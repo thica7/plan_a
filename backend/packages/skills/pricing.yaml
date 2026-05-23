@@ -1,0 +1,20 @@
+name: pricing
+subagent_class: PricingCollector
+description: Extract concrete pricing tiers, billing cycles, limits, and enterprise quote signals.
+tools_allowlist:
+  - web_search
+  - robots_check
+  - fetch_page
+  - extract_facts
+query_templates:
+  - "{competitor} pricing plans cost"
+  - "{competitor} site:*/pricing"
+  - "{competitor} enterprise quote"
+max_turns: 6
+source_type: webpage
+output:
+  prefix: web
+  confidence_default: 0.9
+  confidence_no_url: 0.5
+  required_dimension: pricing
+

@@ -1,0 +1,20 @@
+name: review
+subagent_class: ReviewCollector
+description: Collect customer review themes, complaints, praise, and adoption signals.
+tools_allowlist:
+  - web_search
+  - search_review_site
+  - fetch_page
+  - extract_facts
+query_templates:
+  - "{competitor} reviews pros cons"
+  - "{competitor} G2 reviews"
+  - "{competitor} Capterra reviews"
+max_turns: 6
+source_type: review
+output:
+  prefix: review
+  confidence_default: 0.75
+  confidence_no_url: 0.4
+  required_dimension: review
+
