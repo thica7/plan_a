@@ -1,0 +1,13 @@
+.env
+runs/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+node_modules/
+.pnpm-store/
+dist/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
