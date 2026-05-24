@@ -1,0 +1,16 @@
+flowchart TD
+    planner --> hitl_plan
+    hitl_plan --> collector_dispatch
+    collector_dispatch --> collectors
+    collectors --> analyst_dispatch
+    analyst_dispatch --> analysts
+    analysts --> comparator
+    comparator --> reflector
+    reflector --> writer
+    writer --> qa
+    qa --> hitl_qa
+    hitl_qa -->|passed| end_node
+    hitl_qa -->|redo writer_only| writer
+    hitl_qa -->|redo comparator| comparator
+    hitl_qa -->|redo analyst| analyst_dispatch
+    hitl_qa -->|redo collector/full| collector_dispatch

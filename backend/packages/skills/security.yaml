@@ -1,0 +1,20 @@
+name: security
+subagent_class: SecurityCollector
+description: Extract security, compliance, privacy, and enterprise readiness evidence.
+tools_allowlist:
+  - web_search
+  - fetch_page
+  - find_official_docs
+  - extract_facts
+query_templates:
+  - "{competitor} security compliance"
+  - "{competitor} SOC 2 GDPR"
+  - "{competitor} trust center"
+max_turns: 6
+source_type: webpage
+output:
+  prefix: security
+  confidence_default: 0.85
+  confidence_no_url: 0.45
+  required_dimension: security
+

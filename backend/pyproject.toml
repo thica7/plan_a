@@ -1,0 +1,32 @@
+[project]
+name = "competiscope-v2-backend"
+version = "0.1.0"
+description = "Schema-first competitive analysis backend"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiosqlite>=0.20.0",
+    "fastapi>=0.111.0",
+    "httpx>=0.27.0",
+    "langgraph>=0.2.0",
+    "langgraph-checkpoint-sqlite>=2.0.0",
+    "pydantic>=2.7.0",
+    "pyyaml>=6.0.1",
+    "sse-starlette>=2.1.0",
+    "uvicorn[standard]>=0.29.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.27.0",
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+]
+trace = [
+    "langfuse>=2.36.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["backend"]
+asyncio_mode = "auto"

@@ -1,0 +1,3419 @@
+﻿{
+
+  "openapi": "3.1.0",
+
+  "info": {
+
+    "title": "Competiscope v2 API",
+
+    "version": "0.1.0"
+
+  },
+
+  "paths": {
+
+    "/api/runs": {
+
+      "get": {
+
+        "tags": [
+
+          "runs"
+
+        ],
+
+        "summary": "List Runs",
+
+        "operationId": "list_runs_api_runs_get",
+
+        "responses": {
+
+          "200": {
+
+            "description": "Successful Response",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "items": {
+
+                    "$ref": "#/components/schemas/RunSummary"
+
+                  },
+
+                  "type": "array",
+
+                  "title": "Response List Runs Api Runs Get"
+
+                }
+
+              }
+
+            }
+
+          }
+
+        }
+
+      },
+
+      "post": {
+
+        "tags": [
+
+          "runs"
+
+        ],
+
+        "summary": "Create Run",
+
+        "operationId": "create_run_api_runs_post",
+
+        "requestBody": {
+
+          "content": {
+
+            "application/json": {
+
+              "schema": {
+
+                "$ref": "#/components/schemas/RunCreateRequest"
+
+              }
+
+            }
+
+          },
+
+          "required": true
+
+        },
+
+        "responses": {
+
+          "201": {
+
+            "description": "Successful Response",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/RunDetail"
+
+                }
+
+              }
+
+            }
+
+          },
+
+          "422": {
+
+            "description": "Validation Error",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/HTTPValidationError"
+
+                }
+
+              }
+
+            }
+
+          }
+
+        }
+
+      }
+
+    },
+
+    "/api/runs/{run_id}": {
+
+      "get": {
+
+        "tags": [
+
+          "runs"
+
+        ],
+
+        "summary": "Get Run",
+
+        "operationId": "get_run_api_runs__run_id__get",
+
+        "parameters": [
+
+          {
+
+            "name": "run_id",
+
+            "in": "path",
+
+            "required": true,
+
+            "schema": {
+
+              "type": "string",
+
+              "title": "Run Id"
+
+            }
+
+          }
+
+        ],
+
+        "responses": {
+
+          "200": {
+
+            "description": "Successful Response",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/RunDetail"
+
+                }
+
+              }
+
+            }
+
+          },
+
+          "422": {
+
+            "description": "Validation Error",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/HTTPValidationError"
+
+                }
+
+              }
+
+            }
+
+          }
+
+        }
+
+      }
+
+    },
+
+    "/api/runs/{run_id}/stream": {
+
+      "get": {
+
+        "tags": [
+
+          "stream"
+
+        ],
+
+        "summary": "Stream Run",
+
+        "operationId": "stream_run_api_runs__run_id__stream_get",
+
+        "parameters": [
+
+          {
+
+            "name": "run_id",
+
+            "in": "path",
+
+            "required": true,
+
+            "schema": {
+
+              "type": "string",
+
+              "title": "Run Id"
+
+            }
+
+          }
+
+        ],
+
+        "responses": {
+
+          "200": {
+
+            "description": "Successful Response",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {}
+
+              }
+
+            }
+
+          },
+
+          "422": {
+
+            "description": "Validation Error",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/HTTPValidationError"
+
+                }
+
+              }
+
+            }
+
+          }
+
+        }
+
+      }
+
+    },
+
+    "/api/runs/{run_id}/resume": {
+
+      "post": {
+
+        "tags": [
+
+          "hitl"
+
+        ],
+
+        "summary": "Resume Run",
+
+        "operationId": "resume_run_api_runs__run_id__resume_post",
+
+        "parameters": [
+
+          {
+
+            "name": "run_id",
+
+            "in": "path",
+
+            "required": true,
+
+            "schema": {
+
+              "type": "string",
+
+              "title": "Run Id"
+
+            }
+
+          }
+
+        ],
+
+        "requestBody": {
+
+          "required": true,
+
+          "content": {
+
+            "application/json": {
+
+              "schema": {
+
+                "$ref": "#/components/schemas/HitlResumeRequest"
+
+              }
+
+            }
+
+          }
+
+        },
+
+        "responses": {
+
+          "200": {
+
+            "description": "Successful Response",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/RunDetail"
+
+                }
+
+              }
+
+            }
+
+          },
+
+          "422": {
+
+            "description": "Validation Error",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/HTTPValidationError"
+
+                }
+
+              }
+
+            }
+
+          }
+
+        }
+
+      }
+
+    },
+
+    "/api/health": {
+
+      "get": {
+
+        "tags": [
+
+          "health"
+
+        ],
+
+        "summary": "Health",
+
+        "operationId": "health_api_health_get",
+
+        "responses": {
+
+          "200": {
+
+            "description": "Successful Response",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/HealthStatus"
+
+                }
+
+              }
+
+            }
+
+          }
+
+        }
+
+      }
+
+    },
+
+    "/api/smoke/llm": {
+
+      "post": {
+
+        "tags": [
+
+          "health"
+
+        ],
+
+        "summary": "Smoke Llm",
+
+        "operationId": "smoke_llm_api_smoke_llm_post",
+
+        "requestBody": {
+
+          "content": {
+
+            "application/json": {
+
+              "schema": {
+
+                "$ref": "#/components/schemas/LlmSmokeRequest"
+
+              }
+
+            }
+
+          },
+
+          "required": true
+
+        },
+
+        "responses": {
+
+          "200": {
+
+            "description": "Successful Response",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/SmokeResult"
+
+                }
+
+              }
+
+            }
+
+          },
+
+          "422": {
+
+            "description": "Validation Error",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/HTTPValidationError"
+
+                }
+
+              }
+
+            }
+
+          }
+
+        }
+
+      }
+
+    },
+
+    "/api/smoke/search": {
+
+      "post": {
+
+        "tags": [
+
+          "health"
+
+        ],
+
+        "summary": "Smoke Search",
+
+        "operationId": "smoke_search_api_smoke_search_post",
+
+        "requestBody": {
+
+          "content": {
+
+            "application/json": {
+
+              "schema": {
+
+                "$ref": "#/components/schemas/SearchSmokeRequest"
+
+              }
+
+            }
+
+          },
+
+          "required": true
+
+        },
+
+        "responses": {
+
+          "200": {
+
+            "description": "Successful Response",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/SmokeResult"
+
+                }
+
+              }
+
+            }
+
+          },
+
+          "422": {
+
+            "description": "Validation Error",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/HTTPValidationError"
+
+                }
+
+              }
+
+            }
+
+          }
+
+        }
+
+      }
+
+    },
+
+    "/api/smoke/fetch": {
+
+      "post": {
+
+        "tags": [
+
+          "health"
+
+        ],
+
+        "summary": "Smoke Fetch",
+
+        "operationId": "smoke_fetch_api_smoke_fetch_post",
+
+        "requestBody": {
+
+          "content": {
+
+            "application/json": {
+
+              "schema": {
+
+                "$ref": "#/components/schemas/FetchSmokeRequest"
+
+              }
+
+            }
+
+          },
+
+          "required": true
+
+        },
+
+        "responses": {
+
+          "200": {
+
+            "description": "Successful Response",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/SmokeResult"
+
+                }
+
+              }
+
+            }
+
+          },
+
+          "422": {
+
+            "description": "Validation Error",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/HTTPValidationError"
+
+                }
+
+              }
+
+            }
+
+          }
+
+        }
+
+      }
+
+    },
+
+    "/api/skills": {
+
+      "get": {
+
+        "tags": [
+
+          "skills"
+
+        ],
+
+        "summary": "List Skills",
+
+        "operationId": "list_skills_api_skills_get",
+
+        "responses": {
+
+          "200": {
+
+            "description": "Successful Response",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "items": {
+
+                    "$ref": "#/components/schemas/SkillSpec"
+
+                  },
+
+                  "type": "array",
+
+                  "title": "Response List Skills Api Skills Get"
+
+                }
+
+              }
+
+            }
+
+          }
+
+        }
+
+      }
+
+    },
+
+    "/api/runtime": {
+
+      "get": {
+
+        "tags": [
+
+          "runtime"
+
+        ],
+
+        "summary": "Get Runtime",
+
+        "operationId": "get_runtime_api_runtime_get",
+
+        "responses": {
+
+          "200": {
+
+            "description": "Successful Response",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/RuntimeConfig"
+
+                }
+
+              }
+
+            }
+
+          }
+
+        }
+
+      }
+
+    },
+
+    "/api/runs/{run_id}/trace": {
+
+      "get": {
+
+        "tags": [
+
+          "trace"
+
+        ],
+
+        "summary": "Get Trace",
+
+        "operationId": "get_trace_api_runs__run_id__trace_get",
+
+        "parameters": [
+
+          {
+
+            "name": "run_id",
+
+            "in": "path",
+
+            "required": true,
+
+            "schema": {
+
+              "type": "string",
+
+              "title": "Run Id"
+
+            }
+
+          }
+
+        ],
+
+        "responses": {
+
+          "200": {
+
+            "description": "Successful Response",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "type": "array",
+
+                  "items": {
+
+                    "$ref": "#/components/schemas/RunEvent"
+
+                  },
+
+                  "title": "Response Get Trace Api Runs  Run Id  Trace Get"
+
+                }
+
+              }
+
+            }
+
+          },
+
+          "422": {
+
+            "description": "Validation Error",
+
+            "content": {
+
+              "application/json": {
+
+                "schema": {
+
+                  "$ref": "#/components/schemas/HTTPValidationError"
+
+                }
+
+              }
+
+            }
+
+          }
+
+        }
+
+      }
+
+    }
+
+  },
+
+  "components": {
+
+    "schemas": {
+
+      "AnalysisPlan": {
+
+        "properties": {
+
+          "topic": {
+
+            "type": "string",
+
+            "title": "Topic"
+
+          },
+
+          "competitors": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Competitors"
+
+          },
+
+          "dimensions": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Dimensions"
+
+          },
+
+          "complexity": {
+
+            "type": "string",
+
+            "enum": [
+
+              "low",
+
+              "medium",
+
+              "high"
+
+            ],
+
+            "title": "Complexity",
+
+            "default": "medium"
+
+          },
+
+          "homepage_hints": {
+
+            "additionalProperties": {
+
+              "type": "string"
+
+            },
+
+            "type": "object",
+
+            "title": "Homepage Hints"
+
+          },
+
+          "created_at": {
+
+            "type": "string",
+
+            "format": "date-time",
+
+            "title": "Created At"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "topic",
+
+          "competitors",
+
+          "dimensions"
+
+        ],
+
+        "title": "AnalysisPlan"
+
+      },
+
+      "ComparisonCell": {
+
+        "properties": {
+
+          "competitor": {
+
+            "type": "string",
+
+            "title": "Competitor"
+
+          },
+
+          "dimension": {
+
+            "type": "string",
+
+            "title": "Dimension"
+
+          },
+
+          "value": {
+
+            "type": "string",
+
+            "title": "Value"
+
+          },
+
+          "source_ids": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Source Ids"
+
+          },
+
+          "confidence": {
+
+            "type": "number",
+
+            "maximum": 1.0,
+
+            "minimum": 0.0,
+
+            "title": "Confidence",
+
+            "default": 0.0
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "competitor",
+
+          "dimension",
+
+          "value"
+
+        ],
+
+        "title": "ComparisonCell"
+
+      },
+
+      "ComparisonMatrix": {
+
+        "properties": {
+
+          "competitors": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Competitors"
+
+          },
+
+          "dimensions": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Dimensions"
+
+          },
+
+          "cells": {
+
+            "items": {
+
+              "$ref": "#/components/schemas/ComparisonCell"
+
+            },
+
+            "type": "array",
+
+            "title": "Cells"
+
+          },
+
+          "winner_by_dimension": {
+
+            "additionalProperties": {
+
+              "type": "string"
+
+            },
+
+            "type": "object",
+
+            "title": "Winner By Dimension"
+
+          },
+
+          "summary": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Summary"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "competitors",
+
+          "dimensions"
+
+        ],
+
+        "title": "ComparisonMatrix"
+
+      },
+
+      "CompetitorCandidate": {
+
+        "properties": {
+
+          "name": {
+
+            "type": "string",
+
+            "title": "Name"
+
+          },
+
+          "rank": {
+
+            "type": "integer",
+
+            "title": "Rank"
+
+          },
+
+          "selected": {
+
+            "type": "boolean",
+
+            "title": "Selected",
+
+            "default": false
+
+          },
+
+          "rationale": {
+
+            "type": "string",
+
+            "title": "Rationale",
+
+            "default": ""
+
+          },
+
+          "evidence_titles": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Evidence Titles"
+
+          },
+
+          "evidence_urls": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Evidence Urls"
+
+          },
+
+          "confidence": {
+
+            "type": "number",
+
+            "maximum": 1.0,
+
+            "minimum": 0.0,
+
+            "title": "Confidence",
+
+            "default": 0.5
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "name",
+
+          "rank"
+
+        ],
+
+        "title": "CompetitorCandidate"
+
+      },
+
+      "CompetitorDiscovery": {
+
+        "properties": {
+
+          "query": {
+
+            "type": "string",
+
+            "title": "Query"
+
+          },
+
+          "candidates": {
+
+            "items": {
+
+              "$ref": "#/components/schemas/CompetitorCandidate"
+
+            },
+
+            "type": "array",
+
+            "title": "Candidates"
+
+          },
+
+          "selected_competitors": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Selected Competitors"
+
+          },
+
+          "rationale": {
+
+            "type": "string",
+
+            "title": "Rationale",
+
+            "default": ""
+
+          },
+
+          "created_at": {
+
+            "type": "string",
+
+            "format": "date-time",
+
+            "title": "Created At"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "query"
+
+        ],
+
+        "title": "CompetitorDiscovery"
+
+      },
+
+      "CompetitorKB": {
+
+        "properties": {
+
+          "competitor": {
+
+            "type": "string",
+
+            "title": "Competitor"
+
+          },
+
+          "slices": {
+
+            "additionalProperties": {
+
+              "items": {
+
+                "type": "string"
+
+              },
+
+              "type": "array"
+
+            },
+
+            "type": "object",
+
+            "title": "Slices"
+
+          },
+
+          "sources": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Sources"
+
+          },
+
+          "confidence": {
+
+            "type": "number",
+
+            "maximum": 1.0,
+
+            "minimum": 0.0,
+
+            "title": "Confidence",
+
+            "default": 0.0
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "competitor"
+
+        ],
+
+        "title": "CompetitorKB"
+
+      },
+
+      "FetchSmokeRequest": {
+
+        "properties": {
+
+          "url": {
+
+            "type": "string",
+
+            "maxLength": 2083,
+
+            "minLength": 1,
+
+            "format": "uri",
+
+            "title": "Url",
+
+            "default": "https://example.com"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "title": "FetchSmokeRequest"
+
+      },
+
+      "HTTPValidationError": {
+
+        "properties": {
+
+          "detail": {
+
+            "items": {
+
+              "$ref": "#/components/schemas/ValidationError"
+
+            },
+
+            "type": "array",
+
+            "title": "Detail"
+
+          }
+
+        },
+
+        "type": "object",
+
+        "title": "HTTPValidationError"
+
+      },
+
+      "HealthCheck": {
+
+        "properties": {
+
+          "name": {
+
+            "type": "string",
+
+            "title": "Name"
+
+          },
+
+          "status": {
+
+            "type": "string",
+
+            "enum": [
+
+              "ok",
+
+              "warn",
+
+              "error"
+
+            ],
+
+            "title": "Status"
+
+          },
+
+          "detail": {
+
+            "type": "string",
+
+            "title": "Detail",
+
+            "default": ""
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "name",
+
+          "status"
+
+        ],
+
+        "title": "HealthCheck"
+
+      },
+
+      "HealthStatus": {
+
+        "properties": {
+
+          "status": {
+
+            "type": "string",
+
+            "enum": [
+
+              "ok",
+
+              "warn",
+
+              "error"
+
+            ],
+
+            "title": "Status"
+
+          },
+
+          "service": {
+
+            "type": "string",
+
+            "title": "Service"
+
+          },
+
+          "version": {
+
+            "type": "string",
+
+            "title": "Version"
+
+          },
+
+          "checks": {
+
+            "items": {
+
+              "$ref": "#/components/schemas/HealthCheck"
+
+            },
+
+            "type": "array",
+
+            "title": "Checks"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "status",
+
+          "service",
+
+          "version"
+
+        ],
+
+        "title": "HealthStatus"
+
+      },
+
+      "HitlResumeRequest": {
+
+        "properties": {
+
+          "decision": {
+
+            "type": "string",
+
+            "enum": [
+
+              "accept",
+
+              "modify_plan",
+
+              "force_pass",
+
+              "redo"
+
+            ],
+
+            "title": "Decision"
+
+          },
+
+          "note": {
+
+            "anyOf": [
+
+              {
+
+                "type": "string"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ],
+
+            "title": "Note"
+
+          },
+
+          "dimensions": {
+
+            "anyOf": [
+
+              {
+
+                "items": {
+
+                  "type": "string"
+
+                },
+
+                "type": "array"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ],
+
+            "title": "Dimensions"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "decision"
+
+        ],
+
+        "title": "HitlResumeRequest"
+
+      },
+
+      "LlmSmokeRequest": {
+
+        "properties": {
+
+          "prompt": {
+
+            "type": "string",
+
+            "maxLength": 500,
+
+            "minLength": 2,
+
+            "title": "Prompt",
+
+            "default": "Reply with exactly: ok"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "title": "LlmSmokeRequest"
+
+      },
+
+      "QCIssue": {
+
+        "properties": {
+
+          "id": {
+
+            "type": "string",
+
+            "title": "Id"
+
+          },
+
+          "severity": {
+
+            "type": "string",
+
+            "enum": [
+
+              "info",
+
+              "warn",
+
+              "blocker"
+
+            ],
+
+            "title": "Severity"
+
+          },
+
+          "detected_by": {
+
+            "type": "string",
+
+            "enum": [
+
+              "citation",
+
+              "consistency",
+
+              "coverage",
+
+              "schema",
+
+              "reflector"
+
+            ],
+
+            "title": "Detected By"
+
+          },
+
+          "target_agent": {
+
+            "type": "string",
+
+            "title": "Target Agent"
+
+          },
+
+          "target_subagent": {
+
+            "anyOf": [
+
+              {
+
+                "type": "string"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ],
+
+            "title": "Target Subagent"
+
+          },
+
+          "field_path": {
+
+            "type": "string",
+
+            "title": "Field Path"
+
+          },
+
+          "problem": {
+
+            "type": "string",
+
+            "title": "Problem"
+
+          },
+
+          "redo_scope": {
+
+            "$ref": "#/components/schemas/RedoScope"
+
+          },
+
+          "self_found": {
+
+            "type": "boolean",
+
+            "title": "Self Found",
+
+            "default": false
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "id",
+
+          "severity",
+
+          "detected_by",
+
+          "target_agent",
+
+          "field_path",
+
+          "problem",
+
+          "redo_scope"
+
+        ],
+
+        "title": "QCIssue"
+
+      },
+
+      "RawSource": {
+
+        "properties": {
+
+          "id": {
+
+            "type": "string",
+
+            "title": "Id"
+
+          },
+
+          "competitor": {
+
+            "type": "string",
+
+            "title": "Competitor"
+
+          },
+
+          "dimension": {
+
+            "type": "string",
+
+            "title": "Dimension"
+
+          },
+
+          "source_type": {
+
+            "type": "string",
+
+            "title": "Source Type"
+
+          },
+
+          "title": {
+
+            "type": "string",
+
+            "title": "Title"
+
+          },
+
+          "url": {
+
+            "anyOf": [
+
+              {
+
+                "type": "string",
+
+                "maxLength": 2083,
+
+                "minLength": 1,
+
+                "format": "uri"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ],
+
+            "title": "Url"
+
+          },
+
+          "snippet": {
+
+            "type": "string",
+
+            "title": "Snippet",
+
+            "default": ""
+
+          },
+
+          "content_hash": {
+
+            "type": "string",
+
+            "title": "Content Hash"
+
+          },
+
+          "confidence": {
+
+            "type": "number",
+
+            "maximum": 1.0,
+
+            "minimum": 0.0,
+
+            "title": "Confidence"
+
+          },
+
+          "extracted_at": {
+
+            "type": "string",
+
+            "format": "date-time",
+
+            "title": "Extracted At"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "id",
+
+          "competitor",
+
+          "dimension",
+
+          "source_type",
+
+          "title",
+
+          "content_hash",
+
+          "confidence"
+
+        ],
+
+        "title": "RawSource"
+
+      },
+
+      "RedoScope": {
+
+        "properties": {
+
+          "kind": {
+
+            "type": "string",
+
+            "enum": [
+
+              "writer_only",
+
+              "comparator",
+
+              "analyst",
+
+              "collector",
+
+              "full"
+
+            ],
+
+            "title": "Kind"
+
+          },
+
+          "target_subagent": {
+
+            "anyOf": [
+
+              {
+
+                "type": "string"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ],
+
+            "title": "Target Subagent"
+
+          },
+
+          "target_competitor": {
+
+            "anyOf": [
+
+              {
+
+                "type": "string"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ],
+
+            "title": "Target Competitor"
+
+          },
+
+          "rationale": {
+
+            "type": "string",
+
+            "title": "Rationale"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "kind",
+
+          "rationale"
+
+        ],
+
+        "title": "RedoScope"
+
+      },
+
+      "ReflectionRecord": {
+
+        "properties": {
+
+          "iteration": {
+
+            "type": "integer",
+
+            "title": "Iteration"
+
+          },
+
+          "coverage_gaps": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Coverage Gaps"
+
+          },
+
+          "confidence_outliers": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Confidence Outliers"
+
+          },
+
+          "cross_competitor_gaps": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Cross Competitor Gaps"
+
+          },
+
+          "suggested_redos": {
+
+            "items": {
+
+              "$ref": "#/components/schemas/RedoScope"
+
+            },
+
+            "type": "array",
+
+            "title": "Suggested Redos"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "iteration"
+
+        ],
+
+        "title": "ReflectionRecord"
+
+      },
+
+      "RevisionRecord": {
+
+        "properties": {
+
+          "id": {
+
+            "type": "string",
+
+            "title": "Id"
+
+          },
+
+          "iteration": {
+
+            "type": "integer",
+
+            "title": "Iteration"
+
+          },
+
+          "stage": {
+
+            "type": "string",
+
+            "title": "Stage"
+
+          },
+
+          "before_md": {
+
+            "type": "string",
+
+            "title": "Before Md",
+
+            "default": ""
+
+          },
+
+          "after_md": {
+
+            "type": "string",
+
+            "title": "After Md",
+
+            "default": ""
+
+          },
+
+          "issue_ids": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Issue Ids"
+
+          },
+
+          "issue_count_before": {
+
+            "type": "integer",
+
+            "title": "Issue Count Before",
+
+            "default": 0
+
+          },
+
+          "issue_count_after": {
+
+            "type": "integer",
+
+            "title": "Issue Count After",
+
+            "default": 0
+
+          },
+
+          "convergence_ratio": {
+
+            "type": "number",
+
+            "minimum": 0.0,
+
+            "title": "Convergence Ratio",
+
+            "default": 1.0
+
+          },
+
+          "created_at": {
+
+            "type": "string",
+
+            "format": "date-time",
+
+            "title": "Created At"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "id",
+
+          "iteration",
+
+          "stage"
+
+        ],
+
+        "title": "RevisionRecord"
+
+      },
+
+      "RunCreateRequest": {
+
+        "properties": {
+
+          "topic": {
+
+            "type": "string",
+
+            "maxLength": 200,
+
+            "minLength": 2,
+
+            "title": "Topic"
+
+          },
+
+          "competitors": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "maxItems": 8,
+
+            "title": "Competitors"
+
+          },
+
+          "dimensions": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "maxItems": 8,
+
+            "minItems": 1,
+
+            "title": "Dimensions"
+
+          },
+
+          "execution_mode": {
+
+            "type": "string",
+
+            "enum": [
+
+              "auto",
+
+              "demo",
+
+              "real"
+
+            ],
+
+            "title": "Execution Mode",
+
+            "default": "auto"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "topic",
+
+          "dimensions"
+
+        ],
+
+        "title": "RunCreateRequest"
+
+      },
+
+      "RunDetail": {
+
+        "properties": {
+
+          "id": {
+
+            "type": "string",
+
+            "title": "Id"
+
+          },
+
+          "topic": {
+
+            "type": "string",
+
+            "title": "Topic"
+
+          },
+
+          "status": {
+
+            "type": "string",
+
+            "enum": [
+
+              "queued",
+
+              "running",
+
+              "interrupted",
+
+              "completed",
+
+              "failed"
+
+            ],
+
+            "title": "Status"
+
+          },
+
+          "execution_mode": {
+
+            "type": "string",
+
+            "enum": [
+
+              "demo",
+
+              "real"
+
+            ],
+
+            "title": "Execution Mode"
+
+          },
+
+          "created_at": {
+
+            "type": "string",
+
+            "format": "date-time",
+
+            "title": "Created At"
+
+          },
+
+          "updated_at": {
+
+            "type": "string",
+
+            "format": "date-time",
+
+            "title": "Updated At"
+
+          },
+
+          "plan": {
+
+            "$ref": "#/components/schemas/AnalysisPlan"
+
+          },
+
+          "report_md": {
+
+            "type": "string",
+
+            "title": "Report Md",
+
+            "default": ""
+
+          },
+
+          "raw_sources": {
+
+            "items": {
+
+              "$ref": "#/components/schemas/RawSource"
+
+            },
+
+            "type": "array",
+
+            "title": "Raw Sources"
+
+          },
+
+          "competitor_kbs": {
+
+            "additionalProperties": {
+
+              "$ref": "#/components/schemas/CompetitorKB"
+
+            },
+
+            "type": "object",
+
+            "title": "Competitor Kbs"
+
+          },
+
+          "competitor_discovery": {
+
+            "anyOf": [
+
+              {
+
+                "$ref": "#/components/schemas/CompetitorDiscovery"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ]
+
+          },
+
+          "comparison_matrix": {
+
+            "anyOf": [
+
+              {
+
+                "$ref": "#/components/schemas/ComparisonMatrix"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ]
+
+          },
+
+          "qa_findings": {
+
+            "items": {
+
+              "$ref": "#/components/schemas/QCIssue"
+
+            },
+
+            "type": "array",
+
+            "title": "Qa Findings"
+
+          },
+
+          "reflections": {
+
+            "items": {
+
+              "$ref": "#/components/schemas/ReflectionRecord"
+
+            },
+
+            "type": "array",
+
+            "title": "Reflections"
+
+          },
+
+          "revisions": {
+
+            "items": {
+
+              "$ref": "#/components/schemas/RevisionRecord"
+
+            },
+
+            "type": "array",
+
+            "title": "Revisions"
+
+          },
+
+          "current_node": {
+
+            "anyOf": [
+
+              {
+
+                "type": "string"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ],
+
+            "title": "Current Node"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "id",
+
+          "topic",
+
+          "status",
+
+          "execution_mode",
+
+          "created_at",
+
+          "updated_at",
+
+          "plan"
+
+        ],
+
+        "title": "RunDetail"
+
+      },
+
+      "RunEvent": {
+
+        "properties": {
+
+          "id": {
+
+            "type": "integer",
+
+            "title": "Id"
+
+          },
+
+          "run_id": {
+
+            "type": "string",
+
+            "title": "Run Id"
+
+          },
+
+          "type": {
+
+            "type": "string",
+
+            "enum": [
+
+              "run_created",
+
+              "node_started",
+
+              "node_completed",
+
+              "interrupt",
+
+              "qa_issue",
+
+              "report_updated",
+
+              "revision_recorded",
+
+              "run_completed",
+
+              "run_failed"
+
+            ],
+
+            "title": "Type"
+
+          },
+
+          "agent": {
+
+            "anyOf": [
+
+              {
+
+                "type": "string"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ],
+
+            "title": "Agent"
+
+          },
+
+          "subagent": {
+
+            "anyOf": [
+
+              {
+
+                "type": "string"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ],
+
+            "title": "Subagent"
+
+          },
+
+          "swimlane": {
+
+            "anyOf": [
+
+              {
+
+                "type": "string"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ],
+
+            "title": "Swimlane"
+
+          },
+
+          "message": {
+
+            "type": "string",
+
+            "title": "Message"
+
+          },
+
+          "payload": {
+
+            "additionalProperties": true,
+
+            "type": "object",
+
+            "title": "Payload"
+
+          },
+
+          "created_at": {
+
+            "type": "string",
+
+            "format": "date-time",
+
+            "title": "Created At"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "id",
+
+          "run_id",
+
+          "type",
+
+          "message"
+
+        ],
+
+        "title": "RunEvent"
+
+      },
+
+      "RunSummary": {
+
+        "properties": {
+
+          "id": {
+
+            "type": "string",
+
+            "title": "Id"
+
+          },
+
+          "topic": {
+
+            "type": "string",
+
+            "title": "Topic"
+
+          },
+
+          "status": {
+
+            "type": "string",
+
+            "enum": [
+
+              "queued",
+
+              "running",
+
+              "interrupted",
+
+              "completed",
+
+              "failed"
+
+            ],
+
+            "title": "Status"
+
+          },
+
+          "execution_mode": {
+
+            "type": "string",
+
+            "enum": [
+
+              "demo",
+
+              "real"
+
+            ],
+
+            "title": "Execution Mode"
+
+          },
+
+          "created_at": {
+
+            "type": "string",
+
+            "format": "date-time",
+
+            "title": "Created At"
+
+          },
+
+          "updated_at": {
+
+            "type": "string",
+
+            "format": "date-time",
+
+            "title": "Updated At"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "id",
+
+          "topic",
+
+          "status",
+
+          "execution_mode",
+
+          "created_at",
+
+          "updated_at"
+
+        ],
+
+        "title": "RunSummary"
+
+      },
+
+      "RuntimeConfig": {
+
+        "properties": {
+
+          "default_execution_mode": {
+
+            "type": "string",
+
+            "enum": [
+
+              "demo",
+
+              "real"
+
+            ],
+
+            "title": "Default Execution Mode"
+
+          },
+
+          "demo_mode": {
+
+            "type": "boolean",
+
+            "title": "Demo Mode"
+
+          },
+
+          "has_ark_api_key": {
+
+            "type": "boolean",
+
+            "title": "Has Ark Api Key"
+
+          },
+
+          "has_ark_model": {
+
+            "type": "boolean",
+
+            "title": "Has Ark Model"
+
+          },
+
+          "ark_base_url": {
+
+            "type": "string",
+
+            "title": "Ark Base Url"
+
+          },
+
+          "ark_model": {
+
+            "anyOf": [
+
+              {
+
+                "type": "string"
+
+              },
+
+              {
+
+                "type": "null"
+
+              }
+
+            ],
+
+            "title": "Ark Model"
+
+          },
+
+          "web_search_provider": {
+
+            "type": "string",
+
+            "title": "Web Search Provider"
+
+          },
+
+          "has_web_search_key": {
+
+            "type": "boolean",
+
+            "title": "Has Web Search Key"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "default_execution_mode",
+
+          "demo_mode",
+
+          "has_ark_api_key",
+
+          "has_ark_model",
+
+          "ark_base_url",
+
+          "web_search_provider",
+
+          "has_web_search_key"
+
+        ],
+
+        "title": "RuntimeConfig"
+
+      },
+
+      "SearchSmokeRequest": {
+
+        "properties": {
+
+          "query": {
+
+            "type": "string",
+
+            "maxLength": 300,
+
+            "minLength": 2,
+
+            "title": "Query",
+
+            "default": "AI coding assistant competitors"
+
+          },
+
+          "max_results": {
+
+            "type": "integer",
+
+            "maximum": 10.0,
+
+            "minimum": 1.0,
+
+            "title": "Max Results",
+
+            "default": 3
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "title": "SearchSmokeRequest"
+
+      },
+
+      "SkillOutputSpec": {
+
+        "properties": {
+
+          "prefix": {
+
+            "type": "string",
+
+            "title": "Prefix"
+
+          },
+
+          "confidence_default": {
+
+            "type": "number",
+
+            "maximum": 1.0,
+
+            "minimum": 0.0,
+
+            "title": "Confidence Default",
+
+            "default": 0.8
+
+          },
+
+          "confidence_no_url": {
+
+            "type": "number",
+
+            "maximum": 1.0,
+
+            "minimum": 0.0,
+
+            "title": "Confidence No Url",
+
+            "default": 0.5
+
+          },
+
+          "required_dimension": {
+
+            "type": "string",
+
+            "title": "Required Dimension"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "prefix",
+
+          "required_dimension"
+
+        ],
+
+        "title": "SkillOutputSpec"
+
+      },
+
+      "SkillSpec": {
+
+        "properties": {
+
+          "name": {
+
+            "type": "string",
+
+            "title": "Name"
+
+          },
+
+          "subagent_class": {
+
+            "type": "string",
+
+            "title": "Subagent Class",
+
+            "default": "GenericCollector"
+
+          },
+
+          "description": {
+
+            "type": "string",
+
+            "title": "Description"
+
+          },
+
+          "tools_allowlist": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Tools Allowlist"
+
+          },
+
+          "query_templates": {
+
+            "items": {
+
+              "type": "string"
+
+            },
+
+            "type": "array",
+
+            "title": "Query Templates"
+
+          },
+
+          "max_turns": {
+
+            "type": "integer",
+
+            "maximum": 12.0,
+
+            "minimum": 1.0,
+
+            "title": "Max Turns",
+
+            "default": 6
+
+          },
+
+          "source_type": {
+
+            "type": "string",
+
+            "title": "Source Type"
+
+          },
+
+          "output": {
+
+            "$ref": "#/components/schemas/SkillOutputSpec"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "name",
+
+          "description",
+
+          "tools_allowlist",
+
+          "query_templates",
+
+          "source_type",
+
+          "output"
+
+        ],
+
+        "title": "SkillSpec"
+
+      },
+
+      "SmokeResult": {
+
+        "properties": {
+
+          "component": {
+
+            "type": "string",
+
+            "enum": [
+
+              "llm",
+
+              "search",
+
+              "fetch",
+
+              "minimal_run"
+
+            ],
+
+            "title": "Component"
+
+          },
+
+          "ok": {
+
+            "type": "boolean",
+
+            "title": "Ok"
+
+          },
+
+          "message": {
+
+            "type": "string",
+
+            "title": "Message"
+
+          },
+
+          "elapsed_ms": {
+
+            "type": "integer",
+
+            "title": "Elapsed Ms"
+
+          },
+
+          "details": {
+
+            "additionalProperties": true,
+
+            "type": "object",
+
+            "title": "Details"
+
+          }
+
+        },
+
+        "additionalProperties": false,
+
+        "type": "object",
+
+        "required": [
+
+          "component",
+
+          "ok",
+
+          "message",
+
+          "elapsed_ms"
+
+        ],
+
+        "title": "SmokeResult"
+
+      },
+
+      "ValidationError": {
+
+        "properties": {
+
+          "loc": {
+
+            "items": {
+
+              "anyOf": [
+
+                {
+
+                  "type": "string"
+
+                },
+
+                {
+
+                  "type": "integer"
+
+                }
+
+              ]
+
+            },
+
+            "type": "array",
+
+            "title": "Location"
+
+          },
+
+          "msg": {
+
+            "type": "string",
+
+            "title": "Message"
+
+          },
+
+          "type": {
+
+            "type": "string",
+
+            "title": "Error Type"
+
+          },
+
+          "input": {
+
+            "title": "Input"
+
+          },
+
+          "ctx": {
+
+            "type": "object",
+
+            "title": "Context"
+
+          }
+
+        },
+
+        "type": "object",
+
+        "required": [
+
+          "loc",
+
+          "msg",
+
+          "type"
+
+        ],
+
+        "title": "ValidationError"
+
+      }
+
+    }
+
+  }
+
+}
+
+

@@ -1,0 +1,20 @@
+name: integrations
+subagent_class: IntegrationsCollector
+description: Extract integrations, ecosystem coverage, APIs, and partner marketplace signals.
+tools_allowlist:
+  - web_search
+  - fetch_page
+  - find_official_docs
+  - extract_facts
+query_templates:
+  - "{competitor} integrations"
+  - "{competitor} API docs"
+  - "{competitor} app marketplace"
+max_turns: 6
+source_type: webpage
+output:
+  prefix: integration
+  confidence_default: 0.85
+  confidence_no_url: 0.45
+  required_dimension: integrations
+

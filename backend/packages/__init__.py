@@ -1,0 +1,2 @@
+"""Competiscope backend packages."""
+
