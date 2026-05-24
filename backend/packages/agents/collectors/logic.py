@@ -1,0 +1,1266 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from datetime import datetime
+from typing import Any, Iterable, Literal
+
+from packages.agents import SubagentContext
+from packages.agents.collectors.skill_tools import collect_competitor_with_skill_tools
+from packages.memory import KBCacheEntry
+from packages.orchestrator.scoping import assign_redo_scope
+from packages.search import SearchResult
+from packages.schema.api_dto import RunDetail
+from packages.schema.models import (
+    ComparisonCell,
+    ComparisonMatrix,
+    CompetitorCandidate,
+    CompetitorDiscovery,
+    CompetitorKB,
+    CompetitorKnowledge,
+    FeatureNode,
+    FeatureTree,
+    KnowledgeClaim,
+    PricingModel,
+    PricingTier,
+    QCIssue,
+    RawSource,
+    RedoScope,
+    ReflectionRecord,
+    UserPersonaModel,
+    UserPersonaSegment,
+)
+from packages.tools import extract_facts, find_official_docs, fetch_page, search_review_site_queries, survey_simulator
+
+CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+
+class CollectorAgentMixin:
+    async def _run_collector_react(
+        self,
+        record: RunRecord,
+        dimension: str,
+        context: SubagentContext,
+    ) -> int:
+        detail = record.detail
+        skill = self._skill_registry.get(dimension)
+        observations: list[dict[str, object]] = []
+        fetched_by_url: dict[str, Any] = {}
+        added = 0
+        for turn in range(1, self._settings.collector_react_max_turns + 1):
+            payload = await self._trace_llm_json(
+                record,
+                agent="collector",
+                subagent=dimension,
+                name=f"{dimension}_react_turn_{turn}",
+                system=(
+                    "You are a bounded collector ReAct runner. Decide exactly one next action. "
+                    "Allowed actions are web_search, fetch_page, finish. "
+                    "Use web_search to find evidence, fetch_page to inspect promising URLs, "
+                    "and finish only when you can output structured sources."
+                ),
+                user=(
+                    f"Topic: {detail.topic}\n"
+                    f"Dimension: {dimension}\n"
+                    f"Dimension description: {skill.description if skill else dimension}\n"
+                    f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                    f"Observations JSON: {json.dumps(observations, ensure_ascii=False)}\n\n"
+                    "Return one action. For finish, include sources with competitor, title, url, summary, confidence."
+                ),
+                schema_hint=(
+                    '{"action":"web_search|fetch_page|finish","query":"query or null",'
+                    '"url":"https://... or null","rationale":"short reason",'
+                    '"sources":[{"competitor":"name","title":"title","url":"https://... or null",'
+                    '"summary":"summary","confidence":0.0}]}'
+                ),
+                context=context,
+            )
+            action = str(payload.get("action") or "").strip().lower()
+            if action == "web_search":
+                query = str(payload.get("query") or self._web_search_query(detail, detail.plan.competitors[0], dimension))
+                results = await self._trace_search(
+                    record,
+                    agent="collector",
+                    subagent=dimension,
+                    query=query,
+                    max_results=3,
+                    context=context,
+                )
+                observations.append(
+                    {
+                        "turn": turn,
+                        "action": action,
+                        "query": query,
+                        "results": [result.__dict__ for result in results[:3]],
+                    }
+                )
+                continue
+            if action == "fetch_page":
+                url = str(payload.get("url") or "")
+                if not url.startswith(("http://", "https://")):
+                    observations.append({"turn": turn, "action": action, "error": "invalid_url", "url": url})
+                    continue
+                fetched = await self._trace_fetch(record, "collector", dimension, url, context)
+                fetched_by_url[fetched.url] = fetched
+                observations.append(
+                    {
+                        "turn": turn,
+                        "action": action,
+                        "url": fetched.url,
+                        "ok": fetched.ok,
+                        "title": fetched.title,
+                        "snippet": fetched.snippet,
+                        "content_hash": fetched.content_hash,
+                    }
+                )
+                continue
+            if action == "finish":
+                sources = await self._sources_from_react_finish(
+                    record,
+                    detail,
+                    dimension,
+                    payload,
+                    context,
+                    fetched_by_url,
+                )
+                detail.raw_sources.extend(sources)
+                added += len(sources)
+                break
+            observations.append({"turn": turn, "action": action or "unknown", "error": "unsupported_action"})
+        return added
+
+    async def _run_collector_competitor_react(
+        self,
+        record: RunRecord,
+        dimension: str,
+        competitor: str,
+        context: SubagentContext,
+    ) -> list[RawSource]:
+        detail = record.detail
+        skill = self._skill_registry.get(dimension)
+        observations: list[dict[str, object]] = []
+        fetched_by_url: dict[str, Any] = {}
+        qa_feedback = self._qa_feedback_for_branch(detail, "collector", dimension, competitor)
+        for turn in range(1, self._settings.collector_react_max_turns + 1):
+            payload = await self._trace_llm_json(
+                record,
+                agent="collector",
+                subagent=context.subagent,
+                name=f"{dimension}_{self._issue_id_fragment(competitor)}_collector_react_turn_{turn}",
+                system=(
+                    "You are a bounded collector ReAct runner for exactly one competitor and one dimension. "
+                    "Allowed actions are web_search, robots_check, fetch_page, find_official_docs, "
+                    "search_review_site, survey_simulator, finish. "
+                    "Use search/fetch evidence before finish. Return only sources for the assigned competitor."
+                ),
+                user=(
+                    f"Topic: {detail.topic}\n"
+                    f"Competitor: {competitor}\n"
+                    f"Dimension: {dimension}\n"
+                    f"Dimension description: {skill.description if skill else dimension}\n"
+                    f"Homepage hint: {detail.plan.homepage_hints.get(competitor, '')}\n"
+                    f"QA feedback for redo: {json.dumps(qa_feedback, ensure_ascii=False)}\n"
+                    f"Observations JSON: {json.dumps(observations, ensure_ascii=False)}\n\n"
+                    "Return one action. For finish, include sources with title, url, summary, confidence."
+                ),
+                schema_hint=(
+                    '{"action":"web_search|robots_check|fetch_page|find_official_docs|search_review_site|survey_simulator|finish","query":"query or null",'
+                    '"url":"https://... or null","rationale":"short reason",'
+                    '"sources":[{"title":"title","url":"https://... or null",'
+                    '"summary":"summary","confidence":0.0}]}'
+                ),
+                context=context,
+            )
+            action = str(payload.get("action") or "").strip().lower()
+            if action == "web_search":
+                query = str(payload.get("query") or self._web_search_query(detail, competitor, dimension))
+                results = await self._trace_search(
+                    record,
+                    agent="collector",
+                    subagent=context.subagent,
+                    query=query,
+                    max_results=3,
+                    context=context,
+                )
+                observations.append(
+                    {
+                        "turn": turn,
+                        "action": action,
+                        "query": query,
+                        "results": [result.__dict__ for result in results[:3]],
+                    }
+                )
+                continue
+            if action == "robots_check":
+                url = str(payload.get("url") or detail.plan.homepage_hints.get(competitor) or "")
+                if not url.startswith(("http://", "https://")):
+                    observations.append({"turn": turn, "action": action, "error": "invalid_url", "url": url})
+                    continue
+                check = await self._trace_robots(record, "collector", context.subagent, url, context)
+                observations.append(
+                    {
+                        "turn": turn,
+                        "action": action,
+                        "url": url,
+                        "allowed": check.allowed,
+                        "checked": check.checked,
+                        "robots_url": check.robots_url,
+                    }
+                )
+                continue
+            if action == "fetch_page":
+                url = str(payload.get("url") or "")
+                if not url.startswith(("http://", "https://")):
+                    observations.append({"turn": turn, "action": action, "error": "invalid_url", "url": url})
+                    continue
+                fetched = await self._trace_fetch(record, "collector", context.subagent, url, context)
+                fetched_by_url[fetched.url] = fetched
+                observations.append(
+                    {
+                        "turn": turn,
+                        "action": action,
+                        "url": fetched.url,
+                        "ok": fetched.ok,
+                        "title": fetched.title,
+                        "snippet": fetched.snippet,
+                        "content_hash": fetched.content_hash,
+                    }
+                )
+                continue
+            if action == "find_official_docs":
+                candidates = find_official_docs(
+                    competitor=competitor,
+                    dimension=dimension,
+                    homepage_hint=detail.plan.homepage_hints.get(competitor),
+                )
+                self._trace_local_tool(
+                    record,
+                    agent="collector",
+                    subagent=context.subagent,
+                    name="find_official_docs",
+                    input_text=json.dumps(
+                        {
+                            "competitor": competitor,
+                            "dimension": dimension,
+                            "homepage_hint": detail.plan.homepage_hints.get(competitor),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    output_text=json.dumps([candidate.__dict__ for candidate in candidates], ensure_ascii=False),
+                    context=context,
+                    metadata={"candidate_count": len(candidates)},
+                )
+                observations.append(
+                    {
+                        "turn": turn,
+                        "action": action,
+                        "candidates": [candidate.__dict__ for candidate in candidates[:4]],
+                    }
+                )
+                continue
+            if action == "search_review_site":
+                plan = search_review_site_queries(competitor=competitor, topic=detail.topic)
+                self._trace_local_tool(
+                    record,
+                    agent="collector",
+                    subagent=context.subagent,
+                    name="search_review_site",
+                    input_text=json.dumps({"competitor": competitor, "topic": detail.topic}, ensure_ascii=False),
+                    output_text=json.dumps(plan.__dict__, ensure_ascii=False),
+                    context=context,
+                    metadata={"query_count": len(plan.queries)},
+                )
+                observations.append({"turn": turn, "action": action, "queries": plan.queries})
+                continue
+            if action == "survey_simulator":
+                records = survey_simulator(
+                    topic=detail.topic,
+                    competitor=competitor,
+                    dimension=dimension,
+                    qa_feedback=qa_feedback,
+                )
+                self._trace_local_tool(
+                    record,
+                    agent="collector",
+                    subagent=context.subagent,
+                    name="survey_simulator",
+                    input_text=json.dumps(
+                        {"topic": detail.topic, "competitor": competitor, "dimension": dimension},
+                        ensure_ascii=False,
+                    ),
+                    output_text=json.dumps([item.__dict__ for item in records], ensure_ascii=False),
+                    context=context,
+                    metadata={"record_count": len(records)},
+                )
+                observations.append(
+                    {
+                        "turn": turn,
+                        "action": action,
+                        "records": [item.__dict__ for item in records],
+                    }
+                )
+                continue
+            if action == "finish":
+                return await self._sources_from_react_finish(
+                    record,
+                    detail,
+                    dimension,
+                    {**payload, "sources": self._force_source_competitor(payload.get("sources"), competitor)},
+                    context,
+                    fetched_by_url,
+                )
+            observations.append({"turn": turn, "action": action or "unknown", "error": "unsupported_action"})
+        return []
+
+    def _force_source_competitor(self, raw_sources: object, competitor: str) -> list[dict[str, object]]:
+        if not isinstance(raw_sources, list):
+            return []
+        sources: list[dict[str, object]] = []
+        for item in raw_sources:
+            if not isinstance(item, dict):
+                continue
+            normalized = dict(item)
+            normalized["competitor"] = competitor
+            sources.append(normalized)
+        return sources
+
+    async def _sources_from_react_finish(
+        self,
+        record: RunRecord,
+        detail: RunDetail,
+        dimension: str,
+        payload: dict[str, Any],
+        context: SubagentContext,
+        fetched_by_url: dict[str, Any],
+    ) -> list[RawSource]:
+        raw_sources = payload.get("sources")
+        if not isinstance(raw_sources, list):
+            return []
+        sources: list[RawSource] = []
+        for item in raw_sources:
+            if not isinstance(item, dict):
+                continue
+            competitor = str(item.get("competitor") or detail.plan.competitors[0])
+            title = str(item.get("title") or f"{competitor} {dimension} evidence")
+            summary = str(item.get("summary") or title)
+            url_value = item.get("url")
+            if not isinstance(url_value, str) or not url_value.startswith(("http://", "https://")):
+                url_value = None
+            content_basis = f"{competitor}:{dimension}:{title}:{url_value or ''}:{summary}"
+            fetched = None
+            if url_value:
+                fetched = fetched_by_url.get(url_value)
+                if fetched is None:
+                    fetched = await self._trace_fetch(record, "collector", context.subagent, url_value, context)
+                    fetched_by_url[fetched.url] = fetched
+            verified = fetched is not None and fetched.ok
+            extracted_facts = []
+            if verified:
+                extracted_facts = extract_facts(
+                    fetched.text,
+                    dimension=dimension,
+                    source_id=None,
+                    max_facts=3,
+                )
+                self._trace_local_tool(
+                    record,
+                    agent="collector",
+                    subagent=context.subagent,
+                    name="extract_facts",
+                    input_text=json.dumps(
+                        {"dimension": dimension, "url": fetched.url, "text": fetched.snippet},
+                        ensure_ascii=False,
+                    ),
+                    output_text=json.dumps([fact.__dict__ for fact in extracted_facts], ensure_ascii=False),
+                    context=context,
+                    metadata={"fact_count": len(extracted_facts), "url": fetched.url},
+                )
+            sources.append(
+                source := RawSource(
+                    id=self._new_source_id(dimension),
+                    competitor=competitor,
+                    dimension=dimension,
+                    source_type=(
+                        "webpage_verified"
+                        if verified
+                        else "web_search_result"
+                        if url_value
+                        else "llm_public_knowledge"
+                    ),
+                    title=fetched.title if verified and fetched.title else title,
+                    url=fetched.url if fetched is not None else url_value,
+                    snippet=(" ".join(fact.fact for fact in extracted_facts[:2]) if extracted_facts else fetched.snippet) if verified else summary,
+                    content_hash=(
+                        fetched.content_hash
+                        if fetched is not None
+                        else hashlib.sha256(content_basis.encode()).hexdigest()[:16]
+                    ),
+                    confidence=(
+                        min(1.0, self._coerce_confidence(item.get("confidence"), default=0.7) + 0.03)
+                        if verified
+                        else self._coerce_confidence(item.get("confidence"), default=0.7)
+                    ),
+                )
+            )
+            if not self._source_is_usable(source):
+                sources.pop()
+        return sources
+
+    async def _collect_with_web_search(
+        self,
+        record: RunRecord,
+        dimension: str,
+        context: SubagentContext,
+    ) -> int:
+        detail = record.detail
+        skill = self._skill_registry.get(dimension)
+        added = 0
+        for competitor in detail.plan.competitors:
+            query = self._web_search_query(detail, competitor, dimension)
+            competitor_added = 0
+            results = await self._trace_search(
+                record,
+                agent="collector",
+                subagent=dimension,
+                query=query,
+                max_results=3,
+                context=context,
+            )
+            for result in results:
+                source = await self._source_from_search_result(
+                    detail,
+                    competitor,
+                    dimension,
+                    result,
+                    record,
+                    context,
+                )
+                if source is None:
+                    continue
+                detail.raw_sources.append(source)
+                added += 1
+                competitor_added += 1
+                break
+            if competitor_added == 0 and skill is not None:
+                fallback_query = f"{competitor} {skill.description}"
+                results = await self._trace_search(
+                    record,
+                    agent="collector",
+                    subagent=dimension,
+                    query=fallback_query,
+                    max_results=3,
+                    context=context,
+                )
+                for result in results:
+                    source = await self._source_from_search_result(
+                        detail,
+                        competitor,
+                        dimension,
+                        result,
+                        record,
+                        context,
+                    )
+                    if source is None:
+                        continue
+                    detail.raw_sources.append(source)
+                    added += 1
+                    competitor_added += 1
+                    break
+        return added
+
+    async def _collect_competitor_with_web_search(
+        self,
+        record: RunRecord,
+        dimension: str,
+        competitor: str,
+        context: SubagentContext,
+    ) -> list[RawSource]:
+        detail = record.detail
+        skill = self._skill_registry.get(dimension)
+        queries = [self._web_search_query(detail, competitor, dimension)]
+        if skill is not None:
+            queries.append(f"{competitor} {skill.description}")
+        for query in queries:
+            results = await self._trace_search(
+                record,
+                agent="collector",
+                subagent=context.subagent,
+                query=query,
+                max_results=3,
+                context=context,
+            )
+            for result in results:
+                source = await self._source_from_search_result(
+                    detail,
+                    competitor,
+                    dimension,
+                    result,
+                    record,
+                    context,
+                )
+                if source is not None:
+                    return [source]
+        return []
+
+    async def _collect_competitor_with_skill_tools(
+        self,
+        record: RunRecord,
+        dimension: str,
+        competitor: str,
+        context: SubagentContext,
+        qa_feedback: list[dict[str, object]],
+    ) -> list[RawSource]:
+        return await collect_competitor_with_skill_tools(
+            self,
+            record,
+            dimension=dimension,
+            competitor=competitor,
+            context=context,
+            qa_feedback=qa_feedback,
+        )
+
+    def _web_search_query(self, detail: RunDetail, competitor: str, dimension: str) -> str:
+        skill = self._skill_registry.get(dimension)
+        if skill and skill.query_templates:
+            template = skill.query_templates[0]
+            query = template.format(competitor=competitor)
+        else:
+            query = f"{competitor} {dimension}"
+        return f"{query} {detail.topic} official source"
+
+    def _source_is_usable(self, source: RawSource) -> bool:
+        return self._source_quality_problem(source) is None
+
+    def _source_quality_problem(self, source: RawSource) -> str | None:
+        text = f"{source.title}\n{source.snippet}".strip()
+        normalized = text.casefold()
+        snippet_normalized = source.snippet.casefold()
+        if len(source.snippet.strip()) < 24 and not self._has_concrete_source_signal(source.dimension, normalized):
+            return f"Source {source.id} snippet is too short to support a reliable {source.dimension} claim."
+        if self._looks_like_binary_or_pdf(source.snippet):
+            return f"Source {source.id} looks like unreadable binary/PDF text, not usable extracted evidence."
+        if self._looks_like_navigation_only(snippet_normalized):
+            return f"Source {source.id} appears to contain mostly navigation or boilerplate text."
+        if (
+            source.source_type == "webpage_verified"
+            and source.confidence <= 0.88
+            and not self._has_dimension_specific_fact(source.dimension, snippet_normalized)
+        ):
+            return (
+                f"Source {source.id} has low confidence ({source.confidence:.2f}) and does not expose "
+                f"a concrete {source.dimension} fact in the fetched snippet."
+            )
+        if source.url and self._is_low_value_url(str(source.url)):
+            return f"Source {source.id} points to a low-value page for structured evidence extraction."
+        if not self._dimension_terms_present(source.dimension, normalized):
+            return f"Source {source.id} does not contain enough {source.dimension} terminology for this dimension."
+        return None
+
+    def _has_concrete_source_signal(self, dimension: str, normalized_text: str) -> bool:
+        dimension_key = dimension.casefold()
+        if "pricing" in dimension_key:
+            return bool(re.search(r"(?:\$|usd|rmb|cny|eur|£|€|\d+\s*(?:/|per)\s*(?:token|seat|month|year))", normalized_text))
+        if "persona" in dimension_key or "user" in dimension_key:
+            return any(term in normalized_text for term in ["developer", "customer", "enterprise", "team", "user"])
+        return any(term in normalized_text for term in ["model", "api", "feature", "coding", "reasoning"])
+
+    def _looks_like_binary_or_pdf(self, text: str) -> bool:
+        if "%pdf" in text[:80].casefold() or " endobj" in text.casefold():
+            return True
+        if not text:
+            return True
+        replacement_ratio = text.count("\ufffd") / max(1, len(text))
+        control_ratio = sum(1 for char in text if ord(char) < 32 and char not in "\n\r\t") / max(1, len(text))
+        return replacement_ratio > 0.02 or control_ratio > 0.01
+
+    def _looks_like_navigation_only(self, normalized_text: str) -> bool:
+        nav_markers = [
+            "skip to main content",
+            "open menu",
+            "toggle theme",
+            "sign in",
+            "sign up",
+            "log in",
+            "language",
+            "cookie",
+            "this browser is no longer supported",
+            "download microsoft edge",
+            "search docs",
+            "search...",
+            "navigation",
+            "home page",
+            "resources",
+            "back to blog",
+        ]
+        marker_count = sum(1 for marker in nav_markers if marker in normalized_text)
+        substantive_terms = [
+            "pricing",
+            "price",
+            "feature",
+            "capability",
+            "customer",
+            "developer",
+            "enterprise",
+            "token",
+            "model",
+            "api",
+            "benchmark",
+            "use case",
+        ]
+        substantive_count = sum(1 for term in substantive_terms if term in normalized_text)
+        return marker_count >= 3 and not self._has_dimension_specific_fact("generic", normalized_text)
+
+    def _has_dimension_specific_fact(self, dimension: str, normalized_text: str) -> bool:
+        if not normalized_text.strip():
+            return False
+        dimension_key = dimension.casefold()
+        if "pricing" in dimension_key:
+            return bool(
+                re.search(r"(?:\$|usd|cny|rmb|eur|free|per\s+(?:user|seat|month|year|token)|\bplan\b|\btier\b)", normalized_text)
+            )
+        if "persona" in dimension_key or "user" in dimension_key:
+            return bool(
+                re.search(
+                    r"(?:target(?:ed)?\s+(?:user|customer|persona)|for\s+(?:developers|teams|enterprises|"
+                    r"engineering|marketing|sales)|case stud(?:y|ies)|customer|enterprise|adoption|use case)",
+                    normalized_text,
+                )
+            )
+        if "generic" in dimension_key:
+            return bool(
+                re.search(
+                    r"(?:\$\d+|\d+\s*(?:k|m|%|tokens?|users?|seats?)|supports|provides|includes|"
+                    r"offers|built for|used by|target(?:ed)?)",
+                    normalized_text,
+                )
+            )
+        return bool(
+            re.search(
+                r"(?:supports|provides|includes|offers|can\s+(?:write|generate|explain|run)|"
+                r"context window|tool calls?|code completion|pull requests?|api|benchmark)",
+                normalized_text,
+            )
+        )
+
+    def _is_low_value_url(self, url: str) -> bool:
+        lowered = url.casefold()
+        return any(
+            host in lowered
+            for host in [
+                "youtube.com",
+                "youtu.be",
+                "google.com/search",
+                "accounts.google",
+            ]
+        )
+
+    def _dimension_terms_present(self, dimension: str, normalized_text: str) -> bool:
+        dimension_key = dimension.casefold()
+        if "pricing" in dimension_key:
+            terms = ["pricing", "price", "cost", "billing", "token", "tier", "free", "enterprise", "plan", "$"]
+        elif "persona" in dimension_key or "user" in dimension_key:
+            terms = [
+                "customer",
+                "user",
+                "developer",
+                "enterprise",
+                "team",
+                "persona",
+                "target",
+                "use case",
+                "case study",
+                "organization",
+            ]
+        else:
+            terms = [
+                "feature",
+                "capability",
+                "model",
+                "context",
+                "multimodal",
+                "coding",
+                "reasoning",
+                "benchmark",
+                "api",
+                "tool",
+            ]
+        return any(term in normalized_text for term in terms)
+
+    async def _source_from_search_result(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        result: SearchResult,
+        record: RunRecord | None = None,
+        context: SubagentContext | None = None,
+    ) -> RawSource | None:
+        if any(
+            source.url
+            and str(source.url) == result.url
+            and source.dimension == dimension
+            and self._source_matches_competitor(source, competitor)
+            for source in detail.raw_sources
+        ):
+            return None
+        source_id = self._new_source_id(dimension)
+        fetched = (
+            await self._trace_fetch(record, "collector", dimension, result.url, context)
+            if record is not None
+            else await fetch_page(result.url)
+        )
+        verified = fetched is not None and fetched.ok
+        snippet = fetched.snippet if verified else result.snippet
+        provisional = RawSource(
+            id=source_id,
+            competitor=competitor,
+            dimension=dimension,
+            source_type="webpage_verified" if verified else "web_search_result",
+            title=(fetched.title if verified and fetched.title else result.title),
+            url=(fetched.url if verified else result.url),
+            snippet=snippet,
+            content_hash=(
+                fetched.content_hash
+                if fetched is not None
+                else hashlib.sha256((snippet or result.title or result.url).encode()).hexdigest()[:16]
+            ),
+            confidence=0.84 if verified else 0.68,
+        )
+        if not self._source_is_usable(provisional):
+            return None
+        content_basis = snippet or result.title or result.url
+        return RawSource(
+            id=source_id,
+            competitor=competitor,
+            dimension=dimension,
+            source_type="webpage_verified" if verified else "web_search_result",
+            title=(fetched.title if verified and fetched.title else result.title),
+            url=(fetched.url if verified else result.url),
+            snippet=snippet,
+            content_hash=(
+                fetched.content_hash
+                if fetched is not None
+                else hashlib.sha256(content_basis.encode()).hexdigest()[:16]
+            ),
+            confidence=0.84 if verified else 0.68,
+        )
+
+    async def _real_collector_step(self, record: RunRecord, dimension: str) -> None:
+        detail = record.detail
+        skill = self._skill_registry.get(dimension)
+        context = SubagentContext(run_id=detail.id, agent="collector", subagent=dimension)
+        detail.current_node = "collector"
+        self._append_agent_message(
+            record,
+            from_agent="collector_dispatch",
+            to_agent="collector",
+            message_type="collect_task",
+            payload_schema="CollectTaskPayload",
+            payload={
+                "topic": detail.topic,
+                "dimension": dimension,
+                "competitors": detail.plan.competitors,
+                "homepage_hints": detail.plan.homepage_hints,
+            },
+        )
+        await self.emit(
+            detail.id,
+            "node_started",
+            "collector",
+            dimension,
+            f"Calling {dimension} collector.",
+            {"context": context.metadata()},
+        )
+        web_payload: dict[str, object] = {"provider": self._settings.web_search_provider, "results": []}
+        if self._settings.collector_react_enabled and self._search.is_enabled:
+            try:
+                added = await self._run_collector_react(record, dimension, context)
+                web_payload["react_added"] = added
+                if added > 0:
+                    self._append_agent_message(
+                        record,
+                        from_agent="collector",
+                        to_agent="collect_join",
+                        message_type="raw_sources_collected",
+                        payload_schema="RawSource[]",
+                        payload={
+                            "dimension": dimension,
+                            "source_ids": [
+                                source.id for source in detail.raw_sources if source.dimension == dimension
+                            ],
+                            "count": added,
+                        },
+                    )
+                    detail.updated_at = datetime.utcnow()
+                    await self.emit(
+                        detail.id,
+                        "node_completed",
+                        "collector",
+                        dimension,
+                        f"ReAct collector returned {added} {dimension} evidence source(s).",
+                        {"react": web_payload, "context": context.metadata()},
+                    )
+                    return
+            except Exception as exc:  # noqa: BLE001 - bounded ReAct falls back to deterministic collection.
+                web_payload["react_error"] = str(exc)
+
+        if self._search.is_enabled:
+            try:
+                added = await self._collect_with_web_search(record, dimension, context)
+                web_payload["added"] = added
+                if added > 0:
+                    self._append_agent_message(
+                        record,
+                        from_agent="collector",
+                        to_agent="collect_join",
+                        message_type="raw_sources_collected",
+                        payload_schema="RawSource[]",
+                        payload={
+                            "dimension": dimension,
+                            "source_ids": [
+                                source.id for source in detail.raw_sources if source.dimension == dimension
+                            ],
+                            "count": added,
+                        },
+                    )
+                    detail.updated_at = datetime.utcnow()
+                    await self.emit(
+                        detail.id,
+                        "node_completed",
+                            "collector",
+                            dimension,
+                            f"Perplexity web_search returned {added} {dimension} evidence source(s).",
+                            {"web_search": web_payload, "context": context.metadata()},
+                        )
+                    return
+            except Exception as exc:  # noqa: BLE001 - web search is best effort; LLM fallback continues.
+                web_payload["error"] = str(exc)
+
+        payload = await self._trace_llm_json(
+            record,
+            agent="collector",
+            subagent=dimension,
+            name=f"{dimension}_collector",
+            system=(
+                "You are a collector subagent. Produce compact evidence candidates for competitive analysis. "
+                "Use public knowledge only and mark confidence lower when evidence is uncertain."
+            ),
+            user=(
+                f"Topic: {detail.topic}\n"
+                f"Dimension: {dimension}\n"
+                f"Dimension description: {skill.description if skill else dimension}\n"
+                f"Competitors: {', '.join(detail.plan.competitors)}\n\n"
+                "For each competitor return one concise evidence candidate. Prefer official URLs when known."
+            ),
+            schema_hint='{"sources":[{"competitor":"name","title":"evidence title","url":"https://... or null",'
+            '"summary":"short factual summary","confidence":0.0}]}',
+            context=context,
+        )
+        sources = payload.get("sources", [])
+        if not isinstance(sources, list):
+            sources = []
+        added = 0
+        for item in sources:
+            if not isinstance(item, dict):
+                continue
+            competitor = str(item.get("competitor") or detail.plan.competitors[0])
+            title = str(item.get("title") or f"{competitor} {dimension} evidence")
+            summary = str(item.get("summary") or title)
+            source_id = self._new_source_id(dimension)
+            url_value = item.get("url")
+            if not isinstance(url_value, str) or not url_value.startswith(("http://", "https://")):
+                url_value = None
+            confidence = self._coerce_confidence(item.get("confidence"), default=0.62)
+            fetched = await self._trace_fetch(record, "collector", dimension, url_value, context) if url_value else None
+            verified = fetched is not None and fetched.ok
+            snippet = fetched.snippet if verified else summary
+            source_title = fetched.title if verified and fetched.title else title
+            source_url = fetched.url if fetched is not None and fetched.ok else url_value
+            content_hash = fetched.content_hash if fetched is not None else hashlib.sha256(summary.encode()).hexdigest()[:16]
+            detail.raw_sources.append(
+                RawSource(
+                    id=source_id,
+                    competitor=competitor,
+                    dimension=dimension,
+                    source_type="webpage_verified" if verified else "llm_public_knowledge",
+                    title=source_title,
+                    url=source_url,
+                    snippet=snippet,
+                    content_hash=content_hash,
+                    confidence=min(1.0, confidence + 0.03) if verified else confidence,
+                )
+            )
+            added += 1
+        self._append_agent_message(
+            record,
+            from_agent="collector",
+            to_agent="collect_join",
+            message_type="raw_sources_collected",
+            payload_schema="RawSource[]",
+            payload={
+                "dimension": dimension,
+                "source_ids": [source.id for source in detail.raw_sources if source.dimension == dimension],
+                "count": added,
+            },
+        )
+        detail.updated_at = datetime.utcnow()
+        await self.emit(
+            detail.id,
+            "node_completed",
+            "collector",
+            dimension,
+            f"Collector returned {added} {dimension} evidence candidates.",
+            {"collector": payload, "web_search": web_payload, "context": context.metadata()},
+        )
+
+    async def _real_collector_dispatch_step(
+        self,
+        record: RunRecord,
+        dimensions: list[str],
+        competitors: list[str],
+    ) -> None:
+        detail = record.detail
+        detail.current_node = "collector_dispatch"
+        self._consume_queued_agent_messages(
+            record,
+            to_agent="collector_dispatch",
+            consumer_agent="collector_dispatch",
+            message_types={"analysis_plan_ready"},
+        )
+        branch_count = len(dimensions) * len(competitors)
+        self._append_agent_message(
+            record,
+            from_agent="orchestrator",
+            to_agent="collector_dispatch",
+            message_type="dispatch_collectors",
+            payload_schema="CollectorDispatchPlan",
+            payload={
+                "topic": detail.topic,
+                "dimensions": dimensions,
+                "competitors": competitors,
+                "branch_count": branch_count,
+                "fanout": "competitor_x_dimension",
+            },
+        )
+        detail.updated_at = datetime.utcnow()
+        await self.emit(
+            detail.id,
+            "node_started",
+            "collector_dispatch",
+            None,
+            f"Dispatching {branch_count} collector branch(es).",
+            {"dimensions": dimensions, "competitors": competitors, "branch_count": branch_count},
+        )
+        await self.emit(
+            detail.id,
+            "node_completed",
+            "collector_dispatch",
+            None,
+            "Collector dispatch completed.",
+            {"fanout": "competitor_x_dimension"},
+        )
+
+    async def _real_collector_branch_step(self, record: RunRecord, dimension: str, competitor: str) -> None:
+        detail = record.detail
+        skill = self._skill_registry.get(dimension)
+        branch_id = self._analyst_branch_id(dimension, competitor)
+        context = SubagentContext(run_id=detail.id, agent="collector", subagent=branch_id)
+        qa_feedback = self._qa_feedback_for_branch(detail, "collector", dimension, competitor)
+        detail.current_node = "collector"
+        task_message = self._append_agent_message(
+            record,
+            from_agent="collector_dispatch",
+            to_agent="collector",
+            message_type="collect_task",
+            payload_schema="CollectTaskPayload",
+            payload={
+                "topic": detail.topic,
+                "competitor": competitor,
+                "dimension": dimension,
+                "homepage_hint": detail.plan.homepage_hints.get(competitor),
+                "required_output_schema": "RawSource[]",
+                "qa_feedback": qa_feedback,
+            },
+        )
+        self._consume_agent_message(record, task_message, consumer_agent="collector", context=context)
+        await self.emit(
+            detail.id,
+            "node_started",
+            "collector",
+            branch_id,
+            f"Calling {competitor} / {dimension} collector.",
+            {"context": context.metadata(), "dimension": dimension, "competitor": competitor},
+        )
+        sources: list[RawSource] = []
+        collect_payload: dict[str, object] = {"provider": self._settings.web_search_provider, "results": []}
+        if self._settings.collector_react_enabled and self._search.is_enabled:
+            try:
+                sources = await self._run_collector_competitor_react(record, dimension, competitor, context)
+                collect_payload["react_added"] = len(sources)
+            except Exception as exc:  # noqa: BLE001 - deterministic fallback continues.
+                collect_payload["react_error"] = str(exc)
+        if not sources and self._search.is_enabled:
+            try:
+                sources = await self._collect_competitor_with_web_search(record, dimension, competitor, context)
+                collect_payload["added"] = len(sources)
+            except Exception as exc:  # noqa: BLE001 - LLM fallback continues.
+                collect_payload["error"] = str(exc)
+        if not sources:
+            try:
+                sources = await self._collect_competitor_with_skill_tools(
+                    record,
+                    dimension,
+                    competitor,
+                    context,
+                    qa_feedback,
+                )
+                collect_payload["skill_tool_added"] = len(sources)
+            except Exception as exc:  # noqa: BLE001 - skill tools degrade to LLM fallback.
+                collect_payload["skill_tool_error"] = str(exc)
+        if not sources:
+            payload = await self._trace_llm_json(
+                record,
+                agent="collector",
+                subagent=branch_id,
+                name=f"{dimension}_{self._issue_id_fragment(competitor)}_collector",
+                system=(
+                    "You are a collector subagent for exactly one competitor and one dimension. "
+                    "Return structured evidence candidates only for the assigned competitor. "
+                    "Use public knowledge only if no URL can be identified and mark confidence lower."
+                ),
+                user=(
+                    f"Topic: {detail.topic}\n"
+                    f"Competitor: {competitor}\n"
+                    f"Dimension: {dimension}\n"
+                    f"Dimension description: {skill.description if skill else dimension}\n"
+                    f"Homepage hint: {detail.plan.homepage_hints.get(competitor, '')}\n\n"
+                    f"QA feedback for this branch: {json.dumps(qa_feedback, ensure_ascii=False)}\n\n"
+                    "Return one concise evidence candidate."
+                ),
+                schema_hint='{"sources":[{"title":"evidence title","url":"https://... or null",'
+                '"summary":"short factual summary","confidence":0.0}]}',
+                context=context,
+            )
+            raw_sources = self._force_source_competitor(payload.get("sources"), competitor)
+            sources = await self._sources_from_react_finish(
+                record,
+                detail,
+                dimension,
+                {"sources": raw_sources},
+                context,
+                {},
+            )
+            collect_payload["llm_added"] = len(sources)
+        detail.raw_sources.extend(sources)
+        message = self._append_agent_message(
+            record,
+            from_agent="collector",
+            to_agent="collect_join",
+            message_type="raw_sources_collected",
+            payload_schema="RawSource[]",
+            payload={
+                "competitor": competitor,
+                "dimension": dimension,
+                "source_ids": [source.id for source in sources],
+                "sources": [source.model_dump(mode="json") for source in sources],
+            },
+            source_message_ids=[task_message.id],
+        )
+        detail.updated_at = datetime.utcnow()
+        await self.emit(
+            detail.id,
+            "node_completed",
+            "collector",
+            branch_id,
+            f"Collector completed {competitor} / {dimension} with {len(sources)} source(s).",
+            {
+                "collect": collect_payload,
+                "context": context.metadata(),
+                "dimension": dimension,
+                "competitor": competitor,
+                "message_id": message.id,
+            },
+        )
+
+    async def _real_collect_join_step(self, record: RunRecord, dimensions: list[str]) -> None:
+        detail = record.detail
+        before_count = len(detail.raw_sources)
+        detail.current_node = "collect_join"
+        self._consume_queued_agent_messages(
+            record,
+            to_agent="collect_join",
+            consumer_agent="collect_join",
+            message_types={
+                "raw_sources_collected",
+                "cross_competitor_sources_collected",
+                "cross_competitor_search_failed",
+            },
+        )
+        await self.emit(
+            detail.id,
+            "node_started",
+            "collect_join",
+            "collect_join",
+            "Normalizing collected evidence sources.",
+        )
+        await self._collect_cross_competitor_evidence(record, dimensions)
+        self._consume_queued_agent_messages(
+            record,
+            to_agent="collect_join",
+            consumer_agent="collect_join",
+            message_types={"cross_competitor_sources_collected", "cross_competitor_search_failed"},
+        )
+        detail.raw_sources = self._normalize_collected_sources(detail, dimensions)
+        normalized_count = len(detail.raw_sources)
+        self._append_agent_message(
+            record,
+            from_agent="collect_join",
+            to_agent="qa",
+            message_type="collect_join_completed",
+            payload_schema="RawSourceDigest",
+            payload={
+                "before_count": before_count,
+                "after_count": normalized_count,
+                "dimensions": dimensions,
+                "source_ids": [source.id for source in detail.raw_sources if source.dimension in dimensions],
+            },
+        )
+        detail.updated_at = datetime.utcnow()
+        await self.emit(
+            detail.id,
+            "node_completed",
+            "collect_join",
+            "collect_join",
+            f"Collect join normalized {normalized_count} source(s).",
+            {
+                "collect_join": {
+                    "before_count": before_count,
+                    "after_count": normalized_count,
+                    "dimensions": dimensions,
+                }
+            },
+        )
+
+    def _normalize_collected_sources(self, detail: RunDetail, dimensions: list[str]) -> list[RawSource]:
+        scoped_dimensions = set(dimensions)
+        normalized: list[RawSource] = []
+        seen: set[tuple[str, str, str, str, str]] = set()
+        for source in detail.raw_sources:
+            if scoped_dimensions and source.dimension not in scoped_dimensions:
+                normalized.append(source)
+                continue
+            covered_competitors = self._normalize_covered_competitors(detail, source.competitor)
+            url_key = str(source.url) if source.url else ""
+            key = (
+                source.dimension,
+                url_key,
+                source.content_hash,
+                source.title.strip().casefold(),
+                "|".join(covered_competitors),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(source.model_copy(update={"covered_competitors": covered_competitors}))
+        return normalized
+
+    async def _collect_cross_competitor_evidence(self, record: RunRecord, dimensions: list[str]) -> None:
+        detail = record.detail
+        if not self._search.is_enabled or len(detail.plan.competitors) < 2:
+            return
+        for dimension in dimensions:
+            if self._has_cross_competitor_source(detail, dimension):
+                continue
+            query = self._cross_competitor_query(detail, dimension)
+            try:
+                results = await self._trace_search(
+                    record,
+                    agent="collector",
+                    subagent=f"cross::{dimension}",
+                    query=query,
+                    max_results=3,
+                )
+            except Exception as exc:  # noqa: BLE001 - cross evidence is optional; QA/reflector can flag gaps.
+                self._append_agent_message(
+                    record,
+                    from_agent="collector",
+                    to_agent="collect_join",
+                    message_type="cross_competitor_search_failed",
+                    payload_schema="ToolError",
+                    payload={
+                        "dimension": dimension,
+                        "query": query,
+                        "error": str(exc),
+                        "degraded": True,
+                    },
+                )
+                await self.emit(
+                    detail.id,
+                    "node_completed",
+                    "collector",
+                    f"cross::{dimension}",
+                    "Cross-competitor evidence search failed; continuing with branch evidence.",
+                    {"dimension": dimension, "query": query, "error": str(exc), "degraded": True},
+                )
+                continue
+            cross_label = f"Cross-model all {len(detail.plan.competitors)} competitors"
+            for result in results:
+                source = await self._source_from_search_result(
+                    detail,
+                    cross_label,
+                    dimension,
+                    result,
+                    record,
+                    None,
+                )
+                if source is None:
+                    continue
+                source.covered_competitors = list(detail.plan.competitors)
+                detail.raw_sources.append(source)
+                self._append_agent_message(
+                    record,
+                    from_agent="collector",
+                    to_agent="collect_join",
+                    message_type="cross_competitor_sources_collected",
+                    payload_schema="RawSource[]",
+                    payload={
+                        "dimension": dimension,
+                        "source_ids": [source.id],
+                        "covered_competitors": source.covered_competitors,
+                    },
+                )
+                break
+
+    def _has_cross_competitor_source(self, detail: RunDetail, dimension: str) -> bool:
+        expected = set(detail.plan.competitors)
+        for source in detail.raw_sources:
+            if source.dimension != dimension:
+                continue
+            covered = set(source.covered_competitors or self._normalize_covered_competitors(detail, source.competitor))
+            if len(covered & expected) >= max(2, min(len(expected), 3)):
+                return True
+        return False
+
+    def _cross_competitor_query(self, detail: RunDetail, dimension: str) -> str:
+        competitors = " ".join(detail.plan.competitors)
+        if dimension == "pricing":
+            focus = "pricing comparison API cost per token tiers"
+        elif dimension == "persona":
+            focus = "target users customers personas use cases comparison"
+        else:
+            focus = "feature benchmark capabilities comparison"
+        return f"{detail.topic} {competitors} {focus} source"
+
+    def _normalize_covered_competitors(self, detail: RunDetail, source_competitor: str) -> list[str]:
+        source_key = source_competitor.strip().casefold()
+        if self._competitor_label_means_all(source_key):
+            return list(detail.plan.competitors)
+        matched = [
+            competitor
+            for competitor in detail.plan.competitors
+            if self._competitor_label_matches(source_competitor, competitor)
+        ]
+        if matched:
+            return matched
+        cleaned = source_competitor.strip()
+        return [cleaned] if cleaned else []
