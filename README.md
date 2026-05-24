@@ -4,12 +4,25 @@ Plan A implementation scaffold: graph-driven competitive analysis with schema-fi
 
 ## Quick Start
 
+For the simplest setup, use Docker. Copy the example environment file, fill in your API credentials, then start the full stack:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Open `http://localhost:8080`.
+
+To run against real APIs, set at least `ARK_API_KEY`, `ARK_MODEL`, and `DEMO_MODE=false` in `.env`. `PPLX_API_KEY` is optional and enables Perplexity-backed web search. Without API credentials, the app falls back to demo-mode behavior.
+
+For local development without Docker, install the backend and frontend dependencies first, then run:
+
 ```bash
 make dev-backend
 make dev-frontend
 ```
 
-The backend runs on `http://localhost:8000`. The frontend runs on `http://localhost:5173` and proxies `/api` to the backend.
+The backend runs on `http://localhost:8000`. The frontend runs on `http://localhost:5173` and proxies `/api` to the backend. The Makefile assumes a local Conda environment named `bd-competiscope-v2`; adjust the commands if you use a different Python environment.
 
 ## Real API Test
 
