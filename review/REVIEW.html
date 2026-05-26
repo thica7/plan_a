@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Plan A vs CIMatrix · 课题评审报告</title>
+<style>
+  :root {
+    --bg: #faf8f3;
+    --paper: #ffffff;
+    --ink: #1a1a1a;
+    --muted: #6b6558;
+    --line: #e3ddd0;
+    --accent: #b8501c;
+    --accent-soft: #f4e4d4;
+    --good: #2d6a4f;
+    --good-soft: #d9f0e1;
+    --warn: #b86e00;
+    --warn-soft: #fce8c5;
+    --bad: #9b2226;
+    --bad-soft: #f5d5d6;
+    --code-bg: #f5f1e8;
+    --shadow: 0 1px 0 rgba(0,0,0,.04), 0 8px 24px -12px rgba(0,0,0,.08);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    max-width: 1280px;
+    margin: 0 auto;
+    gap: 36px;
+    padding: 0 28px;
+  }
+  /* sidebar */
+  aside {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    padding: 32px 0 24px;
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+  }
+  aside .brand {
+    font-family: "Iowan Old Style", "Georgia", "Songti SC", serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    margin: 0 0 4px;
+    color: var(--ink);
+  }
+  aside .brand-sub {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .15em;
+    margin-bottom: 28px;
+  }
+  aside nav { font-size: 13px; line-height: 1.6; }
+  aside nav a {
+    display: block;
+    padding: 5px 12px 5px 0;
+    color: var(--muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    padding-left: 12px;
+    transition: color .15s, border-color .15s;
+  }
+  aside nav a:hover { color: var(--accent); border-left-color: var(--accent-soft); }
+  aside nav a.lvl2 { padding-left: 24px; font-size: 12px; }
+  aside .meta {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  /* main */
+  main { padding: 48px 0 96px; min-width: 0; }
+  .hero {
+    border: 1px solid var(--line);
+    background: var(--paper);
+    border-radius: 4px;
+    padding: 32px 36px;
+    margin-bottom: 36px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    width: 4px; height: 100%;
+    background: var(--accent);
+  }
+  .hero .eyebrow {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .2em;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .hero h1 {
+    font-family: "Iowan Old Style", "Georgia", "Songti SC", serif;
+    font-size: 30px;
+    line-height: 1.25;
+    margin: 0 0 8px;
+    letter-spacing: -.01em;
+  }
+  .hero .subtitle {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+  .hero .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 18px;
+  }
+  .stat {
+    border: 1px solid var(--line);
+    padding: 12px 14px;
+    border-radius: 3px;
+    background: var(--bg);
+  }
+  .stat .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .stat .value {
+    font-family: "Iowan Old Style", "Georgia", serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .stat .value.good { color: var(--good); }
+  .stat .value.warn { color: var(--warn); }
+  .stat .value.bad { color: var(--bad); }
+  .stat .delta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  h2 {
+    font-family: "Iowan Old Style", "Georgia", "Songti SC", serif;
+    font-size: 24px;
+    margin: 56px 0 16px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--ink);
+    letter-spacing: -.005em;
+  }
+  h3 {
+    font-family: "Iowan Old Style", "Georgia", "Songti SC", serif;
+    font-size: 18px;
+    margin: 32px 0 12px;
+    color: var(--ink);
+  }
+  h4 {
+    font-size: 15px;
+    margin: 22px 0 8px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  p { margin: 10px 0; }
+  ul, ol { padding-left: 22px; margin: 10px 0; }
+  li { margin: 4px 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  th, td {
+    padding: 9px 12px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    background: var(--code-bg);
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+    border-bottom: 2px solid var(--line);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+
+  code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: var(--accent);
+  }
+  pre code { background: transparent; padding: 0; color: var(--ink); }
+
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .b-ok { background: var(--good-soft); color: var(--good); }
+  .b-partial { background: var(--warn-soft); color: var(--warn); }
+  .b-fail { background: var(--bad-soft); color: var(--bad); }
+  .b-info { background: var(--accent-soft); color: var(--accent); }
+
+  blockquote {
+    margin: 14px 0;
+    padding: 10px 16px;
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    color: var(--ink);
+    font-size: 14px;
+  }
+
+  .gap-card {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--warn);
+    background: var(--paper);
+    padding: 16px 20px;
+    margin: 14px 0;
+    border-radius: 3px;
+    box-shadow: var(--shadow);
+  }
+  .gap-card.crit { border-left-color: var(--bad); }
+  .gap-card.info { border-left-color: var(--accent); }
+  .gap-card h4 { margin-top: 0; }
+
+  .verdict-box {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin: 24px 0;
+  }
+  .verdict-box .v-card {
+    border: 1px solid var(--line);
+    background: var(--paper);
+    padding: 18px 22px;
+    border-radius: 3px;
+    box-shadow: var(--shadow);
+  }
+  .verdict-box h4 { margin: 0 0 8px; font-family: "Iowan Old Style", serif; font-size: 17px; color: var(--ink); }
+  .verdict-box .score {
+    font-family: "Iowan Old Style", serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 4px 0;
+  }
+  .verdict-box ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+
+  .checklist { list-style: none; padding: 0; }
+  .checklist li {
+    padding: 6px 0 6px 28px;
+    position: relative;
+    border-bottom: 1px dashed var(--line);
+  }
+  .checklist li::before {
+    content: "▢";
+    position: absolute; left: 4px; top: 6px;
+    color: var(--muted);
+  }
+  .priority {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 2px;
+    margin-right: 8px;
+    letter-spacing: .08em;
+  }
+  .p0 { background: var(--bad); color: #fff; }
+  .p1 { background: var(--warn); color: #fff; }
+  .p2 { background: var(--muted); color: #fff; }
+
+  hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; padding: 0 18px; }
+    aside { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--line); padding: 16px 0; }
+    aside nav { display: flex; flex-wrap: wrap; gap: 4px; }
+    aside nav a { padding: 4px 8px !important; border-left: none !important; }
+    .hero .summary-grid { grid-template-columns: 1fr; }
+    .verdict-box { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <div class="brand">课题评审</div>
+    <div class="brand-sub">Plan A · CIMatrix</div>
+    <nav>
+      <a href="#hero">概览</a>
+      <a href="#chap-1">1 · plan_a 实现审查</a>
+      <a href="#sec-1-0" class="lvl2">课题 9 项符合度</a>
+      <a href="#sec-1-1" class="lvl2">方案 A D1–D9 矩阵</a>
+      <a href="#sec-1-3" class="lvl2">差距与改进</a>
+      <a href="#chap-2">2 · CIMatrix 对课题</a>
+      <a href="#sec-2-1" class="lvl2">9 项要求核对</a>
+      <a href="#sec-2-2" class="lvl2">亮点与硬伤</a>
+      <a href="#chap-3">3 · 两项目对比</a>
+      <a href="#sec-3-1" class="lvl2">维度打分</a>
+      <a href="#sec-3-3" class="lvl2">互相借鉴</a>
+      <a href="#chap-4">4 · 扩展方向</a>
+      <a href="#chap-5">5 · 行动清单</a>
+    </nav>
+    <div class="meta">
+      生成时间<br>2026-05-27<br>
+      源文档<br>REVIEW.md
+    </div>
+  </aside>
+
+  <main>
+    <section id="hero" class="hero">
+      <div class="eyebrow">Code Review · Multi-Agent System</div>
+      <h1>Plan A vs CIMatrix —— 课题评审报告</h1>
+      <div class="subtitle">《AI 驱动的竞品分析 Agent 协作系统》—— plan_a 实现质量审查 + CIMatrix 横向对比 + 改进建议 + 扩展方向</div>
+
+      <div class="summary-grid">
+        <div class="stat">
+          <div class="label">plan_a · 课题 9 项符合度</div>
+          <div class="value good">7 + 2 + 0</div>
+          <div class="delta">7 全过 / 2 基本满足 / 0 缺</div>
+        </div>
+        <div class="stat">
+          <div class="label">plan_a · 方案 A 落地度</div>
+          <div class="value good">8.5 / 9</div>
+          <div class="delta">D2–D9 全到，D1 部分</div>
+        </div>
+        <div class="stat">
+          <div class="label">CIMatrix · 课题 9 项符合度</div>
+          <div class="value warn">5 + 3 + 2</div>
+          <div class="delta">2 项不达标（LangGraph / robots）</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Chapter 1 ============ -->
+    <h2 id="chap-1">第 1 章 · plan_a 对课题 + 方案 A 的符合度审查</h2>
+    <p>先核对<b>课题概要 / 详情</b>的 9 项硬要求，再逐条核对方案 A 的 D1–D9 关键决策。</p>
+
+    <h3 id="sec-1-0">1.0 plan_a 对课题 9 项核心要求的符合度</h3>
+    <table>
+      <thead><tr><th>#</th><th>要求</th><th>评级</th><th>关键证据</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>多 Agent 角色划分（采集 / 分析 / 撰写 / 质检）</td><td><span class="badge b-ok">Y</span></td><td>7 个 Agent: planner / collector / analyst / comparator / reflector / writer / qa；QA 独立成节点；职责互不重叠（<code>packages/agents/*</code>）</td></tr>
+        <tr><td>2</td><td>Pydantic 知识 Schema（功能树 / 定价 / 画像）</td><td><span class="badge b-ok">Y</span></td><td><code>FeatureTree</code> / <code>PricingModel</code> / <code>UserPersonaModel</code> / <code>CompetitorKnowledge</code>（<code>schema/models.py:79-138</code>），全 <code>extra="forbid"</code> 严格校验；并额外定义 <code>ComparisonMatrix</code> / <code>RedoScope</code> / <code>QCIssue</code> / <code>ReflectionRecord</code></td></tr>
+        <tr><td>3</td><td>DAG + 反馈闭环（QC 打回触发上游重做）</td><td><span class="badge b-ok">Y</span></td><td>LangGraph + Send fan-out + <b>5 级 RedoScope 真窄化重跑</b>（<code>orchestrator/scoping.py</code> + <code>graph.py:47-58</code>）；phase QA 也走 retry 边</td></tr>
+        <tr><td>4</td><td>信息溯源</td><td><span class="badge b-ok">Y</span></td><td><code>KnowledgeClaim.source_ids: min_length=1</code> 强约束；<code>RawSource.url + content_hash + confidence</code>；<code>qa/logic.py:673-682</code> 检测 phantom citation；前端 ReportView <code>[^src_id]</code> 悬浮卡</td></tr>
+        <tr><td>5</td><td>可观测（prompt / IO / decision / token cost）</td><td><span class="badge b-partial">Mostly Y</span></td><td><code>trace_spans</code> 表带 <code>full_input</code> / <code>full_output</code> / <code>input_tokens_estimate</code> / <code>output_tokens_estimate</code> / <code>cost_estimate_usd</code> / <code>latency_ms</code> / <code>metadata</code>（<code>schema/models.py:212-234</code>）；<code>agent_messages</code> + <code>tool_call_messages</code> 三表齐；Langfuse 可选 mirror。<b>唯独 <code>schema_pass_rate</code> 未作为 RunMetrics 字段暴露</b>（Gap-5）</td></tr>
+        <tr><td>6</td><td>LangGraph / CrewAI 编排</td><td><span class="badge b-ok">Y</span></td><td>LangGraph <code>StateGraph</code> + <code>Send</code> fan-out + <code>interrupt()</code> HITL + SQLite checkpointer（<code>orchestrator/graph.py</code> + <code>checkpointer.py</code>）—— 三框架核心特性全用上</td></tr>
+        <tr><td>7</td><td>抗幻觉 / 上下文 / 错误恢复 / 超时降级</td><td><span class="badge b-partial">Mostly Y</span></td><td>抗幻觉：reflector 主动找 gap + qa phantom citation 强校验 + Pydantic forbid；上下文：SubagentContext 结构隔离（<b>但 messages 列表实际未填充</b>，Gap-2）；错误恢复：scoped redo + checkpointer 断点续跑 + ReAct max_turns 兜底；超时：<code>fetch_page timeout=12s</code> / <code>robots_check timeout=4s</code>；<b>无指数退避</b>，失败一次走 fallback</td></tr>
+        <tr><td>8</td><td>E2E 链路：采集 → 编排 → KB → 后端 → 前端</td><td><span class="badge b-ok">Y</span></td><td>LangGraph orchestrator + SQLite KB cache + FastAPI（runs / stream / hitl / kb / trace / revisions / skills）+ React + Vite + TS（10 个 feature 视图）+ docker-compose + nginx 反代，<code>make demo</code> 一键起</td></tr>
+        <tr><td>9</td><td>robots.txt 等合规</td><td><span class="badge b-ok">Y</span></td><td><code>tools/robots.py</code> 真实实现（httpx + 标准 robotparser 语义）；collector ReAct 把 <code>robots_check</code> 列为合法 action（<code>collectors/logic.py:194-207</code>）；fetch 前置走 <code>_trace_robots</code>（<code>service.py:1655-1664</code>），不允许时直接 short-circuit 写 <code>Blocked by robots.txt</code></td></tr>
+      </tbody>
+    </table>
+    <blockquote><b>课题 9 项总评</b>：<b>7 项全过 / 2 项基本满足</b>（仅 <code>schema_pass_rate</code> 未作 metric 暴露 + SubagentContext.messages 未真填充）。<b>0 项缺失</b> —— 显著强于 CIMatrix 的 5/3/2。</blockquote>
+
+    <h3 id="sec-1-1">1.1 D1–D9 符合度矩阵（方案 A）</h3>
+    <table>
+      <thead>
+        <tr><th style="width:6%">ID</th><th style="width:30%">决策</th><th style="width:10%">状态</th><th>关键证据</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><b>D1</b></td><td>Planner = LLM + web_search，验证竞品名，输出 <code>AnalysisPlan</code></td><td><span class="badge b-partial">部分</span></td><td><code>planner/logic.py:38-99</code> 走 LLM scope step；<code>:120-178</code> <code>_discover_competitors</code> 用 <code>_trace_search</code> + LLM JSON。<b>短板</b>：未对竞品名做权威验证（无域名探活/反证搜索）；<code>homepage_hints</code> 退化为 <code>google.com/search?q=…</code> 占位 URL（<code>service.py:142</code>）</td></tr>
+        <tr><td><b>D2</b></td><td>Collector / Analyst 子 agent 内部 ReAct loop，出口 <code>RawSource[]</code> / partial KB</td><td><span class="badge b-ok">完整</span></td><td>Collector ReAct: <code>collectors/logic.py:39-130</code>（topic 级）、<code>:132-313</code>（per-competitor，7 actions）；Analyst ReAct: <code>analysts/logic.py:92-196</code>（强制 inspect_sources / validate_citations 才能 finish）。出口模型严格</td></tr>
+        <tr><td><b>D3</b></td><td>yaml 驱动 skill registry，≥ 4 维度</td><td><span class="badge b-ok">完整</span></td><td>6 个 skill: <code>pricing / feature / persona / review / integrations / security</code>，<code>registry.py</code> 自动发现。<b>小瑕疵</b>：<code>integrations / security / review</code> 在结构化 KB 容器里仍塞进 <code>feature_tree</code> 分支（<code>analysts/logic.py:910-917</code>）</td></tr>
+        <tr><td><b>D4</b></td><td>QCIssue 携 RedoScope，按 scope 路由</td><td><span class="badge b-ok">完整</span></td><td><code>RedoScope.kind</code> 五值 enum；<code>orchestrator/scoping.py:4-29</code> 中心化映射；最终 QA HITL 走 <code>qa_hitl</code> 条件边（<code>graph.py:47-58</code>）</td></tr>
+        <tr><td><b>D5</b></td><td>comparator 节点产出 <code>ComparisonMatrix</code></td><td><span class="badge b-ok">完整</span></td><td><code>comparator/logic.py:10-83</code> 完整 cell + winner_by_dimension + summary，QA 一致性校验在 <code>qa/logic.py:693-820</code></td></tr>
+        <tr><td><b>D6</b></td><td>reflector 节点主动找 self-found gaps</td><td><span class="badge b-ok">完整</span></td><td><code>reflector/logic.py:11-70</code> 在 comparator 之后、writer 之前；<code>_build_reflector_qa_issues:72-106</code> 把覆盖空缺 / 置信度异常喂回最终 QA</td></tr>
+        <tr><td><b>D7</b></td><td>KB cache <code>(competitor, dim, content_hash)</code> → SQLite</td><td><span class="badge b-ok">完整</span></td><td><code>memory/kb_cache.py:25-108</code>，PK <code>(competitor, dimension, content_hash)</code>；hit 路径 <code>analysts/logic.py:442-478</code></td></tr>
+        <tr><td><b>D8</b></td><td>HITL <code>interrupt()</code> × 2（planner / qa）</td><td><span class="badge b-ok">完整</span></td><td><code>service.py:11</code> 引入 LangGraph <code>interrupt</code>，<code>_maybe_interrupt:820-876</code> + REST resume <code>routers/hitl.py:12-25</code></td></tr>
+        <tr><td><b>D9</b></td><td>双层 trace（SQLite + Langfuse）+ SSE swimlane</td><td><span class="badge b-ok">完整</span></td><td>本地 SQLite 三表（trace_spans / agent_messages / tool_call_messages）；Langfuse 可选 mirror；SSE <code>routers/stream.py:10-25</code></td></tr>
+      </tbody>
+    </table>
+    <blockquote><b>总评</b>：D2–D9 全部落地，D1 部分实现。落地度 ≈ <b>8.5 / 9</b>，骨架与脉络已贴合方案 A。</blockquote>
+
+    <h3 id="sec-1-2">1.2 工程纪律达标项</h3>
+    <ul>
+      <li><b>Schema-first</b>：所有节点出口 Pydantic <code>extra="forbid"</code>（RedoScope / QCIssue / RawSource / CompetitorKnowledge / ComparisonMatrix / TraceSpan / AgentMessage / ToolCallMessage / SkillSpec / KBCacheEntry 全覆盖）。</li>
+      <li><b>目录结构</b>：与方案 A §4 几乎逐行对齐（<code>packages/{schema,llm,tools,skills,agents,orchestrator,memory,observability}</code> + <code>app/{main,deps,routers,events}</code>）。</li>
+      <li><b>前端</b>：方案 A 列的 7 类视图全到 + 额外 discovery / messages，共 10 个 features 目录。</li>
+      <li><b>dev / prod 双路径</b>：conda + pnpm dev、Docker + nginx demo，<code>Makefile</code> 命令固化。</li>
+      <li><b>契约同步</b>：<code>scripts/export_openapi.py</code> + <code>frontend/openapi.json</code> 已存在。</li>
+      <li><b>持久化</b>：<code>runs/</code> 下落 traces.db / kb_cache.db / run_journal.db / graph_checkpoints.db（4 个 SQLite WAL）。</li>
+    </ul>
+
+    <h3 id="sec-1-3">1.3 不足与改进建议（优先级从高到低）</h3>
+
+    <div class="gap-card crit">
+      <h4>Gap-1 · Planner 竞品验证薄、homepage_hints 是占位 URL（D1 短板）</h4>
+      <p><b>现象</b>：<code>_real_planner_step</code> 仅靠 LLM 自行说"X 是竞品"，未加 domain probe / 反证搜索；<code>homepage_hints</code> 直接合成成 <code>google.com/search?q=&lt;name&gt;</code>。</p>
+      <p><b>影响</b>：评分项"DAG 任务流转可视化、可追溯"在 planner 阶段失分；竞品名错会带病往下游传，浪费 collector token。</p>
+      <p><b>改进</b>：</p>
+      <ol>
+        <li>给 planner 加 <code>verify_homepage(name) → {url, status_code, title_match}</code> 工具；明确 fail 则 <code>selected=False</code>。</li>
+        <li>加 <code>cross_check_search(name)</code> —— 用 2 条不同 query 互相印证，全没 hit 视为 LLM 编造。</li>
+        <li>把 <code>CompetitorCandidate.confidence</code> 与 verify 结果挂钩，低于阈值（默认 0.6）的 candidate 自动剔除。</li>
+      </ol>
+    </div>
+
+    <div class="gap-card">
+      <h4>Gap-2 · Sub-agent context.messages 实际未填充</h4>
+      <p><b>现象</b>：<code>SubagentContext.messages</code> 字段定义存在，但 ReAct loop 里没有任何 <code>add_message</code> 调用；上下文隔离仅靠 <code>_trace_llm_json</code> 每次自己组 prompt。</p>
+      <p><b>影响</b>：方案 A §3 强调"子 agent 内部 messages history 完全独立、可单测"，目前是结构形式而非内容形式的隔离。</p>
+      <p><b>改进</b>：在 runner 里把每轮 system / user / tool / assistant message append 到 <code>context.messages</code>，并以此做 prompt 拼装，单测用 <code>context.messages</code> 当输入快照。</p>
+    </div>
+
+    <div class="gap-card">
+      <h4>Gap-3 · 集成 / replay 测试覆盖薄</h4>
+      <p><b>现象</b>：<code>tests/integration/test_redo_routing_contract.py</code> 仅 22 行单 path；<code>tests/replay/test_trace_replay_contract.py</code> 仅 29 行单 assert；<code>tests/contract/test_skill_tool_modules.py</code> 21 行。</p>
+      <p><b>改进</b>：</p>
+      <ol>
+        <li>integration 至少补齐 <code>writer_only / comparator / analyst / collector / full</code> 五条 redo 路径各一个端到端测试，断言"重做后 issue 数下降"。</li>
+        <li>replay：从 <code>traces.db</code> 反向重建 timeline，断言节点顺序、span 数量、token 总量。</li>
+        <li>contract：每个 skill yaml 都要有一个 round-trip 测试。</li>
+      </ol>
+    </div>
+
+    <div class="gap-card crit">
+      <h4>Gap-4 · 3 个 seed case 没真正展示 5 种 redo_scope</h4>
+      <p><b>现象</b>：<code>scripts/seed_cases.py</code> 里的 3 个 topic 在 <code>demo_mode=True</code> 下跑，且没断言 <code>RedoScope.kind</code> 类别覆盖。</p>
+      <p><b>影响</b>：方案 A §7 要求"3/3 种子 case 成功触发对应 scope" —— 这是评分项 35% 里"反馈闭环真实可触发"的硬证据。</p>
+      <p><b>改进</b>：5 个 case 分别针对 <code>writer_only</code>（伪造 phantom citation）/ <code>comparator</code>（matrix 单元格不一致）/ <code>analyst</code>（slice 空 KB）/ <code>collector</code>（fetch 失败）/ <code>full</code>（schema 验证失败），每个落 <code>expected.json</code> 快照供 CI 校验。</p>
+    </div>
+
+    <div class="gap-card">
+      <h4>Gap-5 · <code>schema_pass_rate</code> 没作为 metric 暴露</h4>
+      <p><b>现象</b>：方案 A §9 的 7 个评测指标里"Schema 通过率 100% Pydantic 验证"在 <code>RunMetrics</code> 里缺位。</p>
+      <p><b>改进</b>：在 <code>_refresh_quality_metrics</code> 里聚合所有节点出口 <code>model_validate</code> 成功 / 失败次数，加 <code>schema_pass_rate: float</code>；前端 CostPanel 顺便展示。</p>
+    </div>
+
+    <div class="gap-card info">
+      <h4>Gap-6 · 三个 graph 实现重复</h4>
+      <p><b>现象</b>：<code>build_real_analysis_graph</code> / <code>build_scoped_redo_graph</code> / <code>build_demo_analysis_graph</code> 三套相同边声明并存。</p>
+      <p><b>改进</b>：抽 <code>_install_main_pipeline(graph, service)</code> 公共函数，三种入口只差头部节点。</p>
+    </div>
+
+    <div class="gap-card">
+      <h4>Gap-7 · Final-QA HITL 无独立轮次上限</h4>
+      <p><b>现象</b>：phase QA 有 <code>attempts ≥ max_iterations</code> 兜底，但最终 QA 走 <code>qa_hitl → writer_only → writer → qa → qa_hitl</code> 这种链路缺独立计数器。</p>
+      <p><b>改进</b>：<code>GraphState</code> 加 <code>final_qa_attempts: int</code>，超 <code>MAX_ITERATIONS</code> 强制 END 并标 <code>audit_stalled=True</code>。</p>
+    </div>
+
+    <div class="gap-card info">
+      <h4>Gap-8 · Langfuse adapter 静默吞错</h4>
+      <p><b>现象</b>：<code>langfuse_adapter.py:60-61</code> 整体 try/except 不打印不上报。</p>
+      <p><b>改进</b>：fall back 到 <code>logger.warning</code> + 一个 <code>langfuse_publish_failed</code> Prometheus counter。</p>
+    </div>
+
+    <!-- ============ Chapter 2 ============ -->
+    <h2 id="chap-2">第 2 章 · CIMatrix 对课题要求的符合度</h2>
+
+    <h3 id="sec-2-1">2.1 课题 9 项核心要求逐条核对</h3>
+    <table>
+      <thead><tr><th>#</th><th>要求</th><th>评级</th><th>关键证据</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>多 Agent 角色划分（采集 / 分析 / 撰写 / 质检）</td><td><span class="badge b-ok">Y</span></td><td>12 个 Agent，QC 独立（<code>agents/orchestrator.py:80-93</code>）</td></tr>
+        <tr><td>2</td><td>Pydantic 知识 Schema（功能树 / 定价 / 画像）</td><td><span class="badge b-ok">Y</span></td><td><code>schemas/competitor.py</code>：core_features + pricing_model + target_users；<code>scenario.py</code> ProductBrief</td></tr>
+        <tr><td>3</td><td>DAG + 反馈闭环（QC 打回触发上游重做）</td><td><span class="badge b-partial">Partial</span></td><td>QC↔Analyst 重试存在（<code>runtime/local.py:49-73</code>），但规则可指 Discovery / Collector，<b>运行时只回灌 Analyst</b> —— 不能真重启上游</td></tr>
+        <tr><td>4</td><td>信息溯源</td><td><span class="badge b-ok">Y</span></td><td><code>Claim.evidence_ids</code> 强约束 + <code>EvidenceAuditAgent</code> + <code>R-EVIDENCE-001</code> 规则强制</td></tr>
+        <tr><td>5</td><td>可观测（prompt / IO / decision / token cost）</td><td><span class="badge b-partial">Partial</span></td><td>全 agent + 规则事件 + 审计日志齐全；<b>但 token cost 完全未采集</b>（<code>llm/__init__.py:50-63</code> 丢弃 <code>response.usage</code>），原始 prompt 也未持久化</td></tr>
+        <tr><td>6</td><td>LangGraph / CrewAI 编排</td><td><span class="badge b-fail">N</span></td><td><code>requirements.txt</code> 仅 openai / chromadb / sqlalchemy；自研 <code>AnalysisOrchestrator</code> —— 课题"考察要点"明确点名两框架</td></tr>
+        <tr><td>7</td><td>抗幻觉 / 上下文 / 错误恢复 / 超时降级</td><td><span class="badge b-partial">Partial</span></td><td>抗幻觉：<code>RedTeamAgent</code> + 7 条规则；旁路 agent try/except；<b>但 httpx timeout 写死、无指数退避、call_llm 失败一次 fallback</b></td></tr>
+        <tr><td>8</td><td>E2E 链路：采集→编排→KB→后端→前端</td><td><span class="badge b-ok">Y</span></td><td>WebScraper + ChromaDB + FastAPI + SSE + 单页 HTML 2069 行 + docker-compose</td></tr>
+        <tr><td>9</td><td>robots.txt 等合规</td><td><span class="badge b-fail">N</span></td><td>全仓库无 <code>urllib.robotparser</code> / <code>robots.txt</code> 解析；<code>web_scraper.py:35-71</code> 直接 GET</td></tr>
+      </tbody>
+    </table>
+    <blockquote><b>总评</b>：5 条全过 / 3 条部分 / 2 条不达标（含一条课题点名的"LangGraph/CrewAI"）。</blockquote>
+
+    <h3 id="sec-2-2">2.2 CIMatrix 的亮点（值得 plan_a 借鉴）</h3>
+    <ol>
+      <li><b>三层竞品建模 L1/L2/L3</b> —— 直接产品 / 平台方案 / 模型供应商分层，每层独立 schema。L3 离线兜底 16 家厂商详情（pricing / rate_limits / coding_plan / user_feedback）。</li>
+      <li><b>真实证据 jsonl 流水线</b> —— <code>data/real_evidence/evidence.jsonl</code> 143 条带 source_url / confidence / collected_at，配 <code>validate_real_evidence.py</code> 关系校验、<code>seed_real_evidence.py</code> 同步到 ChromaDB。</li>
+      <li><b>规则引擎驱动 QC</b> —— 7 条规则可热注册（<code>rules/definitions.py:230-285</code>），<code>action ∈ {reject, warn, block}</code> 分级 + <code>target_agent</code> 指向；比 prompt 让 LLM 自评确定性高。</li>
+      <li><b>双库持久化</b> —— Postgres（结构化）+ ChromaDB（向量）。<code>AuditLog / ReportHistory / FeedbackStore</code> 都有 in-memory + Postgres 双实现，本地无 DB 不退化。</li>
+      <li><b>MemoryAgent 偏好学习闭环</b> —— 从 feedback 提取 priority/constraint/dimension 偏好 → <code>memory_candidates</code> 表 → 用户确认后生效（rule <code>memory_requires_confirmation</code>）→ 下次同场景自动加载。</li>
+      <li><b>动态场景生成</b> —— <code>scenario_id="custom"</code> 时 LLM 现场合成 ScenarioPack 落盘。</li>
+      <li><b>旁路增强非阻塞</b> —— EvidenceGap / RedTeam / Benchmark 三个 agent try/except 包裹，主链不被增强能力拖垮。</li>
+    </ol>
+
+    <h3 id="sec-2-3">2.3 CIMatrix 的硬伤</h3>
+    <ul>
+      <li><span class="badge b-fail">高</span> 未用 LangGraph / CrewAI（课题点名失分）。</li>
+      <li><span class="badge b-fail">高</span> token cost 完全未追踪（课题硬要求）。</li>
+      <li><span class="badge b-fail">高</span> robots.txt 合规缺失（课题硬要求）。</li>
+      <li><span class="badge b-partial">中</span> DAG 反馈环退化 —— 规则虽指明 target_agent，运行时只重跑 Analyst。</li>
+      <li><span class="badge b-partial">中</span> prompt 文本未持久化 —— <code>agent.started/completed</code> 事件只带摘要 payload。</li>
+      <li><span class="badge b-partial">中</span> Evidence ↔ Competitor 关联用文本子串匹配，长名 / 英文名 collision 风险。</li>
+      <li><span class="badge b-partial">中</span> AnalystAgent 故意注入 bad claim 演示 QC 打回（<code>analyst_agent.py:200-208</code>），更像 demo 装置而非真实业务逻辑。</li>
+      <li><span class="badge b-info">低</span> L1.target_users 仅 List[str]，缺人口学 / 痛点结构化字段。</li>
+    </ul>
+
+    <!-- ============ Chapter 3 ============ -->
+    <h2 id="chap-3">第 3 章 · plan_a vs CIMatrix 对照</h2>
+
+    <h3 id="sec-3-1">3.1 直观打分（按课题评分维度）</h3>
+    <table>
+      <thead><tr><th>评分维度</th><th>权重</th><th>plan_a</th><th>CIMatrix</th><th>优胜方</th></tr></thead>
+      <tbody>
+        <tr><td>多 Agent 协作与输出可信度</td><td>35%</td><td><b>A−</b><br><span style="font-size:12px;color:var(--muted)">schema-first + scoped redo + structured msg</span></td><td>B+<br><span style="font-size:12px;color:var(--muted)">多 agent + 规则引擎 + EvidenceAudit，反馈环退化</span></td><td><span class="badge b-info">plan_a</span></td></tr>
+        <tr><td>技术深度与工程完整度</td><td>25%</td><td><b>A−</b><br><span style="font-size:12px;color:var(--muted)">LangGraph + 双层 trace + KB cache + HITL + checkpointer</span></td><td>B<br><span style="font-size:12px;color:var(--muted)">自研 orchestrator + Postgres+Chroma；无 LangGraph、token cost 缺</span></td><td><span class="badge b-info">plan_a</span></td></tr>
+        <tr><td>业务价值与产品体验</td><td>20%</td><td>B<br><span style="font-size:12px;color:var(--muted)">前端 10 视图工程量大，场景库浅</span></td><td><b>A−</b><br><span style="font-size:12px;color:var(--muted)">L1/L2/L3 + 动态场景 + MemoryAgent + 真实证据</span></td><td><span class="badge b-info">CIMatrix</span></td></tr>
+        <tr><td>代码质量与文档</td><td>10%</td><td><b>A−</b><br><span style="font-size:12px;color:var(--muted)">Pydantic 全 forbid + ruff + 多层 tests + docs/ 齐备</span></td><td>B<br><span style="font-size:12px;color:var(--muted)">README 详尽但 tests 较少</span></td><td><span class="badge b-info">plan_a</span></td></tr>
+        <tr><td>合规、材料与答辩</td><td>10%</td><td>B+<br><span style="font-size:12px;color:var(--muted)">robots tool 已挂 yaml allowlist</span></td><td>C+<br><span style="font-size:12px;color:var(--muted)">robots 完全缺失</span></td><td><span class="badge b-info">plan_a</span></td></tr>
+      </tbody>
+    </table>
+    <blockquote><b>主观折算</b>：plan_a 综合 <b>88</b> / CIMatrix 综合 <b>78</b>。</blockquote>
+
+    <h3 id="sec-3-2">3.2 维度细分对照</h3>
+    <table>
+      <thead><tr><th>维度</th><th>plan_a</th><th>CIMatrix</th></tr></thead>
+      <tbody>
+        <tr><td>编排框架</td><td><b>LangGraph + Send fan-out + checkpointer</b></td><td>自研 <code>AnalysisOrchestrator</code> + 遗留 <code>SequentialLangGraphWorkflow</code>（命名借用）</td></tr>
+        <tr><td>Agent 数量</td><td>7（planner/collector/analyst/comparator/reflector/writer/qa）</td><td><b>12</b>（含 Discovery / Structuring / EvidenceGap / RedTeam / Benchmark / Memory / Requirement）</td></tr>
+        <tr><td>Schema 严格度</td><td>Pydantic <code>extra="forbid"</code> 全节点</td><td>Pydantic v2 + 三层竞品独立 schema</td></tr>
+        <tr><td>反馈闭环</td><td><b>5 级 RedoScope</b>（writer_only / comparator / analyst / collector / full）真触发</td><td>QC 重试 ≤ 2 次，<b>只回灌 Analyst</b></td></tr>
+        <tr><td>自评估</td><td>reflector 节点 + ReflectionRecord + cross_competitor_gaps</td><td>RedTeamAgent + 7 条规则触发 warn / reject</td></tr>
+        <tr><td>溯源粒度</td><td>每 claim → source_ids → RawSource(content_hash + url + confidence)</td><td>每 claim → evidence_ids → Evidence(source_url + confidence + audit verdict)</td></tr>
+        <tr><td>可观测</td><td>trace_spans / agent_messages / tool_call_messages 三表 + token + 美元成本 + Langfuse 可选</td><td>InMemoryEventBus + 30+ 事件类型 + audit_logs，<b>无 token cost</b></td></tr>
+        <tr><td>持久化</td><td>SQLite × 4（traces / kb_cache / run_journal / graph_checkpoints）</td><td>Postgres + ChromaDB + in-memory 双轨</td></tr>
+        <tr><td>前端</td><td>React + Vite + TS，10 个 feature 视图</td><td>单页 HTML 2069 行 + SSE 渐进渲染（无构建链）</td></tr>
+        <tr><td>测试</td><td>10 unit + 2 contract + 1 integration + 1 replay</td><td>较薄</td></tr>
+        <tr><td>HITL</td><td>双 interrupt（planner / qa）+ resume 协议 + 超时回退</td><td>仅"反馈表单"，无运行时 interrupt</td></tr>
+        <tr><td>演示部署</td><td>docker-compose + nginx 反代 + Makefile</td><td>docker-compose（含 postgres + chromadb）</td></tr>
+        <tr><td>业务深度</td><td>6 个维度 yaml（pricing/feature/persona/review/integrations/security）</td><td><b>L1/L2/L3 三层 + 动态场景 + 16 家 LLM 供应商离线库</b></td></tr>
+        <tr><td>合规</td><td><code>robots.py</code> 工具存在</td><td><b>完全缺失</b></td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="sec-3-3">3.3 plan_a 应该向 CIMatrix 学什么</h3>
+    <table>
+      <thead><tr><th>#</th><th>借鉴点</th><th>落地方式</th><th>收益</th></tr></thead>
+      <tbody>
+        <tr><td>B-1</td><td>三层竞品建模（L1/L2/L3）</td><td>在 <code>AnalysisPlan</code> 加 <code>competitor_layer: Literal["product","platform","model"]</code>；不同 layer 走不同 skill 子集（model 层加 rate_limit / context_window 维度）</td><td>业务价值 +5 分（可同时分析 SaaS 产品和 LLM 供应商）</td></tr>
+        <tr><td>B-2</td><td>真实证据 jsonl 流水线</td><td>在 <code>runs/</code> 下加 <code>evidence_seed.jsonl</code>，由 <code>seed_cases.py</code> 写入 KB cache + RawSource 表；启动时校验 schema 一致性</td><td>演示稳定性 +（不依赖实时爬取）</td></tr>
+        <tr><td>B-3</td><td>规则引擎驱动 QC</td><td>把 <code>qa/logic.py</code> 的 hard-coded 检查抽成 <code>qa/rules/*.yaml</code>（severity / target_agent / target_subagent / rationale_template），动态加载</td><td>可观测性 +（评委能直接看到"是哪条规则触发的 redo"）</td></tr>
+        <tr><td>B-4</td><td>MemoryAgent 偏好学习</td><td>加 <code>packages/memory/preference_store.py</code>：HITL 时人工拒绝的 plan / 通过的 issue 抽成 <code>Preference</code>，下次 planner / qa 系统 prompt 注入</td><td>业务闭环 +（"用得越久越懂你"）</td></tr>
+        <tr><td>B-5</td><td>动态场景生成</td><td>加 <code>scenario_template</code> 字段，让 planner 根据 topic 自动选 dimensions（而非用户硬指定）</td><td>易用性 +</td></tr>
+        <tr><td>B-6</td><td>旁路增强 agent</td><td>把 reflector 改造成 try/except 包裹的可选节点；新增可选 <code>BenchmarkAgent</code>（对比标杆产品）/ <code>RedTeamAgent</code>（红队挑刺）</td><td>技术前瞻性 +</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="sec-3-4">3.4 CIMatrix 应该向 plan_a 学什么（如果两团队共建）</h3>
+    <table>
+      <thead><tr><th>#</th><th>借鉴点</th><th>落地方式</th></tr></thead>
+      <tbody>
+        <tr><td>A-1</td><td><b>迁移到 LangGraph</b></td><td><code>AnalysisOrchestrator</code> 重构为 <code>StateGraph</code>，复用现有 12 个 Agent.handle 方法作为节点函数；DAG 显式声明，反馈环用条件边</td></tr>
+        <tr><td>A-2</td><td>RedoScope 5 级路由</td><td>把规则引擎的 <code>target_agent</code> 升级为 <code>RedoScope</code>，让 LangGraph 按 scope 真窄化重跑，而不是固定回灌 Analyst</td></tr>
+        <tr><td>A-3</td><td><b>补 token cost</b></td><td><code>llm/__init__.py:50-63</code> 加 <code>usage = response.usage</code>；事件 payload 加 <code>prompt_tokens / completion_tokens / cost_usd</code>；前端展示成本饼图</td></tr>
+        <tr><td>A-4</td><td><b>补 robots.txt 合规</b></td><td>给 <code>WebScraper.fetch</code> 加 <code>RobotFileParser</code> 前置检查，违反时抛 <code>RobotsDisallowed</code> + 写 audit log</td></tr>
+        <tr><td>A-5</td><td>持久化 prompt</td><td><code>agent.started/completed</code> 事件加 <code>prompt: str / response: str</code>；audit_logs 表新增列</td></tr>
+        <tr><td>A-6</td><td>HITL 真 interrupt</td><td>LangGraph <code>interrupt()</code> + REST resume，替代单向反馈表单</td></tr>
+        <tr><td>A-7</td><td>KB cache</td><td>在 ChromaDB 之外加一张 <code>kb_cache(competitor, dim, content_hash)</code> 走 PG，演示重跑命中即返回</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============ Chapter 4 ============ -->
+    <h2 id="chap-4">第 4 章 · 后续可扩展方向</h2>
+    <p>按"实施成本 / 评分加成"二维排序，分短中长期落地。</p>
+
+    <h3>4.1 短期（1 周内可落）</h3>
+    <ul class="checklist">
+      <li><span class="priority p0">P0</span> schema_pass_rate 指标补齐（plan_a Gap-5）</li>
+      <li><span class="priority p0">P0</span> 5 个 seed case 严格覆盖 5 种 RedoScope（plan_a Gap-4）</li>
+      <li><span class="priority p0">P0</span> Planner verify_homepage + cross_check_search 工具（plan_a Gap-1）</li>
+      <li><span class="priority p1">P1</span> 集成测试补齐 5 条 redo 路径 E2E（plan_a Gap-3）</li>
+      <li><span class="priority p1">P1</span> 验证 robots 工具在 collector ReAct 真被调用</li>
+    </ul>
+
+    <h3>4.2 中期（2–3 周）</h3>
+    <ul class="checklist">
+      <li><span class="priority p1">P1</span> 三层竞品建模 L1/L2/L3（借鉴 CIMatrix）—— planner 选 layer，dim 池按 layer 过滤</li>
+      <li><span class="priority p1">P1</span> 规则引擎驱动 QC（QA 检查抽成 yaml）</li>
+      <li><span class="priority p1">P1</span> 真实证据 jsonl 流水线 —— 离线 seed + 在线增量</li>
+      <li><span class="priority p2">P2</span> MemoryAgent 偏好学习闭环 —— HITL 人工干预 → preference store</li>
+      <li><span class="priority p2">P2</span> Run 复盘 / Diff 视图增强 —— "两次 run 整体 KB diff"</li>
+    </ul>
+
+    <h3>4.3 长期（>1 月，研究 / 前瞻向，对应 25% "技术前瞻"加分）</h3>
+    <ol>
+      <li><b>自适应任务拆分</b> —— Planner 根据 <code>complexity</code> 估算 + 初步 search，动态决定 collector ReAct 的 <code>max_turns</code> 和 dimensions 数量；甚至自动生成 SkillSpec</li>
+      <li><b>多 Agent 互评矩阵</b> —— reflector 拆成 <code>peer_review_collector / peer_review_analyst / peer_review_writer</code>，每个 agent 都有 1 个 peer 对它的 self-found</li>
+      <li><b>动态 Schema 演化</b> —— 当一类 dim 反复在 reflector 里被发现是 cross_competitor_gap，自动生成 <code>compliance.yaml</code> 草稿放到 <code>skills/_pending/</code> 等审批</li>
+      <li><b>多模态证据</b> —— pricing 页面截图 + OCR；用户访谈视频转写自动化（需补 ASR 工具）；前端 ReportView 加图片 / 视频内联</li>
+      <li><b>Embedding 去重</b> —— <code>content_hash</code> 之上叠 <code>embedding similarity > 0.95 → 视为重复</code>，避免同 pricing 页面不同 URL（带 utm 参数）重复入 KB</li>
+      <li><b>联邦 / 团队协作</b> —— 多人同 run、批注、版本控制（Git-style branch / diff / merge），适合企业落地</li>
+      <li><b>跨 run 知识库累积</b> —— 把每次 run 的 <code>CompetitorKB</code> 落到全局 KB，下次同名 competitor 自动 prefill</li>
+      <li><b>答辩可视化升级</b> —— swimlane 升级为 Sankey 流量图（fan-out / fan-in 用宽度表示）；trace playback 加"按节点回放" + "按 token 消耗回放"双轴</li>
+      <li><b>A/B run 对比</b> —— 同 topic 跑两遍（不同 LLM / 不同 skill 组合），前端 A/B Diff 视图，量化模型选择对结果的影响</li>
+      <li><b>跨竞品价格归一化</b> —— pricing slice 出口加 <code>normalized_monthly_usd</code>（处理 annual 折扣 / 不同币种 / per-seat vs flat），让 ComparisonMatrix 真能横向对比</li>
+    </ol>
+
+    <!-- ============ Chapter 5 ============ -->
+    <h2 id="chap-5">第 5 章 · 结论与行动清单</h2>
+
+    <h3 id="sec-5-1">5.1 结论</h3>
+    <div class="verdict-box">
+      <div class="v-card">
+        <h4>plan_a</h4>
+        <div class="score">88 / 100</div>
+        <div style="font-size:13px;color:var(--muted)">对方案 A 落地度 8.5 / 9</div>
+        <ul>
+          <li>D2–D9 全到，D1 唯一短板</li>
+          <li>Schema 严格度、scoped redo、HITL、双层 trace 都达成</li>
+          <li>工程纪律强，前端视图齐全</li>
+          <li>缺 CIMatrix 那种"业务领域纵深"</li>
+        </ul>
+      </div>
+      <div class="v-card">
+        <h4>CIMatrix</h4>
+        <div class="score" style="color:var(--warn)">78 / 100</div>
+        <div style="font-size:13px;color:var(--muted)">对课题命中 5 全 / 3 部分 / 2 缺</div>
+        <ul>
+          <li>业务建模深、数据治理强、L1/L2/L3 分层</li>
+          <li>关键工程项缺失（LangGraph、token cost、robots）</li>
+          <li>DAG 反馈环退化（QC 只回灌 Analyst）</li>
+          <li>MemoryAgent 偏好学习是亮点</li>
+        </ul>
+      </div>
+    </div>
+    <blockquote>
+      <b>plan_a 综合质量 &gt; CIMatrix</b>，赢在工程纪律和评分项命中度；<br>
+      <b>CIMatrix 业务理解 &gt; plan_a</b>，赢在三层竞品建模、动态场景、MemoryAgent。
+    </blockquote>
+
+    <h3 id="sec-5-2">5.2 plan_a 优先行动清单（按答辩前剩余时间）</h3>
+
+    <h4>P0 · 必做（影响评分硬指标）</h4>
+    <ul class="checklist">
+      <li><span class="priority p0">P0</span> Gap-1: Planner 加 verify_homepage / cross_check_search 工具</li>
+      <li><span class="priority p0">P0</span> Gap-4: 5 个 seed case × 5 种 RedoScope，每个有 expected.json 快照</li>
+      <li><span class="priority p0">P0</span> Gap-5: <code>RunMetrics.schema_pass_rate</code> 暴露 + 前端展示</li>
+      <li><span class="priority p0">P0</span> B-1（借鉴 CIMatrix）: AnalysisPlan 加 <code>competitor_layer</code>，至少演示 L1+L2 两层</li>
+    </ul>
+
+    <h4>P1 · 强烈建议（提升前瞻性 25% 那 3 分）</h4>
+    <ul class="checklist">
+      <li><span class="priority p1">P1</span> Gap-3: integration / replay 测试覆盖 5 条 redo 路径</li>
+      <li><span class="priority p1">P1</span> B-3: QA 规则 yaml 化（先抽 3 条 hard-coded 检查作为示例）</li>
+      <li><span class="priority p1">P1</span> B-2: 离线 evidence seed 流水线（演示稳定性）</li>
+    </ul>
+
+    <h4>P2 · 锦上添花</h4>
+    <ul class="checklist">
+      <li><span class="priority p2">P2</span> Gap-2: SubagentContext.messages 真填充</li>
+      <li><span class="priority p2">P2</span> Gap-6: 三个 graph 抽公共 install 函数</li>
+      <li><span class="priority p2">P2</span> Gap-7: final_qa_attempts 计数器</li>
+      <li><span class="priority p2">P2</span> Gap-8: Langfuse 错误可见化</li>
+    </ul>
+
+    <h3 id="sec-5-3">5.3 CIMatrix 优先行动清单（如果两项目可合并交付）</h3>
+
+    <h4>P0 · 直接对标课题硬要求</h4>
+    <ul class="checklist">
+      <li><span class="priority p0">P0</span> A-1: 迁移到 LangGraph</li>
+      <li><span class="priority p0">P0</span> A-3: token cost 采集</li>
+      <li><span class="priority p0">P0</span> A-4: robots.txt 合规</li>
+      <li><span class="priority p0">P0</span> A-2: RedoScope 5 级路由（修反馈环退化）</li>
+    </ul>
+
+    <h4>P1 · 工程纪律</h4>
+    <ul class="checklist">
+      <li><span class="priority p1">P1</span> A-5: 持久化 prompt 文本</li>
+      <li><span class="priority p1">P1</span> A-6: HITL 真 interrupt</li>
+      <li><span class="priority p1">P1</span> A-7: KB cache</li>
+    </ul>
+
+    <hr>
+    <p style="text-align:center;color:var(--muted);font-size:12px;margin-top:48px;">
+      报告生成于 2026-05-27 · plan_a 与 CIMatrix 对照评审 · 同源文档 <code>REVIEW.md</code>
+    </p>
+  </main>
+</div>
+</body>
+</html>
