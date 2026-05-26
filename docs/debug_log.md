@@ -19,3 +19,12 @@ implementation notes.
   swallowed by the report fallback.
 - Confirmed fallback report generation keeps source IDs and QA-visible findings
   available for the final review panel.
+
+## 2026-05-26 11:10 - Trace and Cost Sanity
+
+- Compared trace span counts with frontend cost panel totals to make sure LLM,
+  search, fetch, and local-tool spans are all counted from the same payload.
+- Checked that agent messages keep their linked `trace_span_ids`, so decision
+  replay can jump from a message to the underlying tool or LLM span.
+- Verified skipped fetches and robots failures remain visible as trace entries
+  instead of silently disappearing from the run timeline.
