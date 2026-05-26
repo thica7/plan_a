@@ -28,3 +28,12 @@ implementation notes.
   replay can jump from a message to the underlying tool or LLM span.
 - Verified skipped fetches and robots failures remain visible as trace entries
   instead of silently disappearing from the run timeline.
+
+## 2026-05-26 11:35 - Frontend Run Inspection
+
+- Opened the latest run detail page and checked that the graph reveals nodes from
+  observed events instead of rendering every node as static completed state.
+- Checked QA findings, agent messages, and trace playback against the same run ID
+  to catch stale client state after SSE reconnects.
+- Confirmed manual redo controls stay disabled once the run reaches the configured
+  max iteration limit.
