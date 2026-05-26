@@ -11,3 +11,11 @@ implementation notes.
 - Confirmed blocker findings are eligible for automatic redo when HITL is off.
 - Confirmed warn findings only trigger redo when the run option enables warn-level
   redo.
+
+## 2026-05-26 10:25 - Writer Timeout Fallback
+
+- Replayed the writer timeout path after real runs showed slow report generation.
+- Confirmed timeout spans stay visible as `error` trace spans instead of being
+  swallowed by the report fallback.
+- Confirmed fallback report generation keeps source IDs and QA-visible findings
+  available for the final review panel.
