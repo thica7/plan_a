@@ -1920,6 +1920,13 @@ class RunService(
         )
         metrics.qa_issue_count = len(detail.qa_findings)
         metrics.revision_count = len(detail.revisions)
+        schema_issue_count = sum(1 for issue in detail.qa_findings if issue.detected_by == "schema")
+        metrics.schema_pass_rate = 0.0 if schema_issue_count else 1.0
+        metrics.human_override_rate = (
+            round(len(detail.revisions) / len(detail.qa_findings), 3) if detail.qa_findings else 0.0
+        )
+        blocker_count = sum(1 for issue in detail.qa_findings if issue.severity == "blocker")
+        metrics.acceptance_rate = 0.0 if blocker_count else 1.0
         detail.metrics = metrics
 
     def _estimate_tokens(self, text: str) -> int:

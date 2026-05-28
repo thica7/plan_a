@@ -231,6 +231,9 @@ export interface RunMetrics {
   source_coverage_rate: number;
   verified_source_rate: number;
   claim_citation_rate: number;
+  schema_pass_rate: number;
+  human_override_rate: number;
+  acceptance_rate: number;
   qa_issue_count: number;
   revision_count: number;
 }

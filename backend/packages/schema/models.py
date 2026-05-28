@@ -283,6 +283,9 @@ class RunMetrics(BaseModel):
     source_coverage_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     verified_source_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     claim_citation_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    schema_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    human_override_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    acceptance_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     qa_issue_count: int = Field(default=0, ge=0)
     revision_count: int = Field(default=0, ge=0)
 
