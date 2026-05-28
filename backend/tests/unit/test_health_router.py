@@ -81,6 +81,69 @@ def test_health_marks_misconfigured_postgres_enterprise_store_as_error() -> None
     assert "ENTERPRISE_DATABASE_URL" in enterprise["detail"]
 
 
+def test_health_pings_configured_postgres_enterprise_store(monkeypatch) -> None:
+    class FakePostgresStore:
+        def __init__(self, database_url: str, *, auto_migrate: bool) -> None:
+            assert database_url == "postgresql://user:pass@db:5432/app"
+            assert auto_migrate is False
+
+        def ping(self) -> str:
+            return "backend=postgres database=app"
+
+    monkeypatch.setattr("app.routers.health.EnterprisePostgresStore", FakePostgresStore)
+    db_path = _db_path()
+    client = _client(
+        db_path,
+        _settings(
+            enterprise_store_backend="postgres",
+            enterprise_database_url="postgresql://user:pass@db:5432/app",
+        ),
+    )
+
+    try:
+        response = client.get("/api/health")
+    finally:
+        db_path.unlink(missing_ok=True)
+
+    assert response.status_code == 200
+    body = response.json()
+    enterprise = [check for check in body["checks"] if check["name"] == "enterprise_store"][0]
+    assert enterprise["status"] == "ok"
+    assert enterprise["detail"] == "backend=postgres database=app"
+
+
+def test_health_marks_unreachable_postgres_enterprise_store_as_error(monkeypatch) -> None:
+    class FakePostgresStore:
+        def __init__(self, database_url: str, *, auto_migrate: bool) -> None:
+            pass
+
+        def ping(self) -> str:
+            raise RuntimeError("contains-secret-password")
+
+    monkeypatch.setattr("app.routers.health.EnterprisePostgresStore", FakePostgresStore)
+    db_path = _db_path()
+    client = _client(
+        db_path,
+        _settings(
+            enterprise_store_backend="postgres",
+            enterprise_database_url="postgresql://user:secret@db:5432/app",
+        ),
+    )
+
+    try:
+        response = client.get("/api/health")
+    finally:
+        db_path.unlink(missing_ok=True)
+
+    assert response.status_code == 200
+    body = response.json()
+    enterprise = [check for check in body["checks"] if check["name"] == "enterprise_store"][0]
+    assert body["status"] == "error"
+    assert enterprise["status"] == "error"
+    assert enterprise["detail"] == "backend=postgres unreachable"
+    assert "secret" not in response.text
+
+
 def test_llm_smoke_uses_real_client_without_exposing_key(
     monkeypatch,
 ) -> None:

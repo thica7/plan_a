@@ -56,6 +56,12 @@ class EnterprisePostgresStore:
                     cur.execute(statement)
             conn.commit()
 
+    def ping(self) -> str:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            row = conn.execute("SELECT current_database() AS database_name").fetchone()
+        database_name = row["database_name"] if row else "unknown"
+        return f"backend=postgres database={database_name}"
+
     def start_run(
         self,
         detail: RunDetail,

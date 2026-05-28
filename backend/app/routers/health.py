@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_app_settings, get_run_journal, get_skill_registry
 from packages.config import Settings
+from packages.enterprise import EnterprisePostgresStore
 from packages.llm import DoubaoClient, LLMError
 from packages.memory import RunJournal
 from packages.schema.api_dto import (
@@ -175,12 +176,27 @@ def _enterprise_store_check(settings: Settings) -> HealthCheck:
             detail="backend=memory",
         )
     if backend == "postgres":
+        if not settings.enterprise_database_url:
+            return HealthCheck(
+                name="enterprise_store",
+                status="error",
+                detail="ENTERPRISE_DATABASE_URL is required",
+            )
+        try:
+            detail = EnterprisePostgresStore(
+                settings.enterprise_database_url,
+                auto_migrate=False,
+            ).ping()
+        except Exception:
+            return HealthCheck(
+                name="enterprise_store",
+                status="error",
+                detail="backend=postgres unreachable",
+            )
         return HealthCheck(
             name="enterprise_store",
-            status="ok" if settings.enterprise_database_url else "error",
-            detail="backend=postgres configured"
-            if settings.enterprise_database_url
-            else "ENTERPRISE_DATABASE_URL is required",
+            status="ok",
+            detail=detail,
         )
     return HealthCheck(
         name="enterprise_store",
