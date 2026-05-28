@@ -38,6 +38,9 @@ ANALYST_REACT_ENABLED=true
 ANALYST_REACT_MAX_TURNS=3
 ENTERPRISE_STORE_BACKEND=postgres
 ENTERPRISE_DATABASE_URL=postgresql://competiscope:competiscope@127.0.0.1:55432/competiscope?connect_timeout=5
+TEMPORAL_ADDRESS=127.0.0.1:7233
+TEMPORAL_NAMESPACE=default
+TEMPORAL_TASK_QUEUE=competitive-intel
 ```
 
 Then restart the backend with `make dev-backend`. The New Run screen will show whether the backend detected `ARK_API_KEY` and `ARK_MODEL`; choose `Real API` to send real chat completion calls through the backend. The API key is never sent from the browser.
@@ -69,6 +72,7 @@ Enterprise Postgres smoke:
 ```bash
 docker compose up -d postgres
 make smoke-enterprise-postgres
+make smoke-temporal-thin-shell
 ```
 
 The smoke script uses `postgresql://competiscope:competiscope@127.0.0.1:55432/competiscope?connect_timeout=5`
@@ -95,6 +99,7 @@ unless `ENTERPRISE_DATABASE_URL` is set.
 - Optional HITL interrupts for planner and QA review, enabled with `HITL_ENABLED=true`
 - Enterprise data boundary for Workspace, Project, Competitor, Evidence, Claim, ReportVersion, and AuditLog, with memory and Postgres store implementations
 - Phase 4 prerequisites for retry-safe workflow wrapping: run `idempotency_key` plus evidence `canonical_url`, first/last seen run IDs, and `seen_count`
+- Phase 4 Temporal thin shell: `CompetitiveIntelWorkflow` wraps the existing LangGraph run as retry-safe activities; start the worker with `make temporal-worker`
 - Docker and Makefile scaffolding for the planned demo path
 
 ## Project Layout

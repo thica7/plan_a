@@ -55,6 +55,9 @@ class Settings:
     langfuse_host: str | None = None
     enterprise_store_backend: str = "postgres"
     enterprise_database_url: str | None = DEFAULT_ENTERPRISE_DATABASE_URL
+    temporal_address: str = "127.0.0.1:7233"
+    temporal_namespace: str = "default"
+    temporal_task_queue: str = "competitive-intel"
 
     @property
     def has_llm_credentials(self) -> bool:
@@ -106,4 +109,7 @@ def get_settings() -> Settings:
         langfuse_host=os.getenv("LANGFUSE_HOST") or None,
         enterprise_store_backend=enterprise_backend,
         enterprise_database_url=enterprise_database_url,
+        temporal_address=os.getenv("TEMPORAL_ADDRESS", "127.0.0.1:7233"),
+        temporal_namespace=os.getenv("TEMPORAL_NAMESPACE", "default"),
+        temporal_task_queue=os.getenv("TEMPORAL_TASK_QUEUE", "competitive-intel"),
     )

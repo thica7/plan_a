@@ -458,10 +458,10 @@ class RunService(
         finally:
             record.subscribers.remove(queue)
 
-    async def run_pipeline(self, run_id: str) -> None:
+    async def run_pipeline(self, run_id: str) -> RunDetail | None:
         record = self._runs.get(run_id)
         if record is None:
-            return
+            return None
         try:
             if record.detail.execution_mode == "real":
                 await self._run_real_pipeline(run_id)
@@ -479,6 +479,7 @@ class RunService(
                 f"Run failed: {exc}",
                 {"error": str(exc)},
             )
+        return record.detail
 
     async def _run_demo_graph_pipeline(self, run_id: str) -> None:
         record = self._runs.get(run_id)
@@ -1473,6 +1474,11 @@ class RunService(
         )
         self._enterprise_store.save_projection(projection)
         return projection
+
+    def get_enterprise_projection(self, run_id: str) -> EnterpriseRunProjection | None:
+        if self._enterprise_store is None:
+            return None
+        return self._enterprise_store.get_run_projection(run_id)
 
     def _enterprise_projection_payload(
         self,

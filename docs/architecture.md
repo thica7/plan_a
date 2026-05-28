@@ -33,6 +33,7 @@ LLM/search work for stable fixture node implementations.
 ## Contracts
 
 - Agent collaboration uses `AgentMessage` envelopes with `queued/consumed` status; tool activity is linked through `ToolCallMessage.source_message_id` when applicable.
+- Phase 4 introduces a Temporal outer shell, not a replacement for LangGraph. `CompetitiveIntelWorkflow` creates an idempotent run, executes the existing LangGraph pipeline as an activity, and loads the persisted enterprise projection as the workflow result.
 - HITL uses native LangGraph interrupt/resume semantics, not a service-level Future wait; manual post-run redo is separated onto `POST /runs/{run_id}/redo`.
 - Knowledge claims use `KnowledgeClaim.source_ids`; QA checks unknown or missing citations.
 - Core knowledge schemas are `FeatureTree`, `PricingModel`, and `UserPersonaModel`.

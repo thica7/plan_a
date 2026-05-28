@@ -18,3 +18,14 @@ the inner LangGraph agent DAG.
 Phase 1-3 stay LangGraph-first. Phase 4 introduces a thin
 `CompetitiveIntelWorkflow` that calls the existing graph as an activity, with
 idempotent evidence, claim, and report writes.
+
+The Phase 4 worker registers exactly one outer workflow first:
+
+- `CompetitiveIntelWorkflow`
+- `create_competitive_intel_run`
+- `run_competitive_intel_langgraph`
+- `load_competitive_intel_projection`
+
+This keeps Temporal responsible for workflow durability and retry boundaries,
+while `RunService` and LangGraph remain responsible for planner, collector,
+analyst, comparator, QA, redo, and HITL behavior inside a single run.

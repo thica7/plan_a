@@ -16,6 +16,7 @@ conda run -n bd-competiscope-v2 python backend/scripts/smoke_minimal_run.py
 conda run -n bd-competiscope-v2 python backend/scripts/smoke_llm.py
 conda run -n bd-competiscope-v2 python backend/scripts/smoke_search.py
 conda run -n bd-competiscope-v2 python backend/scripts/smoke_fetch.py
+conda run -n bd-competiscope-v2 python backend/scripts/smoke_temporal_thin_shell.py
 ```
 
 Enterprise store:
@@ -39,3 +40,15 @@ Phase 4 prerequisite fields are already in the enterprise store: runs persist an
 `idempotency_key`, and evidence records track `canonical_url`,
 `first_seen_run_id`, `last_seen_run_id`, and `seen_count` for retry-safe
 Temporal wrapping later.
+
+Temporal thin shell:
+
+```bash
+TEMPORAL_ADDRESS=127.0.0.1:7233
+TEMPORAL_NAMESPACE=default
+TEMPORAL_TASK_QUEUE=competitive-intel
+conda run -n bd-competiscope-v2 python backend/scripts/run_temporal_worker.py
+```
+
+`CompetitiveIntelWorkflow` calls the existing LangGraph run through activities;
+it does not replace the inner graph.
