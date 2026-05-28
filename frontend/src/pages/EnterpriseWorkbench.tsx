@@ -8,6 +8,7 @@ import {
   Database,
   ExternalLink,
   FileText,
+  Gauge,
   GitCompare,
   Layers,
   RefreshCw,
@@ -17,6 +18,7 @@ import {
 import {
   getProjectBusinessPlan,
   getProjectQAEvaluation,
+  getProjectReadinessScore,
   getReportVersionDiff,
   listEnterpriseCompetitors,
   listEnterpriseProjects,
@@ -33,6 +35,7 @@ import type {
   CompetitorRecord,
   EvidenceQualityLabel,
   EvidenceRecord,
+  ProjectReadinessScore,
   ProjectRecord,
   ReportVersionDiff,
   ReportVersionRecord,
@@ -49,6 +52,7 @@ export function EnterpriseWorkbench() {
   const [versions, setVersions] = useState<ReportVersionRecord[]>([]);
   const [businessPlan, setBusinessPlan] = useState<BusinessIntelPlan | null>(null);
   const [qaEvaluation, setQaEvaluation] = useState<BusinessQAEvaluation | null>(null);
+  const [readinessScore, setReadinessScore] = useState<ProjectReadinessScore | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
   const [activeTab, setActiveTab] = useState<EnterpriseTab>("evidence");
@@ -84,6 +88,7 @@ export function EnterpriseWorkbench() {
       setVersions([]);
       setBusinessPlan(null);
       setQaEvaluation(null);
+      setReadinessScore(null);
       setSelectedVersionId(null);
       return;
     }
@@ -98,6 +103,7 @@ export function EnterpriseWorkbench() {
       listProjectReportVersions(selectedProjectId),
       getProjectBusinessPlan(selectedProjectId),
       getProjectQAEvaluation(selectedProjectId),
+      getProjectReadinessScore(selectedProjectId),
     ])
       .then(
         ([
@@ -107,15 +113,17 @@ export function EnterpriseWorkbench() {
           versionItems,
           businessPlanValue,
           qaEvaluationValue,
+          readinessScoreValue,
         ]) => {
-        if (!active) return;
-        setCompetitors(competitorItems);
-        setEvidence(evidenceItems);
-        setClaims(claimItems);
-        setVersions(versionItems);
-        setBusinessPlan(businessPlanValue);
-        setQaEvaluation(qaEvaluationValue);
-        setSelectedVersionId(versionItems[0]?.id ?? null);
+          if (!active) return;
+          setCompetitors(competitorItems);
+          setEvidence(evidenceItems);
+          setClaims(claimItems);
+          setVersions(versionItems);
+          setBusinessPlan(businessPlanValue);
+          setQaEvaluation(qaEvaluationValue);
+          setReadinessScore(readinessScoreValue);
+          setSelectedVersionId(versionItems[0]?.id ?? null);
         },
       )
       .catch((err: Error) => {
@@ -127,6 +135,7 @@ export function EnterpriseWorkbench() {
         setVersions([]);
         setBusinessPlan(null);
         setQaEvaluation(null);
+        setReadinessScore(null);
         setSelectedVersionId(null);
       })
       .finally(() => {
@@ -199,7 +208,13 @@ export function EnterpriseWorkbench() {
       .then(({ evidence: updated }) => {
         setEvidence((items) => items.map((item) => (item.id === updated.id ? updated : item)));
         if (selectedProjectId) {
-          void getProjectQAEvaluation(selectedProjectId).then(setQaEvaluation);
+          void Promise.all([
+            getProjectQAEvaluation(selectedProjectId),
+            getProjectReadinessScore(selectedProjectId),
+          ]).then(([qaValue, readinessValue]) => {
+            setQaEvaluation(qaValue);
+            setReadinessScore(readinessValue);
+          });
         }
       })
       .catch((err: Error) => {
@@ -297,6 +312,8 @@ export function EnterpriseWorkbench() {
                 </section>
               ) : null}
 
+              {readinessScore ? <ReadinessScorePanel readinessScore={readinessScore} /> : null}
+
               {qaEvaluation ? <QAEvaluationPanel evaluation={qaEvaluation} /> : null}
 
               <section className="panel competitor-strip-panel">
@@ -376,6 +393,57 @@ export function EnterpriseWorkbench() {
         </div>
       </div>
     </section>
+  );
+}
+
+function ReadinessScorePanel({
+  readinessScore,
+}: {
+  readinessScore: ProjectReadinessScore;
+}) {
+  return (
+    <section className={`panel readiness-panel ${readinessScore.risk_level}`}>
+      <div className="panel-heading-row">
+        <h2>Readiness score</h2>
+        <Gauge size={17} aria-hidden />
+      </div>
+      <div className="readiness-score-row">
+        <strong>{readinessScore.score}</strong>
+        <div>
+          <span>{readinessScore.risk_level.replace("_", " ")}</span>
+          <p>{readinessScore.summary}</p>
+        </div>
+      </div>
+      <div className="readiness-breakdown">
+        <ScoreBar label="Evidence" value={readinessScore.evidence_score} />
+        <ScoreBar label="Claims" value={readinessScore.claim_score} />
+        <ScoreBar label="Coverage" value={readinessScore.coverage_score} />
+        <ScoreBar label="QA" value={readinessScore.qa_score} />
+      </div>
+      <div className="recommendation-list">
+        {readinessScore.recommendations.slice(0, 4).map((item) => (
+          <article className={`recommendation-card ${item.priority}`} key={item.id}>
+            <strong>{item.title}</strong>
+            <span>{item.priority} / {item.action_type.replace("_", " ")}</span>
+            <p>{item.detail}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ScoreBar({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="score-bar">
+      <span>
+        {label}
+        <em>{value}%</em>
+      </span>
+      <div>
+        <i style={{ width: `${value}%` }} />
+      </div>
+    </div>
   );
 }
 

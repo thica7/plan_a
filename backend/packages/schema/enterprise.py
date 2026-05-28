@@ -240,6 +240,39 @@ class BusinessQAEvaluation(BaseModel):
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class BusinessRecommendation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    priority: Literal["critical", "high", "medium", "low"]
+    title: str
+    detail: str
+    action_type: Literal[
+        "collect_evidence",
+        "review_evidence",
+        "fix_claim",
+        "expand_competitors",
+        "approve_report",
+    ]
+    target_type: Literal["project", "competitor", "dimension", "evidence", "claim"] = "project"
+    target_id: str | None = None
+
+
+class ProjectReadinessScore(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    score: int = Field(ge=0, le=100)
+    risk_level: Literal["ready", "watch", "at_risk", "blocked"]
+    evidence_score: int = Field(ge=0, le=100)
+    claim_score: int = Field(ge=0, le=100)
+    coverage_score: int = Field(ge=0, le=100)
+    qa_score: int = Field(ge=0, le=100)
+    summary: str
+    recommendations: list[BusinessRecommendation] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class EvidenceQualityUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

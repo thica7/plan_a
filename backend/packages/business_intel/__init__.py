@@ -6,6 +6,7 @@ from packages.business_intel.scenarios import (
     list_scenario_packs,
     recommend_scenario_pack,
 )
+from packages.business_intel.scorer import score_project_readiness
 
 __all__ = [
     "build_business_intel_plan",
@@ -14,4 +15,5 @@ __all__ = [
     "list_business_qa_rules",
     "list_scenario_packs",
     "recommend_scenario_pack",
+    "score_project_readiness",
 ]

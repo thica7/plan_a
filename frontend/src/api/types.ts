@@ -388,6 +388,34 @@ export interface BusinessQAEvaluation {
   generated_at: string;
 }
 
+export interface BusinessRecommendation {
+  id: string;
+  priority: "critical" | "high" | "medium" | "low";
+  title: string;
+  detail: string;
+  action_type:
+    | "collect_evidence"
+    | "review_evidence"
+    | "fix_claim"
+    | "expand_competitors"
+    | "approve_report";
+  target_type: "project" | "competitor" | "dimension" | "evidence" | "claim";
+  target_id?: string | null;
+}
+
+export interface ProjectReadinessScore {
+  project_id: string;
+  score: number;
+  risk_level: "ready" | "watch" | "at_risk" | "blocked";
+  evidence_score: number;
+  claim_score: number;
+  coverage_score: number;
+  qa_score: number;
+  summary: string;
+  recommendations: BusinessRecommendation[];
+  generated_at: string;
+}
+
 export interface WorkspaceRecord {
   id: string;
   name: string;

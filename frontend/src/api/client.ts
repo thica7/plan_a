@@ -7,6 +7,7 @@ import type {
   CompetitorRecord,
   EvidenceQualityLabel,
   EvidenceRecord,
+  ProjectReadinessScore,
   ProjectRecord,
   RevisionRecord,
   ReportVersionDiff,
@@ -137,6 +138,10 @@ export function getProjectBusinessPlan(projectId: string) {
 
 export function getProjectQAEvaluation(projectId: string) {
   return request<BusinessQAEvaluation>(`/enterprise/projects/${projectId}/qa-evaluation`);
+}
+
+export function getProjectReadinessScore(projectId: string) {
+  return request<ProjectReadinessScore>(`/enterprise/projects/${projectId}/readiness-score`);
 }
 
 export function updateEvidenceQuality(

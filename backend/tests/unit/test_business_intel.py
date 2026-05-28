@@ -3,6 +3,7 @@ from packages.business_intel import (
     evaluate_business_qa,
     list_business_qa_rules,
     list_scenario_packs,
+    score_project_readiness,
 )
 from packages.business_intel.layers import assess_competitor_layer
 from packages.schema.enterprise import ClaimRecord, CompetitorRecord, EvidenceRecord
@@ -101,9 +102,20 @@ def test_business_qa_evaluator_passes_verified_pricing_pack() -> None:
         evidence=evidence,
         claims=claims,
     )
+    readiness = score_project_readiness(
+        project_id="project-1",
+        plan=plan,
+        qa_evaluation=evaluation,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
 
     assert evaluation.finding_count == 0
     assert evaluation.passed_rules == evaluation.total_rules
+    assert readiness.risk_level == "ready"
+    assert readiness.score >= 85
+    assert readiness.recommendations[0].action_type == "approve_report"
 
 
 def test_business_qa_evaluator_flags_stale_evidence_and_broken_claim_links() -> None:
@@ -151,6 +163,14 @@ def test_business_qa_evaluator_flags_stale_evidence_and_broken_claim_links() -> 
         evidence=evidence,
         claims=claims,
     )
+    readiness = score_project_readiness(
+        project_id="project-1",
+        plan=plan,
+        qa_evaluation=evaluation,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
 
     assert evaluation.finding_count >= 2
     assert evaluation.blocker_count >= 1
@@ -158,6 +178,9 @@ def test_business_qa_evaluator_flags_stale_evidence_and_broken_claim_links() -> 
         "claim_has_evidence",
         "pricing_currentness",
     }
+    assert readiness.risk_level == "blocked"
+    assert readiness.score < 85
+    assert readiness.recommendations[0].priority == "critical"
 
 
 def _competitor() -> CompetitorRecord:

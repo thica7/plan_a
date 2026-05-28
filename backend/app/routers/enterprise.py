@@ -8,6 +8,7 @@ from packages.business_intel import (
     evaluate_business_qa,
     list_business_qa_rules,
     list_scenario_packs,
+    score_project_readiness,
 )
 from packages.enterprise import EnterpriseStore, build_report_version_diff
 from packages.schema.enterprise import (
@@ -21,6 +22,7 @@ from packages.schema.enterprise import (
     EvidenceQualityUpdateRequest,
     EvidenceQualityUpdateResult,
     EvidenceRecord,
+    ProjectReadinessScore,
     ProjectRecord,
     ReportVersionDiff,
     ReportVersionRecord,
@@ -90,6 +92,35 @@ def get_project_qa_evaluation(
         competitors=store.list_competitors(project_id=project_id),
         evidence=store.list_evidence(project_id=project_id),
         claims=store.list_claims(project_id=project_id),
+    )
+
+
+@router.get(
+    "/enterprise/projects/{project_id}/readiness-score",
+    response_model=ProjectReadinessScore,
+)
+def get_project_readiness_score(
+    project_id: str,
+    store: EnterpriseStoreDep,
+) -> ProjectReadinessScore:
+    plan = _business_plan_for_project(project_id, store)
+    competitors = store.list_competitors(project_id=project_id)
+    evidence = store.list_evidence(project_id=project_id)
+    claims = store.list_claims(project_id=project_id)
+    qa_evaluation = evaluate_business_qa(
+        project_id=project_id,
+        plan=plan,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+    )
+    return score_project_readiness(
+        project_id=project_id,
+        plan=plan,
+        qa_evaluation=qa_evaluation,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
     )
 
 
