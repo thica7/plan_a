@@ -57,7 +57,28 @@ def test_health_reports_foundation_checks() -> None:
         "web_search_credentials",
         "skills",
         "sqlite",
+        "enterprise_store",
     }
+    enterprise = [check for check in body["checks"] if check["name"] == "enterprise_store"][0]
+    assert enterprise["status"] == "ok"
+    assert enterprise["detail"] == "backend=memory"
+
+
+def test_health_marks_misconfigured_postgres_enterprise_store_as_error() -> None:
+    db_path = _db_path()
+    client = _client(db_path, _settings(enterprise_store_backend="postgres"))
+
+    try:
+        response = client.get("/api/health")
+    finally:
+        db_path.unlink(missing_ok=True)
+
+    assert response.status_code == 200
+    body = response.json()
+    enterprise = [check for check in body["checks"] if check["name"] == "enterprise_store"][0]
+    assert body["status"] == "error"
+    assert enterprise["status"] == "error"
+    assert "ENTERPRISE_DATABASE_URL" in enterprise["detail"]
 
 
 def test_llm_smoke_uses_real_client_without_exposing_key(

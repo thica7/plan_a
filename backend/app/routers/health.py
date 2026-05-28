@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from time import perf_counter
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -21,13 +22,16 @@ from packages.skills.registry import SkillRegistry
 from packages.tools import fetch_page
 
 router = APIRouter()
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+SkillRegistryDep = Annotated[SkillRegistry, Depends(get_skill_registry)]
+RunJournalDep = Annotated[RunJournal, Depends(get_run_journal)]
 
 
 @router.get("/health", response_model=HealthStatus)
 def health(
-    settings: Settings = Depends(get_app_settings),
-    skill_registry: SkillRegistry = Depends(get_skill_registry),
-    journal: RunJournal = Depends(get_run_journal),
+    settings: SettingsDep,
+    skill_registry: SkillRegistryDep,
+    journal: RunJournalDep,
 ) -> HealthStatus:
     checks = [
         HealthCheck(
@@ -57,6 +61,7 @@ def health(
             status="ok" if journal.load_runs() is not None else "error",
             detail="run journal opened",
         ),
+        _enterprise_store_check(settings),
     ]
     status = _rollup_status(checks)
     return HealthStatus(
@@ -70,7 +75,7 @@ def health(
 @router.post("/smoke/llm", response_model=SmokeResult)
 async def smoke_llm(
     request: LlmSmokeRequest,
-    settings: Settings = Depends(get_app_settings),
+    settings: SettingsDep,
 ) -> SmokeResult:
     if not settings.has_llm_credentials:
         raise HTTPException(status_code=400, detail="ARK_API_KEY and ARK_MODEL are required.")
@@ -100,10 +105,13 @@ async def smoke_llm(
 @router.post("/smoke/search", response_model=SmokeResult)
 async def smoke_search(
     request: SearchSmokeRequest,
-    settings: Settings = Depends(get_app_settings),
+    settings: SettingsDep,
 ) -> SmokeResult:
     if not settings.has_web_search_credentials:
-        raise HTTPException(status_code=400, detail="PPLX_API_KEY is required for Perplexity search.")
+        raise HTTPException(
+            status_code=400,
+            detail="PPLX_API_KEY is required for Perplexity search.",
+        )
 
     start = perf_counter()
     try:
@@ -156,6 +164,29 @@ def _rollup_status(checks: list[HealthCheck]) -> str:
     if any(check.status == "warn" for check in checks):
         return "warn"
     return "ok"
+
+
+def _enterprise_store_check(settings: Settings) -> HealthCheck:
+    backend = settings.enterprise_store_backend
+    if backend == "memory":
+        return HealthCheck(
+            name="enterprise_store",
+            status="ok",
+            detail="backend=memory",
+        )
+    if backend == "postgres":
+        return HealthCheck(
+            name="enterprise_store",
+            status="ok" if settings.enterprise_database_url else "error",
+            detail="backend=postgres configured"
+            if settings.enterprise_database_url
+            else "ENTERPRISE_DATABASE_URL is required",
+        )
+    return HealthCheck(
+        name="enterprise_store",
+        status="error",
+        detail=f"unknown backend={backend}",
+    )
 
 
 def _elapsed_ms(start: float) -> int:
