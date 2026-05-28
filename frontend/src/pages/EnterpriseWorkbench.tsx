@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   Briefcase,
+  CheckCircle2,
   Database,
   ExternalLink,
   FileText,
@@ -13,16 +14,20 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import {
+  getProjectBusinessPlan,
   getReportVersionDiff,
   listEnterpriseCompetitors,
   listEnterpriseProjects,
   listProjectClaims,
   listProjectEvidence,
   listProjectReportVersions,
+  updateEvidenceQuality,
 } from "../api/client";
 import type {
+  BusinessIntelPlan,
   ClaimRecord,
   CompetitorRecord,
+  EvidenceQualityLabel,
   EvidenceRecord,
   ProjectRecord,
   ReportVersionDiff,
@@ -38,6 +43,7 @@ export function EnterpriseWorkbench() {
   const [evidence, setEvidence] = useState<EvidenceRecord[]>([]);
   const [claims, setClaims] = useState<ClaimRecord[]>([]);
   const [versions, setVersions] = useState<ReportVersionRecord[]>([]);
+  const [businessPlan, setBusinessPlan] = useState<BusinessIntelPlan | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
   const [activeTab, setActiveTab] = useState<EnterpriseTab>("evidence");
@@ -71,6 +77,7 @@ export function EnterpriseWorkbench() {
       setEvidence([]);
       setClaims([]);
       setVersions([]);
+      setBusinessPlan(null);
       setSelectedVersionId(null);
       return;
     }
@@ -83,13 +90,15 @@ export function EnterpriseWorkbench() {
       listProjectEvidence(selectedProjectId),
       listProjectClaims(selectedProjectId),
       listProjectReportVersions(selectedProjectId),
+      getProjectBusinessPlan(selectedProjectId),
     ])
-      .then(([competitorItems, evidenceItems, claimItems, versionItems]) => {
+      .then(([competitorItems, evidenceItems, claimItems, versionItems, businessPlanValue]) => {
         if (!active) return;
         setCompetitors(competitorItems);
         setEvidence(evidenceItems);
         setClaims(claimItems);
         setVersions(versionItems);
+        setBusinessPlan(businessPlanValue);
         setSelectedVersionId(versionItems[0]?.id ?? null);
       })
       .catch((err: Error) => {
@@ -99,6 +108,7 @@ export function EnterpriseWorkbench() {
         setEvidence([]);
         setClaims([]);
         setVersions([]);
+        setBusinessPlan(null);
         setSelectedVersionId(null);
       })
       .finally(() => {
@@ -161,6 +171,17 @@ export function EnterpriseWorkbench() {
     evidence.length > 0
       ? evidence.reduce((total, item) => total + item.reliability_score, 0) / evidence.length
       : 0;
+  function handleQualityChange(evidenceId: string, qualityLabel: EvidenceQualityLabel) {
+    setEvidence((items) =>
+      items.map((item) =>
+        item.id === evidenceId ? { ...item, quality_label: qualityLabel } : item,
+      ),
+    );
+    updateEvidenceQuality(evidenceId, { quality_label: qualityLabel }).catch((err: Error) => {
+      setError(err.message);
+      void listProjectEvidence(selectedProjectId ?? "").then(setEvidence);
+    });
+  }
 
   return (
     <section className="work-surface enterprise-workbench">
@@ -222,11 +243,34 @@ export function EnterpriseWorkbench() {
                   <Metric icon={<FileText size={17} aria-hidden />} label="Versions" value={versions.length} />
                 </div>
                 <div className="project-meta-row">
+                  <span>Layer {businessPlan?.competitor_layer.layer ?? selectedProject.competitor_layer}</span>
+                  <span>Scenario {businessPlan?.scenario_pack.name ?? selectedProject.scenario_id ?? "none"}</span>
                   <span>Reliability {formatPercent(averageReliability)}</span>
                   <span>Latest {latestVersion ? `v${latestVersion.version_number}` : "none"}</span>
-                  <span>Updated {formatDate(selectedProject.updated_at)}</span>
                 </div>
               </section>
+
+              {businessPlan ? (
+                <section className="panel scenario-panel">
+                  <div className="panel-heading-row">
+                    <h2>{businessPlan.scenario_pack.name}</h2>
+                    <CheckCircle2 size={17} aria-hidden />
+                  </div>
+                  <p>{businessPlan.scenario_pack.description}</p>
+                  <div className="scenario-chip-row">
+                    {businessPlan.recommended_dimensions.map((dimension) => (
+                      <span key={dimension}>{dimension}</span>
+                    ))}
+                  </div>
+                  <div className="qa-rule-row">
+                    {businessPlan.qa_rules.map((rule) => (
+                      <span key={rule.id} className={`qa-rule ${rule.severity}`}>
+                        {rule.name}
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
 
               <section className="panel competitor-strip-panel">
                 <div className="panel-heading-row">
@@ -273,6 +317,7 @@ export function EnterpriseWorkbench() {
                   <EvidenceTable
                     competitorById={competitorById}
                     evidence={filteredEvidence}
+                    onQualityChange={handleQualityChange}
                     query={query}
                     setQuery={setQuery}
                   />
@@ -328,11 +373,13 @@ function Metric({
 function EvidenceTable({
   competitorById,
   evidence,
+  onQualityChange,
   query,
   setQuery,
 }: {
   competitorById: Map<string, CompetitorRecord>;
   evidence: EvidenceRecord[];
+  onQualityChange: (evidenceId: string, qualityLabel: EvidenceQualityLabel) => void;
   query: string;
   setQuery: (value: string) => void;
 }) {
@@ -375,7 +422,21 @@ function EvidenceTable({
                   </td>
                   <td>{competitor}</td>
                   <td>{item.dimension}</td>
-                  <td>{item.quality_label}</td>
+                  <td>
+                    <select
+                      aria-label={`Quality for ${item.title}`}
+                      className="quality-select"
+                      value={item.quality_label}
+                      onChange={(event) =>
+                        onQualityChange(item.id, event.target.value as EvidenceQualityLabel)
+                      }
+                    >
+                      <option value="unreviewed">unreviewed</option>
+                      <option value="accepted">accepted</option>
+                      <option value="rejected">rejected</option>
+                      <option value="stale">stale</option>
+                    </select>
+                  </td>
                   <td>{formatPercent(item.reliability_score)}</td>
                 </tr>
               );

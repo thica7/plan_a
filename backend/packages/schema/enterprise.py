@@ -5,6 +5,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
+CompetitorLayer = Literal["L1", "L2", "L3", "unknown"]
+EvidenceQualityLabel = Literal["unreviewed", "accepted", "rejected", "stale"]
+
 
 class WorkspaceRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -36,7 +39,7 @@ class ProjectRecord(BaseModel):
     name: str
     topic: str
     topic_normalized: str
-    competitor_layer: Literal["L1", "L2", "L3", "unknown"] = "unknown"
+    competitor_layer: CompetitorLayer = "unknown"
     competitor_set_hash: str = ""
     scenario_id: str | None = None
     created_by: str | None = None
@@ -51,7 +54,7 @@ class CompetitorRecord(BaseModel):
     workspace_id: str
     name: str
     normalized_name: str
-    layer: Literal["L1", "L2", "L3", "unknown"] = "unknown"
+    layer: CompetitorLayer = "unknown"
     homepage_url: HttpUrl | None = None
     aliases: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -85,7 +88,7 @@ class EvidenceRecord(BaseModel):
     content_hash: str
     reliability_score: float = Field(default=0.0, ge=0.0, le=1.0)
     freshness_score: float = Field(default=0.0, ge=0.0, le=1.0)
-    quality_label: Literal["unreviewed", "accepted", "rejected", "stale"] = "unreviewed"
+    quality_label: EvidenceQualityLabel = "unreviewed"
     captured_at: datetime = Field(default_factory=datetime.utcnow)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -117,7 +120,7 @@ class ReportVersionRecord(BaseModel):
     parent_version_id: str | None = None
     version_number: int = Field(ge=1)
     topic_normalized: str
-    competitor_layer: Literal["L1", "L2", "L3", "unknown"] = "unknown"
+    competitor_layer: CompetitorLayer = "unknown"
     competitor_set_hash: str
     status: Literal["draft", "in_review", "approved", "published", "archived"] = "draft"
     report_md: str = ""
@@ -154,6 +157,68 @@ class EnterpriseRunProjection(BaseModel):
     evidence_records: list[EvidenceRecord] = Field(default_factory=list)
     claim_records: list[ClaimRecord] = Field(default_factory=list)
     report_version: ReportVersionRecord
+
+
+class CompetitorLayerAssessment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    layer: Literal["L1", "L2", "L3"]
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    rationale: str
+    signals: list[str] = Field(default_factory=list)
+
+
+class ScenarioPack(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    description: str
+    competitor_layer: Literal["L1", "L2", "L3"]
+    required_dimensions: list[str] = Field(default_factory=list)
+    optional_dimensions: list[str] = Field(default_factory=list)
+    analyst_questions: list[str] = Field(default_factory=list)
+    evidence_requirements: list[str] = Field(default_factory=list)
+    qa_rule_ids: list[str] = Field(default_factory=list)
+    is_dynamic: bool = False
+
+
+class BusinessQARule(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    severity: Literal["info", "warn", "blocker"]
+    applies_to_layers: list[Literal["L1", "L2", "L3"]] = Field(default_factory=list)
+    required_dimensions: list[str] = Field(default_factory=list)
+    min_sources_per_competitor: int = Field(default=1, ge=0)
+    require_verified_source: bool = True
+    rationale: str = ""
+
+
+class BusinessIntelPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    topic: str
+    competitor_layer: CompetitorLayerAssessment
+    scenario_pack: ScenarioPack
+    requested_dimensions: list[str] = Field(default_factory=list)
+    recommended_dimensions: list[str] = Field(default_factory=list)
+    qa_rules: list[BusinessQARule] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class EvidenceQualityUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    quality_label: EvidenceQualityLabel
+    note: str = Field(default="", max_length=500)
+
+
+class EvidenceQualityUpdateResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence: EvidenceRecord
 
 
 class AuditLogRecord(BaseModel):

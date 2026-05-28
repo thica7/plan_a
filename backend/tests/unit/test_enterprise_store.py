@@ -118,6 +118,30 @@ def test_enterprise_store_round_trips_projection() -> None:
     ]
 
 
+def test_enterprise_store_updates_evidence_quality_with_audit() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+
+    updated = store.update_evidence_quality(
+        projection.evidence_records[0].id,
+        "rejected",
+        note="Outdated pricing page.",
+    )
+
+    assert updated is not None
+    assert updated.quality_label == "rejected"
+    assert updated.metadata["quality_note"] == "Outdated pricing page."
+    assert any(log.action == "evidence.quality_updated" for log in store.list_audit_logs())
+
+
 def test_enterprise_store_increments_report_version_by_group() -> None:
     store = EnterpriseMemoryStore()
     detail = _detail()
@@ -221,6 +245,36 @@ async def test_run_service_writes_enterprise_projection_on_completion() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_service_attaches_business_intel_plan_to_project() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+
+    created = await service.create_run(
+        RunCreateRequest(
+            topic="Cursor vs Copilot pricing battlecard",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing"],
+            competitor_layer="L1",
+            scenario_id="l1_pricing_pack",
+            execution_mode="demo",
+        )
+    )
+
+    assert created.plan.competitor_layer == "L1"
+    assert created.plan.scenario_id == "l1_pricing_pack"
+    assert "pricing_currentness" in created.plan.qa_rule_ids
+    project = store.get_project(created.project_id or "")
+    assert project is not None
+    assert project.competitor_layer == "L1"
+    assert project.scenario_id == "l1_pricing_pack"
+    assert {item.layer for item in store.list_competitors(project_id=project.id)} == {"L1"}
+
+
+@pytest.mark.asyncio
 async def test_run_service_increments_enterprise_report_versions() -> None:
     store = EnterpriseMemoryStore()
     service = RunService(
@@ -276,7 +330,12 @@ def test_enterprise_router_exposes_projection() -> None:
     response = client.get(f"/api/enterprise/runs/{detail.id}/projection")
     workspaces = client.get("/api/enterprise/workspaces")
     project = client.get(f"/api/enterprise/projects/{context.project_id}")
+    business_plan = client.get(f"/api/enterprise/projects/{context.project_id}/business-plan")
     competitors = client.get(f"/api/enterprise/competitors?project_id={context.project_id}")
+    quality = client.patch(
+        f"/api/enterprise/evidence/{projection.evidence_records[0].id}/quality",
+        json={"quality_label": "stale", "note": "Needs review."},
+    )
     version = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}")
     diff = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}/diff")
 
@@ -286,8 +345,12 @@ def test_enterprise_router_exposes_projection() -> None:
     assert workspaces.json()[0]["id"] == "default-workspace"
     assert project.status_code == 200
     assert project.json()["id"] == context.project_id
+    assert business_plan.status_code == 200
+    assert business_plan.json()["scenario_pack"]["id"]
     assert competitors.status_code == 200
     assert [item["name"] for item in competitors.json()] == ["Cursor"]
+    assert quality.status_code == 200
+    assert quality.json()["evidence"]["quality_label"] == "stale"
     assert version.status_code == 200
     assert version.json()["id"] == projection.report_version.id
     assert diff.status_code == 200

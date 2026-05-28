@@ -3,16 +3,26 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_enterprise_store
+from packages.business_intel import (
+    build_business_intel_plan,
+    list_business_qa_rules,
+    list_scenario_packs,
+)
 from packages.enterprise import EnterpriseStore, build_report_version_diff
 from packages.schema.enterprise import (
     AuditLogRecord,
+    BusinessIntelPlan,
+    BusinessQARule,
     ClaimRecord,
     CompetitorRecord,
     EnterpriseRunProjection,
+    EvidenceQualityUpdateRequest,
+    EvidenceQualityUpdateResult,
     EvidenceRecord,
     ProjectRecord,
     ReportVersionDiff,
     ReportVersionRecord,
+    ScenarioPack,
     WorkspaceRecord,
 )
 
@@ -25,6 +35,18 @@ def list_workspaces(
     store: EnterpriseStoreDep,
 ) -> list[WorkspaceRecord]:
     return store.list_workspaces()
+
+
+@router.get("/enterprise/scenario-packs", response_model=list[ScenarioPack])
+def get_scenario_packs() -> list[ScenarioPack]:
+    return list_scenario_packs()
+
+
+@router.get("/enterprise/qa-rules", response_model=list[BusinessQARule])
+def get_qa_rules(
+    layer: str | None = None,
+) -> list[BusinessQARule]:
+    return list_business_qa_rules(layer=layer)
 
 
 @router.get("/enterprise/projects", response_model=list[ProjectRecord])
@@ -46,6 +68,27 @@ def get_project(
     return project
 
 
+@router.get("/enterprise/projects/{project_id}/business-plan", response_model=BusinessIntelPlan)
+def get_project_business_plan(
+    project_id: str,
+    store: EnterpriseStoreDep,
+) -> BusinessIntelPlan:
+    project = store.get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    competitors = store.list_competitors(project_id=project_id)
+    dimensions = sorted({item.dimension for item in store.list_evidence(project_id=project_id)})
+    if not dimensions:
+        dimensions = ["pricing", "feature", "persona"]
+    return build_business_intel_plan(
+        topic=project.topic,
+        competitors=[item.name for item in competitors],
+        dimensions=dimensions,
+        requested_layer=project.competitor_layer if project.competitor_layer != "unknown" else None,
+        requested_scenario_id=project.scenario_id,
+    )
+
+
 @router.get("/enterprise/competitors", response_model=list[CompetitorRecord])
 def list_competitors(
     store: EnterpriseStoreDep,
@@ -61,6 +104,25 @@ def list_project_evidence(
     store: EnterpriseStoreDep,
 ) -> list[EvidenceRecord]:
     return store.list_evidence(project_id=project_id)
+
+
+@router.patch(
+    "/enterprise/evidence/{evidence_id}/quality",
+    response_model=EvidenceQualityUpdateResult,
+)
+def update_evidence_quality(
+    evidence_id: str,
+    request: EvidenceQualityUpdateRequest,
+    store: EnterpriseStoreDep,
+) -> EvidenceQualityUpdateResult:
+    evidence = store.update_evidence_quality(
+        evidence_id,
+        request.quality_label,
+        note=request.note,
+    )
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    return EvidenceQualityUpdateResult(evidence=evidence)
 
 
 @router.get("/enterprise/projects/{project_id}/claims", response_model=list[ClaimRecord])

@@ -19,6 +19,7 @@ from packages.agents.planner.logic import PlannerAgentMixin
 from packages.agents.qa.logic import QualityAgentMixin
 from packages.agents.reflector.logic import ReflectorAgentMixin
 from packages.agents.writer.logic import WriterAgentMixin
+from packages.business_intel import build_business_intel_plan
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore, build_enterprise_projection
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
@@ -128,6 +129,13 @@ class RunService(
             request.dimensions,
             require_core_schema=not competitors,
         )
+        business_plan = build_business_intel_plan(
+            topic=request.topic,
+            competitors=competitors,
+            dimensions=valid_dimensions,
+            requested_layer=request.competitor_layer,
+            requested_scenario_id=request.scenario_id,
+        )
         now = datetime.utcnow()
         run_id = str(uuid4())
         plan = AnalysisPlan(
@@ -135,6 +143,10 @@ class RunService(
             competitors=competitors,
             dimensions=valid_dimensions,
             complexity="medium",
+            competitor_layer=business_plan.competitor_layer.layer,
+            scenario_id=business_plan.scenario_pack.id,
+            scenario_recommended_dimensions=business_plan.recommended_dimensions,
+            qa_rule_ids=[rule.id for rule in business_plan.qa_rules],
             homepage_hints={
                 name: f"https://www.google.com/search?q={name}" for name in competitors
             },
@@ -1410,7 +1422,7 @@ class RunService(
         version_number = self._enterprise_store.next_report_version_number(
             project_id=context.project_id,
             topic_normalized=topic_normalized,
-            competitor_layer="unknown",
+            competitor_layer=detail.plan.competitor_layer,
             competitor_set_hash=competitor_set_hash,
         )
         projection = build_enterprise_projection(
@@ -1418,6 +1430,7 @@ class RunService(
             workspace_id=context.workspace_id,
             project_id=context.project_id,
             version_number=version_number,
+            competitor_layer=detail.plan.competitor_layer,
             competitor_id_map=context.competitor_id_map,
         )
         self._enterprise_store.save_projection(projection)

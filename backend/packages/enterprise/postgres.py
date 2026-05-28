@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ from packages.schema.enterprise import (
     ClaimRecord,
     CompetitorRecord,
     EnterpriseRunProjection,
+    EvidenceQualityLabel,
     EvidenceRecord,
     ProjectRecord,
     ReportVersionRecord,
@@ -276,6 +278,53 @@ class EnterprisePostgresStore:
             EvidenceRecord,
         )
 
+    def update_evidence_quality(
+        self,
+        evidence_id: str,
+        quality_label: EvidenceQualityLabel,
+        *,
+        actor_id: str | None = None,
+        note: str = "",
+    ) -> EvidenceRecord | None:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                row = cur.execute(
+                    "SELECT * FROM evidence_records WHERE id = %s",
+                    (evidence_id,),
+                ).fetchone()
+                if row is None:
+                    return None
+                before = EvidenceRecord.model_validate(dict(row))
+                metadata = dict(before.metadata)
+                metadata["quality_note"] = note
+                metadata["quality_reviewed_at"] = datetime.utcnow().isoformat()
+                updated = before.model_copy(
+                    update={
+                        "quality_label": quality_label,
+                        "metadata": metadata,
+                    },
+                )
+                cur.execute(
+                    """
+                    UPDATE evidence_records
+                    SET quality_label = %s, metadata = %s
+                    WHERE id = %s
+                    """,
+                    (quality_label, self._json(metadata), evidence_id),
+                )
+                self._append_audit(
+                    cur,
+                    workspace_id=before.workspace_id,
+                    actor_id=actor_id or DEFAULT_USER_ID,
+                    action="evidence.quality_updated",
+                    resource_type="evidence",
+                    resource_id=evidence_id,
+                    before=before.model_dump(mode="json"),
+                    after=updated.model_dump(mode="json"),
+                )
+            conn.commit()
+        return updated
+
     def list_claims(self, project_id: str | None = None) -> list[ClaimRecord]:
         if project_id:
             return self._list_models(
@@ -410,13 +459,16 @@ class EnterprisePostgresStore:
             """
             INSERT INTO projects (
                 id, workspace_id, name, topic, topic_normalized,
-                competitor_set_hash, created_by, created_at, updated_at
+                competitor_layer, competitor_set_hash, scenario_id,
+                created_by, created_at, updated_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
             ON CONFLICT (id) DO UPDATE SET
                 topic = EXCLUDED.topic,
                 topic_normalized = EXCLUDED.topic_normalized,
+                competitor_layer = EXCLUDED.competitor_layer,
                 competitor_set_hash = EXCLUDED.competitor_set_hash,
+                scenario_id = EXCLUDED.scenario_id,
                 updated_at = now()
             """,
             (
@@ -425,7 +477,9 @@ class EnterprisePostgresStore:
                 detail.topic,
                 detail.topic,
                 compute_topic_normalized(detail.topic),
+                detail.plan.competitor_layer,
                 compute_competitor_set_hash(context.competitor_ids),
+                detail.plan.scenario_id,
                 actor_id,
                 detail.created_at,
             ),
@@ -442,12 +496,15 @@ class EnterprisePostgresStore:
         cur.execute(
             """
             INSERT INTO competitors (
-                id, workspace_id, name, normalized_name, homepage_url, created_at, updated_at
+                id, workspace_id, name, normalized_name, layer, homepage_url, metadata,
+                created_at, updated_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, now())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now())
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
+                layer = EXCLUDED.layer,
                 homepage_url = EXCLUDED.homepage_url,
+                metadata = EXCLUDED.metadata,
                 updated_at = now()
             """,
             (
@@ -455,7 +512,14 @@ class EnterprisePostgresStore:
                 workspace_id,
                 name,
                 _normalize_key(name),
+                detail.plan.competitor_layer,
                 detail.plan.homepage_hints.get(name),
+                self._json(
+                    {
+                        "scenario_id": detail.plan.scenario_id,
+                        "qa_rule_ids": detail.plan.qa_rule_ids,
+                    }
+                ),
                 detail.created_at,
             ),
         )
@@ -628,15 +692,16 @@ class EnterprisePostgresStore:
         resource_type: str,
         resource_id: str,
         after: dict[str, Any],
+        before: dict[str, Any] | None = None,
     ) -> None:
-        audit_id = f"audit-{_short_hash(f'{action}|{resource_id}|{len(after)}')}"
+        audit_id = f"audit-{_short_hash(f'{action}|{resource_id}|{after}')}"
         cur.execute(
             """
             INSERT INTO audit_logs (
                 id, workspace_id, actor_type, actor_id, action,
-                resource_type, resource_id, after
+                resource_type, resource_id, before, after
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO NOTHING
             """,
             (
@@ -647,6 +712,7 @@ class EnterprisePostgresStore:
                 action,
                 resource_type,
                 resource_id,
+                self._json(before) if before is not None else None,
                 self._json(after),
             ),
         )

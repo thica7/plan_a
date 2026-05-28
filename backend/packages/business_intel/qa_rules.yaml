@@ -1,0 +1,49 @@
+rules:
+  - id: coverage_min_verified
+    name: Verified evidence coverage
+    severity: blocker
+    applies_to_layers: [L1, L2, L3]
+    required_dimensions: []
+    min_sources_per_competitor: 1
+    require_verified_source: true
+    rationale: Each competitor needs at least one verified evidence item before report claims are trusted.
+  - id: claim_has_evidence
+    name: Claim evidence linkage
+    severity: blocker
+    applies_to_layers: [L1, L2, L3]
+    required_dimensions: []
+    min_sources_per_competitor: 1
+    require_verified_source: false
+    rationale: Every knowledge claim must map to at least one stable EvidenceRecord.
+  - id: pricing_currentness
+    name: Pricing currentness
+    severity: warn
+    applies_to_layers: [L1]
+    required_dimensions: [pricing]
+    min_sources_per_competitor: 1
+    require_verified_source: true
+    rationale: Pricing decisions require fresh official or verified pricing evidence.
+  - id: cross_competitor_matrix
+    name: Cross-competitor matrix completeness
+    severity: warn
+    applies_to_layers: [L2, L3]
+    required_dimensions: [feature]
+    min_sources_per_competitor: 1
+    require_verified_source: false
+    rationale: Adjacent and landscape analysis need comparable cells across competitors.
+  - id: security_official_source
+    name: Security official-source gate
+    severity: blocker
+    applies_to_layers: [L1, L2]
+    required_dimensions: [security]
+    min_sources_per_competitor: 1
+    require_verified_source: true
+    rationale: Security and compliance claims should not rely on unverifiable summaries.
+  - id: landscape_breadth
+    name: Landscape breadth
+    severity: info
+    applies_to_layers: [L3]
+    required_dimensions: [market]
+    min_sources_per_competitor: 1
+    require_verified_source: false
+    rationale: Category-level reports should make clear which market segment each competitor represents.

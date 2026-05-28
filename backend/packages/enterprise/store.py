@@ -14,6 +14,7 @@ from packages.schema.enterprise import (
     ClaimRecord,
     CompetitorRecord,
     EnterpriseRunProjection,
+    EvidenceQualityLabel,
     EvidenceRecord,
     ProjectCompetitorLink,
     ProjectRecord,
@@ -74,6 +75,15 @@ class EnterpriseStore(Protocol):
     ) -> list[CompetitorRecord]: ...
 
     def list_evidence(self, project_id: str | None = None) -> list[EvidenceRecord]: ...
+
+    def update_evidence_quality(
+        self,
+        evidence_id: str,
+        quality_label: EvidenceQualityLabel,
+        *,
+        actor_id: str | None = None,
+        note: str = "",
+    ) -> EvidenceRecord | None: ...
 
     def list_claims(self, project_id: str | None = None) -> list[ClaimRecord]: ...
 
@@ -175,7 +185,9 @@ class EnterpriseMemoryStore:
                     name=detail.topic,
                     topic=detail.topic,
                     topic_normalized=compute_topic_normalized(detail.topic),
+                    competitor_layer=detail.plan.competitor_layer,
                     competitor_set_hash=compute_competitor_set_hash(competitor_ids),
+                    scenario_id=detail.plan.scenario_id,
                     created_by=actor_id,
                     created_at=detail.created_at,
                     updated_at=now,
@@ -184,21 +196,34 @@ class EnterpriseMemoryStore:
             else:
                 project.topic = detail.topic
                 project.topic_normalized = compute_topic_normalized(detail.topic)
+                project.competitor_layer = detail.plan.competitor_layer
                 project.competitor_set_hash = compute_competitor_set_hash(competitor_ids)
+                project.scenario_id = detail.plan.scenario_id
                 project.updated_at = now
             for name, competitor_id in zip(detail.plan.competitors, competitor_ids, strict=False):
-                self.competitors.setdefault(
-                    competitor_id,
-                    CompetitorRecord(
+                competitor = self.competitors.get(competitor_id)
+                if competitor is None:
+                    self.competitors[competitor_id] = CompetitorRecord(
                         id=competitor_id,
                         workspace_id=workspace_id,
                         name=name,
                         normalized_name=_normalize_key(name),
+                        layer=detail.plan.competitor_layer,
                         homepage_url=detail.plan.homepage_hints.get(name),
+                        metadata={
+                            "scenario_id": detail.plan.scenario_id,
+                            "qa_rule_ids": detail.plan.qa_rule_ids,
+                        },
                         created_at=detail.created_at,
                         updated_at=now,
-                    ),
-                )
+                    )
+                else:
+                    competitor.name = name
+                    competitor.layer = detail.plan.competitor_layer
+                    competitor.homepage_url = detail.plan.homepage_hints.get(name)
+                    competitor.metadata["scenario_id"] = detail.plan.scenario_id
+                    competitor.metadata["qa_rule_ids"] = detail.plan.qa_rule_ids
+                    competitor.updated_at = now
                 self.project_competitors.setdefault(
                     (project_id, competitor_id),
                     ProjectCompetitorLink(project_id=project_id, competitor_id=competitor_id),
@@ -309,6 +334,34 @@ class EnterpriseMemoryStore:
                 records = [item for item in records if item.project_id == project_id]
             return sorted(records, key=lambda item: item.captured_at, reverse=True)
 
+    def update_evidence_quality(
+        self,
+        evidence_id: str,
+        quality_label: EvidenceQualityLabel,
+        *,
+        actor_id: str | None = None,
+        note: str = "",
+    ) -> EvidenceRecord | None:
+        with self._lock:
+            evidence = self.evidence_records.get(evidence_id)
+            if evidence is None:
+                return None
+            before = evidence.model_dump(mode="json")
+            evidence.quality_label = quality_label
+            evidence.metadata["quality_note"] = note
+            evidence.metadata["quality_reviewed_at"] = datetime.utcnow().isoformat()
+            after = evidence.model_dump(mode="json")
+            self._append_audit(
+                workspace_id=evidence.workspace_id,
+                actor_id=actor_id or DEFAULT_USER_ID,
+                action="evidence.quality_updated",
+                resource_type="evidence",
+                resource_id=evidence.id,
+                before=before,
+                after=after,
+            )
+            return evidence
+
     def list_claims(self, project_id: str | None = None) -> list[ClaimRecord]:
         with self._lock:
             records = list(self.claim_records.values())
@@ -396,6 +449,7 @@ class EnterpriseMemoryStore:
         resource_type: str,
         resource_id: str,
         after: dict,
+        before: dict | None = None,
     ) -> None:
         self.audit_logs.append(
             AuditLogRecord(
@@ -406,6 +460,7 @@ class EnterpriseMemoryStore:
                 action=action,
                 resource_type=resource_type,
                 resource_id=resource_id,
+                before=before,
                 after=after,
             )
         )

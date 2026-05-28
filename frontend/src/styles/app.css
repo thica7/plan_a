@@ -1774,6 +1774,8 @@ textarea {
 
 .project-meta-row span,
 .competitor-strip span,
+.scenario-chip-row span,
+.qa-rule-row span,
 .diff-summary span {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -1781,6 +1783,39 @@ textarea {
   color: #445064;
   font-size: 12px;
   padding: 6px 9px;
+}
+
+.scenario-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.scenario-panel p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.scenario-chip-row,
+.qa-rule-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.qa-rule-row .qa-rule.blocker {
+  border-color: rgba(180, 83, 9, 0.36);
+  color: #7c2d12;
+}
+
+.qa-rule-row .qa-rule.warn {
+  border-color: rgba(202, 138, 4, 0.34);
+  color: #854d0e;
+}
+
+.qa-rule-row .qa-rule.info {
+  border-color: rgba(37, 99, 235, 0.24);
+  color: #1d4ed8;
 }
 
 .competitor-strip {
@@ -1900,6 +1935,16 @@ textarea {
   gap: 5px;
   margin-top: 6px;
   text-decoration: none;
+}
+
+.quality-select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  min-height: 32px;
+  min-width: 112px;
+  padding: 0 8px;
 }
 
 .claim-list article {

@@ -28,6 +28,8 @@ class RunCreateRequest(BaseModel):
     topic: str = Field(min_length=2, max_length=200)
     competitors: list[str] = Field(default_factory=list, max_length=8)
     dimensions: list[str] = Field(min_length=1, max_length=8)
+    competitor_layer: Literal["L1", "L2", "L3"] | None = None
+    scenario_id: str | None = Field(default=None, min_length=1, max_length=120)
     execution_mode: Literal["auto", "demo", "real"] = "auto"
     auto_redo_warn_enabled: bool | None = None
 

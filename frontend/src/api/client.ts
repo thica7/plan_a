@@ -1,8 +1,10 @@
 import type {
   AgentMessage,
+  BusinessIntelPlan,
   CompetitorKnowledge,
   ClaimRecord,
   CompetitorRecord,
+  EvidenceQualityLabel,
   EvidenceRecord,
   ProjectRecord,
   RevisionRecord,
@@ -126,6 +128,20 @@ export function listEnterpriseCompetitors(params: {
 
 export function listProjectEvidence(projectId: string) {
   return request<EvidenceRecord[]>(`/enterprise/projects/${projectId}/evidence`);
+}
+
+export function getProjectBusinessPlan(projectId: string) {
+  return request<BusinessIntelPlan>(`/enterprise/projects/${projectId}/business-plan`);
+}
+
+export function updateEvidenceQuality(
+  evidenceId: string,
+  payload: { quality_label: EvidenceQualityLabel; note?: string },
+) {
+  return request<{ evidence: EvidenceRecord }>(`/enterprise/evidence/${evidenceId}/quality`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function listProjectClaims(projectId: string) {

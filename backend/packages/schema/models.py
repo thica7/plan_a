@@ -48,6 +48,10 @@ class AnalysisPlan(BaseModel):
     competitors: list[str]
     dimensions: list[str]
     complexity: Literal["low", "medium", "high"] = "medium"
+    competitor_layer: Literal["L1", "L2", "L3", "unknown"] = "unknown"
+    scenario_id: str | None = None
+    scenario_recommended_dimensions: list[str] = Field(default_factory=list)
+    qa_rule_ids: list[str] = Field(default_factory=list)
     homepage_hints: dict[str, str] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

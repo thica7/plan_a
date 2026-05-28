@@ -5,6 +5,10 @@ export interface AnalysisPlan {
   competitors: string[];
   dimensions: string[];
   complexity: "low" | "medium" | "high";
+  competitor_layer: CompetitorLayer;
+  scenario_id?: string | null;
+  scenario_recommended_dimensions: string[];
+  qa_rule_ids: string[];
   homepage_hints: Record<string, string>;
   created_at: string;
 }
@@ -244,6 +248,8 @@ export interface RunCreateRequest {
   topic: string;
   competitors: string[];
   dimensions: string[];
+  competitor_layer?: "L1" | "L2" | "L3" | null;
+  scenario_id?: string | null;
   execution_mode: "auto" | "demo" | "real";
   auto_redo_warn_enabled?: boolean;
 }
@@ -311,6 +317,48 @@ export interface RuntimeConfig {
 }
 
 export type CompetitorLayer = "L1" | "L2" | "L3" | "unknown";
+export type EvidenceQualityLabel = "unreviewed" | "accepted" | "rejected" | "stale";
+
+export interface CompetitorLayerAssessment {
+  layer: "L1" | "L2" | "L3";
+  confidence: number;
+  rationale: string;
+  signals: string[];
+}
+
+export interface ScenarioPack {
+  id: string;
+  name: string;
+  description: string;
+  competitor_layer: "L1" | "L2" | "L3";
+  required_dimensions: string[];
+  optional_dimensions: string[];
+  analyst_questions: string[];
+  evidence_requirements: string[];
+  qa_rule_ids: string[];
+  is_dynamic: boolean;
+}
+
+export interface BusinessQARule {
+  id: string;
+  name: string;
+  severity: "info" | "warn" | "blocker";
+  applies_to_layers: Array<"L1" | "L2" | "L3">;
+  required_dimensions: string[];
+  min_sources_per_competitor: number;
+  require_verified_source: boolean;
+  rationale: string;
+}
+
+export interface BusinessIntelPlan {
+  topic: string;
+  competitor_layer: CompetitorLayerAssessment;
+  scenario_pack: ScenarioPack;
+  requested_dimensions: string[];
+  recommended_dimensions: string[];
+  qa_rules: BusinessQARule[];
+  created_at: string;
+}
 
 export interface WorkspaceRecord {
   id: string;
@@ -363,7 +411,7 @@ export interface EvidenceRecord {
   content_hash: string;
   reliability_score: number;
   freshness_score: number;
-  quality_label: "unreviewed" | "accepted" | "rejected" | "stale";
+  quality_label: EvidenceQualityLabel;
   captured_at: string;
   metadata: Record<string, unknown>;
 }
