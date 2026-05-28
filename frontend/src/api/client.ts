@@ -1,7 +1,13 @@
 import type {
   AgentMessage,
   CompetitorKnowledge,
+  ClaimRecord,
+  CompetitorRecord,
+  EvidenceRecord,
+  ProjectRecord,
   RevisionRecord,
+  ReportVersionDiff,
+  ReportVersionRecord,
   RunCreateRequest,
   RunDetail,
   RunSummary,
@@ -100,6 +106,39 @@ export function redoRun(runId: string) {
 
 export function listRuns() {
   return request<RunSummary[]>("/runs");
+}
+
+export function listEnterpriseProjects(workspaceId?: string) {
+  const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
+  return request<ProjectRecord[]>(`/enterprise/projects${params}`);
+}
+
+export function listEnterpriseCompetitors(params: {
+  workspaceId?: string;
+  projectId?: string;
+} = {}) {
+  const search = new URLSearchParams();
+  if (params.workspaceId) search.set("workspace_id", params.workspaceId);
+  if (params.projectId) search.set("project_id", params.projectId);
+  const query = search.toString();
+  return request<CompetitorRecord[]>(`/enterprise/competitors${query ? `?${query}` : ""}`);
+}
+
+export function listProjectEvidence(projectId: string) {
+  return request<EvidenceRecord[]>(`/enterprise/projects/${projectId}/evidence`);
+}
+
+export function listProjectClaims(projectId: string) {
+  return request<ClaimRecord[]>(`/enterprise/projects/${projectId}/claims`);
+}
+
+export function listProjectReportVersions(projectId: string) {
+  return request<ReportVersionRecord[]>(`/enterprise/projects/${projectId}/report-versions`);
+}
+
+export function getReportVersionDiff(versionId: string, baseVersionId?: string) {
+  const params = baseVersionId ? `?base_version_id=${encodeURIComponent(baseVersionId)}` : "";
+  return request<ReportVersionDiff>(`/enterprise/report-versions/${versionId}/diff${params}`);
 }
 
 export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) {

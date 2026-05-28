@@ -303,6 +303,41 @@ class EnterprisePostgresStore:
             ReportVersionRecord,
         )
 
+    def get_report_version(self, version_id: str) -> ReportVersionRecord | None:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            row = conn.execute(
+                "SELECT * FROM report_versions WHERE id = %s",
+                (version_id,),
+            ).fetchone()
+        return ReportVersionRecord.model_validate(dict(row)) if row else None
+
+    def get_previous_report_version(
+        self,
+        version: ReportVersionRecord,
+    ) -> ReportVersionRecord | None:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM report_versions
+                WHERE project_id = %s
+                  AND topic_normalized = %s
+                  AND competitor_layer = %s
+                  AND competitor_set_hash = %s
+                  AND version_number < %s
+                ORDER BY version_number DESC, created_at DESC
+                LIMIT 1
+                """,
+                (
+                    version.project_id,
+                    version.topic_normalized,
+                    version.competitor_layer,
+                    version.competitor_set_hash,
+                    version.version_number,
+                ),
+            ).fetchone()
+        return ReportVersionRecord.model_validate(dict(row)) if row else None
+
     def list_audit_logs(self, workspace_id: str | None = None) -> list[AuditLogRecord]:
         if workspace_id:
             return self._list_models(

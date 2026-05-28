@@ -401,6 +401,20 @@ export interface ReportVersionRecord {
   published_at?: string | null;
 }
 
+export interface ReportDiffLine {
+  kind: "unchanged" | "added" | "removed";
+  text: string;
+}
+
+export interface ReportVersionDiff {
+  base_version?: ReportVersionRecord | null;
+  target_version: ReportVersionRecord;
+  added_lines: number;
+  removed_lines: number;
+  unchanged_lines: number;
+  lines: ReportDiffLine[];
+}
+
 export interface EnterpriseRunProjection {
   workspace_id: string;
   project_id: string;

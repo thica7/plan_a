@@ -127,6 +127,24 @@ class ReportVersionRecord(BaseModel):
     published_at: datetime | None = None
 
 
+class ReportDiffLine(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["unchanged", "added", "removed"]
+    text: str
+
+
+class ReportVersionDiff(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    base_version: ReportVersionRecord | None = None
+    target_version: ReportVersionRecord
+    added_lines: int = 0
+    removed_lines: int = 0
+    unchanged_lines: int = 0
+    lines: list[ReportDiffLine] = Field(default_factory=list)
+
+
 class EnterpriseRunProjection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

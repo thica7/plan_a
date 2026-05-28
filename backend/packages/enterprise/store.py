@@ -79,6 +79,13 @@ class EnterpriseStore(Protocol):
 
     def list_report_versions(self, project_id: str | None = None) -> list[ReportVersionRecord]: ...
 
+    def get_report_version(self, version_id: str) -> ReportVersionRecord | None: ...
+
+    def get_previous_report_version(
+        self,
+        version: ReportVersionRecord,
+    ) -> ReportVersionRecord | None: ...
+
     def list_audit_logs(self, workspace_id: str | None = None) -> list[AuditLogRecord]: ...
 
 
@@ -315,6 +322,28 @@ class EnterpriseMemoryStore:
                 key=lambda item: (item.created_at, item.version_number),
                 reverse=True,
             )
+
+    def get_report_version(self, version_id: str) -> ReportVersionRecord | None:
+        with self._lock:
+            return self.report_versions.get(version_id)
+
+    def get_previous_report_version(
+        self,
+        version: ReportVersionRecord,
+    ) -> ReportVersionRecord | None:
+        with self._lock:
+            candidates = [
+                item
+                for item in self.report_versions.values()
+                if item.project_id == version.project_id
+                and item.topic_normalized == version.topic_normalized
+                and item.competitor_layer == version.competitor_layer
+                and item.competitor_set_hash == version.competitor_set_hash
+                and item.version_number < version.version_number
+            ]
+            if not candidates:
+                return None
+            return max(candidates, key=lambda item: (item.version_number, item.created_at))
 
     def list_audit_logs(self, workspace_id: str | None = None) -> list[AuditLogRecord]:
         with self._lock:

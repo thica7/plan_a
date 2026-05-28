@@ -4,7 +4,11 @@ from fastapi.testclient import TestClient
 from app.deps import get_enterprise_store
 from app.main import create_app
 from packages.config import Settings
-from packages.enterprise import EnterpriseMemoryStore, build_enterprise_projection
+from packages.enterprise import (
+    EnterpriseMemoryStore,
+    build_enterprise_projection,
+    build_report_version_diff,
+)
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.models import (
@@ -136,6 +140,53 @@ def test_enterprise_store_increments_report_version_by_group() -> None:
     assert next_version == 2
 
 
+def test_report_version_diff_uses_previous_version() -> None:
+    store = EnterpriseMemoryStore()
+    first_detail = _detail()
+    first_context = store.start_run(first_detail)
+    first_projection = build_enterprise_projection(
+        first_detail,
+        workspace_id=first_context.workspace_id,
+        project_id=first_context.project_id,
+        competitor_id_map=first_context.competitor_id_map,
+    )
+    store.save_projection(first_projection)
+
+    second_detail = _detail().model_copy(
+        deep=True,
+        update={
+            "id": "run-2",
+            "report_md": (
+                "Cursor publishes pricing. [source:pricing-1]\n"
+                "Cursor has a public paid plan. [source:pricing-1]"
+            ),
+        },
+    )
+    second_context = store.start_run(second_detail)
+    second_projection = build_enterprise_projection(
+        second_detail,
+        workspace_id=second_context.workspace_id,
+        project_id=second_context.project_id,
+        version_number=store.next_report_version_number(
+            project_id=second_context.project_id,
+            topic_normalized=first_projection.report_version.topic_normalized,
+            competitor_layer=first_projection.report_version.competitor_layer,
+            competitor_set_hash=first_projection.report_version.competitor_set_hash,
+        ),
+        competitor_id_map=second_context.competitor_id_map,
+    )
+    store.save_projection(second_projection)
+
+    previous = store.get_previous_report_version(second_projection.report_version)
+    diff = build_report_version_diff(second_projection.report_version, base_version=previous)
+
+    assert previous is not None
+    assert previous.id == first_projection.report_version.id
+    assert diff.target_version.version_number == 2
+    assert diff.added_lines == 1
+    assert diff.unchanged_lines == 1
+
+
 @pytest.mark.asyncio
 async def test_run_service_writes_enterprise_projection_on_completion() -> None:
     store = EnterpriseMemoryStore()
@@ -211,14 +262,13 @@ def test_enterprise_router_exposes_projection() -> None:
     store = EnterpriseMemoryStore()
     detail = _detail()
     context = store.start_run(detail)
-    store.save_projection(
-        build_enterprise_projection(
-            detail,
-            workspace_id=context.workspace_id,
-            project_id=context.project_id,
-            competitor_id_map=context.competitor_id_map,
-        )
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
     )
+    store.save_projection(projection)
     app = create_app()
     app.dependency_overrides[get_enterprise_store] = lambda: store
     client = TestClient(app)
@@ -227,6 +277,8 @@ def test_enterprise_router_exposes_projection() -> None:
     workspaces = client.get("/api/enterprise/workspaces")
     project = client.get(f"/api/enterprise/projects/{context.project_id}")
     competitors = client.get(f"/api/enterprise/competitors?project_id={context.project_id}")
+    version = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}")
+    diff = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}/diff")
 
     assert response.status_code == 200
     assert response.json()["report_version"]["id"].startswith("report-run-1")
@@ -236,6 +288,11 @@ def test_enterprise_router_exposes_projection() -> None:
     assert project.json()["id"] == context.project_id
     assert competitors.status_code == 200
     assert [item["name"] for item in competitors.json()] == ["Cursor"]
+    assert version.status_code == 200
+    assert version.json()["id"] == projection.report_version.id
+    assert diff.status_code == 200
+    assert diff.json()["base_version"] is None
+    assert diff.json()["added_lines"] >= 1
 
 
 def test_enterprise_router_returns_404_for_missing_project() -> None:

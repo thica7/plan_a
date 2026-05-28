@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_enterprise_store
-from packages.enterprise import EnterpriseStore
+from packages.enterprise import EnterpriseStore, build_report_version_diff
 from packages.schema.enterprise import (
     AuditLogRecord,
     ClaimRecord,
@@ -11,6 +11,7 @@ from packages.schema.enterprise import (
     EnterpriseRunProjection,
     EvidenceRecord,
     ProjectRecord,
+    ReportVersionDiff,
     ReportVersionRecord,
     WorkspaceRecord,
 )
@@ -79,6 +80,35 @@ def list_project_report_versions(
     store: EnterpriseStoreDep,
 ) -> list[ReportVersionRecord]:
     return store.list_report_versions(project_id=project_id)
+
+
+@router.get("/enterprise/report-versions/{version_id}", response_model=ReportVersionRecord)
+def get_report_version(
+    version_id: str,
+    store: EnterpriseStoreDep,
+) -> ReportVersionRecord:
+    version = store.get_report_version(version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Report version not found")
+    return version
+
+
+@router.get("/enterprise/report-versions/{version_id}/diff", response_model=ReportVersionDiff)
+def get_report_version_diff(
+    version_id: str,
+    store: EnterpriseStoreDep,
+    base_version_id: str | None = None,
+) -> ReportVersionDiff:
+    target_version = store.get_report_version(version_id)
+    if target_version is None:
+        raise HTTPException(status_code=404, detail="Report version not found")
+    if base_version_id:
+        base_version = store.get_report_version(base_version_id)
+        if base_version is None:
+            raise HTTPException(status_code=404, detail="Base report version not found")
+    else:
+        base_version = store.get_previous_report_version(target_version)
+    return build_report_version_diff(target_version, base_version=base_version)
 
 
 @router.get("/enterprise/runs/{run_id}/projection", response_model=EnterpriseRunProjection)
