@@ -1,5 +1,5 @@
 import { NavLink, Route, Routes } from "react-router-dom";
-import { Activity, Briefcase, History, Radar } from "lucide-react";
+import { Activity, Briefcase, Database, FileText, History, Layers, Radar } from "lucide-react";
 import { NewRun } from "./pages/NewRun";
 import { RunDetail } from "./pages/RunDetail";
 import { HistoryPage } from "./pages/History";
@@ -29,6 +29,18 @@ export function App() {
             <Briefcase size={18} aria-hidden />
             Enterprise
           </NavLink>
+          <NavLink to="/competitors">
+            <Layers size={18} aria-hidden />
+            Competitors
+          </NavLink>
+          <NavLink to="/evidence">
+            <Database size={18} aria-hidden />
+            Evidence
+          </NavLink>
+          <NavLink to="/reports">
+            <FileText size={18} aria-hidden />
+            Reports
+          </NavLink>
         </nav>
       </aside>
 
@@ -37,7 +49,10 @@ export function App() {
           <Route path="/" element={<NewRun />} />
           <Route path="/runs/:runId" element={<RunDetail />} />
           <Route path="/history" element={<HistoryPage />} />
-          <Route path="/enterprise" element={<EnterpriseWorkbench />} />
+          <Route path="/enterprise" element={<EnterpriseWorkbench initialTab="competitors" />} />
+          <Route path="/competitors" element={<EnterpriseWorkbench initialTab="competitors" />} />
+          <Route path="/evidence" element={<EnterpriseWorkbench initialTab="evidence" />} />
+          <Route path="/reports" element={<EnterpriseWorkbench initialTab="reports" />} />
         </Routes>
       </main>
     </div>

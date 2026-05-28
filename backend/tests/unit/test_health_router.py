@@ -22,6 +22,8 @@ def _settings(**overrides: object) -> Settings:
         "pplx_api_key": None,
         "pplx_base_url": "https://api.perplexity.ai",
         "web_search_provider": "perplexity",
+        "enterprise_store_backend": "memory",
+        "enterprise_database_url": None,
     }
     values.update(overrides)
     return Settings(**values)
@@ -66,7 +68,10 @@ def test_health_reports_foundation_checks() -> None:
 
 def test_health_marks_misconfigured_postgres_enterprise_store_as_error() -> None:
     db_path = _db_path()
-    client = _client(db_path, _settings(enterprise_store_backend="postgres"))
+    client = _client(
+        db_path,
+        _settings(enterprise_store_backend="postgres", enterprise_database_url=None),
+    )
 
     try:
         response = client.get("/api/health")

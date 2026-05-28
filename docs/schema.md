@@ -18,3 +18,15 @@ Compatibility rule:
 
 - `CompetitorKB` remains as a legacy slice view for comparison and report rendering.
 - `CompetitorKnowledge` is the canonical structured schema used for QA.
+
+## Enterprise Evidence Quality
+
+The enterprise evidence store uses one canonical quality label enum:
+
+- `unreviewed`: collected evidence that has not been manually checked.
+- `accepted`: evidence approved for claims, reports, scoring, and QA.
+- `rejected`: evidence that should not support claims or reports.
+- `stale`: evidence that was once useful but needs replacement or refresh.
+
+These labels intentionally replace earlier draft wording such as `good`,
+`outdated`, `pending_review`, and `discarded`.

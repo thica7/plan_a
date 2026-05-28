@@ -20,6 +20,9 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     env_file: .env
+    environment:
+      ENTERPRISE_STORE_BACKEND: postgres
+      ENTERPRISE_DATABASE_URL: postgresql://competiscope:competiscope@postgres:5432/competiscope?connect_timeout=5
     volumes:
       - ./runs:/app/runs
       - ./backend/db:/app/db:ro

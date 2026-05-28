@@ -48,7 +48,9 @@ def get_enterprise_store() -> EnterpriseStore:
                 "ENTERPRISE_DATABASE_URL is required when enterprise store is postgres."
             )
         return EnterprisePostgresStore(settings.enterprise_database_url)
-    return EnterpriseMemoryStore()
+    if settings.enterprise_store_backend == "memory":
+        return EnterpriseMemoryStore()
+    raise RuntimeError(f"Unknown enterprise store backend: {settings.enterprise_store_backend}")
 
 
 @lru_cache

@@ -50,9 +50,13 @@ import type {
   ReportVersionRecord,
 } from "../api/types";
 
-type EnterpriseTab = "evidence" | "claims" | "reports";
+type EnterpriseTab = "competitors" | "evidence" | "claims" | "reports";
 
-export function EnterpriseWorkbench() {
+export function EnterpriseWorkbench({
+  initialTab = "evidence",
+}: {
+  initialTab?: EnterpriseTab;
+}) {
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [competitors, setCompetitors] = useState<CompetitorRecord[]>([]);
@@ -67,7 +71,7 @@ export function EnterpriseWorkbench() {
   const [redTeam, setRedTeam] = useState<RedTeamReport | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
-  const [activeTab, setActiveTab] = useState<EnterpriseTab>("evidence");
+  const [activeTab, setActiveTab] = useState<EnterpriseTab>(initialTab);
   const [query, setQuery] = useState("");
   const [isLoadingProjects, setLoadingProjects] = useState(true);
   const [isLoadingProject, setLoadingProject] = useState(false);
@@ -91,6 +95,10 @@ export function EnterpriseWorkbench() {
   useEffect(() => {
     refreshProjects();
   }, []);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     if (!selectedProjectId) {
@@ -373,6 +381,13 @@ export function EnterpriseWorkbench() {
               <section className="panel enterprise-data-panel">
                 <div className="enterprise-tabs">
                   <button
+                    className={activeTab === "competitors" ? "active" : ""}
+                    type="button"
+                    onClick={() => setActiveTab("competitors")}
+                  >
+                    Competitors
+                  </button>
+                  <button
                     className={activeTab === "evidence" ? "active" : ""}
                     type="button"
                     onClick={() => setActiveTab("evidence")}
@@ -396,6 +411,9 @@ export function EnterpriseWorkbench() {
                 </div>
 
                 {isLoadingProject ? <p className="muted-line">Loading project data...</p> : null}
+                {activeTab === "competitors" ? (
+                  <CompetitorLibrary competitors={competitors} scores={competitorScores} />
+                ) : null}
                 {activeTab === "evidence" ? (
                   <EvidenceTable
                     competitorById={competitorById}
@@ -432,6 +450,47 @@ export function EnterpriseWorkbench() {
         </div>
       </div>
     </section>
+  );
+}
+
+function CompetitorLibrary({
+  competitors,
+  scores,
+}: {
+  competitors: CompetitorRecord[];
+  scores: CompetitorScoreReport | null;
+}) {
+  const scoreByCompetitor = new Map(
+    (scores?.scores ?? []).map((score) => [score.competitor_id, score]),
+  );
+  if (competitors.length === 0) {
+    return (
+      <div className="empty-state">
+        <Layers size={18} aria-hidden />
+        <span>No competitors are linked to this project.</span>
+      </div>
+    );
+  }
+  return (
+    <div className="competitor-library-grid">
+      {competitors.map((competitor) => {
+        const score = scoreByCompetitor.get(competitor.id);
+        return (
+          <article className="competitor-library-card" key={competitor.id}>
+            <div>
+              <strong>{competitor.name}</strong>
+              <span>{competitor.layer}</span>
+            </div>
+            <p>{competitor.homepage_url ?? "No homepage recorded"}</p>
+            <div className="project-meta-row">
+              <span>Aliases {competitor.aliases.length}</span>
+              <span>Score {score ? score.total_score : "-"}</span>
+              <span>Rank {score ? `#${score.rank}` : "-"}</span>
+            </div>
+          </article>
+        );
+      })}
+    </div>
   );
 }
 

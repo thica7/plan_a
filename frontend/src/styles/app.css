@@ -2288,6 +2288,43 @@ textarea {
   font-style: normal;
 }
 
+.competitor-library-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.competitor-library-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 132px;
+  padding: 14px;
+}
+
+.competitor-library-card div:first-child {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.competitor-library-card span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.competitor-library-card p {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .enterprise-data-panel {
   display: grid;
   gap: 14px;

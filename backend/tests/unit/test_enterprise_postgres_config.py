@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from packages.config.settings import get_settings
+from packages.config.settings import DEFAULT_ENTERPRISE_DATABASE_URL, get_settings
 from packages.enterprise import EnterprisePostgresStore
 from packages.enterprise.postgres import _split_sql
 
@@ -15,8 +15,19 @@ def clear_settings_cache():
     get_settings.cache_clear()
 
 
-def test_enterprise_store_settings_default_to_memory(monkeypatch) -> None:
+def test_enterprise_store_settings_default_to_postgres(monkeypatch) -> None:
     monkeypatch.delenv("ENTERPRISE_STORE_BACKEND", raising=False)
+    monkeypatch.delenv("ENTERPRISE_DATABASE_URL", raising=False)
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.enterprise_store_backend == "postgres"
+    assert settings.enterprise_database_url == DEFAULT_ENTERPRISE_DATABASE_URL
+
+
+def test_enterprise_store_settings_allow_explicit_memory(monkeypatch) -> None:
+    monkeypatch.setenv("ENTERPRISE_STORE_BACKEND", "memory")
     monkeypatch.delenv("ENTERPRISE_DATABASE_URL", raising=False)
     get_settings.cache_clear()
 

@@ -21,13 +21,16 @@ conda run -n bd-competiscope-v2 python backend/scripts/smoke_fetch.py
 Enterprise store:
 
 ```bash
-# default local mode
-ENTERPRISE_STORE_BACKEND=memory
-
-# durable enterprise mode
+# default enterprise mode
 ENTERPRISE_STORE_BACKEND=postgres
 ENTERPRISE_DATABASE_URL=postgresql://competiscope:competiscope@127.0.0.1:55432/competiscope?connect_timeout=5
+
+# explicit lightweight fallback
+ENTERPRISE_STORE_BACKEND=memory
 ```
 
 `EnterpriseMemoryStore` and `EnterprisePostgresStore` implement the same repository boundary,
-so local development can stay lightweight while Docker deployments can use Postgres/pgvector.
+but Postgres is the default enterprise path. Use memory only for isolated local tests.
+
+Evidence quality labels are `unreviewed`, `accepted`, `rejected`, and `stale`.
+Rejected and stale evidence are excluded from QA support and competitor scoring.

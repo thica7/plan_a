@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+DEFAULT_ENTERPRISE_DATABASE_URL = (
+    "postgresql://competiscope:competiscope@127.0.0.1:55432/competiscope?connect_timeout=5"
+)
+
 
 def _load_env_file(path: Path) -> None:
     if not path.exists():
@@ -49,8 +53,8 @@ class Settings:
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
-    enterprise_store_backend: str = "memory"
-    enterprise_database_url: str | None = None
+    enterprise_store_backend: str = "postgres"
+    enterprise_database_url: str | None = DEFAULT_ENTERPRISE_DATABASE_URL
 
     @property
     def has_llm_credentials(self) -> bool:
@@ -72,6 +76,10 @@ def get_settings() -> Settings:
     root = Path.cwd()
     _load_env_file(root / ".env")
     _load_env_file(root / "backend" / ".env")
+    enterprise_backend = os.getenv("ENTERPRISE_STORE_BACKEND", "postgres").strip().lower()
+    enterprise_database_url = os.getenv("ENTERPRISE_DATABASE_URL")
+    if enterprise_backend == "postgres" and not enterprise_database_url:
+        enterprise_database_url = DEFAULT_ENTERPRISE_DATABASE_URL
     return Settings(
         demo_mode=_env_bool("DEMO_MODE", True),
         ark_api_key=os.getenv("ARK_API_KEY") or None,
@@ -96,6 +104,6 @@ def get_settings() -> Settings:
         langfuse_public_key=os.getenv("LANGFUSE_PUBLIC_KEY") or None,
         langfuse_secret_key=os.getenv("LANGFUSE_SECRET_KEY") or None,
         langfuse_host=os.getenv("LANGFUSE_HOST") or None,
-        enterprise_store_backend=os.getenv("ENTERPRISE_STORE_BACKEND", "memory").strip().lower(),
-        enterprise_database_url=os.getenv("ENTERPRISE_DATABASE_URL") or None,
+        enterprise_store_backend=enterprise_backend,
+        enterprise_database_url=enterprise_database_url,
     )

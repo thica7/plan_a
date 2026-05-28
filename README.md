@@ -5,11 +5,15 @@ Plan A implementation scaffold: graph-driven competitive analysis with schema-fi
 ## Quick Start
 
 ```bash
+docker compose up -d postgres
 make dev-backend
 make dev-frontend
 ```
 
 The backend runs on `http://localhost:8000`. The frontend runs on `http://localhost:5173` and proxies `/api` to the backend.
+The enterprise store is Postgres-first by default and uses the local Docker
+database at `127.0.0.1:55432`. Set `ENTERPRISE_STORE_BACKEND=memory` only for an
+explicit lightweight local fallback.
 
 ## Real API Test
 
@@ -32,8 +36,8 @@ COLLECTOR_REACT_ENABLED=true
 COLLECTOR_REACT_MAX_TURNS=3
 ANALYST_REACT_ENABLED=true
 ANALYST_REACT_MAX_TURNS=3
-ENTERPRISE_STORE_BACKEND=memory
-ENTERPRISE_DATABASE_URL=postgresql://competiscope:competiscope@localhost:5432/competiscope
+ENTERPRISE_STORE_BACKEND=postgres
+ENTERPRISE_DATABASE_URL=postgresql://competiscope:competiscope@127.0.0.1:55432/competiscope?connect_timeout=5
 ```
 
 Then restart the backend with `make dev-backend`. The New Run screen will show whether the backend detected `ARK_API_KEY` and `ARK_MODEL`; choose `Real API` to send real chat completion calls through the backend. The API key is never sent from the browser.
