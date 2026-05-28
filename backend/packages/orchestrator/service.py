@@ -20,15 +20,17 @@ from packages.agents.qa.logic import QualityAgentMixin
 from packages.agents.reflector.logic import ReflectorAgentMixin
 from packages.agents.writer.logic import WriterAgentMixin
 from packages.config import Settings
+from packages.enterprise import EnterpriseStore, build_enterprise_projection
 from packages.llm import DoubaoClient
 from packages.memory import KBCache, KBCacheEntry, RunJournal
 from packages.orchestrator.audit import build_revision_record, convergence_ratio
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.graph import build_demo_analysis_graph, build_real_analysis_graph, build_scoped_redo_graph
-from packages.observability import LangfuseAdapter, LangfuseConfig, TraceStore, build_run_event
 from packages.orchestrator.scoping import assign_redo_scope
+from packages.observability import LangfuseAdapter, LangfuseConfig, TraceStore, build_run_event
 from packages.search import PerplexitySearchClient, SearchResult
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail, RunSummary
+from packages.schema.enterprise import EnterpriseRunProjection
 from packages.schema.models import (
     AnalysisPlan,
     AgentMessage,
@@ -102,6 +104,7 @@ class RunService(
         kb_cache: KBCache | None = None,
         trace_store: TraceStore | None = None,
         graph_checkpointer: GraphCheckpointer | None = None,
+        enterprise_store: EnterpriseStore | None = None,
     ) -> None:
         self._skill_registry = skill_registry
         self._settings = settings
@@ -118,6 +121,7 @@ class RunService(
             )
         )
         self._graph_checkpointer = graph_checkpointer or GraphCheckpointer.from_default_path()
+        self._enterprise_store = enterprise_store
         self._real_graph = None
         self._demo_graph = None
         self._scoped_redo_graph = None
@@ -143,6 +147,8 @@ class RunService(
         )
         detail = RunDetail(
             id=run_id,
+            workspace_id=request.workspace_id,
+            project_id=request.project_id,
             topic=request.topic,
             status="queued",
             execution_mode=execution_mode,
@@ -159,6 +165,14 @@ class RunService(
         )
         async with self._lock:
             self._runs[run_id] = RunRecord(detail=detail)
+        if self._enterprise_store is not None:
+            context = self._enterprise_store.start_run(
+                detail,
+                workspace_id=request.workspace_id,
+                project_id=request.project_id,
+            )
+            detail.workspace_id = context.workspace_id
+            detail.project_id = context.project_id
         self._persist_run(run_id)
         await self.emit(
             run_id,
@@ -174,6 +188,8 @@ class RunService(
         return [
             RunSummary(
                 id=record.detail.id,
+                workspace_id=record.detail.workspace_id,
+                project_id=record.detail.project_id,
                 topic=record.detail.topic,
                 status=record.detail.status,
                 execution_mode=record.detail.execution_mode,
@@ -551,7 +567,15 @@ class RunService(
         record.detail.status = "completed"
         record.detail.current_node = None
         record.detail.updated_at = datetime.utcnow()
-        await self.emit(record.detail.id, "run_completed", "orchestrator", None, "Real API run completed.")
+        projection = self._sync_enterprise_projection(record)
+        await self.emit(
+            record.detail.id,
+            "run_completed",
+            "orchestrator",
+            None,
+            "Real API run completed.",
+            self._enterprise_projection_payload(projection),
+        )
 
     async def _finalize_scoped_redo_graph(self, record: RunRecord) -> None:
         detail = record.detail
@@ -564,13 +588,17 @@ class RunService(
         detail.updated_at = datetime.utcnow()
         if (pending and pending.auto_continue) and await self._maybe_run_auto_redo(record):
             return
+        projection = self._sync_enterprise_projection(record)
         await self.emit(
             detail.id,
             "run_completed",
             "orchestrator",
             None,
             f"Scoped redo completed: {pending.stage if pending else 'redo'}.",
-            {"redo_scope": pending.redo_scope.model_dump(mode="json") if pending else None},
+            {
+                "redo_scope": pending.redo_scope.model_dump(mode="json") if pending else None,
+                **self._enterprise_projection_payload(projection),
+            },
         )
 
     async def _finalize_demo_pipeline(self, record: RunRecord) -> None:
@@ -580,7 +608,15 @@ class RunService(
         record.detail.status = "completed"
         record.detail.current_node = None
         record.detail.updated_at = datetime.utcnow()
-        await self.emit(record.detail.id, "run_completed", "orchestrator", None, "Demo graph run completed.")
+        projection = self._sync_enterprise_projection(record)
+        await self.emit(
+            record.detail.id,
+            "run_completed",
+            "orchestrator",
+            None,
+            "Demo graph run completed.",
+            self._enterprise_projection_payload(projection),
+        )
 
     async def _demo_planner_step(self, record: RunRecord) -> None:
         detail = record.detail
@@ -1317,6 +1353,42 @@ class RunService(
         record.detail.updated_at = datetime.utcnow()
         self._persist_run(record.detail.id)
         return message
+
+    def _sync_enterprise_projection(self, record: RunRecord) -> EnterpriseRunProjection | None:
+        if self._enterprise_store is None:
+            return None
+
+        detail = record.detail
+        context = self._enterprise_store.start_run(
+            detail,
+            workspace_id=detail.workspace_id,
+            project_id=detail.project_id,
+        )
+        detail.workspace_id = context.workspace_id
+        detail.project_id = context.project_id
+        projection = build_enterprise_projection(
+            detail,
+            workspace_id=context.workspace_id,
+            project_id=context.project_id,
+            competitor_id_map=context.competitor_id_map,
+        )
+        self._enterprise_store.save_projection(projection)
+        return projection
+
+    def _enterprise_projection_payload(
+        self,
+        projection: EnterpriseRunProjection | None,
+    ) -> dict[str, Any]:
+        if projection is None:
+            return {}
+        return {
+            "enterprise_projection": {
+                "project_id": projection.project_id,
+                "evidence_count": len(projection.evidence_records),
+                "claim_count": len(projection.claim_records),
+                "report_version_id": projection.report_version.id,
+            }
+        }
 
     def _hydrate_runs(self) -> None:
         if self._journal is None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import datetime
 
 from packages.identity import (
@@ -29,17 +30,24 @@ def build_enterprise_projection(
     project_id: str | None = None,
     version_number: int = 1,
     competitor_layer: str = "unknown",
+    competitor_id_map: Mapping[str, str] | None = None,
 ) -> EnterpriseRunProjection:
     """Project the current run-centric DTO into Phase 1 enterprise records."""
 
     resolved_project_id = project_id or f"project-{detail.id}"
-    evidence_records = _build_evidence_records(detail, workspace_id, resolved_project_id)
+    evidence_records = _build_evidence_records(
+        detail,
+        workspace_id,
+        resolved_project_id,
+        competitor_id_map,
+    )
     evidence_by_source = _index_evidence_by_source(evidence_records)
     claim_records = _build_claim_records(
         detail,
         workspace_id,
         resolved_project_id,
         evidence_by_source,
+        competitor_id_map,
     )
     report_version = _build_report_version(
         detail,
@@ -49,6 +57,7 @@ def build_enterprise_projection(
         competitor_layer,
         claim_records,
         evidence_records,
+        competitor_id_map,
     )
     return EnterpriseRunProjection(
         workspace_id=workspace_id,
@@ -64,15 +73,17 @@ def _build_evidence_records(
     detail: RunDetail,
     workspace_id: str,
     project_id: str,
+    competitor_id_map: Mapping[str, str] | None,
 ) -> list[EvidenceRecord]:
     records: list[EvidenceRecord] = []
     seen: set[str] = set()
     for source in detail.raw_sources:
         for competitor in _source_competitors(source):
+            competitor_id = _competitor_id_for(competitor, competitor_id_map)
             evidence_id = compute_evidence_id(
                 normalize_url(str(source.url) if source.url is not None else ""),
                 source.content_hash,
-                _record_id(competitor),
+                competitor_id,
                 source.dimension,
             )
             if evidence_id in seen:
@@ -85,7 +96,7 @@ def _build_evidence_records(
                     project_id=project_id,
                     run_id=detail.id,
                     raw_source_id=source.id,
-                    competitor_id=_record_id(competitor),
+                    competitor_id=competitor_id,
                     dimension=normalize_dimension_key(source.dimension),
                     source_type=source.source_type,
                     title=source.title,
@@ -107,11 +118,12 @@ def _build_claim_records(
     workspace_id: str,
     project_id: str,
     evidence_by_source: dict[tuple[str, str], list[EvidenceRecord]],
+    competitor_id_map: Mapping[str, str] | None,
 ) -> list[ClaimRecord]:
     records: list[ClaimRecord] = []
     seen: set[str] = set()
     for competitor, knowledge in detail.competitor_knowledge.items():
-        competitor_id = _record_id(competitor)
+        competitor_id = _competitor_id_for(competitor, competitor_id_map)
         for dimension in detail.plan.dimensions:
             for claim in _claims_for_dimension(knowledge, dimension):
                 evidence_ids = _evidence_ids_for_claim(claim, competitor_id, evidence_by_source)
@@ -151,8 +163,9 @@ def _build_report_version(
     competitor_layer: str,
     claim_records: list[ClaimRecord],
     evidence_records: list[EvidenceRecord],
+    competitor_id_map: Mapping[str, str] | None,
 ) -> ReportVersionRecord:
-    competitor_ids = [_record_id(c) for c in detail.plan.competitors]
+    competitor_ids = [_competitor_id_for(c, competitor_id_map) for c in detail.plan.competitors]
     competitor_set_hash = compute_competitor_set_hash(competitor_ids)
     return ReportVersionRecord(
         id=f"report-{detail.id}-v{version_number}",
@@ -237,6 +250,20 @@ def _source_competitors(source: RawSource) -> list[str]:
 def _record_id(value: str) -> str:
     normalized = normalize_text(value)
     return normalized.replace(" ", "_")
+
+
+def _competitor_id_for(
+    value: str,
+    competitor_id_map: Mapping[str, str] | None,
+) -> str:
+    if competitor_id_map is None:
+        return _record_id(value)
+    return (
+        competitor_id_map.get(value)
+        or competitor_id_map.get(_record_id(value))
+        or competitor_id_map.get(normalize_text(value))
+        or _record_id(value)
+    )
 
 
 def _quality_label(source: RawSource) -> str:

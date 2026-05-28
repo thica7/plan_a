@@ -239,6 +239,8 @@ export interface RunMetrics {
 }
 
 export interface RunCreateRequest {
+  workspace_id?: string;
+  project_id?: string | null;
   topic: string;
   competitors: string[];
   dimensions: string[];
@@ -248,6 +250,8 @@ export interface RunCreateRequest {
 
 export interface RunSummary {
   id: string;
+  workspace_id: string;
+  project_id?: string | null;
   topic: string;
   status: RunStatus;
   execution_mode: "demo" | "real";
@@ -304,4 +308,91 @@ export interface RuntimeConfig {
   auto_redo_warn_enabled: boolean;
   hitl_enabled: boolean;
   hitl_timeout_seconds: number;
+}
+
+export type CompetitorLayer = "L1" | "L2" | "L3" | "unknown";
+
+export interface WorkspaceRecord {
+  id: string;
+  name: string;
+  description: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectRecord {
+  id: string;
+  workspace_id: string;
+  name: string;
+  topic: string;
+  topic_normalized: string;
+  competitor_layer: CompetitorLayer;
+  competitor_set_hash: string;
+  scenario_id?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EvidenceRecord {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  run_id?: string | null;
+  raw_source_id: string;
+  competitor_id: string;
+  dimension: string;
+  source_type: string;
+  title: string;
+  url?: string | null;
+  snippet: string;
+  content_hash: string;
+  reliability_score: number;
+  freshness_score: number;
+  quality_label: "unreviewed" | "accepted" | "rejected" | "stale";
+  captured_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ClaimRecord {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  run_id?: string | null;
+  competitor_id: string;
+  claim_type: string;
+  claim_text: string;
+  evidence_ids: string[];
+  confidence: number;
+  status: "proposed" | "accepted" | "disputed" | "rejected" | "deprecated";
+  created_by_agent?: string | null;
+  created_at: string;
+}
+
+export interface ReportVersionRecord {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  run_id?: string | null;
+  parent_version_id?: string | null;
+  version_number: number;
+  topic_normalized: string;
+  competitor_layer: CompetitorLayer;
+  competitor_set_hash: string;
+  status: "draft" | "in_review" | "approved" | "published" | "archived";
+  report_md: string;
+  claim_ids: string[];
+  evidence_ids: string[];
+  created_at: string;
+  published_at?: string | null;
+}
+
+export interface EnterpriseRunProjection {
+  workspace_id: string;
+  project_id: string;
+  run_id: string;
+  evidence_records: EvidenceRecord[];
+  claim_records: ClaimRecord[];
+  report_version: ReportVersionRecord;
 }

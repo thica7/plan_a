@@ -1,7 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import health, hitl, kb, revisions, runtime, runs, skills, stream, trace
+from app.routers import (
+    enterprise,
+    health,
+    hitl,
+    kb,
+    revisions,
+    runs,
+    runtime,
+    skills,
+    stream,
+    trace,
+)
 
 
 def create_app() -> FastAPI:
@@ -22,6 +33,7 @@ def create_app() -> FastAPI:
     app.include_router(trace.router, prefix="/api", tags=["trace"])
     app.include_router(kb.router, prefix="/api", tags=["kb"])
     app.include_router(revisions.router, prefix="/api", tags=["revisions"])
+    app.include_router(enterprise.router, prefix="/api", tags=["enterprise"])
     return app
 
 

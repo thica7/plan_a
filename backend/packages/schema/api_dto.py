@@ -1,12 +1,11 @@
 from datetime import datetime
-from typing import Any
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from packages.schema.models import (
-    AnalysisPlan,
     AgentMessage,
+    AnalysisPlan,
     ComparisonMatrix,
     CompetitorDiscovery,
     CompetitorKB,
@@ -24,6 +23,8 @@ from packages.schema.models import (
 class RunCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    workspace_id: str = Field(default="default-workspace", min_length=1, max_length=120)
+    project_id: str | None = Field(default=None, min_length=1, max_length=160)
     topic: str = Field(min_length=2, max_length=200)
     competitors: list[str] = Field(default_factory=list, max_length=8)
     dimensions: list[str] = Field(min_length=1, max_length=8)
@@ -43,6 +44,8 @@ class RunSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
+    workspace_id: str = "default-workspace"
+    project_id: str | None = None
     topic: str
     status: Literal["queued", "running", "interrupted", "completed", "failed"]
     execution_mode: Literal["demo", "real"]

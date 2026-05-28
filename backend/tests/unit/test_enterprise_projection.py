@@ -102,6 +102,35 @@ def test_projection_expands_multi_competitor_sources() -> None:
     assert {record.competitor_id for record in projection.evidence_records} == {"a", "b"}
 
 
+def test_projection_uses_competitor_id_map_when_present() -> None:
+    detail = RunDetail(
+        id="run-1",
+        topic="Comparison",
+        status="completed",
+        execution_mode="real",
+        created_at="2026-05-28T00:00:00",
+        updated_at="2026-05-28T00:05:00",
+        plan=AnalysisPlan(topic="Comparison", competitors=["A"], dimensions=["feature"]),
+        raw_sources=[
+            RawSource(
+                id="feature-1",
+                competitor="A",
+                dimension="feature",
+                source_type="webpage_verified",
+                title="Feature comparison",
+                url="https://example.com/features",
+                snippet="A supports this feature.",
+                content_hash="hash-1",
+                confidence=0.8,
+            )
+        ],
+    )
+
+    projection = build_enterprise_projection(detail, competitor_id_map={"A": "competitor-a"})
+
+    assert projection.evidence_records[0].competitor_id == "competitor-a"
+
+
 def test_projection_skips_claims_with_missing_source_ids() -> None:
     detail = RunDetail(
         id="run-1",
