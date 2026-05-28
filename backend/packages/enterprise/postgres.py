@@ -107,6 +107,19 @@ class EnterprisePostgresStore:
                 self._upsert_workspace(cur, workspace_id)
                 self._upsert_default_user(cur)
                 self._upsert_project(cur, detail, context, actor_id)
+                self._append_audit_once(
+                    cur,
+                    workspace_id=workspace_id,
+                    actor_id=actor_id,
+                    action="project.upserted",
+                    resource_type="project",
+                    resource_id=project_id,
+                    after={
+                        "topic": detail.topic,
+                        "competitor_layer": detail.plan.competitor_layer,
+                        "scenario_id": detail.plan.scenario_id,
+                    },
+                )
                 for name, competitor_id in zip(
                     detail.plan.competitors,
                     competitor_ids,
@@ -114,21 +127,38 @@ class EnterprisePostgresStore:
                 ):
                     self._upsert_competitor(cur, detail, workspace_id, competitor_id, name)
                     self._upsert_project_competitor(cur, project_id, competitor_id)
-                self._upsert_run(cur, detail, context)
-                if not self._audit_exists(cur, "run.created", detail.id):
-                    self._append_audit(
+                    self._append_audit_once(
                         cur,
                         workspace_id=workspace_id,
                         actor_id=actor_id,
-                        action="run.created",
-                        resource_type="run",
-                        resource_id=detail.id,
-                        after={
-                            "project_id": project_id,
-                            "topic": detail.topic,
-                            "competitors": detail.plan.competitors,
-                        },
+                        action="competitor.upserted",
+                        resource_type="competitor",
+                        resource_id=competitor_id,
+                        after={"name": name, "layer": detail.plan.competitor_layer},
                     )
+                    self._append_audit_once(
+                        cur,
+                        workspace_id=workspace_id,
+                        actor_id=actor_id,
+                        action="project_competitor.linked",
+                        resource_type="project_competitor",
+                        resource_id=f"{project_id}:{competitor_id}",
+                        after={"project_id": project_id, "competitor_id": competitor_id},
+                    )
+                self._upsert_run(cur, detail, context)
+                self._append_audit_once(
+                    cur,
+                    workspace_id=workspace_id,
+                    actor_id=actor_id,
+                    action="run.created",
+                    resource_type="run",
+                    resource_id=detail.id,
+                    after={
+                        "project_id": project_id,
+                        "topic": detail.topic,
+                        "competitors": detail.plan.competitors,
+                    },
+                )
             conn.commit()
         return context
 
@@ -140,7 +170,46 @@ class EnterprisePostgresStore:
                 for claim in projection.claim_records:
                     self._upsert_claim(cur, claim)
                 self._upsert_report_version(cur, projection.report_version)
-                self._append_audit(
+                if projection.evidence_records:
+                    self._append_audit_once(
+                        cur,
+                        workspace_id=projection.workspace_id,
+                        actor_id=DEFAULT_USER_ID,
+                        action="evidence.upserted",
+                        resource_type="run",
+                        resource_id=projection.run_id,
+                        after={
+                            "project_id": projection.project_id,
+                            "evidence_ids": [item.id for item in projection.evidence_records],
+                        },
+                    )
+                if projection.claim_records:
+                    self._append_audit_once(
+                        cur,
+                        workspace_id=projection.workspace_id,
+                        actor_id=DEFAULT_USER_ID,
+                        action="claim.upserted",
+                        resource_type="run",
+                        resource_id=projection.run_id,
+                        after={
+                            "project_id": projection.project_id,
+                            "claim_ids": [item.id for item in projection.claim_records],
+                        },
+                    )
+                self._append_audit_once(
+                    cur,
+                    workspace_id=projection.workspace_id,
+                    actor_id=DEFAULT_USER_ID,
+                    action="report_version.upserted",
+                    resource_type="report_version",
+                    resource_id=projection.report_version.id,
+                    after={
+                        "project_id": projection.project_id,
+                        "run_id": projection.run_id,
+                        "version_number": projection.report_version.version_number,
+                    },
+                )
+                self._append_audit_once(
                     cur,
                     workspace_id=projection.workspace_id,
                     actor_id=DEFAULT_USER_ID,
@@ -198,16 +267,38 @@ class EnterprisePostgresStore:
             if report_row is None:
                 return None
             report_version = ReportVersionRecord.model_validate(dict(report_row))
+            report_claim_ids = self._linked_ids(
+                conn,
+                table="report_version_claims",
+                owner_column="report_version_id",
+                related_column="claim_id",
+                owner_id=report_version.id,
+                fallback=report_version.claim_ids,
+            )
+            report_evidence_ids = self._linked_ids(
+                conn,
+                table="report_version_evidence",
+                owner_column="report_version_id",
+                related_column="evidence_id",
+                owner_id=report_version.id,
+                fallback=report_version.evidence_ids,
+            )
+            report_version = report_version.model_copy(
+                update={
+                    "claim_ids": report_claim_ids,
+                    "evidence_ids": report_evidence_ids,
+                }
+            )
             evidence_records = self._records_by_ids(
                 conn,
                 table="evidence_records",
-                ids=report_version.evidence_ids,
+                ids=report_evidence_ids,
                 model=EvidenceRecord,
             )
             claim_records = self._records_by_ids(
                 conn,
                 table="claim_records",
-                ids=report_version.claim_ids,
+                ids=report_claim_ids,
                 model=ClaimRecord,
             )
         return EnterpriseRunProjection(
@@ -428,6 +519,28 @@ class EnterprisePostgresStore:
         by_id = {row["id"]: model.model_validate(dict(row)) for row in rows}
         return [by_id[item] for item in ids if item in by_id]
 
+    def _linked_ids(
+        self,
+        conn: Any,
+        *,
+        table: str,
+        owner_column: str,
+        related_column: str,
+        owner_id: str,
+        fallback: list[str],
+    ) -> list[str]:
+        rows = conn.execute(
+            f"""
+            SELECT {related_column}
+            FROM {table}
+            WHERE {owner_column} = %s
+            ORDER BY ordinal, {related_column}
+            """,
+            (owner_id,),
+        ).fetchall()
+        ids = [str(row[related_column]) for row in rows]
+        return ids or list(fallback)
+
     def _upsert_workspace(self, cur: Any, workspace_id: str) -> None:
         cur.execute(
             """
@@ -635,6 +748,7 @@ class EnterprisePostgresStore:
                 claim.created_at,
             ),
         )
+        self._replace_claim_evidence_links(cur, claim)
 
     def _upsert_report_version(self, cur: Any, report: ReportVersionRecord) -> None:
         cur.execute(
@@ -669,18 +783,120 @@ class EnterprisePostgresStore:
                 report.published_at,
             ),
         )
+        self._replace_report_version_claim_links(cur, report)
+        self._replace_report_version_evidence_links(cur, report)
 
-    def _audit_exists(self, cur: Any, action: str, resource_id: str) -> bool:
+    def _replace_claim_evidence_links(self, cur: Any, claim: ClaimRecord) -> None:
+        cur.execute("DELETE FROM claim_evidence WHERE claim_id = %s", (claim.id,))
+        for evidence_id in claim.evidence_ids:
+            cur.execute(
+                """
+                INSERT INTO claim_evidence (
+                    claim_id, evidence_id, workspace_id, project_id
+                )
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (claim_id, evidence_id) DO NOTHING
+                """,
+                (claim.id, evidence_id, claim.workspace_id, claim.project_id),
+            )
+
+    def _replace_report_version_claim_links(
+        self,
+        cur: Any,
+        report: ReportVersionRecord,
+    ) -> None:
+        cur.execute(
+            "DELETE FROM report_version_claims WHERE report_version_id = %s",
+            (report.id,),
+        )
+        for ordinal, claim_id in enumerate(report.claim_ids):
+            cur.execute(
+                """
+                INSERT INTO report_version_claims (
+                    report_version_id, claim_id, workspace_id, project_id, ordinal
+                )
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (report_version_id, claim_id) DO UPDATE SET
+                    ordinal = EXCLUDED.ordinal
+                """,
+                (report.id, claim_id, report.workspace_id, report.project_id, ordinal),
+            )
+
+    def _replace_report_version_evidence_links(
+        self,
+        cur: Any,
+        report: ReportVersionRecord,
+    ) -> None:
+        cur.execute(
+            "DELETE FROM report_version_evidence WHERE report_version_id = %s",
+            (report.id,),
+        )
+        for ordinal, evidence_id in enumerate(report.evidence_ids):
+            cur.execute(
+                """
+                INSERT INTO report_version_evidence (
+                    report_version_id, evidence_id, workspace_id, project_id, ordinal
+                )
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (report_version_id, evidence_id) DO UPDATE SET
+                    ordinal = EXCLUDED.ordinal
+                """,
+                (report.id, evidence_id, report.workspace_id, report.project_id, ordinal),
+            )
+
+    def _audit_exists(
+        self,
+        cur: Any,
+        action: str,
+        resource_id: str,
+        *,
+        resource_type: str | None = None,
+    ) -> bool:
+        clauses = ["action = %s", "resource_id = %s"]
+        params: list[str] = [action, resource_id]
+        if resource_type is not None:
+            clauses.append("resource_type = %s")
+            params.append(resource_type)
         row = cur.execute(
-            """
+            f"""
             SELECT 1
             FROM audit_logs
-            WHERE action = %s AND resource_type = 'run' AND resource_id = %s
+            WHERE {" AND ".join(clauses)}
             LIMIT 1
             """,
-            (action, resource_id),
+            tuple(params),
         ).fetchone()
         return row is not None
+
+    def _append_audit_once(
+        self,
+        cur: Any,
+        *,
+        workspace_id: str,
+        actor_id: str | None,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        after: dict[str, Any],
+        before: dict[str, Any] | None = None,
+    ) -> None:
+        if self._audit_exists(
+            cur,
+            action,
+            resource_id,
+            resource_type=resource_type,
+        ):
+            return
+        self._append_audit(
+            cur,
+            workspace_id=workspace_id,
+            actor_id=actor_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            before=before,
+            after=after,
+        )
 
     def _append_audit(
         self,

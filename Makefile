@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 SHELL := bash
 
-.PHONY: dev-backend dev-frontend test-backend test-frontend sync-openapi smoke-llm smoke-search smoke-fetch smoke-minimal-run smoke-enterprise-postgres m0-check demo-build demo demo-down demo-logs help
+.PHONY: dev-backend dev-frontend test-backend test-frontend sync-openapi smoke-llm smoke-search smoke-fetch smoke-minimal-run smoke-enterprise-postgres eval-baseline m0-check demo-build demo demo-down demo-logs help
 
 dev-backend: ## Start FastAPI in reload mode
 	conda run -n bd-competiscope-v2 uvicorn app.main:app --reload --port 8000 --app-dir backend
@@ -34,7 +34,10 @@ smoke-minimal-run: ## Run the minimal demo graph pipeline smoke test
 smoke-enterprise-postgres: ## Verify enterprise projection persistence against local Postgres
 	conda run -n bd-competiscope-v2 python backend/scripts/smoke_enterprise_postgres.py
 
-m0-check: test-backend smoke-minimal-run ## Verify M0 foundation without external APIs
+eval-baseline: ## Run Phase 1 baseline eval smoke cases without external APIs
+	conda run -n bd-competiscope-v2 python backend/scripts/eval_baseline.py
+
+m0-check: test-backend smoke-minimal-run eval-baseline ## Verify M0 foundation without external APIs
 
 demo-build: ## Build demo containers
 	docker compose build

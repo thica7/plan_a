@@ -200,6 +200,18 @@ class EnterpriseMemoryStore:
                 project.competitor_set_hash = compute_competitor_set_hash(competitor_ids)
                 project.scenario_id = detail.plan.scenario_id
                 project.updated_at = now
+            self._append_audit_once(
+                workspace_id=workspace_id,
+                actor_id=actor_id,
+                action="project.upserted",
+                resource_type="project",
+                resource_id=project_id,
+                after={
+                    "topic": detail.topic,
+                    "competitor_layer": detail.plan.competitor_layer,
+                    "scenario_id": detail.plan.scenario_id,
+                },
+            )
             for name, competitor_id in zip(detail.plan.competitors, competitor_ids, strict=False):
                 competitor = self.competitors.get(competitor_id)
                 if competitor is None:
@@ -224,9 +236,26 @@ class EnterpriseMemoryStore:
                     competitor.metadata["scenario_id"] = detail.plan.scenario_id
                     competitor.metadata["qa_rule_ids"] = detail.plan.qa_rule_ids
                     competitor.updated_at = now
+                self._append_audit_once(
+                    workspace_id=workspace_id,
+                    actor_id=actor_id,
+                    action="competitor.upserted",
+                    resource_type="competitor",
+                    resource_id=competitor_id,
+                    after={"name": name, "layer": detail.plan.competitor_layer},
+                )
+                link_key = (project_id, competitor_id)
                 self.project_competitors.setdefault(
-                    (project_id, competitor_id),
+                    link_key,
                     ProjectCompetitorLink(project_id=project_id, competitor_id=competitor_id),
+                )
+                self._append_audit_once(
+                    workspace_id=workspace_id,
+                    actor_id=actor_id,
+                    action="project_competitor.linked",
+                    resource_type="project_competitor",
+                    resource_id=f"{project_id}:{competitor_id}",
+                    after={"project_id": project_id, "competitor_id": competitor_id},
                 )
             self._run_contexts[detail.id] = context
             if is_new_run:
@@ -251,7 +280,43 @@ class EnterpriseMemoryStore:
             for claim in projection.claim_records:
                 self.claim_records[claim.id] = claim
             self.report_versions[projection.report_version.id] = projection.report_version
-            self._append_audit(
+            if projection.evidence_records:
+                self._append_audit_once(
+                    workspace_id=projection.workspace_id,
+                    actor_id=DEFAULT_USER_ID,
+                    action="evidence.upserted",
+                    resource_type="run",
+                    resource_id=projection.run_id,
+                    after={
+                        "project_id": projection.project_id,
+                        "evidence_ids": [item.id for item in projection.evidence_records],
+                    },
+                )
+            if projection.claim_records:
+                self._append_audit_once(
+                    workspace_id=projection.workspace_id,
+                    actor_id=DEFAULT_USER_ID,
+                    action="claim.upserted",
+                    resource_type="run",
+                    resource_id=projection.run_id,
+                    after={
+                        "project_id": projection.project_id,
+                        "claim_ids": [item.id for item in projection.claim_records],
+                    },
+                )
+            self._append_audit_once(
+                workspace_id=projection.workspace_id,
+                actor_id=DEFAULT_USER_ID,
+                action="report_version.upserted",
+                resource_type="report_version",
+                resource_id=projection.report_version.id,
+                after={
+                    "project_id": projection.project_id,
+                    "run_id": projection.run_id,
+                    "version_number": projection.report_version.version_number,
+                },
+            )
+            self._append_audit_once(
                 workspace_id=projection.workspace_id,
                 actor_id=DEFAULT_USER_ID,
                 action="run.projected",
@@ -463,6 +528,43 @@ class EnterpriseMemoryStore:
                 before=before,
                 after=after,
             )
+        )
+
+    def _append_audit_once(
+        self,
+        *,
+        workspace_id: str,
+        actor_id: str | None,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        after: dict,
+        before: dict | None = None,
+    ) -> None:
+        if self._audit_exists(action, resource_id, resource_type=resource_type):
+            return
+        self._append_audit(
+            workspace_id=workspace_id,
+            actor_id=actor_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            before=before,
+            after=after,
+        )
+
+    def _audit_exists(
+        self,
+        action: str,
+        resource_id: str,
+        *,
+        resource_type: str | None = None,
+    ) -> bool:
+        return any(
+            log.action == action
+            and log.resource_id == resource_id
+            and (resource_type is None or log.resource_type == resource_type)
+            for log in self.audit_logs
         )
 
     def _competitor_id(self, workspace_id: str, name: str) -> str:

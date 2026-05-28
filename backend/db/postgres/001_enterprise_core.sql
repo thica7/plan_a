@@ -106,6 +106,15 @@ CREATE TABLE IF NOT EXISTS claim_records (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS claim_evidence (
+    claim_id TEXT NOT NULL REFERENCES claim_records(id) ON DELETE CASCADE,
+    evidence_id TEXT NOT NULL REFERENCES evidence_records(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (claim_id, evidence_id)
+);
+
 CREATE TABLE IF NOT EXISTS report_versions (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -125,6 +134,26 @@ CREATE TABLE IF NOT EXISTS report_versions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     published_at TIMESTAMPTZ,
     UNIQUE (project_id, topic_normalized, competitor_layer, competitor_set_hash, version_number)
+);
+
+CREATE TABLE IF NOT EXISTS report_version_claims (
+    report_version_id TEXT NOT NULL REFERENCES report_versions(id) ON DELETE CASCADE,
+    claim_id TEXT NOT NULL REFERENCES claim_records(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    ordinal INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (report_version_id, claim_id)
+);
+
+CREATE TABLE IF NOT EXISTS report_version_evidence (
+    report_version_id TEXT NOT NULL REFERENCES report_versions(id) ON DELETE CASCADE,
+    evidence_id TEXT NOT NULL REFERENCES evidence_records(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    ordinal INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (report_version_id, evidence_id)
 );
 
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -147,8 +176,14 @@ CREATE INDEX IF NOT EXISTS idx_evidence_project_dimension
     ON evidence_records(project_id, dimension);
 CREATE INDEX IF NOT EXISTS idx_claims_project_competitor
     ON claim_records(project_id, competitor_id);
+CREATE INDEX IF NOT EXISTS idx_claim_evidence_evidence
+    ON claim_evidence(evidence_id);
 CREATE INDEX IF NOT EXISTS idx_report_versions_project_group
     ON report_versions(project_id, topic_normalized, competitor_layer, competitor_set_hash);
+CREATE INDEX IF NOT EXISTS idx_report_version_claims_claim
+    ON report_version_claims(claim_id);
+CREATE INDEX IF NOT EXISTS idx_report_version_evidence_evidence
+    ON report_version_evidence(evidence_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_workspace_created
     ON audit_logs(workspace_id, created_at DESC);
 

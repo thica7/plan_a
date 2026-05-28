@@ -116,6 +116,17 @@ def test_enterprise_store_round_trips_projection() -> None:
     assert [item.id for item in loaded.claim_records] == [
         item.id for item in projection.claim_records
     ]
+    actions = {log.action for log in store.list_audit_logs()}
+    assert actions >= {
+        "run.created",
+        "project.upserted",
+        "competitor.upserted",
+        "project_competitor.linked",
+        "evidence.upserted",
+        "claim.upserted",
+        "report_version.upserted",
+        "run.projected",
+    }
 
 
 def test_enterprise_store_updates_evidence_quality_with_audit() -> None:
