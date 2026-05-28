@@ -766,11 +766,11 @@ class EnterprisePostgresStore:
         cur.execute(
             """
             INSERT INTO runs (
-                id, workspace_id, project_id, topic, status, execution_mode,
+                id, idempotency_key, workspace_id, project_id, topic, status, execution_mode,
                 detail_json, created_at, updated_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (id) DO UPDATE SET
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (idempotency_key) DO UPDATE SET
                 project_id = EXCLUDED.project_id,
                 status = EXCLUDED.status,
                 detail_json = EXCLUDED.detail_json,
@@ -778,6 +778,7 @@ class EnterprisePostgresStore:
             """,
             (
                 detail.id,
+                detail.idempotency_key or detail.id,
                 context.workspace_id,
                 context.project_id,
                 detail.topic,
@@ -794,14 +795,25 @@ class EnterprisePostgresStore:
             """
             INSERT INTO evidence_records (
                 id, workspace_id, project_id, run_id, raw_source_id, competitor_id,
-                dimension, source_type, title, url, snippet, content_hash,
-                reliability_score, freshness_score, quality_label, captured_at, metadata
+                dimension, source_type, title, url, canonical_url, snippet, content_hash,
+                reliability_score, freshness_score, quality_label, first_seen_run_id,
+                last_seen_run_id, seen_count, captured_at, metadata
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s
+            )
             ON CONFLICT (id) DO UPDATE SET
                 reliability_score = EXCLUDED.reliability_score,
                 freshness_score = EXCLUDED.freshness_score,
                 quality_label = EXCLUDED.quality_label,
+                last_seen_run_id = EXCLUDED.last_seen_run_id,
+                seen_count = CASE
+                    WHEN evidence_records.last_seen_run_id
+                        IS DISTINCT FROM EXCLUDED.last_seen_run_id
+                    THEN evidence_records.seen_count + 1
+                    ELSE evidence_records.seen_count
+                END,
                 metadata = EXCLUDED.metadata
             """,
             (
@@ -815,11 +827,15 @@ class EnterprisePostgresStore:
                 evidence.source_type,
                 evidence.title,
                 str(evidence.url) if evidence.url else None,
+                evidence.canonical_url,
                 evidence.snippet,
                 evidence.content_hash,
                 evidence.reliability_score,
                 evidence.freshness_score,
                 evidence.quality_label,
+                evidence.first_seen_run_id or evidence.run_id,
+                evidence.last_seen_run_id or evidence.run_id,
+                evidence.seen_count,
                 evidence.captured_at,
                 self._json(evidence.metadata),
             ),

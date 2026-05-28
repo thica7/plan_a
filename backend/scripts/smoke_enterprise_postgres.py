@@ -103,6 +103,15 @@ async def main() -> None:
     audit_action_count = _audit_action_count(store, detail.id)
     if audit_action_count < 5:
         raise SystemExit("Postgres audit action coverage is below Phase 1 minimum.")
+    phase4_prereqs = _phase4_prereq_state(store, detail.id, loaded.evidence_records[0].id)
+    if not phase4_prereqs["idempotency_key"]:
+        raise SystemExit("Postgres run idempotency_key was not persisted.")
+    if phase4_prereqs["seen_count"] < 1:
+        raise SystemExit("Postgres evidence lifecycle seen_count was not persisted.")
+    if phase4_prereqs["first_seen_run_id"] != detail.id:
+        raise SystemExit("Postgres evidence lifecycle first_seen_run_id is incorrect.")
+    if phase4_prereqs["last_seen_run_id"] != detail.id:
+        raise SystemExit("Postgres evidence lifecycle last_seen_run_id is incorrect.")
 
     print(
         json.dumps(
@@ -119,6 +128,7 @@ async def main() -> None:
                 "phase1_table_count": len(table_names),
                 "link_counts": link_counts,
                 "audit_action_count": audit_action_count,
+                "phase4_prereqs": phase4_prereqs,
             },
             ensure_ascii=False,
         )
@@ -180,6 +190,37 @@ def _audit_action_count(store: EnterprisePostgresStore, run_id: str) -> int:
             (run_id, run_id),
         ).fetchone()
     return int(row["action_count"])
+
+
+def _phase4_prereq_state(
+    store: EnterprisePostgresStore,
+    run_id: str,
+    evidence_id: str,
+) -> dict[str, object]:
+    with store._connect(store.database_url, row_factory=store._dict_row) as conn:
+        row = conn.execute(
+            """
+            SELECT
+                r.idempotency_key,
+                e.canonical_url,
+                e.first_seen_run_id,
+                e.last_seen_run_id,
+                e.seen_count
+            FROM runs r
+            JOIN evidence_records e ON e.id = %s
+            WHERE r.id = %s
+            """,
+            (evidence_id, run_id),
+        ).fetchone()
+    if row is None:
+        return {}
+    return {
+        "idempotency_key": str(row["idempotency_key"]),
+        "canonical_url": str(row["canonical_url"]),
+        "first_seen_run_id": str(row["first_seen_run_id"]),
+        "last_seen_run_id": str(row["last_seen_run_id"]),
+        "seen_count": int(row["seen_count"]),
+    }
 
 
 if __name__ == "__main__":

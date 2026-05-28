@@ -147,7 +147,13 @@ class RunService(
             requested_scenario_id=request.scenario_id,
         )
         now = datetime.utcnow()
-        run_id = str(uuid4())
+        run_id = _run_id_for_idempotency_key(request.idempotency_key) or str(uuid4())
+        idempotency_key = request.idempotency_key or f"run:{run_id}"
+        if request.idempotency_key:
+            async with self._lock:
+                existing = self._runs.get(run_id)
+            if existing is not None:
+                return existing.detail
         plan = AnalysisPlan(
             topic=request.topic,
             competitors=competitors,
@@ -168,6 +174,7 @@ class RunService(
         )
         detail = RunDetail(
             id=run_id,
+            idempotency_key=idempotency_key,
             workspace_id=request.workspace_id,
             project_id=request.project_id,
             topic=request.topic,
@@ -209,6 +216,7 @@ class RunService(
         return [
             RunSummary(
                 id=record.detail.id,
+                idempotency_key=record.detail.idempotency_key,
                 workspace_id=record.detail.workspace_id,
                 project_id=record.detail.project_id,
                 topic=record.detail.topic,
@@ -2358,3 +2366,10 @@ class RunService(
         if not isinstance(value, list):
             return []
         return [str(item) for item in value if str(item).strip()]
+
+
+def _run_id_for_idempotency_key(idempotency_key: str | None) -> str | None:
+    if not idempotency_key:
+        return None
+    digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:32]
+    return f"run-{digest}"

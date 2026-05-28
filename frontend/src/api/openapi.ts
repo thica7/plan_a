@@ -1338,6 +1338,11 @@ export interface components {
             /** Url */
             url?: string | null;
             /**
+             * Canonical Url
+             * @default
+             */
+            canonical_url: string;
+            /**
              * Snippet
              * @default
              */
@@ -1360,6 +1365,15 @@ export interface components {
              * @enum {string}
              */
             quality_label: "unreviewed" | "accepted" | "rejected" | "stale";
+            /** First Seen Run Id */
+            first_seen_run_id?: string | null;
+            /** Last Seen Run Id */
+            last_seen_run_id?: string | null;
+            /**
+             * Seen Count
+             * @default 1
+             */
+            seen_count: number;
             /**
              * Captured At
              * Format: date-time
@@ -1855,6 +1869,8 @@ export interface components {
             workspace_id: string;
             /** Project Id */
             project_id?: string | null;
+            /** Idempotency Key */
+            idempotency_key?: string | null;
             /** Topic */
             topic: string;
             /** Competitors */
@@ -1878,6 +1894,11 @@ export interface components {
         RunDetail: {
             /** Id */
             id: string;
+            /**
+             * Idempotency Key
+             * @default
+             */
+            idempotency_key: string;
             /**
              * Workspace Id
              * @default default-workspace
@@ -2067,6 +2088,11 @@ export interface components {
         RunSummary: {
             /** Id */
             id: string;
+            /**
+             * Idempotency Key
+             * @default
+             */
+            idempotency_key: string;
             /**
              * Workspace Id
              * @default default-workspace

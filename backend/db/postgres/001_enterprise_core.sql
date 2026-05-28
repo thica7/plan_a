@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS project_competitors (
 
 CREATE TABLE IF NOT EXISTS runs (
     id TEXT PRIMARY KEY,
+    idempotency_key TEXT NOT NULL,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id),
     project_id TEXT REFERENCES projects(id),
     topic TEXT NOT NULL,
@@ -80,12 +81,16 @@ CREATE TABLE IF NOT EXISTS evidence_records (
     source_type TEXT NOT NULL,
     title TEXT NOT NULL,
     url TEXT,
+    canonical_url TEXT NOT NULL DEFAULT '',
     snippet TEXT NOT NULL DEFAULT '',
     content_hash TEXT NOT NULL,
     reliability_score DOUBLE PRECISION NOT NULL DEFAULT 0,
     freshness_score DOUBLE PRECISION NOT NULL DEFAULT 0,
     quality_label TEXT NOT NULL DEFAULT 'unreviewed'
         CHECK (quality_label IN ('unreviewed', 'accepted', 'rejected', 'stale')),
+    first_seen_run_id TEXT REFERENCES runs(id),
+    last_seen_run_id TEXT REFERENCES runs(id),
+    seen_count INTEGER NOT NULL DEFAULT 1 CHECK (seen_count >= 1),
     captured_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
@@ -133,7 +138,14 @@ CREATE TABLE IF NOT EXISTS report_versions (
     evidence_ids TEXT[] NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     published_at TIMESTAMPTZ,
-    UNIQUE (project_id, topic_normalized, competitor_layer, competitor_set_hash, version_number)
+    UNIQUE (
+        workspace_id,
+        project_id,
+        topic_normalized,
+        competitor_layer,
+        competitor_set_hash,
+        version_number
+    )
 );
 
 CREATE TABLE IF NOT EXISTS report_version_claims (
@@ -194,3 +206,28 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO users (id, email, display_name, role)
 VALUES ('system-user', 'system@local', 'System', 'owner')
 ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+UPDATE runs SET idempotency_key = id WHERE idempotency_key IS NULL OR idempotency_key = '';
+ALTER TABLE runs ALTER COLUMN idempotency_key SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_idempotency_key ON runs(idempotency_key);
+
+ALTER TABLE evidence_records ADD COLUMN IF NOT EXISTS canonical_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE evidence_records ADD COLUMN IF NOT EXISTS first_seen_run_id TEXT REFERENCES runs(id);
+ALTER TABLE evidence_records ADD COLUMN IF NOT EXISTS last_seen_run_id TEXT REFERENCES runs(id);
+ALTER TABLE evidence_records ADD COLUMN IF NOT EXISTS seen_count INTEGER NOT NULL DEFAULT 1;
+UPDATE evidence_records
+SET canonical_url = COALESCE(NULLIF(canonical_url, ''), url, '')
+WHERE canonical_url = '';
+CREATE INDEX IF NOT EXISTS idx_evidence_canonical_url
+    ON evidence_records(workspace_id, canonical_url);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_report_versions_workspace_group_unique
+    ON report_versions (
+        workspace_id,
+        project_id,
+        topic_normalized,
+        competitor_layer,
+        competitor_set_hash,
+        version_number
+    );

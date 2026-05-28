@@ -30,3 +30,20 @@ The enterprise evidence store uses one canonical quality label enum:
 
 These labels intentionally replace earlier draft wording such as `good`,
 `outdated`, `pending_review`, and `discarded`.
+
+## Phase 4 Prerequisite Fields
+
+Runs now carry `idempotency_key` so a future Temporal activity can retry run
+creation without creating duplicate durable records. UI-created runs use a
+unique generated key; workflow-created runs should pass an explicit key.
+
+Evidence records now carry lifecycle fields:
+
+- `canonical_url`: normalized URL used with `content_hash`, competitor, and
+  dimension to derive stable `evidence_id`.
+- `first_seen_run_id`: the first run that persisted the evidence.
+- `last_seen_run_id`: the latest run that observed the evidence.
+- `seen_count`: the number of distinct runs that observed the evidence.
+
+These fields are the required idempotency base before adding Temporal around
+the LangGraph run.

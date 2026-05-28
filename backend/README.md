@@ -34,3 +34,8 @@ but Postgres is the default enterprise path. Use memory only for isolated local 
 
 Evidence quality labels are `unreviewed`, `accepted`, `rejected`, and `stale`.
 Rejected and stale evidence are excluded from QA support and competitor scoring.
+
+Phase 4 prerequisite fields are already in the enterprise store: runs persist an
+`idempotency_key`, and evidence records track `canonical_url`,
+`first_seen_run_id`, `last_seen_run_id`, and `seen_count` for retry-safe
+Temporal wrapping later.

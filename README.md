@@ -94,6 +94,7 @@ unless `ENTERPRISE_DATABASE_URL` is set.
 - Automatic scoped redo loop for blocker QA findings, bounded by `MAX_ITERATIONS` and disabled when HITL is active; warn-level redo is opt-in with `AUTO_REDO_WARN_ENABLED` or the New Run switch
 - Optional HITL interrupts for planner and QA review, enabled with `HITL_ENABLED=true`
 - Enterprise data boundary for Workspace, Project, Competitor, Evidence, Claim, ReportVersion, and AuditLog, with memory and Postgres store implementations
+- Phase 4 prerequisites for retry-safe workflow wrapping: run `idempotency_key` plus evidence `canonical_url`, first/last seen run IDs, and `seen_count`
 - Docker and Makefile scaffolding for the planned demo path
 
 ## Project Layout

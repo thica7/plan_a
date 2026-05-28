@@ -3294,6 +3294,11 @@
             ],
             "title": "Url"
           },
+          "canonical_url": {
+            "type": "string",
+            "title": "Canonical Url",
+            "default": ""
+          },
           "snippet": {
             "type": "string",
             "title": "Snippet",
@@ -3327,6 +3332,34 @@
             ],
             "title": "Quality Label",
             "default": "unreviewed"
+          },
+          "first_seen_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen Run Id"
+          },
+          "last_seen_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen Run Id"
+          },
+          "seen_count": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Seen Count",
+            "default": 1
           },
           "captured_at": {
             "type": "string",
@@ -4527,6 +4560,19 @@
             ],
             "title": "Project Id"
           },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
           "topic": {
             "type": "string",
             "maxLength": 200,
@@ -4614,6 +4660,11 @@
           "id": {
             "type": "string",
             "title": "Id"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "title": "Idempotency Key",
+            "default": ""
           },
           "workspace_id": {
             "type": "string",
@@ -4983,6 +5034,11 @@
           "id": {
             "type": "string",
             "title": "Id"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "title": "Idempotency Key",
+            "default": ""
           },
           "workspace_id": {
             "type": "string",

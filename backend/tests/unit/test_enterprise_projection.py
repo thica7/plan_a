@@ -63,6 +63,11 @@ def test_build_enterprise_projection_links_evidence_claims_and_report() -> None:
     )
 
     assert len(projection.evidence_records) == 1
+    evidence = projection.evidence_records[0]
+    assert evidence.canonical_url == "https://cursor.sh/pricing"
+    assert evidence.first_seen_run_id == "run-1"
+    assert evidence.last_seen_run_id == "run-1"
+    assert evidence.seen_count == 1
     assert len(projection.claim_records) == 1
     assert projection.claim_records[0].evidence_ids == [projection.evidence_records[0].id]
     assert projection.report_version.claim_ids == [projection.claim_records[0].id]

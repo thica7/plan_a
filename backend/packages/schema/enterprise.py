@@ -84,11 +84,15 @@ class EvidenceRecord(BaseModel):
     source_type: str
     title: str
     url: HttpUrl | None = None
+    canonical_url: str = ""
     snippet: str = ""
     content_hash: str
     reliability_score: float = Field(default=0.0, ge=0.0, le=1.0)
     freshness_score: float = Field(default=0.0, ge=0.0, le=1.0)
     quality_label: EvidenceQualityLabel = "unreviewed"
+    first_seen_run_id: str | None = None
+    last_seen_run_id: str | None = None
+    seen_count: int = Field(default=1, ge=1)
     captured_at: datetime = Field(default_factory=datetime.utcnow)
     metadata: dict[str, Any] = Field(default_factory=dict)
 

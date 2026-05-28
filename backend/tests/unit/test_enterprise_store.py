@@ -129,6 +129,37 @@ def test_enterprise_store_round_trips_projection() -> None:
     }
 
 
+def test_enterprise_store_tracks_evidence_lifecycle_across_runs() -> None:
+    store = EnterpriseMemoryStore()
+    first_detail = _detail()
+    first_context = store.start_run(first_detail)
+    first_projection = build_enterprise_projection(
+        first_detail,
+        workspace_id=first_context.workspace_id,
+        project_id=first_context.project_id,
+        competitor_id_map=first_context.competitor_id_map,
+    )
+    store.save_projection(first_projection)
+
+    second_detail = _detail().model_copy(deep=True, update={"id": "run-2"})
+    second_context = store.start_run(second_detail)
+    second_projection = build_enterprise_projection(
+        second_detail,
+        workspace_id=second_context.workspace_id,
+        project_id=second_context.project_id,
+        version_number=2,
+        competitor_id_map=second_context.competitor_id_map,
+    )
+    store.save_projection(second_projection)
+    store.save_projection(second_projection)
+
+    [evidence] = store.list_evidence(project_id=first_context.project_id)
+    assert evidence.first_seen_run_id == "run-1"
+    assert evidence.last_seen_run_id == "run-2"
+    assert evidence.seen_count == 2
+    assert evidence.run_id == "run-1"
+
+
 def test_enterprise_store_updates_evidence_quality_with_audit() -> None:
     store = EnterpriseMemoryStore()
     detail = _detail()
@@ -220,6 +251,30 @@ def test_report_version_diff_uses_previous_version() -> None:
     assert diff.target_version.version_number == 2
     assert diff.added_lines == 1
     assert diff.unchanged_lines == 1
+
+
+@pytest.mark.asyncio
+async def test_run_service_reuses_explicit_idempotency_key() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+    request = RunCreateRequest(
+        topic="AI coding assistant comparison",
+        competitors=["Cursor"],
+        dimensions=["pricing"],
+        execution_mode="demo",
+        idempotency_key="temporal-request-001",
+    )
+
+    first = await service.create_run(request)
+    second = await service.create_run(request)
+
+    assert first.id == second.id
+    assert first.idempotency_key == "temporal-request-001"
+    assert [log.action for log in store.list_audit_logs()].count("run.created") == 1
 
 
 @pytest.mark.asyncio

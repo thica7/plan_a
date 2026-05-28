@@ -80,8 +80,9 @@ def _build_evidence_records(
     for source in detail.raw_sources:
         for competitor in _source_competitors(source):
             competitor_id = _competitor_id_for(competitor, competitor_id_map)
+            canonical_url = normalize_url(str(source.url) if source.url is not None else "")
             evidence_id = compute_evidence_id(
-                normalize_url(str(source.url) if source.url is not None else ""),
+                canonical_url,
                 source.content_hash,
                 competitor_id,
                 source.dimension,
@@ -101,11 +102,15 @@ def _build_evidence_records(
                     source_type=source.source_type,
                     title=source.title,
                     url=source.url,
+                    canonical_url=canonical_url,
                     snippet=source.snippet,
                     content_hash=source.content_hash,
                     reliability_score=source.confidence,
                     freshness_score=1.0,
                     quality_label=_quality_label(source),
+                    first_seen_run_id=detail.id,
+                    last_seen_run_id=detail.id,
+                    seen_count=1,
                     captured_at=source.extracted_at,
                     metadata={"source_competitor": source.competitor},
                 )

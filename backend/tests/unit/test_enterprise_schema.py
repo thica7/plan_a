@@ -58,6 +58,10 @@ def test_evidence_and_claim_records_are_linked_by_stable_ids() -> None:
     )
 
     assert claim.evidence_ids == [evidence.id]
+    assert evidence.canonical_url == ""
+    assert evidence.seen_count == 1
+    assert evidence.first_seen_run_id is None
+    assert evidence.last_seen_run_id is None
 
 
 def test_claim_record_requires_evidence() -> None:

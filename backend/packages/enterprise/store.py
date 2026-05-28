@@ -287,7 +287,11 @@ class EnterpriseMemoryStore:
     def save_projection(self, projection: EnterpriseRunProjection) -> None:
         with self._lock:
             for evidence in projection.evidence_records:
-                self.evidence_records[evidence.id] = evidence
+                existing = self.evidence_records.get(evidence.id)
+                self.evidence_records[evidence.id] = _merge_evidence_lifecycle(
+                    existing,
+                    evidence,
+                )
             for claim in projection.claim_records:
                 self.claim_records[claim.id] = claim
             self.report_versions[projection.report_version.id] = projection.report_version
@@ -430,6 +434,7 @@ class EnterpriseMemoryStore:
     def upsert_evidence(self, evidence: EvidenceRecord) -> EvidenceRecord:
         with self._lock:
             before_record = self.evidence_records.get(evidence.id)
+            evidence = _merge_evidence_lifecycle(before_record, evidence)
             self.evidence_records[evidence.id] = evidence
             self._append_audit(
                 workspace_id=evidence.workspace_id,
@@ -651,3 +656,31 @@ def _normalize_key(value: str) -> str:
 
 def _title_from_id(value: str) -> str:
     return value.replace("-", " ").strip().title() or value
+
+
+def _merge_evidence_lifecycle(
+    existing: EvidenceRecord | None,
+    incoming: EvidenceRecord,
+) -> EvidenceRecord:
+    current_run_id = incoming.last_seen_run_id or incoming.run_id
+    if existing is None:
+        return incoming.model_copy(
+            update={
+                "first_seen_run_id": incoming.first_seen_run_id or incoming.run_id,
+                "last_seen_run_id": current_run_id,
+                "seen_count": max(1, incoming.seen_count),
+            }
+        )
+
+    increment = 1 if current_run_id and current_run_id != existing.last_seen_run_id else 0
+    return incoming.model_copy(
+        update={
+            "run_id": existing.run_id or incoming.run_id,
+            "first_seen_run_id": existing.first_seen_run_id
+            or existing.run_id
+            or incoming.first_seen_run_id
+            or incoming.run_id,
+            "last_seen_run_id": current_run_id or existing.last_seen_run_id,
+            "seen_count": max(1, existing.seen_count + increment),
+        }
+    )

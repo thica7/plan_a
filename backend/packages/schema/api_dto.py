@@ -25,6 +25,7 @@ class RunCreateRequest(BaseModel):
 
     workspace_id: str = Field(default="default-workspace", min_length=1, max_length=120)
     project_id: str | None = Field(default=None, min_length=1, max_length=160)
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=200)
     topic: str = Field(min_length=2, max_length=200)
     competitors: list[str] = Field(default_factory=list, max_length=8)
     dimensions: list[str] = Field(min_length=1, max_length=8)
@@ -46,6 +47,7 @@ class RunSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
+    idempotency_key: str = ""
     workspace_id: str = "default-workspace"
     project_id: str | None = None
     topic: str
