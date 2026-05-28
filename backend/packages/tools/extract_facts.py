@@ -50,7 +50,9 @@ def extract_facts(
                 source_id=source_id,
                 dimension=dimension,
                 confidence=min(0.95, 0.55 + score * 0.1),
-                content_hash=hashlib.sha256(clean.encode("utf-8", errors="ignore")).hexdigest()[:16],
+                content_hash=hashlib.sha256(clean.encode("utf-8", errors="ignore")).hexdigest()[
+                    :16
+                ],
             )
         )
         if len(facts) >= max_facts:
@@ -67,11 +69,40 @@ def _dimension_score(sentence: str, dimension: str) -> int:
     normalized = sentence.casefold()
     dimension_key = dimension.casefold()
     if "pricing" in dimension_key:
-        terms = ["pricing", "price", "cost", "plan", "tier", "billing", "$", "usd", "per user", "per seat"]
+        terms = [
+            "pricing",
+            "price",
+            "cost",
+            "plan",
+            "tier",
+            "billing",
+            "$",
+            "usd",
+            "per user",
+            "per seat",
+        ]
     elif "persona" in dimension_key or "user" in dimension_key:
-        terms = ["customer", "user", "persona", "developer", "team", "enterprise", "use case", "case study"]
+        terms = [
+            "customer",
+            "user",
+            "persona",
+            "developer",
+            "team",
+            "enterprise",
+            "use case",
+            "case study",
+        ]
     else:
-        terms = ["feature", "supports", "includes", "api", "model", "context", "integration", "workflow"]
+        terms = [
+            "feature",
+            "supports",
+            "includes",
+            "api",
+            "model",
+            "context",
+            "integration",
+            "workflow",
+        ]
     return sum(1 for term in terms if term in normalized)
 
 

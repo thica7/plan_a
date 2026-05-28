@@ -26,8 +26,7 @@ class FetchPageResult:
 async def fetch_page(url: str, timeout_seconds: float = 12.0) -> FetchPageResult:
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (compatible; CompetiscopeBot/0.1; "
-            "+https://example.local/competiscope)"
+            "Mozilla/5.0 (compatible; CompetiscopeBot/0.1; +https://example.local/competiscope)"
         )
     }
     try:

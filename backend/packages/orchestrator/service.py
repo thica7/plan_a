@@ -5,7 +5,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 from langgraph.types import Command, interrupt
@@ -13,8 +13,8 @@ from langgraph.types import Command, interrupt
 from app.events import RunEvent
 from packages.agents import SubagentContext
 from packages.agents.analysts.logic import AnalystAgentMixin
-from packages.agents.comparator.logic import ComparatorAgentMixin
 from packages.agents.collectors.logic import CollectorAgentMixin
+from packages.agents.comparator.logic import ComparatorAgentMixin
 from packages.agents.planner.logic import PlannerAgentMixin
 from packages.agents.qa.logic import QualityAgentMixin
 from packages.agents.reflector.logic import ReflectorAgentMixin
@@ -23,29 +23,22 @@ from packages.config import Settings
 from packages.enterprise import EnterpriseStore, build_enterprise_projection
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.llm import DoubaoClient
-from packages.memory import KBCache, KBCacheEntry, RunJournal
+from packages.memory import KBCache, RunJournal
+from packages.observability import LangfuseAdapter, LangfuseConfig, TraceStore, build_run_event
 from packages.orchestrator.audit import build_revision_record, convergence_ratio
 from packages.orchestrator.checkpointer import GraphCheckpointer
-from packages.orchestrator.graph import build_demo_analysis_graph, build_real_analysis_graph, build_scoped_redo_graph
-from packages.orchestrator.scoping import assign_redo_scope
-from packages.observability import LangfuseAdapter, LangfuseConfig, TraceStore, build_run_event
-from packages.search import PerplexitySearchClient, SearchResult
+from packages.orchestrator.graph import (
+    build_demo_analysis_graph,
+    build_real_analysis_graph,
+    build_scoped_redo_graph,
+)
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail, RunSummary
 from packages.schema.enterprise import EnterpriseRunProjection
 from packages.schema.models import (
-    AnalysisPlan,
     AgentMessage,
-    ComparisonCell,
-    ComparisonMatrix,
+    AnalysisPlan,
     CompetitorCandidate,
     CompetitorDiscovery,
-    CompetitorKB,
-    CompetitorKnowledge,
-    FeatureNode,
-    FeatureTree,
-    KnowledgeClaim,
-    PricingModel,
-    PricingTier,
     QCIssue,
     RawSource,
     RedoScope,
@@ -53,12 +46,10 @@ from packages.schema.models import (
     RunMetrics,
     ToolCallMessage,
     TraceSpan,
-    UserPersonaModel,
-    UserPersonaSegment,
 )
+from packages.search import PerplexitySearchClient, SearchResult
 from packages.skills.registry import SkillRegistry
 from packages.tools import WebSearchRequest, fetch_page, robots_check, web_search
-
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
 
@@ -144,7 +135,9 @@ class RunService(
             competitors=competitors,
             dimensions=valid_dimensions,
             complexity="medium",
-            homepage_hints={name: f"https://www.google.com/search?q={name}" for name in competitors},
+            homepage_hints={
+                name: f"https://www.google.com/search?q={name}" for name in competitors
+            },
         )
         detail = RunDetail(
             id=run_id,
@@ -241,7 +234,9 @@ class RunService(
 
     def can_start_redo(self, run_id: str) -> bool:
         record = self._runs.get(run_id)
-        return bool(record and record.detail.qa_findings and not self._redo_limit_reached(record.detail))
+        return bool(
+            record and record.detail.qa_findings and not self._redo_limit_reached(record.detail)
+        )
 
     def has_pending_interrupt(self, run_id: str) -> bool:
         record = self._runs.get(run_id)
@@ -357,7 +352,9 @@ class RunService(
         self._append_agent_message(
             record,
             from_agent="qa",
-            to_agent=scope.kind if scope.kind in {"collector", "analyst", "comparator", "writer_only"} else "orchestrator",
+            to_agent=scope.kind
+            if scope.kind in {"collector", "analyst", "comparator", "writer_only"}
+            else "orchestrator",
             message_type="redo_request",
             payload_schema="RedoRequestPayload",
             payload={
@@ -661,7 +658,9 @@ class RunService(
             {"plan": detail.plan.model_dump(mode="json")},
         )
 
-    async def _demo_collector_branch_step(self, record: RunRecord, dimension: str, competitor: str) -> None:
+    async def _demo_collector_branch_step(
+        self, record: RunRecord, dimension: str, competitor: str
+    ) -> None:
         detail = record.detail
         branch_id = self._analyst_branch_id(dimension, competitor)
         detail.current_node = "collector"
@@ -716,12 +715,23 @@ class RunService(
             to_agent="qa",
             message_type="collect_join_completed",
             payload_schema="RawSourceDigest",
-            payload={"dimensions": dimensions, "source_ids": [source.id for source in detail.raw_sources]},
+            payload={
+                "dimensions": dimensions,
+                "source_ids": [source.id for source in detail.raw_sources],
+            },
         )
         detail.updated_at = datetime.utcnow()
-        await self.emit(detail.id, "node_completed", "collect_join", "collect_join", "Demo collect join completed.")
+        await self.emit(
+            detail.id,
+            "node_completed",
+            "collect_join",
+            "collect_join",
+            "Demo collect join completed.",
+        )
 
-    async def _demo_phase_qa_step(self, record: RunRecord, phase: Literal["collect", "analyst"]) -> None:
+    async def _demo_phase_qa_step(
+        self, record: RunRecord, phase: Literal["collect", "analyst"]
+    ) -> None:
         detail = record.detail
         detail.current_node = f"{phase}_qa"
         detail.qa_findings = []
@@ -736,7 +746,9 @@ class RunService(
         detail.updated_at = datetime.utcnow()
         await self.emit(detail.id, "node_completed", "qa", phase, f"Demo {phase} QA passed.")
 
-    async def _demo_analyst_branch_step(self, record: RunRecord, dimension: str, competitor: str) -> None:
+    async def _demo_analyst_branch_step(
+        self, record: RunRecord, dimension: str, competitor: str
+    ) -> None:
         detail = record.detail
         branch_id = self._analyst_branch_id(dimension, competitor)
         detail.current_node = "analyst"
@@ -757,20 +769,36 @@ class RunService(
             to_agent="analyst_join",
             message_type="competitor_knowledge_slice",
             payload_schema="CompetitorKnowledge",
-            payload={"competitor": competitor, "dimension": dimension, "source_ids": source_ids, "mode": "demo_graph"},
+            payload={
+                "competitor": competitor,
+                "dimension": dimension,
+                "source_ids": source_ids,
+                "mode": "demo_graph",
+            },
         )
         detail.updated_at = datetime.utcnow()
-        await self.emit(detail.id, "node_completed", "analyst", branch_id, f"Demo analyst completed {competitor} / {dimension}.")
+        await self.emit(
+            detail.id,
+            "node_completed",
+            "analyst",
+            branch_id,
+            f"Demo analyst completed {competitor} / {dimension}.",
+        )
 
     async def _demo_comparator_step(self, record: RunRecord) -> None:
         detail = record.detail
         detail.current_node = "comparator"
         detail.comparison_matrix = self._build_comparison_matrix(
             detail,
-            {"matrix_summary": ["Demo comparison matrix generated through graph."], "winner_by_dimension": {}},
+            {
+                "matrix_summary": ["Demo comparison matrix generated through graph."],
+                "winner_by_dimension": {},
+            },
         )
         detail.updated_at = datetime.utcnow()
-        await self.emit(detail.id, "node_completed", "comparator", None, "Demo comparator completed.")
+        await self.emit(
+            detail.id, "node_completed", "comparator", None, "Demo comparator completed."
+        )
 
     async def _demo_reflector_step(self, record: RunRecord) -> None:
         detail = record.detail
@@ -816,7 +844,8 @@ class RunService(
         redo_issues = [
             issue
             for issue in detail.qa_findings
-            if issue.severity == "blocker" or (detail.auto_redo_warn_enabled and issue.severity == "warn")
+            if issue.severity == "blocker"
+            or (detail.auto_redo_warn_enabled and issue.severity == "warn")
         ]
         if not redo_issues or self._redo_limit_reached(detail):
             return False
@@ -991,11 +1020,15 @@ class RunService(
         if not completed:
             return
 
-    def _prepare_redo_scope_inputs(self, detail: RunDetail, scope: RedoScope) -> tuple[list[str], list[str]]:
+    def _prepare_redo_scope_inputs(
+        self, detail: RunDetail, scope: RedoScope
+    ) -> tuple[list[str], list[str]]:
         dimensions = list(detail.plan.dimensions)
         target_competitors: list[str] = []
         if scope.kind in {"analyst", "collector"}:
-            dimension = scope.target_subagent or (detail.plan.dimensions[0] if detail.plan.dimensions else None)
+            dimension = scope.target_subagent or (
+                detail.plan.dimensions[0] if detail.plan.dimensions else None
+            )
             if dimension is None:
                 raise ValueError("Cannot redo analyst/collector scope without a target dimension.")
             dimensions = [dimension]
@@ -1084,7 +1117,9 @@ class RunService(
         self._append_agent_message(
             record,
             from_agent="qa",
-            to_agent=scope.kind if scope.kind in {"collector", "analyst", "comparator", "writer_only"} else "orchestrator",
+            to_agent=scope.kind
+            if scope.kind in {"collector", "analyst", "comparator", "writer_only"}
+            else "orchestrator",
             message_type="redo_request",
             payload_schema="RedoRequestPayload",
             payload={
@@ -1243,7 +1278,10 @@ class RunService(
                 continue
             if dimension is not None and message.payload.get("dimension") not in {None, dimension}:
                 continue
-            if competitor is not None and message.payload.get("competitor") not in {None, competitor}:
+            if competitor is not None and message.payload.get("competitor") not in {
+                None,
+                competitor,
+            }:
                 continue
             consumed.append(
                 self._consume_agent_message(
@@ -1449,7 +1487,10 @@ class RunService(
             "revision_recorded",
             "orchestrator",
             None,
-            f"Revision {iteration} recorded with convergence ratio {revision.convergence_ratio:.2f}.",
+            (
+                f"Revision {iteration} recorded with convergence ratio "
+                f"{revision.convergence_ratio:.2f}."
+            ),
             {"revision": revision.model_dump(mode="json")},
         )
 
@@ -1521,7 +1562,10 @@ class RunService(
             if candidate.id in selected_ids:
                 continue
             scope = candidate.redo_scope
-            if scope.kind != primary_scope.kind or scope.target_subagent != primary_scope.target_subagent:
+            if (
+                scope.kind != primary_scope.kind
+                or scope.target_subagent != primary_scope.target_subagent
+            ):
                 continue
             candidate_competitors = {
                 competitor
@@ -1547,7 +1591,10 @@ class RunService(
             {
                 competitor
                 for issue in issues
-                for competitor in [issue.redo_scope.target_competitor, *issue.redo_scope.target_competitors]
+                for competitor in [
+                    issue.redo_scope.target_competitor,
+                    *issue.redo_scope.target_competitors,
+                ]
                 if competitor
             }
         )
@@ -1564,7 +1611,11 @@ class RunService(
         )
 
     def _redo_scope_key(self, scope: RedoScope) -> str:
-        competitors = ",".join(scope.target_competitors) if scope.target_competitors else scope.target_competitor or "*"
+        competitors = (
+            ",".join(scope.target_competitors)
+            if scope.target_competitors
+            else scope.target_competitor or "*"
+        )
         return f"{scope.kind}:{competitors}:{scope.target_subagent or '*'}"
 
     async def _trace_llm_json(
@@ -1585,7 +1636,9 @@ class RunService(
             context.add_message("system", system)
             context.add_message("user", user)
         try:
-            payload = await self._llm.complete_json(system=system, user=user, schema_hint=schema_hint)
+            payload = await self._llm.complete_json(
+                system=system, user=user, schema_hint=schema_hint
+            )
         except Exception as exc:
             self._append_trace_span(
                 record,
@@ -1614,7 +1667,9 @@ class RunService(
             started=started,
             input_text=input_text,
             output_text=output_text,
-            metadata=self._trace_metadata(context, {"response_format": "json", **self._llm_usage_metadata(usage)}),
+            metadata=self._trace_metadata(
+                context, {"response_format": "json", **self._llm_usage_metadata(usage)}
+            ),
             token_usage=usage,
         )
         return payload
@@ -1664,7 +1719,9 @@ class RunService(
             started=started,
             input_text=input_text,
             output_text=output,
-            metadata=self._trace_metadata(context, {"response_format": "text", **self._llm_usage_metadata(usage)}),
+            metadata=self._trace_metadata(
+                context, {"response_format": "text", **self._llm_usage_metadata(usage)}
+            ),
             token_usage=usage,
         )
         return output
@@ -1781,7 +1838,9 @@ class RunService(
         started = time.perf_counter()
         if context is not None:
             context.add_tool_call("robots_check", url)
-        result = await robots_check(url, timeout_seconds=min(4.0, self._settings.llm_timeout_seconds))
+        result = await robots_check(
+            url, timeout_seconds=min(4.0, self._settings.llm_timeout_seconds)
+        )
         output_text = json.dumps(
             {
                 "robots_url": result.robots_url,
@@ -1894,7 +1953,9 @@ class RunService(
         input_chars = len(input_text)
         output_chars = len(output_text)
         input_tokens = self._usage_prompt_tokens(token_usage) or self._estimate_tokens(input_text)
-        output_tokens = self._usage_completion_tokens(token_usage) or self._estimate_tokens(output_text)
+        output_tokens = self._usage_completion_tokens(token_usage) or self._estimate_tokens(
+            output_text
+        )
         span_id = f"span-{len(record.detail.trace_spans) + 1}"
         span = TraceSpan(
             id=span_id,
@@ -1904,7 +1965,11 @@ class RunService(
             name=name,
             status=status,
             model=self._settings.ark_model if kind == "llm" else None,
-            provider="doubao" if kind == "llm" else self._settings.web_search_provider if kind == "search" else None,
+            provider="doubao"
+            if kind == "llm"
+            else self._settings.web_search_provider
+            if kind == "search"
+            else None,
             duration_ms=duration_ms,
             input_chars=input_chars,
             output_chars=output_chars,
@@ -2030,12 +2095,14 @@ class RunService(
         cleaned = re.sub(r"\s+", " ", text).strip()
         if len(cleaned) <= limit:
             return cleaned
-        return f"{cleaned[:limit - 3]}..."
+        return f"{cleaned[: limit - 3]}..."
 
     def _new_source_id(self, dimension: str) -> str:
         return f"{dimension}-{uuid4().hex[:8]}"
 
-    def _demo_source(self, detail: RunDetail, dimension: str, competitor: str | None = None) -> RawSource:
+    def _demo_source(
+        self, detail: RunDetail, dimension: str, competitor: str | None = None
+    ) -> RawSource:
         competitor = competitor or detail.plan.competitors[0]
         source_id = f"{dimension}-{len(detail.raw_sources) + 1}"
         content_hash = hashlib.sha256(f"{detail.id}:{source_id}".encode()).hexdigest()[:16]
@@ -2047,7 +2114,10 @@ class RunService(
             source_type="webpage_verified",
             title=f"{competitor} {dimension} evidence fixture",
             url=f"https://example.com/{self._issue_id_fragment(competitor)}/{dimension}",
-            snippet=f"Demo evidence fixture for {competitor} {dimension} with a concrete structured claim.",
+            snippet=(
+                f"Demo evidence fixture for {competitor} {dimension} "
+                "with a concrete structured claim."
+            ),
             content_hash=content_hash,
             confidence=0.72,
         )
@@ -2055,9 +2125,13 @@ class RunService(
     def _demo_reflection(self, dimension: str) -> ReflectionRecord:
         return ReflectionRecord(
             iteration=1,
-            coverage_gaps=[f"Only the first competitor has {dimension} evidence in this demo slice."],
+            coverage_gaps=[
+                f"Only the first competitor has {dimension} evidence in this demo slice."
+            ],
             confidence_outliers=[],
-            cross_competitor_gaps=[f"{dimension.title()} comparison needs another source before final scoring."],
+            cross_competitor_gaps=[
+                f"{dimension.title()} comparison needs another source before final scoring."
+            ],
             suggested_redos=[
                 RedoScope(
                     kind="collector",
@@ -2101,15 +2175,11 @@ class RunService(
             return "demo"
         if requested == "real":
             if not self._settings.has_llm_credentials:
-                raise ValueError("Real mode requires ARK_API_KEY and ARK_MODEL in backend environment or .env.")
+                raise ValueError(
+                    "Real mode requires ARK_API_KEY and ARK_MODEL in backend environment or .env."
+                )
             return "real"
         return self._settings.default_execution_mode
-
-
-
-
-
-
 
     def _normalize_competitor_names(self, value: object) -> list[str]:
         if not isinstance(value, list):
@@ -2143,7 +2213,9 @@ class RunService(
             if dimension in available and not (dimension in seen or seen.add(dimension))
         ]
         if not normalized:
-            normalized = [dimension for dimension in CORE_SCHEMA_DIMENSIONS if dimension in available]
+            normalized = [
+                dimension for dimension in CORE_SCHEMA_DIMENSIONS if dimension in available
+            ]
         if require_core_schema:
             for dimension in CORE_SCHEMA_DIMENSIONS:
                 if dimension in available and dimension not in normalized:
@@ -2151,83 +2223,17 @@ class RunService(
         return normalized
 
     def _plan_requires_core_schema(self, detail: RunDetail) -> bool:
-        available_core = [dimension for dimension in CORE_SCHEMA_DIMENSIONS if dimension in self._skill_registry.names()]
-        return bool(available_core) and all(dimension in detail.plan.dimensions for dimension in available_core)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        available_core = [
+            dimension
+            for dimension in CORE_SCHEMA_DIMENSIONS
+            if dimension in self._skill_registry.names()
+        ]
+        return bool(available_core) and all(
+            dimension in detail.plan.dimensions for dimension in available_core
+        )
 
     def _redo_limit_reached(self, detail: RunDetail) -> bool:
         return len(detail.revisions) >= detail.max_iterations
-
-
-
-
 
     def _qa_feedback_for_branch(
         self,
@@ -2295,31 +2301,8 @@ class RunService(
             return competitor in source.covered_competitors
         return self._competitor_label_matches(source.competitor, competitor)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     def _analyst_branch_id(self, dimension: str, competitor: str) -> str:
         return f"{dimension}::{competitor}"
-
-
 
     def _coerce_confidence(self, value: object, default: float) -> float:
         try:

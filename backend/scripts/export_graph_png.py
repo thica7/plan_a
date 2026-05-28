@@ -4,7 +4,6 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "docs" / "graph.png"
 
@@ -61,25 +60,42 @@ def main() -> None:
             fill = "#effaf3"
             outline = "#72b489"
 
-        draw.rounded_rectangle((x, y, x + box_w, y + box_h), radius=10, fill=fill, outline=outline, width=3)
+        draw.rounded_rectangle(
+            (x, y, x + box_w, y + box_h), radius=10, fill=fill, outline=outline, width=3
+        )
         lines = label.splitlines()
         for index, line in enumerate(lines):
-            draw.text((x + 24, y + 18 + index * 24), line, fill="#202733", font=font if index == 0 else small)
+            draw.text(
+                (x + 24, y + 18 + index * 24),
+                line,
+                fill="#202733",
+                font=font if index == 0 else small,
+            )
         centers[node_id] = (x + box_w // 2, y + box_h // 2)
         y += box_h + gap
 
-    for first, second in zip(NODES, NODES[1:]):
+    for first, second in zip(NODES, NODES[1:], strict=False):
         _, y1 = centers[first[0]]
         _, y2 = centers[second[0]]
         x_mid = x + box_w // 2
         draw.line((x_mid, y1 + box_h // 2, x_mid, y2 - box_h // 2), fill="#65758d", width=3)
         draw.polygon(
-            [(x_mid - 8, y2 - box_h // 2 - 10), (x_mid + 8, y2 - box_h // 2 - 10), (x_mid, y2 - box_h // 2 + 6)],
+            [
+                (x_mid - 8, y2 - box_h // 2 - 10),
+                (x_mid + 8, y2 - box_h // 2 - 10),
+                (x_mid, y2 - box_h // 2 + 6),
+            ],
             fill="#65758d",
         )
 
     draw.text((40, 28), "Competiscope Plan A LangGraph DAG", fill="#202733", font=font)
-    draw.text((40, 64), "Collector and analyst branches fan out through LangGraph Send; QA can route redo upstream.", fill="#526071", font=small)
+    draw.text(
+        (40, 64),
+        "Collector and analyst branches fan out through LangGraph Send; "
+        "QA can route redo upstream.",
+        fill="#526071",
+        font=small,
+    )
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     image.save(OUTPUT)
 

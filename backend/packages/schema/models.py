@@ -82,7 +82,7 @@ class FeatureNode(BaseModel):
     name: str
     description: str = ""
     claims: list[KnowledgeClaim] = Field(default_factory=list)
-    children: list["FeatureNode"] = Field(default_factory=list)
+    children: list[FeatureNode] = Field(default_factory=list)
 
 
 class FeatureTree(BaseModel):

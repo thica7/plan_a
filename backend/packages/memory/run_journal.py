@@ -14,7 +14,7 @@ class RunJournal:
         self._init_db()
 
     @classmethod
-    def from_default_path(cls) -> "RunJournal":
+    def from_default_path(cls) -> RunJournal:
         return cls(Path("runs") / "run_journal.db")
 
     def save_run(self, detail: RunDetail) -> None:
@@ -61,9 +61,7 @@ class RunJournal:
     def load_runs(self) -> list[RunDetail]:
         conn = self._connect()
         try:
-            rows = conn.execute(
-                "select detail_json from runs order by updated_at desc"
-            ).fetchall()
+            rows = conn.execute("select detail_json from runs order by updated_at desc").fetchall()
         finally:
             conn.close()
         return [RunDetail.model_validate_json(row[0]) for row in rows]

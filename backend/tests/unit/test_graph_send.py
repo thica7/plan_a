@@ -33,7 +33,9 @@ async def test_real_graph_uses_send_fanout_for_collector_and_analyst() -> None:
         async def _real_collector_dispatch_step(self, _record, dimensions, competitors) -> None:
             calls.append(("collector_dispatch", ",".join(dimensions), ",".join(competitors)))
 
-        async def _real_collector_branch_step(self, _record, dimension: str, competitor: str) -> None:
+        async def _real_collector_branch_step(
+            self, _record, dimension: str, competitor: str
+        ) -> None:
             calls.append(("collector", dimension, competitor))
 
         async def _real_collect_join_step(self, _record, dimensions) -> None:

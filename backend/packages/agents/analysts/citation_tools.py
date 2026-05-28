@@ -73,8 +73,12 @@ def validate_source_ids(
         for source in dimension_sources
         if str(source.get("id") or "").strip()
     }
-    valid_source_ids = [source_id for source_id in requested_source_ids if source_id in known_source_ids]
-    unknown_source_ids = [source_id for source_id in requested_source_ids if source_id not in known_source_ids]
+    valid_source_ids = [
+        source_id for source_id in requested_source_ids if source_id in known_source_ids
+    ]
+    unknown_source_ids = [
+        source_id for source_id in requested_source_ids if source_id not in known_source_ids
+    ]
     output: dict[str, object] = {
         "dimension": dimension,
         "requested_source_ids": requested_source_ids,

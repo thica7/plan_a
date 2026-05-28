@@ -4,7 +4,6 @@ from typing import get_args
 
 from app.events import RunEvent, RunEventType
 
-
 EXPECTED_EVENT_TYPES = {
     "run_created",
     "node_started",

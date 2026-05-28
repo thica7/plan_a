@@ -1,54 +1,36 @@
 from __future__ import annotations
 
-import hashlib
-import json
-import re
 from datetime import datetime
-from typing import Any, Iterable, Literal
+from typing import TYPE_CHECKING, Literal
 
-from packages.agents import SubagentContext
-from packages.memory import KBCacheEntry
 from packages.orchestrator.scoping import assign_redo_scope
-from packages.search import SearchResult
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
-    ComparisonCell,
-    ComparisonMatrix,
-    CompetitorCandidate,
-    CompetitorDiscovery,
-    CompetitorKB,
     CompetitorKnowledge,
-    FeatureNode,
-    FeatureTree,
     KnowledgeClaim,
-    PricingModel,
-    PricingTier,
     QCIssue,
-    RawSource,
     RedoScope,
-    ReflectionRecord,
-    UserPersonaModel,
-    UserPersonaSegment,
 )
-from packages.tools import fetch_page
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
 
+if TYPE_CHECKING:
+    from packages.orchestrator.service import RunRecord
+
+
 class QualityAgentMixin:
-
-
-
-
-
-
-    async def _real_phase_qa_step(self, record: RunRecord, phase: Literal["collect", "analyst"]) -> None:
+    async def _real_phase_qa_step(
+        self, record: RunRecord, phase: Literal["collect", "analyst"]
+    ) -> None:
         detail = record.detail
         detail.current_node = "qa"
         self._consume_queued_agent_messages(
             record,
             to_agent="qa",
             consumer_agent="qa",
-            message_types={"collect_join_completed" if phase == "collect" else "analyst_join_completed"},
+            message_types={
+                "collect_join_completed" if phase == "collect" else "analyst_join_completed"
+            },
         )
         await self.emit(
             detail.id,
@@ -76,7 +58,10 @@ class QualityAgentMixin:
             to_agent=next_agent,
             message_type=f"{phase}_qa_result",
             payload_schema="QCIssue[]",
-            payload={"phase": phase, "qa_findings": [issue.model_dump(mode="json") for issue in issues]},
+            payload={
+                "phase": phase,
+                "qa_findings": [issue.model_dump(mode="json") for issue in issues],
+            },
         )
         for issue in issues:
             await self.emit(
@@ -99,7 +84,9 @@ class QualityAgentMixin:
     def _phase_has_blockers(self, record: RunRecord, phase: Literal["collect", "analyst"]) -> bool:
         return bool(self._blocking_phase_issues(record.detail, phase))
 
-    def _route_phase_qa(self, state: dict[str, object], phase: Literal["collect", "analyst"]) -> str:
+    def _route_phase_qa(
+        self, state: dict[str, object], phase: Literal["collect", "analyst"]
+    ) -> str:
         record = self._runs[str(state["run_id"])]
         detail = record.detail
         blockers = self._blocking_phase_issues(detail, phase)
@@ -127,7 +114,10 @@ class QualityAgentMixin:
                     for source in detail.raw_sources
                     if not (
                         source.dimension in dimensions
-                        and any(self._source_matches_competitor(source, competitor) for competitor in target_competitors)
+                        and any(
+                            self._source_matches_competitor(source, competitor)
+                            for competitor in target_competitors
+                        )
                     )
                 ]
             else:
@@ -221,7 +211,9 @@ class QualityAgentMixin:
             record,
             stage="qa",
             message="QA findings are ready for review.",
-            payload={"qa_findings": [issue.model_dump(mode="json") for issue in detail.qa_findings]},
+            payload={
+                "qa_findings": [issue.model_dump(mode="json") for issue in detail.qa_findings]
+            },
         )
         if decision.decision == "force_pass":
             detail.qa_findings = []
@@ -301,8 +293,12 @@ class QualityAgentMixin:
             dimension = source.dimension
             if dimension in missing_dimensions:
                 continue
-            covered = source.covered_competitors or self._normalize_covered_competitors(detail, source.competitor)
-            targets = [competitor for competitor in covered if competitor in detail.plan.competitors] or [None]
+            covered = source.covered_competitors or self._normalize_covered_competitors(
+                detail, source.competitor
+            )
+            targets = [
+                competitor for competitor in covered if competitor in detail.plan.competitors
+            ] or [None]
             for competitor in targets:
                 issue = QCIssue(
                     id=(
@@ -341,8 +337,12 @@ class QualityAgentMixin:
             problem = self._source_quality_problem(source)
             if problem is None:
                 continue
-            covered = source.covered_competitors or self._normalize_covered_competitors(detail, source.competitor)
-            targets = [competitor for competitor in covered if competitor in detail.plan.competitors] or [None]
+            covered = source.covered_competitors or self._normalize_covered_competitors(
+                detail, source.competitor
+            )
+            targets = [
+                competitor for competitor in covered if competitor in detail.plan.competitors
+            ] or [None]
             for competitor in targets:
                 issue_id = (
                     f"low-quality-source-{source.dimension}-"
@@ -379,7 +379,9 @@ class QualityAgentMixin:
         for source in detail.raw_sources:
             if source.dimension not in detail.plan.dimensions:
                 continue
-            covered = source.covered_competitors or self._normalize_covered_competitors(detail, source.competitor)
+            covered = source.covered_competitors or self._normalize_covered_competitors(
+                detail, source.competitor
+            )
             unknown = sorted(value for value in covered if value not in expected_competitors)
             if not covered or unknown:
                 issue_id = f"invalid-source-coverage-{self._issue_id_fragment(source.id)}"
@@ -398,7 +400,9 @@ class QualityAgentMixin:
                         redo_scope=RedoScope(
                             kind="collector",
                             target_subagent=source.dimension,
-                            rationale=f"Source {source.id} needs competitor coverage normalization.",
+                            rationale=(
+                                f"Source {source.id} needs competitor coverage normalization."
+                            ),
                         ),
                         self_found=False,
                     )
@@ -409,7 +413,8 @@ class QualityAgentMixin:
                 continue
             for competitor in detail.plan.competitors:
                 if any(
-                    source.dimension == dimension and self._source_matches_competitor(source, competitor)
+                    source.dimension == dimension
+                    and self._source_matches_competitor(source, competitor)
                     for source in detail.raw_sources
                 ):
                     continue
@@ -453,15 +458,26 @@ class QualityAgentMixin:
                     continue
                 self._merge_structured_knowledge_slice(detail, competitor, dimension, findings)
 
-    def _structured_slice_has_claims(self, knowledge: CompetitorKnowledge | None, dimension: str) -> bool:
+    def _structured_slice_has_claims(
+        self, knowledge: CompetitorKnowledge | None, dimension: str
+    ) -> bool:
         if knowledge is None:
             return False
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
-            return bool(knowledge.pricing_model.notes or any(tier.claims for tier in knowledge.pricing_model.tiers))
+            return bool(
+                knowledge.pricing_model.notes
+                or any(tier.claims for tier in knowledge.pricing_model.tiers)
+            )
         if "persona" in dimension_key or "user" in dimension_key:
-            return bool(knowledge.user_personas.summary_claims or any(segment.claims for segment in knowledge.user_personas.segments))
-        return bool(knowledge.feature_tree.summary_claims or any(node.claims for node in knowledge.feature_tree.nodes))
+            return bool(
+                knowledge.user_personas.summary_claims
+                or any(segment.claims for segment in knowledge.user_personas.segments)
+            )
+        return bool(
+            knowledge.feature_tree.summary_claims
+            or any(node.claims for node in knowledge.feature_tree.nodes)
+        )
 
     def _build_structured_knowledge_issues(
         self,
@@ -476,7 +492,8 @@ class QualityAgentMixin:
                 if dimension in missing_dimensions:
                     continue
                 has_sources = any(
-                    source.dimension == dimension and self._source_matches_competitor(source, competitor)
+                    source.dimension == dimension
+                    and self._source_matches_competitor(source, competitor)
                     for source in detail.raw_sources
                 )
                 if not has_sources:
@@ -494,7 +511,10 @@ class QualityAgentMixin:
                         target_subagent=dimension,
                         target_competitor=competitor,
                         field_path=f"competitor_knowledge[{competitor}].{dimension}",
-                        problem=f"{competitor} has sources for {dimension}, but no structured knowledge claims.",
+                        problem=(
+                            f"{competitor} has sources for {dimension}, "
+                            "but no structured knowledge claims."
+                        ),
                         redo_scope=RedoScope(kind="full", rationale="placeholder"),
                         self_found=False,
                     )
@@ -513,7 +533,10 @@ class QualityAgentMixin:
                             target_agent="analyst",
                             target_subagent=dimension,
                             target_competitor=competitor,
-                            field_path=f"competitor_knowledge[{competitor}].{dimension}.claims[{index}].source_ids",
+                            field_path=(
+                                f"competitor_knowledge[{competitor}].{dimension}"
+                                f".claims[{index}].source_ids"
+                            ),
                             problem=f"{competitor} {dimension} claim is missing source_ids.",
                             redo_scope=RedoScope(kind="full", rationale="placeholder"),
                             self_found=False,
@@ -533,8 +556,14 @@ class QualityAgentMixin:
                             target_agent="analyst",
                             target_subagent=dimension,
                             target_competitor=competitor,
-                            field_path=f"competitor_knowledge[{competitor}].{dimension}.claims[{index}].source_ids",
-                            problem=f"{competitor} {dimension} structured claim references unknown source id {source_id}.",
+                            field_path=(
+                                f"competitor_knowledge[{competitor}].{dimension}"
+                                f".claims[{index}].source_ids"
+                            ),
+                            problem=(
+                                f"{competitor} {dimension} structured claim references "
+                                f"unknown source id {source_id}."
+                            ),
                             redo_scope=RedoScope(kind="full", rationale="placeholder"),
                             self_found=False,
                         )
@@ -555,8 +584,12 @@ class QualityAgentMixin:
         if "pricing" in dimension_key and not knowledge.pricing_model.tiers:
             problem = f"{competitor} pricing schema has claims but no pricing_model.tiers entries."
             field_path = f"competitor_knowledge[{competitor}].pricing_model.tiers"
-        elif ("persona" in dimension_key or "user" in dimension_key) and not knowledge.user_personas.segments:
-            problem = f"{competitor} persona schema has claims but no user_personas.segments entries."
+        elif (
+            "persona" in dimension_key or "user" in dimension_key
+        ) and not knowledge.user_personas.segments:
+            problem = (
+                f"{competitor} persona schema has claims but no user_personas.segments entries."
+            )
             field_path = f"competitor_knowledge[{competitor}].user_personas.segments"
         elif (
             "pricing" not in dimension_key
@@ -599,7 +632,11 @@ class QualityAgentMixin:
         if "persona" in dimension_key or "user" in dimension_key:
             return [
                 *knowledge.user_personas.summary_claims,
-                *[claim for segment in knowledge.user_personas.segments for claim in segment.claims],
+                *[
+                    claim
+                    for segment in knowledge.user_personas.segments
+                    for claim in segment.claims
+                ],
             ]
         return [
             *knowledge.feature_tree.summary_claims,
@@ -617,7 +654,8 @@ class QualityAgentMixin:
                 continue
             for competitor in detail.plan.competitors:
                 has_sources = any(
-                    source.dimension == dimension and self._source_matches_competitor(source, competitor)
+                    source.dimension == dimension
+                    and self._source_matches_competitor(source, competitor)
                     for source in detail.raw_sources
                 )
                 kb = detail.competitor_kbs.get(competitor)
@@ -632,7 +670,10 @@ class QualityAgentMixin:
                     target_subagent=dimension,
                     target_competitor=competitor,
                     field_path=f"competitor_kbs[{competitor}].slices[{dimension}]",
-                    problem=f"{dimension.title()} analyst did not produce structured findings for {competitor}.",
+                    problem=(
+                        f"{dimension.title()} analyst did not produce structured "
+                        f"findings for {competitor}."
+                    ),
                     redo_scope=RedoScope(kind="full", rationale="placeholder"),
                     self_found=False,
                 )
@@ -662,7 +703,10 @@ class QualityAgentMixin:
                         target_subagent=dimension,
                         target_competitor=competitor,
                         field_path=f"competitor_kbs[{competitor}].slices[{dimension}]",
-                        problem=f"{dimension.title()} analyst cites unknown source id {cited_id} for {competitor}.",
+                        problem=(
+                            f"{dimension.title()} analyst cites unknown source id "
+                            f"{cited_id} for {competitor}."
+                        ),
                         redo_scope=RedoScope(kind="full", rationale="placeholder"),
                         self_found=False,
                     )
@@ -745,18 +789,27 @@ class QualityAgentMixin:
                         f"matrix-duplicate-cell-{cell_id}",
                         "warn",
                         f"comparison_matrix.cells[{cell.competitor},{cell.dimension}]",
-                        f"Comparison matrix contains a duplicate cell for {cell.competitor} / {cell.dimension}.",
+                        (
+                            "Comparison matrix contains a duplicate cell for "
+                            f"{cell.competitor} / {cell.dimension}."
+                        ),
                     )
                 )
             seen_cells.add(cell_key)
 
-            if cell.competitor not in expected_competitors or cell.dimension not in expected_dimensions:
+            if (
+                cell.competitor not in expected_competitors
+                or cell.dimension not in expected_dimensions
+            ):
                 issues.append(
                     self._matrix_issue(
                         f"matrix-extra-cell-{cell_id}",
                         "warn",
                         f"comparison_matrix.cells[{cell.competitor},{cell.dimension}]",
-                        f"Comparison matrix contains a cell outside the analysis plan: {cell.competitor} / {cell.dimension}.",
+                        (
+                            "Comparison matrix contains a cell outside the analysis "
+                            f"plan: {cell.competitor} / {cell.dimension}."
+                        ),
                     )
                 )
             for source_id in cell.source_ids:
@@ -776,9 +829,13 @@ class QualityAgentMixin:
                             f"matrix-missing-cited-source-{self._issue_id_fragment(cell.competitor)}-"
                             f"{self._issue_id_fragment(cell.dimension)}-{self._issue_id_fragment(cited_id)}",
                             "blocker",
-                            f"comparison_matrix.cells[{cell.competitor},{cell.dimension}].source_ids",
                             (
-                                f"Comparison matrix cell for {cell.competitor} / {cell.dimension} cites "
+                                f"comparison_matrix.cells[{cell.competitor},"
+                                f"{cell.dimension}].source_ids"
+                            ),
+                            (
+                                f"Comparison matrix cell for {cell.competitor} / "
+                                f"{cell.dimension} cites "
                                 f"{cited_id} in its value but omits it from source_ids."
                             ),
                         )
@@ -818,13 +875,6 @@ class QualityAgentMixin:
         )
         issue.redo_scope = assign_redo_scope(issue)
         return issue
-
-
-
-
-
-
-
 
     def _clear_dimension_outputs(self, detail: RunDetail, dimension: str) -> None:
         for kb in detail.competitor_kbs.values():
@@ -871,7 +921,9 @@ class QualityAgentMixin:
                 },
             )
 
-    def _clear_structured_knowledge_slice(self, detail: RunDetail, competitor: str, dimension: str) -> None:
+    def _clear_structured_knowledge_slice(
+        self, detail: RunDetail, competitor: str, dimension: str
+    ) -> None:
         knowledge = detail.competitor_knowledge.get(competitor)
         if knowledge is None:
             return
@@ -890,7 +942,7 @@ class QualityAgentMixin:
             for source in detail.raw_sources
             if self._source_matches_competitor(source, competitor)
         }
-        knowledge.source_ids = [source_id for source_id in knowledge.source_ids if source_id in valid_source_ids]
+        knowledge.source_ids = [
+            source_id for source_id in knowledge.source_ids if source_id in valid_source_ids
+        ]
         detail.competitor_knowledge[competitor] = knowledge
-
-

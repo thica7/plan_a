@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from packages.schema.models import ComparisonCell, ComparisonMatrix
+from packages.schema.api_dto import RunDetail
+from packages.schema.models import ComparisonCell, ComparisonMatrix, RawSource
+
+if TYPE_CHECKING:
+    from packages.orchestrator.service import RunRecord
 
 
 class ComparatorAgentMixin:
@@ -27,11 +32,13 @@ class ComparatorAgentMixin:
                 f"Topic: {detail.topic}\n"
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
                 f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                f"Competitor KB JSON: {json.dumps({k: v.model_dump(mode='json') for k, v in detail.competitor_kbs.items()}, ensure_ascii=False)}\n"
-                f"Competitor Knowledge Schema JSON: {json.dumps({k: v.model_dump(mode='json') for k, v in detail.competitor_knowledge.items()}, ensure_ascii=False)}\n"
-                f"Source digest JSON: {json.dumps(self._source_digest(detail.raw_sources), ensure_ascii=False)}"
+                f"Competitor KB JSON: {self._competitor_kb_json(detail)}\n"
+                f"Competitor Knowledge Schema JSON: {self._competitor_knowledge_json(detail)}\n"
+                f"Source digest JSON: {self._source_digest_json(detail)}"
             ),
-            schema_hint='{"matrix_summary":["row"],"winner_by_dimension":{"dimension":"competitor or tie"}}',
+            schema_hint=(
+                '{"matrix_summary":["row"],"winner_by_dimension":{"dimension":"competitor or tie"}}'
+            ),
         )
         detail.comparison_matrix = self._build_comparison_matrix(detail, payload)
         self._append_agent_message(
@@ -43,7 +50,14 @@ class ComparatorAgentMixin:
             payload={"comparison_matrix": detail.comparison_matrix.model_dump(mode="json")},
         )
         detail.updated_at = datetime.utcnow()
-        await self.emit(detail.id, "node_completed", "comparator", None, "Comparator completed.", {"matrix": payload})
+        await self.emit(
+            detail.id,
+            "node_completed",
+            "comparator",
+            None,
+            "Comparator completed.",
+            {"matrix": payload},
+        )
 
     def _build_comparison_matrix(self, detail: RunDetail, payload: dict) -> ComparisonMatrix:
         cells: list[ComparisonCell] = []
@@ -52,7 +66,10 @@ class ComparatorAgentMixin:
                 kb = detail.competitor_kbs.get(competitor)
                 findings = kb.slices.get(dimension, []) if kb else []
                 related_sources = [
-                    source for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
+                    source
+                    for source in self._sources_for_competitor_dimension(
+                        detail, competitor, dimension
+                    )
                 ]
                 value = "; ".join(findings[:2])
                 if not value and related_sources:
@@ -64,7 +81,8 @@ class ComparatorAgentMixin:
                         value=value or "No structured finding available.",
                         source_ids=[source.id for source in related_sources],
                         confidence=(
-                            sum(source.confidence for source in related_sources) / len(related_sources)
+                            sum(source.confidence for source in related_sources)
+                            / len(related_sources)
                             if related_sources
                             else 0.0
                         ),
@@ -97,3 +115,21 @@ class ComparatorAgentMixin:
             }
             for source in sources
         ]
+
+    def _competitor_kb_json(self, detail: RunDetail) -> str:
+        return json.dumps(
+            {key: value.model_dump(mode="json") for key, value in detail.competitor_kbs.items()},
+            ensure_ascii=False,
+        )
+
+    def _competitor_knowledge_json(self, detail: RunDetail) -> str:
+        return json.dumps(
+            {
+                key: value.model_dump(mode="json")
+                for key, value in detail.competitor_knowledge.items()
+            },
+            ensure_ascii=False,
+        )
+
+    def _source_digest_json(self, detail: RunDetail) -> str:
+        return json.dumps(self._source_digest(detail.raw_sources), ensure_ascii=False)

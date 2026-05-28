@@ -62,7 +62,9 @@ class DoubaoClient:
             async with httpx.AsyncClient(timeout=self._settings.llm_timeout_seconds) as client:
                 response = await client.post(url, json=payload, headers=headers)
         except httpx.TimeoutException as exc:
-            raise LLMError(f"LLM request timed out after {self._settings.llm_timeout_seconds} seconds.") from exc
+            raise LLMError(
+                f"LLM request timed out after {self._settings.llm_timeout_seconds} seconds."
+            ) from exc
         except httpx.HTTPError as exc:
             raise LLMError(f"LLM request failed before response: {exc}") from exc
         if response.status_code >= 400:

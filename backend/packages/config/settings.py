@@ -76,7 +76,9 @@ def get_settings() -> Settings:
         demo_mode=_env_bool("DEMO_MODE", True),
         ark_api_key=os.getenv("ARK_API_KEY") or None,
         ark_model=os.getenv("ARK_MODEL") or None,
-        ark_base_url=os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3").rstrip("/"),
+        ark_base_url=os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3").rstrip(
+            "/"
+        ),
         llm_timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "60")),
         llm_temperature=float(os.getenv("LLM_TEMPERATURE", "0.2")),
         pplx_api_key=os.getenv("PPLX_API_KEY") or os.getenv("PERPLEXITY_API_KEY") or None,

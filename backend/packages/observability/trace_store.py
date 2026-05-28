@@ -13,7 +13,7 @@ class TraceStore:
         self._init_db()
 
     @classmethod
-    def from_default_path(cls) -> "TraceStore":
+    def from_default_path(cls) -> TraceStore:
         return cls(Path("runs") / "traces.db")
 
     def append_span(self, run_id: str, span: TraceSpan) -> None:
@@ -189,9 +189,17 @@ class TraceStore:
                 )
                 """
             )
-            conn.execute("create index if not exists idx_trace_spans_run on trace_spans(run_id, span_id)")
-            conn.execute("create index if not exists idx_agent_messages_run on agent_messages(run_id, message_id)")
-            conn.execute("create index if not exists idx_tool_messages_run on tool_call_messages(run_id, message_id)")
+            conn.execute(
+                "create index if not exists idx_trace_spans_run on trace_spans(run_id, span_id)"
+            )
+            conn.execute(
+                "create index if not exists idx_agent_messages_run "
+                "on agent_messages(run_id, message_id)"
+            )
+            conn.execute(
+                "create index if not exists idx_tool_messages_run "
+                "on tool_call_messages(run_id, message_id)"
+            )
             conn.commit()
         finally:
             conn.close()

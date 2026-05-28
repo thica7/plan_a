@@ -11,7 +11,11 @@ def test_kb_cache_round_trips_competitor_dimension_slice() -> None:
     knowledge = CompetitorKnowledge(
         competitor="A",
         pricing_model=PricingModel(
-            notes=[KnowledgeClaim(claim="A has transparent pricing.", source_ids=["pricing-1"], confidence=0.9)]
+            notes=[
+                KnowledgeClaim(
+                    claim="A has transparent pricing.", source_ids=["pricing-1"], confidence=0.9
+                )
+            ]
         ),
         source_ids=["pricing-1"],
         confidence=0.9,

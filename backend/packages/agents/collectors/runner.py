@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 
-async def dispatch(service: Any, record: Any, dimensions: list[str], competitors: list[str]) -> None:
+async def dispatch(
+    service: Any, record: Any, dimensions: list[str], competitors: list[str]
+) -> None:
     await service._real_collector_dispatch_step(record, dimensions, competitors)
 
 

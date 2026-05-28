@@ -14,7 +14,7 @@ class GraphCheckpointer:
         self.saver: AsyncSqliteSaver | None = None
 
     @classmethod
-    def from_default_path(cls) -> "GraphCheckpointer":
+    def from_default_path(cls) -> GraphCheckpointer:
         return cls(Path("runs") / "graph_checkpoints.db")
 
     async def open(self) -> AsyncSqliteSaver:

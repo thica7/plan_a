@@ -4,36 +4,28 @@ import hashlib
 import json
 import re
 from datetime import datetime
-from typing import Any, Iterable, Literal
+from typing import TYPE_CHECKING, Any
 
 from packages.agents import SubagentContext
 from packages.agents.collectors.skill_tools import collect_competitor_with_skill_tools
-from packages.memory import KBCacheEntry
-from packages.orchestrator.scoping import assign_redo_scope
-from packages.search import SearchResult
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
-    ComparisonCell,
-    ComparisonMatrix,
-    CompetitorCandidate,
-    CompetitorDiscovery,
-    CompetitorKB,
-    CompetitorKnowledge,
-    FeatureNode,
-    FeatureTree,
-    KnowledgeClaim,
-    PricingModel,
-    PricingTier,
-    QCIssue,
     RawSource,
-    RedoScope,
-    ReflectionRecord,
-    UserPersonaModel,
-    UserPersonaSegment,
 )
-from packages.tools import extract_facts, find_official_docs, fetch_page, search_review_site_queries, survey_simulator
+from packages.search import SearchResult
+from packages.tools import (
+    extract_facts,
+    fetch_page,
+    find_official_docs,
+    search_review_site_queries,
+    survey_simulator,
+)
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+
+if TYPE_CHECKING:
+    from packages.orchestrator.service import RunRecord
+
 
 class CollectorAgentMixin:
     async def _run_collector_react(
@@ -65,7 +57,8 @@ class CollectorAgentMixin:
                     f"Dimension description: {skill.description if skill else dimension}\n"
                     f"Competitors: {', '.join(detail.plan.competitors)}\n"
                     f"Observations JSON: {json.dumps(observations, ensure_ascii=False)}\n\n"
-                    "Return one action. For finish, include sources with competitor, title, url, summary, confidence."
+                    "Return one action. For finish, include sources with competitor, "
+                    "title, url, summary, confidence."
                 ),
                 schema_hint=(
                     '{"action":"web_search|fetch_page|finish","query":"query or null",'
@@ -77,7 +70,10 @@ class CollectorAgentMixin:
             )
             action = str(payload.get("action") or "").strip().lower()
             if action == "web_search":
-                query = str(payload.get("query") or self._web_search_query(detail, detail.plan.competitors[0], dimension))
+                query = str(
+                    payload.get("query")
+                    or self._web_search_query(detail, detail.plan.competitors[0], dimension)
+                )
                 results = await self._trace_search(
                     record,
                     agent="collector",
@@ -98,7 +94,9 @@ class CollectorAgentMixin:
             if action == "fetch_page":
                 url = str(payload.get("url") or "")
                 if not url.startswith(("http://", "https://")):
-                    observations.append({"turn": turn, "action": action, "error": "invalid_url", "url": url})
+                    observations.append(
+                        {"turn": turn, "action": action, "error": "invalid_url", "url": url}
+                    )
                     continue
                 fetched = await self._trace_fetch(record, "collector", dimension, url, context)
                 fetched_by_url[fetched.url] = fetched
@@ -126,7 +124,9 @@ class CollectorAgentMixin:
                 detail.raw_sources.extend(sources)
                 added += len(sources)
                 break
-            observations.append({"turn": turn, "action": action or "unknown", "error": "unsupported_action"})
+            observations.append(
+                {"turn": turn, "action": action or "unknown", "error": "unsupported_action"}
+            )
         return added
 
     async def _run_collector_competitor_react(
@@ -148,10 +148,12 @@ class CollectorAgentMixin:
                 subagent=context.subagent,
                 name=f"{dimension}_{self._issue_id_fragment(competitor)}_collector_react_turn_{turn}",
                 system=(
-                    "You are a bounded collector ReAct runner for exactly one competitor and one dimension. "
+                    "You are a bounded collector ReAct runner for exactly one competitor "
+                    "and one dimension. "
                     "Allowed actions are web_search, robots_check, fetch_page, find_official_docs, "
                     "search_review_site, survey_simulator, finish. "
-                    "Use search/fetch evidence before finish. Return only sources for the assigned competitor."
+                    "Use search/fetch evidence before finish. Return only sources for "
+                    "the assigned competitor."
                 ),
                 user=(
                     f"Topic: {detail.topic}\n"
@@ -161,10 +163,12 @@ class CollectorAgentMixin:
                     f"Homepage hint: {detail.plan.homepage_hints.get(competitor, '')}\n"
                     f"QA feedback for redo: {json.dumps(qa_feedback, ensure_ascii=False)}\n"
                     f"Observations JSON: {json.dumps(observations, ensure_ascii=False)}\n\n"
-                    "Return one action. For finish, include sources with title, url, summary, confidence."
+                    "Return one action. For finish, include sources with title, url, "
+                    "summary, confidence."
                 ),
                 schema_hint=(
-                    '{"action":"web_search|robots_check|fetch_page|find_official_docs|search_review_site|survey_simulator|finish","query":"query or null",'
+                    '{"action":"web_search|robots_check|fetch_page|find_official_docs|'
+                    'search_review_site|survey_simulator|finish","query":"query or null",'
                     '"url":"https://... or null","rationale":"short reason",'
                     '"sources":[{"title":"title","url":"https://... or null",'
                     '"summary":"summary","confidence":0.0}]}'
@@ -173,7 +177,9 @@ class CollectorAgentMixin:
             )
             action = str(payload.get("action") or "").strip().lower()
             if action == "web_search":
-                query = str(payload.get("query") or self._web_search_query(detail, competitor, dimension))
+                query = str(
+                    payload.get("query") or self._web_search_query(detail, competitor, dimension)
+                )
                 results = await self._trace_search(
                     record,
                     agent="collector",
@@ -194,9 +200,13 @@ class CollectorAgentMixin:
             if action == "robots_check":
                 url = str(payload.get("url") or detail.plan.homepage_hints.get(competitor) or "")
                 if not url.startswith(("http://", "https://")):
-                    observations.append({"turn": turn, "action": action, "error": "invalid_url", "url": url})
+                    observations.append(
+                        {"turn": turn, "action": action, "error": "invalid_url", "url": url}
+                    )
                     continue
-                check = await self._trace_robots(record, "collector", context.subagent, url, context)
+                check = await self._trace_robots(
+                    record, "collector", context.subagent, url, context
+                )
                 observations.append(
                     {
                         "turn": turn,
@@ -211,9 +221,13 @@ class CollectorAgentMixin:
             if action == "fetch_page":
                 url = str(payload.get("url") or "")
                 if not url.startswith(("http://", "https://")):
-                    observations.append({"turn": turn, "action": action, "error": "invalid_url", "url": url})
+                    observations.append(
+                        {"turn": turn, "action": action, "error": "invalid_url", "url": url}
+                    )
                     continue
-                fetched = await self._trace_fetch(record, "collector", context.subagent, url, context)
+                fetched = await self._trace_fetch(
+                    record, "collector", context.subagent, url, context
+                )
                 fetched_by_url[fetched.url] = fetched
                 observations.append(
                     {
@@ -246,7 +260,9 @@ class CollectorAgentMixin:
                         },
                         ensure_ascii=False,
                     ),
-                    output_text=json.dumps([candidate.__dict__ for candidate in candidates], ensure_ascii=False),
+                    output_text=json.dumps(
+                        [candidate.__dict__ for candidate in candidates], ensure_ascii=False
+                    ),
                     context=context,
                     metadata={"candidate_count": len(candidates)},
                 )
@@ -265,7 +281,9 @@ class CollectorAgentMixin:
                     agent="collector",
                     subagent=context.subagent,
                     name="search_review_site",
-                    input_text=json.dumps({"competitor": competitor, "topic": detail.topic}, ensure_ascii=False),
+                    input_text=json.dumps(
+                        {"competitor": competitor, "topic": detail.topic}, ensure_ascii=False
+                    ),
                     output_text=json.dumps(plan.__dict__, ensure_ascii=False),
                     context=context,
                     metadata={"query_count": len(plan.queries)},
@@ -305,14 +323,23 @@ class CollectorAgentMixin:
                     record,
                     detail,
                     dimension,
-                    {**payload, "sources": self._force_source_competitor(payload.get("sources"), competitor)},
+                    {
+                        **payload,
+                        "sources": self._force_source_competitor(
+                            payload.get("sources"), competitor
+                        ),
+                    },
                     context,
                     fetched_by_url,
                 )
-            observations.append({"turn": turn, "action": action or "unknown", "error": "unsupported_action"})
+            observations.append(
+                {"turn": turn, "action": action or "unknown", "error": "unsupported_action"}
+            )
         return []
 
-    def _force_source_competitor(self, raw_sources: object, competitor: str) -> list[dict[str, object]]:
+    def _force_source_competitor(
+        self, raw_sources: object, competitor: str
+    ) -> list[dict[str, object]]:
         if not isinstance(raw_sources, list):
             return []
         sources: list[dict[str, object]] = []
@@ -351,7 +378,9 @@ class CollectorAgentMixin:
             if url_value:
                 fetched = fetched_by_url.get(url_value)
                 if fetched is None:
-                    fetched = await self._trace_fetch(record, "collector", context.subagent, url_value, context)
+                    fetched = await self._trace_fetch(
+                        record, "collector", context.subagent, url_value, context
+                    )
                     fetched_by_url[fetched.url] = fetched
             verified = fetched is not None and fetched.ok
             extracted_facts = []
@@ -371,7 +400,9 @@ class CollectorAgentMixin:
                         {"dimension": dimension, "url": fetched.url, "text": fetched.snippet},
                         ensure_ascii=False,
                     ),
-                    output_text=json.dumps([fact.__dict__ for fact in extracted_facts], ensure_ascii=False),
+                    output_text=json.dumps(
+                        [fact.__dict__ for fact in extracted_facts], ensure_ascii=False
+                    ),
                     context=context,
                     metadata={"fact_count": len(extracted_facts), "url": fetched.url},
                 )
@@ -389,14 +420,22 @@ class CollectorAgentMixin:
                     ),
                     title=fetched.title if verified and fetched.title else title,
                     url=fetched.url if fetched is not None else url_value,
-                    snippet=(" ".join(fact.fact for fact in extracted_facts[:2]) if extracted_facts else fetched.snippet) if verified else summary,
+                    snippet=(
+                        " ".join(fact.fact for fact in extracted_facts[:2])
+                        if extracted_facts
+                        else fetched.snippet
+                    )
+                    if verified
+                    else summary,
                     content_hash=(
                         fetched.content_hash
                         if fetched is not None
                         else hashlib.sha256(content_basis.encode()).hexdigest()[:16]
                     ),
                     confidence=(
-                        min(1.0, self._coerce_confidence(item.get("confidence"), default=0.7) + 0.03)
+                        min(
+                            1.0, self._coerce_confidence(item.get("confidence"), default=0.7) + 0.03
+                        )
                         if verified
                         else self._coerce_confidence(item.get("confidence"), default=0.7)
                     ),
@@ -535,10 +574,18 @@ class CollectorAgentMixin:
         text = f"{source.title}\n{source.snippet}".strip()
         normalized = text.casefold()
         snippet_normalized = source.snippet.casefold()
-        if len(source.snippet.strip()) < 24 and not self._has_concrete_source_signal(source.dimension, normalized):
-            return f"Source {source.id} snippet is too short to support a reliable {source.dimension} claim."
+        if len(source.snippet.strip()) < 24 and not self._has_concrete_source_signal(
+            source.dimension, normalized
+        ):
+            return (
+                f"Source {source.id} snippet is too short to support a reliable "
+                f"{source.dimension} claim."
+            )
         if self._looks_like_binary_or_pdf(source.snippet):
-            return f"Source {source.id} looks like unreadable binary/PDF text, not usable extracted evidence."
+            return (
+                f"Source {source.id} looks like unreadable binary/PDF text, "
+                "not usable extracted evidence."
+            )
         if self._looks_like_navigation_only(snippet_normalized):
             return f"Source {source.id} appears to contain mostly navigation or boilerplate text."
         if (
@@ -547,22 +594,38 @@ class CollectorAgentMixin:
             and not self._has_dimension_specific_fact(source.dimension, snippet_normalized)
         ):
             return (
-                f"Source {source.id} has low confidence ({source.confidence:.2f}) and does not expose "
+                f"Source {source.id} has low confidence ({source.confidence:.2f}) "
+                "and does not expose "
                 f"a concrete {source.dimension} fact in the fetched snippet."
             )
         if source.url and self._is_low_value_url(str(source.url)):
-            return f"Source {source.id} points to a low-value page for structured evidence extraction."
+            return (
+                f"Source {source.id} points to a low-value page for structured evidence extraction."
+            )
         if not self._dimension_terms_present(source.dimension, normalized):
-            return f"Source {source.id} does not contain enough {source.dimension} terminology for this dimension."
+            return (
+                f"Source {source.id} does not contain enough {source.dimension} "
+                "terminology for this dimension."
+            )
         return None
 
     def _has_concrete_source_signal(self, dimension: str, normalized_text: str) -> bool:
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
-            return bool(re.search(r"(?:\$|usd|rmb|cny|eur|£|€|\d+\s*(?:/|per)\s*(?:token|seat|month|year))", normalized_text))
+            return bool(
+                re.search(
+                    r"(?:\$|usd|rmb|cny|eur|£|€|\d+\s*(?:/|per)\s*(?:token|seat|month|year))",
+                    normalized_text,
+                )
+            )
         if "persona" in dimension_key or "user" in dimension_key:
-            return any(term in normalized_text for term in ["developer", "customer", "enterprise", "team", "user"])
-        return any(term in normalized_text for term in ["model", "api", "feature", "coding", "reasoning"])
+            return any(
+                term in normalized_text
+                for term in ["developer", "customer", "enterprise", "team", "user"]
+            )
+        return any(
+            term in normalized_text for term in ["model", "api", "feature", "coding", "reasoning"]
+        )
 
     def _looks_like_binary_or_pdf(self, text: str) -> bool:
         if "%pdf" in text[:80].casefold() or " endobj" in text.casefold():
@@ -570,7 +633,9 @@ class CollectorAgentMixin:
         if not text:
             return True
         replacement_ratio = text.count("\ufffd") / max(1, len(text))
-        control_ratio = sum(1 for char in text if ord(char) < 32 and char not in "\n\r\t") / max(1, len(text))
+        control_ratio = sum(1 for char in text if ord(char) < 32 and char not in "\n\r\t") / max(
+            1, len(text)
+        )
         return replacement_ratio > 0.02 or control_ratio > 0.01
 
     def _looks_like_navigation_only(self, normalized_text: str) -> bool:
@@ -593,22 +658,9 @@ class CollectorAgentMixin:
             "back to blog",
         ]
         marker_count = sum(1 for marker in nav_markers if marker in normalized_text)
-        substantive_terms = [
-            "pricing",
-            "price",
-            "feature",
-            "capability",
-            "customer",
-            "developer",
-            "enterprise",
-            "token",
-            "model",
-            "api",
-            "benchmark",
-            "use case",
-        ]
-        substantive_count = sum(1 for term in substantive_terms if term in normalized_text)
-        return marker_count >= 3 and not self._has_dimension_specific_fact("generic", normalized_text)
+        return marker_count >= 3 and not self._has_dimension_specific_fact(
+            "generic", normalized_text
+        )
 
     def _has_dimension_specific_fact(self, dimension: str, normalized_text: str) -> bool:
         if not normalized_text.strip():
@@ -616,13 +668,17 @@ class CollectorAgentMixin:
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
             return bool(
-                re.search(r"(?:\$|usd|cny|rmb|eur|free|per\s+(?:user|seat|month|year|token)|\bplan\b|\btier\b)", normalized_text)
+                re.search(
+                    r"(?:\$|usd|cny|rmb|eur|free|per\s+(?:user|seat|month|year|token)|\bplan\b|\btier\b)",
+                    normalized_text,
+                )
             )
         if "persona" in dimension_key or "user" in dimension_key:
             return bool(
                 re.search(
                     r"(?:target(?:ed)?\s+(?:user|customer|persona)|for\s+(?:developers|teams|enterprises|"
-                    r"engineering|marketing|sales)|case stud(?:y|ies)|customer|enterprise|adoption|use case)",
+                    r"engineering|marketing|sales)|case stud(?:y|ies)|customer|"
+                    r"enterprise|adoption|use case)",
                     normalized_text,
                 )
             )
@@ -657,7 +713,18 @@ class CollectorAgentMixin:
     def _dimension_terms_present(self, dimension: str, normalized_text: str) -> bool:
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
-            terms = ["pricing", "price", "cost", "billing", "token", "tier", "free", "enterprise", "plan", "$"]
+            terms = [
+                "pricing",
+                "price",
+                "cost",
+                "billing",
+                "token",
+                "tier",
+                "free",
+                "enterprise",
+                "plan",
+                "$",
+            ]
         elif "persona" in dimension_key or "user" in dimension_key:
             terms = [
                 "customer",
@@ -722,7 +789,9 @@ class CollectorAgentMixin:
             content_hash=(
                 fetched.content_hash
                 if fetched is not None
-                else hashlib.sha256((snippet or result.title or result.url).encode()).hexdigest()[:16]
+                else hashlib.sha256((snippet or result.title or result.url).encode()).hexdigest()[
+                    :16
+                ]
             ),
             confidence=0.84 if verified else 0.68,
         )
@@ -771,7 +840,10 @@ class CollectorAgentMixin:
             f"Calling {dimension} collector.",
             {"context": context.metadata()},
         )
-        web_payload: dict[str, object] = {"provider": self._settings.web_search_provider, "results": []}
+        web_payload: dict[str, object] = {
+            "provider": self._settings.web_search_provider,
+            "results": [],
+        }
         if self._settings.collector_react_enabled and self._search.is_enabled:
             try:
                 added = await self._run_collector_react(record, dimension, context)
@@ -786,7 +858,9 @@ class CollectorAgentMixin:
                         payload={
                             "dimension": dimension,
                             "source_ids": [
-                                source.id for source in detail.raw_sources if source.dimension == dimension
+                                source.id
+                                for source in detail.raw_sources
+                                if source.dimension == dimension
                             ],
                             "count": added,
                         },
@@ -818,7 +892,9 @@ class CollectorAgentMixin:
                         payload={
                             "dimension": dimension,
                             "source_ids": [
-                                source.id for source in detail.raw_sources if source.dimension == dimension
+                                source.id
+                                for source in detail.raw_sources
+                                if source.dimension == dimension
                             ],
                             "count": added,
                         },
@@ -827,11 +903,11 @@ class CollectorAgentMixin:
                     await self.emit(
                         detail.id,
                         "node_completed",
-                            "collector",
-                            dimension,
-                            f"Perplexity web_search returned {added} {dimension} evidence source(s).",
-                            {"web_search": web_payload, "context": context.metadata()},
-                        )
+                        "collector",
+                        dimension,
+                        f"Perplexity web_search returned {added} {dimension} evidence source(s).",
+                        {"web_search": web_payload, "context": context.metadata()},
+                    )
                     return
             except Exception as exc:  # noqa: BLE001 - web search is best effort; LLM fallback continues.
                 web_payload["error"] = str(exc)
@@ -842,7 +918,8 @@ class CollectorAgentMixin:
             subagent=dimension,
             name=f"{dimension}_collector",
             system=(
-                "You are a collector subagent. Produce compact evidence candidates for competitive analysis. "
+                "You are a collector subagent. Produce compact evidence candidates "
+                "for competitive analysis. "
                 "Use public knowledge only and mark confidence lower when evidence is uncertain."
             ),
             user=(
@@ -850,10 +927,14 @@ class CollectorAgentMixin:
                 f"Dimension: {dimension}\n"
                 f"Dimension description: {skill.description if skill else dimension}\n"
                 f"Competitors: {', '.join(detail.plan.competitors)}\n\n"
-                "For each competitor return one concise evidence candidate. Prefer official URLs when known."
+                "For each competitor return one concise evidence candidate. "
+                "Prefer official URLs when known."
             ),
-            schema_hint='{"sources":[{"competitor":"name","title":"evidence title","url":"https://... or null",'
-            '"summary":"short factual summary","confidence":0.0}]}',
+            schema_hint=(
+                '{"sources":[{"competitor":"name","title":"evidence title",'
+                '"url":"https://... or null","summary":"short factual summary",'
+                '"confidence":0.0}]}'
+            ),
             context=context,
         )
         sources = payload.get("sources", [])
@@ -871,12 +952,20 @@ class CollectorAgentMixin:
             if not isinstance(url_value, str) or not url_value.startswith(("http://", "https://")):
                 url_value = None
             confidence = self._coerce_confidence(item.get("confidence"), default=0.62)
-            fetched = await self._trace_fetch(record, "collector", dimension, url_value, context) if url_value else None
+            fetched = (
+                await self._trace_fetch(record, "collector", dimension, url_value, context)
+                if url_value
+                else None
+            )
             verified = fetched is not None and fetched.ok
             snippet = fetched.snippet if verified else summary
             source_title = fetched.title if verified and fetched.title else title
             source_url = fetched.url if fetched is not None and fetched.ok else url_value
-            content_hash = fetched.content_hash if fetched is not None else hashlib.sha256(summary.encode()).hexdigest()[:16]
+            content_hash = (
+                fetched.content_hash
+                if fetched is not None
+                else hashlib.sha256(summary.encode()).hexdigest()[:16]
+            )
             detail.raw_sources.append(
                 RawSource(
                     id=source_id,
@@ -899,7 +988,9 @@ class CollectorAgentMixin:
             payload_schema="RawSource[]",
             payload={
                 "dimension": dimension,
-                "source_ids": [source.id for source in detail.raw_sources if source.dimension == dimension],
+                "source_ids": [
+                    source.id for source in detail.raw_sources if source.dimension == dimension
+                ],
                 "count": added,
             },
         )
@@ -960,7 +1051,9 @@ class CollectorAgentMixin:
             {"fanout": "competitor_x_dimension"},
         )
 
-    async def _real_collector_branch_step(self, record: RunRecord, dimension: str, competitor: str) -> None:
+    async def _real_collector_branch_step(
+        self, record: RunRecord, dimension: str, competitor: str
+    ) -> None:
         detail = record.detail
         skill = self._skill_registry.get(dimension)
         branch_id = self._analyst_branch_id(dimension, competitor)
@@ -982,7 +1075,9 @@ class CollectorAgentMixin:
                 "qa_feedback": qa_feedback,
             },
         )
-        self._consume_agent_message(record, task_message, consumer_agent="collector", context=context)
+        self._consume_agent_message(
+            record, task_message, consumer_agent="collector", context=context
+        )
         await self.emit(
             detail.id,
             "node_started",
@@ -992,16 +1087,23 @@ class CollectorAgentMixin:
             {"context": context.metadata(), "dimension": dimension, "competitor": competitor},
         )
         sources: list[RawSource] = []
-        collect_payload: dict[str, object] = {"provider": self._settings.web_search_provider, "results": []}
+        collect_payload: dict[str, object] = {
+            "provider": self._settings.web_search_provider,
+            "results": [],
+        }
         if self._settings.collector_react_enabled and self._search.is_enabled:
             try:
-                sources = await self._run_collector_competitor_react(record, dimension, competitor, context)
+                sources = await self._run_collector_competitor_react(
+                    record, dimension, competitor, context
+                )
                 collect_payload["react_added"] = len(sources)
             except Exception as exc:  # noqa: BLE001 - deterministic fallback continues.
                 collect_payload["react_error"] = str(exc)
         if not sources and self._search.is_enabled:
             try:
-                sources = await self._collect_competitor_with_web_search(record, dimension, competitor, context)
+                sources = await self._collect_competitor_with_web_search(
+                    record, dimension, competitor, context
+                )
                 collect_payload["added"] = len(sources)
             except Exception as exc:  # noqa: BLE001 - LLM fallback continues.
                 collect_payload["error"] = str(exc)
@@ -1024,9 +1126,11 @@ class CollectorAgentMixin:
                 subagent=branch_id,
                 name=f"{dimension}_{self._issue_id_fragment(competitor)}_collector",
                 system=(
-                    "You are a collector subagent for exactly one competitor and one dimension. "
+                    "You are a collector subagent for exactly one competitor and "
+                    "one dimension. "
                     "Return structured evidence candidates only for the assigned competitor. "
-                    "Use public knowledge only if no URL can be identified and mark confidence lower."
+                    "Use public knowledge only if no URL can be identified and mark "
+                    "confidence lower."
                 ),
                 user=(
                     f"Topic: {detail.topic}\n"
@@ -1034,7 +1138,8 @@ class CollectorAgentMixin:
                     f"Dimension: {dimension}\n"
                     f"Dimension description: {skill.description if skill else dimension}\n"
                     f"Homepage hint: {detail.plan.homepage_hints.get(competitor, '')}\n\n"
-                    f"QA feedback for this branch: {json.dumps(qa_feedback, ensure_ascii=False)}\n\n"
+                    f"QA feedback for this branch: "
+                    f"{json.dumps(qa_feedback, ensure_ascii=False)}\n\n"
                     "Return one concise evidence candidate."
                 ),
                 schema_hint='{"sources":[{"title":"evidence title","url":"https://... or null",'
@@ -1122,7 +1227,9 @@ class CollectorAgentMixin:
                 "before_count": before_count,
                 "after_count": normalized_count,
                 "dimensions": dimensions,
-                "source_ids": [source.id for source in detail.raw_sources if source.dimension in dimensions],
+                "source_ids": [
+                    source.id for source in detail.raw_sources if source.dimension in dimensions
+                ],
             },
         )
         detail.updated_at = datetime.utcnow()
@@ -1141,7 +1248,9 @@ class CollectorAgentMixin:
             },
         )
 
-    def _normalize_collected_sources(self, detail: RunDetail, dimensions: list[str]) -> list[RawSource]:
+    def _normalize_collected_sources(
+        self, detail: RunDetail, dimensions: list[str]
+    ) -> list[RawSource]:
         scoped_dimensions = set(dimensions)
         normalized: list[RawSource] = []
         seen: set[tuple[str, str, str, str, str]] = set()
@@ -1161,10 +1270,14 @@ class CollectorAgentMixin:
             if key in seen:
                 continue
             seen.add(key)
-            normalized.append(source.model_copy(update={"covered_competitors": covered_competitors}))
+            normalized.append(
+                source.model_copy(update={"covered_competitors": covered_competitors})
+            )
         return normalized
 
-    async def _collect_cross_competitor_evidence(self, record: RunRecord, dimensions: list[str]) -> None:
+    async def _collect_cross_competitor_evidence(
+        self, record: RunRecord, dimensions: list[str]
+    ) -> None:
         detail = record.detail
         if not self._search.is_enabled or len(detail.plan.competitors) < 2:
             return
@@ -1236,7 +1349,10 @@ class CollectorAgentMixin:
         for source in detail.raw_sources:
             if source.dimension != dimension:
                 continue
-            covered = set(source.covered_competitors or self._normalize_covered_competitors(detail, source.competitor))
+            covered = set(
+                source.covered_competitors
+                or self._normalize_covered_competitors(detail, source.competitor)
+            )
             if len(covered & expected) >= max(2, min(len(expected), 3)):
                 return True
         return False
@@ -1251,7 +1367,9 @@ class CollectorAgentMixin:
             focus = "feature benchmark capabilities comparison"
         return f"{detail.topic} {competitors} {focus} source"
 
-    def _normalize_covered_competitors(self, detail: RunDetail, source_competitor: str) -> list[str]:
+    def _normalize_covered_competitors(
+        self, detail: RunDetail, source_competitor: str
+    ) -> list[str]:
         source_key = source_competitor.strip().casefold()
         if self._competitor_label_means_all(source_key):
             return list(detail.plan.competitors)

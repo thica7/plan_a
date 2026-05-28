@@ -1,20 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 import sys
+from pathlib import Path
 from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from packages.config import Settings
-from packages.orchestrator.checkpointer import GraphCheckpointer
-from packages.orchestrator.service import RunService
-from packages.schema.api_dto import RunCreateRequest
-from packages.skills.registry import SkillRegistry
-
+from packages.config import Settings  # noqa: E402
+from packages.orchestrator.checkpointer import GraphCheckpointer  # noqa: E402
+from packages.orchestrator.service import RunService  # noqa: E402
+from packages.schema.api_dto import RunCreateRequest  # noqa: E402
+from packages.skills.registry import SkillRegistry  # noqa: E402
 
 CASES = [
     ("ai coding assistant", ["pricing", "feature", "persona"]),
@@ -39,7 +38,9 @@ async def run_case(topic: str, dimensions: list[str]) -> tuple[str, str, int, in
     )
     try:
         detail = await service.create_run(
-            RunCreateRequest(topic=topic, competitors=[], dimensions=dimensions, execution_mode="demo")
+            RunCreateRequest(
+                topic=topic, competitors=[], dimensions=dimensions, execution_mode="demo"
+            )
         )
         await service.run_pipeline(detail.id)
         updated = service.get_run(detail.id)

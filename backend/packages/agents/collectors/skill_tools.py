@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 
 from packages.agents import SubagentContext
-from packages.search import SearchResult
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import RawSource
+from packages.search import SearchResult
 from packages.tools import find_official_docs, search_review_site_queries, survey_simulator
 
 
@@ -42,7 +42,9 @@ async def collect_competitor_with_skill_tools(
                 },
                 ensure_ascii=False,
             ),
-            output_text=json.dumps([candidate.__dict__ for candidate in candidates], ensure_ascii=False),
+            output_text=json.dumps(
+                [candidate.__dict__ for candidate in candidates], ensure_ascii=False
+            ),
             context=context,
             metadata={"candidate_count": len(candidates)},
         )
@@ -66,7 +68,9 @@ async def collect_competitor_with_skill_tools(
             agent="collector",
             subagent=context.subagent,
             name="search_review_site",
-            input_text=json.dumps({"competitor": competitor, "topic": detail.topic}, ensure_ascii=False),
+            input_text=json.dumps(
+                {"competitor": competitor, "topic": detail.topic}, ensure_ascii=False
+            ),
             output_text=json.dumps(plan.__dict__, ensure_ascii=False),
             context=context,
             metadata={"query_count": len(plan.queries)},

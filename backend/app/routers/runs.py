@@ -1,4 +1,5 @@
 import asyncio
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -7,12 +8,13 @@ from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail, RunSummary
 
 router = APIRouter()
+RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 
 
 @router.post("/runs", response_model=RunDetail, status_code=201)
 async def create_run(
     request: RunCreateRequest,
-    service: RunService = Depends(get_run_service),
+    service: RunServiceDep,
 ) -> RunDetail:
     try:
         detail = await service.create_run(request)
@@ -23,14 +25,14 @@ async def create_run(
 
 
 @router.get("/runs", response_model=list[RunSummary])
-async def list_runs(service: RunService = Depends(get_run_service)) -> list[RunSummary]:
+async def list_runs(service: RunServiceDep) -> list[RunSummary]:
     return service.list_runs()
 
 
 @router.get("/runs/{run_id}", response_model=RunDetail)
 async def get_run(
     run_id: str,
-    service: RunService = Depends(get_run_service),
+    service: RunServiceDep,
 ) -> RunDetail:
     detail = service.get_run(run_id)
     if detail is None:

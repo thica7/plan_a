@@ -1,38 +1,20 @@
 from __future__ import annotations
 
-import hashlib
 import json
-import re
 from datetime import datetime
-from typing import Any, Iterable, Literal
+from typing import TYPE_CHECKING
 
-from packages.agents import SubagentContext
-from packages.memory import KBCacheEntry
-from packages.orchestrator.scoping import assign_redo_scope
-from packages.search import SearchResult
-from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
-    ComparisonCell,
-    ComparisonMatrix,
     CompetitorCandidate,
     CompetitorDiscovery,
-    CompetitorKB,
-    CompetitorKnowledge,
-    FeatureNode,
-    FeatureTree,
-    KnowledgeClaim,
-    PricingModel,
-    PricingTier,
-    QCIssue,
-    RawSource,
-    RedoScope,
-    ReflectionRecord,
-    UserPersonaModel,
-    UserPersonaSegment,
 )
-from packages.tools import fetch_page
+from packages.search import SearchResult
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+
+if TYPE_CHECKING:
+    from packages.orchestrator.service import RunRecord
+
 
 class PlannerAgentMixin:
     async def _real_planner_step(self, record: RunRecord) -> None:
@@ -44,7 +26,10 @@ class PlannerAgentMixin:
             discovery = await self._discover_competitors(record)
             discovered = discovery.selected_competitors
             if not discovered:
-                raise ValueError("Unable to discover competitors for this topic. Add competitors manually and retry.")
+                raise ValueError(
+                    "Unable to discover competitors for this topic. "
+                    "Add competitors manually and retry."
+                )
             detail.plan.competitors = discovered
             detail.competitor_discovery = discovery
             detail.plan.homepage_hints = {
@@ -64,7 +49,10 @@ class PlannerAgentMixin:
             agent="planner",
             subagent=None,
             name="planner_scope",
-            system="You are a competitive intelligence planner. Validate the user scope and keep outputs concise.",
+            system=(
+                "You are a competitive intelligence planner. "
+                "Validate the user scope and keep outputs concise."
+            ),
             user=(
                 f"Topic: {detail.topic}\n"
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
@@ -79,7 +67,9 @@ class PlannerAgentMixin:
             detail.plan.complexity = complexity
         hints = payload.get("homepage_hints")
         if isinstance(hints, dict):
-            detail.plan.homepage_hints.update({str(key): str(value) for key, value in hints.items()})
+            detail.plan.homepage_hints.update(
+                {str(key): str(value) for key, value in hints.items()}
+            )
         self._append_agent_message(
             record,
             from_agent="planner",
@@ -101,7 +91,9 @@ class PlannerAgentMixin:
     async def _real_planner_hitl_step(self, record: RunRecord) -> None:
         detail = record.detail
         detail.current_node = "planner_hitl"
-        await self.emit(detail.id, "node_started", "hitl", "planner", "Planner HITL checkpoint reached.")
+        await self.emit(
+            detail.id, "node_started", "hitl", "planner", "Planner HITL checkpoint reached."
+        )
         decision = await self._maybe_interrupt(
             record,
             stage="planner",
@@ -129,10 +121,7 @@ class PlannerAgentMixin:
                 query=query,
                 max_results=6,
             )
-        search_context = [
-            result.__dict__
-            for result in search_results
-        ]
+        search_context = [result.__dict__ for result in search_results]
         payload = await self._trace_llm_json(
             record,
             agent="planner",
@@ -145,7 +134,8 @@ class PlannerAgentMixin:
             user=(
                 f"Topic: {detail.topic}\n"
                 f"Search results JSON: {json.dumps(search_context, ensure_ascii=False)}\n\n"
-                "Return 3 to 5 direct competitors. Prefer product or company names, not article titles. "
+                "Return 3 to 5 direct competitors. "
+                "Prefer product or company names, not article titles. "
                 "If search results are provided, use them as evidence. Keep names short."
             ),
             schema_hint=(
@@ -164,8 +154,12 @@ class PlannerAgentMixin:
                 rank=index + 1,
                 selected=name.casefold() in selected_set,
                 rationale=self._candidate_rationale(payload, name),
-                evidence_titles=[result.title for result in self._candidate_evidence(name, search_results)],
-                evidence_urls=[result.url for result in self._candidate_evidence(name, search_results)],
+                evidence_titles=[
+                    result.title for result in self._candidate_evidence(name, search_results)
+                ],
+                evidence_urls=[
+                    result.url for result in self._candidate_evidence(name, search_results)
+                ],
                 confidence=self._candidate_confidence(payload, name),
             )
             for index, name in enumerate(candidate_names)

@@ -1,4 +1,9 @@
-from packages.tools import extract_facts, find_official_docs, search_review_site_queries, survey_simulator
+from packages.tools import (
+    extract_facts,
+    find_official_docs,
+    search_review_site_queries,
+    survey_simulator,
+)
 
 
 def test_skill_allowlist_tools_have_structured_outputs() -> None:
@@ -8,7 +13,9 @@ def test_skill_allowlist_tools_have_structured_outputs() -> None:
         homepage_hint="https://acme.example",
     )
     reviews = search_review_site_queries(competitor="Acme", topic="AI coding assistant")
-    interviews = survey_simulator(topic="AI coding assistant", competitor="Acme", dimension="persona")
+    interviews = survey_simulator(
+        topic="AI coding assistant", competitor="Acme", dimension="persona"
+    )
     facts = extract_facts(
         "Acme pricing starts at $10 per seat. Acme supports API workflows.",
         dimension="pricing",

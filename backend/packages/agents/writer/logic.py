@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Iterable
+from typing import TYPE_CHECKING
+
+from packages.schema.api_dto import RunDetail
+
+if TYPE_CHECKING:
+    from packages.orchestrator.service import RunRecord
 
 
 class WriterAgentMixin:
@@ -20,6 +26,26 @@ class WriterAgentMixin:
         previous_report = detail.report_md
         writer_mode = "real LLM call"
         writer_error: str | None = None
+        competitor_kb_json = json.dumps(
+            {key: value.model_dump(mode="json") for key, value in detail.competitor_kbs.items()},
+            ensure_ascii=False,
+        )
+        competitor_knowledge_json = json.dumps(
+            {
+                key: value.model_dump(mode="json")
+                for key, value in detail.competitor_knowledge.items()
+            },
+            ensure_ascii=False,
+        )
+        comparison_matrix_json = json.dumps(
+            (detail.comparison_matrix.model_dump(mode="json") if detail.comparison_matrix else {}),
+            ensure_ascii=False,
+        )
+        source_digest_json = json.dumps(self._source_digest(detail.raw_sources), ensure_ascii=False)
+        reflections_json = json.dumps(
+            [reflection.model_dump(mode="json") for reflection in detail.reflections],
+            ensure_ascii=False,
+        )
         try:
             report_md = await self._trace_llm_text(
                 record,
@@ -29,17 +55,18 @@ class WriterAgentMixin:
                 system=(
                     "You are a competitive analysis report writer. Produce markdown. "
                     "Keep it concise, evidence-aware, and include a Confidence Notes section. "
-                    "Cite factual claims with existing source IDs using [source:ID]. Do not invent source IDs."
+                    "Cite factual claims with existing source IDs using [source:ID]. "
+                    "Do not invent source IDs."
                 ),
                 user=(
                     f"Topic: {detail.topic}\n"
                     f"Competitors: {', '.join(detail.plan.competitors)}\n"
                     f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                    f"Competitor KB JSON: {json.dumps({k: v.model_dump(mode='json') for k, v in detail.competitor_kbs.items()}, ensure_ascii=False)}\n"
-                    f"Competitor Knowledge Schema JSON: {json.dumps({k: v.model_dump(mode='json') for k, v in detail.competitor_knowledge.items()}, ensure_ascii=False)}\n"
-                    f"Comparison Matrix JSON: {json.dumps(detail.comparison_matrix.model_dump(mode='json') if detail.comparison_matrix else {}, ensure_ascii=False)}\n"
-                    f"Source digest JSON: {json.dumps(self._source_digest(detail.raw_sources), ensure_ascii=False)}\n"
-                    f"Reflections JSON: {json.dumps([r.model_dump(mode='json') for r in detail.reflections], ensure_ascii=False)}"
+                    f"Competitor KB JSON: {competitor_kb_json}\n"
+                    f"Competitor Knowledge Schema JSON: {competitor_knowledge_json}\n"
+                    f"Comparison Matrix JSON: {comparison_matrix_json}\n"
+                    f"Source digest JSON: {source_digest_json}\n"
+                    f"Reflections JSON: {reflections_json}"
                 ),
             )
             detail.report_md = self._ensure_report_claim_citations(detail, report_md)
@@ -85,7 +112,8 @@ class WriterAgentMixin:
         ]
         matrix_sources = self._matrix_source_ids(detail)
         lines.append(
-            "The report writer hit a transient generation error, so this fallback report summarizes "
+            "The report writer hit a transient generation error, so this fallback "
+            "report summarizes "
             "the latest structured knowledge and comparison matrix."
             + self._format_source_refs(matrix_sources)
         )
@@ -110,11 +138,17 @@ class WriterAgentMixin:
             knowledge = detail.competitor_knowledge.get(competitor)
             source_ids = knowledge.source_ids if knowledge is not None else []
             confidence = f"{knowledge.confidence:.2f}" if knowledge is not None else "unknown"
-            lines.append(f"- {competitor}: confidence {confidence}{self._format_source_refs(source_ids)}")
+            lines.append(
+                f"- {competitor}: confidence {confidence}{self._format_source_refs(source_ids)}"
+            )
         if detail.reflections:
             latest = detail.reflections[-1]
             lines.extend(["", "## Confidence Notes"])
-            notes = [*latest.coverage_gaps[:3], *latest.confidence_outliers[:2], *latest.cross_competitor_gaps[:2]]
+            notes = [
+                *latest.coverage_gaps[:3],
+                *latest.confidence_outliers[:2],
+                *latest.cross_competitor_gaps[:2],
+            ]
             for note in notes:
                 lines.append(f"- {note}{self._format_source_refs(matrix_sources)}")
         lines.extend(["", "## Writer Fallback Reason", f"- {reason}"])
@@ -201,29 +235,54 @@ class WriterAgentMixin:
             dimension
             for dimension in detail.plan.dimensions
             if dimension.casefold() in normalized
-            or (dimension == "pricing" and any(token in normalized for token in ("price", "pricing", "cost", "$")))
-            or (dimension == "feature" and any(token in normalized for token in ("feature", "capability", "function")))
-            or (dimension == "persona" and any(token in normalized for token in ("persona", "customer", "user", "buyer", "use case")))
+            or (
+                dimension == "pricing"
+                and any(token in normalized for token in ("price", "pricing", "cost", "$"))
+            )
+            or (
+                dimension == "feature"
+                and any(token in normalized for token in ("feature", "capability", "function"))
+            )
+            or (
+                dimension == "persona"
+                and any(
+                    token in normalized
+                    for token in ("persona", "customer", "user", "buyer", "use case")
+                )
+            )
         ]
 
         def unique(ids: list[str]) -> list[str]:
             seen: set[str] = set()
-            return [source_id for source_id in ids if not (source_id in seen or seen.add(source_id))]
+            return [
+                source_id for source_id in ids if not (source_id in seen or seen.add(source_id))
+            ]
 
         source_ids = [
             source.id
             for source in detail.raw_sources
-            if (not matched_competitors or any(self._source_matches_competitor(source, competitor) for competitor in matched_competitors))
+            if (
+                not matched_competitors
+                or any(
+                    self._source_matches_competitor(source, competitor)
+                    for competitor in matched_competitors
+                )
+            )
             and (not matched_dimensions or source.dimension in matched_dimensions)
         ]
         if not source_ids and matched_competitors:
             source_ids = [
                 source.id
                 for source in detail.raw_sources
-                if any(self._source_matches_competitor(source, competitor) for competitor in matched_competitors)
+                if any(
+                    self._source_matches_competitor(source, competitor)
+                    for competitor in matched_competitors
+                )
             ]
         if not source_ids and matched_dimensions:
-            source_ids = [source.id for source in detail.raw_sources if source.dimension in matched_dimensions]
+            source_ids = [
+                source.id for source in detail.raw_sources if source.dimension in matched_dimensions
+            ]
         if not source_ids:
             source_ids = [source.id for source in detail.raw_sources]
         return unique(source_ids)

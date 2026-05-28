@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 
 from app.deps import get_app_settings
@@ -5,10 +7,11 @@ from packages.config import Settings
 from packages.schema.api_dto import RuntimeConfig
 
 router = APIRouter()
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 
 @router.get("/runtime", response_model=RuntimeConfig)
-def get_runtime(settings: Settings = Depends(get_app_settings)) -> RuntimeConfig:
+def get_runtime(settings: SettingsDep) -> RuntimeConfig:
     return RuntimeConfig(
         default_execution_mode=settings.default_execution_mode,
         demo_mode=settings.demo_mode,

@@ -1,13 +1,12 @@
 import asyncio
-
-import pytest
 from pathlib import Path
 from uuid import uuid4
+
+import pytest
 
 from packages.config import Settings
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
-from packages.search import SearchResult
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
 from packages.schema.models import (
     AnalysisPlan,
@@ -16,10 +15,11 @@ from packages.schema.models import (
     CompetitorKB,
     QCIssue,
     RawSource,
-    ReflectionRecord,
     RedoScope,
+    ReflectionRecord,
     RevisionRecord,
 )
+from packages.search import SearchResult
 from packages.skills.registry import SkillRegistry
 from packages.tools.fetch_page import FetchPageResult
 
@@ -318,8 +318,16 @@ def test_qa_surfaces_latest_reflector_findings() -> None:
     issues = service._build_qa_issues(detail)
     reflector_issues = [issue for issue in issues if issue.detected_by == "reflector"]
 
-    assert [issue.target_subagent for issue in reflector_issues] == ["feature", "pricing", "feature"]
-    assert [issue.redo_scope.kind for issue in reflector_issues] == ["collector", "collector", "comparator"]
+    assert [issue.target_subagent for issue in reflector_issues] == [
+        "feature",
+        "pricing",
+        "feature",
+    ]
+    assert [issue.redo_scope.kind for issue in reflector_issues] == [
+        "collector",
+        "collector",
+        "comparator",
+    ]
     assert all(issue.severity == "warn" for issue in reflector_issues)
 
 
@@ -640,9 +648,7 @@ def test_qa_marks_matrix_value_citation_missing_from_source_ids() -> None:
     issues = service._build_qa_issues(detail)
 
     matrix = [
-        issue
-        for issue in issues
-        if issue.id == "matrix-missing-cited-source-a-feature-feature-1"
+        issue for issue in issues if issue.id == "matrix-missing-cited-source-a-feature-feature-1"
     ]
     assert len(matrix) == 1
     assert matrix[0].severity == "blocker"
@@ -763,7 +769,9 @@ async def test_resume_redo_respects_max_iterations() -> None:
             target_subagent="pricing",
             field_path="raw_sources[pricing]",
             problem="No evidence sources were collected for pricing.",
-            redo_scope=RedoScope(kind="collector", target_subagent="pricing", rationale="Missing pricing."),
+            redo_scope=RedoScope(
+                kind="collector", target_subagent="pricing", rationale="Missing pricing."
+            ),
         )
     ]
     record.detail.revisions = [
@@ -858,14 +866,19 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
     )
     record.detail.report_md = "Previous report. [source:pricing-1]"
     record.detail.revisions = [
-        RevisionRecord(id="rev-1", iteration=1, stage="collector", issue_count_before=2, issue_count_after=1)
+        RevisionRecord(
+            id="rev-1", iteration=1, stage="collector", issue_count_before=2, issue_count_after=1
+        )
     ]
 
     await service._real_writer_step(record)
 
     assert record.detail.report_md == "Previous report. [source:pricing-1]"
     assert record.detail.metrics.revision_count == 1
-    assert record.detail.agent_messages[-1].payload["writer_mode"] == "preserved previous report after writer error"
+    assert (
+        record.detail.agent_messages[-1].payload["writer_mode"]
+        == "preserved previous report after writer error"
+    )
     assert record.detail.agent_messages[-1].trace_span_ids
     assert record.detail.trace_spans[-2].agent == "writer"
     assert record.detail.trace_spans[-2].status == "error"
@@ -886,7 +899,9 @@ def test_candidate_evidence_prefers_matching_search_results() -> None:
 
     results = [
         SearchResult(title="Generic market map", url="https://example.com/map", snippet="A list."),
-        SearchResult(title="Alpha product review", url="https://example.com/alpha", snippet="Alpha details."),
+        SearchResult(
+            title="Alpha product review", url="https://example.com/alpha", snippet="Alpha details."
+        ),
     ]
 
     evidence = service._candidate_evidence("Alpha", results)
@@ -1001,7 +1016,9 @@ async def test_real_pipeline_runs_through_langgraph() -> None:
 
         await service.run_pipeline(detail.id)
 
-        assert order[0] == "planner", [event.message for event in service.get_trace(detail.id) or []]
+        assert order[0] == "planner", [
+            event.message for event in service.get_trace(detail.id) or []
+        ]
         assert set(order[1:3]) == {"collector:A:pricing", "collector:A:feature"}
         assert order[3] == "qa:collect"
         assert set(order[4:6]) == {"analyst:A:pricing", "analyst:A:feature"}
@@ -1035,14 +1052,22 @@ async def test_collector_and_analyst_dimensions_run_concurrently() -> None:
         timeline.append(("planner", "done", asyncio.get_running_loop().time()))
 
     async def fake_collector(record, dimension, competitor):  # noqa: ANN001, ANN202
-        timeline.append((f"collector:{competitor}:{dimension}", "start", asyncio.get_running_loop().time()))
+        timeline.append(
+            (f"collector:{competitor}:{dimension}", "start", asyncio.get_running_loop().time())
+        )
         await asyncio.sleep(0.05)
-        timeline.append((f"collector:{competitor}:{dimension}", "end", asyncio.get_running_loop().time()))
+        timeline.append(
+            (f"collector:{competitor}:{dimension}", "end", asyncio.get_running_loop().time())
+        )
 
     async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
-        timeline.append((f"analyst:{competitor}:{dimension}", "start", asyncio.get_running_loop().time()))
+        timeline.append(
+            (f"analyst:{competitor}:{dimension}", "start", asyncio.get_running_loop().time())
+        )
         await asyncio.sleep(0.05)
-        timeline.append((f"analyst:{competitor}:{dimension}", "end", asyncio.get_running_loop().time()))
+        timeline.append(
+            (f"analyst:{competitor}:{dimension}", "end", asyncio.get_running_loop().time())
+        )
 
     async def fake_comparator(record):  # noqa: ANN001, ANN202
         timeline.append(("comparator", "done", asyncio.get_running_loop().time()))
@@ -1132,7 +1157,9 @@ async def test_collect_qa_blocks_and_retries_collector_before_analyst() -> None:
 
     async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
         order.append("analyst")
-        service._merge_competitor_kb_slice(record.detail, competitor, dimension, ["A costs $10. [source:pricing-1]"])
+        service._merge_competitor_kb_slice(
+            record.detail, competitor, dimension, ["A costs $10. [source:pricing-1]"]
+        )
 
     async def fake_comparator(record):  # noqa: ANN001, ANN202
         order.append("comparator")
@@ -1226,10 +1253,14 @@ async def test_real_pipeline_auto_runs_scoped_redo_for_qa_findings() -> None:
         )
 
     async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
-        service._merge_competitor_kb_slice(record.detail, competitor, dimension, [f"A {dimension} finding."])
+        service._merge_competitor_kb_slice(
+            record.detail, competitor, dimension, [f"A {dimension} finding."]
+        )
 
     async def fake_comparator(record):  # noqa: ANN001, ANN202
-        record.detail.comparison_matrix = service._build_comparison_matrix(record.detail, {"matrix_summary": []})
+        record.detail.comparison_matrix = service._build_comparison_matrix(
+            record.detail, {"matrix_summary": []}
+        )
 
     async def fake_reflector(record):  # noqa: ANN001, ANN202
         return None
@@ -1250,7 +1281,9 @@ async def test_real_pipeline_auto_runs_scoped_redo_for_qa_findings() -> None:
                     target_subagent="pricing",
                     field_path="raw_sources[pricing]",
                     problem="Redo pricing evidence.",
-                    redo_scope=RedoScope(kind="collector", target_subagent="pricing", rationale="Redo pricing."),
+                    redo_scope=RedoScope(
+                        kind="collector", target_subagent="pricing", rationale="Redo pricing."
+                    ),
                 )
             ]
         else:
@@ -1330,10 +1363,14 @@ async def test_real_pipeline_does_not_auto_redo_warn_only_findings() -> None:
         )
 
     async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
-        service._merge_competitor_kb_slice(record.detail, competitor, dimension, ["A pricing finding. [source:pricing-1]"])
+        service._merge_competitor_kb_slice(
+            record.detail, competitor, dimension, ["A pricing finding. [source:pricing-1]"]
+        )
 
     async def fake_comparator(record):  # noqa: ANN001, ANN202
-        record.detail.comparison_matrix = service._build_comparison_matrix(record.detail, {"matrix_summary": []})
+        record.detail.comparison_matrix = service._build_comparison_matrix(
+            record.detail, {"matrix_summary": []}
+        )
 
     async def fake_reflector(record):  # noqa: ANN001, ANN202
         return None
@@ -1353,7 +1390,9 @@ async def test_real_pipeline_does_not_auto_redo_warn_only_findings() -> None:
                 target_subagent="pricing",
                 field_path="raw_sources[pricing].source_type",
                 problem="Pricing source is not independently verified.",
-                redo_scope=RedoScope(kind="collector", target_subagent="pricing", rationale="Retry pricing."),
+                redo_scope=RedoScope(
+                    kind="collector", target_subagent="pricing", rationale="Retry pricing."
+                ),
             )
         ]
 
@@ -1431,10 +1470,14 @@ async def test_real_pipeline_auto_redoes_warn_when_run_option_enabled() -> None:
         )
 
     async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
-        service._merge_competitor_kb_slice(record.detail, competitor, dimension, ["A pricing finding."])
+        service._merge_competitor_kb_slice(
+            record.detail, competitor, dimension, ["A pricing finding."]
+        )
 
     async def fake_comparator(record):  # noqa: ANN001, ANN202
-        record.detail.comparison_matrix = service._build_comparison_matrix(record.detail, {"matrix_summary": []})
+        record.detail.comparison_matrix = service._build_comparison_matrix(
+            record.detail, {"matrix_summary": []}
+        )
 
     async def fake_reflector(record):  # noqa: ANN001, ANN202
         return None
@@ -1455,7 +1498,9 @@ async def test_real_pipeline_auto_redoes_warn_when_run_option_enabled() -> None:
                     target_subagent="pricing",
                     field_path="raw_sources[pricing].source_type",
                     problem="Pricing source is not independently verified.",
-                    redo_scope=RedoScope(kind="collector", target_subagent="pricing", rationale="Retry pricing."),
+                    redo_scope=RedoScope(
+                        kind="collector", target_subagent="pricing", rationale="Retry pricing."
+                    ),
                 )
             ]
         else:
@@ -1572,7 +1617,9 @@ async def test_collector_and_analyst_trace_spans_have_independent_contexts() -> 
         for span in record.detail.trace_spans
         if span.kind == "llm" and span.agent in {"collector", "analyst"}
     )
-    assert len({source.id for source in record.detail.raw_sources}) == len(record.detail.raw_sources)
+    assert len({source.id for source in record.detail.raw_sources}) == len(
+        record.detail.raw_sources
+    )
 
 
 @pytest.mark.asyncio
@@ -1603,8 +1650,16 @@ async def test_collector_react_runner_searches_fetches_and_finishes(
         ),
     )
     actions = [
-        {"action": "web_search", "query": "A pricing official", "rationale": "Find official pricing."},
-        {"action": "fetch_page", "url": "https://example.com/pricing", "rationale": "Inspect pricing page."},
+        {
+            "action": "web_search",
+            "query": "A pricing official",
+            "rationale": "Find official pricing.",
+        },
+        {
+            "action": "fetch_page",
+            "url": "https://example.com/pricing",
+            "rationale": "Inspect pricing page.",
+        },
         {
             "action": "finish",
             "rationale": "Evidence is sufficient.",
@@ -1731,7 +1786,11 @@ async def test_collector_react_finish_fetches_uninspected_urls(
 
     assert record.detail.raw_sources[0].source_type == "webpage_verified"
     assert record.detail.raw_sources[0].content_hash == "finishhash"
-    assert [span.name for span in record.detail.trace_spans if not span.name.startswith("agent_message:")] == [
+    assert [
+        span.name
+        for span in record.detail.trace_spans
+        if not span.name.startswith("agent_message:")
+    ] == [
         "pricing_react_turn_1",
         "robots_check",
         "fetch_page",
@@ -1973,7 +2032,9 @@ async def test_real_scoped_redo_runs_through_langgraph() -> None:
                 target_subagent="pricing",
                 field_path="raw_sources[pricing]",
                 problem="Redo pricing evidence.",
-                redo_scope=RedoScope(kind="collector", target_subagent="pricing", rationale="Redo pricing."),
+                redo_scope=RedoScope(
+                    kind="collector", target_subagent="pricing", rationale="Redo pricing."
+                ),
             )
         ]
 
@@ -2033,7 +2094,9 @@ async def test_demo_pipeline_uses_same_langgraph_fanout_shape() -> None:
 
         events = service.get_trace(detail.id) or []
         collector_subagents = sorted(
-            event.subagent for event in events if event.type == "node_completed" and event.agent == "collector"
+            event.subagent
+            for event in events
+            if event.type == "node_completed" and event.agent == "collector"
         )
         assert collector_subagents == ["pricing::A", "pricing::B"]
         assert any(event.agent == "collector_dispatch" for event in events)

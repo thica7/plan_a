@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
@@ -5,13 +7,14 @@ from app.deps import get_run_service
 from packages.orchestrator.service import RunService
 
 router = APIRouter()
+RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 
 
 @router.get("/runs/{run_id}/stream")
 async def stream_run(
     run_id: str,
     request: Request,
-    service: RunService = Depends(get_run_service),
+    service: RunServiceDep,
 ) -> EventSourceResponse:
     if service.get_run(run_id) is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -23,4 +26,3 @@ async def stream_run(
             yield event.to_sse()
 
     return EventSourceResponse(event_generator())
-

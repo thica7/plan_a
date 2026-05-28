@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from packages.schema.models import QCIssue, RedoScope, ReflectionRecord
 from packages.orchestrator.scoping import assign_redo_scope
+from packages.schema.api_dto import RunDetail
+from packages.schema.models import QCIssue, RedoScope, ReflectionRecord
+
+if TYPE_CHECKING:
+    from packages.orchestrator.service import RunRecord
 
 
 class ReflectorAgentMixin:
@@ -27,7 +32,8 @@ class ReflectorAgentMixin:
             user=(
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
                 f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                f"Source digest JSON: {json.dumps(self._source_digest(detail.raw_sources), ensure_ascii=False)}"
+                f"Source digest JSON: "
+                f"{json.dumps(self._source_digest(detail.raw_sources), ensure_ascii=False)}"
             ),
             schema_hint='{"coverage_gaps":["gap"],"confidence_outliers":["outlier"],"cross_competitor_gaps":["gap"],'
             '"suggested_redo_dimension":"dimension or null"}',
@@ -77,8 +83,18 @@ class ReflectorAgentMixin:
         issues: list[QCIssue] = []
         groups = [
             ("coverage", latest.coverage_gaps, "collector", "reflections[-1].coverage_gaps"),
-            ("confidence", latest.confidence_outliers, "collector", "reflections[-1].confidence_outliers"),
-            ("cross-competitor", latest.cross_competitor_gaps, "comparator", "reflections[-1].cross_competitor_gaps"),
+            (
+                "confidence",
+                latest.confidence_outliers,
+                "collector",
+                "reflections[-1].confidence_outliers",
+            ),
+            (
+                "cross-competitor",
+                latest.cross_competitor_gaps,
+                "comparator",
+                "reflections[-1].cross_competitor_gaps",
+            ),
         ]
         for group_name, findings, target_agent, field_path in groups:
             for index, finding in enumerate(findings[:5], start=1):
@@ -92,7 +108,9 @@ class ReflectorAgentMixin:
                     detected_by="reflector",
                     target_agent=target_agent,
                     target_subagent=dimension,
-                    target_competitor=competitor if target_agent in {"collector", "analyst"} else None,
+                    target_competitor=competitor
+                    if target_agent in {"collector", "analyst"}
+                    else None,
                     field_path=f"{field_path}[{index - 1}]",
                     problem=finding,
                     redo_scope=RedoScope(kind="full", rationale="placeholder"),

@@ -139,10 +139,14 @@ class EnterpriseMemoryStore:
         competitor_ids = [
             self._competitor_id(workspace_id, name) for name in detail.plan.competitors
         ]
-        project_id = project_id or detail.project_id or self._project_id(
-            workspace_id,
-            detail.topic,
-            competitor_ids,
+        project_id = (
+            project_id
+            or detail.project_id
+            or self._project_id(
+                workspace_id,
+                detail.topic,
+                competitor_ids,
+            )
         )
         now = datetime.utcnow()
         context = EnterpriseRunContext(

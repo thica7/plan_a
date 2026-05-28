@@ -18,8 +18,8 @@ from packages.schema.enterprise import (
     WorkspaceRecord,
 )
 from packages.schema.models import (
-    AnalysisPlan,
     AgentMessage,
+    AnalysisPlan,
     ComparisonMatrix,
     CompetitorCandidate,
     CompetitorDiscovery,

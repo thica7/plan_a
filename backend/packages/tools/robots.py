@@ -6,7 +6,6 @@ from urllib.robotparser import RobotFileParser
 
 import httpx
 
-
 DEFAULT_USER_AGENT = "CompetiscopeBot"
 
 

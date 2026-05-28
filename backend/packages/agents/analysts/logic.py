@@ -4,19 +4,13 @@ import hashlib
 import json
 import re
 from datetime import datetime
-from typing import Any, Iterable, Literal
+from typing import TYPE_CHECKING, Any
 
 from packages.agents import SubagentContext
 from packages.agents.analysts.citation_tools import inspect_sources, validate_source_ids
 from packages.memory import KBCacheEntry
-from packages.orchestrator.scoping import assign_redo_scope
-from packages.search import SearchResult
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
-    ComparisonCell,
-    ComparisonMatrix,
-    CompetitorCandidate,
-    CompetitorDiscovery,
     CompetitorKB,
     CompetitorKnowledge,
     FeatureNode,
@@ -24,16 +18,16 @@ from packages.schema.models import (
     KnowledgeClaim,
     PricingModel,
     PricingTier,
-    QCIssue,
     RawSource,
-    RedoScope,
-    ReflectionRecord,
     UserPersonaModel,
     UserPersonaSegment,
 )
-from packages.tools import fetch_page
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+
+if TYPE_CHECKING:
+    from packages.orchestrator.service import RunRecord
+
 
 class AnalystAgentMixin:
     async def _real_analyst_dispatch_step(
@@ -67,7 +61,10 @@ class AnalystAgentMixin:
                     source.id
                     for source in detail.raw_sources
                     if source.dimension in dimensions
-                    and any(self._source_matches_competitor(source, competitor) for competitor in competitors)
+                    and any(
+                        self._source_matches_competitor(source, competitor)
+                        for competitor in competitors
+                    )
                 ],
             },
         )
@@ -115,7 +112,8 @@ class AnalystAgentMixin:
                     "You are a bounded analyst ReAct runner. Decide exactly one next action. "
                     "Allowed actions are inspect_sources, validate_citations, finish. "
                     "Use only the provided RawSource JSON. Do not invent facts. "
-                    "Finish only when findings are grouped by competitor and cite source IDs when possible."
+                    "Finish only when findings are grouped by competitor and cite source IDs "
+                    "when possible."
                 ),
                 user=(
                     f"Topic: {detail.topic}\n"
@@ -124,7 +122,8 @@ class AnalystAgentMixin:
                     f"Sources JSON: {json.dumps(dimension_sources, ensure_ascii=False)}\n"
                     f"QA feedback for redo: {json.dumps(qa_feedback, ensure_ascii=False)}\n"
                     f"Observations JSON: {json.dumps(observations, ensure_ascii=False)}\n\n"
-                    "Return one action. For finish, include competitor_findings, source_ids_used, and caveats."
+                    "Return one action. For finish, include competitor_findings, "
+                    "source_ids_used, and caveats."
                 ),
                 schema_hint=(
                     '{"action":"inspect_sources|validate_citations|finish",'
@@ -136,7 +135,9 @@ class AnalystAgentMixin:
             )
             action = str(payload.get("action") or "").strip().lower()
             if action == "inspect_sources":
-                observation = self._inspect_sources_tool(record, dimension, context, dimension_sources)
+                observation = self._inspect_sources_tool(
+                    record, dimension, context, dimension_sources
+                )
                 inspected = True
                 observations.append({"turn": turn, "action": action, "observation": observation})
                 continue
@@ -151,7 +152,9 @@ class AnalystAgentMixin:
                     dimension_sources,
                     requested_source_ids,
                 )
-                validated_source_ids.update(str(source_id) for source_id in observation["valid_source_ids"])
+                validated_source_ids.update(
+                    str(source_id) for source_id in observation["valid_source_ids"]
+                )
                 observations.append({"turn": turn, "action": action, "observation": observation})
                 continue
             if action == "finish":
@@ -160,7 +163,9 @@ class AnalystAgentMixin:
                     observations.append({"turn": turn, "action": action, "error": "empty_findings"})
                     continue
                 if not inspected:
-                    observation = self._inspect_sources_tool(record, dimension, context, dimension_sources)
+                    observation = self._inspect_sources_tool(
+                        record, dimension, context, dimension_sources
+                    )
                     inspected = True
                     observations.append(
                         {
@@ -171,7 +176,11 @@ class AnalystAgentMixin:
                         }
                     )
                 used_source_ids = self._source_ids_from_analyst_payload(payload, dimension_sources)
-                unvalidated_source_ids = [source_id for source_id in used_source_ids if source_id not in validated_source_ids]
+                unvalidated_source_ids = [
+                    source_id
+                    for source_id in used_source_ids
+                    if source_id not in validated_source_ids
+                ]
                 if used_source_ids and unvalidated_source_ids:
                     observation = self._validate_source_ids_tool(
                         record,
@@ -180,7 +189,9 @@ class AnalystAgentMixin:
                         dimension_sources,
                         unvalidated_source_ids,
                     )
-                    validated_source_ids.update(str(source_id) for source_id in observation["valid_source_ids"])
+                    validated_source_ids.update(
+                        str(source_id) for source_id in observation["valid_source_ids"]
+                    )
                     observations.append(
                         {
                             "turn": turn,
@@ -189,10 +200,15 @@ class AnalystAgentMixin:
                             "reason": "required_before_finish",
                         }
                     )
-                    if observation["unknown_source_ids"] and turn < self._settings.analyst_react_max_turns:
+                    if (
+                        observation["unknown_source_ids"]
+                        and turn < self._settings.analyst_react_max_turns
+                    ):
                         continue
                 return self._ensure_analyst_citations(detail, dimension, payload, normalized)
-            observations.append({"turn": turn, "action": action or "unknown", "error": "unsupported_action"})
+            observations.append(
+                {"turn": turn, "action": action or "unknown", "error": "unsupported_action"}
+            )
         return None
 
     def _source_ids_from_analyst_payload(
@@ -205,7 +221,9 @@ class AnalystAgentMixin:
             for source in dimension_sources
             if str(source.get("id") or "").strip()
         ]
-        explicit_ids = self._string_list(payload.get("source_ids_used") or payload.get("source_ids"))
+        explicit_ids = self._string_list(
+            payload.get("source_ids_used") or payload.get("source_ids")
+        )
         payload_text = json.dumps(payload, ensure_ascii=False)
         found_ids: list[str] = []
         seen: set[str] = set()
@@ -228,7 +246,8 @@ class AnalystAgentMixin:
             competitor: [
                 source.id
                 for source in detail.raw_sources
-                if source.dimension == dimension and self._source_matches_competitor(source, competitor)
+                if source.dimension == dimension
+                and self._source_matches_competitor(source, competitor)
             ]
             for competitor in detail.plan.competitors
         }
@@ -238,7 +257,9 @@ class AnalystAgentMixin:
             competitor_source_ids = source_ids_by_competitor.get(competitor, [])
             findings: list[str] = []
             for finding in normalized.get(competitor, []):
-                has_known_citation = any(source_id in finding for source_id in competitor_source_ids)
+                has_known_citation = any(
+                    source_id in finding for source_id in competitor_source_ids
+                )
                 if not has_known_citation and competitor_source_ids:
                     finding = f"{finding} [source:{competitor_source_ids[0]}]"
                     changed = True
@@ -320,8 +341,10 @@ class AnalystAgentMixin:
                 subagent=context.subagent,
                 name=f"{dimension}_{self._issue_id_fragment(competitor)}_analyst_react_turn_{turn}",
                 system=(
-                    "You are a bounded analyst ReAct runner for exactly one competitor and one dimension. "
-                    "Decide exactly one next action. Allowed actions are inspect_sources, validate_citations, finish. "
+                    "You are a bounded analyst ReAct runner for exactly one competitor "
+                    "and one dimension. "
+                    "Decide exactly one next action. Allowed actions are inspect_sources, "
+                    "validate_citations, finish. "
                     "Use only the provided RawSource JSON. Do not invent facts. "
                     "Finish only with strict structured knowledge whose claims cite source IDs."
                 ),
@@ -332,21 +355,26 @@ class AnalystAgentMixin:
                     f"Sources JSON: {json.dumps(dimension_sources, ensure_ascii=False)}\n"
                     f"QA feedback for redo: {json.dumps(qa_feedback, ensure_ascii=False)}\n"
                     f"Observations JSON: {json.dumps(observations, ensure_ascii=False)}\n\n"
-                    "Return one action. For finish, include the strict structured knowledge slice for this dimension."
+                    "Return one action. For finish, include the strict structured "
+                    "knowledge slice for this dimension."
                 ),
                 schema_hint=json.dumps(
                     {
                         "action": "inspect_sources|validate_citations|finish",
                         "source_ids": ["source-id"],
                         "rationale": "short reason",
-                        "structured_knowledge": json.loads(self._structured_knowledge_schema_hint(dimension)),
+                        "structured_knowledge": json.loads(
+                            self._structured_knowledge_schema_hint(dimension)
+                        ),
                     }
                 ),
                 context=context,
             )
             action = str(payload.get("action") or "").strip().lower()
             if action == "inspect_sources":
-                observation = self._inspect_sources_tool(record, dimension, context, dimension_sources)
+                observation = self._inspect_sources_tool(
+                    record, dimension, context, dimension_sources
+                )
                 inspected = True
                 observations.append({"turn": turn, "action": action, "observation": observation})
                 continue
@@ -361,7 +389,9 @@ class AnalystAgentMixin:
                     dimension_sources,
                     requested_source_ids,
                 )
-                validated_source_ids.update(str(source_id) for source_id in observation["valid_source_ids"])
+                validated_source_ids.update(
+                    str(source_id) for source_id in observation["valid_source_ids"]
+                )
                 observations.append({"turn": turn, "action": action, "observation": observation})
                 continue
             if action == "finish":
@@ -370,7 +400,9 @@ class AnalystAgentMixin:
                     observations.append({"turn": turn, "action": action, "error": "empty_findings"})
                     continue
                 if not inspected:
-                    observation = self._inspect_sources_tool(record, dimension, context, dimension_sources)
+                    observation = self._inspect_sources_tool(
+                        record, dimension, context, dimension_sources
+                    )
                     inspected = True
                     observations.append(
                         {
@@ -381,7 +413,11 @@ class AnalystAgentMixin:
                         }
                     )
                 used_source_ids = self._source_ids_from_analyst_payload(payload, dimension_sources)
-                unvalidated_source_ids = [source_id for source_id in used_source_ids if source_id not in validated_source_ids]
+                unvalidated_source_ids = [
+                    source_id
+                    for source_id in used_source_ids
+                    if source_id not in validated_source_ids
+                ]
                 if used_source_ids and unvalidated_source_ids:
                     observation = self._validate_source_ids_tool(
                         record,
@@ -390,7 +426,9 @@ class AnalystAgentMixin:
                         dimension_sources,
                         unvalidated_source_ids,
                     )
-                    validated_source_ids.update(str(source_id) for source_id in observation["valid_source_ids"])
+                    validated_source_ids.update(
+                        str(source_id) for source_id in observation["valid_source_ids"]
+                    )
                     observations.append(
                         {
                             "turn": turn,
@@ -399,13 +437,20 @@ class AnalystAgentMixin:
                             "reason": "required_before_finish",
                         }
                     )
-                    if observation["unknown_source_ids"] and turn < self._settings.analyst_react_max_turns:
+                    if (
+                        observation["unknown_source_ids"]
+                        and turn < self._settings.analyst_react_max_turns
+                    ):
                         continue
                 return payload
-            observations.append({"turn": turn, "action": action or "unknown", "error": "unsupported_action"})
+            observations.append(
+                {"turn": turn, "action": action or "unknown", "error": "unsupported_action"}
+            )
         return None
 
-    async def _real_analyst_branch_step(self, record: RunRecord, dimension: str, competitor: str) -> None:
+    async def _real_analyst_branch_step(
+        self, record: RunRecord, dimension: str, competitor: str
+    ) -> None:
         detail = record.detail
         branch_id = self._analyst_branch_id(dimension, competitor)
         context = SubagentContext(run_id=detail.id, agent="analyst", subagent=branch_id)
@@ -421,7 +466,10 @@ class AnalystAgentMixin:
                 "competitor": competitor,
                 "dimension": dimension,
                 "source_ids": [
-                    source.id for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
+                    source.id
+                    for source in self._sources_for_competitor_dimension(
+                        detail, competitor, dimension
+                    )
                 ],
                 "qa_feedback": qa_feedback,
             },
@@ -510,7 +558,12 @@ class AnalystAgentMixin:
                         "analyst",
                         branch_id,
                         f"ReAct analyst completed {competitor} / {dimension} slice.",
-                        {"analysis": payload, "context": context.metadata(), "dimension": dimension, "competitor": competitor},
+                        {
+                            "analysis": payload,
+                            "context": context.metadata(),
+                            "dimension": dimension,
+                            "competitor": competitor,
+                        },
                     )
                     return
             except Exception as exc:  # noqa: BLE001 - bounded ReAct falls back to one-shot analysis.
@@ -522,9 +575,10 @@ class AnalystAgentMixin:
             subagent=branch_id,
             name=f"{dimension}_{self._issue_id_fragment(competitor)}_analyst",
             system=(
-                "You are an analyst subagent. Produce strict structured competitor knowledge for exactly "
-                "one competitor and one dimension. Do not output free-form findings as the primary artifact. "
-                "Every factual claim must include at least one source_id from the provided RawSource JSON."
+                "You are an analyst subagent. Produce strict structured competitor "
+                "knowledge for exactly one competitor and one dimension. Do not output "
+                "free-form findings as the primary artifact. Every factual claim must "
+                "include at least one source_id from the provided RawSource JSON."
             ),
             user=(
                 f"Topic: {detail.topic}\n"
@@ -560,7 +614,13 @@ class AnalystAgentMixin:
             "analyst",
             branch_id,
             f"Analyst completed {competitor} / {dimension} slice.",
-            {"analysis": payload, "react": react_payload, "context": context.metadata(), "dimension": dimension, "competitor": competitor},
+            {
+                "analysis": payload,
+                "react": react_payload,
+                "context": context.metadata(),
+                "dimension": dimension,
+                "competitor": competitor,
+            },
         )
 
     async def _real_analyst_step(self, record: RunRecord, dimension: str) -> None:
@@ -583,9 +643,13 @@ class AnalystAgentMixin:
         react_payload: dict[str, object] = {}
         if self._settings.analyst_react_enabled:
             try:
-                payload = await self._run_analyst_react(record, dimension, context, dimension_sources)
+                payload = await self._run_analyst_react(
+                    record, dimension, context, dimension_sources
+                )
                 if payload is not None:
-                    self._merge_kb_slice(detail, dimension, self._normalize_competitor_findings(detail, payload))
+                    self._merge_kb_slice(
+                        detail, dimension, self._normalize_competitor_findings(detail, payload)
+                    )
                     detail.updated_at = datetime.utcnow()
                     await self.emit(
                         detail.id,
@@ -604,7 +668,10 @@ class AnalystAgentMixin:
             agent="analyst",
             subagent=dimension,
             name=f"{dimension}_analyst",
-            system="You are an analyst subagent. Convert source candidates into comparison-ready findings.",
+            system=(
+                "You are an analyst subagent. Convert source candidates into "
+                "comparison-ready findings."
+            ),
             user=(
                 f"Topic: {detail.topic}\n"
                 f"Dimension: {dimension}\n"
@@ -614,7 +681,9 @@ class AnalystAgentMixin:
             schema_hint='{"competitor_findings":{"competitor":["finding"]},"caveats":["caveat"]}',
             context=context,
         )
-        self._merge_kb_slice(detail, dimension, self._normalize_competitor_findings(detail, payload))
+        self._merge_kb_slice(
+            detail, dimension, self._normalize_competitor_findings(detail, payload)
+        )
         detail.updated_at = datetime.utcnow()
         await self.emit(
             detail.id,
@@ -712,7 +781,9 @@ class AnalystAgentMixin:
         return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:24]
 
     def _apply_kb_cache_entry(self, detail: RunDetail, entry: KBCacheEntry) -> None:
-        kb = detail.competitor_kbs.get(entry.competitor) or CompetitorKB(competitor=entry.competitor)
+        kb = detail.competitor_kbs.get(entry.competitor) or CompetitorKB(
+            competitor=entry.competitor
+        )
         kb.slices[entry.dimension] = entry.kb_slice
         kb.sources = sorted(set(kb.sources + entry.source_ids))
         kb.confidence = entry.confidence
@@ -729,7 +800,9 @@ class AnalystAgentMixin:
             knowledge.user_personas = cached.user_personas
         else:
             knowledge.feature_tree = cached.feature_tree
-        knowledge.source_ids = sorted(set(knowledge.source_ids + entry.source_ids + cached.source_ids))
+        knowledge.source_ids = sorted(
+            set(knowledge.source_ids + entry.source_ids + cached.source_ids)
+        )
         knowledge.confidence = max(knowledge.confidence, cached.confidence, entry.confidence)
         detail.competitor_knowledge[entry.competitor] = knowledge
 
@@ -767,11 +840,15 @@ class AnalystAgentMixin:
         competitor_findings: dict[str, list[str]],
     ) -> None:
         for competitor in detail.plan.competitors:
-            findings = [finding for finding in competitor_findings.get(competitor, []) if finding.strip()]
+            findings = [
+                finding for finding in competitor_findings.get(competitor, []) if finding.strip()
+            ]
             if not findings:
                 findings = [
                     source.snippet or source.title
-                    for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
+                    for source in self._sources_for_competitor_dimension(
+                        detail, competitor, dimension
+                    )
                 ][:3]
             kb = detail.competitor_kbs.get(competitor) or CompetitorKB(competitor=competitor)
             kb.slices[dimension] = findings
@@ -833,7 +910,9 @@ class AnalystAgentMixin:
         dimension: str,
         findings: list[str],
     ) -> None:
-        knowledge = detail.competitor_knowledge.get(competitor) or CompetitorKnowledge(competitor=competitor)
+        knowledge = detail.competitor_knowledge.get(competitor) or CompetitorKnowledge(
+            competitor=competitor
+        )
         claims = self._claims_from_findings(detail, competitor, dimension, findings)
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
@@ -889,7 +968,9 @@ class AnalystAgentMixin:
         raw = payload.get("structured_knowledge")
         if not isinstance(raw, dict):
             raw = payload
-        knowledge = detail.competitor_knowledge.get(competitor) or CompetitorKnowledge(competitor=competitor)
+        knowledge = detail.competitor_knowledge.get(competitor) or CompetitorKnowledge(
+            competitor=competitor
+        )
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
             section = raw.get("pricing_model")
@@ -920,7 +1001,10 @@ class AnalystAgentMixin:
         knowledge.source_ids = sorted(
             {
                 source_id
-                for source_id in [*knowledge.source_ids, *[sid for claim in claims for sid in claim.source_ids]]
+                for source_id in [
+                    *knowledge.source_ids,
+                    *[sid for claim in claims for sid in claim.source_ids],
+                ]
             }
         )
         knowledge.confidence = self._claim_list_confidence(claims)
@@ -936,10 +1020,14 @@ class AnalystAgentMixin:
     ) -> None:
         kb = detail.competitor_kbs.get(competitor) or CompetitorKB(competitor=competitor)
         kb.slices[dimension] = [
-            f"{claim.claim} [source:{claim.source_ids[0]}]" if claim.source_ids[0] not in claim.claim else claim.claim
+            f"{claim.claim} [source:{claim.source_ids[0]}]"
+            if claim.source_ids[0] not in claim.claim
+            else claim.claim
             for claim in claims
         ]
-        kb.sources = sorted(set(kb.sources + [source_id for claim in claims for source_id in claim.source_ids]))
+        kb.sources = sorted(
+            set(kb.sources + [source_id for claim in claims for source_id in claim.source_ids])
+        )
         kb.confidence = self._claim_list_confidence(claims)
         detail.competitor_kbs[competitor] = kb
 
@@ -1002,7 +1090,9 @@ class AnalystAgentMixin:
             }
         )
 
-    def _claims_from_structured_payload(self, payload: dict[str, Any], dimension: str) -> list[KnowledgeClaim]:
+    def _claims_from_structured_payload(
+        self, payload: dict[str, Any], dimension: str
+    ) -> list[KnowledgeClaim]:
         raw = payload.get("structured_knowledge")
         if not isinstance(raw, dict):
             raw = payload
@@ -1011,7 +1101,9 @@ class AnalystAgentMixin:
             dimension_key = dimension.casefold()
             if "pricing" in dimension_key and isinstance(raw.get("pricing_model"), dict):
                 probe.pricing_model = PricingModel.model_validate(raw["pricing_model"])
-            elif ("persona" in dimension_key or "user" in dimension_key) and isinstance(raw.get("user_personas"), dict):
+            elif ("persona" in dimension_key or "user" in dimension_key) and isinstance(
+                raw.get("user_personas"), dict
+            ):
                 probe.user_personas = UserPersonaModel.model_validate(raw["user_personas"])
             elif isinstance(raw.get("feature_tree"), dict):
                 probe.feature_tree = FeatureTree.model_validate(raw["feature_tree"])
@@ -1046,19 +1138,21 @@ class AnalystAgentMixin:
 
     def _claim_confidence(self, detail: RunDetail, source_ids: list[str]) -> float:
         confidences = [
-            source.confidence
-            for source in detail.raw_sources
-            if source.id in source_ids
+            source.confidence for source in detail.raw_sources if source.id in source_ids
         ]
         if not confidences:
             return 0.0
         return sum(confidences) / len(confidences)
 
     def _extract_price_hint(self, text: str) -> str:
-        match = re.search(r"(?:\$|USD\s*)\s?\d+(?:[.,]\d+)?(?:\s?/\s?\w+)?", text, flags=re.IGNORECASE)
+        match = re.search(
+            r"(?:\$|USD\s*)\s?\d+(?:[.,]\d+)?(?:\s?/\s?\w+)?", text, flags=re.IGNORECASE
+        )
         return match.group(0) if match else "unknown"
 
-    def _normalize_competitor_findings(self, detail: RunDetail, payload: dict) -> dict[str, list[str]]:
+    def _normalize_competitor_findings(
+        self, detail: RunDetail, payload: dict
+    ) -> dict[str, list[str]]:
         raw = payload.get("competitor_findings")
         if isinstance(raw, dict):
             normalized: dict[str, list[str]] = {}

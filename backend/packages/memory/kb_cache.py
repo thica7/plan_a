@@ -29,7 +29,7 @@ class KBCache:
         self._init_db()
 
     @classmethod
-    def from_default_path(cls) -> "KBCache":
+    def from_default_path(cls) -> KBCache:
         return cls(Path("runs") / "kb_cache.db")
 
     def get(self, competitor: str, dimension: str, content_hash: str) -> KBCacheEntry | None:
@@ -77,7 +77,9 @@ class KBCache:
         conn = self._connect()
         try:
             row_count = conn.execute("select count(*) from kb_cache").fetchone()[0]
-            competitor_count = conn.execute("select count(distinct competitor) from kb_cache").fetchone()[0]
+            competitor_count = conn.execute(
+                "select count(distinct competitor) from kb_cache"
+            ).fetchone()[0]
         finally:
             conn.close()
         return {"entries": int(row_count), "competitors": int(competitor_count)}
@@ -101,7 +103,8 @@ class KBCache:
                 """
             )
             conn.execute(
-                "create index if not exists idx_kb_cache_competitor on kb_cache(competitor, dimension)"
+                "create index if not exists idx_kb_cache_competitor "
+                "on kb_cache(competitor, dimension)"
             )
             conn.commit()
         finally:

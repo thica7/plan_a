@@ -74,9 +74,7 @@ async def test_legacy_agent_executor_returns_typed_error() -> None:
         handler=handler,
     )
 
-    result = await executor.execute(
-        AgentExecutionRequest(run_id="run-1", agent_name="collector")
-    )
+    result = await executor.execute(AgentExecutionRequest(run_id="run-1", agent_name="collector"))
 
     assert result.status == "error"
     assert result.error == "failed run-1"

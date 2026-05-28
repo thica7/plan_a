@@ -28,4 +28,3 @@ class SubagentContext:
             "message_count": len(self.messages),
             "tool_call_count": len(self.tool_trace),
         }
-

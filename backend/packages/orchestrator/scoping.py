@@ -11,7 +11,9 @@ def assign_redo_scope(issue: QCIssue) -> RedoScope:
             rationale="comparison matrix mismatch",
         )
     if issue.target_agent == "comparator":
-        return RedoScope(kind="comparator", target_subagent=issue.target_subagent, rationale=issue.problem)
+        return RedoScope(
+            kind="comparator", target_subagent=issue.target_subagent, rationale=issue.problem
+        )
     if issue.target_agent == "analyst":
         return RedoScope(
             kind="analyst",

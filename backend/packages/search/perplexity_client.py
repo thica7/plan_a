@@ -39,7 +39,9 @@ class PerplexitySearchClient:
         async with httpx.AsyncClient(timeout=self._settings.llm_timeout_seconds) as client:
             response = await client.post(url, json=payload, headers=headers)
         if response.status_code >= 400:
-            raise WebSearchError(f"Perplexity search failed with {response.status_code}: {response.text[:500]}")
+            raise WebSearchError(
+                f"Perplexity search failed with {response.status_code}: {response.text[:500]}"
+            )
 
         data = response.json()
         raw_results = data.get("results", [])

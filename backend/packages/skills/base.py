@@ -19,5 +19,5 @@ class SkillDefinition:
         self.source_path = source_path
 
     @classmethod
-    def from_yaml(cls, path: Path) -> "SkillDefinition":
+    def from_yaml(cls, path: Path) -> SkillDefinition:
         return cls(spec=load_skill_spec(path), source_path=path)

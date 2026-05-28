@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_run_service
@@ -6,12 +8,13 @@ from packages.orchestrator.service import RunService
 from packages.schema.models import AgentMessage, ToolCallMessage, TraceSpan
 
 router = APIRouter()
+RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 
 
 @router.get("/runs/{run_id}/trace", response_model=list[RunEvent])
 async def get_trace(
     run_id: str,
-    service: RunService = Depends(get_run_service),
+    service: RunServiceDep,
 ) -> list[RunEvent]:
     events = service.get_trace(run_id)
     if events is None:
@@ -22,7 +25,7 @@ async def get_trace(
 @router.get("/runs/{run_id}/trace/spans", response_model=list[TraceSpan])
 async def get_trace_spans(
     run_id: str,
-    service: RunService = Depends(get_run_service),
+    service: RunServiceDep,
 ) -> list[TraceSpan]:
     spans = service.get_trace_spans(run_id)
     if spans is None:
@@ -33,7 +36,7 @@ async def get_trace_spans(
 @router.get("/runs/{run_id}/trace/agent-messages", response_model=list[AgentMessage])
 async def get_agent_messages(
     run_id: str,
-    service: RunService = Depends(get_run_service),
+    service: RunServiceDep,
 ) -> list[AgentMessage]:
     messages = service.get_agent_messages(run_id)
     if messages is None:
@@ -44,7 +47,7 @@ async def get_agent_messages(
 @router.get("/runs/{run_id}/trace/tool-calls", response_model=list[ToolCallMessage])
 async def get_tool_call_messages(
     run_id: str,
-    service: RunService = Depends(get_run_service),
+    service: RunServiceDep,
 ) -> list[ToolCallMessage]:
     messages = service.get_tool_call_messages(run_id)
     if messages is None:

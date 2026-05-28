@@ -7,11 +7,23 @@ from langgraph.types import Send
 
 from packages.agents import (
     analysts as analyst_agent,
+)
+from packages.agents import (
     collectors as collector_agent,
+)
+from packages.agents import (
     comparator as comparator_agent,
+)
+from packages.agents import (
     planner as planner_agent,
+)
+from packages.agents import (
     qa as qa_agent,
+)
+from packages.agents import (
     reflector as reflector_agent,
+)
+from packages.agents import (
     writer as writer_agent,
 )
 from packages.orchestrator.state import GraphState
@@ -208,7 +220,9 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
         branch_dimensions = state.get("branch_dimensions") or []
         branch_competitors = state.get("branch_competitors") or []
         if not branch_dimensions or not branch_competitors:
-            raise RuntimeError("collector node must be entered through Send(competitor x dimension).")
+            raise RuntimeError(
+                "collector node must be entered through Send(competitor x dimension)."
+            )
         dimension = branch_dimensions[-1]
         competitor = branch_competitors[-1]
         await collector_agent.run_branch(service, record, dimension, competitor)
@@ -216,7 +230,11 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
 
     async def collect_join(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
-        dimensions = _ordered_unique(state.get("dimensions") or state.get("branch_dimensions") or record.detail.plan.dimensions)
+        dimensions = _ordered_unique(
+            state.get("dimensions")
+            or state.get("branch_dimensions")
+            or record.detail.plan.dimensions
+        )
         await collector_agent.join(service, record, list(dimensions))
         return {"current_node": "collect_join", "dimensions": list(dimensions)}
 
@@ -244,10 +262,22 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
 
     async def analyst_join(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
-        dimensions = _ordered_unique(state.get("dimensions") or state.get("branch_dimensions") or record.detail.plan.dimensions)
-        competitors = _ordered_unique(state.get("target_competitors") or state.get("branch_competitors") or record.detail.plan.competitors)
+        dimensions = _ordered_unique(
+            state.get("dimensions")
+            or state.get("branch_dimensions")
+            or record.detail.plan.dimensions
+        )
+        competitors = _ordered_unique(
+            state.get("target_competitors")
+            or state.get("branch_competitors")
+            or record.detail.plan.competitors
+        )
         await analyst_agent.join(service, record, list(dimensions), list(competitors))
-        return {"current_node": "analyst_join", "dimensions": list(dimensions), "target_competitors": list(competitors)}
+        return {
+            "current_node": "analyst_join",
+            "dimensions": list(dimensions),
+            "target_competitors": list(competitors),
+        }
 
     async def collect_qa(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
@@ -256,8 +286,16 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
         blockers = service._blocking_phase_issues(record.detail, "collect")
         if blockers:
             attempts += 1
-        next_dimensions = sorted(service._issue_dimensions(record.detail, blockers)) if blockers else list(state.get("dimensions") or record.detail.plan.dimensions)
-        next_competitors = sorted(service._issue_target_competitors(record.detail, blockers)) if blockers else list(state.get("target_competitors") or [])
+        next_dimensions = (
+            sorted(service._issue_dimensions(record.detail, blockers))
+            if blockers
+            else list(state.get("dimensions") or record.detail.plan.dimensions)
+        )
+        next_competitors = (
+            sorted(service._issue_target_competitors(record.detail, blockers))
+            if blockers
+            else list(state.get("target_competitors") or [])
+        )
         return {
             "current_node": "collect_qa",
             "collect_qa_attempts": attempts,
@@ -272,8 +310,16 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
         blockers = service._blocking_phase_issues(record.detail, "analyst")
         if blockers:
             attempts += 1
-        next_dimensions = sorted(service._issue_dimensions(record.detail, blockers)) if blockers else list(state.get("dimensions") or record.detail.plan.dimensions)
-        next_competitors = sorted(service._issue_target_competitors(record.detail, blockers)) if blockers else list(state.get("target_competitors") or [])
+        next_dimensions = (
+            sorted(service._issue_dimensions(record.detail, blockers))
+            if blockers
+            else list(state.get("dimensions") or record.detail.plan.dimensions)
+        )
+        next_competitors = (
+            sorted(service._issue_target_competitors(record.detail, blockers))
+            if blockers
+            else list(state.get("target_competitors") or [])
+        )
         return {
             "current_node": "analyst_qa",
             "analyst_qa_attempts": attempts,
@@ -350,7 +396,9 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
         branch_dimensions = state.get("branch_dimensions") or []
         branch_competitors = state.get("branch_competitors") or []
         if not branch_dimensions or not branch_competitors:
-            raise RuntimeError("collector node must be entered through Send(competitor x dimension).")
+            raise RuntimeError(
+                "collector node must be entered through Send(competitor x dimension)."
+            )
         dimension = branch_dimensions[-1]
         competitor = branch_competitors[-1]
         await service._demo_collector_branch_step(record, dimension, competitor)
@@ -358,7 +406,11 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
 
     async def collect_join(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
-        dimensions = _ordered_unique(state.get("dimensions") or state.get("branch_dimensions") or record.detail.plan.dimensions)
+        dimensions = _ordered_unique(
+            state.get("dimensions")
+            or state.get("branch_dimensions")
+            or record.detail.plan.dimensions
+        )
         await service._demo_collect_join_step(record, list(dimensions))
         return {"current_node": "collect_join", "dimensions": list(dimensions)}
 
@@ -369,7 +421,9 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
             "current_node": "collect_qa",
             "collect_qa_attempts": state.get("collect_qa_attempts", 0),
             "dimensions": list(state.get("dimensions") or record.detail.plan.dimensions),
-            "target_competitors": list(state.get("target_competitors") or record.detail.plan.competitors),
+            "target_competitors": list(
+                state.get("target_competitors") or record.detail.plan.competitors
+            ),
         }
 
     async def analyst_dispatch(state: GraphState) -> GraphState:
@@ -396,10 +450,22 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
 
     async def analyst_join(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
-        dimensions = _ordered_unique(state.get("dimensions") or state.get("branch_dimensions") or record.detail.plan.dimensions)
-        competitors = _ordered_unique(state.get("target_competitors") or state.get("branch_competitors") or record.detail.plan.competitors)
+        dimensions = _ordered_unique(
+            state.get("dimensions")
+            or state.get("branch_dimensions")
+            or record.detail.plan.dimensions
+        )
+        competitors = _ordered_unique(
+            state.get("target_competitors")
+            or state.get("branch_competitors")
+            or record.detail.plan.competitors
+        )
         await analyst_agent.join(service, record, list(dimensions), list(competitors))
-        return {"current_node": "analyst_join", "dimensions": list(dimensions), "target_competitors": list(competitors)}
+        return {
+            "current_node": "analyst_join",
+            "dimensions": list(dimensions),
+            "target_competitors": list(competitors),
+        }
 
     async def analyst_qa(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
@@ -408,7 +474,9 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
             "current_node": "analyst_qa",
             "analyst_qa_attempts": state.get("analyst_qa_attempts", 0),
             "dimensions": list(state.get("dimensions") or record.detail.plan.dimensions),
-            "target_competitors": list(state.get("target_competitors") or record.detail.plan.competitors),
+            "target_competitors": list(
+                state.get("target_competitors") or record.detail.plan.competitors
+            ),
         }
 
     async def comparator(state: GraphState) -> GraphState:
