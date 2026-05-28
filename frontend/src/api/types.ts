@@ -335,6 +335,19 @@ export interface ProjectRecord {
   updated_at: string;
 }
 
+export interface CompetitorRecord {
+  id: string;
+  workspace_id: string;
+  name: string;
+  normalized_name: string;
+  layer: CompetitorLayer;
+  homepage_url?: string | null;
+  aliases: string[];
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface EvidenceRecord {
   id: string;
   workspace_id: string;

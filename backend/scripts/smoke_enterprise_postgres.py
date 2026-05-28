@@ -45,6 +45,27 @@ async def main() -> None:
     await service.run_pipeline(detail.id)
     completed = service.get_run(detail.id)
     if completed is None or completed.status != "completed":
+        trace = service.get_trace(detail.id) if completed is not None else []
+        print(
+            json.dumps(
+                {
+                    "component": "enterprise_postgres",
+                    "ok": False,
+                    "run_id": detail.id,
+                    "status": completed.status if completed else None,
+                    "current_node": completed.current_node if completed else None,
+                    "last_events": [
+                        {
+                            "type": event.type,
+                            "agent": event.agent,
+                            "message": event.message,
+                        }
+                        for event in (trace or [])[-5:]
+                    ],
+                },
+                ensure_ascii=False,
+            )
+        )
         raise SystemExit("Postgres enterprise demo run did not complete.")
 
     loaded = store.get_run_projection(detail.id)

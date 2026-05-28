@@ -86,6 +86,8 @@ def test_enterprise_store_bootstraps_context_and_deduplicates_audit() -> None:
     assert store.list_projects()[0].competitor_set_hash
     assert first.competitor_id_map["Cursor"].startswith("competitor-")
     assert len(store.project_competitors) == 1
+    assert store.get_project(first.project_id) is not None
+    assert [item.name for item in store.list_competitors(project_id=first.project_id)] == ["Cursor"]
 
 
 def test_enterprise_store_round_trips_projection() -> None:
@@ -110,6 +112,28 @@ def test_enterprise_store_round_trips_projection() -> None:
     assert [item.id for item in loaded.claim_records] == [
         item.id for item in projection.claim_records
     ]
+
+
+def test_enterprise_store_increments_report_version_by_group() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+
+    store.save_projection(projection)
+    next_version = store.next_report_version_number(
+        project_id=projection.project_id,
+        topic_normalized=projection.report_version.topic_normalized,
+        competitor_layer=projection.report_version.competitor_layer,
+        competitor_set_hash=projection.report_version.competitor_set_hash,
+    )
+
+    assert next_version == 2
 
 
 @pytest.mark.asyncio
@@ -145,6 +169,44 @@ async def test_run_service_writes_enterprise_projection_on_completion() -> None:
     assert record.events[-1].payload["enterprise_projection"]["evidence_count"] == 1
 
 
+@pytest.mark.asyncio
+async def test_run_service_increments_enterprise_report_versions() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+
+    async def run_once() -> str:
+        created = await service.create_run(
+            RunCreateRequest(
+                topic="AI coding assistant comparison",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+        record = service._runs[created.id]
+        detail = _detail()
+        record.detail.raw_sources = detail.raw_sources
+        record.detail.competitor_knowledge = detail.competitor_knowledge
+        record.detail.report_md = detail.report_md
+        record.detail.status = "running"
+        await service._finalize_demo_pipeline(record)
+        return created.id
+
+    first_run_id = await run_once()
+    second_run_id = await run_once()
+
+    first_projection = store.get_run_projection(first_run_id)
+    second_projection = store.get_run_projection(second_run_id)
+    assert first_projection is not None
+    assert second_projection is not None
+    assert first_projection.report_version.version_number == 1
+    assert second_projection.report_version.version_number == 2
+
+
 def test_enterprise_router_exposes_projection() -> None:
     store = EnterpriseMemoryStore()
     detail = _detail()
@@ -163,8 +225,25 @@ def test_enterprise_router_exposes_projection() -> None:
 
     response = client.get(f"/api/enterprise/runs/{detail.id}/projection")
     workspaces = client.get("/api/enterprise/workspaces")
+    project = client.get(f"/api/enterprise/projects/{context.project_id}")
+    competitors = client.get(f"/api/enterprise/competitors?project_id={context.project_id}")
 
     assert response.status_code == 200
     assert response.json()["report_version"]["id"].startswith("report-run-1")
     assert workspaces.status_code == 200
     assert workspaces.json()[0]["id"] == "default-workspace"
+    assert project.status_code == 200
+    assert project.json()["id"] == context.project_id
+    assert competitors.status_code == 200
+    assert [item["name"] for item in competitors.json()] == ["Cursor"]
+
+
+def test_enterprise_router_returns_404_for_missing_project() -> None:
+    store = EnterpriseMemoryStore()
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    client = TestClient(app)
+
+    response = client.get("/api/enterprise/projects/missing")
+
+    assert response.status_code == 404

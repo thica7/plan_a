@@ -21,6 +21,7 @@ from packages.agents.reflector.logic import ReflectorAgentMixin
 from packages.agents.writer.logic import WriterAgentMixin
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore, build_enterprise_projection
+from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.llm import DoubaoClient
 from packages.memory import KBCache, KBCacheEntry, RunJournal
 from packages.orchestrator.audit import build_revision_record, convergence_ratio
@@ -1366,10 +1367,19 @@ class RunService(
         )
         detail.workspace_id = context.workspace_id
         detail.project_id = context.project_id
+        competitor_set_hash = compute_competitor_set_hash(context.competitor_ids)
+        topic_normalized = compute_topic_normalized(detail.topic)
+        version_number = self._enterprise_store.next_report_version_number(
+            project_id=context.project_id,
+            topic_normalized=topic_normalized,
+            competitor_layer="unknown",
+            competitor_set_hash=competitor_set_hash,
+        )
         projection = build_enterprise_projection(
             detail,
             workspace_id=context.workspace_id,
             project_id=context.project_id,
+            version_number=version_number,
             competitor_id_map=context.competitor_id_map,
         )
         self._enterprise_store.save_projection(projection)

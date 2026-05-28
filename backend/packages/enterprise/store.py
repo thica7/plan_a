@@ -47,6 +47,15 @@ class EnterpriseStore(Protocol):
 
     def save_projection(self, projection: EnterpriseRunProjection) -> None: ...
 
+    def next_report_version_number(
+        self,
+        *,
+        project_id: str,
+        topic_normalized: str,
+        competitor_layer: str,
+        competitor_set_hash: str,
+    ) -> int: ...
+
     def project_id_for_run(self, run_id: str) -> str | None: ...
 
     def get_run_projection(self, run_id: str) -> EnterpriseRunProjection | None: ...
@@ -54,6 +63,15 @@ class EnterpriseStore(Protocol):
     def list_workspaces(self) -> list[WorkspaceRecord]: ...
 
     def list_projects(self, workspace_id: str | None = None) -> list[ProjectRecord]: ...
+
+    def get_project(self, project_id: str) -> ProjectRecord | None: ...
+
+    def list_competitors(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+    ) -> list[CompetitorRecord]: ...
 
     def list_evidence(self, project_id: str | None = None) -> list[EvidenceRecord]: ...
 
@@ -211,6 +229,25 @@ class EnterpriseMemoryStore:
                 },
             )
 
+    def next_report_version_number(
+        self,
+        *,
+        project_id: str,
+        topic_normalized: str,
+        competitor_layer: str,
+        competitor_set_hash: str,
+    ) -> int:
+        with self._lock:
+            versions = [
+                version.version_number
+                for version in self.report_versions.values()
+                if version.project_id == project_id
+                and version.topic_normalized == topic_normalized
+                and version.competitor_layer == competitor_layer
+                and version.competitor_set_hash == competitor_set_hash
+            ]
+            return (max(versions) + 1) if versions else 1
+
     def project_id_for_run(self, run_id: str) -> str | None:
         with self._lock:
             context = self._run_contexts.get(run_id)
@@ -230,6 +267,29 @@ class EnterpriseMemoryStore:
             if workspace_id:
                 projects = [item for item in projects if item.workspace_id == workspace_id]
             return sorted(projects, key=lambda item: item.updated_at, reverse=True)
+
+    def get_project(self, project_id: str) -> ProjectRecord | None:
+        with self._lock:
+            return self.projects.get(project_id)
+
+    def list_competitors(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+    ) -> list[CompetitorRecord]:
+        with self._lock:
+            records = list(self.competitors.values())
+            if workspace_id:
+                records = [item for item in records if item.workspace_id == workspace_id]
+            if project_id:
+                linked_ids = {
+                    competitor_id
+                    for link_project_id, competitor_id in self.project_competitors
+                    if link_project_id == project_id
+                }
+                records = [item for item in records if item.id in linked_ids]
+            return sorted(records, key=lambda item: item.name.casefold())
 
     def list_evidence(self, project_id: str | None = None) -> list[EvidenceRecord]:
         with self._lock:

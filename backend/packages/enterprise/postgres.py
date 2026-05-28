@@ -18,6 +18,7 @@ from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     AuditLogRecord,
     ClaimRecord,
+    CompetitorRecord,
     EnterpriseRunProjection,
     EvidenceRecord,
     ProjectRecord,
@@ -149,6 +150,28 @@ class EnterprisePostgresStore:
                 )
             conn.commit()
 
+    def next_report_version_number(
+        self,
+        *,
+        project_id: str,
+        topic_normalized: str,
+        competitor_layer: str,
+        competitor_set_hash: str,
+    ) -> int:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            row = conn.execute(
+                """
+                SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version
+                FROM report_versions
+                WHERE project_id = %s
+                  AND topic_normalized = %s
+                  AND competitor_layer = %s
+                  AND competitor_set_hash = %s
+                """,
+                (project_id, topic_normalized, competitor_layer, competitor_set_hash),
+            ).fetchone()
+        return int(row["next_version"]) if row else 1
+
     def project_id_for_run(self, run_id: str) -> str | None:
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
             row = conn.execute("SELECT project_id FROM runs WHERE id = %s", (run_id,)).fetchone()
@@ -209,6 +232,32 @@ class EnterprisePostgresStore:
             (),
             ProjectRecord,
         )
+
+    def get_project(self, project_id: str) -> ProjectRecord | None:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            row = conn.execute("SELECT * FROM projects WHERE id = %s", (project_id,)).fetchone()
+        return ProjectRecord.model_validate(dict(row)) if row else None
+
+    def list_competitors(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+    ) -> list[CompetitorRecord]:
+        sql = "SELECT c.* FROM competitors c"
+        params: list[str] = []
+        clauses: list[str] = []
+        if project_id:
+            sql += " JOIN project_competitors pc ON pc.competitor_id = c.id"
+            clauses.append("pc.project_id = %s")
+            params.append(project_id)
+        if workspace_id:
+            clauses.append("c.workspace_id = %s")
+            params.append(workspace_id)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY lower(c.name)"
+        return self._list_models(sql, tuple(params), CompetitorRecord)
 
     def list_evidence(self, project_id: str | None = None) -> list[EvidenceRecord]:
         if project_id:

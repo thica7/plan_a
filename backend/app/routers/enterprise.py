@@ -7,6 +7,7 @@ from packages.enterprise import EnterpriseStore
 from packages.schema.enterprise import (
     AuditLogRecord,
     ClaimRecord,
+    CompetitorRecord,
     EnterpriseRunProjection,
     EvidenceRecord,
     ProjectRecord,
@@ -31,6 +32,26 @@ def list_projects(
     workspace_id: str | None = None,
 ) -> list[ProjectRecord]:
     return store.list_projects(workspace_id=workspace_id)
+
+
+@router.get("/enterprise/projects/{project_id}", response_model=ProjectRecord)
+def get_project(
+    project_id: str,
+    store: EnterpriseStoreDep,
+) -> ProjectRecord:
+    project = store.get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@router.get("/enterprise/competitors", response_model=list[CompetitorRecord])
+def list_competitors(
+    store: EnterpriseStoreDep,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+) -> list[CompetitorRecord]:
+    return store.list_competitors(workspace_id=workspace_id, project_id=project_id)
 
 
 @router.get("/enterprise/projects/{project_id}/evidence", response_model=list[EvidenceRecord])
