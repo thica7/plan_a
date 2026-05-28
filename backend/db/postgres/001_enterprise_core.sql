@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS evidence_records (
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
-CREATE TABLE IF NOT EXISTS claim_records (
+CREATE TABLE IF NOT EXISTS knowledge_claims (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id),
     project_id TEXT NOT NULL REFERENCES projects(id),
@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS claim_records (
 );
 
 CREATE TABLE IF NOT EXISTS claim_evidence (
-    claim_id TEXT NOT NULL REFERENCES claim_records(id) ON DELETE CASCADE,
+    claim_id TEXT NOT NULL REFERENCES knowledge_claims(id) ON DELETE CASCADE,
     evidence_id TEXT NOT NULL REFERENCES evidence_records(id) ON DELETE CASCADE,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id),
     project_id TEXT NOT NULL REFERENCES projects(id),
@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS report_versions (
 
 CREATE TABLE IF NOT EXISTS report_version_claims (
     report_version_id TEXT NOT NULL REFERENCES report_versions(id) ON DELETE CASCADE,
-    claim_id TEXT NOT NULL REFERENCES claim_records(id) ON DELETE CASCADE,
+    claim_id TEXT NOT NULL REFERENCES knowledge_claims(id) ON DELETE CASCADE,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id),
     project_id TEXT NOT NULL REFERENCES projects(id),
     ordinal INTEGER NOT NULL DEFAULT 0,
@@ -175,7 +175,7 @@ CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_project_dimension
     ON evidence_records(project_id, dimension);
 CREATE INDEX IF NOT EXISTS idx_claims_project_competitor
-    ON claim_records(project_id, competitor_id);
+    ON knowledge_claims(project_id, competitor_id);
 CREATE INDEX IF NOT EXISTS idx_claim_evidence_evidence
     ON claim_evidence(evidence_id);
 CREATE INDEX IF NOT EXISTS idx_report_versions_project_group

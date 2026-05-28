@@ -57,6 +57,7 @@ class EnterprisePostgresStore:
             with conn.cursor() as cur:
                 for statement in _split_sql(script):
                     cur.execute(statement)
+                self._copy_legacy_claim_records(cur)
             conn.commit()
 
     def ping(self) -> str:
@@ -297,7 +298,7 @@ class EnterprisePostgresStore:
             )
             claim_records = self._records_by_ids(
                 conn,
-                table="claim_records",
+                table="knowledge_claims",
                 ids=report_claim_ids,
                 model=ClaimRecord,
             )
@@ -335,6 +336,61 @@ class EnterprisePostgresStore:
             row = conn.execute("SELECT * FROM projects WHERE id = %s", (project_id,)).fetchone()
         return ProjectRecord.model_validate(dict(row)) if row else None
 
+    def upsert_project(self, project: ProjectRecord) -> ProjectRecord:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._upsert_workspace(cur, project.workspace_id)
+                self._upsert_default_user(cur)
+                before_row = cur.execute(
+                    "SELECT * FROM projects WHERE id = %s",
+                    (project.id,),
+                ).fetchone()
+                cur.execute(
+                    """
+                    INSERT INTO projects (
+                        id, workspace_id, name, topic, topic_normalized,
+                        competitor_layer, competitor_set_hash, scenario_id,
+                        created_by, created_at, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        topic = EXCLUDED.topic,
+                        topic_normalized = EXCLUDED.topic_normalized,
+                        competitor_layer = EXCLUDED.competitor_layer,
+                        competitor_set_hash = EXCLUDED.competitor_set_hash,
+                        scenario_id = EXCLUDED.scenario_id,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (
+                        project.id,
+                        project.workspace_id,
+                        project.name,
+                        project.topic,
+                        project.topic_normalized,
+                        project.competitor_layer,
+                        project.competitor_set_hash,
+                        project.scenario_id,
+                        project.created_by,
+                        project.created_at,
+                        project.updated_at,
+                    ),
+                )
+                self._append_audit(
+                    cur,
+                    workspace_id=project.workspace_id,
+                    actor_id=project.created_by or DEFAULT_USER_ID,
+                    action="project.upserted",
+                    resource_type="project",
+                    resource_id=project.id,
+                    before=ProjectRecord.model_validate(dict(before_row)).model_dump(mode="json")
+                    if before_row
+                    else None,
+                    after=project.model_dump(mode="json"),
+                )
+            conn.commit()
+        return project
+
     def list_competitors(
         self,
         *,
@@ -368,6 +424,29 @@ class EnterprisePostgresStore:
             (),
             EvidenceRecord,
         )
+
+    def upsert_evidence(self, evidence: EvidenceRecord) -> EvidenceRecord:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                before_row = cur.execute(
+                    "SELECT * FROM evidence_records WHERE id = %s",
+                    (evidence.id,),
+                ).fetchone()
+                self._upsert_evidence(cur, evidence)
+                self._append_audit(
+                    cur,
+                    workspace_id=evidence.workspace_id,
+                    actor_id=DEFAULT_USER_ID,
+                    action="evidence.upserted",
+                    resource_type="evidence",
+                    resource_id=evidence.id,
+                    before=EvidenceRecord.model_validate(dict(before_row)).model_dump(mode="json")
+                    if before_row
+                    else None,
+                    after=evidence.model_dump(mode="json"),
+                )
+            conn.commit()
+        return evidence
 
     def update_evidence_quality(
         self,
@@ -419,12 +498,12 @@ class EnterprisePostgresStore:
     def list_claims(self, project_id: str | None = None) -> list[ClaimRecord]:
         if project_id:
             return self._list_models(
-                "SELECT * FROM claim_records WHERE project_id = %s ORDER BY created_at DESC",
+                "SELECT * FROM knowledge_claims WHERE project_id = %s ORDER BY created_at DESC",
                 (project_id,),
                 ClaimRecord,
             )
         return self._list_models(
-            "SELECT * FROM claim_records ORDER BY created_at DESC",
+            "SELECT * FROM knowledge_claims ORDER BY created_at DESC",
             (),
             ClaimRecord,
         )
@@ -454,6 +533,31 @@ class EnterprisePostgresStore:
                 (version_id,),
             ).fetchone()
         return ReportVersionRecord.model_validate(dict(row)) if row else None
+
+    def upsert_report_version(self, version: ReportVersionRecord) -> ReportVersionRecord:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                before_row = cur.execute(
+                    "SELECT * FROM report_versions WHERE id = %s",
+                    (version.id,),
+                ).fetchone()
+                self._upsert_report_version(cur, version)
+                self._append_audit(
+                    cur,
+                    workspace_id=version.workspace_id,
+                    actor_id=DEFAULT_USER_ID,
+                    action="report_version.upserted",
+                    resource_type="report_version",
+                    resource_id=version.id,
+                    before=ReportVersionRecord.model_validate(dict(before_row)).model_dump(
+                        mode="json"
+                    )
+                    if before_row
+                    else None,
+                    after=version.model_dump(mode="json"),
+                )
+            conn.commit()
+        return version
 
     def get_previous_report_version(
         self,
@@ -723,7 +827,7 @@ class EnterprisePostgresStore:
     def _upsert_claim(self, cur: Any, claim: ClaimRecord) -> None:
         cur.execute(
             """
-            INSERT INTO claim_records (
+            INSERT INTO knowledge_claims (
                 id, workspace_id, project_id, run_id, competitor_id, claim_type,
                 claim_text, evidence_ids, confidence, status, created_by_agent, created_at
             )
@@ -748,6 +852,34 @@ class EnterprisePostgresStore:
                 claim.created_at,
             ),
         )
+        if self._relation_exists(cur, "claim_records"):
+            cur.execute(
+                """
+                INSERT INTO claim_records (
+                    id, workspace_id, project_id, run_id, competitor_id, claim_type,
+                    claim_text, evidence_ids, confidence, status, created_by_agent, created_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    evidence_ids = EXCLUDED.evidence_ids,
+                    confidence = EXCLUDED.confidence,
+                    status = EXCLUDED.status
+                """,
+                (
+                    claim.id,
+                    claim.workspace_id,
+                    claim.project_id,
+                    claim.run_id,
+                    claim.competitor_id,
+                    claim.claim_type,
+                    claim.claim_text,
+                    claim.evidence_ids,
+                    claim.confidence,
+                    claim.status,
+                    claim.created_by_agent,
+                    claim.created_at,
+                ),
+            )
         self._replace_claim_evidence_links(cur, claim)
 
     def _upsert_report_version(self, cur: Any, report: ReportVersionRecord) -> None:
@@ -867,6 +999,36 @@ class EnterprisePostgresStore:
             tuple(params),
         ).fetchone()
         return row is not None
+
+    def _relation_exists(self, cur: Any, relation_name: str) -> bool:
+        row = cur.execute(
+            """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = %s
+            LIMIT 1
+            """,
+            (relation_name,),
+        ).fetchone()
+        return row is not None
+
+    def _copy_legacy_claim_records(self, cur: Any) -> None:
+        if not self._relation_exists(cur, "claim_records"):
+            return
+        cur.execute(
+            """
+            INSERT INTO knowledge_claims (
+                id, workspace_id, project_id, run_id, competitor_id, claim_type,
+                claim_text, evidence_ids, confidence, status, created_by_agent, created_at
+            )
+            SELECT
+                id, workspace_id, project_id, run_id, competitor_id, claim_type,
+                claim_text, evidence_ids, confidence, status, created_by_agent, created_at
+            FROM claim_records
+            ON CONFLICT (id) DO NOTHING
+            """
+        )
 
     def _append_audit_once(
         self,

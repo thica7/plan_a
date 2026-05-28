@@ -63,6 +63,14 @@ def list_projects(
     return store.list_projects(workspace_id=workspace_id)
 
 
+@router.post("/enterprise/projects", response_model=ProjectRecord)
+def upsert_project(
+    project: ProjectRecord,
+    store: EnterpriseStoreDep,
+) -> ProjectRecord:
+    return store.upsert_project(project)
+
+
 @router.get("/enterprise/projects/{project_id}", response_model=ProjectRecord)
 def get_project(
     project_id: str,
@@ -186,6 +194,14 @@ def list_project_evidence(
     return store.list_evidence(project_id=project_id)
 
 
+@router.post("/enterprise/evidence", response_model=EvidenceRecord)
+def upsert_evidence(
+    evidence: EvidenceRecord,
+    store: EnterpriseStoreDep,
+) -> EvidenceRecord:
+    return store.upsert_evidence(evidence)
+
+
 @router.patch(
     "/enterprise/evidence/{evidence_id}/quality",
     response_model=EvidenceQualityUpdateResult,
@@ -222,6 +238,14 @@ def list_project_report_versions(
     store: EnterpriseStoreDep,
 ) -> list[ReportVersionRecord]:
     return store.list_report_versions(project_id=project_id)
+
+
+@router.post("/enterprise/report-versions", response_model=ReportVersionRecord)
+def upsert_report_version(
+    version: ReportVersionRecord,
+    store: EnterpriseStoreDep,
+) -> ReportVersionRecord:
+    return store.upsert_report_version(version)
 
 
 @router.get("/enterprise/report-versions/{version_id}", response_model=ReportVersionRecord)

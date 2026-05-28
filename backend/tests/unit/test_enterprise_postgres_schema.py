@@ -21,7 +21,7 @@ def test_phase1_postgres_schema_has_strict_core_tables() -> None:
         "project_competitors",
         "runs",
         "evidence_records",
-        "claim_records",
+        "knowledge_claims",
         "claim_evidence",
         "report_versions",
         "report_version_claims",

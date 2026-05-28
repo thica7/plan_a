@@ -94,13 +94,19 @@ class WriterAgentMixin:
             },
         )
         detail.updated_at = datetime.utcnow()
+        projection = self._sync_enterprise_projection(record)
         await self.emit(
             detail.id,
             "report_updated",
             "writer",
             None,
             f"Report markdown updated from {writer_mode}.",
-            {"report_md": detail.report_md, "writer_mode": writer_mode, "error": writer_error},
+            {
+                "report_md": detail.report_md,
+                "writer_mode": writer_mode,
+                "error": writer_error,
+                **self._enterprise_projection_payload(projection),
+            },
         )
         await self.emit(detail.id, "node_completed", "writer", None, "Writer completed.")
 

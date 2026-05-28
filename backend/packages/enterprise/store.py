@@ -67,6 +67,8 @@ class EnterpriseStore(Protocol):
 
     def get_project(self, project_id: str) -> ProjectRecord | None: ...
 
+    def upsert_project(self, project: ProjectRecord) -> ProjectRecord: ...
+
     def list_competitors(
         self,
         *,
@@ -75,6 +77,8 @@ class EnterpriseStore(Protocol):
     ) -> list[CompetitorRecord]: ...
 
     def list_evidence(self, project_id: str | None = None) -> list[EvidenceRecord]: ...
+
+    def upsert_evidence(self, evidence: EvidenceRecord) -> EvidenceRecord: ...
 
     def update_evidence_quality(
         self,
@@ -88,6 +92,8 @@ class EnterpriseStore(Protocol):
     def list_claims(self, project_id: str | None = None) -> list[ClaimRecord]: ...
 
     def list_report_versions(self, project_id: str | None = None) -> list[ReportVersionRecord]: ...
+
+    def upsert_report_version(self, version: ReportVersionRecord) -> ReportVersionRecord: ...
 
     def get_report_version(self, version_id: str) -> ReportVersionRecord | None: ...
 
@@ -373,6 +379,23 @@ class EnterpriseMemoryStore:
         with self._lock:
             return self.projects.get(project_id)
 
+    def upsert_project(self, project: ProjectRecord) -> ProjectRecord:
+        with self._lock:
+            self._ensure_workspace(project.workspace_id)
+            existing = self.projects.get(project.id)
+            before = existing.model_dump(mode="json") if existing is not None else None
+            self.projects[project.id] = project
+            self._append_audit(
+                workspace_id=project.workspace_id,
+                actor_id=project.created_by or DEFAULT_USER_ID,
+                action="project.upserted",
+                resource_type="project",
+                resource_id=project.id,
+                before=before,
+                after=project.model_dump(mode="json"),
+            )
+            return project
+
     def list_competitors(
         self,
         *,
@@ -398,6 +421,21 @@ class EnterpriseMemoryStore:
             if project_id:
                 records = [item for item in records if item.project_id == project_id]
             return sorted(records, key=lambda item: item.captured_at, reverse=True)
+
+    def upsert_evidence(self, evidence: EvidenceRecord) -> EvidenceRecord:
+        with self._lock:
+            before_record = self.evidence_records.get(evidence.id)
+            self.evidence_records[evidence.id] = evidence
+            self._append_audit(
+                workspace_id=evidence.workspace_id,
+                actor_id=DEFAULT_USER_ID,
+                action="evidence.upserted",
+                resource_type="evidence",
+                resource_id=evidence.id,
+                before=before_record.model_dump(mode="json") if before_record else None,
+                after=evidence.model_dump(mode="json"),
+            )
+            return evidence
 
     def update_evidence_quality(
         self,
@@ -448,6 +486,21 @@ class EnterpriseMemoryStore:
     def get_report_version(self, version_id: str) -> ReportVersionRecord | None:
         with self._lock:
             return self.report_versions.get(version_id)
+
+    def upsert_report_version(self, version: ReportVersionRecord) -> ReportVersionRecord:
+        with self._lock:
+            before_record = self.report_versions.get(version.id)
+            self.report_versions[version.id] = version
+            self._append_audit(
+                workspace_id=version.workspace_id,
+                actor_id=DEFAULT_USER_ID,
+                action="report_version.upserted",
+                resource_type="report_version",
+                resource_id=version.id,
+                before=before_record.model_dump(mode="json") if before_record else None,
+                after=version.model_dump(mode="json"),
+            )
+            return version
 
     def get_previous_report_version(
         self,

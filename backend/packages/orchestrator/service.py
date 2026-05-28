@@ -824,15 +824,26 @@ class RunService(
         detail.current_node = "writer"
         detail.report_md = self._demo_report(detail)
         detail.updated_at = datetime.utcnow()
+        projection = self._sync_enterprise_projection(record)
         await self.emit(
             detail.id,
             "report_updated",
             "writer",
             None,
             "Report markdown updated.",
-            {"report_md": detail.report_md},
+            {
+                "report_md": detail.report_md,
+                **self._enterprise_projection_payload(projection),
+            },
         )
-        await self.emit(detail.id, "node_completed", "writer", None, "Demo writer completed.")
+        await self.emit(
+            detail.id,
+            "node_completed",
+            "writer",
+            None,
+            "Demo writer completed.",
+            self._enterprise_projection_payload(projection),
+        )
 
     async def _demo_qa_step(self, record: RunRecord) -> None:
         detail = record.detail
@@ -1419,12 +1430,16 @@ class RunService(
         detail.project_id = context.project_id
         competitor_set_hash = compute_competitor_set_hash(context.competitor_ids)
         topic_normalized = compute_topic_normalized(detail.topic)
-        version_number = self._enterprise_store.next_report_version_number(
-            project_id=context.project_id,
-            topic_normalized=topic_normalized,
-            competitor_layer=detail.plan.competitor_layer,
-            competitor_set_hash=competitor_set_hash,
-        )
+        existing_projection = self._enterprise_store.get_run_projection(detail.id)
+        if existing_projection is not None:
+            version_number = existing_projection.report_version.version_number
+        else:
+            version_number = self._enterprise_store.next_report_version_number(
+                project_id=context.project_id,
+                topic_normalized=topic_normalized,
+                competitor_layer=detail.plan.competitor_layer,
+                competitor_set_hash=competitor_set_hash,
+            )
         projection = build_enterprise_projection(
             detail,
             workspace_id=context.workspace_id,

@@ -256,6 +256,39 @@ async def test_run_service_writes_enterprise_projection_on_completion() -> None:
 
 
 @pytest.mark.asyncio
+async def test_writer_node_persists_enterprise_report_version_draft() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+    created = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[created.id]
+    detail = _detail()
+    record.detail.raw_sources = detail.raw_sources
+    record.detail.competitor_knowledge = detail.competitor_knowledge
+    record.detail.status = "running"
+
+    await service._demo_writer_step(record)
+
+    projection = store.get_run_projection(created.id)
+    assert projection is not None
+    assert projection.report_version.report_md == record.detail.report_md
+    assert projection.report_version.version_number == 1
+    assert record.events[-1].payload["enterprise_projection"]["report_version_id"] == (
+        projection.report_version.id
+    )
+
+
+@pytest.mark.asyncio
 async def test_run_service_attaches_business_intel_plan_to_project() -> None:
     store = EnterpriseMemoryStore()
     service = RunService(
@@ -346,9 +379,21 @@ def test_enterprise_router_exposes_projection() -> None:
     readiness = client.get(f"/api/enterprise/projects/{context.project_id}/readiness-score")
     gaps = client.get(f"/api/enterprise/projects/{context.project_id}/evidence-gaps")
     competitors = client.get(f"/api/enterprise/competitors?project_id={context.project_id}")
+    project_upsert = client.post(
+        "/api/enterprise/projects",
+        json=store.get_project(context.project_id).model_dump(mode="json"),
+    )
+    evidence_upsert = client.post(
+        "/api/enterprise/evidence",
+        json=projection.evidence_records[0].model_dump(mode="json"),
+    )
     quality = client.patch(
         f"/api/enterprise/evidence/{projection.evidence_records[0].id}/quality",
         json={"quality_label": "stale", "note": "Needs review."},
+    )
+    report_upsert = client.post(
+        "/api/enterprise/report-versions",
+        json=projection.report_version.model_dump(mode="json"),
     )
     version = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}")
     diff = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}/diff")
@@ -369,8 +414,14 @@ def test_enterprise_router_exposes_projection() -> None:
     assert "gap_count" in gaps.json()
     assert competitors.status_code == 200
     assert [item["name"] for item in competitors.json()] == ["Cursor"]
+    assert project_upsert.status_code == 200
+    assert project_upsert.json()["id"] == context.project_id
+    assert evidence_upsert.status_code == 200
+    assert evidence_upsert.json()["id"] == projection.evidence_records[0].id
     assert quality.status_code == 200
     assert quality.json()["evidence"]["quality_label"] == "stale"
+    assert report_upsert.status_code == 200
+    assert report_upsert.json()["id"] == projection.report_version.id
     assert version.status_code == 200
     assert version.json()["id"] == projection.report_version.id
     assert diff.status_code == 200
