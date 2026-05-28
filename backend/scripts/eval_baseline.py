@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import sys
@@ -65,10 +66,10 @@ FALLBACK_CASES = [
 ]
 
 
-def load_cases(limit: int = 5) -> list[EvalCase]:
+def load_cases(limit: int | None = 5) -> list[EvalCase]:
     path = Path("data/golden_set.jsonl")
     if not path.exists():
-        return FALLBACK_CASES[:limit]
+        return FALLBACK_CASES if limit is None else FALLBACK_CASES[:limit]
     cases: list[EvalCase] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -83,9 +84,11 @@ def load_cases(limit: int = 5) -> list[EvalCase]:
                 layer=str(row.get("expected_layer", "L1")),
             )
         )
-        if len(cases) >= limit:
+        if limit is not None and len(cases) >= limit:
             break
-    return cases or FALLBACK_CASES[:limit]
+    if cases:
+        return cases
+    return FALLBACK_CASES if limit is None else FALLBACK_CASES[:limit]
 
 
 async def run_case(case: EvalCase) -> dict[str, object]:
@@ -153,7 +156,8 @@ async def run_case(case: EvalCase) -> dict[str, object]:
 
 
 async def main() -> None:
-    rows = [await run_case(case) for case in load_cases(limit=5)]
+    args = _parse_args()
+    rows = [await run_case(case) for case in load_cases(limit=args.limit)]
     summary = {
         "component": "baseline_eval",
         "ok": all(bool(row["passed"]) for row in rows),
@@ -164,6 +168,20 @@ async def main() -> None:
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     if not summary["ok"]:
         raise SystemExit("Phase 1 baseline eval smoke failed.")
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run deterministic baseline eval cases.")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="Number of golden cases to run. Use 0 for all cases.",
+    )
+    args = parser.parse_args()
+    if args.limit <= 0:
+        args.limit = None
+    return args
 
 
 if __name__ == "__main__":
