@@ -29,3 +29,8 @@ The Phase 4 worker registers exactly one outer workflow first:
 This keeps Temporal responsible for workflow durability and retry boundaries,
 while `RunService` and LangGraph remain responsible for planner, collector,
 analyst, comparator, QA, redo, and HITL behavior inside a single run.
+
+The first API integration point is `POST /api/workflows/competitive-intel`,
+which submits the same request shape as direct run creation and returns `202`
+with deterministic workflow/run IDs. Direct `/api/runs` remains available while
+the Temporal path is verified.

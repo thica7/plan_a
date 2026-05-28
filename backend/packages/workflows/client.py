@@ -22,13 +22,13 @@ async def start_competitive_intel_workflow(
     handle = await client.start_workflow(
         CompetitiveIntelWorkflow.run,
         request,
-        id=workflow_id or _workflow_id(request),
+        id=workflow_id or workflow_id_for_request(request),
         task_queue=task_queue,
     )
     return await handle.result()
 
 
-def _workflow_id(request: CompetitiveIntelWorkflowInput) -> str:
+def workflow_id_for_request(request: CompetitiveIntelWorkflowInput) -> str:
     source = request.idempotency_key or "|".join(
         [
             request.workspace_id,

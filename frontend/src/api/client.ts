@@ -22,6 +22,7 @@ import type {
   SkillSpec,
   ToolCallMessage,
   TraceSpan,
+  WorkflowStartResponse,
 } from "./types";
 import type { RunEvent } from "./sse_types";
 
@@ -62,6 +63,13 @@ export function getRuntime() {
 
 export function createRun(payload: RunCreateRequest) {
   return request<RunDetail>("/runs", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function startCompetitiveIntelWorkflow(payload: RunCreateRequest) {
+  return request<WorkflowStartResponse>("/workflows/competitive-intel", {
     method: "POST",
     body: JSON.stringify(payload),
   });

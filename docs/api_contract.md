@@ -11,6 +11,7 @@ All backend routes are mounted under `/api`.
 | `GET` | `/runs/{run_id}/trace` | Fetch persisted run event trace |
 | `POST` | `/runs/{run_id}/resume` | Resume after a HITL interrupt |
 | `POST` | `/runs/{run_id}/redo` | Start a manual scoped redo after QA findings |
+| `POST` | `/workflows/competitive-intel` | Start the Phase 4 Temporal wrapper for a competitive analysis run |
 | `GET` | `/skills` | List available analysis dimensions |
 | `GET` | `/runtime` | Fetch non-secret runtime capability flags |
 | `GET` | `/health` | Check config, skill registry, and SQLite readiness |

@@ -1735,6 +1735,47 @@
           }
         }
       }
+    },
+    "/api/workflows/competitive-intel": {
+      "post": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Start Competitive Intel Workflow",
+        "operationId": "start_competitive_intel_workflow_api_workflows_competitive_intel_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5757,6 +5798,50 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WorkflowStartResponse": {
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "title": "Workflow Id"
+          },
+          "workflow_type": {
+            "type": "string",
+            "const": "CompetitiveIntelWorkflow",
+            "title": "Workflow Type",
+            "default": "CompetitiveIntelWorkflow"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "title": "Idempotency Key"
+          },
+          "task_queue": {
+            "type": "string",
+            "title": "Task Queue"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "started",
+              "already_started"
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workflow_id",
+          "run_id",
+          "idempotency_key",
+          "task_queue",
+          "status"
+        ],
+        "title": "WorkflowStartResponse"
       },
       "WorkspaceRecord": {
         "properties": {

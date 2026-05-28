@@ -247,6 +247,7 @@ export interface RunMetrics {
 export interface RunCreateRequest {
   workspace_id?: string;
   project_id?: string | null;
+  idempotency_key?: string | null;
   topic: string;
   competitors: string[];
   dimensions: string[];
@@ -258,6 +259,7 @@ export interface RunCreateRequest {
 
 export interface RunSummary {
   id: string;
+  idempotency_key: string;
   workspace_id: string;
   project_id?: string | null;
   topic: string;
@@ -285,6 +287,15 @@ export interface RunDetail extends RunSummary {
   trace_spans: TraceSpan[];
   metrics: RunMetrics;
   current_node?: string | null;
+}
+
+export interface WorkflowStartResponse {
+  workflow_id: string;
+  workflow_type: "CompetitiveIntelWorkflow";
+  run_id: string;
+  idempotency_key: string;
+  task_queue: string;
+  status: "started" | "already_started";
 }
 
 export interface SkillSpec {

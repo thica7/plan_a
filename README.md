@@ -11,6 +11,8 @@ make dev-frontend
 ```
 
 The backend runs on `http://localhost:8000`. The frontend runs on `http://localhost:5173` and proxies `/api` to the backend.
+Temporal dev services expose gRPC on `127.0.0.1:7233` and UI on `http://localhost:8233`
+when the full compose stack is running.
 The enterprise store is Postgres-first by default and uses the local Docker
 database at `127.0.0.1:55432`. Set `ENTERPRISE_STORE_BACKEND=memory` only for an
 explicit lightweight local fallback.
@@ -99,7 +101,7 @@ unless `ENTERPRISE_DATABASE_URL` is set.
 - Optional HITL interrupts for planner and QA review, enabled with `HITL_ENABLED=true`
 - Enterprise data boundary for Workspace, Project, Competitor, Evidence, Claim, ReportVersion, and AuditLog, with memory and Postgres store implementations
 - Phase 4 prerequisites for retry-safe workflow wrapping: run `idempotency_key` plus evidence `canonical_url`, first/last seen run IDs, and `seen_count`
-- Phase 4 Temporal thin shell: `CompetitiveIntelWorkflow` wraps the existing LangGraph run as retry-safe activities; start the worker with `make temporal-worker`
+- Phase 4 Temporal thin shell: `CompetitiveIntelWorkflow` wraps the existing LangGraph run as retry-safe activities; start it through `POST /api/workflows/competitive-intel` or run the worker with `make temporal-worker`
 - Docker and Makefile scaffolding for the planned demo path
 
 ## Project Layout

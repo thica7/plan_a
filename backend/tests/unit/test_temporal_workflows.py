@@ -4,17 +4,17 @@ from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
 from packages.orchestrator.service import RunService
 from packages.skills.registry import SkillRegistry
-from packages.workflows import (
+from packages.workflows.activities import CompetitiveIntelActivities
+from packages.workflows.competitive_intel import CompetitiveIntelWorkflow, _workflow_result
+from packages.workflows.models import (
     CREATE_RUN_ACTIVITY,
     LOAD_PROJECTION_ACTIVITY,
     RUN_LANGGRAPH_ACTIVITY,
-    CompetitiveIntelActivities,
-    CompetitiveIntelWorkflow,
     CompetitiveIntelWorkflowInput,
-    build_competitive_intel_worker_components,
+    WorkflowProjectionState,
+    WorkflowRunState,
 )
-from packages.workflows.competitive_intel import _workflow_result
-from packages.workflows.models import WorkflowProjectionState, WorkflowRunState
+from packages.workflows.worker import build_competitive_intel_worker_components
 
 
 def _settings() -> Settings:

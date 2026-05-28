@@ -669,6 +669,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workflows/competitive-intel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Competitive Intel Workflow */
+        post: operations["start_competitive_intel_workflow_api_workflows_competitive_intel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2411,6 +2428,28 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** WorkflowStartResponse */
+        WorkflowStartResponse: {
+            /** Workflow Id */
+            workflow_id: string;
+            /**
+             * Workflow Type
+             * @default CompetitiveIntelWorkflow
+             * @constant
+             */
+            workflow_type: "CompetitiveIntelWorkflow";
+            /** Run Id */
+            run_id: string;
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Task Queue */
+            task_queue: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "already_started";
+        };
         /** WorkspaceRecord */
         WorkspaceRecord: {
             /** Id */
@@ -3666,6 +3705,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditLogRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_competitive_intel_workflow_api_workflows_competitive_intel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowStartResponse"];
                 };
             };
             /** @description Validation Error */

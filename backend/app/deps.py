@@ -7,6 +7,7 @@ from packages.observability import TraceStore
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.skills.registry import SkillRegistry
+from packages.workflows.service import TemporalWorkflowService
 
 
 @lru_cache
@@ -64,3 +65,8 @@ def get_run_service() -> RunService:
         graph_checkpointer=get_graph_checkpointer(),
         enterprise_store=get_enterprise_store(),
     )
+
+
+@lru_cache
+def get_temporal_workflow_service() -> TemporalWorkflowService:
+    return TemporalWorkflowService(get_app_settings())

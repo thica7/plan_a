@@ -1,5 +1,5 @@
 from packages.workflows.activities import CompetitiveIntelActivities
-from packages.workflows.client import start_competitive_intel_workflow
+from packages.workflows.client import start_competitive_intel_workflow, workflow_id_for_request
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
 from packages.workflows.models import (
     CREATE_RUN_ACTIVITY,
@@ -11,10 +11,6 @@ from packages.workflows.models import (
     WorkflowProjectionState,
     WorkflowRunState,
 )
-from packages.workflows.worker import (
-    TemporalWorkerComponents,
-    build_competitive_intel_worker_components,
-)
 
 __all__ = [
     "CREATE_RUN_ACTIVITY",
@@ -25,9 +21,8 @@ __all__ = [
     "CompetitiveIntelWorkflow",
     "CompetitiveIntelWorkflowInput",
     "CompetitiveIntelWorkflowResult",
-    "TemporalWorkerComponents",
     "WorkflowProjectionState",
     "WorkflowRunState",
-    "build_competitive_intel_worker_components",
     "start_competitive_intel_workflow",
+    "workflow_id_for_request",
 ]

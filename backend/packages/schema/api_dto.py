@@ -57,6 +57,17 @@ class RunSummary(BaseModel):
     updated_at: datetime
 
 
+class WorkflowStartResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str
+    workflow_type: Literal["CompetitiveIntelWorkflow"] = "CompetitiveIntelWorkflow"
+    run_id: str
+    idempotency_key: str
+    task_queue: str
+    status: Literal["started", "already_started"]
+
+
 class RunDetail(RunSummary):
     plan: AnalysisPlan
     max_iterations: int = Field(default=2, ge=1)
