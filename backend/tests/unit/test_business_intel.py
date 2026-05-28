@@ -1,11 +1,16 @@
+from packages.agents.executor import AgentExecutionRequest
 from packages.business_intel import (
     analyze_evidence_gaps,
+    analyze_red_team,
     build_business_intel_plan,
+    build_evidence_gap_agent,
+    build_red_team_agent,
     business_findings_to_redo_scopes,
     evaluate_business_qa,
     generate_dynamic_scenario_pack,
     list_business_qa_rules,
     list_scenario_packs,
+    score_competitors,
     score_project_readiness,
 )
 from packages.business_intel.homepage import verify_homepage
@@ -304,6 +309,200 @@ def test_business_qa_rules_cover_five_redo_scope_routes() -> None:
         "analyst",
         "full",
     }
+
+
+def test_phase3_red_team_and_evidence_gap_agents_hit_exit_criteria() -> None:
+    plan = build_business_intel_plan(
+        topic="Cursor vs Copilot pricing comparison",
+        competitors=["Cursor", "Copilot"],
+        dimensions=["pricing"],
+        requested_scenario_id="l1_pricing_pack",
+    )
+    competitors = [
+        _competitor(),
+        CompetitorRecord(
+            id="competitor-copilot",
+            workspace_id="workspace-1",
+            name="Copilot",
+            normalized_name="copilot",
+            layer="L1",
+            metadata={"homepage_verified": False},
+        ),
+    ]
+    evidence = [
+        EvidenceRecord(
+            id="evidence-stale",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id="competitor-cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor pricing.",
+            content_hash="hash-1",
+            reliability_score=0.2,
+            quality_label="stale",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-unsupported",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id="competitor-cursor",
+            claim_type="pricing",
+            claim_text="Cursor pricing is better.",
+            evidence_ids=["missing-evidence"],
+            confidence=0.4,
+        )
+    ]
+    evaluation = evaluate_business_qa(
+        project_id="project-1",
+        plan=plan,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+    )
+    gaps = analyze_evidence_gaps(
+        project_id="project-1",
+        plan=plan,
+        qa_evaluation=evaluation,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+    )
+    red_team = analyze_red_team(
+        project_id="project-1",
+        plan=plan,
+        qa_evaluation=evaluation,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+        report_versions=[],
+    )
+
+    assert gaps.framework == "pydantic-ai"
+    assert gaps.gap_count >= 1
+    assert any(gap.competitor_id == "competitor-copilot" for gap in gaps.gaps)
+    assert red_team.framework == "pydantic-ai"
+    assert red_team.high_severity_count >= 2
+
+
+async def test_phase3_pydantic_ai_executors_return_structured_outputs() -> None:
+    plan = build_business_intel_plan(
+        topic="Cursor vs Copilot pricing comparison",
+        competitors=["Cursor"],
+        dimensions=["pricing"],
+        requested_scenario_id="l1_pricing_pack",
+    )
+    competitor = _competitor()
+    evaluation = evaluate_business_qa(
+        project_id="project-1",
+        plan=plan,
+        competitors=[competitor],
+        evidence=[],
+        claims=[],
+    )
+
+    gap_result = await build_evidence_gap_agent().execute(
+        AgentExecutionRequest(
+            run_id="run-1",
+            agent_name="evidence_gap",
+            payload={
+                "project_id": "project-1",
+                "plan": plan.model_dump(mode="json"),
+                "qa_evaluation": evaluation.model_dump(mode="json"),
+                "competitors": [competitor.model_dump(mode="json")],
+                "evidence": [],
+                "claims": [],
+            },
+        )
+    )
+    red_team_result = await build_red_team_agent().execute(
+        AgentExecutionRequest(
+            run_id="run-1",
+            agent_name="red_team",
+            payload={
+                "project_id": "project-1",
+                "plan": plan.model_dump(mode="json"),
+                "qa_evaluation": evaluation.model_dump(mode="json"),
+                "competitors": [competitor.model_dump(mode="json")],
+                "evidence": [],
+                "claims": [],
+                "report_versions": [],
+            },
+        )
+    )
+
+    assert gap_result.status == "ok"
+    assert gap_result.metadata["framework"] == "pydantic-ai"
+    assert gap_result.payload["gap_count"] >= 1
+    assert red_team_result.status == "ok"
+    assert red_team_result.metadata["framework"] == "pydantic-ai"
+    assert red_team_result.payload["high_severity_count"] >= 1
+
+
+def test_phase3_competitor_scores_return_ranked_scorecards() -> None:
+    plan = build_business_intel_plan(
+        topic="Cursor vs Copilot pricing comparison",
+        competitors=["Cursor", "Copilot"],
+        dimensions=["pricing"],
+        requested_scenario_id="l1_pricing_pack",
+    )
+    competitors = [
+        _competitor(),
+        CompetitorRecord(
+            id="competitor-copilot",
+            workspace_id="workspace-1",
+            name="Copilot",
+            normalized_name="copilot",
+            layer="L1",
+            metadata={"homepage_verified": True},
+        ),
+    ]
+    evidence = [
+        EvidenceRecord(
+            id="evidence-cursor",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id="competitor-cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-cursor",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id="competitor-cursor",
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-cursor"],
+            confidence=0.9,
+        )
+    ]
+
+    report = score_competitors(
+        project_id="project-1",
+        plan=plan,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert report.scores[0].competitor_id == "competitor-cursor"
+    assert report.scores[0].total_score > report.scores[1].total_score
+    assert report.scores[0].dimension_scores[0].dimension == "pricing"
 
 
 def _competitor() -> CompetitorRecord:

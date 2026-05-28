@@ -2,6 +2,12 @@ from __future__ import annotations
 
 import hashlib
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from packages.agents.pydantic_ai_adapter import (
+    PydanticAIAgentExecutor,
+    pydantic_ai_available,
+)
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS
 from packages.schema.enterprise import (
     BusinessIntelPlan,
@@ -12,6 +18,41 @@ from packages.schema.enterprise import (
     EvidenceGapReport,
     EvidenceRecord,
 )
+
+
+class EvidenceGapInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    plan: BusinessIntelPlan
+    qa_evaluation: BusinessQAEvaluation
+    competitors: list[CompetitorRecord] = Field(default_factory=list)
+    evidence: list[EvidenceRecord] = Field(default_factory=list)
+    claims: list[ClaimRecord] = Field(default_factory=list)
+
+
+def build_evidence_gap_agent() -> PydanticAIAgentExecutor[EvidenceGapInput, EvidenceGapReport]:
+    return PydanticAIAgentExecutor(
+        name="evidence_gap",
+        input_type=EvidenceGapInput,
+        output_type=EvidenceGapReport,
+        handler=_evidence_gap_handler,
+        system_prompt=(
+            "Find missing, stale, rejected, or low-confidence evidence gaps for "
+            "the selected competitive-intelligence scenario."
+        ),
+    )
+
+
+def _evidence_gap_handler(agent_input: EvidenceGapInput) -> EvidenceGapReport:
+    return analyze_evidence_gaps(
+        project_id=agent_input.project_id,
+        plan=agent_input.plan,
+        qa_evaluation=agent_input.qa_evaluation,
+        competitors=agent_input.competitors,
+        evidence=agent_input.evidence,
+        claims=agent_input.claims,
+    )
 
 
 def analyze_evidence_gaps(
@@ -39,6 +80,7 @@ def analyze_evidence_gaps(
         medium_count=len([item for item in gaps if item.severity == "medium"]),
         low_count=len([item for item in gaps if item.severity == "low"]),
         gaps=gaps,
+        pydantic_ai_available=pydantic_ai_available(),
     )
 
 

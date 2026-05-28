@@ -5,10 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.deps import get_enterprise_store
 from packages.business_intel import (
     analyze_evidence_gaps,
+    analyze_red_team,
     build_business_intel_plan,
     evaluate_business_qa,
     list_business_qa_rules,
     list_scenario_packs,
+    score_competitors,
     score_project_readiness,
 )
 from packages.enterprise import EnterpriseStore, build_report_version_diff
@@ -19,6 +21,7 @@ from packages.schema.enterprise import (
     BusinessQARule,
     ClaimRecord,
     CompetitorRecord,
+    CompetitorScoreReport,
     EnterpriseRunProjection,
     EvidenceGapReport,
     EvidenceQualityUpdateRequest,
@@ -26,6 +29,7 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     ProjectReadinessScore,
     ProjectRecord,
+    RedTeamReport,
     ReportVersionDiff,
     ReportVersionRecord,
     ScenarioPack,
@@ -134,6 +138,24 @@ def get_project_readiness_score(
     )
 
 
+@router.get(
+    "/enterprise/projects/{project_id}/competitor-scores",
+    response_model=CompetitorScoreReport,
+)
+def get_project_competitor_scores(
+    project_id: str,
+    store: EnterpriseStoreDep,
+) -> CompetitorScoreReport:
+    plan = _business_plan_for_project(project_id, store)
+    return score_competitors(
+        project_id=project_id,
+        plan=plan,
+        competitors=store.list_competitors(project_id=project_id),
+        evidence=store.list_evidence(project_id=project_id),
+        claims=store.list_claims(project_id=project_id),
+    )
+
+
 @router.get("/enterprise/projects/{project_id}/evidence-gaps", response_model=EvidenceGapReport)
 def get_project_evidence_gaps(
     project_id: str,
@@ -157,6 +179,33 @@ def get_project_evidence_gaps(
         competitors=competitors,
         evidence=evidence,
         claims=claims,
+    )
+
+
+@router.get("/enterprise/projects/{project_id}/red-team", response_model=RedTeamReport)
+def get_project_red_team(
+    project_id: str,
+    store: EnterpriseStoreDep,
+) -> RedTeamReport:
+    plan = _business_plan_for_project(project_id, store)
+    competitors = store.list_competitors(project_id=project_id)
+    evidence = store.list_evidence(project_id=project_id)
+    claims = store.list_claims(project_id=project_id)
+    qa_evaluation = evaluate_business_qa(
+        project_id=project_id,
+        plan=plan,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+    )
+    return analyze_red_team(
+        project_id=project_id,
+        plan=plan,
+        qa_evaluation=qa_evaluation,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+        report_versions=store.list_report_versions(project_id=project_id),
     )
 
 

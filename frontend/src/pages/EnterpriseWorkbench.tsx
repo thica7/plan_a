@@ -11,6 +11,7 @@ import {
   Gauge,
   GitCompare,
   Layers,
+  ListChecks,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -18,9 +19,11 @@ import {
 import {
   getProjectEvidenceGaps,
   getProjectBusinessPlan,
+  getProjectCompetitorScores,
   getProjectQAEvaluation,
   getProjectReadinessScore,
   getReportVersionDiff,
+  getProjectRedTeam,
   listEnterpriseCompetitors,
   listEnterpriseProjects,
   listProjectClaims,
@@ -33,6 +36,7 @@ import type {
   BusinessQAEvaluation,
   BusinessQAFinding,
   ClaimRecord,
+  CompetitorScoreReport,
   CompetitorRecord,
   EvidenceGapItem,
   EvidenceGapReport,
@@ -40,6 +44,8 @@ import type {
   EvidenceRecord,
   ProjectReadinessScore,
   ProjectRecord,
+  RedTeamFinding,
+  RedTeamReport,
   ReportVersionDiff,
   ReportVersionRecord,
 } from "../api/types";
@@ -56,7 +62,9 @@ export function EnterpriseWorkbench() {
   const [businessPlan, setBusinessPlan] = useState<BusinessIntelPlan | null>(null);
   const [qaEvaluation, setQaEvaluation] = useState<BusinessQAEvaluation | null>(null);
   const [readinessScore, setReadinessScore] = useState<ProjectReadinessScore | null>(null);
+  const [competitorScores, setCompetitorScores] = useState<CompetitorScoreReport | null>(null);
   const [evidenceGaps, setEvidenceGaps] = useState<EvidenceGapReport | null>(null);
+  const [redTeam, setRedTeam] = useState<RedTeamReport | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
   const [activeTab, setActiveTab] = useState<EnterpriseTab>("evidence");
@@ -93,7 +101,9 @@ export function EnterpriseWorkbench() {
       setBusinessPlan(null);
       setQaEvaluation(null);
       setReadinessScore(null);
+      setCompetitorScores(null);
       setEvidenceGaps(null);
+      setRedTeam(null);
       setSelectedVersionId(null);
       return;
     }
@@ -109,7 +119,9 @@ export function EnterpriseWorkbench() {
       getProjectBusinessPlan(selectedProjectId),
       getProjectQAEvaluation(selectedProjectId),
       getProjectReadinessScore(selectedProjectId),
+      getProjectCompetitorScores(selectedProjectId),
       getProjectEvidenceGaps(selectedProjectId),
+      getProjectRedTeam(selectedProjectId),
     ])
       .then(
         ([
@@ -120,7 +132,9 @@ export function EnterpriseWorkbench() {
           businessPlanValue,
           qaEvaluationValue,
           readinessScoreValue,
+          competitorScoresValue,
           evidenceGapsValue,
+          redTeamValue,
         ]) => {
           if (!active) return;
           setCompetitors(competitorItems);
@@ -130,7 +144,9 @@ export function EnterpriseWorkbench() {
           setBusinessPlan(businessPlanValue);
           setQaEvaluation(qaEvaluationValue);
           setReadinessScore(readinessScoreValue);
+          setCompetitorScores(competitorScoresValue);
           setEvidenceGaps(evidenceGapsValue);
+          setRedTeam(redTeamValue);
           setSelectedVersionId(versionItems[0]?.id ?? null);
         },
       )
@@ -144,7 +160,9 @@ export function EnterpriseWorkbench() {
         setBusinessPlan(null);
         setQaEvaluation(null);
         setReadinessScore(null);
+        setCompetitorScores(null);
         setEvidenceGaps(null);
+        setRedTeam(null);
         setSelectedVersionId(null);
       })
       .finally(() => {
@@ -220,11 +238,15 @@ export function EnterpriseWorkbench() {
           void Promise.all([
             getProjectQAEvaluation(selectedProjectId),
             getProjectReadinessScore(selectedProjectId),
+            getProjectCompetitorScores(selectedProjectId),
             getProjectEvidenceGaps(selectedProjectId),
-          ]).then(([qaValue, readinessValue, evidenceGapsValue]) => {
+            getProjectRedTeam(selectedProjectId),
+          ]).then(([qaValue, readinessValue, competitorScoresValue, evidenceGapsValue, redTeamValue]) => {
             setQaEvaluation(qaValue);
             setReadinessScore(readinessValue);
+            setCompetitorScores(competitorScoresValue);
             setEvidenceGaps(evidenceGapsValue);
+            setRedTeam(redTeamValue);
           });
         }
       })
@@ -325,7 +347,11 @@ export function EnterpriseWorkbench() {
 
               {readinessScore ? <ReadinessScorePanel readinessScore={readinessScore} /> : null}
 
+              {competitorScores ? <CompetitorScorePanel report={competitorScores} /> : null}
+
               {evidenceGaps ? <EvidenceGapPanel report={evidenceGaps} /> : null}
+
+              {redTeam ? <RedTeamPanel report={redTeam} /> : null}
 
               {qaEvaluation ? <QAEvaluationPanel evaluation={qaEvaluation} /> : null}
 
@@ -446,6 +472,43 @@ function ReadinessScorePanel({
   );
 }
 
+function CompetitorScorePanel({ report }: { report: CompetitorScoreReport }) {
+  if (report.scores.length === 0) {
+    return null;
+  }
+  return (
+    <section className="panel competitor-score-panel">
+      <div className="panel-heading-row">
+        <h2>Competitor scores</h2>
+        <ListChecks size={17} aria-hidden />
+      </div>
+      <div className="scorecard-grid">
+        {report.scores.slice(0, 4).map((score) => (
+          <article className="competitor-score-card" key={score.competitor_id}>
+            <div>
+              <span>#{score.rank}</span>
+              <strong>{score.competitor_name}</strong>
+              <em>{score.total_score}</em>
+            </div>
+            <ScoreBar label="Evidence" value={score.evidence_score} />
+            <ScoreBar label="Claims" value={score.claim_score} />
+            <ScoreBar label="Coverage" value={score.coverage_score} />
+            <p>{score.recommendation}</p>
+            <div className="dimension-score-row">
+              {score.dimension_scores.slice(0, 4).map((dimension) => (
+                <span key={dimension.dimension} title={dimension.rationale}>
+                  {dimension.dimension}
+                  <em>{dimension.score}</em>
+                </span>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
     <div className="score-bar">
@@ -512,6 +575,58 @@ function EvidenceGapCard({ gap }: { gap: EvidenceGapItem }) {
       </div>
       <p>{gap.message}</p>
       {gap.recommended_query ? <em>{gap.recommended_query}</em> : null}
+    </article>
+  );
+}
+
+function RedTeamPanel({ report }: { report: RedTeamReport }) {
+  const status = report.high_severity_count >= 2 ? "high" : report.finding_count > 0 ? "medium" : "clear";
+  return (
+    <section className={`panel red-team-panel ${status}`}>
+      <div className="panel-heading-row">
+        <h2>Red team</h2>
+        {status === "clear" ? <CheckCircle2 size={17} aria-hidden /> : <AlertTriangle size={17} aria-hidden />}
+      </div>
+      <div className="red-team-summary">
+        <span>
+          <strong>{report.finding_count}</strong>
+          <em>Findings</em>
+        </span>
+        <span>
+          <strong>{report.high_severity_count}</strong>
+          <em>High severity</em>
+        </span>
+        <span>
+          <strong>{report.pydantic_ai_available ? "on" : "off"}</strong>
+          <em>Pydantic-AI</em>
+        </span>
+      </div>
+      {report.findings.length > 0 ? (
+        <div className="red-team-list">
+          {report.findings.slice(0, 5).map((finding) => (
+            <RedTeamFindingCard finding={finding} key={finding.id} />
+          ))}
+        </div>
+      ) : (
+        <p className="muted-line">No red-team findings for the active project.</p>
+      )}
+    </section>
+  );
+}
+
+function RedTeamFindingCard({ finding }: { finding: RedTeamFinding }) {
+  return (
+    <article className={`red-team-card ${finding.severity}`}>
+      <div>
+        <strong>{finding.finding_type.replace(/_/g, " ")}</strong>
+        <span>
+          {finding.severity}
+          {finding.competitor_name ? ` / ${finding.competitor_name}` : ""}
+          {finding.dimension ? ` / ${finding.dimension}` : ""}
+        </span>
+      </div>
+      <p>{finding.message}</p>
+      <em>{finding.recommendation}</em>
     </article>
   );
 }

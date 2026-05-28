@@ -11,6 +11,7 @@ dependencies = [
     "langgraph>=0.2.0",
     "langgraph-checkpoint-sqlite>=2.0.0",
     "pydantic>=2.7.0",
+    "pydantic-ai>=0.8.0",
     "psycopg[binary]>=3.2.0",
     "pyyaml>=6.0.1",
     "sse-starlette>=2.1.0",

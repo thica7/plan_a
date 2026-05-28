@@ -1,7 +1,8 @@
 from packages.business_intel.evaluator import evaluate_business_qa
-from packages.business_intel.evidence_gaps import analyze_evidence_gaps
+from packages.business_intel.evidence_gaps import analyze_evidence_gaps, build_evidence_gap_agent
 from packages.business_intel.planning import build_business_intel_plan
 from packages.business_intel.qa_rules import list_business_qa_rules
+from packages.business_intel.red_team import analyze_red_team, build_red_team_agent
 from packages.business_intel.redo import business_findings_to_redo_scopes
 from packages.business_intel.scenarios import (
     generate_dynamic_scenario_pack,
@@ -9,11 +10,14 @@ from packages.business_intel.scenarios import (
     list_scenario_packs,
     recommend_scenario_pack,
 )
-from packages.business_intel.scorer import score_project_readiness
+from packages.business_intel.scorer import score_competitors, score_project_readiness
 
 __all__ = [
     "build_business_intel_plan",
     "analyze_evidence_gaps",
+    "analyze_red_team",
+    "build_evidence_gap_agent",
+    "build_red_team_agent",
     "business_findings_to_redo_scopes",
     "evaluate_business_qa",
     "generate_dynamic_scenario_pack",
@@ -21,5 +25,6 @@ __all__ = [
     "list_business_qa_rules",
     "list_scenario_packs",
     "recommend_scenario_pack",
+    "score_competitors",
     "score_project_readiness",
 ]

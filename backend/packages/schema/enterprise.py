@@ -258,6 +258,41 @@ class BusinessRecommendation(BaseModel):
     target_id: str | None = None
 
 
+class CompetitorDimensionScore(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dimension: str
+    score: int = Field(ge=0, le=100)
+    evidence_count: int = Field(ge=0)
+    claim_count: int = Field(ge=0)
+    average_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    rationale: str
+
+
+class CompetitorScore(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    competitor_id: str
+    competitor_name: str
+    total_score: int = Field(ge=0, le=100)
+    evidence_score: int = Field(ge=0, le=100)
+    claim_score: int = Field(ge=0, le=100)
+    coverage_score: int = Field(ge=0, le=100)
+    risk_penalty: int = Field(default=0, ge=0, le=100)
+    rank: int = Field(ge=1)
+    dimension_scores: list[CompetitorDimensionScore] = Field(default_factory=list)
+    recommendation: str
+
+
+class CompetitorScoreReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    top_competitor_id: str | None = None
+    scores: list[CompetitorScore] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class ProjectReadinessScore(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -306,6 +341,44 @@ class EvidenceGapReport(BaseModel):
     medium_count: int = 0
     low_count: int = 0
     gaps: list[EvidenceGapItem] = Field(default_factory=list)
+    agent_name: str = "pydantic_ai_evidence_gap"
+    framework: str = "pydantic-ai"
+    pydantic_ai_available: bool = False
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class RedTeamFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    severity: Literal["critical", "high", "medium", "low"]
+    finding_type: Literal[
+        "unsupported_claim",
+        "weak_evidence",
+        "stale_or_rejected_evidence",
+        "competitive_bias",
+        "homepage_phantom",
+        "report_risk",
+    ]
+    competitor_id: str | None = None
+    competitor_name: str | None = None
+    dimension: str | None = None
+    message: str
+    recommendation: str
+    evidence_ids: list[str] = Field(default_factory=list)
+    claim_ids: list[str] = Field(default_factory=list)
+
+
+class RedTeamReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    finding_count: int = 0
+    high_severity_count: int = 0
+    findings: list[RedTeamFinding] = Field(default_factory=list)
+    agent_name: str = "pydantic_ai_red_team"
+    framework: str = "pydantic-ai"
+    pydantic_ai_available: bool = False
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 

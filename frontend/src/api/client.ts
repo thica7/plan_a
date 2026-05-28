@@ -2,6 +2,7 @@ import type {
   AgentMessage,
   BusinessIntelPlan,
   BusinessQAEvaluation,
+  CompetitorScoreReport,
   CompetitorKnowledge,
   ClaimRecord,
   CompetitorRecord,
@@ -11,6 +12,7 @@ import type {
   ProjectReadinessScore,
   ProjectRecord,
   RevisionRecord,
+  RedTeamReport,
   ReportVersionDiff,
   ReportVersionRecord,
   RunCreateRequest,
@@ -145,8 +147,16 @@ export function getProjectReadinessScore(projectId: string) {
   return request<ProjectReadinessScore>(`/enterprise/projects/${projectId}/readiness-score`);
 }
 
+export function getProjectCompetitorScores(projectId: string) {
+  return request<CompetitorScoreReport>(`/enterprise/projects/${projectId}/competitor-scores`);
+}
+
 export function getProjectEvidenceGaps(projectId: string) {
   return request<EvidenceGapReport>(`/enterprise/projects/${projectId}/evidence-gaps`);
+}
+
+export function getProjectRedTeam(projectId: string) {
+  return request<RedTeamReport>(`/enterprise/projects/${projectId}/red-team`);
 }
 
 export function updateEvidenceQuality(

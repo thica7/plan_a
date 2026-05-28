@@ -11,7 +11,10 @@ from packages.schema.enterprise import (
     BusinessQAFinding,
     BusinessRecommendation,
     ClaimRecord,
+    CompetitorDimensionScore,
     CompetitorRecord,
+    CompetitorScore,
+    CompetitorScoreReport,
     EvidenceRecord,
     ProjectReadinessScore,
 )
@@ -55,6 +58,82 @@ def score_project_readiness(
         qa_score=qa_score,
         summary=_summary(score, risk_level, qa_evaluation, coverage_score),
         recommendations=recommendations,
+    )
+
+
+def score_competitors(
+    *,
+    project_id: str,
+    plan: BusinessIntelPlan,
+    competitors: list[CompetitorRecord],
+    evidence: list[EvidenceRecord],
+    claims: list[ClaimRecord],
+) -> CompetitorScoreReport:
+    dimensions = plan.scenario_pack.required_dimensions or plan.requested_dimensions
+    scores = [
+        _score_competitor(
+            competitor=competitor,
+            dimensions=dimensions,
+            evidence=[item for item in evidence if item.competitor_id == competitor.id],
+            claims=[item for item in claims if item.competitor_id == competitor.id],
+        )
+        for competitor in competitors
+    ]
+    scores = sorted(scores, key=lambda item: item.total_score, reverse=True)
+    ranked = [
+        item.model_copy(update={"rank": index + 1})
+        for index, item in enumerate(scores)
+    ]
+    return CompetitorScoreReport(
+        project_id=project_id,
+        top_competitor_id=ranked[0].competitor_id if ranked else None,
+        scores=ranked,
+    )
+
+
+def _score_competitor(
+    *,
+    competitor: CompetitorRecord,
+    dimensions: list[str],
+    evidence: list[EvidenceRecord],
+    claims: list[ClaimRecord],
+) -> CompetitorScore:
+    usable_evidence = [item for item in evidence if item.quality_label not in BAD_QUALITY_LABELS]
+    evidence_score = _evidence_score(usable_evidence)
+    claim_score = _claim_score(claims, usable_evidence)
+    coverage_score = _competitor_coverage_score(dimensions, usable_evidence)
+    risk_penalty = _competitor_risk_penalty(evidence=evidence, claims=claims)
+    dimension_scores = [
+        _dimension_score(
+            dimension=dimension,
+            evidence=[
+                item for item in usable_evidence if _same_dimension(item.dimension, dimension)
+            ],
+            claims=[item for item in claims if _same_dimension(item.claim_type, dimension)],
+        )
+        for dimension in dimensions
+    ]
+    total_score = max(
+        0,
+        round(
+            evidence_score * 0.30
+            + claim_score * 0.25
+            + coverage_score * 0.30
+            + _dimension_average(dimension_scores) * 0.15
+            - risk_penalty
+        ),
+    )
+    return CompetitorScore(
+        competitor_id=competitor.id,
+        competitor_name=competitor.name,
+        total_score=total_score,
+        evidence_score=evidence_score,
+        claim_score=claim_score,
+        coverage_score=coverage_score,
+        risk_penalty=risk_penalty,
+        rank=1,
+        dimension_scores=dimension_scores,
+        recommendation=_competitor_recommendation(total_score, risk_penalty, coverage_score),
     )
 
 
@@ -109,6 +188,59 @@ def _coverage_score(
             ):
                 covered += 1
     return round(covered / expected * 100)
+
+
+def _competitor_coverage_score(dimensions: list[str], evidence: list[EvidenceRecord]) -> int:
+    if not dimensions:
+        return 0
+    covered = 0
+    for dimension in dimensions:
+        if any(_same_dimension(item.dimension, dimension) for item in evidence):
+            covered += 1
+    return round(covered / len(dimensions) * 100)
+
+
+def _dimension_score(
+    *,
+    dimension: str,
+    evidence: list[EvidenceRecord],
+    claims: list[ClaimRecord],
+) -> CompetitorDimensionScore:
+    evidence_part = min(1.0, len(evidence) / 2)
+    avg_evidence_reliability = (
+        mean([item.reliability_score for item in evidence]) if evidence else 0.0
+    )
+    avg_claim_confidence = mean([item.confidence for item in claims]) if claims else 0.0
+    score = _percent(
+        evidence_part * 0.35
+        + avg_evidence_reliability * 0.35
+        + avg_claim_confidence * 0.30
+    )
+    return CompetitorDimensionScore(
+        dimension=dimension,
+        score=score,
+        evidence_count=len(evidence),
+        claim_count=len(claims),
+        average_confidence=round(avg_claim_confidence, 2),
+        rationale=_dimension_rationale(dimension, evidence, claims),
+    )
+
+
+def _competitor_risk_penalty(
+    *,
+    evidence: list[EvidenceRecord],
+    claims: list[ClaimRecord],
+) -> int:
+    bad_evidence = len([item for item in evidence if item.quality_label in BAD_QUALITY_LABELS])
+    low_reliability = len([item for item in evidence if item.reliability_score < 0.5])
+    unsupported_claims = len([item for item in claims if not item.evidence_ids])
+    return min(40, bad_evidence * 8 + low_reliability * 5 + unsupported_claims * 10)
+
+
+def _dimension_average(scores: list[CompetitorDimensionScore]) -> int:
+    if not scores:
+        return 0
+    return round(mean([item.score for item in scores]))
 
 
 def _qa_score(evaluation: BusinessQAEvaluation) -> int:
@@ -292,6 +424,30 @@ def _recommendation(
         target_type=target_type,
         target_id=target_id,
     )
+
+
+def _competitor_recommendation(total_score: int, risk_penalty: int, coverage_score: int) -> str:
+    if risk_penalty >= 20:
+        return "Review evidence quality before recommending this competitor."
+    if coverage_score < 70:
+        return "Collect missing required-dimension evidence before final ranking."
+    if total_score >= 85:
+        return "Strong evidence-backed competitor profile; suitable for report recommendation."
+    if total_score >= 70:
+        return "Usable competitor profile with remaining review items."
+    return "Insufficient confidence for stakeholder recommendation."
+
+
+def _dimension_rationale(
+    dimension: str,
+    evidence: list[EvidenceRecord],
+    claims: list[ClaimRecord],
+) -> str:
+    if not evidence:
+        return f"No usable evidence for {dimension}."
+    if not claims:
+        return f"{dimension} has evidence but no projected claims."
+    return f"{dimension} has {len(evidence)} usable evidence item(s) and {len(claims)} claim(s)."
 
 
 def _dedupe_recommendations(

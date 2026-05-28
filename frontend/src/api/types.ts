@@ -1,3 +1,5 @@
+export type { components, operations, paths } from "./openapi";
+
 export type RunStatus = "queued" | "running" | "interrupted" | "completed" | "failed";
 
 export interface AnalysisPlan {
@@ -403,6 +405,35 @@ export interface BusinessRecommendation {
   target_id?: string | null;
 }
 
+export interface CompetitorDimensionScore {
+  dimension: string;
+  score: number;
+  evidence_count: number;
+  claim_count: number;
+  average_confidence: number;
+  rationale: string;
+}
+
+export interface CompetitorScore {
+  competitor_id: string;
+  competitor_name: string;
+  total_score: number;
+  evidence_score: number;
+  claim_score: number;
+  coverage_score: number;
+  risk_penalty: number;
+  rank: number;
+  dimension_scores: CompetitorDimensionScore[];
+  recommendation: string;
+}
+
+export interface CompetitorScoreReport {
+  project_id: string;
+  top_competitor_id?: string | null;
+  scores: CompetitorScore[];
+  generated_at: string;
+}
+
 export interface ProjectReadinessScore {
   project_id: string;
   score: number;
@@ -444,6 +475,39 @@ export interface EvidenceGapReport {
   medium_count: number;
   low_count: number;
   gaps: EvidenceGapItem[];
+  agent_name: string;
+  framework: "pydantic-ai";
+  pydantic_ai_available: boolean;
+  generated_at: string;
+}
+
+export interface RedTeamFinding {
+  id: string;
+  severity: "critical" | "high" | "medium" | "low";
+  finding_type:
+    | "unsupported_claim"
+    | "weak_evidence"
+    | "stale_or_rejected_evidence"
+    | "competitive_bias"
+    | "homepage_phantom"
+    | "report_risk";
+  competitor_id?: string | null;
+  competitor_name?: string | null;
+  dimension?: string | null;
+  message: string;
+  recommendation: string;
+  evidence_ids: string[];
+  claim_ids: string[];
+}
+
+export interface RedTeamReport {
+  project_id: string;
+  finding_count: number;
+  high_severity_count: number;
+  findings: RedTeamFinding[];
+  agent_name: string;
+  framework: "pydantic-ai";
+  pydantic_ai_available: boolean;
   generated_at: string;
 }
 

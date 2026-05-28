@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 SHELL := bash
 
-.PHONY: dev-backend dev-frontend test-backend test-frontend sync-openapi smoke-llm smoke-search smoke-fetch smoke-minimal-run smoke-enterprise-postgres smoke-phase2-business-intel eval-baseline eval-baseline-full m0-check demo-build demo demo-down demo-logs help
+.PHONY: dev-backend dev-frontend test-backend test-frontend sync-openapi smoke-llm smoke-search smoke-fetch smoke-minimal-run smoke-enterprise-postgres smoke-phase2-business-intel smoke-phase3-strict eval-baseline eval-baseline-full m0-check demo-build demo demo-down demo-logs help
 
 dev-backend: ## Start FastAPI in reload mode
 	conda run -n bd-competiscope-v2 uvicorn app.main:app --reload --port 8000 --app-dir backend
@@ -17,7 +17,7 @@ test-frontend: ## Run frontend tests
 
 sync-openapi: ## Export OpenAPI and generate frontend types
 	conda run -n bd-competiscope-v2 python backend/scripts/export_openapi.py > frontend/openapi.json
-	cd frontend && pnpm openapi-typescript openapi.json -o src/api/types.ts
+	cd frontend && pnpm openapi-typescript openapi.json -o src/api/openapi.ts
 
 smoke-llm: ## Run a real Doubao/ARK LLM smoke test
 	conda run -n bd-competiscope-v2 python backend/scripts/smoke_llm.py
@@ -36,6 +36,9 @@ smoke-enterprise-postgres: ## Verify enterprise projection persistence against l
 
 smoke-phase2-business-intel: ## Verify Phase 2 business intel gates
 	conda run -n bd-competiscope-v2 python backend/scripts/smoke_phase2_business_intel.py
+
+smoke-phase3-strict: ## Verify strict Phase 3 product-agent gates
+	conda run -n bd-competiscope-v2 python backend/scripts/smoke_phase3_strict.py
 
 eval-baseline: ## Run Phase 1 baseline eval smoke cases without external APIs
 	conda run -n bd-competiscope-v2 python backend/scripts/eval_baseline.py
