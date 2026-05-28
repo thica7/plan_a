@@ -11,6 +11,7 @@ dependencies = [
     "langgraph>=0.2.0",
     "langgraph-checkpoint-sqlite>=2.0.0",
     "pydantic>=2.7.0",
+    "psycopg[binary]>=3.2.0",
     "pyyaml>=6.0.1",
     "sse-starlette>=2.1.0",
     "uvicorn[standard]>=0.29.0",
@@ -30,3 +31,6 @@ trace = [
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
 asyncio_mode = "auto"
+
+[tool.setuptools.packages.find]
+include = ["app*", "packages*"]

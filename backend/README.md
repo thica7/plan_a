@@ -17,3 +17,17 @@ conda run -n bd-competiscope-v2 python backend/scripts/smoke_llm.py
 conda run -n bd-competiscope-v2 python backend/scripts/smoke_search.py
 conda run -n bd-competiscope-v2 python backend/scripts/smoke_fetch.py
 ```
+
+Enterprise store:
+
+```bash
+# default local mode
+ENTERPRISE_STORE_BACKEND=memory
+
+# durable enterprise mode
+ENTERPRISE_STORE_BACKEND=postgres
+ENTERPRISE_DATABASE_URL=postgresql://competiscope:competiscope@localhost:5432/competiscope
+```
+
+`EnterpriseMemoryStore` and `EnterprisePostgresStore` implement the same repository boundary,
+so local development can stay lightweight while Docker deployments can use Postgres/pgvector.

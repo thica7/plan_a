@@ -32,6 +32,8 @@ COLLECTOR_REACT_ENABLED=true
 COLLECTOR_REACT_MAX_TURNS=3
 ANALYST_REACT_ENABLED=true
 ANALYST_REACT_MAX_TURNS=3
+ENTERPRISE_STORE_BACKEND=memory
+ENTERPRISE_DATABASE_URL=postgresql://competiscope:competiscope@localhost:5432/competiscope
 ```
 
 Then restart the backend with `make dev-backend`. The New Run screen will show whether the backend detected `ARK_API_KEY` and `ARK_MODEL`; choose `Real API` to send real chat completion calls through the backend. The API key is never sent from the browser.
@@ -77,6 +79,7 @@ pnpm dev
 - QA consistency checks for comparison matrices plus bounded scoped redo iterations
 - Automatic scoped redo loop for blocker QA findings, bounded by `MAX_ITERATIONS` and disabled when HITL is active; warn-level redo is opt-in with `AUTO_REDO_WARN_ENABLED` or the New Run switch
 - Optional HITL interrupts for planner and QA review, enabled with `HITL_ENABLED=true`
+- Enterprise data boundary for Workspace, Project, Competitor, Evidence, Claim, ReportVersion, and AuditLog, with memory and Postgres store implementations
 - Docker and Makefile scaffolding for the planned demo path
 
 ## Project Layout

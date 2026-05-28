@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_enterprise_store
-from packages.enterprise import EnterpriseMemoryStore
+from packages.enterprise import EnterpriseStore
 from packages.schema.enterprise import (
     AuditLogRecord,
     ClaimRecord,
@@ -15,7 +15,7 @@ from packages.schema.enterprise import (
 )
 
 router = APIRouter()
-EnterpriseStoreDep = Annotated[EnterpriseMemoryStore, Depends(get_enterprise_store)]
+EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
 
 
 @router.get("/enterprise/workspaces", response_model=list[WorkspaceRecord])

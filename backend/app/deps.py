@@ -1,7 +1,7 @@
 from functools import lru_cache
 
 from packages.config import Settings, get_settings
-from packages.enterprise import EnterpriseMemoryStore
+from packages.enterprise import EnterpriseMemoryStore, EnterprisePostgresStore, EnterpriseStore
 from packages.memory import KBCache, RunJournal
 from packages.observability import TraceStore
 from packages.orchestrator.checkpointer import GraphCheckpointer
@@ -40,7 +40,14 @@ def get_graph_checkpointer() -> GraphCheckpointer:
 
 
 @lru_cache
-def get_enterprise_store() -> EnterpriseMemoryStore:
+def get_enterprise_store() -> EnterpriseStore:
+    settings = get_app_settings()
+    if settings.enterprise_store_backend == "postgres":
+        if not settings.enterprise_database_url:
+            raise RuntimeError(
+                "ENTERPRISE_DATABASE_URL is required when enterprise store is postgres."
+            )
+        return EnterprisePostgresStore(settings.enterprise_database_url)
     return EnterpriseMemoryStore()
 
 

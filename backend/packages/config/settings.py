@@ -49,6 +49,8 @@ class Settings:
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
+    enterprise_store_backend: str = "memory"
+    enterprise_database_url: str | None = None
 
     @property
     def has_llm_credentials(self) -> bool:
@@ -92,4 +94,6 @@ def get_settings() -> Settings:
         langfuse_public_key=os.getenv("LANGFUSE_PUBLIC_KEY") or None,
         langfuse_secret_key=os.getenv("LANGFUSE_SECRET_KEY") or None,
         langfuse_host=os.getenv("LANGFUSE_HOST") or None,
+        enterprise_store_backend=os.getenv("ENTERPRISE_STORE_BACKEND", "memory").strip().lower(),
+        enterprise_database_url=os.getenv("ENTERPRISE_DATABASE_URL") or None,
     )

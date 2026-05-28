@@ -1,0 +1,583 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel
+
+from packages.enterprise.store import (
+    DEFAULT_USER_ID,
+    DEFAULT_WORKSPACE_ID,
+    EnterpriseRunContext,
+    _normalize_key,
+    _short_hash,
+    _title_from_id,
+)
+from packages.identity import compute_competitor_set_hash, compute_topic_normalized
+from packages.schema.api_dto import RunDetail
+from packages.schema.enterprise import (
+    AuditLogRecord,
+    ClaimRecord,
+    EnterpriseRunProjection,
+    EvidenceRecord,
+    ProjectRecord,
+    ReportVersionRecord,
+    WorkspaceRecord,
+)
+
+
+class EnterprisePostgresStore:
+    """Postgres-backed enterprise repository for Workspace/Project/Evidence projections."""
+
+    def __init__(self, database_url: str, *, auto_migrate: bool = True) -> None:
+        if not database_url:
+            raise ValueError("ENTERPRISE_DATABASE_URL is required for postgres enterprise store.")
+        try:
+            from psycopg import connect
+            from psycopg.rows import dict_row
+            from psycopg.types.json import Jsonb
+        except ImportError as exc:
+            raise RuntimeError(
+                "psycopg is required for ENTERPRISE_STORE_BACKEND=postgres. "
+                "Install backend dependencies with `pip install -e .`."
+            ) from exc
+        self.database_url = database_url
+        self._connect = connect
+        self._dict_row = dict_row
+        self._jsonb = Jsonb
+        if auto_migrate:
+            self.migrate()
+
+    def migrate(self) -> None:
+        script = _schema_path().read_text(encoding="utf-8")
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                for statement in _split_sql(script):
+                    cur.execute(statement)
+            conn.commit()
+
+    def start_run(
+        self,
+        detail: RunDetail,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+        actor_id: str | None = None,
+    ) -> EnterpriseRunContext:
+        workspace_id = workspace_id or detail.workspace_id or DEFAULT_WORKSPACE_ID
+        actor_id = actor_id or DEFAULT_USER_ID
+        competitor_ids = [
+            self._competitor_id(workspace_id, name) for name in detail.plan.competitors
+        ]
+        project_id = project_id or detail.project_id or self._project_id(
+            workspace_id,
+            detail.topic,
+            competitor_ids,
+        )
+        context = EnterpriseRunContext(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            user_id=actor_id,
+            competitor_ids=competitor_ids,
+            competitor_id_map={
+                name: competitor_id
+                for name, competitor_id in zip(
+                    detail.plan.competitors,
+                    competitor_ids,
+                    strict=False,
+                )
+            },
+        )
+
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._upsert_workspace(cur, workspace_id)
+                self._upsert_default_user(cur)
+                self._upsert_project(cur, detail, context, actor_id)
+                for name, competitor_id in zip(
+                    detail.plan.competitors,
+                    competitor_ids,
+                    strict=False,
+                ):
+                    self._upsert_competitor(cur, detail, workspace_id, competitor_id, name)
+                    self._upsert_project_competitor(cur, project_id, competitor_id)
+                self._upsert_run(cur, detail, context)
+                if not self._audit_exists(cur, "run.created", detail.id):
+                    self._append_audit(
+                        cur,
+                        workspace_id=workspace_id,
+                        actor_id=actor_id,
+                        action="run.created",
+                        resource_type="run",
+                        resource_id=detail.id,
+                        after={
+                            "project_id": project_id,
+                            "topic": detail.topic,
+                            "competitors": detail.plan.competitors,
+                        },
+                    )
+            conn.commit()
+        return context
+
+    def save_projection(self, projection: EnterpriseRunProjection) -> None:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                for evidence in projection.evidence_records:
+                    self._upsert_evidence(cur, evidence)
+                for claim in projection.claim_records:
+                    self._upsert_claim(cur, claim)
+                self._upsert_report_version(cur, projection.report_version)
+                self._append_audit(
+                    cur,
+                    workspace_id=projection.workspace_id,
+                    actor_id=DEFAULT_USER_ID,
+                    action="run.projected",
+                    resource_type="run",
+                    resource_id=projection.run_id,
+                    after={
+                        "project_id": projection.project_id,
+                        "evidence_count": len(projection.evidence_records),
+                        "claim_count": len(projection.claim_records),
+                        "report_version_id": projection.report_version.id,
+                    },
+                )
+            conn.commit()
+
+    def project_id_for_run(self, run_id: str) -> str | None:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            row = conn.execute("SELECT project_id FROM runs WHERE id = %s", (run_id,)).fetchone()
+        return str(row["project_id"]) if row and row["project_id"] else None
+
+    def get_run_projection(self, run_id: str) -> EnterpriseRunProjection | None:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            report_row = conn.execute(
+                """
+                SELECT *
+                FROM report_versions
+                WHERE run_id = %s
+                ORDER BY version_number DESC, created_at DESC
+                LIMIT 1
+                """,
+                (run_id,),
+            ).fetchone()
+            if report_row is None:
+                return None
+            report_version = ReportVersionRecord.model_validate(dict(report_row))
+            evidence_records = self._records_by_ids(
+                conn,
+                table="evidence_records",
+                ids=report_version.evidence_ids,
+                model=EvidenceRecord,
+            )
+            claim_records = self._records_by_ids(
+                conn,
+                table="claim_records",
+                ids=report_version.claim_ids,
+                model=ClaimRecord,
+            )
+        return EnterpriseRunProjection(
+            workspace_id=report_version.workspace_id,
+            project_id=report_version.project_id,
+            run_id=run_id,
+            evidence_records=evidence_records,
+            claim_records=claim_records,
+            report_version=report_version,
+        )
+
+    def list_workspaces(self) -> list[WorkspaceRecord]:
+        return self._list_models(
+            "SELECT * FROM workspaces ORDER BY created_at",
+            (),
+            WorkspaceRecord,
+        )
+
+    def list_projects(self, workspace_id: str | None = None) -> list[ProjectRecord]:
+        if workspace_id:
+            return self._list_models(
+                "SELECT * FROM projects WHERE workspace_id = %s ORDER BY updated_at DESC",
+                (workspace_id,),
+                ProjectRecord,
+            )
+        return self._list_models(
+            "SELECT * FROM projects ORDER BY updated_at DESC",
+            (),
+            ProjectRecord,
+        )
+
+    def list_evidence(self, project_id: str | None = None) -> list[EvidenceRecord]:
+        if project_id:
+            return self._list_models(
+                "SELECT * FROM evidence_records WHERE project_id = %s ORDER BY captured_at DESC",
+                (project_id,),
+                EvidenceRecord,
+            )
+        return self._list_models(
+            "SELECT * FROM evidence_records ORDER BY captured_at DESC",
+            (),
+            EvidenceRecord,
+        )
+
+    def list_claims(self, project_id: str | None = None) -> list[ClaimRecord]:
+        if project_id:
+            return self._list_models(
+                "SELECT * FROM claim_records WHERE project_id = %s ORDER BY created_at DESC",
+                (project_id,),
+                ClaimRecord,
+            )
+        return self._list_models(
+            "SELECT * FROM claim_records ORDER BY created_at DESC",
+            (),
+            ClaimRecord,
+        )
+
+    def list_report_versions(self, project_id: str | None = None) -> list[ReportVersionRecord]:
+        if project_id:
+            return self._list_models(
+                """
+                SELECT *
+                FROM report_versions
+                WHERE project_id = %s
+                ORDER BY created_at DESC, version_number DESC
+                """,
+                (project_id,),
+                ReportVersionRecord,
+            )
+        return self._list_models(
+            "SELECT * FROM report_versions ORDER BY created_at DESC, version_number DESC",
+            (),
+            ReportVersionRecord,
+        )
+
+    def list_audit_logs(self, workspace_id: str | None = None) -> list[AuditLogRecord]:
+        if workspace_id:
+            return self._list_models(
+                "SELECT * FROM audit_logs WHERE workspace_id = %s ORDER BY created_at DESC",
+                (workspace_id,),
+                AuditLogRecord,
+            )
+        return self._list_models(
+            "SELECT * FROM audit_logs ORDER BY created_at DESC",
+            (),
+            AuditLogRecord,
+        )
+
+    def _list_models(
+        self,
+        sql: str,
+        params: tuple[Any, ...],
+        model: type[BaseModel],
+    ) -> list[Any]:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [model.model_validate(dict(row)) for row in rows]
+
+    def _records_by_ids(
+        self,
+        conn: Any,
+        *,
+        table: str,
+        ids: list[str],
+        model: type[BaseModel],
+    ) -> list[Any]:
+        if not ids:
+            return []
+        rows = conn.execute(f"SELECT * FROM {table} WHERE id = ANY(%s)", (ids,)).fetchall()
+        by_id = {row["id"]: model.model_validate(dict(row)) for row in rows}
+        return [by_id[item] for item in ids if item in by_id]
+
+    def _upsert_workspace(self, cur: Any, workspace_id: str) -> None:
+        cur.execute(
+            """
+            INSERT INTO workspaces (id, name, description)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (workspace_id, _title_from_id(workspace_id), "Phase 1 workspace."),
+        )
+
+    def _upsert_default_user(self, cur: Any) -> None:
+        cur.execute(
+            """
+            INSERT INTO users (id, email, display_name, role)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (DEFAULT_USER_ID, "system@local", "System", "owner"),
+        )
+
+    def _upsert_project(
+        self,
+        cur: Any,
+        detail: RunDetail,
+        context: EnterpriseRunContext,
+        actor_id: str,
+    ) -> None:
+        cur.execute(
+            """
+            INSERT INTO projects (
+                id, workspace_id, name, topic, topic_normalized,
+                competitor_set_hash, created_by, created_at, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now())
+            ON CONFLICT (id) DO UPDATE SET
+                topic = EXCLUDED.topic,
+                topic_normalized = EXCLUDED.topic_normalized,
+                competitor_set_hash = EXCLUDED.competitor_set_hash,
+                updated_at = now()
+            """,
+            (
+                context.project_id,
+                context.workspace_id,
+                detail.topic,
+                detail.topic,
+                compute_topic_normalized(detail.topic),
+                compute_competitor_set_hash(context.competitor_ids),
+                actor_id,
+                detail.created_at,
+            ),
+        )
+
+    def _upsert_competitor(
+        self,
+        cur: Any,
+        detail: RunDetail,
+        workspace_id: str,
+        competitor_id: str,
+        name: str,
+    ) -> None:
+        cur.execute(
+            """
+            INSERT INTO competitors (
+                id, workspace_id, name, normalized_name, homepage_url, created_at, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, now())
+            ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name,
+                homepage_url = EXCLUDED.homepage_url,
+                updated_at = now()
+            """,
+            (
+                competitor_id,
+                workspace_id,
+                name,
+                _normalize_key(name),
+                detail.plan.homepage_hints.get(name),
+                detail.created_at,
+            ),
+        )
+
+    def _upsert_project_competitor(
+        self,
+        cur: Any,
+        project_id: str,
+        competitor_id: str,
+    ) -> None:
+        cur.execute(
+            """
+            INSERT INTO project_competitors (project_id, competitor_id)
+            VALUES (%s, %s)
+            ON CONFLICT (project_id, competitor_id) DO NOTHING
+            """,
+            (project_id, competitor_id),
+        )
+
+    def _upsert_run(
+        self,
+        cur: Any,
+        detail: RunDetail,
+        context: EnterpriseRunContext,
+    ) -> None:
+        cur.execute(
+            """
+            INSERT INTO runs (
+                id, workspace_id, project_id, topic, status, execution_mode,
+                detail_json, created_at, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                project_id = EXCLUDED.project_id,
+                status = EXCLUDED.status,
+                detail_json = EXCLUDED.detail_json,
+                updated_at = EXCLUDED.updated_at
+            """,
+            (
+                detail.id,
+                context.workspace_id,
+                context.project_id,
+                detail.topic,
+                detail.status,
+                detail.execution_mode,
+                self._json(detail.model_dump(mode="json")),
+                detail.created_at,
+                detail.updated_at,
+            ),
+        )
+
+    def _upsert_evidence(self, cur: Any, evidence: EvidenceRecord) -> None:
+        cur.execute(
+            """
+            INSERT INTO evidence_records (
+                id, workspace_id, project_id, run_id, raw_source_id, competitor_id,
+                dimension, source_type, title, url, snippet, content_hash,
+                reliability_score, freshness_score, quality_label, captured_at, metadata
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                reliability_score = EXCLUDED.reliability_score,
+                freshness_score = EXCLUDED.freshness_score,
+                quality_label = EXCLUDED.quality_label,
+                metadata = EXCLUDED.metadata
+            """,
+            (
+                evidence.id,
+                evidence.workspace_id,
+                evidence.project_id,
+                evidence.run_id,
+                evidence.raw_source_id,
+                evidence.competitor_id,
+                evidence.dimension,
+                evidence.source_type,
+                evidence.title,
+                str(evidence.url) if evidence.url else None,
+                evidence.snippet,
+                evidence.content_hash,
+                evidence.reliability_score,
+                evidence.freshness_score,
+                evidence.quality_label,
+                evidence.captured_at,
+                self._json(evidence.metadata),
+            ),
+        )
+
+    def _upsert_claim(self, cur: Any, claim: ClaimRecord) -> None:
+        cur.execute(
+            """
+            INSERT INTO claim_records (
+                id, workspace_id, project_id, run_id, competitor_id, claim_type,
+                claim_text, evidence_ids, confidence, status, created_by_agent, created_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                evidence_ids = EXCLUDED.evidence_ids,
+                confidence = EXCLUDED.confidence,
+                status = EXCLUDED.status
+            """,
+            (
+                claim.id,
+                claim.workspace_id,
+                claim.project_id,
+                claim.run_id,
+                claim.competitor_id,
+                claim.claim_type,
+                claim.claim_text,
+                claim.evidence_ids,
+                claim.confidence,
+                claim.status,
+                claim.created_by_agent,
+                claim.created_at,
+            ),
+        )
+
+    def _upsert_report_version(self, cur: Any, report: ReportVersionRecord) -> None:
+        cur.execute(
+            """
+            INSERT INTO report_versions (
+                id, workspace_id, project_id, run_id, parent_version_id, version_number,
+                topic_normalized, competitor_layer, competitor_set_hash, status,
+                report_md, claim_ids, evidence_ids, created_at, published_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                status = EXCLUDED.status,
+                report_md = EXCLUDED.report_md,
+                claim_ids = EXCLUDED.claim_ids,
+                evidence_ids = EXCLUDED.evidence_ids
+            """,
+            (
+                report.id,
+                report.workspace_id,
+                report.project_id,
+                report.run_id,
+                report.parent_version_id,
+                report.version_number,
+                report.topic_normalized,
+                report.competitor_layer,
+                report.competitor_set_hash,
+                report.status,
+                report.report_md,
+                report.claim_ids,
+                report.evidence_ids,
+                report.created_at,
+                report.published_at,
+            ),
+        )
+
+    def _audit_exists(self, cur: Any, action: str, resource_id: str) -> bool:
+        row = cur.execute(
+            """
+            SELECT 1
+            FROM audit_logs
+            WHERE action = %s AND resource_type = 'run' AND resource_id = %s
+            LIMIT 1
+            """,
+            (action, resource_id),
+        ).fetchone()
+        return row is not None
+
+    def _append_audit(
+        self,
+        cur: Any,
+        *,
+        workspace_id: str,
+        actor_id: str | None,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        after: dict[str, Any],
+    ) -> None:
+        audit_id = f"audit-{_short_hash(f'{action}|{resource_id}|{len(after)}')}"
+        cur.execute(
+            """
+            INSERT INTO audit_logs (
+                id, workspace_id, actor_type, actor_id, action,
+                resource_type, resource_id, after
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (
+                audit_id,
+                workspace_id,
+                "system",
+                actor_id,
+                action,
+                resource_type,
+                resource_id,
+                self._json(after),
+            ),
+        )
+
+    def _json(self, value: dict[str, Any]) -> Any:
+        return self._jsonb(value)
+
+    def _competitor_id(self, workspace_id: str, name: str) -> str:
+        raw = f"{workspace_id}|{_normalize_key(name)}"
+        return f"competitor-{_short_hash(raw)}"
+
+    def _project_id(self, workspace_id: str, topic: str, competitor_ids: list[str]) -> str:
+        raw = "|".join(
+            [
+                workspace_id,
+                compute_topic_normalized(topic),
+                compute_competitor_set_hash(competitor_ids),
+            ]
+        )
+        return f"project-{_short_hash(raw)}"
+
+
+def _schema_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "db" / "postgres" / "001_enterprise_core.sql"
+
+
+def _split_sql(script: str) -> list[str]:
+    return [statement.strip() for statement in script.split(";") if statement.strip()]
