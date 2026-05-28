@@ -18,7 +18,7 @@ services:
   temporal:
     image: temporalio/auto-setup:1.27.2
     environment:
-      DB: postgresql
+      DB: postgres12
       DB_PORT: 5432
       POSTGRES_USER: competiscope
       POSTGRES_PWD: competiscope

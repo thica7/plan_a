@@ -34,3 +34,8 @@ The first API integration point is `POST /api/workflows/competitive-intel`,
 which submits the same request shape as direct run creation and returns `202`
 with deterministic workflow/run IDs. Direct `/api/runs` remains available while
 the Temporal path is verified.
+
+`backend/scripts/smoke_temporal_server.py` is the strict Phase 4 server smoke:
+it requires a running Temporal Server, starts an in-process worker, executes
+`CompetitiveIntelWorkflow` on an isolated smoke task queue, and verifies the
+resulting enterprise projection.

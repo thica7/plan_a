@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from packages.config import Settings
@@ -5,7 +7,12 @@ from packages.enterprise import EnterpriseMemoryStore
 from packages.orchestrator.service import RunService
 from packages.skills.registry import SkillRegistry
 from packages.workflows.activities import CompetitiveIntelActivities
-from packages.workflows.competitive_intel import CompetitiveIntelWorkflow, _workflow_result
+from packages.workflows.competitive_intel import (
+    CompetitiveIntelWorkflow,
+    _coerce_projection_state,
+    _coerce_run_state,
+    _workflow_result,
+)
 from packages.workflows.models import (
     CREATE_RUN_ACTIVITY,
     LOAD_PROJECTION_ACTIVITY,
@@ -26,6 +33,14 @@ def _settings() -> Settings:
         llm_timeout_seconds=10,
         llm_temperature=0.2,
     )
+
+
+def test_workflow_package_init_is_temporal_sandbox_safe() -> None:
+    init_source = Path("backend/packages/workflows/__init__.py").read_text(encoding="utf-8")
+
+    assert "packages.workflows.activities" not in init_source
+    assert "packages.workflows.worker" not in init_source
+    assert "packages.orchestrator" not in init_source
 
 
 @pytest.mark.asyncio
@@ -108,3 +123,35 @@ def test_competitive_intel_workflow_result_preserves_projection_metadata() -> No
     assert result.claim_count == 4
     assert result.report_chars == 128
     assert result.qa_finding_count == 2
+
+
+def test_temporal_activity_payloads_can_cross_json_converter_boundary() -> None:
+    run_state = _coerce_run_state(
+        {
+            "run_id": "run-1",
+            "idempotency_key": "workflow-1",
+            "status": "completed",
+            "workspace_id": "workspace-1",
+            "project_id": None,
+            "current_node": None,
+            "report_chars": 128,
+            "qa_finding_count": 2,
+        }
+    )
+    projection = _coerce_projection_state(
+        {
+            "run_id": "run-1",
+            "workspace_id": "workspace-1",
+            "project_id": "project-1",
+            "report_version_id": "report-version-1",
+            "evidence_count": 3,
+            "claim_count": 4,
+        }
+    )
+
+    result = _workflow_result(run_state, projection)
+
+    assert result.status == "completed"
+    assert result.run_id == "run-1"
+    assert result.report_version_id == "report-version-1"
+    assert result.evidence_count == 3

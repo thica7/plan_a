@@ -79,6 +79,15 @@ make smoke-temporal-thin-shell
 
 The smoke script uses `postgresql://competiscope:competiscope@127.0.0.1:55432/competiscope?connect_timeout=5`
 unless `ENTERPRISE_DATABASE_URL` is set.
+For a real Temporal workflow smoke, start Temporal first and then run:
+
+```bash
+docker compose up -d postgres temporal temporal-ui
+make smoke-temporal-server
+```
+
+The Temporal server smoke uses a unique default smoke task queue on each run so
+old test workflows cannot pollute the result.
 
 ## Current Slice
 
@@ -101,7 +110,7 @@ unless `ENTERPRISE_DATABASE_URL` is set.
 - Optional HITL interrupts for planner and QA review, enabled with `HITL_ENABLED=true`
 - Enterprise data boundary for Workspace, Project, Competitor, Evidence, Claim, ReportVersion, and AuditLog, with memory and Postgres store implementations
 - Phase 4 prerequisites for retry-safe workflow wrapping: run `idempotency_key` plus evidence `canonical_url`, first/last seen run IDs, and `seen_count`
-- Phase 4 Temporal thin shell: `CompetitiveIntelWorkflow` wraps the existing LangGraph run as retry-safe activities; start it through `POST /api/workflows/competitive-intel` or run the worker with `make temporal-worker`
+- Phase 4 Temporal thin shell: `CompetitiveIntelWorkflow` wraps the existing LangGraph run as retry-safe activities; start it through `POST /api/workflows/competitive-intel`, run the worker with `make temporal-worker`, and verify a real server with `make smoke-temporal-server`
 - Docker and Makefile scaffolding for the planned demo path
 
 ## Project Layout

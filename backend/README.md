@@ -56,3 +56,13 @@ it does not replace the inner graph.
 The API route `POST /api/workflows/competitive-intel` submits the same payload
 shape as `POST /api/runs`, returns `202 Accepted`, and reports the deterministic
 workflow/run IDs without waiting for the long-running analysis to finish.
+
+Real Temporal server smoke:
+
+```bash
+docker compose up -d postgres temporal temporal-ui
+conda run -n bd-competiscope-v2 python backend/scripts/smoke_temporal_server.py
+```
+
+The server smoke defaults to an isolated per-run smoke task queue; set
+`TEMPORAL_TASK_QUEUE` only when intentionally testing a named queue.
