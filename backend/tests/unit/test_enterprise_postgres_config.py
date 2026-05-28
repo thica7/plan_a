@@ -5,6 +5,7 @@ import pytest
 
 from packages.config.settings import get_settings
 from packages.enterprise import EnterprisePostgresStore
+from packages.enterprise.postgres import _split_sql
 
 
 @pytest.fixture(autouse=True)
@@ -49,6 +50,12 @@ def test_postgres_schema_contains_enterprise_core_tables() -> None:
         "audit_logs",
     ]:
         assert f"CREATE TABLE IF NOT EXISTS {table}" in schema
+
+
+def test_postgres_schema_splitter_ignores_comment_semicolons() -> None:
+    statements = _split_sql("-- comment with ; semicolon\nCREATE TABLE example (id TEXT);")
+
+    assert statements == ["CREATE TABLE example (id TEXT)"]
 
 
 def test_postgres_store_can_be_constructed_without_migrating() -> None:

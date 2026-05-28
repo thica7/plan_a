@@ -26,7 +26,7 @@ ENTERPRISE_STORE_BACKEND=memory
 
 # durable enterprise mode
 ENTERPRISE_STORE_BACKEND=postgres
-ENTERPRISE_DATABASE_URL=postgresql://competiscope:competiscope@localhost:5432/competiscope
+ENTERPRISE_DATABASE_URL=postgresql://competiscope:competiscope@127.0.0.1:55432/competiscope?connect_timeout=5
 ```
 
 `EnterpriseMemoryStore` and `EnterprisePostgresStore` implement the same repository boundary,

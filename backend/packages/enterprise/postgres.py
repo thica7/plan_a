@@ -580,4 +580,7 @@ def _schema_path() -> Path:
 
 
 def _split_sql(script: str) -> list[str]:
-    return [statement.strip() for statement in script.split(";") if statement.strip()]
+    uncommented = "\n".join(
+        line for line in script.splitlines() if not line.strip().startswith("--")
+    )
+    return [statement.strip() for statement in uncommented.split(";") if statement.strip()]

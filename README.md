@@ -60,6 +60,16 @@ $env:VITE_API_TARGET="http://localhost:8010"
 pnpm dev
 ```
 
+Enterprise Postgres smoke:
+
+```bash
+docker compose up -d postgres
+make smoke-enterprise-postgres
+```
+
+The smoke script uses `postgresql://competiscope:competiscope@127.0.0.1:55432/competiscope?connect_timeout=5`
+unless `ENTERPRISE_DATABASE_URL` is set.
+
 ## Current Slice
 
 - FastAPI backend with `/api/runs`, `/api/runs/{id}/stream`, `/api/skills`, `/api/runtime`, and `/api/runs/{id}/resume`
