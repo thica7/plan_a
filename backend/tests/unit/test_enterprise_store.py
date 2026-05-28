@@ -333,6 +333,7 @@ def test_enterprise_router_exposes_projection() -> None:
     business_plan = client.get(f"/api/enterprise/projects/{context.project_id}/business-plan")
     qa_evaluation = client.get(f"/api/enterprise/projects/{context.project_id}/qa-evaluation")
     readiness = client.get(f"/api/enterprise/projects/{context.project_id}/readiness-score")
+    gaps = client.get(f"/api/enterprise/projects/{context.project_id}/evidence-gaps")
     competitors = client.get(f"/api/enterprise/competitors?project_id={context.project_id}")
     quality = client.patch(
         f"/api/enterprise/evidence/{projection.evidence_records[0].id}/quality",
@@ -353,6 +354,8 @@ def test_enterprise_router_exposes_projection() -> None:
     assert "finding_count" in qa_evaluation.json()
     assert readiness.status_code == 200
     assert readiness.json()["risk_level"] in {"ready", "watch", "at_risk", "blocked"}
+    assert gaps.status_code == 200
+    assert "gap_count" in gaps.json()
     assert competitors.status_code == 200
     assert [item["name"] for item in competitors.json()] == ["Cursor"]
     assert quality.status_code == 200

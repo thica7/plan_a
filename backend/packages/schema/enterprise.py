@@ -273,6 +273,42 @@ class ProjectReadinessScore(BaseModel):
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class EvidenceGapItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    severity: Literal["critical", "high", "medium", "low"]
+    gap_type: Literal[
+        "missing_dimension_coverage",
+        "missing_verified_source",
+        "stale_or_rejected_evidence",
+        "claim_without_usable_evidence",
+        "landscape_breadth",
+    ]
+    competitor_id: str | None = None
+    competitor_name: str | None = None
+    dimension: str | None = None
+    source_type_required: str | None = None
+    message: str
+    recommended_query: str = ""
+    evidence_ids: list[str] = Field(default_factory=list)
+    claim_ids: list[str] = Field(default_factory=list)
+
+
+class EvidenceGapReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    scenario_id: str
+    gap_count: int = 0
+    critical_count: int = 0
+    high_count: int = 0
+    medium_count: int = 0
+    low_count: int = 0
+    gaps: list[EvidenceGapItem] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class EvidenceQualityUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

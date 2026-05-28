@@ -1793,6 +1793,7 @@ textarea {
 .scenario-panel p,
 .readiness-score-row p,
 .recommendation-card p,
+.evidence-gap-card p,
 .business-qa-finding p {
   color: var(--muted);
   line-height: 1.45;
@@ -1937,6 +1938,91 @@ textarea {
 .recommendation-card span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.evidence-gap-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.evidence-gap-panel.critical {
+  border-color: rgba(180, 83, 9, 0.34);
+}
+
+.evidence-gap-panel.high {
+  border-color: rgba(202, 138, 4, 0.32);
+}
+
+.evidence-gap-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.evidence-gap-summary span {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  min-height: 58px;
+  padding: 10px;
+}
+
+.evidence-gap-summary strong,
+.evidence-gap-summary em {
+  display: block;
+}
+
+.evidence-gap-summary strong {
+  color: #252c39;
+  font-size: 17px;
+}
+
+.evidence-gap-summary em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.evidence-gap-list {
+  display: grid;
+  gap: 8px;
+}
+
+.evidence-gap-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.evidence-gap-card.critical {
+  border-color: rgba(180, 83, 9, 0.36);
+}
+
+.evidence-gap-card.high {
+  border-color: rgba(202, 138, 4, 0.34);
+}
+
+.evidence-gap-card.medium {
+  border-color: rgba(37, 99, 235, 0.24);
+}
+
+.evidence-gap-card strong,
+.evidence-gap-card span,
+.evidence-gap-card em {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.evidence-gap-card span,
+.evidence-gap-card em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
 }
 
 .business-qa-panel {

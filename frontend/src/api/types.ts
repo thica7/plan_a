@@ -416,6 +416,37 @@ export interface ProjectReadinessScore {
   generated_at: string;
 }
 
+export interface EvidenceGapItem {
+  id: string;
+  severity: "critical" | "high" | "medium" | "low";
+  gap_type:
+    | "missing_dimension_coverage"
+    | "missing_verified_source"
+    | "stale_or_rejected_evidence"
+    | "claim_without_usable_evidence"
+    | "landscape_breadth";
+  competitor_id?: string | null;
+  competitor_name?: string | null;
+  dimension?: string | null;
+  source_type_required?: string | null;
+  message: string;
+  recommended_query: string;
+  evidence_ids: string[];
+  claim_ids: string[];
+}
+
+export interface EvidenceGapReport {
+  project_id: string;
+  scenario_id: string;
+  gap_count: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  gaps: EvidenceGapItem[];
+  generated_at: string;
+}
+
 export interface WorkspaceRecord {
   id: string;
   name: string;

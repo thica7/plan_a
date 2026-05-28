@@ -6,6 +6,7 @@ import type {
   ClaimRecord,
   CompetitorRecord,
   EvidenceQualityLabel,
+  EvidenceGapReport,
   EvidenceRecord,
   ProjectReadinessScore,
   ProjectRecord,
@@ -142,6 +143,10 @@ export function getProjectQAEvaluation(projectId: string) {
 
 export function getProjectReadinessScore(projectId: string) {
   return request<ProjectReadinessScore>(`/enterprise/projects/${projectId}/readiness-score`);
+}
+
+export function getProjectEvidenceGaps(projectId: string) {
+  return request<EvidenceGapReport>(`/enterprise/projects/${projectId}/evidence-gaps`);
 }
 
 export function updateEvidenceQuality(

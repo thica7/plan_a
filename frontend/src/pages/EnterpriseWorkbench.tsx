@@ -16,6 +16,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import {
+  getProjectEvidenceGaps,
   getProjectBusinessPlan,
   getProjectQAEvaluation,
   getProjectReadinessScore,
@@ -33,6 +34,8 @@ import type {
   BusinessQAFinding,
   ClaimRecord,
   CompetitorRecord,
+  EvidenceGapItem,
+  EvidenceGapReport,
   EvidenceQualityLabel,
   EvidenceRecord,
   ProjectReadinessScore,
@@ -53,6 +56,7 @@ export function EnterpriseWorkbench() {
   const [businessPlan, setBusinessPlan] = useState<BusinessIntelPlan | null>(null);
   const [qaEvaluation, setQaEvaluation] = useState<BusinessQAEvaluation | null>(null);
   const [readinessScore, setReadinessScore] = useState<ProjectReadinessScore | null>(null);
+  const [evidenceGaps, setEvidenceGaps] = useState<EvidenceGapReport | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
   const [activeTab, setActiveTab] = useState<EnterpriseTab>("evidence");
@@ -89,6 +93,7 @@ export function EnterpriseWorkbench() {
       setBusinessPlan(null);
       setQaEvaluation(null);
       setReadinessScore(null);
+      setEvidenceGaps(null);
       setSelectedVersionId(null);
       return;
     }
@@ -104,6 +109,7 @@ export function EnterpriseWorkbench() {
       getProjectBusinessPlan(selectedProjectId),
       getProjectQAEvaluation(selectedProjectId),
       getProjectReadinessScore(selectedProjectId),
+      getProjectEvidenceGaps(selectedProjectId),
     ])
       .then(
         ([
@@ -114,6 +120,7 @@ export function EnterpriseWorkbench() {
           businessPlanValue,
           qaEvaluationValue,
           readinessScoreValue,
+          evidenceGapsValue,
         ]) => {
           if (!active) return;
           setCompetitors(competitorItems);
@@ -123,6 +130,7 @@ export function EnterpriseWorkbench() {
           setBusinessPlan(businessPlanValue);
           setQaEvaluation(qaEvaluationValue);
           setReadinessScore(readinessScoreValue);
+          setEvidenceGaps(evidenceGapsValue);
           setSelectedVersionId(versionItems[0]?.id ?? null);
         },
       )
@@ -136,6 +144,7 @@ export function EnterpriseWorkbench() {
         setBusinessPlan(null);
         setQaEvaluation(null);
         setReadinessScore(null);
+        setEvidenceGaps(null);
         setSelectedVersionId(null);
       })
       .finally(() => {
@@ -211,9 +220,11 @@ export function EnterpriseWorkbench() {
           void Promise.all([
             getProjectQAEvaluation(selectedProjectId),
             getProjectReadinessScore(selectedProjectId),
-          ]).then(([qaValue, readinessValue]) => {
+            getProjectEvidenceGaps(selectedProjectId),
+          ]).then(([qaValue, readinessValue, evidenceGapsValue]) => {
             setQaEvaluation(qaValue);
             setReadinessScore(readinessValue);
+            setEvidenceGaps(evidenceGapsValue);
           });
         }
       })
@@ -313,6 +324,8 @@ export function EnterpriseWorkbench() {
               ) : null}
 
               {readinessScore ? <ReadinessScorePanel readinessScore={readinessScore} /> : null}
+
+              {evidenceGaps ? <EvidenceGapPanel report={evidenceGaps} /> : null}
 
               {qaEvaluation ? <QAEvaluationPanel evaluation={qaEvaluation} /> : null}
 
@@ -444,6 +457,62 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
         <i style={{ width: `${value}%` }} />
       </div>
     </div>
+  );
+}
+
+function EvidenceGapPanel({ report }: { report: EvidenceGapReport }) {
+  const status = report.critical_count > 0 ? "critical" : report.high_count > 0 ? "high" : "clear";
+  return (
+    <section className={`panel evidence-gap-panel ${status}`}>
+      <div className="panel-heading-row">
+        <h2>Evidence gaps</h2>
+        {status === "clear" ? <CheckCircle2 size={17} aria-hidden /> : <Search size={17} aria-hidden />}
+      </div>
+      <div className="evidence-gap-summary">
+        <span>
+          <strong>{report.gap_count}</strong>
+          <em>Total gaps</em>
+        </span>
+        <span>
+          <strong>{report.critical_count}</strong>
+          <em>Critical</em>
+        </span>
+        <span>
+          <strong>{report.high_count}</strong>
+          <em>High</em>
+        </span>
+        <span>
+          <strong>{report.medium_count}</strong>
+          <em>Medium</em>
+        </span>
+      </div>
+      {report.gaps.length > 0 ? (
+        <div className="evidence-gap-list">
+          {report.gaps.slice(0, 5).map((gap) => (
+            <EvidenceGapCard gap={gap} key={gap.id} />
+          ))}
+        </div>
+      ) : (
+        <p className="muted-line">No structured evidence gaps for the active scenario.</p>
+      )}
+    </section>
+  );
+}
+
+function EvidenceGapCard({ gap }: { gap: EvidenceGapItem }) {
+  return (
+    <article className={`evidence-gap-card ${gap.severity}`}>
+      <div>
+        <strong>{gap.gap_type.replace(/_/g, " ")}</strong>
+        <span>
+          {gap.severity}
+          {gap.competitor_name ? ` / ${gap.competitor_name}` : ""}
+          {gap.dimension ? ` / ${gap.dimension}` : ""}
+        </span>
+      </div>
+      <p>{gap.message}</p>
+      {gap.recommended_query ? <em>{gap.recommended_query}</em> : null}
+    </article>
   );
 }
 

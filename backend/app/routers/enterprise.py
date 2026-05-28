@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_enterprise_store
 from packages.business_intel import (
+    analyze_evidence_gaps,
     build_business_intel_plan,
     evaluate_business_qa,
     list_business_qa_rules,
@@ -19,6 +20,7 @@ from packages.schema.enterprise import (
     ClaimRecord,
     CompetitorRecord,
     EnterpriseRunProjection,
+    EvidenceGapReport,
     EvidenceQualityUpdateRequest,
     EvidenceQualityUpdateResult,
     EvidenceRecord,
@@ -115,6 +117,32 @@ def get_project_readiness_score(
         claims=claims,
     )
     return score_project_readiness(
+        project_id=project_id,
+        plan=plan,
+        qa_evaluation=qa_evaluation,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+    )
+
+
+@router.get("/enterprise/projects/{project_id}/evidence-gaps", response_model=EvidenceGapReport)
+def get_project_evidence_gaps(
+    project_id: str,
+    store: EnterpriseStoreDep,
+) -> EvidenceGapReport:
+    plan = _business_plan_for_project(project_id, store)
+    competitors = store.list_competitors(project_id=project_id)
+    evidence = store.list_evidence(project_id=project_id)
+    claims = store.list_claims(project_id=project_id)
+    qa_evaluation = evaluate_business_qa(
+        project_id=project_id,
+        plan=plan,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+    )
+    return analyze_evidence_gaps(
         project_id=project_id,
         plan=plan,
         qa_evaluation=qa_evaluation,

@@ -1,4 +1,5 @@
 from packages.business_intel import (
+    analyze_evidence_gaps,
     build_business_intel_plan,
     evaluate_business_qa,
     list_business_qa_rules,
@@ -102,6 +103,14 @@ def test_business_qa_evaluator_passes_verified_pricing_pack() -> None:
         evidence=evidence,
         claims=claims,
     )
+    gaps = analyze_evidence_gaps(
+        project_id="project-1",
+        plan=plan,
+        qa_evaluation=evaluation,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
     readiness = score_project_readiness(
         project_id="project-1",
         plan=plan,
@@ -112,6 +121,7 @@ def test_business_qa_evaluator_passes_verified_pricing_pack() -> None:
     )
 
     assert evaluation.finding_count == 0
+    assert gaps.gap_count == 0
     assert evaluation.passed_rules == evaluation.total_rules
     assert readiness.risk_level == "ready"
     assert readiness.score >= 85
@@ -163,6 +173,14 @@ def test_business_qa_evaluator_flags_stale_evidence_and_broken_claim_links() -> 
         evidence=evidence,
         claims=claims,
     )
+    gaps = analyze_evidence_gaps(
+        project_id="project-1",
+        plan=plan,
+        qa_evaluation=evaluation,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
     readiness = score_project_readiness(
         project_id="project-1",
         plan=plan,
@@ -177,6 +195,11 @@ def test_business_qa_evaluator_flags_stale_evidence_and_broken_claim_links() -> 
     assert {finding.rule_id for finding in evaluation.findings} >= {
         "claim_has_evidence",
         "pricing_currentness",
+    }
+    assert gaps.gap_count >= 2
+    assert {gap.gap_type for gap in gaps.gaps} >= {
+        "claim_without_usable_evidence",
+        "missing_dimension_coverage",
     }
     assert readiness.risk_level == "blocked"
     assert readiness.score < 85
