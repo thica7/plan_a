@@ -127,6 +127,17 @@ class ReportVersionRecord(BaseModel):
     published_at: datetime | None = None
 
 
+class EnterpriseRunProjection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str
+    project_id: str
+    run_id: str
+    evidence_records: list[EvidenceRecord] = Field(default_factory=list)
+    claim_records: list[ClaimRecord] = Field(default_factory=list)
+    report_version: ReportVersionRecord
+
+
 class AuditLogRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
