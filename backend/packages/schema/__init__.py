@@ -8,6 +8,8 @@ from packages.schema.api_dto import (
 from packages.schema.enterprise import (
     AuditLogRecord,
     BusinessIntelPlan,
+    BusinessQAEvaluation,
+    BusinessQAFinding,
     BusinessQARule,
     ClaimRecord,
     CompetitorLayerAssessment,
@@ -54,6 +56,8 @@ __all__ = [
     "AgentMessage",
     "AuditLogRecord",
     "BusinessIntelPlan",
+    "BusinessQAEvaluation",
+    "BusinessQAFinding",
     "BusinessQARule",
     "ClaimRecord",
     "ComparisonMatrix",

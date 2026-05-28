@@ -208,6 +208,38 @@ class BusinessIntelPlan(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class BusinessQAFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    rule_id: str
+    rule_name: str
+    severity: Literal["info", "warn", "blocker"]
+    competitor_id: str | None = None
+    competitor_name: str | None = None
+    dimension: str | None = None
+    message: str
+    evidence_ids: list[str] = Field(default_factory=list)
+    claim_ids: list[str] = Field(default_factory=list)
+    recommendation: str = ""
+
+
+class BusinessQAEvaluation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    scenario_id: str
+    competitor_layer: Literal["L1", "L2", "L3"]
+    total_rules: int = 0
+    passed_rules: int = 0
+    finding_count: int = 0
+    blocker_count: int = 0
+    warn_count: int = 0
+    info_count: int = 0
+    findings: list[BusinessQAFinding] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class EvidenceQualityUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  AlertTriangle,
   Briefcase,
   CheckCircle2,
   Database,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import {
   getProjectBusinessPlan,
+  getProjectQAEvaluation,
   getReportVersionDiff,
   listEnterpriseCompetitors,
   listEnterpriseProjects,
@@ -25,6 +27,8 @@ import {
 } from "../api/client";
 import type {
   BusinessIntelPlan,
+  BusinessQAEvaluation,
+  BusinessQAFinding,
   ClaimRecord,
   CompetitorRecord,
   EvidenceQualityLabel,
@@ -44,6 +48,7 @@ export function EnterpriseWorkbench() {
   const [claims, setClaims] = useState<ClaimRecord[]>([]);
   const [versions, setVersions] = useState<ReportVersionRecord[]>([]);
   const [businessPlan, setBusinessPlan] = useState<BusinessIntelPlan | null>(null);
+  const [qaEvaluation, setQaEvaluation] = useState<BusinessQAEvaluation | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
   const [activeTab, setActiveTab] = useState<EnterpriseTab>("evidence");
@@ -78,6 +83,7 @@ export function EnterpriseWorkbench() {
       setClaims([]);
       setVersions([]);
       setBusinessPlan(null);
+      setQaEvaluation(null);
       setSelectedVersionId(null);
       return;
     }
@@ -91,16 +97,27 @@ export function EnterpriseWorkbench() {
       listProjectClaims(selectedProjectId),
       listProjectReportVersions(selectedProjectId),
       getProjectBusinessPlan(selectedProjectId),
+      getProjectQAEvaluation(selectedProjectId),
     ])
-      .then(([competitorItems, evidenceItems, claimItems, versionItems, businessPlanValue]) => {
+      .then(
+        ([
+          competitorItems,
+          evidenceItems,
+          claimItems,
+          versionItems,
+          businessPlanValue,
+          qaEvaluationValue,
+        ]) => {
         if (!active) return;
         setCompetitors(competitorItems);
         setEvidence(evidenceItems);
         setClaims(claimItems);
         setVersions(versionItems);
         setBusinessPlan(businessPlanValue);
+        setQaEvaluation(qaEvaluationValue);
         setSelectedVersionId(versionItems[0]?.id ?? null);
-      })
+        },
+      )
       .catch((err: Error) => {
         if (!active) return;
         setError(err.message);
@@ -109,6 +126,7 @@ export function EnterpriseWorkbench() {
         setClaims([]);
         setVersions([]);
         setBusinessPlan(null);
+        setQaEvaluation(null);
         setSelectedVersionId(null);
       })
       .finally(() => {
@@ -177,10 +195,17 @@ export function EnterpriseWorkbench() {
         item.id === evidenceId ? { ...item, quality_label: qualityLabel } : item,
       ),
     );
-    updateEvidenceQuality(evidenceId, { quality_label: qualityLabel }).catch((err: Error) => {
-      setError(err.message);
-      void listProjectEvidence(selectedProjectId ?? "").then(setEvidence);
-    });
+    updateEvidenceQuality(evidenceId, { quality_label: qualityLabel })
+      .then(({ evidence: updated }) => {
+        setEvidence((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+        if (selectedProjectId) {
+          void getProjectQAEvaluation(selectedProjectId).then(setQaEvaluation);
+        }
+      })
+      .catch((err: Error) => {
+        setError(err.message);
+        void listProjectEvidence(selectedProjectId ?? "").then(setEvidence);
+      });
   }
 
   return (
@@ -272,6 +297,8 @@ export function EnterpriseWorkbench() {
                 </section>
               ) : null}
 
+              {qaEvaluation ? <QAEvaluationPanel evaluation={qaEvaluation} /> : null}
+
               <section className="panel competitor-strip-panel">
                 <div className="panel-heading-row">
                   <h2>Competitor library</h2>
@@ -349,6 +376,62 @@ export function EnterpriseWorkbench() {
         </div>
       </div>
     </section>
+  );
+}
+
+function QAEvaluationPanel({ evaluation }: { evaluation: BusinessQAEvaluation }) {
+  const status = evaluation.blocker_count > 0 ? "blocker" : evaluation.warn_count > 0 ? "warn" : "pass";
+  return (
+    <section className={`panel business-qa-panel ${status}`}>
+      <div className="panel-heading-row">
+        <h2>Business QA</h2>
+        {status === "pass" ? <CheckCircle2 size={17} aria-hidden /> : <AlertTriangle size={17} aria-hidden />}
+      </div>
+      <div className="business-qa-metrics">
+        <span>
+          <strong>{evaluation.passed_rules}/{evaluation.total_rules}</strong>
+          <em>Rules passed</em>
+        </span>
+        <span>
+          <strong>{evaluation.blocker_count}</strong>
+          <em>Blockers</em>
+        </span>
+        <span>
+          <strong>{evaluation.warn_count}</strong>
+          <em>Warnings</em>
+        </span>
+        <span>
+          <strong>{evaluation.info_count}</strong>
+          <em>Info</em>
+        </span>
+      </div>
+      {evaluation.findings.length > 0 ? (
+        <div className="business-qa-findings">
+          {evaluation.findings.slice(0, 5).map((finding) => (
+            <QAFindingItem finding={finding} key={finding.id} />
+          ))}
+        </div>
+      ) : (
+        <p className="muted-line">All active business QA rules passed.</p>
+      )}
+    </section>
+  );
+}
+
+function QAFindingItem({ finding }: { finding: BusinessQAFinding }) {
+  return (
+    <article className={`business-qa-finding ${finding.severity}`}>
+      <div>
+        <strong>{finding.rule_name}</strong>
+        <span>
+          {finding.severity}
+          {finding.competitor_name ? ` / ${finding.competitor_name}` : ""}
+          {finding.dimension ? ` / ${finding.dimension}` : ""}
+        </span>
+      </div>
+      <p>{finding.message}</p>
+      {finding.recommendation ? <em>{finding.recommendation}</em> : null}
+    </article>
   );
 }
 

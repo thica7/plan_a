@@ -1,6 +1,7 @@
 import type {
   AgentMessage,
   BusinessIntelPlan,
+  BusinessQAEvaluation,
   CompetitorKnowledge,
   ClaimRecord,
   CompetitorRecord,
@@ -132,6 +133,10 @@ export function listProjectEvidence(projectId: string) {
 
 export function getProjectBusinessPlan(projectId: string) {
   return request<BusinessIntelPlan>(`/enterprise/projects/${projectId}/business-plan`);
+}
+
+export function getProjectQAEvaluation(projectId: string) {
+  return request<BusinessQAEvaluation>(`/enterprise/projects/${projectId}/qa-evaluation`);
 }
 
 export function updateEvidenceQuality(

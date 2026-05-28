@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.deps import get_enterprise_store
 from packages.business_intel import (
     build_business_intel_plan,
+    evaluate_business_qa,
     list_business_qa_rules,
     list_scenario_packs,
 )
@@ -12,6 +13,7 @@ from packages.enterprise import EnterpriseStore, build_report_version_diff
 from packages.schema.enterprise import (
     AuditLogRecord,
     BusinessIntelPlan,
+    BusinessQAEvaluation,
     BusinessQARule,
     ClaimRecord,
     CompetitorRecord,
@@ -73,6 +75,25 @@ def get_project_business_plan(
     project_id: str,
     store: EnterpriseStoreDep,
 ) -> BusinessIntelPlan:
+    return _business_plan_for_project(project_id, store)
+
+
+@router.get("/enterprise/projects/{project_id}/qa-evaluation", response_model=BusinessQAEvaluation)
+def get_project_qa_evaluation(
+    project_id: str,
+    store: EnterpriseStoreDep,
+) -> BusinessQAEvaluation:
+    plan = _business_plan_for_project(project_id, store)
+    return evaluate_business_qa(
+        project_id=project_id,
+        plan=plan,
+        competitors=store.list_competitors(project_id=project_id),
+        evidence=store.list_evidence(project_id=project_id),
+        claims=store.list_claims(project_id=project_id),
+    )
+
+
+def _business_plan_for_project(project_id: str, store: EnterpriseStore) -> BusinessIntelPlan:
     project = store.get_project(project_id)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")

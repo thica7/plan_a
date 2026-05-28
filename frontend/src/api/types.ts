@@ -360,6 +360,34 @@ export interface BusinessIntelPlan {
   created_at: string;
 }
 
+export interface BusinessQAFinding {
+  id: string;
+  rule_id: string;
+  rule_name: string;
+  severity: "info" | "warn" | "blocker";
+  competitor_id?: string | null;
+  competitor_name?: string | null;
+  dimension?: string | null;
+  message: string;
+  evidence_ids: string[];
+  claim_ids: string[];
+  recommendation: string;
+}
+
+export interface BusinessQAEvaluation {
+  project_id: string;
+  scenario_id: string;
+  competitor_layer: "L1" | "L2" | "L3";
+  total_rules: number;
+  passed_rules: number;
+  finding_count: number;
+  blocker_count: number;
+  warn_count: number;
+  info_count: number;
+  findings: BusinessQAFinding[];
+  generated_at: string;
+}
+
 export interface WorkspaceRecord {
   id: string;
   name: string;

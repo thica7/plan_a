@@ -1790,7 +1790,8 @@ textarea {
   gap: 12px;
 }
 
-.scenario-panel p {
+.scenario-panel p,
+.business-qa-finding p {
   color: var(--muted);
   line-height: 1.45;
   margin: 0;
@@ -1816,6 +1817,91 @@ textarea {
 .qa-rule-row .qa-rule.info {
   border-color: rgba(37, 99, 235, 0.24);
   color: #1d4ed8;
+}
+
+.business-qa-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.business-qa-panel.blocker {
+  border-color: rgba(180, 83, 9, 0.32);
+}
+
+.business-qa-panel.warn {
+  border-color: rgba(202, 138, 4, 0.3);
+}
+
+.business-qa-metrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.business-qa-metrics span {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  min-height: 58px;
+  padding: 10px;
+}
+
+.business-qa-metrics strong,
+.business-qa-metrics em {
+  display: block;
+}
+
+.business-qa-metrics strong {
+  color: #252c39;
+  font-size: 17px;
+}
+
+.business-qa-metrics em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.business-qa-findings {
+  display: grid;
+  gap: 8px;
+}
+
+.business-qa-finding {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.business-qa-finding.blocker {
+  border-color: rgba(180, 83, 9, 0.36);
+}
+
+.business-qa-finding.warn {
+  border-color: rgba(202, 138, 4, 0.34);
+}
+
+.business-qa-finding.info {
+  border-color: rgba(37, 99, 235, 0.24);
+}
+
+.business-qa-finding strong,
+.business-qa-finding span,
+.business-qa-finding em {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.business-qa-finding span,
+.business-qa-finding em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
 }
 
 .competitor-strip {
