@@ -231,6 +231,7 @@ class EnterpriseMemoryStore:
                         metadata={
                             "scenario_id": detail.plan.scenario_id,
                             "qa_rule_ids": detail.plan.qa_rule_ids,
+                            "homepage_verified": detail.plan.homepage_verified.get(name, False),
                         },
                         created_at=detail.created_at,
                         updated_at=now,
@@ -241,6 +242,10 @@ class EnterpriseMemoryStore:
                     competitor.homepage_url = detail.plan.homepage_hints.get(name)
                     competitor.metadata["scenario_id"] = detail.plan.scenario_id
                     competitor.metadata["qa_rule_ids"] = detail.plan.qa_rule_ids
+                    competitor.metadata["homepage_verified"] = detail.plan.homepage_verified.get(
+                        name,
+                        False,
+                    )
                     competitor.updated_at = now
                 self._append_audit_once(
                     workspace_id=workspace_id,

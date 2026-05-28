@@ -15,6 +15,22 @@ rules:
     min_sources_per_competitor: 1
     require_verified_source: false
     rationale: Every knowledge claim must map to at least one stable EvidenceRecord.
+  - id: homepage_verified
+    name: Homepage verification gate
+    severity: blocker
+    applies_to_layers: [L1, L2, L3]
+    required_dimensions: []
+    min_sources_per_competitor: 0
+    require_verified_source: false
+    rationale: Phantom competitors should be rejected before collection starts.
+  - id: source_reliability_min
+    name: Source reliability floor
+    severity: warn
+    applies_to_layers: [L1, L2, L3]
+    required_dimensions: []
+    min_sources_per_competitor: 0
+    require_verified_source: false
+    rationale: Low-reliability evidence should be reviewed or replaced before reporting.
   - id: pricing_currentness
     name: Pricing currentness
     severity: warn

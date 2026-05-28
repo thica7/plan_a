@@ -20,6 +20,7 @@ from packages.agents.qa.logic import QualityAgentMixin
 from packages.agents.reflector.logic import ReflectorAgentMixin
 from packages.agents.writer.logic import WriterAgentMixin
 from packages.business_intel import build_business_intel_plan
+from packages.business_intel.homepage import verify_homepages
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore, build_enterprise_projection
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
@@ -125,10 +126,19 @@ class RunService(
     async def create_run(self, request: RunCreateRequest) -> RunDetail:
         execution_mode = self._resolve_execution_mode(request.execution_mode)
         competitors = self._normalize_competitor_names(request.competitors)
+        homepage_verifications = verify_homepages(competitors)
+        verified_competitors = [
+            competitor
+            for competitor in competitors
+            if homepage_verifications[competitor].verified
+        ]
+        if verified_competitors:
+            competitors = verified_competitors
         valid_dimensions = self._normalize_requested_dimensions(
             request.dimensions,
             require_core_schema=not competitors,
         )
+        homepage_verifications = verify_homepages(competitors)
         business_plan = build_business_intel_plan(
             topic=request.topic,
             competitors=competitors,
@@ -148,7 +158,12 @@ class RunService(
             scenario_recommended_dimensions=business_plan.recommended_dimensions,
             qa_rule_ids=[rule.id for rule in business_plan.qa_rules],
             homepage_hints={
-                name: f"https://www.google.com/search?q={name}" for name in competitors
+                name: str(homepage_verifications[name].homepage_url)
+                for name in competitors
+                if homepage_verifications[name].homepage_url is not None
+            },
+            homepage_verified={
+                name: homepage_verifications[name].verified for name in competitors
             },
         )
         detail = RunDetail(

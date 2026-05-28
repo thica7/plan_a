@@ -99,6 +99,34 @@ async def test_topic_only_run_discovers_competitors_in_planner() -> None:
     assert record.detail.trace_spans[0].agent == "planner"
 
 
+@pytest.mark.asyncio
+async def test_create_run_filters_phantom_competitors_with_homepage_gate() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor", "FAKE_PRODUCT_NOT_EXISTS", "Windsurf"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+
+    assert detail.plan.competitors == ["Cursor", "Windsurf"]
+    assert detail.plan.homepage_verified == {"Cursor": True, "Windsurf": True}
+    assert "FAKE_PRODUCT_NOT_EXISTS" not in detail.plan.homepage_hints
+
+
 def test_qa_marks_unverified_source_without_missing_false_positive() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

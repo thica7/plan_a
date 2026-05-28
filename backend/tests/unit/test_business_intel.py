@@ -1,11 +1,14 @@
 from packages.business_intel import (
     analyze_evidence_gaps,
     build_business_intel_plan,
+    business_findings_to_redo_scopes,
     evaluate_business_qa,
+    generate_dynamic_scenario_pack,
     list_business_qa_rules,
     list_scenario_packs,
     score_project_readiness,
 )
+from packages.business_intel.homepage import verify_homepage
 from packages.business_intel.layers import assess_competitor_layer
 from packages.schema.enterprise import ClaimRecord, CompetitorRecord, EvidenceRecord
 
@@ -51,11 +54,30 @@ def test_business_plan_selects_scenario_and_rules() -> None:
 
 def test_scenario_pack_catalog_and_qa_rules_are_loaded() -> None:
     packs = list_scenario_packs()
-    rules = list_business_qa_rules(layer="L1")
+    rules = list_business_qa_rules()
 
     assert len(packs) >= 5
+    assert len(rules) == 8
     assert any(pack.id == "l1_direct_battlecard" for pack in packs)
     assert any(rule.id == "claim_has_evidence" for rule in rules)
+    assert any(rule.id == "homepage_verified" for rule in rules)
+
+
+def test_dynamic_scenario_pack_and_homepage_gate_are_deterministic() -> None:
+    pack = generate_dynamic_scenario_pack(
+        topic="AI meeting assistant landscape",
+        competitors=["Fathom", "Otter", "Fireflies", "Avoma"],
+        dimensions=["market"],
+    )
+    good = verify_homepage("Cursor")
+    phantom = verify_homepage("FAKE_PRODUCT_NOT_EXISTS")
+
+    assert pack.is_dynamic is True
+    assert pack.competitor_layer == "L3"
+    assert "market" in pack.required_dimensions
+    assert good.verified is True
+    assert phantom.verified is False
+    assert phantom.reason == "phantom_name"
 
 
 def test_business_qa_evaluator_passes_verified_pricing_pack() -> None:
@@ -206,6 +228,84 @@ def test_business_qa_evaluator_flags_stale_evidence_and_broken_claim_links() -> 
     assert readiness.recommendations[0].priority == "critical"
 
 
+def test_business_qa_rules_cover_five_redo_scope_routes() -> None:
+    plan = build_business_intel_plan(
+        topic="Enterprise AI assistant security review",
+        competitors=["A", "B"],
+        dimensions=["security", "feature"],
+        requested_scenario_id="dynamic_enterprise",
+    )
+    competitors = [
+        CompetitorRecord(
+            id="competitor-a",
+            workspace_id="workspace-1",
+            name="A",
+            normalized_name="a",
+            layer="L2",
+            metadata={"homepage_verified": False},
+        ),
+        CompetitorRecord(
+            id="competitor-b",
+            workspace_id="workspace-1",
+            name="B",
+            normalized_name="b",
+            layer="L2",
+            metadata={"homepage_verified": False},
+        ),
+    ]
+    evidence = [
+        EvidenceRecord(
+            id="evidence-low",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="source-low",
+            competitor_id="competitor-a",
+            dimension="security",
+            source_type="webpage_verified",
+            title="Low confidence security note",
+            snippet="Security claim.",
+            content_hash="hash-low",
+            reliability_score=0.2,
+            quality_label="unreviewed",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-broken",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id="competitor-a",
+            claim_type="security",
+            claim_text="A supports enterprise security controls.",
+            evidence_ids=["missing-evidence"],
+            confidence=0.6,
+        )
+    ]
+
+    evaluation = evaluate_business_qa(
+        project_id="project-1",
+        plan=plan,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+    )
+    synthetic_findings = [
+        *evaluation.findings,
+        evaluation.findings[0].model_copy(update={"rule_id": "cross_competitor_matrix"}),
+        evaluation.findings[0].model_copy(update={"rule_id": "security_official_source"}),
+        evaluation.findings[0].model_copy(update={"rule_id": "landscape_breadth"}),
+    ]
+    scopes = business_findings_to_redo_scopes(synthetic_findings)
+
+    assert {scope.kind for scope in scopes} >= {
+        "collector",
+        "writer_only",
+        "comparator",
+        "analyst",
+        "full",
+    }
+
+
 def _competitor() -> CompetitorRecord:
     return CompetitorRecord(
         id="competitor-cursor",
@@ -213,4 +313,5 @@ def _competitor() -> CompetitorRecord:
         name="Cursor",
         normalized_name="cursor",
         layer="L1",
+        metadata={"homepage_verified": True},
     )

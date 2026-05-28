@@ -20,7 +20,13 @@ SCENARIO_PACKS: tuple[ScenarioPack, ...] = (
             "At least one official or verified source per competitor.",
             "Pricing claims must cite current pricing or plan documentation.",
         ],
-        qa_rule_ids=["coverage_min_verified", "claim_has_evidence", "pricing_currentness"],
+        qa_rule_ids=[
+            "coverage_min_verified",
+            "claim_has_evidence",
+            "homepage_verified",
+            "source_reliability_min",
+            "pricing_currentness",
+        ],
     ),
     ScenarioPack(
         id="l1_pricing_pack",
@@ -38,7 +44,12 @@ SCENARIO_PACKS: tuple[ScenarioPack, ...] = (
             "Pricing rows require official pricing-page evidence.",
             "Enterprise-only claims need explicit qualification.",
         ],
-        qa_rule_ids=["claim_has_evidence", "pricing_currentness"],
+        qa_rule_ids=[
+            "claim_has_evidence",
+            "homepage_verified",
+            "source_reliability_min",
+            "pricing_currentness",
+        ],
     ),
     ScenarioPack(
         id="l2_adjacent_workflow",
@@ -58,7 +69,12 @@ SCENARIO_PACKS: tuple[ScenarioPack, ...] = (
             "Cross-category claims must identify the workflow overlap.",
             "Integration claims need product documentation or marketplace evidence.",
         ],
-        qa_rule_ids=["coverage_min_verified", "cross_competitor_matrix"],
+        qa_rule_ids=[
+            "coverage_min_verified",
+            "homepage_verified",
+            "source_reliability_min",
+            "cross_competitor_matrix",
+        ],
     ),
     ScenarioPack(
         id="l3_market_landscape",
@@ -76,7 +92,13 @@ SCENARIO_PACKS: tuple[ScenarioPack, ...] = (
             "Landscape claims should cite multiple independent sources when possible.",
             "Segment labels must be derived from evidence, not only model judgment.",
         ],
-        qa_rule_ids=["coverage_min_verified", "cross_competitor_matrix", "landscape_breadth"],
+        qa_rule_ids=[
+            "coverage_min_verified",
+            "homepage_verified",
+            "source_reliability_min",
+            "cross_competitor_matrix",
+            "landscape_breadth",
+        ],
     ),
     ScenarioPack(
         id="enterprise_risk_review",
@@ -96,7 +118,13 @@ SCENARIO_PACKS: tuple[ScenarioPack, ...] = (
             "Security claims require official docs, trust-center, or policy evidence.",
             "Unverified enterprise claims should remain proposed until reviewed.",
         ],
-        qa_rule_ids=["coverage_min_verified", "security_official_source", "claim_has_evidence"],
+        qa_rule_ids=[
+            "coverage_min_verified",
+            "homepage_verified",
+            "source_reliability_min",
+            "security_official_source",
+            "claim_has_evidence",
+        ],
     ),
 )
 
@@ -121,6 +149,13 @@ def recommend_scenario_pack(
         pack = get_scenario_pack(requested_scenario_id)
         if pack is not None:
             return pack
+        if requested_scenario_id.startswith("dynamic"):
+            return generate_dynamic_scenario_pack(
+                topic=topic,
+                competitors=competitors,
+                dimensions=dimensions,
+                requested_layer=requested_layer,
+            )
 
     text = " ".join([topic, *dimensions]).casefold()
     if "pricing" in text and "market" not in text and len(competitors) <= 3:
@@ -141,6 +176,51 @@ def recommend_scenario_pack(
     return _pack("l1_direct_battlecard")
 
 
+def generate_dynamic_scenario_pack(
+    *,
+    topic: str,
+    competitors: list[str],
+    dimensions: list[str],
+    requested_layer: str | None = None,
+) -> ScenarioPack:
+    layer = assess_competitor_layer(
+        topic=topic,
+        competitors=competitors,
+        dimensions=dimensions,
+        requested_layer=requested_layer,
+    ).layer
+    required_dimensions = _dynamic_required_dimensions(layer, dimensions)
+    dynamic_id = "dynamic_" + layer.casefold() + "_" + _slug(topic)
+    return ScenarioPack(
+        id=dynamic_id[:120],
+        name=f"Dynamic {layer} scenario",
+        description=f"Generated scenario pack for {topic}.",
+        competitor_layer=layer,
+        required_dimensions=required_dimensions,
+        optional_dimensions=[
+            item
+            for item in ("pricing", "feature", "persona", "security", "integrations", "market")
+            if item not in required_dimensions
+        ][:3],
+        analyst_questions=[
+            f"What evidence best distinguishes {topic} competitors?",
+            "Which claims need official-source validation?",
+            "Which dimensions are under-evidenced for the selected layer?",
+        ],
+        evidence_requirements=[
+            "At least one verified source per competitor for required dimensions.",
+            "Reject phantom or unverified homepages before collection.",
+        ],
+        qa_rule_ids=[
+            "coverage_min_verified",
+            "claim_has_evidence",
+            "homepage_verified",
+            "source_reliability_min",
+        ],
+        is_dynamic=True,
+    )
+
+
 def recommended_dimensions(pack: ScenarioPack, requested_dimensions: list[str]) -> list[str]:
     seen: set[str] = set()
     merged: list[str] = []
@@ -158,3 +238,21 @@ def _pack(scenario_id: str) -> ScenarioPack:
     if pack is None:
         raise ValueError(f"Unknown scenario pack: {scenario_id}")
     return pack
+
+
+def _dynamic_required_dimensions(layer: str, dimensions: list[str]) -> list[str]:
+    requested = [item for item in dimensions if item]
+    if requested:
+        return requested[:4]
+    if layer == "L3":
+        return ["feature", "persona", "market"]
+    if layer == "L2":
+        return ["feature", "integrations"]
+    return ["pricing", "feature"]
+
+
+def _slug(value: str) -> str:
+    import re
+
+    slug = re.sub(r"[^a-z0-9]+", "_", value.casefold()).strip("_")
+    return slug or "scenario"

@@ -53,6 +53,7 @@ class AnalysisPlan(BaseModel):
     scenario_recommended_dimensions: list[str] = Field(default_factory=list)
     qa_rule_ids: list[str] = Field(default_factory=list)
     homepage_hints: dict[str, str] = Field(default_factory=dict)
+    homepage_verified: dict[str, bool] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

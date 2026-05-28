@@ -62,6 +62,10 @@ def _evaluate_rule(
         return _claim_linkage_findings(rule=rule, evidence=evidence, claims=claims)
     if rule.id == "landscape_breadth":
         return _landscape_findings(rule=rule, competitors=competitors)
+    if rule.id == "homepage_verified":
+        return _homepage_findings(rule=rule, competitors=competitors)
+    if rule.id == "source_reliability_min":
+        return _source_reliability_findings(rule=rule, evidence=evidence)
     return _coverage_findings(
         rule=rule,
         plan=plan,
@@ -109,6 +113,49 @@ def _coverage_findings(
                     recommendation=rule.rationale,
                 )
             )
+    return findings
+
+
+def _homepage_findings(
+    *,
+    rule: BusinessQARule,
+    competitors: list[CompetitorRecord],
+) -> list[BusinessQAFinding]:
+    findings: list[BusinessQAFinding] = []
+    for competitor in competitors:
+        if competitor.metadata.get("homepage_verified") is True or competitor.homepage_url:
+            continue
+        findings.append(
+            _finding(
+                rule=rule,
+                competitor=competitor,
+                dimension="homepage",
+                message=f"{competitor.name} does not have a verified homepage.",
+                recommendation=rule.rationale,
+            )
+        )
+    return findings
+
+
+def _source_reliability_findings(
+    *,
+    rule: BusinessQARule,
+    evidence: list[EvidenceRecord],
+) -> list[BusinessQAFinding]:
+    findings: list[BusinessQAFinding] = []
+    for item in evidence:
+        if item.quality_label in BAD_QUALITY_LABELS or item.reliability_score >= 0.5:
+            continue
+        findings.append(
+            _finding(
+                rule=rule,
+                competitor=None,
+                dimension=item.dimension,
+                message=f"Evidence {item.id} has low reliability score.",
+                evidence_ids=[item.id],
+                recommendation=rule.rationale,
+            )
+        )
     return findings
 
 

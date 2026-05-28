@@ -735,6 +735,7 @@ class EnterprisePostgresStore:
                     {
                         "scenario_id": detail.plan.scenario_id,
                         "qa_rule_ids": detail.plan.qa_rule_ids,
+                        "homepage_verified": detail.plan.homepage_verified.get(name, False),
                     }
                 ),
                 detail.created_at,
