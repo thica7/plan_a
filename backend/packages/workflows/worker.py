@@ -8,15 +8,20 @@ from typing import Any
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from app.deps import get_app_settings, get_run_service
+from app.deps import get_app_settings, get_enterprise_store, get_run_service
+from packages.enterprise import EnterpriseStore
 from packages.orchestrator.service import RunService
-from packages.workflows.activities import CompetitiveIntelActivities
+from packages.workflows.activities import CompetitiveIntelActivities, ReportApprovalActivities
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
 from packages.workflows.models import (
+    APPROVE_REPORT_VERSION_ACTIVITY,
     CREATE_RUN_ACTIVITY,
     LOAD_PROJECTION_ACTIVITY,
+    REJECT_REPORT_VERSION_ACTIVITY,
+    REQUEST_REPORT_APPROVAL_ACTIVITY,
     RUN_LANGGRAPH_ACTIVITY,
 )
+from packages.workflows.report_approval import ReportApprovalWorkflow
 
 
 @dataclass(frozen=True)
@@ -28,20 +33,42 @@ class TemporalWorkerComponents:
 
 def build_competitive_intel_worker_components(
     service: RunService,
+    *,
+    enterprise_store: EnterpriseStore | None = None,
 ) -> TemporalWorkerComponents:
-    activities = CompetitiveIntelActivities(service)
+    competitive = CompetitiveIntelActivities(service)
+    workflows: list[type] = [CompetitiveIntelWorkflow]
+    activity_fns: list[Callable[..., Any]] = [
+        competitive.create_run,
+        competitive.run_langgraph_pipeline,
+        competitive.load_projection,
+    ]
+    activity_names = [
+        CREATE_RUN_ACTIVITY,
+        RUN_LANGGRAPH_ACTIVITY,
+        LOAD_PROJECTION_ACTIVITY,
+    ]
+    if enterprise_store is not None:
+        approval = ReportApprovalActivities(enterprise_store)
+        workflows.append(ReportApprovalWorkflow)
+        activity_fns.extend(
+            [
+                approval.request_report_approval,
+                approval.approve_report_version,
+                approval.reject_report_version,
+            ]
+        )
+        activity_names.extend(
+            [
+                REQUEST_REPORT_APPROVAL_ACTIVITY,
+                APPROVE_REPORT_VERSION_ACTIVITY,
+                REJECT_REPORT_VERSION_ACTIVITY,
+            ]
+        )
     return TemporalWorkerComponents(
-        workflows=[CompetitiveIntelWorkflow],
-        activities=[
-            activities.create_run,
-            activities.run_langgraph_pipeline,
-            activities.load_projection,
-        ],
-        activity_names=[
-            CREATE_RUN_ACTIVITY,
-            RUN_LANGGRAPH_ACTIVITY,
-            LOAD_PROJECTION_ACTIVITY,
-        ],
+        workflows=workflows,
+        activities=activity_fns,
+        activity_names=activity_names,
     )
 
 
@@ -51,7 +78,10 @@ async def run_worker() -> None:
         settings.temporal_address,
         namespace=settings.temporal_namespace,
     )
-    components = build_competitive_intel_worker_components(get_run_service())
+    components = build_competitive_intel_worker_components(
+        get_run_service(),
+        enterprise_store=get_enterprise_store(),
+    )
     worker = Worker(
         client,
         task_queue=settings.temporal_task_queue,

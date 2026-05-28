@@ -686,6 +686,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workflows/report-approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Report Approval Workflow */
+        post: operations["start_report_approval_workflow_api_workflows_report_approval_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/report-approval/{report_version_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Report Approval Workflow */
+        post: operations["approve_report_approval_workflow_api_workflows_report_approval__report_version_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/report-approval/{report_version_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Report Approval Workflow */
+        post: operations["reject_report_approval_workflow_api_workflows_report_approval__report_version_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1746,6 +1797,76 @@ export interface components {
             cross_competitor_gaps?: string[];
             /** Suggested Redos */
             suggested_redos?: components["schemas"]["RedoScope"][];
+        };
+        /** ReportApprovalSignalRequest */
+        ReportApprovalSignalRequest: {
+            /** Approver Id */
+            approver_id: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** ReportApprovalSignalResponse */
+        ReportApprovalSignalResponse: {
+            /** Workflow Id */
+            workflow_id: string;
+            /**
+             * Workflow Type
+             * @default ReportApprovalWorkflow
+             * @constant
+             */
+            workflow_type: "ReportApprovalWorkflow";
+            /** Report Version Id */
+            report_version_id: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approved" | "rejected";
+            /**
+             * Status
+             * @constant
+             */
+            status: "signaled";
+        };
+        /** ReportApprovalStartRequest */
+        ReportApprovalStartRequest: {
+            /** Report Version Id */
+            report_version_id: string;
+            /**
+             * Requested By
+             * @default system-user
+             */
+            requested_by: string;
+            /** Approver Ids */
+            approver_ids?: string[];
+            /**
+             * Timeout Seconds
+             * @default 86400
+             */
+            timeout_seconds: number;
+        };
+        /** ReportApprovalStartResponse */
+        ReportApprovalStartResponse: {
+            /** Workflow Id */
+            workflow_id: string;
+            /**
+             * Workflow Type
+             * @default ReportApprovalWorkflow
+             * @constant
+             */
+            workflow_type: "ReportApprovalWorkflow";
+            /** Report Version Id */
+            report_version_id: string;
+            /** Task Queue */
+            task_queue: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "already_started";
         };
         /** ReportDiffLine */
         ReportDiffLine: {
@@ -3738,6 +3859,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkflowStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_report_approval_workflow_api_workflows_report_approval_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportApprovalStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportApprovalStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_report_approval_workflow_api_workflows_report_approval__report_version_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportApprovalSignalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportApprovalSignalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_report_approval_workflow_api_workflows_report_approval__report_version_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportApprovalSignalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportApprovalSignalResponse"];
                 };
             };
             /** @description Validation Error */

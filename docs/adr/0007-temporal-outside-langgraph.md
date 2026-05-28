@@ -35,7 +35,13 @@ which submits the same request shape as direct run creation and returns `202`
 with deterministic workflow/run IDs. Direct `/api/runs` remains available while
 the Temporal path is verified.
 
+The first approval integration point is `ReportApprovalWorkflow`: it sends no
+long-running human wait into an activity, waits for Temporal `approve` or
+`reject` signals, and persists the report version status through short
+activities.
+
 `backend/scripts/smoke_temporal_server.py` is the strict Phase 4 server smoke:
 it requires a running Temporal Server, starts an in-process worker, executes
-`CompetitiveIntelWorkflow` on an isolated smoke task queue, and verifies the
-resulting enterprise projection.
+`CompetitiveIntelWorkflow` on an isolated smoke task queue, verifies the
+resulting enterprise projection, then signals `ReportApprovalWorkflow` and
+verifies the approved report status.

@@ -5,11 +5,20 @@ from fastapi.testclient import TestClient
 from app.deps import get_temporal_workflow_service
 from app.main import create_app
 from packages.config import Settings
-from packages.schema.api_dto import RunCreateRequest, WorkflowStartResponse
+from packages.schema.api_dto import (
+    ReportApprovalSignalRequest,
+    ReportApprovalSignalResponse,
+    ReportApprovalStartRequest,
+    ReportApprovalStartResponse,
+    RunCreateRequest,
+    WorkflowStartResponse,
+)
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
+from packages.workflows.report_approval import ReportApprovalWorkflow
 from packages.workflows.service import (
     TemporalWorkflowService,
     competitive_intel_input_from_run_request,
+    report_approval_workflow_id,
     run_id_for_idempotency_key,
     workflow_idempotency_key,
 )
@@ -42,11 +51,21 @@ def _request(idempotency_key: str | None = None) -> RunCreateRequest:
 class FakeTemporalHandle:
     def __init__(self, workflow_id: str) -> None:
         self.id = workflow_id
+        self.signals: list[dict[str, object]] = []
+
+    async def signal(
+        self,
+        signal: object,
+        *,
+        args: list[object],
+    ) -> None:
+        self.signals.append({"signal": signal, "args": args})
 
 
 class FakeTemporalClient:
     def __init__(self) -> None:
         self.started: list[dict[str, object]] = []
+        self.handles: dict[str, FakeTemporalHandle] = {}
 
     async def start_workflow(
         self,
@@ -64,7 +83,16 @@ class FakeTemporalClient:
                 "task_queue": task_queue,
             }
         )
-        return FakeTemporalHandle(id)
+        handle = FakeTemporalHandle(id)
+        self.handles[id] = handle
+        return handle
+
+    def get_workflow_handle(self, workflow_id: str) -> FakeTemporalHandle:
+        handle = self.handles.get(workflow_id)
+        if handle is None:
+            handle = FakeTemporalHandle(workflow_id)
+            self.handles[workflow_id] = handle
+        return handle
 
 
 def test_workflow_input_derives_stable_idempotency_key_when_missing() -> None:
@@ -107,6 +135,54 @@ async def test_temporal_workflow_service_starts_competitive_intel_workflow() -> 
     assert fake_client.started[0]["task_queue"] == "test-queue"
 
 
+async def test_temporal_workflow_service_starts_report_approval_workflow() -> None:
+    fake_client = FakeTemporalClient()
+
+    async def client_factory(settings: Settings) -> FakeTemporalClient:
+        assert settings.temporal_task_queue == "test-queue"
+        return fake_client
+
+    service = TemporalWorkflowService(_settings(), client_factory=client_factory)
+
+    response = await service.start_report_approval(
+        ReportApprovalStartRequest(
+            report_version_id="report-version-1",
+            approver_ids=["approver-1"],
+            timeout_seconds=60,
+        )
+    )
+
+    assert response.status == "started"
+    assert response.workflow_id == report_approval_workflow_id("report-version-1")
+    assert response.report_version_id == "report-version-1"
+    assert fake_client.started[0]["workflow"] == ReportApprovalWorkflow.run
+    assert fake_client.started[0]["task_queue"] == "test-queue"
+
+
+async def test_temporal_workflow_service_signals_report_approval() -> None:
+    fake_client = FakeTemporalClient()
+
+    async def client_factory(settings: Settings) -> FakeTemporalClient:
+        return fake_client
+
+    service = TemporalWorkflowService(_settings(), client_factory=client_factory)
+
+    response = await service.approve_report(
+        "report-version-1",
+        ReportApprovalSignalRequest(approver_id="approver-1", note="ship it"),
+    )
+
+    handle = fake_client.get_workflow_handle(report_approval_workflow_id("report-version-1"))
+    assert response.status == "signaled"
+    assert response.decision == "approved"
+    assert handle.signals == [
+        {
+            "signal": ReportApprovalWorkflow.approve,
+            "args": ["approver-1", "ship it"],
+        }
+    ]
+
+
 def test_workflow_router_returns_accepted_start_response() -> None:
     class FakeWorkflowService:
         async def start_competitive_intel(
@@ -144,6 +220,60 @@ def test_workflow_router_returns_accepted_start_response() -> None:
         "idempotency_key": "route-001",
         "task_queue": "test-queue",
         "status": "started",
+    }
+
+
+def test_workflow_router_exposes_report_approval_start_and_signal() -> None:
+    class FakeWorkflowService:
+        async def start_report_approval(
+            self,
+            request: ReportApprovalStartRequest,
+        ) -> ReportApprovalStartResponse:
+            return ReportApprovalStartResponse(
+                workflow_id="report-approval-test",
+                report_version_id=request.report_version_id,
+                task_queue="test-queue",
+                status="started",
+            )
+
+        async def approve_report(
+            self,
+            report_version_id: str,
+            request: ReportApprovalSignalRequest,
+        ) -> ReportApprovalSignalResponse:
+            return ReportApprovalSignalResponse(
+                workflow_id="report-approval-test",
+                report_version_id=report_version_id,
+                decision="approved",
+                status="signaled",
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    client = TestClient(app)
+
+    start_response = client.post(
+        "/api/workflows/report-approval",
+        json={
+            "report_version_id": "report-version-1",
+            "approver_ids": ["approver-1"],
+            "timeout_seconds": 60,
+        },
+    )
+    signal_response = client.post(
+        "/api/workflows/report-approval/report-version-1/approve",
+        json={"approver_id": "approver-1", "note": "ship it"},
+    )
+
+    assert start_response.status_code == 202
+    assert start_response.json()["workflow_type"] == "ReportApprovalWorkflow"
+    assert signal_response.status_code == 202
+    assert signal_response.json() == {
+        "workflow_id": "report-approval-test",
+        "workflow_type": "ReportApprovalWorkflow",
+        "report_version_id": "report-version-1",
+        "decision": "approved",
+        "status": "signaled",
     }
 
 

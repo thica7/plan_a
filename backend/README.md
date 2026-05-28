@@ -57,6 +57,11 @@ The API route `POST /api/workflows/competitive-intel` submits the same payload
 shape as `POST /api/runs`, returns `202 Accepted`, and reports the deterministic
 workflow/run IDs without waiting for the long-running analysis to finish.
 
+`ReportApprovalWorkflow` is the Phase 4 approval prototype. Start it with
+`POST /api/workflows/report-approval`, then send manual approval decisions with
+`POST /api/workflows/report-approval/{report_version_id}/approve` or
+`POST /api/workflows/report-approval/{report_version_id}/reject`.
+
 Real Temporal server smoke:
 
 ```bash

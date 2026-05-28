@@ -1,9 +1,14 @@
 from packages.schema.api_dto import (
     HitlResumeRequest,
+    ReportApprovalSignalRequest,
+    ReportApprovalSignalResponse,
+    ReportApprovalStartRequest,
+    ReportApprovalStartResponse,
     RunCreateRequest,
     RunDetail,
     RunSummary,
     RuntimeConfig,
+    WorkflowStartResponse,
 )
 from packages.schema.enterprise import (
     AuditLogRecord,
@@ -99,6 +104,10 @@ __all__ = [
     "RawSource",
     "RedoScope",
     "ReflectionRecord",
+    "ReportApprovalSignalRequest",
+    "ReportApprovalSignalResponse",
+    "ReportApprovalStartRequest",
+    "ReportApprovalStartResponse",
     "ReportVersionRecord",
     "RevisionRecord",
     "RedTeamFinding",
@@ -115,5 +124,6 @@ __all__ = [
     "UserPersonaModel",
     "UserPersonaSegment",
     "UserRecord",
+    "WorkflowStartResponse",
     "WorkspaceRecord",
 ]

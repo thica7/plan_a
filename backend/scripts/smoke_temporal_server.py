@@ -23,7 +23,11 @@ from packages.workflows.competitive_intel import CompetitiveIntelWorkflow  # noq
 from packages.workflows.models import (  # noqa: E402
     CompetitiveIntelWorkflowInput,
     CompetitiveIntelWorkflowResult,
+    ReportApprovalWorkflowInput,
+    ReportApprovalWorkflowResult,
 )
+from packages.workflows.report_approval import ReportApprovalWorkflow  # noqa: E402
+from packages.workflows.service import report_approval_workflow_id  # noqa: E402
 from packages.workflows.worker import build_competitive_intel_worker_components  # noqa: E402
 
 
@@ -62,7 +66,7 @@ async def main() -> None:
         ),
         enterprise_store=store,
     )
-    components = build_competitive_intel_worker_components(service)
+    components = build_competitive_intel_worker_components(service, enterprise_store=store)
     request = CompetitiveIntelWorkflowInput(
         topic="AI coding assistant temporal server smoke",
         competitors=["Cursor", "GitHub Copilot"],
@@ -91,6 +95,36 @@ async def main() -> None:
                 ),
                 timeout=75,
             )
+            projection = store.get_run_projection(result.run_id)
+            if result.status != "completed":
+                raise SystemExit(f"Temporal workflow did not complete: {result.status}")
+            if projection is None:
+                raise SystemExit("Temporal workflow completed without enterprise projection.")
+            if projection.report_version.id != result.report_version_id:
+                raise SystemExit(
+                    "Temporal workflow result does not match stored report version."
+                )
+
+            approval_workflow_id = report_approval_workflow_id(result.report_version_id)
+            approval_input = ReportApprovalWorkflowInput(
+                report_version_id=result.report_version_id,
+                requested_by="temporal-smoke",
+                approver_ids=["temporal-smoke-approver"],
+                timeout_seconds=30,
+            )
+            approval_handle = await client.start_workflow(
+                ReportApprovalWorkflow.run,
+                approval_input,
+                id=approval_workflow_id,
+                task_queue=task_queue,
+                result_type=ReportApprovalWorkflowResult,
+                run_timeout=timedelta(seconds=45),
+            )
+            await approval_handle.signal(
+                ReportApprovalWorkflow.approve,
+                args=["temporal-smoke-approver", "server smoke approval"],
+            )
+            approval_result = await asyncio.wait_for(approval_handle.result(), timeout=45)
     except RPCError as exc:
         raise SystemExit(f"Temporal workflow execution failed: {exc}") from exc
     except TimeoutError as exc:
@@ -99,13 +133,11 @@ async def main() -> None:
             f"workflow_id={workflow_id} task_queue={task_queue}"
         ) from exc
 
-    projection = store.get_run_projection(result.run_id)
-    if result.status != "completed":
-        raise SystemExit(f"Temporal workflow did not complete: {result.status}")
-    if projection is None:
-        raise SystemExit("Temporal workflow completed without enterprise projection.")
-    if projection.report_version.id != result.report_version_id:
-        raise SystemExit("Temporal workflow result does not match stored report version.")
+    approved_version = store.get_report_version(result.report_version_id)
+    if approval_result.decision != "approved" or approval_result.final_status != "approved":
+        raise SystemExit("Temporal approval workflow did not approve the report version.")
+    if approved_version is None or approved_version.status != "approved":
+        raise SystemExit("Temporal approval workflow did not persist approved status.")
 
     print(
         json.dumps(
@@ -117,6 +149,8 @@ async def main() -> None:
                 "status": result.status,
                 "task_queue": task_queue,
                 "report_version_id": result.report_version_id,
+                "approval_workflow_id": approval_workflow_id,
+                "approval_status": approval_result.final_status,
                 "evidence_count": result.evidence_count,
                 "claim_count": result.claim_count,
                 "event_count": len(service.get_trace(result.run_id) or []),

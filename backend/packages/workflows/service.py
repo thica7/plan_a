@@ -9,10 +9,22 @@ from temporalio.client import Client, WorkflowHandle
 from temporalio.exceptions import WorkflowAlreadyStartedError
 
 from packages.config import Settings
-from packages.schema.api_dto import RunCreateRequest, WorkflowStartResponse
+from packages.schema.api_dto import (
+    ReportApprovalSignalRequest,
+    ReportApprovalSignalResponse,
+    ReportApprovalStartRequest,
+    ReportApprovalStartResponse,
+    RunCreateRequest,
+    WorkflowStartResponse,
+)
 from packages.workflows.client import workflow_id_for_request
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
-from packages.workflows.models import CompetitiveIntelWorkflowInput
+from packages.workflows.models import (
+    CompetitiveIntelWorkflowInput,
+    ReportApprovalSignalDecision,
+    ReportApprovalWorkflowInput,
+)
+from packages.workflows.report_approval import ReportApprovalWorkflow
 
 
 class TemporalClient(Protocol):
@@ -24,6 +36,8 @@ class TemporalClient(Protocol):
         id: str,
         task_queue: str,
     ) -> WorkflowHandle: ...
+
+    def get_workflow_handle(self, workflow_id: str) -> WorkflowHandle: ...
 
 
 TemporalClientFactory = Callable[[Settings], Awaitable[TemporalClient]]
@@ -64,6 +78,80 @@ class TemporalWorkflowService:
             status=status,
         )
 
+    async def start_report_approval(
+        self,
+        request: ReportApprovalStartRequest,
+    ) -> ReportApprovalStartResponse:
+        workflow_input = ReportApprovalWorkflowInput(
+            report_version_id=request.report_version_id,
+            requested_by=request.requested_by,
+            approver_ids=request.approver_ids,
+            timeout_seconds=request.timeout_seconds,
+        )
+        workflow_id = report_approval_workflow_id(request.report_version_id)
+        client = await self._client_factory(self._settings)
+        try:
+            await client.start_workflow(
+                ReportApprovalWorkflow.run,
+                workflow_input,
+                id=workflow_id,
+                task_queue=self._settings.temporal_task_queue,
+            )
+            status = "started"
+        except WorkflowAlreadyStartedError:
+            status = "already_started"
+        return ReportApprovalStartResponse(
+            workflow_id=workflow_id,
+            report_version_id=request.report_version_id,
+            task_queue=self._settings.temporal_task_queue,
+            status=status,
+        )
+
+    async def approve_report(
+        self,
+        report_version_id: str,
+        request: ReportApprovalSignalRequest,
+    ) -> ReportApprovalSignalResponse:
+        return await self._signal_report_approval(
+            report_version_id,
+            request,
+            decision="approved",
+        )
+
+    async def reject_report(
+        self,
+        report_version_id: str,
+        request: ReportApprovalSignalRequest,
+    ) -> ReportApprovalSignalResponse:
+        return await self._signal_report_approval(
+            report_version_id,
+            request,
+            decision="rejected",
+        )
+
+    async def _signal_report_approval(
+        self,
+        report_version_id: str,
+        request: ReportApprovalSignalRequest,
+        *,
+        decision: ReportApprovalSignalDecision,
+    ) -> ReportApprovalSignalResponse:
+        workflow_id = report_approval_workflow_id(report_version_id)
+        client = await self._client_factory(self._settings)
+        handle = client.get_workflow_handle(workflow_id)
+        signal = (
+            ReportApprovalWorkflow.approve
+            if decision == "approved"
+            else ReportApprovalWorkflow.reject
+        )
+        await handle.signal(signal, args=[request.approver_id, request.note])
+        return ReportApprovalSignalResponse(
+            workflow_id=workflow_id,
+            report_version_id=report_version_id,
+            decision=decision,
+            status="signaled",
+        )
+
 
 def competitive_intel_input_from_run_request(
     request: RunCreateRequest,
@@ -93,6 +181,11 @@ def workflow_idempotency_key(request: RunCreateRequest) -> str:
 def run_id_for_idempotency_key(idempotency_key: str) -> str:
     digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:32]
     return f"run-{digest}"
+
+
+def report_approval_workflow_id(report_version_id: str) -> str:
+    digest = hashlib.sha256(report_version_id.encode("utf-8")).hexdigest()[:32]
+    return f"report-approval-{digest}"
 
 
 async def _connect_temporal_client(settings: Settings) -> TemporalClient:

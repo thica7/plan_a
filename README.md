@@ -111,6 +111,7 @@ old test workflows cannot pollute the result.
 - Enterprise data boundary for Workspace, Project, Competitor, Evidence, Claim, ReportVersion, and AuditLog, with memory and Postgres store implementations
 - Phase 4 prerequisites for retry-safe workflow wrapping: run `idempotency_key` plus evidence `canonical_url`, first/last seen run IDs, and `seen_count`
 - Phase 4 Temporal thin shell: `CompetitiveIntelWorkflow` wraps the existing LangGraph run as retry-safe activities; start it through `POST /api/workflows/competitive-intel`, run the worker with `make temporal-worker`, and verify a real server with `make smoke-temporal-server`
+- Phase 4 approval prototype: `ReportApprovalWorkflow` supports report approval start plus manual approve/reject signals through `/api/workflows/report-approval`
 - Docker and Makefile scaffolding for the planned demo path
 
 ## Project Layout

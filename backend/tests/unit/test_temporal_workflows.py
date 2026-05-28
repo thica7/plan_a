@@ -5,8 +5,9 @@ import pytest
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
 from packages.orchestrator.service import RunService
+from packages.schema.enterprise import ReportVersionRecord
 from packages.skills.registry import SkillRegistry
-from packages.workflows.activities import CompetitiveIntelActivities
+from packages.workflows.activities import CompetitiveIntelActivities, ReportApprovalActivities
 from packages.workflows.competitive_intel import (
     CompetitiveIntelWorkflow,
     _coerce_projection_state,
@@ -14,13 +15,19 @@ from packages.workflows.competitive_intel import (
     _workflow_result,
 )
 from packages.workflows.models import (
+    APPROVE_REPORT_VERSION_ACTIVITY,
     CREATE_RUN_ACTIVITY,
     LOAD_PROJECTION_ACTIVITY,
+    REJECT_REPORT_VERSION_ACTIVITY,
+    REQUEST_REPORT_APPROVAL_ACTIVITY,
     RUN_LANGGRAPH_ACTIVITY,
     CompetitiveIntelWorkflowInput,
+    ReportApprovalDecisionInput,
+    ReportApprovalWorkflowInput,
     WorkflowProjectionState,
     WorkflowRunState,
 )
+from packages.workflows.report_approval import ReportApprovalWorkflow, _coerce_approval_state
 from packages.workflows.worker import build_competitive_intel_worker_components
 
 
@@ -96,6 +103,31 @@ def test_temporal_worker_registers_only_the_outer_workflow_and_activities() -> N
     ]
 
 
+def test_temporal_worker_registers_approval_workflow_when_store_is_available() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+
+    components = build_competitive_intel_worker_components(service, enterprise_store=store)
+    registered_activity_names = [
+        getattr(activity_fn, "__temporal_activity_definition").name
+        for activity_fn in components.activities
+    ]
+
+    assert components.workflows == [CompetitiveIntelWorkflow, ReportApprovalWorkflow]
+    assert registered_activity_names == [
+        CREATE_RUN_ACTIVITY,
+        RUN_LANGGRAPH_ACTIVITY,
+        LOAD_PROJECTION_ACTIVITY,
+        REQUEST_REPORT_APPROVAL_ACTIVITY,
+        APPROVE_REPORT_VERSION_ACTIVITY,
+        REJECT_REPORT_VERSION_ACTIVITY,
+    ]
+
+
 def test_competitive_intel_workflow_result_preserves_projection_metadata() -> None:
     result = _workflow_result(
         WorkflowRunState(
@@ -155,3 +187,80 @@ def test_temporal_activity_payloads_can_cross_json_converter_boundary() -> None:
     assert result.run_id == "run-1"
     assert result.report_version_id == "report-version-1"
     assert result.evidence_count == 3
+
+
+@pytest.mark.asyncio
+async def test_report_approval_activities_update_report_version_status() -> None:
+    store = EnterpriseMemoryStore()
+    store.upsert_report_version(_report_version("report-version-1"))
+    activities = ReportApprovalActivities(store)
+
+    requested = await activities.request_report_approval(
+        ReportApprovalWorkflowInput(report_version_id="report-version-1")
+    )
+    approved = await activities.approve_report_version(
+        ReportApprovalDecisionInput(
+            report_version_id="report-version-1",
+            approver_id="approver-1",
+            note="looks good",
+        )
+    )
+    stored = store.get_report_version("report-version-1")
+
+    assert requested.status == "in_review"
+    assert approved.status == "approved"
+    assert approved.approver_id == "approver-1"
+    assert stored is not None
+    assert stored.status == "approved"
+
+
+@pytest.mark.asyncio
+async def test_report_approval_activities_can_reject_to_draft() -> None:
+    store = EnterpriseMemoryStore()
+    store.upsert_report_version(_report_version("report-version-2"))
+    activities = ReportApprovalActivities(store)
+
+    await activities.request_report_approval(
+        ReportApprovalWorkflowInput(report_version_id="report-version-2")
+    )
+    rejected = await activities.reject_report_version(
+        ReportApprovalDecisionInput(
+            report_version_id="report-version-2",
+            approver_id="approver-1",
+            note="needs revision",
+        )
+    )
+    stored = store.get_report_version("report-version-2")
+
+    assert rejected.status == "draft"
+    assert rejected.note == "needs revision"
+    assert stored is not None
+    assert stored.status == "draft"
+
+
+def test_report_approval_payloads_can_cross_json_converter_boundary() -> None:
+    state = _coerce_approval_state(
+        {
+            "report_version_id": "report-version-1",
+            "workspace_id": "workspace-1",
+            "project_id": "project-1",
+            "status": "in_review",
+            "approver_id": None,
+            "note": "",
+        }
+    )
+
+    assert state.report_version_id == "report-version-1"
+    assert state.status == "in_review"
+
+
+def _report_version(version_id: str) -> ReportVersionRecord:
+    return ReportVersionRecord(
+        id=version_id,
+        workspace_id="default-workspace",
+        project_id="project-1",
+        version_number=1,
+        topic_normalized="ai-coding-assistant",
+        competitor_set_hash="competitors",
+        report_md="demo report",
+    )

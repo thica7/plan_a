@@ -68,6 +68,42 @@ class WorkflowStartResponse(BaseModel):
     status: Literal["started", "already_started"]
 
 
+class ReportApprovalStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report_version_id: str = Field(min_length=1, max_length=200)
+    requested_by: str = Field(default="system-user", min_length=1, max_length=120)
+    approver_ids: list[str] = Field(default_factory=list, max_length=20)
+    timeout_seconds: int = Field(default=86400, ge=1, le=604800)
+
+
+class ReportApprovalStartResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str
+    workflow_type: Literal["ReportApprovalWorkflow"] = "ReportApprovalWorkflow"
+    report_version_id: str
+    task_queue: str
+    status: Literal["started", "already_started"]
+
+
+class ReportApprovalSignalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    approver_id: str = Field(min_length=1, max_length=120)
+    note: str = Field(default="", max_length=1000)
+
+
+class ReportApprovalSignalResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str
+    workflow_type: Literal["ReportApprovalWorkflow"] = "ReportApprovalWorkflow"
+    report_version_id: str
+    decision: Literal["approved", "rejected"]
+    status: Literal["signaled"]
+
+
 class RunDetail(RunSummary):
     plan: AnalysisPlan
     max_iterations: int = Field(default=2, ge=1)

@@ -11,6 +11,10 @@ import type {
   EvidenceRecord,
   ProjectReadinessScore,
   ProjectRecord,
+  ReportApprovalSignalRequest,
+  ReportApprovalSignalResponse,
+  ReportApprovalStartRequest,
+  ReportApprovalStartResponse,
   RevisionRecord,
   RedTeamReport,
   ReportVersionDiff,
@@ -73,6 +77,39 @@ export function startCompetitiveIntelWorkflow(payload: RunCreateRequest) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function startReportApprovalWorkflow(payload: ReportApprovalStartRequest) {
+  return request<ReportApprovalStartResponse>("/workflows/report-approval", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function approveReportWorkflow(
+  reportVersionId: string,
+  payload: ReportApprovalSignalRequest,
+) {
+  return request<ReportApprovalSignalResponse>(
+    `/workflows/report-approval/${reportVersionId}/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function rejectReportWorkflow(
+  reportVersionId: string,
+  payload: ReportApprovalSignalRequest,
+) {
+  return request<ReportApprovalSignalResponse>(
+    `/workflows/report-approval/${reportVersionId}/reject`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function getRun(runId: string) {

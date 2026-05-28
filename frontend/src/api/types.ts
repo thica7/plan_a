@@ -298,6 +298,34 @@ export interface WorkflowStartResponse {
   status: "started" | "already_started";
 }
 
+export interface ReportApprovalStartRequest {
+  report_version_id: string;
+  requested_by?: string;
+  approver_ids?: string[];
+  timeout_seconds?: number;
+}
+
+export interface ReportApprovalStartResponse {
+  workflow_id: string;
+  workflow_type: "ReportApprovalWorkflow";
+  report_version_id: string;
+  task_queue: string;
+  status: "started" | "already_started";
+}
+
+export interface ReportApprovalSignalRequest {
+  approver_id: string;
+  note?: string;
+}
+
+export interface ReportApprovalSignalResponse {
+  workflow_id: string;
+  workflow_type: "ReportApprovalWorkflow";
+  report_version_id: string;
+  decision: "approved" | "rejected";
+  status: "signaled";
+}
+
 export interface SkillSpec {
   name: string;
   subagent_class: string;

@@ -1776,6 +1776,151 @@
           }
         }
       }
+    },
+    "/api/workflows/report-approval": {
+      "post": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Start Report Approval Workflow",
+        "operationId": "start_report_approval_workflow_api_workflows_report_approval_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportApprovalStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportApprovalStartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workflows/report-approval/{report_version_id}/approve": {
+      "post": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Approve Report Approval Workflow",
+        "operationId": "approve_report_approval_workflow_api_workflows_report_approval__report_version_id__approve_post",
+        "parameters": [
+          {
+            "name": "report_version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Version Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportApprovalSignalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportApprovalSignalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workflows/report-approval/{report_version_id}/reject": {
+      "post": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Reject Report Approval Workflow",
+        "operationId": "reject_report_approval_workflow_api_workflows_report_approval__report_version_id__reject_post",
+        "parameters": [
+          {
+            "name": "report_version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Version Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportApprovalSignalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportApprovalSignalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4283,6 +4428,145 @@
           "iteration"
         ],
         "title": "ReflectionRecord"
+      },
+      "ReportApprovalSignalRequest": {
+        "properties": {
+          "approver_id": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Approver Id"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "approver_id"
+        ],
+        "title": "ReportApprovalSignalRequest"
+      },
+      "ReportApprovalSignalResponse": {
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "title": "Workflow Id"
+          },
+          "workflow_type": {
+            "type": "string",
+            "const": "ReportApprovalWorkflow",
+            "title": "Workflow Type",
+            "default": "ReportApprovalWorkflow"
+          },
+          "report_version_id": {
+            "type": "string",
+            "title": "Report Version Id"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "title": "Decision"
+          },
+          "status": {
+            "type": "string",
+            "const": "signaled",
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workflow_id",
+          "report_version_id",
+          "decision",
+          "status"
+        ],
+        "title": "ReportApprovalSignalResponse"
+      },
+      "ReportApprovalStartRequest": {
+        "properties": {
+          "report_version_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Report Version Id"
+          },
+          "requested_by": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Requested By",
+            "default": "system-user"
+          },
+          "approver_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Approver Ids"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "maximum": 604800.0,
+            "minimum": 1.0,
+            "title": "Timeout Seconds",
+            "default": 86400
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report_version_id"
+        ],
+        "title": "ReportApprovalStartRequest"
+      },
+      "ReportApprovalStartResponse": {
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "title": "Workflow Id"
+          },
+          "workflow_type": {
+            "type": "string",
+            "const": "ReportApprovalWorkflow",
+            "title": "Workflow Type",
+            "default": "ReportApprovalWorkflow"
+          },
+          "report_version_id": {
+            "type": "string",
+            "title": "Report Version Id"
+          },
+          "task_queue": {
+            "type": "string",
+            "title": "Task Queue"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "started",
+              "already_started"
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workflow_id",
+          "report_version_id",
+          "task_queue",
+          "status"
+        ],
+        "title": "ReportApprovalStartResponse"
       },
       "ReportDiffLine": {
         "properties": {
