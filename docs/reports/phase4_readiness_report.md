@@ -1,7 +1,7 @@
 # Phase 4 Readiness Report
 
-- Generated at: 2026-05-29T06:51:40.873278+00:00
-- Require Temporal server: False
+- Generated at: 2026-05-29T06:52:40.172115+00:00
+- Require Temporal server: True
 - Overall: PASS
 
 | Check | Status | Detail |
