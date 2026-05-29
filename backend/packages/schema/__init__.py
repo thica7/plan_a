@@ -36,6 +36,7 @@ from packages.schema.enterprise import (
     RedTeamReport,
     ReportVersionRecord,
     ScenarioPack,
+    SourceRegistryRecord,
     UserRecord,
     WorkspaceRecord,
 )
@@ -119,6 +120,7 @@ __all__ = [
     "RuntimeConfig",
     "ScenarioPack",
     "SkillSpec",
+    "SourceRegistryRecord",
     "ToolCallMessage",
     "TraceSpan",
     "UserPersonaModel",

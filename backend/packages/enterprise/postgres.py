@@ -13,6 +13,7 @@ from packages.enterprise.store import (
     _normalize_key,
     _short_hash,
     _title_from_id,
+    source_registry_from_evidence,
 )
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.schema.api_dto import RunDetail
@@ -25,6 +26,7 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     ProjectRecord,
     ReportVersionRecord,
+    SourceRegistryRecord,
     WorkspaceRecord,
 )
 
@@ -168,6 +170,17 @@ class EnterprisePostgresStore:
             with conn.cursor() as cur:
                 for evidence in projection.evidence_records:
                     self._upsert_evidence(cur, evidence)
+                    registry_record = source_registry_from_evidence(evidence)
+                    self._upsert_source_registry(cur, registry_record)
+                    self._append_audit_once(
+                        cur,
+                        workspace_id=registry_record.workspace_id,
+                        actor_id=DEFAULT_USER_ID,
+                        action="source_registry.upserted",
+                        resource_type="source_registry",
+                        resource_id=registry_record.id,
+                        after=registry_record.model_dump(mode="json"),
+                    )
                 for claim in projection.claim_records:
                     self._upsert_claim(cur, claim)
                 self._upsert_report_version(cur, projection.report_version)
@@ -433,6 +446,17 @@ class EnterprisePostgresStore:
                     (evidence.id,),
                 ).fetchone()
                 self._upsert_evidence(cur, evidence)
+                registry_record = source_registry_from_evidence(evidence)
+                self._upsert_source_registry(cur, registry_record)
+                self._append_audit_once(
+                    cur,
+                    workspace_id=registry_record.workspace_id,
+                    actor_id=DEFAULT_USER_ID,
+                    action="source_registry.upserted",
+                    resource_type="source_registry",
+                    resource_id=registry_record.id,
+                    after=registry_record.model_dump(mode="json"),
+                )
                 self._append_audit(
                     cur,
                     workspace_id=evidence.workspace_id,
@@ -447,6 +471,61 @@ class EnterprisePostgresStore:
                 )
             conn.commit()
         return evidence
+
+    def list_source_registry(
+        self,
+        workspace_id: str | None = None,
+    ) -> list[SourceRegistryRecord]:
+        if workspace_id:
+            return self._list_models(
+                """
+                SELECT *
+                FROM source_registry
+                WHERE workspace_id = %s
+                ORDER BY domain, source_type
+                """,
+                (workspace_id,),
+                SourceRegistryRecord,
+            )
+        return self._list_models(
+            "SELECT * FROM source_registry ORDER BY domain, source_type",
+            (),
+            SourceRegistryRecord,
+        )
+
+    def upsert_source_registry(
+        self,
+        record: SourceRegistryRecord,
+    ) -> SourceRegistryRecord:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._upsert_workspace(cur, record.workspace_id)
+                before_row = cur.execute(
+                    "SELECT * FROM source_registry WHERE id = %s",
+                    (record.id,),
+                ).fetchone()
+                self._upsert_source_registry(cur, record)
+                row = cur.execute(
+                    "SELECT * FROM source_registry WHERE id = %s",
+                    (record.id,),
+                ).fetchone()
+                updated = SourceRegistryRecord.model_validate(dict(row))
+                self._append_audit(
+                    cur,
+                    workspace_id=updated.workspace_id,
+                    actor_id=DEFAULT_USER_ID,
+                    action="source_registry.upserted",
+                    resource_type="source_registry",
+                    resource_id=updated.id,
+                    before=SourceRegistryRecord.model_validate(dict(before_row)).model_dump(
+                        mode="json"
+                    )
+                    if before_row
+                    else None,
+                    after=updated.model_dump(mode="json"),
+                )
+            conn.commit()
+        return updated
 
     def update_evidence_quality(
         self,
@@ -838,6 +917,79 @@ class EnterprisePostgresStore:
                 evidence.seen_count,
                 evidence.captured_at,
                 self._json(evidence.metadata),
+            ),
+        )
+
+    def _upsert_source_registry(self, cur: Any, record: SourceRegistryRecord) -> None:
+        cur.execute(
+            """
+            INSERT INTO source_registry (
+                id, workspace_id, domain, source_type, display_name, homepage_url,
+                trust_level, robots_status, is_active, first_seen_run_id,
+                last_seen_run_id, first_seen_at, last_seen_at, seen_count, metadata
+            )
+            VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (id) DO UPDATE SET
+                display_name = EXCLUDED.display_name,
+                homepage_url = COALESCE(EXCLUDED.homepage_url, source_registry.homepage_url),
+                trust_level = CASE
+                    WHEN source_registry.trust_level = 'official'
+                         OR EXCLUDED.trust_level = 'official'
+                    THEN 'official'
+                    WHEN source_registry.trust_level = 'verified'
+                         OR EXCLUDED.trust_level = 'verified'
+                    THEN 'verified'
+                    WHEN source_registry.trust_level = 'community'
+                         OR EXCLUDED.trust_level = 'community'
+                    THEN 'community'
+                    WHEN source_registry.trust_level = 'synthetic'
+                         OR EXCLUDED.trust_level = 'synthetic'
+                    THEN 'synthetic'
+                    ELSE 'unknown'
+                END,
+                robots_status = CASE
+                    WHEN EXCLUDED.robots_status <> 'unknown'
+                    THEN EXCLUDED.robots_status
+                    ELSE source_registry.robots_status
+                END,
+                is_active = source_registry.is_active,
+                first_seen_run_id = COALESCE(
+                    source_registry.first_seen_run_id,
+                    EXCLUDED.first_seen_run_id
+                ),
+                last_seen_run_id = COALESCE(
+                    EXCLUDED.last_seen_run_id,
+                    source_registry.last_seen_run_id
+                ),
+                first_seen_at = LEAST(source_registry.first_seen_at, EXCLUDED.first_seen_at),
+                last_seen_at = GREATEST(source_registry.last_seen_at, EXCLUDED.last_seen_at),
+                seen_count = CASE
+                    WHEN EXCLUDED.last_seen_run_id IS NOT NULL
+                         AND source_registry.last_seen_run_id
+                             IS DISTINCT FROM EXCLUDED.last_seen_run_id
+                    THEN GREATEST(source_registry.seen_count + 1, EXCLUDED.seen_count)
+                    ELSE GREATEST(source_registry.seen_count, EXCLUDED.seen_count)
+                END,
+                metadata = source_registry.metadata || EXCLUDED.metadata
+            """,
+            (
+                record.id,
+                record.workspace_id,
+                record.domain,
+                record.source_type,
+                record.display_name,
+                str(record.homepage_url) if record.homepage_url else None,
+                record.trust_level,
+                record.robots_status,
+                record.is_active,
+                record.first_seen_run_id,
+                record.last_seen_run_id,
+                record.first_seen_at,
+                record.last_seen_at,
+                record.seen_count,
+                self._json(record.metadata),
             ),
         )
 

@@ -95,6 +95,27 @@ CREATE TABLE IF NOT EXISTS evidence_records (
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
+CREATE TABLE IF NOT EXISTS source_registry (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    domain TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    homepage_url TEXT,
+    trust_level TEXT NOT NULL DEFAULT 'unknown'
+        CHECK (trust_level IN ('official', 'verified', 'community', 'synthetic', 'unknown')),
+    robots_status TEXT NOT NULL DEFAULT 'unknown'
+        CHECK (robots_status IN ('unknown', 'allowed', 'blocked', 'error')),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    first_seen_run_id TEXT REFERENCES runs(id),
+    last_seen_run_id TEXT REFERENCES runs(id),
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    seen_count INTEGER NOT NULL DEFAULT 1 CHECK (seen_count >= 1),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    UNIQUE (workspace_id, domain, source_type)
+);
+
 CREATE TABLE IF NOT EXISTS knowledge_claims (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -186,6 +207,10 @@ CREATE INDEX IF NOT EXISTS idx_competitors_workspace ON competitors(workspace_id
 CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_project_dimension
     ON evidence_records(project_id, dimension);
+CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_domain
+    ON source_registry(workspace_id, domain);
+CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_trust
+    ON source_registry(workspace_id, trust_level);
 CREATE INDEX IF NOT EXISTS idx_claims_project_competitor
     ON knowledge_claims(project_id, competitor_id);
 CREATE INDEX IF NOT EXISTS idx_claim_evidence_evidence

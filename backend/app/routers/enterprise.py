@@ -33,6 +33,7 @@ from packages.schema.enterprise import (
     ReportVersionDiff,
     ReportVersionRecord,
     ScenarioPack,
+    SourceRegistryRecord,
     WorkspaceRecord,
 )
 
@@ -249,6 +250,22 @@ def upsert_evidence(
     store: EnterpriseStoreDep,
 ) -> EvidenceRecord:
     return store.upsert_evidence(evidence)
+
+
+@router.get("/enterprise/source-registry", response_model=list[SourceRegistryRecord])
+def list_source_registry(
+    store: EnterpriseStoreDep,
+    workspace_id: str | None = None,
+) -> list[SourceRegistryRecord]:
+    return store.list_source_registry(workspace_id=workspace_id)
+
+
+@router.post("/enterprise/source-registry", response_model=SourceRegistryRecord)
+def upsert_source_registry(
+    record: SourceRegistryRecord,
+    store: EnterpriseStoreDep,
+) -> SourceRegistryRecord:
+    return store.upsert_source_registry(record)
 
 
 @router.patch(

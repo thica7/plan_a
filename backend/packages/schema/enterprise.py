@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 CompetitorLayer = Literal["L1", "L2", "L3", "unknown"]
 EvidenceQualityLabel = Literal["unreviewed", "accepted", "rejected", "stale"]
+SourceRobotsStatus = Literal["unknown", "allowed", "blocked", "error"]
+SourceTrustLevel = Literal["official", "verified", "community", "synthetic", "unknown"]
 
 
 class WorkspaceRecord(BaseModel):
@@ -94,6 +96,26 @@ class EvidenceRecord(BaseModel):
     last_seen_run_id: str | None = None
     seen_count: int = Field(default=1, ge=1)
     captured_at: datetime = Field(default_factory=datetime.utcnow)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SourceRegistryRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    workspace_id: str
+    domain: str
+    source_type: str
+    display_name: str
+    homepage_url: HttpUrl | None = None
+    trust_level: SourceTrustLevel = "unknown"
+    robots_status: SourceRobotsStatus = "unknown"
+    is_active: bool = True
+    first_seen_run_id: str | None = None
+    last_seen_run_id: str | None = None
+    first_seen_at: datetime = Field(default_factory=datetime.utcnow)
+    last_seen_at: datetime = Field(default_factory=datetime.utcnow)
+    seen_count: int = Field(default=1, ge=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

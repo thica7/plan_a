@@ -6,6 +6,7 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     ProjectRecord,
     ReportVersionRecord,
+    SourceRegistryRecord,
 )
 
 
@@ -79,6 +80,26 @@ def test_claim_record_requires_evidence() -> None:
         assert "evidence_ids" in str(exc)
     else:
         raise AssertionError("ClaimRecord accepted a claim without evidence.")
+
+
+def test_source_registry_record_tracks_source_governance() -> None:
+    record = SourceRegistryRecord(
+        id="source-1",
+        workspace_id="workspace-1",
+        domain="cursor.sh",
+        source_type="webpage_verified",
+        display_name="Cursor",
+        homepage_url="https://cursor.sh",
+        trust_level="verified",
+        robots_status="allowed",
+        first_seen_run_id="run-1",
+        last_seen_run_id="run-1",
+    )
+
+    assert record.domain == "cursor.sh"
+    assert record.trust_level == "verified"
+    assert record.robots_status == "allowed"
+    assert record.seen_count == 1
 
 
 def test_report_version_groups_by_topic_layer_and_competitor_set() -> None:

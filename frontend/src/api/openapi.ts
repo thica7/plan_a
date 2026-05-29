@@ -550,6 +550,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/source-registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Source Registry */
+        get: operations["list_source_registry_api_enterprise_source_registry_get"];
+        put?: never;
+        /** Upsert Source Registry */
+        post: operations["upsert_source_registry_api_enterprise_source_registry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/evidence/{evidence_id}/quality": {
         parameters: {
             query?: never;
@@ -2420,6 +2438,61 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** SourceRegistryRecord */
+        SourceRegistryRecord: {
+            /** Id */
+            id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Domain */
+            domain: string;
+            /** Source Type */
+            source_type: string;
+            /** Display Name */
+            display_name: string;
+            /** Homepage Url */
+            homepage_url?: string | null;
+            /**
+             * Trust Level
+             * @default unknown
+             * @enum {string}
+             */
+            trust_level: "official" | "verified" | "community" | "synthetic" | "unknown";
+            /**
+             * Robots Status
+             * @default unknown
+             * @enum {string}
+             */
+            robots_status: "unknown" | "allowed" | "blocked" | "error";
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** First Seen Run Id */
+            first_seen_run_id?: string | null;
+            /** Last Seen Run Id */
+            last_seen_run_id?: string | null;
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at?: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at?: string;
+            /**
+             * Seen Count
+             * @default 1
+             */
+            seen_count: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
         /** ToolCallMessage */
         ToolCallMessage: {
             /** Id */
@@ -3618,6 +3691,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvidenceRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_source_registry_api_enterprise_source_registry_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceRegistryRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_source_registry_api_enterprise_source_registry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceRegistryRecord"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceRegistryRecord"];
                 };
             };
             /** @description Validation Error */

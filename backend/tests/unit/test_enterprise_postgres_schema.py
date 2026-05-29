@@ -21,6 +21,7 @@ def test_phase1_postgres_schema_has_strict_core_tables() -> None:
         "project_competitors",
         "runs",
         "evidence_records",
+        "source_registry",
         "knowledge_claims",
         "claim_evidence",
         "report_versions",
@@ -40,3 +41,13 @@ def test_phase4_prereq_columns_are_present_in_postgres_schema() -> None:
     assert "last_seen_run_id TEXT REFERENCES runs(id)" in sql
     assert "seen_count INTEGER NOT NULL DEFAULT 1" in sql
     assert "idx_report_versions_workspace_group_unique" in sql
+
+
+def test_phase4_source_registry_schema_is_present() -> None:
+    sql = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS source_registry" in sql
+    assert "UNIQUE (workspace_id, domain, source_type)" in sql
+    assert "trust_level TEXT NOT NULL DEFAULT 'unknown'" in sql
+    assert "robots_status TEXT NOT NULL DEFAULT 'unknown'" in sql
+    assert "idx_source_registry_workspace_domain" in sql

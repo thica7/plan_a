@@ -1385,6 +1385,98 @@
         }
       }
     },
+    "/api/enterprise/source-registry": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "List Source Registry",
+        "operationId": "list_source_registry_api_enterprise_source_registry_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SourceRegistryRecord"
+                  },
+                  "title": "Response List Source Registry Api Enterprise Source Registry Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Upsert Source Registry",
+        "operationId": "upsert_source_registry_api_enterprise_source_registry_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceRegistryRecord"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRegistryRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enterprise/evidence/{evidence_id}/quality": {
       "patch": {
         "tags": [
@@ -5782,6 +5874,125 @@
           "elapsed_ms"
         ],
         "title": "SmokeResult"
+      },
+      "SourceRegistryRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "homepage_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Homepage Url"
+          },
+          "trust_level": {
+            "type": "string",
+            "enum": [
+              "official",
+              "verified",
+              "community",
+              "synthetic",
+              "unknown"
+            ],
+            "title": "Trust Level",
+            "default": "unknown"
+          },
+          "robots_status": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "allowed",
+              "blocked",
+              "error"
+            ],
+            "title": "Robots Status",
+            "default": "unknown"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "first_seen_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen Run Id"
+          },
+          "last_seen_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen Run Id"
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Seen At"
+          },
+          "seen_count": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Seen Count",
+            "default": 1
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "workspace_id",
+          "domain",
+          "source_type",
+          "display_name"
+        ],
+        "title": "SourceRegistryRecord"
       },
       "ToolCallMessage": {
         "properties": {

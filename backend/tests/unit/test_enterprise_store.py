@@ -160,6 +160,42 @@ def test_enterprise_store_tracks_evidence_lifecycle_across_runs() -> None:
     assert evidence.run_id == "run-1"
 
 
+def test_enterprise_store_registers_sources_from_evidence_lifecycle() -> None:
+    store = EnterpriseMemoryStore()
+    first_detail = _detail()
+    first_context = store.start_run(first_detail)
+    first_projection = build_enterprise_projection(
+        first_detail,
+        workspace_id=first_context.workspace_id,
+        project_id=first_context.project_id,
+        competitor_id_map=first_context.competitor_id_map,
+    )
+    store.save_projection(first_projection)
+
+    second_detail = _detail().model_copy(deep=True, update={"id": "run-2"})
+    second_context = store.start_run(second_detail)
+    second_projection = build_enterprise_projection(
+        second_detail,
+        workspace_id=second_context.workspace_id,
+        project_id=second_context.project_id,
+        version_number=2,
+        competitor_id_map=second_context.competitor_id_map,
+    )
+    store.save_projection(second_projection)
+    store.save_projection(second_projection)
+
+    [source] = store.list_source_registry(workspace_id=first_context.workspace_id)
+    assert source.domain == "cursor.sh"
+    assert source.source_type == "webpage_verified"
+    assert source.trust_level == "verified"
+    assert source.homepage_url is not None
+    assert str(source.homepage_url) == "https://cursor.sh/"
+    assert source.first_seen_run_id == "run-1"
+    assert source.last_seen_run_id == "run-2"
+    assert source.seen_count == 2
+    assert any(log.action == "source_registry.upserted" for log in store.list_audit_logs())
+
+
 def test_enterprise_store_updates_evidence_quality_with_audit() -> None:
     store = EnterpriseMemoryStore()
     detail = _detail()
@@ -434,6 +470,13 @@ def test_enterprise_router_exposes_projection() -> None:
     readiness = client.get(f"/api/enterprise/projects/{context.project_id}/readiness-score")
     gaps = client.get(f"/api/enterprise/projects/{context.project_id}/evidence-gaps")
     competitors = client.get(f"/api/enterprise/competitors?project_id={context.project_id}")
+    source_registry = client.get(
+        f"/api/enterprise/source-registry?workspace_id={context.workspace_id}"
+    )
+    source_upsert = client.post(
+        "/api/enterprise/source-registry",
+        json=store.list_source_registry()[0].model_dump(mode="json"),
+    )
     project_upsert = client.post(
         "/api/enterprise/projects",
         json=store.get_project(context.project_id).model_dump(mode="json"),
@@ -469,6 +512,10 @@ def test_enterprise_router_exposes_projection() -> None:
     assert "gap_count" in gaps.json()
     assert competitors.status_code == 200
     assert [item["name"] for item in competitors.json()] == ["Cursor"]
+    assert source_registry.status_code == 200
+    assert source_registry.json()[0]["domain"] == "cursor.sh"
+    assert source_upsert.status_code == 200
+    assert source_upsert.json()["source_type"] == "webpage_verified"
     assert project_upsert.status_code == 200
     assert project_upsert.json()["id"] == context.project_id
     assert evidence_upsert.status_code == 200

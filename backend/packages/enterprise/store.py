@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from threading import RLock
 from typing import Protocol
+from urllib.parse import urlparse
 
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.schema.api_dto import RunDetail
@@ -19,6 +20,7 @@ from packages.schema.enterprise import (
     ProjectCompetitorLink,
     ProjectRecord,
     ReportVersionRecord,
+    SourceRegistryRecord,
     UserRecord,
     WorkspaceRecord,
 )
@@ -80,6 +82,16 @@ class EnterpriseStore(Protocol):
 
     def upsert_evidence(self, evidence: EvidenceRecord) -> EvidenceRecord: ...
 
+    def list_source_registry(
+        self,
+        workspace_id: str | None = None,
+    ) -> list[SourceRegistryRecord]: ...
+
+    def upsert_source_registry(
+        self,
+        record: SourceRegistryRecord,
+    ) -> SourceRegistryRecord: ...
+
     def update_evidence_quality(
         self,
         evidence_id: str,
@@ -116,6 +128,7 @@ class EnterpriseMemoryStore:
         self.competitors: dict[str, CompetitorRecord] = {}
         self.project_competitors: dict[tuple[str, str], ProjectCompetitorLink] = {}
         self.evidence_records: dict[str, EvidenceRecord] = {}
+        self.source_registry: dict[str, SourceRegistryRecord] = {}
         self.claim_records: dict[str, ClaimRecord] = {}
         self.report_versions: dict[str, ReportVersionRecord] = {}
         self.audit_logs: list[AuditLogRecord] = []
@@ -288,9 +301,15 @@ class EnterpriseMemoryStore:
         with self._lock:
             for evidence in projection.evidence_records:
                 existing = self.evidence_records.get(evidence.id)
-                self.evidence_records[evidence.id] = _merge_evidence_lifecycle(
+                merged_evidence = _merge_evidence_lifecycle(
                     existing,
                     evidence,
+                )
+                self.evidence_records[evidence.id] = merged_evidence
+                self._upsert_source_registry_locked(
+                    source_registry_from_evidence(merged_evidence),
+                    actor_id=DEFAULT_USER_ID,
+                    audit_once=True,
                 )
             for claim in projection.claim_records:
                 self.claim_records[claim.id] = claim
@@ -436,6 +455,11 @@ class EnterpriseMemoryStore:
             before_record = self.evidence_records.get(evidence.id)
             evidence = _merge_evidence_lifecycle(before_record, evidence)
             self.evidence_records[evidence.id] = evidence
+            self._upsert_source_registry_locked(
+                source_registry_from_evidence(evidence),
+                actor_id=DEFAULT_USER_ID,
+                audit_once=True,
+            )
             self._append_audit(
                 workspace_id=evidence.workspace_id,
                 actor_id=DEFAULT_USER_ID,
@@ -446,6 +470,28 @@ class EnterpriseMemoryStore:
                 after=evidence.model_dump(mode="json"),
             )
             return evidence
+
+    def list_source_registry(
+        self,
+        workspace_id: str | None = None,
+    ) -> list[SourceRegistryRecord]:
+        with self._lock:
+            records = list(self.source_registry.values())
+            if workspace_id:
+                records = [item for item in records if item.workspace_id == workspace_id]
+            return sorted(records, key=lambda item: (item.domain, item.source_type))
+
+    def upsert_source_registry(
+        self,
+        record: SourceRegistryRecord,
+    ) -> SourceRegistryRecord:
+        with self._lock:
+            self._ensure_workspace(record.workspace_id)
+            return self._upsert_source_registry_locked(
+                record,
+                actor_id=DEFAULT_USER_ID,
+                audit_once=False,
+            )
 
     def update_evidence_quality(
         self,
@@ -568,6 +614,28 @@ class EnterpriseMemoryStore:
             WorkspaceRecord(id=workspace_id, name=_title_from_id(workspace_id)),
         )
 
+    def _upsert_source_registry_locked(
+        self,
+        record: SourceRegistryRecord,
+        *,
+        actor_id: str | None,
+        audit_once: bool,
+    ) -> SourceRegistryRecord:
+        before_record = self.source_registry.get(record.id)
+        merged = _merge_source_registry(before_record, record)
+        self.source_registry[merged.id] = merged
+        append_audit = self._append_audit_once if audit_once else self._append_audit
+        append_audit(
+            workspace_id=merged.workspace_id,
+            actor_id=actor_id,
+            action="source_registry.upserted",
+            resource_type="source_registry",
+            resource_id=merged.id,
+            before=before_record.model_dump(mode="json") if before_record else None,
+            after=merged.model_dump(mode="json"),
+        )
+        return merged
+
     def _append_audit(
         self,
         *,
@@ -684,3 +752,108 @@ def _merge_evidence_lifecycle(
             "seen_count": max(1, existing.seen_count + increment),
         }
     )
+
+
+def source_registry_id(workspace_id: str, domain: str, source_type: str) -> str:
+    raw = f"{workspace_id}|{domain.casefold()}|{source_type.casefold()}"
+    return f"source-{_short_hash(raw)}"
+
+
+def source_registry_from_evidence(evidence: EvidenceRecord) -> SourceRegistryRecord:
+    domain, homepage_url = _source_location(evidence)
+    source_type = evidence.source_type or "unknown"
+    first_seen_run_id = evidence.first_seen_run_id or evidence.run_id
+    last_seen_run_id = evidence.last_seen_run_id or evidence.run_id
+    return SourceRegistryRecord(
+        id=source_registry_id(evidence.workspace_id, domain, source_type),
+        workspace_id=evidence.workspace_id,
+        domain=domain,
+        source_type=source_type,
+        display_name=_title_from_id(domain),
+        homepage_url=homepage_url,
+        trust_level=_source_trust_level(evidence),
+        robots_status=_source_robots_status(evidence),
+        first_seen_run_id=first_seen_run_id,
+        last_seen_run_id=last_seen_run_id,
+        first_seen_at=evidence.captured_at,
+        last_seen_at=evidence.captured_at,
+        seen_count=max(1, evidence.seen_count),
+        metadata={
+            "last_evidence_id": evidence.id,
+            "last_project_id": evidence.project_id,
+            "last_dimension": evidence.dimension,
+        },
+    )
+
+
+def _source_location(evidence: EvidenceRecord) -> tuple[str, str | None]:
+    url_value = evidence.canonical_url or (str(evidence.url) if evidence.url else "")
+    parsed = urlparse(url_value)
+    host = parsed.hostname or ""
+    if host:
+        domain = host.lower()
+        if domain.startswith("www."):
+            domain = domain[4:]
+        scheme = parsed.scheme if parsed.scheme in {"http", "https"} else "https"
+        return domain, f"{scheme}://{domain}"
+    return _normalize_key(evidence.source_type or "unknown"), None
+
+
+def _source_trust_level(evidence: EvidenceRecord) -> str:
+    source_type = evidence.source_type.casefold()
+    if source_type in {"official", "official_site", "official_docs"}:
+        return "official"
+    if source_type in {"webpage_verified", "verified_webpage", "verified_document"}:
+        return "verified"
+    if source_type in {"synthetic", "synthesized", "interview_record", "manual_note"}:
+        return "synthetic"
+    if evidence.url or evidence.canonical_url:
+        return "community"
+    return "unknown"
+
+
+def _source_robots_status(evidence: EvidenceRecord) -> str:
+    status = str(evidence.metadata.get("robots_status") or "unknown").casefold()
+    if status in {"unknown", "allowed", "blocked", "error"}:
+        return status
+    return "unknown"
+
+
+def _merge_source_registry(
+    existing: SourceRegistryRecord | None,
+    incoming: SourceRegistryRecord,
+) -> SourceRegistryRecord:
+    if existing is None:
+        return incoming
+
+    run_increment = (
+        1
+        if incoming.last_seen_run_id
+        and incoming.last_seen_run_id != existing.last_seen_run_id
+        else 0
+    )
+    return incoming.model_copy(
+        update={
+            "trust_level": _stronger_trust_level(existing.trust_level, incoming.trust_level),
+            "robots_status": incoming.robots_status
+            if incoming.robots_status != "unknown"
+            else existing.robots_status,
+            "is_active": existing.is_active,
+            "first_seen_run_id": existing.first_seen_run_id or incoming.first_seen_run_id,
+            "first_seen_at": min(existing.first_seen_at, incoming.first_seen_at),
+            "last_seen_at": max(existing.last_seen_at, incoming.last_seen_at),
+            "seen_count": max(existing.seen_count + run_increment, incoming.seen_count),
+            "metadata": {**existing.metadata, **incoming.metadata},
+        }
+    )
+
+
+def _stronger_trust_level(left: str, right: str) -> str:
+    rank = {
+        "unknown": 0,
+        "synthetic": 1,
+        "community": 2,
+        "verified": 3,
+        "official": 4,
+    }
+    return left if rank.get(left, 0) >= rank.get(right, 0) else right
