@@ -11,8 +11,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from packages.auth import EnterpriseUserContext, can_access_workspace  # noqa: E402
 from packages.config import Settings  # noqa: E402
 from packages.enterprise import EnterpriseMemoryStore  # noqa: E402
+from packages.enterprise.store import DEFAULT_USER_ID  # noqa: E402
 from packages.orchestrator.service import RunService  # noqa: E402
 from packages.skills.registry import SkillRegistry  # noqa: E402
 from packages.workflows.activities import CompetitiveIntelActivities  # noqa: E402
@@ -40,6 +42,8 @@ async def main() -> None:
     )
     checks = [
         _server_socket_check(settings),
+        *_schema_extension_checks(),
+        *_rbac_policy_checks(),
         *(await _activity_idempotency_checks(settings)),
     ]
     summary = {
@@ -80,6 +84,17 @@ async def _activity_idempotency_checks(settings: Settings) -> list[ReadinessChec
     event_count = len(service.get_trace(created.run_id) or [])
     completed_again = await activities.run_langgraph_pipeline(created.run_id)
     projection = await activities.load_projection(created.run_id)
+    project_id = service._runs[created.run_id].detail.project_id or ""
+    workspace_id = service._runs[created.run_id].detail.workspace_id
+    source_count = len(store.list_source_registry(workspace_id=workspace_id))
+    embedding_count = len(store.list_evidence_embeddings(workspace_id=workspace_id))
+    search_hits = store.search_evidence(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        query="AI coding assistant pricing",
+        limit=3,
+    )
+    member = store.get_workspace_member(workspace_id, DEFAULT_USER_ID)
 
     stable_run = created.run_id == duplicate.run_id
     pipeline_idempotent = (
@@ -92,6 +107,9 @@ async def _activity_idempotency_checks(settings: Settings) -> list[ReadinessChec
         and projection.evidence_count >= 1
         and projection.claim_count >= 1
     )
+    source_registry_ready = source_count >= 1
+    embedding_ready = embedding_count >= 1 and len(search_hits) >= 1
+    workspace_member_ready = member is not None and member.role == "owner"
     return [
         ReadinessCheck(
             name="workflow_create_idempotency",
@@ -111,6 +129,89 @@ async def _activity_idempotency_checks(settings: Settings) -> list[ReadinessChec
                 f"evidence_count={projection.evidence_count} claim_count={projection.claim_count}"
             ),
         ),
+        ReadinessCheck(
+            name="source_registry_projection",
+            status="ok" if source_registry_ready else "error",
+            detail=f"workspace_id={workspace_id} source_count={source_count}",
+        ),
+        ReadinessCheck(
+            name="evidence_embedding_index",
+            status="ok" if embedding_ready else "error",
+            detail=(
+                f"workspace_id={workspace_id} embedding_count={embedding_count} "
+                f"search_hit_count={len(search_hits)}"
+            ),
+        ),
+        ReadinessCheck(
+            name="workspace_member_bootstrap",
+            status="ok" if workspace_member_ready else "error",
+            detail=(
+                f"workspace_id={workspace_id} "
+                f"system_member_role={member.role if member else ''}"
+            ),
+        ),
+    ]
+
+
+def _schema_extension_checks() -> list[ReadinessCheck]:
+    schema = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
+    required = {
+        "workspace_members": "CREATE TABLE IF NOT EXISTS workspace_members",
+        "source_registry": "CREATE TABLE IF NOT EXISTS source_registry",
+        "pgvector": "CREATE EXTENSION IF NOT EXISTS vector",
+        "evidence_embeddings": "CREATE TABLE IF NOT EXISTS evidence_embeddings",
+        "evidence_full_text": "idx_evidence_search",
+    }
+    return [
+        ReadinessCheck(
+            name=f"postgres_schema_{name}",
+            status="ok" if marker in schema else "error",
+            detail=f"marker={marker}",
+        )
+        for name, marker in required.items()
+    ]
+
+
+def _rbac_policy_checks() -> list[ReadinessCheck]:
+    scoped_viewer = EnterpriseUserContext(
+        user_id="phase4-viewer",
+        role="viewer",
+        workspace_id="workspace-a",
+    )
+    reviewer = EnterpriseUserContext(
+        user_id="phase4-reviewer",
+        role="reviewer",
+        workspace_id="workspace-a",
+    )
+    checks = {
+        "rbac_same_workspace_read": can_access_workspace(
+            scoped_viewer,
+            "workspace-a",
+            "project:read",
+        ),
+        "rbac_cross_workspace_block": not can_access_workspace(
+            scoped_viewer,
+            "workspace-b",
+            "project:read",
+        ),
+        "rbac_viewer_write_block": not can_access_workspace(
+            scoped_viewer,
+            "workspace-a",
+            "project:write",
+        ),
+        "rbac_reviewer_quality_gate": can_access_workspace(
+            reviewer,
+            "workspace-a",
+            "evidence:review",
+        ),
+    }
+    return [
+        ReadinessCheck(
+            name=name,
+            status="ok" if passed else "error",
+            detail=f"passed={passed}",
+        )
+        for name, passed in checks.items()
     ]
 
 
@@ -179,7 +280,9 @@ def _render_markdown(summary: dict[str, object]) -> str:
             "This report validates the Phase 4 thin-shell contract: the same idempotency "
             "key produces the same run, rerunning the LangGraph activity does not append "
             "duplicate trace events, and the enterprise projection contains a report "
-            "version with evidence and claims.",
+            "version with evidence and claims. It also checks the enterprise extension "
+            "surface now expected at Phase 4 closeout: workspace members/RBAC, Source "
+            "Registry, pgvector evidence embeddings, and full-text evidence search.",
             "",
             "Server reachability is reported separately because local development can run "
             "the deterministic activity checks without a Temporal Server. Use "
