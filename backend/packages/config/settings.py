@@ -46,6 +46,9 @@ class Settings:
     ark_base_url: str
     llm_timeout_seconds: float
     llm_temperature: float
+    backup_llm_api_key: str | None = None
+    backup_llm_base_url: str = "https://openrouter.ai/api/v1"
+    backup_llm_model: str | None = None
     pplx_api_key: str | None = None
     pplx_base_url: str = "https://api.perplexity.ai"
     web_search_provider: str = "perplexity"
@@ -70,7 +73,15 @@ class Settings:
 
     @property
     def has_llm_credentials(self) -> bool:
+        return self.has_primary_llm_credentials or self.has_backup_llm_credentials
+
+    @property
+    def has_primary_llm_credentials(self) -> bool:
         return bool(self.ark_api_key and self.ark_model)
+
+    @property
+    def has_backup_llm_credentials(self) -> bool:
+        return bool(self.backup_llm_api_key and self.backup_llm_model)
 
     @property
     def has_web_search_credentials(self) -> bool:
@@ -99,6 +110,11 @@ def get_settings() -> Settings:
         ark_base_url=os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3").rstrip(
             "/"
         ),
+        backup_llm_api_key=os.getenv("BACKUP_LLM_API_KEY") or None,
+        backup_llm_base_url=os.getenv(
+            "BACKUP_LLM_BASE_URL", "https://openrouter.ai/api/v1"
+        ).rstrip("/"),
+        backup_llm_model=os.getenv("BACKUP_LLM_MODEL") or None,
         llm_timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "60")),
         llm_temperature=float(os.getenv("LLM_TEMPERATURE", "0.2")),
         pplx_api_key=os.getenv("PPLX_API_KEY") or os.getenv("PERPLEXITY_API_KEY") or None,

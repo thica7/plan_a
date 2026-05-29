@@ -8039,6 +8039,29 @@
             ],
             "title": "Ark Model"
           },
+          "has_backup_llm_api_key": {
+            "type": "boolean",
+            "title": "Has Backup Llm Api Key"
+          },
+          "has_backup_llm_model": {
+            "type": "boolean",
+            "title": "Has Backup Llm Model"
+          },
+          "backup_llm_base_url": {
+            "type": "string",
+            "title": "Backup Llm Base Url"
+          },
+          "backup_llm_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Llm Model"
+          },
           "web_search_provider": {
             "type": "string",
             "title": "Web Search Provider"
@@ -8085,6 +8108,9 @@
           "has_ark_api_key",
           "has_ark_model",
           "ark_base_url",
+          "has_backup_llm_api_key",
+          "has_backup_llm_model",
+          "backup_llm_base_url",
           "web_search_provider",
           "has_web_search_key",
           "auto_redo_enabled",

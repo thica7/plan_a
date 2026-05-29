@@ -146,10 +146,19 @@ export function NewRun() {
           </div>
           {runtime ? (
             <div className="runtime-lines">
-              <p className={runtime.has_ark_api_key && runtime.has_ark_model ? "runtime-ok" : "runtime-warn"}>
+              <p
+                className={
+                  (runtime.has_ark_api_key && runtime.has_ark_model)
+                  || (runtime.has_backup_llm_api_key && runtime.has_backup_llm_model)
+                    ? "runtime-ok"
+                    : "runtime-warn"
+                }
+              >
                 {runtime.has_ark_api_key && runtime.has_ark_model
                   ? `Backend is ready for real calls with ${runtime.ark_model}.`
-                  : "Real API mode needs ARK_API_KEY and ARK_MODEL in backend .env."}
+                  : runtime.has_backup_llm_api_key && runtime.has_backup_llm_model
+                    ? `Backend is ready for backup LLM calls with ${runtime.backup_llm_model}.`
+                    : "Real API mode needs primary ARK or BACKUP_LLM settings in backend .env."}
               </p>
               <p className={runtime.has_web_search_key ? "runtime-ok" : "runtime-warn"}>
                 {runtime.has_web_search_key

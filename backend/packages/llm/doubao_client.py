@@ -20,10 +20,20 @@ class LLMUsage:
     total_tokens: int | None = None
 
 
+@dataclass(frozen=True)
+class LLMProviderConfig:
+    name: str
+    api_key: str
+    base_url: str
+    model: str
+
+
 class DoubaoClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._last_usage: LLMUsage | None = None
+        self._last_provider: str | None = None
+        self._last_model: str | None = None
 
     async def complete_json(
         self,
@@ -32,31 +42,77 @@ class DoubaoClient:
         user: str,
         schema_hint: str,
     ) -> dict[str, Any]:
-        content = await self.complete_text(
-            system=(
-                f"{system}\n\n"
-                "Return only valid JSON. Do not wrap it in markdown fences. "
-                f"The JSON shape is: {schema_hint}"
-            ),
-            user=user,
+        json_system = (
+            f"{system}\n\n"
+            "Return only valid JSON. Do not wrap it in markdown fences. "
+            f"The JSON shape is: {schema_hint}"
         )
-        return self._extract_json(content)
+        providers = self._provider_configs()
+        if not providers:
+            raise LLMError(
+                "ARK_API_KEY and ARK_MODEL or BACKUP_LLM_API_KEY and BACKUP_LLM_MODEL "
+                "are required for real execution mode."
+            )
+
+        errors: list[str] = []
+        for provider in providers:
+            try:
+                content = await self._complete_text_with_provider(
+                    provider,
+                    system=json_system,
+                    user=user,
+                )
+                return self._extract_json(content)
+            except Exception as exc:
+                errors.append(f"{provider.name}: {exc}")
+                self._last_usage = None
+                self._last_provider = None
+                self._last_model = None
+        raise LLMError("LLM JSON request failed for all providers: " + " | ".join(errors))
 
     async def complete_text(self, *, system: str, user: str) -> str:
-        if not self._settings.ark_api_key or not self._settings.ark_model:
-            raise LLMError("ARK_API_KEY and ARK_MODEL are required for real execution mode.")
-        self._last_usage = None
+        providers = self._provider_configs()
+        if not providers:
+            raise LLMError(
+                "ARK_API_KEY and ARK_MODEL or BACKUP_LLM_API_KEY and BACKUP_LLM_MODEL "
+                "are required for real execution mode."
+            )
 
+        errors: list[str] = []
+        for provider in providers:
+            try:
+                return await self._complete_text_with_provider(
+                    provider,
+                    system=system,
+                    user=user,
+                )
+            except LLMError as exc:
+                errors.append(f"{provider.name}: {exc}")
+                self._last_usage = None
+                self._last_provider = None
+                self._last_model = None
+        raise LLMError("LLM request failed for all providers: " + " | ".join(errors))
+
+    async def _complete_text_with_provider(
+        self,
+        provider: LLMProviderConfig,
+        *,
+        system: str,
+        user: str,
+    ) -> str:
         payload = {
-            "model": self._settings.ark_model,
+            "model": provider.model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
             "temperature": self._settings.llm_temperature,
         }
-        headers = {"Authorization": f"Bearer {self._settings.ark_api_key}"}
-        url = f"{self._settings.ark_base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {provider.api_key}",
+            "X-Title": "Competiscope",
+        }
+        url = f"{provider.base_url}/chat/completions"
 
         try:
             async with httpx.AsyncClient(timeout=self._settings.llm_timeout_seconds) as client:
@@ -72,6 +128,8 @@ class DoubaoClient:
 
         data = response.json()
         self._last_usage = self._parse_usage(data.get("usage"))
+        self._last_provider = provider.name
+        self._last_model = provider.model
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
@@ -84,6 +142,40 @@ class DoubaoClient:
         usage = self._last_usage
         self._last_usage = None
         return usage
+
+    def last_provider(self) -> str | None:
+        if self._last_provider:
+            return self._last_provider
+        if self._settings.has_primary_llm_credentials:
+            return "doubao"
+        if self._settings.has_backup_llm_credentials:
+            return "backup"
+        return None
+
+    def last_model(self) -> str | None:
+        return self._last_model or self._settings.ark_model or self._settings.backup_llm_model
+
+    def _provider_configs(self) -> list[LLMProviderConfig]:
+        providers: list[LLMProviderConfig] = []
+        if self._settings.ark_api_key and self._settings.ark_model:
+            providers.append(
+                LLMProviderConfig(
+                    name="doubao",
+                    api_key=self._settings.ark_api_key,
+                    base_url=self._settings.ark_base_url,
+                    model=self._settings.ark_model,
+                )
+            )
+        if self._settings.backup_llm_api_key and self._settings.backup_llm_model:
+            providers.append(
+                LLMProviderConfig(
+                    name="backup",
+                    api_key=self._settings.backup_llm_api_key,
+                    base_url=self._settings.backup_llm_base_url,
+                    model=self._settings.backup_llm_model,
+                )
+            )
+        return providers
 
     def _parse_usage(self, usage: object) -> LLMUsage | None:
         if not isinstance(usage, dict):

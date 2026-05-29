@@ -44,9 +44,7 @@ def health(
         HealthCheck(
             name="llm_credentials",
             status="ok" if settings.has_llm_credentials else "warn",
-            detail="ARK_API_KEY and ARK_MODEL detected"
-            if settings.has_llm_credentials
-            else "Real mode requires ARK_API_KEY and ARK_MODEL",
+            detail=_llm_credentials_detail(settings),
         ),
         HealthCheck(
             name="web_search_credentials",
@@ -81,11 +79,18 @@ async def smoke_llm(
     settings: SettingsDep,
 ) -> SmokeResult:
     if not settings.has_llm_credentials:
-        raise HTTPException(status_code=400, detail="ARK_API_KEY and ARK_MODEL are required.")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "ARK_API_KEY and ARK_MODEL or BACKUP_LLM_API_KEY and "
+                "BACKUP_LLM_MODEL are required."
+            ),
+        )
 
     start = perf_counter()
+    client = DoubaoClient(settings)
     try:
-        content = await DoubaoClient(settings).complete_text(
+        content = await client.complete_text(
             system="You are a smoke-test assistant. Keep the answer short.",
             user=request.prompt,
         )
@@ -98,7 +103,8 @@ async def smoke_llm(
         message="LLM responded.",
         elapsed_ms=_elapsed_ms(start),
         details={
-            "model": settings.ark_model,
+            "provider": client.last_provider(),
+            "model": client.last_model(),
             "response_chars": len(content),
             "preview": content[:80],
         },
@@ -167,6 +173,16 @@ def _rollup_status(checks: list[HealthCheck]) -> str:
     if any(check.status == "warn" for check in checks):
         return "warn"
     return "ok"
+
+
+def _llm_credentials_detail(settings: Settings) -> str:
+    if settings.has_primary_llm_credentials and settings.has_backup_llm_credentials:
+        return "primary ARK and backup LLM credentials detected"
+    if settings.has_primary_llm_credentials:
+        return "primary ARK credentials detected"
+    if settings.has_backup_llm_credentials:
+        return "backup LLM credentials detected"
+    return "Real mode requires primary ARK or BACKUP_LLM credentials"
 
 
 def _enterprise_store_check(settings: Settings) -> HealthCheck:

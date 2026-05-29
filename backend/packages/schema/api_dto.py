@@ -191,6 +191,10 @@ class RuntimeConfig(BaseModel):
     has_ark_model: bool
     ark_base_url: str
     ark_model: str | None = None
+    has_backup_llm_api_key: bool
+    has_backup_llm_model: bool
+    backup_llm_base_url: str
+    backup_llm_model: str | None = None
     web_search_provider: str
     has_web_search_key: bool
     auto_redo_enabled: bool

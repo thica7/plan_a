@@ -2026,9 +2026,20 @@ class RunService(
         return consume()
 
     def _llm_usage_metadata(self, usage: Any | None) -> dict[str, int | str]:
+        provider = self._last_llm_provider()
+        model = self._last_llm_model()
         if usage is None:
-            return {"token_usage_source": "estimate"}
-        metadata: dict[str, int | str] = {"token_usage_source": "provider"}
+            metadata: dict[str, int | str] = {"token_usage_source": "estimate"}
+            if provider:
+                metadata["llm_provider"] = provider
+            if model:
+                metadata["llm_model"] = model
+            return metadata
+        metadata = {"token_usage_source": "provider"}
+        if provider:
+            metadata["llm_provider"] = provider
+        if model:
+            metadata["llm_model"] = model
         prompt_tokens = getattr(usage, "prompt_tokens", None)
         completion_tokens = getattr(usage, "completion_tokens", None)
         total_tokens = getattr(usage, "total_tokens", None)
@@ -2071,8 +2082,8 @@ class RunService(
             subagent=subagent,
             name=name,
             status=status,
-            model=self._settings.ark_model if kind == "llm" else None,
-            provider="doubao"
+            model=self._last_llm_model() if kind == "llm" else None,
+            provider=self._last_llm_provider()
             if kind == "llm"
             else self._settings.web_search_provider
             if kind == "search"
@@ -2198,6 +2209,26 @@ class RunService(
         # the provider SDK does not return exact billing usage.
         return round((input_tokens * 0.0000003) + (output_tokens * 0.0000006), 6)
 
+    def _last_llm_provider(self) -> str | None:
+        getter = getattr(self._llm, "last_provider", None)
+        if callable(getter):
+            value = getter()
+            if isinstance(value, str) and value:
+                return value
+        if self._settings.has_primary_llm_credentials:
+            return "doubao"
+        if self._settings.has_backup_llm_credentials:
+            return "backup"
+        return None
+
+    def _last_llm_model(self) -> str | None:
+        getter = getattr(self._llm, "last_model", None)
+        if callable(getter):
+            value = getter()
+            if isinstance(value, str) and value:
+                return value
+        return self._settings.ark_model or self._settings.backup_llm_model
+
     def _preview(self, text: str, limit: int = 420) -> str:
         cleaned = re.sub(r"\s+", " ", text).strip()
         if len(cleaned) <= limit:
@@ -2283,7 +2314,8 @@ class RunService(
         if requested == "real":
             if not self._settings.has_llm_credentials:
                 raise ValueError(
-                    "Real mode requires ARK_API_KEY and ARK_MODEL in backend environment or .env."
+                    "Real mode requires ARK_API_KEY and ARK_MODEL or "
+                    "BACKUP_LLM_API_KEY and BACKUP_LLM_MODEL in backend environment or .env."
                 )
             return "real"
         return self._settings.default_execution_mode

@@ -391,6 +391,10 @@ export interface RuntimeConfig {
   has_ark_model: boolean;
   ark_base_url: string;
   ark_model?: string | null;
+  has_backup_llm_api_key: boolean;
+  has_backup_llm_model: boolean;
+  backup_llm_base_url: string;
+  backup_llm_model?: string | null;
   web_search_provider: string;
   has_web_search_key: boolean;
   auto_redo_enabled: boolean;

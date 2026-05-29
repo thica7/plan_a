@@ -2603,6 +2603,14 @@ export interface components {
             ark_base_url: string;
             /** Ark Model */
             ark_model?: string | null;
+            /** Has Backup Llm Api Key */
+            has_backup_llm_api_key: boolean;
+            /** Has Backup Llm Model */
+            has_backup_llm_model: boolean;
+            /** Backup Llm Base Url */
+            backup_llm_base_url: string;
+            /** Backup Llm Model */
+            backup_llm_model?: string | null;
             /** Web Search Provider */
             web_search_provider: string;
             /** Has Web Search Key */
