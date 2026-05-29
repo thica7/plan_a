@@ -9,6 +9,7 @@ import type {
   EvidenceQualityLabel,
   EvidenceGapReport,
   EvidenceRecord,
+  NotificationRecord,
   ProjectReadinessScore,
   ProjectRecord,
   ReportApprovalSignalRequest,
@@ -23,6 +24,8 @@ import type {
   RunDetail,
   RunSummary,
   RuntimeConfig,
+  ScheduledScanStartRequest,
+  ScheduledScanStartResponse,
   SkillSpec,
   ToolCallMessage,
   TraceSpan,
@@ -74,6 +77,13 @@ export function createRun(payload: RunCreateRequest) {
 
 export function startCompetitiveIntelWorkflow(payload: RunCreateRequest) {
   return request<WorkflowStartResponse>("/workflows/competitive-intel", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function startScheduledScanWorkflow(payload: ScheduledScanStartRequest) {
+  return request<ScheduledScanStartResponse>("/workflows/scheduled-scan", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -163,6 +173,19 @@ export function listRuns() {
 export function listEnterpriseProjects(workspaceId?: string) {
   const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
   return request<ProjectRecord[]>(`/enterprise/projects${params}`);
+}
+
+export function listEnterpriseNotifications(params: {
+  workspaceId?: string;
+  status?: string;
+  limit?: number;
+} = {}) {
+  const search = new URLSearchParams();
+  if (params.workspaceId) search.set("workspace_id", params.workspaceId);
+  if (params.status) search.set("status", params.status);
+  if (params.limit) search.set("limit", String(params.limit));
+  const query = search.toString();
+  return request<NotificationRecord[]>(`/enterprise/notifications${query ? `?${query}` : ""}`);
 }
 
 export function listEnterpriseCompetitors(params: {

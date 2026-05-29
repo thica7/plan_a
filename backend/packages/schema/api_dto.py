@@ -68,6 +68,34 @@ class WorkflowStartResponse(BaseModel):
     status: Literal["started", "already_started"]
 
 
+class ScheduledScanStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str = Field(min_length=1, max_length=120)
+    schedule_id: str = Field(default="default-weekly-scan", min_length=1, max_length=160)
+    requested_by: str = Field(default="system-user", min_length=1, max_length=120)
+    project_ids: list[str] = Field(default_factory=list, max_length=50)
+    dimensions: list[str] = Field(
+        default_factory=lambda: ["pricing", "feature", "persona"],
+        min_length=1,
+        max_length=8,
+    )
+    execution_mode: Literal["auto", "demo", "real"] = "auto"
+    max_projects: int = Field(default=10, ge=1, le=50)
+    cron_schedule: str | None = Field(default=None, min_length=1, max_length=120)
+
+
+class ScheduledScanStartResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str
+    workflow_type: Literal["ScheduledScanWorkflow"] = "ScheduledScanWorkflow"
+    workspace_id: str
+    schedule_id: str
+    task_queue: str
+    status: Literal["started", "already_started"]
+
+
 class ReportApprovalStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

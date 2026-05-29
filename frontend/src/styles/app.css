@@ -351,6 +351,11 @@ textarea {
   opacity: 0.6;
 }
 
+.icon-text-button.full-width {
+  justify-content: center;
+  width: 100%;
+}
+
 .icon-button {
   align-items: center;
   aspect-ratio: 1;
@@ -1660,6 +1665,54 @@ textarea {
 .claim-list {
   display: grid;
   gap: 12px;
+}
+
+.operations-panel {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.notification-list {
+  display: grid;
+  gap: 8px;
+}
+
+.notification-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.notification-item.success {
+  border-color: rgba(15, 139, 141, 0.34);
+}
+
+.notification-item.warning,
+.notification-item.critical {
+  border-color: rgba(179, 86, 35, 0.34);
+}
+
+.notification-item div {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.notification-item strong,
+.notification-item span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.notification-item span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .project-card {

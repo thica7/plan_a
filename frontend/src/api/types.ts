@@ -298,6 +298,26 @@ export interface WorkflowStartResponse {
   status: "started" | "already_started";
 }
 
+export interface ScheduledScanStartRequest {
+  workspace_id: string;
+  schedule_id?: string;
+  requested_by?: string;
+  project_ids?: string[];
+  dimensions?: string[];
+  execution_mode?: "auto" | "demo" | "real";
+  max_projects?: number;
+  cron_schedule?: string | null;
+}
+
+export interface ScheduledScanStartResponse {
+  workflow_id: string;
+  workflow_type: "ScheduledScanWorkflow";
+  workspace_id: string;
+  schedule_id: string;
+  task_queue: string;
+  status: "started" | "already_started";
+}
+
 export interface ReportApprovalStartRequest {
   report_version_id: string;
   requested_by?: string;
@@ -561,6 +581,32 @@ export interface WorkspaceRecord {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export type NotificationType =
+  | "scheduled_scan_summary"
+  | "scheduled_scan_failure"
+  | "approval_request"
+  | "approval_timeout"
+  | "anomaly_alert";
+
+export interface NotificationRecord {
+  id: string;
+  workspace_id: string;
+  project_id?: string | null;
+  notification_type: NotificationType;
+  channel: "in_app" | "email" | "webhook" | "feishu";
+  severity: "info" | "success" | "warning" | "critical";
+  status: "queued" | "sent" | "failed" | "read";
+  title: string;
+  body: string;
+  resource_type?: string | null;
+  resource_id?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  sent_at?: string | null;
+  read_at?: string | null;
+  metadata: Record<string, unknown>;
 }
 
 export interface ProjectRecord {

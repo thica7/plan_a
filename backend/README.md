@@ -62,6 +62,11 @@ workflow/run IDs without waiting for the long-running analysis to finish.
 `POST /api/workflows/report-approval/{report_version_id}/approve` or
 `POST /api/workflows/report-approval/{report_version_id}/reject`.
 
+`ScheduledScanWorkflow` is the Phase 5 recurring-monitoring entry point. Start it
+with `POST /api/workflows/scheduled-scan`; the workflow scans selected
+workspace projects and writes an in-app notification retrievable from
+`GET /api/enterprise/notifications`.
+
 Real Temporal server smoke:
 
 ```bash

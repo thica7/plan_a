@@ -30,6 +30,7 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     EvidenceReindexResult,
     EvidenceSearchHit,
+    NotificationRecord,
     ProjectReadinessScore,
     ProjectRecord,
     RedTeamReport,
@@ -76,6 +77,39 @@ def upsert_workspace_member(
 ) -> WorkspaceMemberRecord:
     _require_workspace_access(user, member.workspace_id, "workspace:write")
     return store.upsert_workspace_member(member)
+
+
+@router.get("/enterprise/notifications", response_model=list[NotificationRecord])
+def list_notifications(
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    workspace_id: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[NotificationRecord]:
+    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "notification:read")
+    return store.list_notifications(
+        workspace_id=scoped_workspace_id,
+        status=status,
+        limit=limit,
+    )
+
+
+@router.post("/enterprise/notifications", response_model=NotificationRecord)
+def upsert_notification(
+    notification: NotificationRecord,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> NotificationRecord:
+    _require_workspace_access(user, notification.workspace_id, "notification:write")
+    if notification.project_id is not None:
+        project = store.get_project(notification.project_id)
+        if project is not None and project.workspace_id != notification.workspace_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Notification workspace does not match project",
+            )
+    return store.upsert_notification(notification)
 
 
 @router.get("/enterprise/scenario-packs", response_model=list[ScenarioPack])

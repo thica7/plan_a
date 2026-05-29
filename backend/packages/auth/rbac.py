@@ -27,6 +27,8 @@ _ACTION_MIN_ROLE: dict[str, EnterpriseRole] = {
     "report:read": "viewer",
     "report:write": "analyst",
     "report:review": "reviewer",
+    "notification:read": "viewer",
+    "notification:write": "analyst",
     "audit:read": "admin",
 }
 

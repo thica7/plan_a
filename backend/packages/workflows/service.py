@@ -15,6 +15,8 @@ from packages.schema.api_dto import (
     ReportApprovalStartRequest,
     ReportApprovalStartResponse,
     RunCreateRequest,
+    ScheduledScanStartRequest,
+    ScheduledScanStartResponse,
     WorkflowStartResponse,
 )
 from packages.workflows.client import workflow_id_for_request
@@ -23,8 +25,10 @@ from packages.workflows.models import (
     CompetitiveIntelWorkflowInput,
     ReportApprovalSignalDecision,
     ReportApprovalWorkflowInput,
+    ScheduledScanWorkflowInput,
 )
 from packages.workflows.report_approval import ReportApprovalWorkflow
+from packages.workflows.scheduled_scan import ScheduledScanWorkflow
 
 
 class TemporalClient(Protocol):
@@ -35,6 +39,7 @@ class TemporalClient(Protocol):
         *,
         id: str,
         task_queue: str,
+        cron_schedule: str | None = None,
     ) -> WorkflowHandle: ...
 
     def get_workflow_handle(self, workflow_id: str) -> WorkflowHandle: ...
@@ -107,6 +112,32 @@ class TemporalWorkflowService:
             status=status,
         )
 
+    async def start_scheduled_scan(
+        self,
+        request: ScheduledScanStartRequest,
+    ) -> ScheduledScanStartResponse:
+        workflow_input = scheduled_scan_input_from_request(request)
+        workflow_id = scheduled_scan_workflow_id(workflow_input)
+        client = await self._client_factory(self._settings)
+        try:
+            await client.start_workflow(
+                ScheduledScanWorkflow.run,
+                workflow_input,
+                id=workflow_id,
+                task_queue=self._settings.temporal_task_queue,
+                cron_schedule=request.cron_schedule,
+            )
+            status = "started"
+        except WorkflowAlreadyStartedError:
+            status = "already_started"
+        return ScheduledScanStartResponse(
+            workflow_id=workflow_id,
+            workspace_id=request.workspace_id,
+            schedule_id=request.schedule_id,
+            task_queue=self._settings.temporal_task_queue,
+            status=status,
+        )
+
     async def approve_report(
         self,
         report_version_id: str,
@@ -171,6 +202,20 @@ def competitive_intel_input_from_run_request(
     )
 
 
+def scheduled_scan_input_from_request(
+    request: ScheduledScanStartRequest,
+) -> ScheduledScanWorkflowInput:
+    return ScheduledScanWorkflowInput(
+        workspace_id=request.workspace_id,
+        schedule_id=request.schedule_id,
+        requested_by=request.requested_by,
+        project_ids=request.project_ids,
+        dimensions=request.dimensions,
+        execution_mode=request.execution_mode,
+        max_projects=request.max_projects,
+    )
+
+
 def workflow_idempotency_key(request: RunCreateRequest) -> str:
     payload = request.model_dump(mode="json", exclude={"idempotency_key"})
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
@@ -186,6 +231,12 @@ def run_id_for_idempotency_key(idempotency_key: str) -> str:
 def report_approval_workflow_id(report_version_id: str) -> str:
     digest = hashlib.sha256(report_version_id.encode("utf-8")).hexdigest()[:32]
     return f"report-approval-{digest}"
+
+
+def scheduled_scan_workflow_id(request: ScheduledScanWorkflowInput) -> str:
+    raw = f"{request.workspace_id}|{request.schedule_id}"
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+    return f"scheduled-scan-{digest}"
 
 
 async def _connect_temporal_client(settings: Settings) -> TemporalClient:

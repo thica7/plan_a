@@ -17,6 +17,7 @@ def test_phase1_postgres_schema_has_strict_core_tables() -> None:
         "workspaces",
         "users",
         "workspace_members",
+        "notifications",
         "projects",
         "competitors",
         "project_competitors",
@@ -71,3 +72,12 @@ def test_phase4_pgvector_schema_is_present() -> None:
     assert "embedding VECTOR(384) NOT NULL" in sql
     assert "idx_evidence_embeddings_vector" in sql
     assert "idx_evidence_search" in sql
+
+
+def test_phase5_notifications_schema_is_present() -> None:
+    sql = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS notifications" in sql
+    assert "scheduled_scan_summary" in sql
+    assert "idx_notifications_workspace_created" in sql
+    assert "idx_notifications_workspace_status" in sql

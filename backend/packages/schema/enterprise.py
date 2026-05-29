@@ -10,6 +10,16 @@ EvidenceQualityLabel = Literal["unreviewed", "accepted", "rejected", "stale"]
 EnterpriseRole = Literal["owner", "admin", "analyst", "reviewer", "viewer"]
 SourceRobotsStatus = Literal["unknown", "allowed", "blocked", "error"]
 SourceTrustLevel = Literal["official", "verified", "community", "synthetic", "unknown"]
+NotificationChannel = Literal["in_app", "email", "webhook", "feishu"]
+NotificationSeverity = Literal["info", "success", "warning", "critical"]
+NotificationStatus = Literal["queued", "sent", "failed", "read"]
+NotificationType = Literal[
+    "scheduled_scan_summary",
+    "scheduled_scan_failure",
+    "approval_request",
+    "approval_timeout",
+    "anomaly_alert",
+]
 
 
 class WorkspaceRecord(BaseModel):
@@ -42,6 +52,27 @@ class WorkspaceMemberRecord(BaseModel):
     role: EnterpriseRole = "viewer"
     status: Literal["active", "disabled"] = "active"
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class NotificationRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    workspace_id: str
+    project_id: str | None = None
+    notification_type: NotificationType
+    channel: NotificationChannel = "in_app"
+    severity: NotificationSeverity = "info"
+    status: NotificationStatus = "queued"
+    title: str
+    body: str = ""
+    resource_type: str | None = None
+    resource_id: str | None = None
+    created_by: str | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    sent_at: datetime | None = None
+    read_at: datetime | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProjectRecord(BaseModel):

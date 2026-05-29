@@ -32,6 +32,7 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     EvidenceReindexResult,
     EvidenceSearchHit,
+    NotificationRecord,
     ProjectRecord,
     ReportVersionRecord,
     SourceRegistryRecord,
@@ -415,6 +416,66 @@ class EnterprisePostgresStore:
                 (workspace_id, user_id),
             ).fetchone()
         return WorkspaceMemberRecord.model_validate(dict(row)) if row else None
+
+    def list_notifications(
+        self,
+        workspace_id: str | None = None,
+        *,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[NotificationRecord]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if workspace_id:
+            clauses.append("workspace_id = %s")
+            params.append(workspace_id)
+        if status:
+            clauses.append("status = %s")
+            params.append(status)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(max(1, limit))
+        return self._list_models(
+            f"""
+            SELECT *
+            FROM notifications
+            {where}
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            tuple(params),
+            NotificationRecord,
+        )
+
+    def upsert_notification(
+        self,
+        notification: NotificationRecord,
+    ) -> NotificationRecord:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._upsert_workspace(cur, notification.workspace_id)
+                if notification.created_by:
+                    self._upsert_user_placeholder(cur, notification.created_by)
+                before_row = cur.execute(
+                    "SELECT * FROM notifications WHERE id = %s",
+                    (notification.id,),
+                ).fetchone()
+                self._upsert_notification(cur, notification)
+                self._append_audit(
+                    cur,
+                    workspace_id=notification.workspace_id,
+                    actor_id=notification.created_by or DEFAULT_USER_ID,
+                    action="notification.upserted",
+                    resource_type="notification",
+                    resource_id=notification.id,
+                    before=NotificationRecord.model_validate(dict(before_row)).model_dump(
+                        mode="json"
+                    )
+                    if before_row
+                    else None,
+                    after=notification.model_dump(mode="json"),
+                )
+            conn.commit()
+        return notification
 
     def list_projects(self, workspace_id: str | None = None) -> list[ProjectRecord]:
         if workspace_id:
@@ -1329,6 +1390,49 @@ class EnterprisePostgresStore:
         )
         self._replace_report_version_claim_links(cur, report)
         self._replace_report_version_evidence_links(cur, report)
+
+    def _upsert_notification(self, cur: Any, notification: NotificationRecord) -> None:
+        cur.execute(
+            """
+            INSERT INTO notifications (
+                id, workspace_id, project_id, notification_type, channel, severity, status,
+                title, body, resource_type, resource_id, created_by, created_at,
+                sent_at, read_at, metadata
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                project_id = EXCLUDED.project_id,
+                notification_type = EXCLUDED.notification_type,
+                channel = EXCLUDED.channel,
+                severity = EXCLUDED.severity,
+                status = EXCLUDED.status,
+                title = EXCLUDED.title,
+                body = EXCLUDED.body,
+                resource_type = EXCLUDED.resource_type,
+                resource_id = EXCLUDED.resource_id,
+                sent_at = EXCLUDED.sent_at,
+                read_at = EXCLUDED.read_at,
+                metadata = EXCLUDED.metadata
+            """,
+            (
+                notification.id,
+                notification.workspace_id,
+                notification.project_id,
+                notification.notification_type,
+                notification.channel,
+                notification.severity,
+                notification.status,
+                notification.title,
+                notification.body,
+                notification.resource_type,
+                notification.resource_id,
+                notification.created_by,
+                notification.created_at,
+                notification.sent_at,
+                notification.read_at,
+                self._json(notification.metadata),
+            ),
+        )
 
     def _replace_claim_evidence_links(self, cur: Any, claim: ClaimRecord) -> None:
         cur.execute("DELETE FROM claim_evidence WHERE claim_id = %s", (claim.id,))

@@ -25,6 +25,7 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     EvidenceReindexResult,
     EvidenceSearchHit,
+    NotificationRecord,
     ProjectCompetitorLink,
     ProjectRecord,
     ReportVersionRecord,
@@ -89,6 +90,19 @@ class EnterpriseStore(Protocol):
         workspace_id: str,
         user_id: str,
     ) -> WorkspaceMemberRecord | None: ...
+
+    def list_notifications(
+        self,
+        workspace_id: str | None = None,
+        *,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[NotificationRecord]: ...
+
+    def upsert_notification(
+        self,
+        notification: NotificationRecord,
+    ) -> NotificationRecord: ...
 
     def list_projects(self, workspace_id: str | None = None) -> list[ProjectRecord]: ...
 
@@ -171,6 +185,7 @@ class EnterpriseMemoryStore:
         self.workspaces: dict[str, WorkspaceRecord] = {}
         self.users: dict[str, UserRecord] = {}
         self.workspace_members: dict[tuple[str, str], WorkspaceMemberRecord] = {}
+        self.notifications: dict[str, NotificationRecord] = {}
         self.projects: dict[str, ProjectRecord] = {}
         self.competitors: dict[str, CompetitorRecord] = {}
         self.project_competitors: dict[tuple[str, str], ProjectCompetitorLink] = {}
@@ -487,6 +502,41 @@ class EnterpriseMemoryStore:
     ) -> WorkspaceMemberRecord | None:
         with self._lock:
             return self.workspace_members.get((workspace_id, user_id))
+
+    def list_notifications(
+        self,
+        workspace_id: str | None = None,
+        *,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[NotificationRecord]:
+        with self._lock:
+            records = list(self.notifications.values())
+            if workspace_id:
+                records = [item for item in records if item.workspace_id == workspace_id]
+            if status:
+                records = [item for item in records if item.status == status]
+            records = sorted(records, key=lambda item: item.created_at, reverse=True)
+            return records[: max(1, limit)]
+
+    def upsert_notification(
+        self,
+        notification: NotificationRecord,
+    ) -> NotificationRecord:
+        with self._lock:
+            self._ensure_workspace(notification.workspace_id)
+            before_record = self.notifications.get(notification.id)
+            self.notifications[notification.id] = notification
+            self._append_audit(
+                workspace_id=notification.workspace_id,
+                actor_id=notification.created_by or DEFAULT_USER_ID,
+                action="notification.upserted",
+                resource_type="notification",
+                resource_id=notification.id,
+                before=before_record.model_dump(mode="json") if before_record else None,
+                after=notification.model_dump(mode="json"),
+            )
+            return notification
 
     def list_projects(self, workspace_id: str | None = None) -> list[ProjectRecord]:
         with self._lock:

@@ -47,6 +47,37 @@ CREATE TABLE IF NOT EXISTS projects (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+    notification_type TEXT NOT NULL
+        CHECK (
+            notification_type IN (
+                'scheduled_scan_summary',
+                'scheduled_scan_failure',
+                'approval_request',
+                'approval_timeout',
+                'anomaly_alert'
+            )
+        ),
+    channel TEXT NOT NULL DEFAULT 'in_app'
+        CHECK (channel IN ('in_app', 'email', 'webhook', 'feishu')),
+    severity TEXT NOT NULL DEFAULT 'info'
+        CHECK (severity IN ('info', 'success', 'warning', 'critical')),
+    status TEXT NOT NULL DEFAULT 'queued'
+        CHECK (status IN ('queued', 'sent', 'failed', 'read')),
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    resource_type TEXT,
+    resource_id TEXT,
+    created_by TEXT REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sent_at TIMESTAMPTZ,
+    read_at TIMESTAMPTZ,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
 CREATE TABLE IF NOT EXISTS competitors (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -233,6 +264,10 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_projects_workspace ON projects(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user
     ON workspace_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_workspace_created
+    ON notifications(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_workspace_status
+    ON notifications(workspace_id, status);
 CREATE INDEX IF NOT EXISTS idx_competitors_workspace ON competitors(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_project_dimension

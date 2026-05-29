@@ -11,15 +11,20 @@ from packages.schema.api_dto import (
     ReportApprovalStartRequest,
     ReportApprovalStartResponse,
     RunCreateRequest,
+    ScheduledScanStartRequest,
+    ScheduledScanStartResponse,
     WorkflowStartResponse,
 )
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
 from packages.workflows.report_approval import ReportApprovalWorkflow
+from packages.workflows.scheduled_scan import ScheduledScanWorkflow
 from packages.workflows.service import (
     TemporalWorkflowService,
     competitive_intel_input_from_run_request,
     report_approval_workflow_id,
     run_id_for_idempotency_key,
+    scheduled_scan_input_from_request,
+    scheduled_scan_workflow_id,
     workflow_idempotency_key,
 )
 
@@ -76,6 +81,7 @@ class FakeTemporalClient:
         *,
         id: str,
         task_queue: str,
+        cron_schedule: str | None = None,
     ) -> FakeTemporalHandle:
         self.started.append(
             {
@@ -83,6 +89,7 @@ class FakeTemporalClient:
                 "arg": arg,
                 "id": id,
                 "task_queue": task_queue,
+                "cron_schedule": cron_schedule,
             }
         )
         handle = FakeTemporalHandle(id)
@@ -159,6 +166,35 @@ async def test_temporal_workflow_service_starts_report_approval_workflow() -> No
     assert response.report_version_id == "report-version-1"
     assert fake_client.started[0]["workflow"] == ReportApprovalWorkflow.run
     assert fake_client.started[0]["task_queue"] == "test-queue"
+
+
+async def test_temporal_workflow_service_starts_scheduled_scan_workflow() -> None:
+    fake_client = FakeTemporalClient()
+
+    async def client_factory(settings: Settings) -> FakeTemporalClient:
+        assert settings.temporal_task_queue == "test-queue"
+        return fake_client
+
+    service = TemporalWorkflowService(_settings(), client_factory=client_factory)
+    request = ScheduledScanStartRequest(
+        workspace_id="workspace-a",
+        schedule_id="weekly",
+        project_ids=["project-1"],
+        dimensions=["pricing"],
+        execution_mode="demo",
+        cron_schedule="0 2 * * 1",
+    )
+
+    response = await service.start_scheduled_scan(request)
+
+    workflow_input = scheduled_scan_input_from_request(request)
+    assert response.status == "started"
+    assert response.workflow_id == scheduled_scan_workflow_id(workflow_input)
+    assert response.workspace_id == "workspace-a"
+    assert response.schedule_id == "weekly"
+    assert fake_client.started[0]["workflow"] == ScheduledScanWorkflow.run
+    assert fake_client.started[0]["arg"] == workflow_input
+    assert fake_client.started[0]["cron_schedule"] == "0 2 * * 1"
 
 
 async def test_temporal_workflow_service_signals_report_approval() -> None:
@@ -319,6 +355,46 @@ def test_workflow_router_exposes_report_approval_start_and_signal() -> None:
         "report_version_id": "report-version-1",
         "decision": "approved",
         "status": "signaled",
+    }
+
+
+def test_workflow_router_exposes_scheduled_scan_start() -> None:
+    class FakeWorkflowService:
+        async def start_scheduled_scan(
+            self,
+            request: ScheduledScanStartRequest,
+        ) -> ScheduledScanStartResponse:
+            return ScheduledScanStartResponse(
+                workflow_id="scheduled-scan-test",
+                workspace_id=request.workspace_id,
+                schedule_id=request.schedule_id,
+                task_queue="test-queue",
+                status="started",
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/workflows/scheduled-scan",
+        json={
+            "workspace_id": "workspace-a",
+            "schedule_id": "weekly",
+            "project_ids": ["project-1"],
+            "dimensions": ["pricing"],
+            "execution_mode": "demo",
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "workflow_id": "scheduled-scan-test",
+        "workflow_type": "ScheduledScanWorkflow",
+        "workspace_id": "workspace-a",
+        "schedule_id": "weekly",
+        "task_queue": "test-queue",
+        "status": "started",
     }
 
 

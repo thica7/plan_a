@@ -3,7 +3,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   AlertTriangle,
+  Bell,
   Briefcase,
+  CalendarClock,
   CheckCircle2,
   Database,
   ExternalLink,
@@ -25,10 +27,12 @@ import {
   getReportVersionDiff,
   getProjectRedTeam,
   listEnterpriseCompetitors,
+  listEnterpriseNotifications,
   listEnterpriseProjects,
   listProjectClaims,
   listProjectEvidence,
   listProjectReportVersions,
+  startScheduledScanWorkflow,
   updateEvidenceQuality,
 } from "../api/client";
 import type {
@@ -42,6 +46,7 @@ import type {
   EvidenceGapReport,
   EvidenceQualityLabel,
   EvidenceRecord,
+  NotificationRecord,
   ProjectReadinessScore,
   ProjectRecord,
   RedTeamFinding,
@@ -58,6 +63,7 @@ export function EnterpriseWorkbench({
   initialTab?: EnterpriseTab;
 }) {
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [competitors, setCompetitors] = useState<CompetitorRecord[]>([]);
   const [evidence, setEvidence] = useState<EvidenceRecord[]>([]);
@@ -75,19 +81,23 @@ export function EnterpriseWorkbench({
   const [query, setQuery] = useState("");
   const [isLoadingProjects, setLoadingProjects] = useState(true);
   const [isLoadingProject, setLoadingProject] = useState(false);
+  const [isStartingScan, setStartingScan] = useState(false);
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function refreshProjects() {
     setLoadingProjects(true);
     setError(null);
-    listEnterpriseProjects()
-      .then((items) => {
+    Promise.all([listEnterpriseProjects(), listEnterpriseNotifications({ limit: 8 })])
+      .then(([items, notificationItems]) => {
         setProjects(items);
+        setNotifications(notificationItems);
         setSelectedProjectId((current) => current ?? items[0]?.id ?? null);
       })
       .catch((err: Error) => {
         setError(err.message);
         setProjects([]);
+        setNotifications([]);
       })
       .finally(() => setLoadingProjects(false));
   }
@@ -233,6 +243,35 @@ export function EnterpriseWorkbench({
     evidence.length > 0
       ? evidence.reduce((total, item) => total + item.reliability_score, 0) / evidence.length
       : 0;
+
+  function handleStartScheduledScan() {
+    if (!selectedProject) return;
+    setStartingScan(true);
+    setScanMessage(null);
+    setError(null);
+    startScheduledScanWorkflow({
+      workspace_id: selectedProject.workspace_id,
+      schedule_id: "manual-workbench-scan",
+      requested_by: "workbench-user",
+      project_ids: [selectedProject.id],
+      dimensions: (businessPlan?.recommended_dimensions ?? ["pricing", "feature", "persona"]).slice(0, 8),
+      execution_mode: "auto",
+      max_projects: 1,
+    })
+      .then((response) => {
+        setScanMessage(`${response.status}: ${response.workflow_id}`);
+        return listEnterpriseNotifications({
+          workspaceId: selectedProject.workspace_id,
+          limit: 8,
+        });
+      })
+      .then(setNotifications)
+      .catch((err: Error) => {
+        setError(err.message);
+      })
+      .finally(() => setStartingScan(false));
+  }
+
   function handleQualityChange(evidenceId: string, qualityLabel: EvidenceQualityLabel) {
     setEvidence((items) =>
       items.map((item) =>
@@ -305,6 +344,34 @@ export function EnterpriseWorkbench({
                 <em>{formatDate(project.updated_at)}</em>
               </button>
             ))}
+          </div>
+          <div className="operations-panel">
+            <div className="panel-heading-row">
+              <h2>Operations</h2>
+              <CalendarClock size={17} aria-hidden />
+            </div>
+            <button
+              className="icon-text-button full-width"
+              disabled={!selectedProject || isStartingScan}
+              type="button"
+              onClick={handleStartScheduledScan}
+            >
+              <RefreshCw size={16} aria-hidden />
+              {isStartingScan ? "Starting scan" : "Scan selected"}
+            </button>
+            {scanMessage ? <p className="muted-line">{scanMessage}</p> : null}
+            <div className="notification-list">
+              {notifications.slice(0, 5).map((notification) => (
+                <article className={`notification-item ${notification.severity}`} key={notification.id}>
+                  <div>
+                    <Bell size={14} aria-hidden />
+                    <strong>{notification.title}</strong>
+                  </div>
+                  <span>{notification.status} / {formatDate(notification.created_at)}</span>
+                </article>
+              ))}
+            </div>
+            {notifications.length === 0 ? <p className="muted-line">No notifications yet.</p> : null}
           </div>
         </aside>
 

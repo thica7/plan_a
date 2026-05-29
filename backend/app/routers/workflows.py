@@ -9,6 +9,8 @@ from packages.schema.api_dto import (
     ReportApprovalStartRequest,
     ReportApprovalStartResponse,
     RunCreateRequest,
+    ScheduledScanStartRequest,
+    ScheduledScanStartResponse,
     WorkflowStartResponse,
 )
 from packages.workflows.service import TemporalWorkflowService
@@ -31,6 +33,24 @@ async def start_competitive_intel_workflow(
 ) -> WorkflowStartResponse:
     try:
         return await service.start_competitive_intel(request)
+    except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Temporal workflow service is unavailable.",
+        ) from exc
+
+
+@router.post(
+    "/workflows/scheduled-scan",
+    response_model=ScheduledScanStartResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def start_scheduled_scan_workflow(
+    request: ScheduledScanStartRequest,
+    service: TemporalWorkflowServiceDep,
+) -> ScheduledScanStartResponse:
+    try:
+        return await service.start_scheduled_scan(request)
     except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

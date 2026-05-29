@@ -11,7 +11,7 @@ from packages.enterprise import (
 )
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
-from packages.schema.enterprise import WorkspaceMemberRecord
+from packages.schema.enterprise import NotificationRecord, WorkspaceMemberRecord
 from packages.schema.models import (
     AnalysisPlan,
     CompetitorKnowledge,
@@ -113,6 +113,30 @@ def test_enterprise_store_upserts_workspace_members() -> None:
         "analyst-1",
         "system-user",
     ]
+
+
+def test_enterprise_store_round_trips_notifications_with_audit() -> None:
+    store = EnterpriseMemoryStore()
+
+    notification = store.upsert_notification(
+        NotificationRecord(
+            id="notification-1",
+            workspace_id="workspace-a",
+            notification_type="scheduled_scan_summary",
+            severity="success",
+            status="sent",
+            title="Scheduled scan finished",
+            body="1 project scanned.",
+            resource_type="scheduled_scan",
+            resource_id="weekly",
+        )
+    )
+
+    assert notification.status == "sent"
+    assert store.list_notifications("workspace-a") == [notification]
+    assert store.list_notifications("workspace-a", status="sent") == [notification]
+    assert store.list_notifications("workspace-b") == []
+    assert any(log.action == "notification.upserted" for log in store.list_audit_logs())
 
 
 def test_enterprise_store_round_trips_projection() -> None:
@@ -513,6 +537,20 @@ def test_enterprise_router_exposes_projection() -> None:
 
     response = client.get(f"/api/enterprise/runs/{detail.id}/projection")
     workspaces = client.get("/api/enterprise/workspaces")
+    notification_upsert = client.post(
+        "/api/enterprise/notifications",
+        json=NotificationRecord(
+            id="notification-route-1",
+            workspace_id=context.workspace_id,
+            notification_type="scheduled_scan_summary",
+            severity="success",
+            status="sent",
+            title="Scheduled scan finished",
+        ).model_dump(mode="json"),
+    )
+    notifications = client.get(
+        f"/api/enterprise/notifications?workspace_id={context.workspace_id}"
+    )
     project = client.get(f"/api/enterprise/projects/{context.project_id}")
     business_plan = client.get(f"/api/enterprise/projects/{context.project_id}/business-plan")
     qa_evaluation = client.get(f"/api/enterprise/projects/{context.project_id}/qa-evaluation")
@@ -561,6 +599,10 @@ def test_enterprise_router_exposes_projection() -> None:
     assert response.json()["report_version"]["id"].startswith("report-run-1")
     assert workspaces.status_code == 200
     assert workspaces.json()[0]["id"] == "default-workspace"
+    assert notification_upsert.status_code == 200
+    assert notification_upsert.json()["id"] == "notification-route-1"
+    assert notifications.status_code == 200
+    assert notifications.json()[0]["notification_type"] == "scheduled_scan_summary"
     assert project.status_code == 200
     assert project.json()["id"] == context.project_id
     assert business_plan.status_code == 200

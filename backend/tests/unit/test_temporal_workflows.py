@@ -5,9 +5,14 @@ import pytest
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
 from packages.orchestrator.service import RunService
+from packages.schema.api_dto import RunCreateRequest
 from packages.schema.enterprise import ReportVersionRecord
 from packages.skills.registry import SkillRegistry
-from packages.workflows.activities import CompetitiveIntelActivities, ReportApprovalActivities
+from packages.workflows.activities import (
+    CompetitiveIntelActivities,
+    ReportApprovalActivities,
+    ScheduledScanActivities,
+)
 from packages.workflows.competitive_intel import (
     CompetitiveIntelWorkflow,
     _coerce_projection_state,
@@ -17,17 +22,25 @@ from packages.workflows.competitive_intel import (
 from packages.workflows.models import (
     APPROVE_REPORT_VERSION_ACTIVITY,
     CREATE_RUN_ACTIVITY,
+    LIST_SCHEDULED_SCAN_TARGETS_ACTIVITY,
     LOAD_PROJECTION_ACTIVITY,
+    RECORD_SCHEDULED_SCAN_NOTIFICATION_ACTIVITY,
     REJECT_REPORT_VERSION_ACTIVITY,
     REQUEST_REPORT_APPROVAL_ACTIVITY,
     RUN_LANGGRAPH_ACTIVITY,
+    RUN_SCHEDULED_SCAN_PROJECT_ACTIVITY,
     CompetitiveIntelWorkflowInput,
     ReportApprovalDecisionInput,
     ReportApprovalWorkflowInput,
+    ScheduledScanNotificationInput,
+    ScheduledScanProjectInput,
+    ScheduledScanProjectResult,
+    ScheduledScanWorkflowInput,
     WorkflowProjectionState,
     WorkflowRunState,
 )
 from packages.workflows.report_approval import ReportApprovalWorkflow, _coerce_approval_state
+from packages.workflows.scheduled_scan import ScheduledScanWorkflow, _scan_result
 from packages.workflows.worker import build_competitive_intel_worker_components
 
 
@@ -117,7 +130,11 @@ def test_temporal_worker_registers_approval_workflow_when_store_is_available() -
         for activity_fn in components.activities
     ]
 
-    assert components.workflows == [CompetitiveIntelWorkflow, ReportApprovalWorkflow]
+    assert components.workflows == [
+        CompetitiveIntelWorkflow,
+        ReportApprovalWorkflow,
+        ScheduledScanWorkflow,
+    ]
     assert registered_activity_names == [
         CREATE_RUN_ACTIVITY,
         RUN_LANGGRAPH_ACTIVITY,
@@ -125,6 +142,9 @@ def test_temporal_worker_registers_approval_workflow_when_store_is_available() -
         REQUEST_REPORT_APPROVAL_ACTIVITY,
         APPROVE_REPORT_VERSION_ACTIVITY,
         REJECT_REPORT_VERSION_ACTIVITY,
+        LIST_SCHEDULED_SCAN_TARGETS_ACTIVITY,
+        RUN_SCHEDULED_SCAN_PROJECT_ACTIVITY,
+        RECORD_SCHEDULED_SCAN_NOTIFICATION_ACTIVITY,
     ]
 
 
@@ -155,6 +175,89 @@ def test_competitive_intel_workflow_result_preserves_projection_metadata() -> No
     assert result.claim_count == 4
     assert result.report_chars == 128
     assert result.qa_finding_count == 2
+
+
+@pytest.mark.asyncio
+async def test_scheduled_scan_activities_scan_projects_and_notify() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+    created = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant scheduled scan",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    assert created.project_id is not None
+    activities = ScheduledScanActivities(service, store)
+    request = ScheduledScanWorkflowInput(
+        workspace_id=created.workspace_id,
+        schedule_id="weekly",
+        project_ids=[created.project_id],
+        dimensions=["pricing"],
+        execution_mode="demo",
+    )
+
+    targets = await activities.list_targets(request)
+    result = await activities.run_project_scan(
+        ScheduledScanProjectInput(
+            request=request,
+            target=targets[0],
+            scan_started_at="2026-05-29T00:00:00+00:00",
+        )
+    )
+    notification = await activities.record_notification(
+        ScheduledScanNotificationInput(
+            request=request,
+            results=[result],
+            scan_started_at="2026-05-29T00:00:00+00:00",
+        )
+    )
+
+    assert [target.project_id for target in targets] == [created.project_id]
+    assert result.status == "completed"
+    assert result.run_id is not None
+    assert result.report_version_id is not None
+    assert notification.notification_id is not None
+    assert store.list_notifications(created.workspace_id)[0].notification_type == (
+        "scheduled_scan_summary"
+    )
+
+
+def test_scheduled_scan_workflow_result_summarizes_partial_runs() -> None:
+    result = _scan_result(
+        ScheduledScanWorkflowInput(workspace_id="workspace-1", schedule_id="weekly"),
+        [
+            ScheduledScanProjectResult(
+                project_id="project-1",
+                run_id="run-1",
+                status="completed",
+                report_version_id="report-1",
+                evidence_count=2,
+            ),
+            ScheduledScanProjectResult(
+                project_id="project-2",
+                run_id=None,
+                status="failed",
+                error="boom",
+            ),
+        ],
+        notification_id="notification-1",
+        scan_started_at="2026-05-29T00:00:00+00:00",
+    )
+
+    assert result.status == "partial"
+    assert result.scanned_project_count == 2
+    assert result.completed_count == 1
+    assert result.failed_count == 1
+    assert result.run_ids == ["run-1"]
+    assert result.report_version_ids == ["report-1"]
+    assert result.notification_id == "notification-1"
 
 
 def test_temporal_activity_payloads_can_cross_json_converter_boundary() -> None:

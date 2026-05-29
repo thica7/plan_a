@@ -346,6 +346,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Notifications */
+        get: operations["list_notifications_api_enterprise_notifications_get"];
+        put?: never;
+        /** Upsert Notification */
+        post: operations["upsert_notification_api_enterprise_notifications_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/scenario-packs": {
         parameters: {
             query?: never;
@@ -767,6 +785,23 @@ export interface paths {
         put?: never;
         /** Start Competitive Intel Workflow */
         post: operations["start_competitive_intel_workflow_api_workflows_competitive_intel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/scheduled-scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Scheduled Scan Workflow */
+        post: operations["start_scheduled_scan_workflow_api_workflows_scheduled_scan_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1648,6 +1683,64 @@ export interface components {
              */
             prompt: string;
         };
+        /** NotificationRecord */
+        NotificationRecord: {
+            /** Id */
+            id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Notification Type
+             * @enum {string}
+             */
+            notification_type: "scheduled_scan_summary" | "scheduled_scan_failure" | "approval_request" | "approval_timeout" | "anomaly_alert";
+            /**
+             * Channel
+             * @default in_app
+             * @enum {string}
+             */
+            channel: "in_app" | "email" | "webhook" | "feishu";
+            /**
+             * Severity
+             * @default info
+             * @enum {string}
+             */
+            severity: "info" | "success" | "warning" | "critical";
+            /**
+             * Status
+             * @default queued
+             * @enum {string}
+             */
+            status: "queued" | "sent" | "failed" | "read";
+            /** Title */
+            title: string;
+            /**
+             * Body
+             * @default
+             */
+            body: string;
+            /** Resource Type */
+            resource_type?: string | null;
+            /** Resource Id */
+            resource_id?: string | null;
+            /** Created By */
+            created_by?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Sent At */
+            sent_at?: string | null;
+            /** Read At */
+            read_at?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
         /** PricingModel */
         PricingModel: {
             /** Tiers */
@@ -2430,6 +2523,60 @@ export interface components {
              * @default false
              */
             is_dynamic: boolean;
+        };
+        /** ScheduledScanStartRequest */
+        ScheduledScanStartRequest: {
+            /** Workspace Id */
+            workspace_id: string;
+            /**
+             * Schedule Id
+             * @default default-weekly-scan
+             */
+            schedule_id: string;
+            /**
+             * Requested By
+             * @default system-user
+             */
+            requested_by: string;
+            /** Project Ids */
+            project_ids?: string[];
+            /** Dimensions */
+            dimensions?: string[];
+            /**
+             * Execution Mode
+             * @default auto
+             * @enum {string}
+             */
+            execution_mode: "auto" | "demo" | "real";
+            /**
+             * Max Projects
+             * @default 10
+             */
+            max_projects: number;
+            /** Cron Schedule */
+            cron_schedule?: string | null;
+        };
+        /** ScheduledScanStartResponse */
+        ScheduledScanStartResponse: {
+            /** Workflow Id */
+            workflow_id: string;
+            /**
+             * Workflow Type
+             * @default ScheduledScanWorkflow
+             * @constant
+             */
+            workflow_type: "ScheduledScanWorkflow";
+            /** Workspace Id */
+            workspace_id: string;
+            /** Schedule Id */
+            schedule_id: string;
+            /** Task Queue */
+            task_queue: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "already_started";
         };
         /** SearchSmokeRequest */
         SearchSmokeRequest: {
@@ -3450,6 +3597,80 @@ export interface operations {
             };
         };
     };
+    list_notifications_api_enterprise_notifications_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+                status?: string | null;
+                limit?: number;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_notification_api_enterprise_notifications_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationRecord"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_scenario_packs_api_enterprise_scenario_packs_get: {
         parameters: {
             query?: never;
@@ -4380,6 +4601,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkflowStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_scheduled_scan_workflow_api_workflows_scheduled_scan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduledScanStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledScanStartResponse"];
                 };
             };
             /** @description Validation Error */
