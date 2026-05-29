@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import os
 import sys
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -26,12 +27,14 @@ from packages.workflows.models import (  # noqa: E402
     ReportApprovalWorkflowInput,
     ReportApprovalWorkflowResult,
 )
+from packages.workflows.replay import replay_temporal_history  # noqa: E402
 from packages.workflows.report_approval import ReportApprovalWorkflow  # noqa: E402
 from packages.workflows.service import report_approval_workflow_id  # noqa: E402
 from packages.workflows.worker import build_competitive_intel_worker_components  # noqa: E402
 
 
 async def main() -> None:
+    args = _parse_args()
     temporal_address = os.getenv("TEMPORAL_ADDRESS", "127.0.0.1:7233")
     temporal_namespace = os.getenv("TEMPORAL_NAMESPACE", "default")
     smoke_id = uuid4().hex
@@ -84,17 +87,15 @@ async def main() -> None:
     )
     try:
         async with worker:
-            result = await asyncio.wait_for(
-                client.execute_workflow(
-                    CompetitiveIntelWorkflow.run,
-                    request,
-                    id=workflow_id,
-                    task_queue=task_queue,
-                    result_type=CompetitiveIntelWorkflowResult,
-                    run_timeout=timedelta(seconds=60),
-                ),
-                timeout=75,
+            handle = await client.start_workflow(
+                CompetitiveIntelWorkflow.run,
+                request,
+                id=workflow_id,
+                task_queue=task_queue,
+                result_type=CompetitiveIntelWorkflowResult,
+                run_timeout=timedelta(seconds=60),
             )
+            result = await asyncio.wait_for(handle.result(), timeout=75)
             projection = store.get_run_projection(result.run_id)
             if result.status != "completed":
                 raise SystemExit(f"Temporal workflow did not complete: {result.status}")
@@ -125,6 +126,10 @@ async def main() -> None:
                 args=["temporal-smoke-approver", "server smoke approval"],
             )
             approval_result = await asyncio.wait_for(approval_handle.result(), timeout=45)
+            workflow_replay = await replay_temporal_history(await handle.fetch_history())
+            approval_replay = await replay_temporal_history(
+                await approval_handle.fetch_history()
+            )
     except RPCError as exc:
         raise SystemExit(f"Temporal workflow execution failed: {exc}") from exc
     except TimeoutError as exc:
@@ -138,26 +143,69 @@ async def main() -> None:
         raise SystemExit("Temporal approval workflow did not approve the report version.")
     if approved_version is None or approved_version.status != "approved":
         raise SystemExit("Temporal approval workflow did not persist approved status.")
+    if not workflow_replay.ok:
+        raise SystemExit(f"CompetitiveIntelWorkflow replay failed: {workflow_replay.failure}")
+    if not approval_replay.ok:
+        raise SystemExit(f"ReportApprovalWorkflow replay failed: {approval_replay.failure}")
 
-    print(
-        json.dumps(
-            {
-                "component": "temporal_server",
-                "ok": True,
-                "workflow_id": workflow_id,
-                "run_id": result.run_id,
-                "status": result.status,
-                "task_queue": task_queue,
-                "report_version_id": result.report_version_id,
-                "approval_workflow_id": approval_workflow_id,
-                "approval_status": approval_result.final_status,
-                "evidence_count": result.evidence_count,
-                "claim_count": result.claim_count,
-                "event_count": len(service.get_trace(result.run_id) or []),
-            },
-            ensure_ascii=False,
-        )
+    summary = {
+        "component": "temporal_server",
+        "ok": True,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "workflow_id": workflow_id,
+        "run_id": result.run_id,
+        "status": result.status,
+        "task_queue": task_queue,
+        "report_version_id": result.report_version_id,
+        "approval_workflow_id": approval_workflow_id,
+        "approval_status": approval_result.final_status,
+        "workflow_replay_ok": workflow_replay.ok,
+        "workflow_replay_event_count": workflow_replay.event_count,
+        "approval_replay_ok": approval_replay.ok,
+        "approval_replay_event_count": approval_replay.event_count,
+        "evidence_count": result.evidence_count,
+        "claim_count": result.claim_count,
+        "event_count": len(service.get_trace(result.run_id) or []),
+    }
+    if args.report:
+        report_path = Path(args.report)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(_render_report(summary), encoding="utf-8")
+    print(json.dumps(summary, ensure_ascii=False))
+
+
+def _render_report(summary: dict[str, object]) -> str:
+    return "\n".join(
+        [
+            "# Temporal Replay Report",
+            "",
+            f"- Generated at: {summary['generated_at']}",
+            f"- Workflow id: {summary['workflow_id']}",
+            f"- Run id: {summary['run_id']}",
+            f"- Task queue: {summary['task_queue']}",
+            f"- CompetitiveIntel status: {summary['status']}",
+            f"- Approval status: {summary['approval_status']}",
+            f"- CompetitiveIntel replay: {summary['workflow_replay_ok']}",
+            f"- CompetitiveIntel history events: {summary['workflow_replay_event_count']}",
+            f"- Approval replay: {summary['approval_replay_ok']}",
+            f"- Approval history events: {summary['approval_replay_event_count']}",
+            "",
+            "## Interpretation",
+            "",
+            "This report fetches real Temporal workflow histories after execution and replays "
+            "them with the Temporal Python SDK Replayer. A pass means the current workflow "
+            "definitions can deterministically replay the stored histories.",
+            "",
+        ]
     )
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run a real Temporal server smoke and replay its histories."
+    )
+    parser.add_argument("--report", default=None, help="Optional markdown report path.")
+    return parser.parse_args()
 
 
 if __name__ == "__main__":

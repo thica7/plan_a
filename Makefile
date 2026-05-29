@@ -41,7 +41,7 @@ smoke-temporal-thin-shell: ## Verify the Phase 4 Temporal activity shell without
 	conda run -n bd-competiscope-v2 python backend/scripts/smoke_temporal_thin_shell.py
 
 smoke-temporal-server: ## Verify CompetitiveIntelWorkflow against a running Temporal server
-	conda run -n bd-competiscope-v2 python backend/scripts/smoke_temporal_server.py
+	conda run -n bd-competiscope-v2 python backend/scripts/smoke_temporal_server.py --report docs/reports/temporal_replay_report.md
 
 smoke-phase2-business-intel: ## Verify Phase 2 business intel gates
 	conda run -n bd-competiscope-v2 python backend/scripts/smoke_phase2_business_intel.py
@@ -51,6 +51,7 @@ smoke-phase3-strict: ## Verify strict Phase 3 product-agent gates
 
 phase4-readiness: ## Generate the strict Phase 4 readiness report
 	conda run -n bd-competiscope-v2 python backend/scripts/phase4_readiness_report.py --require-server --report docs/reports/phase4_readiness_report.md
+	conda run -n bd-competiscope-v2 python backend/scripts/smoke_temporal_server.py --report docs/reports/temporal_replay_report.md
 
 eval-baseline: ## Run Phase 1 baseline eval smoke cases without external APIs
 	conda run -n bd-competiscope-v2 python backend/scripts/eval_baseline.py

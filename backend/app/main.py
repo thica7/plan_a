@@ -6,6 +6,7 @@ from app.routers import (
     health,
     hitl,
     kb,
+    metrics,
     revisions,
     runs,
     runtime,
@@ -29,6 +30,7 @@ def create_app() -> FastAPI:
     app.include_router(stream.router, prefix="/api", tags=["stream"])
     app.include_router(hitl.router, prefix="/api", tags=["hitl"])
     app.include_router(health.router, prefix="/api", tags=["health"])
+    app.include_router(metrics.router, prefix="/api", tags=["metrics"])
     app.include_router(skills.router, prefix="/api", tags=["skills"])
     app.include_router(runtime.router, prefix="/api", tags=["runtime"])
     app.include_router(trace.router, prefix="/api", tags=["trace"])
