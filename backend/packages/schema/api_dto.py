@@ -96,6 +96,35 @@ class ScheduledScanStartResponse(BaseModel):
     status: Literal["started", "already_started"]
 
 
+class MonitorStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str = Field(min_length=1, max_length=120)
+    project_id: str = Field(min_length=1, max_length=160)
+    monitor_id: str = Field(default="default-project-monitor", min_length=1, max_length=160)
+    requested_by: str = Field(default="system-user", min_length=1, max_length=120)
+    dimensions: list[str] = Field(
+        default_factory=lambda: ["pricing", "feature", "persona"],
+        min_length=1,
+        max_length=8,
+    )
+    execution_mode: Literal["auto", "demo", "real"] = "auto"
+    interval_seconds: int = Field(default=604800, ge=1, le=2592000)
+    max_cycles: int = Field(default=1, ge=1, le=52)
+
+
+class MonitorStartResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str
+    workflow_type: Literal["MonitorWorkflow"] = "MonitorWorkflow"
+    workspace_id: str
+    project_id: str
+    monitor_id: str
+    task_queue: str
+    status: Literal["started", "already_started"]
+
+
 class ReportApprovalStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

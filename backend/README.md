@@ -67,6 +67,10 @@ with `POST /api/workflows/scheduled-scan`; the workflow scans selected
 workspace projects and writes an in-app notification retrievable from
 `GET /api/enterprise/notifications`.
 
+`MonitorWorkflow` is the Phase 5 continuous project monitor. Start it with
+`POST /api/workflows/monitor`; each cycle runs the existing project analysis and
+writes `anomaly_alert` notifications when report/evidence/claim signals change.
+
 Real Temporal server smoke:
 
 ```bash

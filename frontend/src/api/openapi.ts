@@ -808,6 +808,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workflows/monitor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Monitor Workflow */
+        post: operations["start_monitor_workflow_api_workflows_monitor_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workflows/report-approval": {
         parameters: {
             query?: never;
@@ -1682,6 +1699,65 @@ export interface components {
              * @default Reply with exactly: ok
              */
             prompt: string;
+        };
+        /** MonitorStartRequest */
+        MonitorStartRequest: {
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /**
+             * Monitor Id
+             * @default default-project-monitor
+             */
+            monitor_id: string;
+            /**
+             * Requested By
+             * @default system-user
+             */
+            requested_by: string;
+            /** Dimensions */
+            dimensions?: string[];
+            /**
+             * Execution Mode
+             * @default auto
+             * @enum {string}
+             */
+            execution_mode: "auto" | "demo" | "real";
+            /**
+             * Interval Seconds
+             * @default 604800
+             */
+            interval_seconds: number;
+            /**
+             * Max Cycles
+             * @default 1
+             */
+            max_cycles: number;
+        };
+        /** MonitorStartResponse */
+        MonitorStartResponse: {
+            /** Workflow Id */
+            workflow_id: string;
+            /**
+             * Workflow Type
+             * @default MonitorWorkflow
+             * @constant
+             */
+            workflow_type: "MonitorWorkflow";
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Monitor Id */
+            monitor_id: string;
+            /** Task Queue */
+            task_queue: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "already_started";
         };
         /** NotificationRecord */
         NotificationRecord: {
@@ -4634,6 +4710,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScheduledScanStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_monitor_workflow_api_workflows_monitor_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MonitorStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonitorStartResponse"];
                 };
             };
             /** @description Validation Error */

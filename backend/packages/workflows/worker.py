@@ -13,6 +13,7 @@ from packages.enterprise import EnterpriseStore
 from packages.orchestrator.service import RunService
 from packages.workflows.activities import (
     CompetitiveIntelActivities,
+    MonitorActivities,
     ReportApprovalActivities,
     ScheduledScanActivities,
 )
@@ -22,12 +23,15 @@ from packages.workflows.models import (
     CREATE_RUN_ACTIVITY,
     LIST_SCHEDULED_SCAN_TARGETS_ACTIVITY,
     LOAD_PROJECTION_ACTIVITY,
+    RECORD_MONITOR_ANOMALY_NOTIFICATION_ACTIVITY,
     RECORD_SCHEDULED_SCAN_NOTIFICATION_ACTIVITY,
     REJECT_REPORT_VERSION_ACTIVITY,
     REQUEST_REPORT_APPROVAL_ACTIVITY,
     RUN_LANGGRAPH_ACTIVITY,
+    RUN_MONITOR_CYCLE_ACTIVITY,
     RUN_SCHEDULED_SCAN_PROJECT_ACTIVITY,
 )
+from packages.workflows.monitor import MonitorWorkflow
 from packages.workflows.report_approval import ReportApprovalWorkflow
 from packages.workflows.scheduled_scan import ScheduledScanWorkflow
 
@@ -59,7 +63,8 @@ def build_competitive_intel_worker_components(
     if enterprise_store is not None:
         approval = ReportApprovalActivities(enterprise_store)
         scheduled_scan = ScheduledScanActivities(service, enterprise_store)
-        workflows.extend([ReportApprovalWorkflow, ScheduledScanWorkflow])
+        monitor = MonitorActivities(service, enterprise_store)
+        workflows.extend([ReportApprovalWorkflow, ScheduledScanWorkflow, MonitorWorkflow])
         activity_fns.extend(
             [
                 approval.request_report_approval,
@@ -68,6 +73,8 @@ def build_competitive_intel_worker_components(
                 scheduled_scan.list_targets,
                 scheduled_scan.run_project_scan,
                 scheduled_scan.record_notification,
+                monitor.run_cycle,
+                monitor.record_anomaly_notification,
             ]
         )
         activity_names.extend(
@@ -78,6 +85,8 @@ def build_competitive_intel_worker_components(
                 LIST_SCHEDULED_SCAN_TARGETS_ACTIVITY,
                 RUN_SCHEDULED_SCAN_PROJECT_ACTIVITY,
                 RECORD_SCHEDULED_SCAN_NOTIFICATION_ACTIVITY,
+                RUN_MONITOR_CYCLE_ACTIVITY,
+                RECORD_MONITOR_ANOMALY_NOTIFICATION_ACTIVITY,
             ]
         )
     return TemporalWorkerComponents(

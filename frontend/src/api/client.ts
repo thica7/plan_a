@@ -9,6 +9,8 @@ import type {
   EvidenceQualityLabel,
   EvidenceGapReport,
   EvidenceRecord,
+  MonitorStartRequest,
+  MonitorStartResponse,
   NotificationRecord,
   ProjectReadinessScore,
   ProjectRecord,
@@ -84,6 +86,13 @@ export function startCompetitiveIntelWorkflow(payload: RunCreateRequest) {
 
 export function startScheduledScanWorkflow(payload: ScheduledScanStartRequest) {
   return request<ScheduledScanStartResponse>("/workflows/scheduled-scan", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function startMonitorWorkflow(payload: MonitorStartRequest) {
+  return request<MonitorStartResponse>("/workflows/monitor", {
     method: "POST",
     body: JSON.stringify(payload),
   });

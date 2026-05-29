@@ -3711,6 +3711,47 @@
         }
       }
     },
+    "/api/workflows/monitor": {
+      "post": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Start Monitor Workflow",
+        "operationId": "start_monitor_workflow_api_workflows_monitor_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MonitorStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitorStartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workflows/report-approval": {
       "post": {
         "tags": [
@@ -5782,6 +5823,125 @@
         "additionalProperties": false,
         "type": "object",
         "title": "LlmSmokeRequest"
+      },
+      "MonitorStartRequest": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Workspace Id"
+          },
+          "project_id": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "monitor_id": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Monitor Id",
+            "default": "default-project-monitor"
+          },
+          "requested_by": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Requested By",
+            "default": "system-user"
+          },
+          "dimensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Dimensions"
+          },
+          "execution_mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "demo",
+              "real"
+            ],
+            "title": "Execution Mode",
+            "default": "auto"
+          },
+          "interval_seconds": {
+            "type": "integer",
+            "maximum": 2592000.0,
+            "minimum": 1.0,
+            "title": "Interval Seconds",
+            "default": 604800
+          },
+          "max_cycles": {
+            "type": "integer",
+            "maximum": 52.0,
+            "minimum": 1.0,
+            "title": "Max Cycles",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "project_id"
+        ],
+        "title": "MonitorStartRequest"
+      },
+      "MonitorStartResponse": {
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "title": "Workflow Id"
+          },
+          "workflow_type": {
+            "type": "string",
+            "const": "MonitorWorkflow",
+            "title": "Workflow Type",
+            "default": "MonitorWorkflow"
+          },
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "monitor_id": {
+            "type": "string",
+            "title": "Monitor Id"
+          },
+          "task_queue": {
+            "type": "string",
+            "title": "Task Queue"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "started",
+              "already_started"
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workflow_id",
+          "workspace_id",
+          "project_id",
+          "monitor_id",
+          "task_queue",
+          "status"
+        ],
+        "title": "MonitorStartResponse"
       },
       "NotificationRecord": {
         "properties": {

@@ -10,6 +10,8 @@ from temporalio.exceptions import WorkflowAlreadyStartedError
 
 from packages.config import Settings
 from packages.schema.api_dto import (
+    MonitorStartRequest,
+    MonitorStartResponse,
     ReportApprovalSignalRequest,
     ReportApprovalSignalResponse,
     ReportApprovalStartRequest,
@@ -23,10 +25,12 @@ from packages.workflows.client import workflow_id_for_request
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
 from packages.workflows.models import (
     CompetitiveIntelWorkflowInput,
+    MonitorWorkflowInput,
     ReportApprovalSignalDecision,
     ReportApprovalWorkflowInput,
     ScheduledScanWorkflowInput,
 )
+from packages.workflows.monitor import MonitorWorkflow
 from packages.workflows.report_approval import ReportApprovalWorkflow
 from packages.workflows.scheduled_scan import ScheduledScanWorkflow
 
@@ -138,6 +142,32 @@ class TemporalWorkflowService:
             status=status,
         )
 
+    async def start_monitor(
+        self,
+        request: MonitorStartRequest,
+    ) -> MonitorStartResponse:
+        workflow_input = monitor_input_from_request(request)
+        workflow_id = monitor_workflow_id(workflow_input)
+        client = await self._client_factory(self._settings)
+        try:
+            await client.start_workflow(
+                MonitorWorkflow.run,
+                workflow_input,
+                id=workflow_id,
+                task_queue=self._settings.temporal_task_queue,
+            )
+            status = "started"
+        except WorkflowAlreadyStartedError:
+            status = "already_started"
+        return MonitorStartResponse(
+            workflow_id=workflow_id,
+            workspace_id=request.workspace_id,
+            project_id=request.project_id,
+            monitor_id=request.monitor_id,
+            task_queue=self._settings.temporal_task_queue,
+            status=status,
+        )
+
     async def approve_report(
         self,
         report_version_id: str,
@@ -216,6 +246,19 @@ def scheduled_scan_input_from_request(
     )
 
 
+def monitor_input_from_request(request: MonitorStartRequest) -> MonitorWorkflowInput:
+    return MonitorWorkflowInput(
+        workspace_id=request.workspace_id,
+        project_id=request.project_id,
+        monitor_id=request.monitor_id,
+        requested_by=request.requested_by,
+        dimensions=request.dimensions,
+        execution_mode=request.execution_mode,
+        interval_seconds=request.interval_seconds,
+        max_cycles=request.max_cycles,
+    )
+
+
 def workflow_idempotency_key(request: RunCreateRequest) -> str:
     payload = request.model_dump(mode="json", exclude={"idempotency_key"})
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
@@ -237,6 +280,12 @@ def scheduled_scan_workflow_id(request: ScheduledScanWorkflowInput) -> str:
     raw = f"{request.workspace_id}|{request.schedule_id}"
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
     return f"scheduled-scan-{digest}"
+
+
+def monitor_workflow_id(request: MonitorWorkflowInput) -> str:
+    raw = f"{request.workspace_id}|{request.project_id}|{request.monitor_id}"
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+    return f"monitor-{digest}"
 
 
 async def _connect_temporal_client(settings: Settings) -> TemporalClient:

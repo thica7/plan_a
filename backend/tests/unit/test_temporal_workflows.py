@@ -10,8 +10,10 @@ from packages.schema.enterprise import ReportVersionRecord
 from packages.skills.registry import SkillRegistry
 from packages.workflows.activities import (
     CompetitiveIntelActivities,
+    MonitorActivities,
     ReportApprovalActivities,
     ScheduledScanActivities,
+    _detect_monitor_anomalies,
 )
 from packages.workflows.competitive_intel import (
     CompetitiveIntelWorkflow,
@@ -24,12 +26,20 @@ from packages.workflows.models import (
     CREATE_RUN_ACTIVITY,
     LIST_SCHEDULED_SCAN_TARGETS_ACTIVITY,
     LOAD_PROJECTION_ACTIVITY,
+    RECORD_MONITOR_ANOMALY_NOTIFICATION_ACTIVITY,
     RECORD_SCHEDULED_SCAN_NOTIFICATION_ACTIVITY,
     REJECT_REPORT_VERSION_ACTIVITY,
     REQUEST_REPORT_APPROVAL_ACTIVITY,
     RUN_LANGGRAPH_ACTIVITY,
+    RUN_MONITOR_CYCLE_ACTIVITY,
     RUN_SCHEDULED_SCAN_PROJECT_ACTIVITY,
     CompetitiveIntelWorkflowInput,
+    MonitorAnomaly,
+    MonitorAnomalyNotificationInput,
+    MonitorCycleInput,
+    MonitorCycleResult,
+    MonitorSnapshot,
+    MonitorWorkflowInput,
     ReportApprovalDecisionInput,
     ReportApprovalWorkflowInput,
     ScheduledScanNotificationInput,
@@ -39,6 +49,7 @@ from packages.workflows.models import (
     WorkflowProjectionState,
     WorkflowRunState,
 )
+from packages.workflows.monitor import MonitorWorkflow, _monitor_result
 from packages.workflows.report_approval import ReportApprovalWorkflow, _coerce_approval_state
 from packages.workflows.scheduled_scan import ScheduledScanWorkflow, _scan_result
 from packages.workflows.worker import build_competitive_intel_worker_components
@@ -134,6 +145,7 @@ def test_temporal_worker_registers_approval_workflow_when_store_is_available() -
         CompetitiveIntelWorkflow,
         ReportApprovalWorkflow,
         ScheduledScanWorkflow,
+        MonitorWorkflow,
     ]
     assert registered_activity_names == [
         CREATE_RUN_ACTIVITY,
@@ -145,6 +157,8 @@ def test_temporal_worker_registers_approval_workflow_when_store_is_available() -
         LIST_SCHEDULED_SCAN_TARGETS_ACTIVITY,
         RUN_SCHEDULED_SCAN_PROJECT_ACTIVITY,
         RECORD_SCHEDULED_SCAN_NOTIFICATION_ACTIVITY,
+        RUN_MONITOR_CYCLE_ACTIVITY,
+        RECORD_MONITOR_ANOMALY_NOTIFICATION_ACTIVITY,
     ]
 
 
@@ -258,6 +272,145 @@ def test_scheduled_scan_workflow_result_summarizes_partial_runs() -> None:
     assert result.run_ids == ["run-1"]
     assert result.report_version_ids == ["report-1"]
     assert result.notification_id == "notification-1"
+
+
+@pytest.mark.asyncio
+async def test_monitor_activities_run_cycle_and_record_anomaly_notification() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+    created = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant monitor",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    assert created.project_id is not None
+    activities = MonitorActivities(service, store)
+    request = MonitorWorkflowInput(
+        workspace_id=created.workspace_id,
+        project_id=created.project_id,
+        monitor_id="monitor-unit",
+        dimensions=["pricing"],
+        execution_mode="demo",
+    )
+
+    cycle = await activities.run_cycle(
+        MonitorCycleInput(
+            request=request,
+            cycle_index=0,
+            monitor_started_at="2026-05-29T00:00:00+00:00",
+        )
+    )
+    notification = await activities.record_anomaly_notification(
+        MonitorAnomalyNotificationInput(
+            request=request,
+            cycle_result=MonitorCycleResult(
+                cycle_index=1,
+                project_id=created.project_id,
+                status="completed",
+                run_id=cycle.run_id,
+                report_version_id=cycle.report_version_id,
+                anomalies=[
+                    MonitorAnomaly(
+                        id="anomaly-1",
+                        severity="warning",
+                        anomaly_type="evidence_drop",
+                        message="Evidence dropped.",
+                        metadata={"previous": 2, "current": 1},
+                    )
+                ],
+            ),
+            monitor_started_at="2026-05-29T00:00:00+00:00",
+        )
+    )
+
+    assert cycle.status == "completed"
+    assert cycle.run_id is not None
+    assert cycle.current is not None
+    assert notification.notification_id is not None
+    [stored] = store.list_notifications(created.workspace_id)
+    assert stored.notification_type == "anomaly_alert"
+    assert stored.severity == "warning"
+
+
+def test_monitor_anomaly_detector_flags_report_and_count_changes() -> None:
+    previous = MonitorSnapshot(
+        project_id="project-1",
+        report_version_id="report-1",
+        evidence_count=3,
+        claim_count=3,
+        report_hash="old",
+    )
+    current = MonitorSnapshot(
+        project_id="project-1",
+        report_version_id="report-2",
+        evidence_count=1,
+        claim_count=2,
+        report_hash="new",
+    )
+
+    anomalies = _detect_monitor_anomalies(previous, current, status="completed")
+
+    assert [item.anomaly_type for item in anomalies] == [
+        "report_changed",
+        "evidence_drop",
+        "claim_drop",
+    ]
+    assert [item.severity for item in anomalies] == ["info", "warning", "warning"]
+
+
+def test_monitor_workflow_result_summarizes_cycles() -> None:
+    result = _monitor_result(
+        MonitorWorkflowInput(
+            workspace_id="workspace-1",
+            project_id="project-1",
+            monitor_id="weekly",
+        ),
+        [
+            MonitorCycleResult(
+                cycle_index=0,
+                project_id="project-1",
+                status="completed",
+                run_id="run-1",
+                anomalies=[
+                    MonitorAnomaly(
+                        id="anomaly-1",
+                        severity="info",
+                        anomaly_type="report_changed",
+                        message="changed",
+                    )
+                ],
+            ),
+            MonitorCycleResult(
+                cycle_index=1,
+                project_id="project-1",
+                status="failed",
+                anomalies=[
+                    MonitorAnomaly(
+                        id="anomaly-2",
+                        severity="critical",
+                        anomaly_type="scan_failed",
+                        message="failed",
+                    )
+                ],
+            ),
+        ],
+        notification_ids=["notification-1"],
+        monitor_started_at="2026-05-29T00:00:00+00:00",
+    )
+
+    assert result.status == "partial"
+    assert result.cycle_count == 2
+    assert result.failed_count == 1
+    assert result.anomaly_count == 2
+    assert result.run_ids == ["run-1"]
+    assert result.notification_ids == ["notification-1"]
 
 
 def test_temporal_activity_payloads_can_cross_json_converter_boundary() -> None:

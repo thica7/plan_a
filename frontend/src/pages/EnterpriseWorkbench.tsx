@@ -32,6 +32,7 @@ import {
   listProjectClaims,
   listProjectEvidence,
   listProjectReportVersions,
+  startMonitorWorkflow,
   startScheduledScanWorkflow,
   updateEvidenceQuality,
 } from "../api/client";
@@ -82,6 +83,7 @@ export function EnterpriseWorkbench({
   const [isLoadingProjects, setLoadingProjects] = useState(true);
   const [isLoadingProject, setLoadingProject] = useState(false);
   const [isStartingScan, setStartingScan] = useState(false);
+  const [isStartingMonitor, setStartingMonitor] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -254,7 +256,10 @@ export function EnterpriseWorkbench({
       schedule_id: "manual-workbench-scan",
       requested_by: "workbench-user",
       project_ids: [selectedProject.id],
-      dimensions: (businessPlan?.recommended_dimensions ?? ["pricing", "feature", "persona"]).slice(0, 8),
+      dimensions: (businessPlan?.recommended_dimensions ?? ["pricing", "feature", "persona"]).slice(
+        0,
+        8,
+      ),
       execution_mode: "auto",
       max_projects: 1,
     })
@@ -270,6 +275,35 @@ export function EnterpriseWorkbench({
         setError(err.message);
       })
       .finally(() => setStartingScan(false));
+  }
+
+  function handleStartMonitor() {
+    if (!selectedProject) return;
+    setStartingMonitor(true);
+    setScanMessage(null);
+    setError(null);
+    startMonitorWorkflow({
+      workspace_id: selectedProject.workspace_id,
+      project_id: selectedProject.id,
+      monitor_id: "manual-workbench-monitor",
+      requested_by: "workbench-user",
+      dimensions: (businessPlan?.recommended_dimensions ?? ["pricing", "feature", "persona"]).slice(0, 8),
+      execution_mode: "auto",
+      interval_seconds: 604800,
+      max_cycles: 1,
+    })
+      .then((response) => {
+        setScanMessage(`${response.status}: ${response.workflow_id}`);
+        return listEnterpriseNotifications({
+          workspaceId: selectedProject.workspace_id,
+          limit: 8,
+        });
+      })
+      .then(setNotifications)
+      .catch((err: Error) => {
+        setError(err.message);
+      })
+      .finally(() => setStartingMonitor(false));
   }
 
   function handleQualityChange(evidenceId: string, qualityLabel: EvidenceQualityLabel) {
@@ -358,6 +392,15 @@ export function EnterpriseWorkbench({
             >
               <RefreshCw size={16} aria-hidden />
               {isStartingScan ? "Starting scan" : "Scan selected"}
+            </button>
+            <button
+              className="icon-text-button full-width"
+              disabled={!selectedProject || isStartingMonitor}
+              type="button"
+              onClick={handleStartMonitor}
+            >
+              <CalendarClock size={16} aria-hidden />
+              {isStartingMonitor ? "Starting monitor" : "Monitor selected"}
             </button>
             {scanMessage ? <p className="muted-line">{scanMessage}</p> : null}
             <div className="notification-list">

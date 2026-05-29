@@ -318,6 +318,27 @@ export interface ScheduledScanStartResponse {
   status: "started" | "already_started";
 }
 
+export interface MonitorStartRequest {
+  workspace_id: string;
+  project_id: string;
+  monitor_id?: string;
+  requested_by?: string;
+  dimensions?: string[];
+  execution_mode?: "auto" | "demo" | "real";
+  interval_seconds?: number;
+  max_cycles?: number;
+}
+
+export interface MonitorStartResponse {
+  workflow_id: string;
+  workflow_type: "MonitorWorkflow";
+  workspace_id: string;
+  project_id: string;
+  monitor_id: string;
+  task_queue: string;
+  status: "started" | "already_started";
+}
+
 export interface ReportApprovalStartRequest {
   report_version_id: string;
   requested_by?: string;

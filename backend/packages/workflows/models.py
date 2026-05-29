@@ -12,6 +12,8 @@ REJECT_REPORT_VERSION_ACTIVITY = "reject_report_version"
 LIST_SCHEDULED_SCAN_TARGETS_ACTIVITY = "list_scheduled_scan_targets"
 RUN_SCHEDULED_SCAN_PROJECT_ACTIVITY = "run_scheduled_scan_project"
 RECORD_SCHEDULED_SCAN_NOTIFICATION_ACTIVITY = "record_scheduled_scan_notification"
+RUN_MONITOR_CYCLE_ACTIVITY = "run_monitor_cycle"
+RECORD_MONITOR_ANOMALY_NOTIFICATION_ACTIVITY = "record_monitor_anomaly_notification"
 DEFAULT_TEMPORAL_TASK_QUEUE = "competitive-intel"
 
 RunStatus = Literal["queued", "running", "interrupted", "completed", "failed"]
@@ -19,6 +21,16 @@ ExecutionMode = Literal["auto", "demo", "real"]
 WorkflowStatus = Literal["completed", "interrupted", "failed"]
 ScheduledScanStatus = Literal["completed", "partial", "failed", "empty"]
 ScheduledScanProjectStatus = Literal["completed", "interrupted", "failed"]
+MonitorStatus = Literal["completed", "partial", "failed"]
+MonitorCycleStatus = Literal["completed", "interrupted", "failed"]
+MonitorAnomalySeverity = Literal["info", "warning", "critical"]
+MonitorAnomalyType = Literal[
+    "scan_failed",
+    "report_missing",
+    "report_changed",
+    "evidence_drop",
+    "claim_drop",
+]
 ReportApprovalDecision = Literal["approved", "rejected", "timed_out"]
 ReportApprovalSignalDecision = Literal["approved", "rejected"]
 ReportVersionWorkflowStatus = Literal["draft", "in_review", "approved", "published", "archived"]
@@ -140,6 +152,86 @@ class ScheduledScanWorkflowResult:
     report_version_ids: list[str] = field(default_factory=list)
     notification_id: str | None = None
     scan_started_at: str = ""
+
+
+@dataclass(frozen=True)
+class MonitorWorkflowInput:
+    workspace_id: str
+    project_id: str
+    monitor_id: str = "default-project-monitor"
+    requested_by: str = "system-user"
+    dimensions: list[str] = field(default_factory=lambda: ["pricing", "feature", "persona"])
+    execution_mode: ExecutionMode = "auto"
+    interval_seconds: int = 604800
+    max_cycles: int = 1
+
+
+@dataclass(frozen=True)
+class MonitorSnapshot:
+    project_id: str
+    report_version_id: str | None = None
+    run_id: str | None = None
+    evidence_count: int = 0
+    claim_count: int = 0
+    report_chars: int = 0
+    report_hash: str = ""
+
+
+@dataclass(frozen=True)
+class MonitorAnomaly:
+    id: str
+    severity: MonitorAnomalySeverity
+    anomaly_type: MonitorAnomalyType
+    message: str
+    metadata: dict[str, str | int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class MonitorCycleInput:
+    request: MonitorWorkflowInput
+    cycle_index: int
+    monitor_started_at: str
+
+
+@dataclass(frozen=True)
+class MonitorCycleResult:
+    cycle_index: int
+    project_id: str
+    status: MonitorCycleStatus
+    previous: MonitorSnapshot | None = None
+    current: MonitorSnapshot | None = None
+    run_id: str | None = None
+    report_version_id: str | None = None
+    anomalies: list[MonitorAnomaly] = field(default_factory=list)
+    error: str = ""
+
+
+@dataclass(frozen=True)
+class MonitorAnomalyNotificationInput:
+    request: MonitorWorkflowInput
+    cycle_result: MonitorCycleResult
+    monitor_started_at: str
+
+
+@dataclass(frozen=True)
+class MonitorAnomalyNotificationState:
+    notification_id: str | None
+    status: str
+    anomaly_count: int = 0
+
+
+@dataclass(frozen=True)
+class MonitorWorkflowResult:
+    workspace_id: str
+    project_id: str
+    monitor_id: str
+    status: MonitorStatus
+    cycle_count: int = 0
+    failed_count: int = 0
+    anomaly_count: int = 0
+    run_ids: list[str] = field(default_factory=list)
+    notification_ids: list[str] = field(default_factory=list)
+    monitor_started_at: str = ""
 
 
 @dataclass(frozen=True)

@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.deps import get_temporal_workflow_service
 from packages.schema.api_dto import (
+    MonitorStartRequest,
+    MonitorStartResponse,
     ReportApprovalSignalRequest,
     ReportApprovalSignalResponse,
     ReportApprovalStartRequest,
@@ -51,6 +53,24 @@ async def start_scheduled_scan_workflow(
 ) -> ScheduledScanStartResponse:
     try:
         return await service.start_scheduled_scan(request)
+    except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Temporal workflow service is unavailable.",
+        ) from exc
+
+
+@router.post(
+    "/workflows/monitor",
+    response_model=MonitorStartResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def start_monitor_workflow(
+    request: MonitorStartRequest,
+    service: TemporalWorkflowServiceDep,
+) -> MonitorStartResponse:
+    try:
+        return await service.start_monitor(request)
     except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

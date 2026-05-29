@@ -6,6 +6,8 @@ from app.deps import get_app_settings, get_temporal_workflow_service
 from app.main import create_app
 from packages.config import Settings
 from packages.schema.api_dto import (
+    MonitorStartRequest,
+    MonitorStartResponse,
     ReportApprovalSignalRequest,
     ReportApprovalSignalResponse,
     ReportApprovalStartRequest,
@@ -16,11 +18,14 @@ from packages.schema.api_dto import (
     WorkflowStartResponse,
 )
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
+from packages.workflows.monitor import MonitorWorkflow
 from packages.workflows.report_approval import ReportApprovalWorkflow
 from packages.workflows.scheduled_scan import ScheduledScanWorkflow
 from packages.workflows.service import (
     TemporalWorkflowService,
     competitive_intel_input_from_run_request,
+    monitor_input_from_request,
+    monitor_workflow_id,
     report_approval_workflow_id,
     run_id_for_idempotency_key,
     scheduled_scan_input_from_request,
@@ -195,6 +200,36 @@ async def test_temporal_workflow_service_starts_scheduled_scan_workflow() -> Non
     assert fake_client.started[0]["workflow"] == ScheduledScanWorkflow.run
     assert fake_client.started[0]["arg"] == workflow_input
     assert fake_client.started[0]["cron_schedule"] == "0 2 * * 1"
+
+
+async def test_temporal_workflow_service_starts_monitor_workflow() -> None:
+    fake_client = FakeTemporalClient()
+
+    async def client_factory(settings: Settings) -> FakeTemporalClient:
+        assert settings.temporal_task_queue == "test-queue"
+        return fake_client
+
+    service = TemporalWorkflowService(_settings(), client_factory=client_factory)
+    request = MonitorStartRequest(
+        workspace_id="workspace-a",
+        project_id="project-1",
+        monitor_id="weekly-monitor",
+        dimensions=["pricing"],
+        execution_mode="demo",
+        interval_seconds=60,
+        max_cycles=2,
+    )
+
+    response = await service.start_monitor(request)
+
+    workflow_input = monitor_input_from_request(request)
+    assert response.status == "started"
+    assert response.workflow_id == monitor_workflow_id(workflow_input)
+    assert response.workspace_id == "workspace-a"
+    assert response.project_id == "project-1"
+    assert response.monitor_id == "weekly-monitor"
+    assert fake_client.started[0]["workflow"] == MonitorWorkflow.run
+    assert fake_client.started[0]["arg"] == workflow_input
 
 
 async def test_temporal_workflow_service_signals_report_approval() -> None:
@@ -393,6 +428,50 @@ def test_workflow_router_exposes_scheduled_scan_start() -> None:
         "workflow_type": "ScheduledScanWorkflow",
         "workspace_id": "workspace-a",
         "schedule_id": "weekly",
+        "task_queue": "test-queue",
+        "status": "started",
+    }
+
+
+def test_workflow_router_exposes_monitor_start() -> None:
+    class FakeWorkflowService:
+        async def start_monitor(
+            self,
+            request: MonitorStartRequest,
+        ) -> MonitorStartResponse:
+            return MonitorStartResponse(
+                workflow_id="monitor-test",
+                workspace_id=request.workspace_id,
+                project_id=request.project_id,
+                monitor_id=request.monitor_id,
+                task_queue="test-queue",
+                status="started",
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/workflows/monitor",
+        json={
+            "workspace_id": "workspace-a",
+            "project_id": "project-1",
+            "monitor_id": "weekly-monitor",
+            "dimensions": ["pricing"],
+            "execution_mode": "demo",
+            "interval_seconds": 60,
+            "max_cycles": 2,
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "workflow_id": "monitor-test",
+        "workflow_type": "MonitorWorkflow",
+        "workspace_id": "workspace-a",
+        "project_id": "project-1",
+        "monitor_id": "weekly-monitor",
         "task_queue": "test-queue",
         "status": "started",
     }
