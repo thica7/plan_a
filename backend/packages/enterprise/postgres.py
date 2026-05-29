@@ -423,7 +423,7 @@ class EnterprisePostgresStore:
                 """,
                 (workspace_id, user_id),
             ).fetchone()
-        return WorkspaceMemberRecord.model_validate(dict(row)) if row else None
+        return self._model_from_row(WorkspaceMemberRecord, row) if row else None
 
     def update_workspace_quota(
         self,
@@ -441,7 +441,7 @@ class EnterprisePostgresStore:
                 ).fetchone()
                 if before_row is None:
                     return None
-                before = WorkspaceRecord.model_validate(dict(before_row))
+                before = self._model_from_row(WorkspaceRecord, before_row)
                 if update_values:
                     updated = before.model_copy(
                         update={**update_values, "updated_at": datetime.utcnow()}
@@ -480,7 +480,7 @@ class EnterprisePostgresStore:
                     (workspace_id,),
                 ).fetchone()
             conn.commit()
-        return WorkspaceRecord.model_validate(dict(row)) if row else None
+        return self._model_from_row(WorkspaceRecord, row) if row else None
 
     def get_workspace_usage(
         self,
@@ -574,7 +574,7 @@ class EnterprisePostgresStore:
                 "SELECT * FROM workspaces WHERE id = %s",
                 (workspace_id,),
             ).fetchone()
-        workspace = WorkspaceRecord.model_validate(dict(row))
+        workspace = self._model_from_row(WorkspaceRecord, row)
         return build_quota_decision(usage, workspace.quota_enforcement)
 
     def list_notifications(
@@ -627,7 +627,7 @@ class EnterprisePostgresStore:
                     action="notification.upserted",
                     resource_type="notification",
                     resource_id=notification.id,
-                    before=NotificationRecord.model_validate(dict(before_row)).model_dump(
+                    before=self._model_from_row(NotificationRecord, before_row).model_dump(
                         mode="json"
                     )
                     if before_row
@@ -653,7 +653,7 @@ class EnterprisePostgresStore:
     def get_project(self, project_id: str) -> ProjectRecord | None:
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
             row = conn.execute("SELECT * FROM projects WHERE id = %s", (project_id,)).fetchone()
-        return ProjectRecord.model_validate(dict(row)) if row else None
+        return self._model_from_row(ProjectRecord, row) if row else None
 
     def upsert_project(self, project: ProjectRecord) -> ProjectRecord:
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
@@ -702,7 +702,7 @@ class EnterprisePostgresStore:
                     action="project.upserted",
                     resource_type="project",
                     resource_id=project.id,
-                    before=ProjectRecord.model_validate(dict(before_row)).model_dump(mode="json")
+                    before=self._model_from_row(ProjectRecord, before_row).model_dump(mode="json")
                     if before_row
                     else None,
                     after=project.model_dump(mode="json"),
@@ -771,7 +771,7 @@ class EnterprisePostgresStore:
                     action="evidence.upserted",
                     resource_type="evidence",
                     resource_id=evidence.id,
-                    before=EvidenceRecord.model_validate(dict(before_row)).model_dump(mode="json")
+                    before=self._model_from_row(EvidenceRecord, before_row).model_dump(mode="json")
                     if before_row
                     else None,
                     after=evidence.model_dump(mode="json"),
@@ -833,7 +833,7 @@ class EnterprisePostgresStore:
                 for row in rows:
                     self._upsert_evidence_embedding(
                         cur,
-                        EvidenceRecord.model_validate(dict(row)),
+                        self._model_from_row(EvidenceRecord, row),
                     )
             conn.commit()
         return EvidenceReindexResult(indexed_count=len(rows))
@@ -875,7 +875,7 @@ class EnterprisePostgresStore:
             score = float(evidence_data.pop("score") or 0)
             hits.append(
                 EvidenceSearchHit(
-                    evidence=EvidenceRecord.model_validate(evidence_data),
+                    evidence=self._model_from_mapping(EvidenceRecord, evidence_data),
                     score=score,
                     embedding_model=embedding_model,
                 )
@@ -919,7 +919,7 @@ class EnterprisePostgresStore:
                     "SELECT * FROM source_registry WHERE id = %s",
                     (record.id,),
                 ).fetchone()
-                updated = SourceRegistryRecord.model_validate(dict(row))
+                updated = self._model_from_row(SourceRegistryRecord, row)
                 self._append_audit(
                     cur,
                     workspace_id=updated.workspace_id,
@@ -927,7 +927,7 @@ class EnterprisePostgresStore:
                     action="source_registry.upserted",
                     resource_type="source_registry",
                     resource_id=updated.id,
-                    before=SourceRegistryRecord.model_validate(dict(before_row)).model_dump(
+                    before=self._model_from_row(SourceRegistryRecord, before_row).model_dump(
                         mode="json"
                     )
                     if before_row
@@ -953,7 +953,7 @@ class EnterprisePostgresStore:
                 ).fetchone()
                 if row is None:
                     return None
-                before = EvidenceRecord.model_validate(dict(row))
+                before = self._model_from_row(EvidenceRecord, row)
                 metadata = dict(before.metadata)
                 metadata["quality_note"] = note
                 metadata["quality_reviewed_at"] = datetime.utcnow().isoformat()
@@ -1021,7 +1021,7 @@ class EnterprisePostgresStore:
                 "SELECT * FROM report_versions WHERE id = %s",
                 (version_id,),
             ).fetchone()
-        return ReportVersionRecord.model_validate(dict(row)) if row else None
+        return self._model_from_row(ReportVersionRecord, row) if row else None
 
     def upsert_report_version(self, version: ReportVersionRecord) -> ReportVersionRecord:
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
@@ -1038,7 +1038,7 @@ class EnterprisePostgresStore:
                     action="report_version.upserted",
                     resource_type="report_version",
                     resource_id=version.id,
-                    before=ReportVersionRecord.model_validate(dict(before_row)).model_dump(
+                    before=self._model_from_row(ReportVersionRecord, before_row).model_dump(
                         mode="json"
                     )
                     if before_row
@@ -1073,7 +1073,7 @@ class EnterprisePostgresStore:
                     version.version_number,
                 ),
             ).fetchone()
-        return ReportVersionRecord.model_validate(dict(row)) if row else None
+        return self._model_from_row(ReportVersionRecord, row) if row else None
 
     def list_audit_logs(self, workspace_id: str | None = None) -> list[AuditLogRecord]:
         if workspace_id:
@@ -1096,7 +1096,7 @@ class EnterprisePostgresStore:
     ) -> list[Any]:
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
             rows = conn.execute(sql, params).fetchall()
-        return [model.model_validate(dict(row)) for row in rows]
+        return [self._model_from_row(model, row) for row in rows]
 
     def _records_by_ids(
         self,
@@ -1109,8 +1109,18 @@ class EnterprisePostgresStore:
         if not ids:
             return []
         rows = conn.execute(f"SELECT * FROM {table} WHERE id = ANY(%s)", (ids,)).fetchall()
-        by_id = {row["id"]: model.model_validate(dict(row)) for row in rows}
+        by_id = {row["id"]: self._model_from_row(model, row) for row in rows}
         return [by_id[item] for item in ids if item in by_id]
+
+    def _model_from_row(self, model: type[BaseModel], row: Any) -> Any:
+        return self._model_from_mapping(model, dict(row))
+
+    @staticmethod
+    def _model_from_mapping(model: type[BaseModel], data: dict[str, Any]) -> Any:
+        allowed_fields = set(model.model_fields)
+        return model.model_validate(
+            {key: value for key, value in data.items() if key in allowed_fields}
+        )
 
     def _linked_ids(
         self,

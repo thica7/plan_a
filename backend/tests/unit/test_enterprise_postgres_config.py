@@ -6,6 +6,7 @@ import pytest
 from packages.config.settings import DEFAULT_ENTERPRISE_DATABASE_URL, get_settings
 from packages.enterprise import EnterprisePostgresStore
 from packages.enterprise.postgres import _split_sql
+from packages.schema.enterprise import EvidenceRecord
 
 
 @pytest.fixture(autouse=True)
@@ -79,3 +80,31 @@ def test_postgres_store_can_be_constructed_without_migrating() -> None:
     store = EnterprisePostgresStore("postgresql://user:pass@localhost:5432/db", auto_migrate=False)
 
     assert store.database_url == "postgresql://user:pass@localhost:5432/db"
+
+
+def test_postgres_store_filters_generated_columns_when_validating_rows() -> None:
+    if find_spec("psycopg") is None:
+        pytest.skip("psycopg is not installed")
+
+    store = EnterprisePostgresStore("postgresql://user:pass@localhost:5432/db", auto_migrate=False)
+
+    evidence = store._model_from_mapping(
+        EvidenceRecord,
+        {
+            "id": "ev-1",
+            "workspace_id": "workspace-1",
+            "project_id": "project-1",
+            "run_id": "run-1",
+            "raw_source_id": "source-1",
+            "competitor_id": "competitor-1",
+            "dimension": "pricing",
+            "source_type": "webpage_verified",
+            "title": "Pricing",
+            "url": "https://example.com/pricing",
+            "content_hash": "hash-1",
+            "search_vector": "'pricing':1",
+        },
+    )
+
+    assert evidence.id == "ev-1"
+    assert not hasattr(evidence, "search_vector")
