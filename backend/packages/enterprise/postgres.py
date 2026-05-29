@@ -6,6 +6,11 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from packages.enterprise.embedding_index import (
+    build_evidence_embedding_record,
+    deterministic_embedding,
+    vector_literal,
+)
 from packages.enterprise.store import (
     DEFAULT_USER_ID,
     DEFAULT_WORKSPACE_ID,
@@ -22,8 +27,11 @@ from packages.schema.enterprise import (
     ClaimRecord,
     CompetitorRecord,
     EnterpriseRunProjection,
+    EvidenceEmbeddingRecord,
     EvidenceQualityLabel,
     EvidenceRecord,
+    EvidenceReindexResult,
+    EvidenceSearchHit,
     ProjectRecord,
     ReportVersionRecord,
     SourceRegistryRecord,
@@ -170,6 +178,7 @@ class EnterprisePostgresStore:
             with conn.cursor() as cur:
                 for evidence in projection.evidence_records:
                     self._upsert_evidence(cur, evidence)
+                    self._upsert_evidence_embedding(cur, evidence)
                     registry_record = source_registry_from_evidence(evidence)
                     self._upsert_source_registry(cur, registry_record)
                     self._append_audit_once(
@@ -446,6 +455,7 @@ class EnterprisePostgresStore:
                     (evidence.id,),
                 ).fetchone()
                 self._upsert_evidence(cur, evidence)
+                self._upsert_evidence_embedding(cur, evidence)
                 registry_record = source_registry_from_evidence(evidence)
                 self._upsert_source_registry(cur, registry_record)
                 self._append_audit_once(
@@ -471,6 +481,109 @@ class EnterprisePostgresStore:
                 )
             conn.commit()
         return evidence
+
+    def list_evidence_embeddings(
+        self,
+        workspace_id: str | None = None,
+    ) -> list[EvidenceEmbeddingRecord]:
+        if workspace_id:
+            return self._list_models(
+                """
+                SELECT
+                    id, workspace_id, project_id, evidence_id, embedding_model,
+                    embedding_dimensions, embedding_hash, embedding_text,
+                    created_at, updated_at, metadata
+                FROM evidence_embeddings
+                WHERE workspace_id = %s
+                ORDER BY workspace_id, evidence_id
+                """,
+                (workspace_id,),
+                EvidenceEmbeddingRecord,
+            )
+        return self._list_models(
+            """
+            SELECT
+                id, workspace_id, project_id, evidence_id, embedding_model,
+                embedding_dimensions, embedding_hash, embedding_text,
+                created_at, updated_at, metadata
+            FROM evidence_embeddings
+            ORDER BY workspace_id, evidence_id
+            """,
+            (),
+            EvidenceEmbeddingRecord,
+        )
+
+    def reindex_evidence_embeddings(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+    ) -> EvidenceReindexResult:
+        sql = "SELECT * FROM evidence_records"
+        clauses: list[str] = []
+        params: list[str] = []
+        if workspace_id:
+            clauses.append("workspace_id = %s")
+            params.append(workspace_id)
+        if project_id:
+            clauses.append("project_id = %s")
+            params.append(project_id)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                rows = cur.execute(sql, tuple(params)).fetchall()
+                for row in rows:
+                    self._upsert_evidence_embedding(
+                        cur,
+                        EvidenceRecord.model_validate(dict(row)),
+                    )
+            conn.commit()
+        return EvidenceReindexResult(indexed_count=len(rows))
+
+    def search_evidence(
+        self,
+        *,
+        workspace_id: str,
+        query: str,
+        project_id: str | None = None,
+        limit: int = 10,
+    ) -> list[EvidenceSearchHit]:
+        query_vector = vector_literal(deterministic_embedding(query))
+        clauses = ["e.workspace_id = %s"]
+        filter_params: list[Any] = [workspace_id]
+        if project_id:
+            clauses.append("e.project_id = %s")
+            filter_params.append(project_id)
+        params: list[Any] = [query_vector, *filter_params, query_vector, max(1, limit)]
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT
+                    e.*,
+                    ee.embedding_model AS embedding_model,
+                    1 - (ee.embedding <=> %s::vector) AS score
+                FROM evidence_embeddings ee
+                JOIN evidence_records e ON e.id = ee.evidence_id
+                WHERE {" AND ".join(clauses)}
+                ORDER BY ee.embedding <=> %s::vector, e.captured_at DESC
+                LIMIT %s
+                """,
+                tuple(params),
+            ).fetchall()
+        hits: list[EvidenceSearchHit] = []
+        for row in rows:
+            evidence_data = dict(row)
+            embedding_model = str(evidence_data.pop("embedding_model"))
+            score = float(evidence_data.pop("score") or 0)
+            hits.append(
+                EvidenceSearchHit(
+                    evidence=EvidenceRecord.model_validate(evidence_data),
+                    score=score,
+                    embedding_model=embedding_model,
+                )
+            )
+        return hits
 
     def list_source_registry(
         self,
@@ -917,6 +1030,41 @@ class EnterprisePostgresStore:
                 evidence.seen_count,
                 evidence.captured_at,
                 self._json(evidence.metadata),
+            ),
+        )
+
+    def _upsert_evidence_embedding(self, cur: Any, evidence: EvidenceRecord) -> None:
+        record = build_evidence_embedding_record(evidence)
+        embedding = vector_literal(deterministic_embedding(record.embedding_text))
+        cur.execute(
+            """
+            INSERT INTO evidence_embeddings (
+                id, workspace_id, project_id, evidence_id, embedding_model,
+                embedding_dimensions, embedding_hash, embedding_text, embedding,
+                created_at, updated_at, metadata
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::vector, %s, now(), %s)
+            ON CONFLICT (evidence_id, embedding_model) DO UPDATE SET
+                project_id = EXCLUDED.project_id,
+                embedding_dimensions = EXCLUDED.embedding_dimensions,
+                embedding_hash = EXCLUDED.embedding_hash,
+                embedding_text = EXCLUDED.embedding_text,
+                embedding = EXCLUDED.embedding,
+                updated_at = now(),
+                metadata = EXCLUDED.metadata
+            """,
+            (
+                record.id,
+                record.workspace_id,
+                record.project_id,
+                record.evidence_id,
+                record.embedding_model,
+                record.embedding_dimensions,
+                record.embedding_hash,
+                record.embedding_text,
+                embedding,
+                record.created_at,
+                self._json(record.metadata),
             ),
         )
 

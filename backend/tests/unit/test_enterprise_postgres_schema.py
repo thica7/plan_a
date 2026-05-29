@@ -22,6 +22,7 @@ def test_phase1_postgres_schema_has_strict_core_tables() -> None:
         "runs",
         "evidence_records",
         "source_registry",
+        "evidence_embeddings",
         "knowledge_claims",
         "claim_evidence",
         "report_versions",
@@ -51,3 +52,13 @@ def test_phase4_source_registry_schema_is_present() -> None:
     assert "trust_level TEXT NOT NULL DEFAULT 'unknown'" in sql
     assert "robots_status TEXT NOT NULL DEFAULT 'unknown'" in sql
     assert "idx_source_registry_workspace_domain" in sql
+
+
+def test_phase4_pgvector_schema_is_present() -> None:
+    sql = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
+
+    assert "CREATE EXTENSION IF NOT EXISTS vector" in sql
+    assert "CREATE TABLE IF NOT EXISTS evidence_embeddings" in sql
+    assert "embedding VECTOR(384) NOT NULL" in sql
+    assert "idx_evidence_embeddings_vector" in sql
+    assert "idx_evidence_search" in sql

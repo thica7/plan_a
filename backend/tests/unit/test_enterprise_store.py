@@ -196,6 +196,34 @@ def test_enterprise_store_registers_sources_from_evidence_lifecycle() -> None:
     assert any(log.action == "source_registry.upserted" for log in store.list_audit_logs())
 
 
+def test_enterprise_store_indexes_and_searches_evidence_embeddings() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+
+    embeddings = store.list_evidence_embeddings(workspace_id=context.workspace_id)
+    hits = store.search_evidence(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        query="Cursor pricing plan",
+        limit=3,
+    )
+    reindexed = store.reindex_evidence_embeddings(workspace_id=context.workspace_id)
+
+    assert len(embeddings) == 1
+    assert embeddings[0].evidence_id == projection.evidence_records[0].id
+    assert reindexed.indexed_count == 1
+    assert [hit.evidence.id for hit in hits] == [projection.evidence_records[0].id]
+    assert hits[0].embedding_model == "hashing-384"
+
+
 def test_enterprise_store_updates_evidence_quality_with_audit() -> None:
     store = EnterpriseMemoryStore()
     detail = _detail()
@@ -485,6 +513,18 @@ def test_enterprise_router_exposes_projection() -> None:
         "/api/enterprise/evidence",
         json=projection.evidence_records[0].model_dump(mode="json"),
     )
+    evidence_search = client.get(
+        "/api/enterprise/evidence/search",
+        params={
+            "workspace_id": context.workspace_id,
+            "project_id": context.project_id,
+            "query": "Cursor pricing",
+        },
+    )
+    evidence_reindex = client.post(
+        "/api/enterprise/evidence/reindex",
+        params={"workspace_id": context.workspace_id},
+    )
     quality = client.patch(
         f"/api/enterprise/evidence/{projection.evidence_records[0].id}/quality",
         json={"quality_label": "stale", "note": "Needs review."},
@@ -520,6 +560,10 @@ def test_enterprise_router_exposes_projection() -> None:
     assert project_upsert.json()["id"] == context.project_id
     assert evidence_upsert.status_code == 200
     assert evidence_upsert.json()["id"] == projection.evidence_records[0].id
+    assert evidence_search.status_code == 200
+    assert evidence_search.json()[0]["evidence"]["id"] == projection.evidence_records[0].id
+    assert evidence_reindex.status_code == 200
+    assert evidence_reindex.json()["indexed_count"] == 1
     assert quality.status_code == 200
     assert quality.json()["evidence"]["quality_label"] == "stale"
     assert report_upsert.status_code == 200

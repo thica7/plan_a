@@ -2,6 +2,8 @@
 -- The current runtime uses EnterpriseMemoryStore behind the same repository
 -- boundary; these tables are the target durable projection.
 
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -116,6 +118,22 @@ CREATE TABLE IF NOT EXISTS source_registry (
     UNIQUE (workspace_id, domain, source_type)
 );
 
+CREATE TABLE IF NOT EXISTS evidence_embeddings (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    evidence_id TEXT NOT NULL REFERENCES evidence_records(id) ON DELETE CASCADE,
+    embedding_model TEXT NOT NULL,
+    embedding_dimensions INTEGER NOT NULL DEFAULT 384 CHECK (embedding_dimensions > 0),
+    embedding_hash TEXT NOT NULL,
+    embedding_text TEXT NOT NULL,
+    embedding VECTOR(384) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    UNIQUE (evidence_id, embedding_model)
+);
+
 CREATE TABLE IF NOT EXISTS knowledge_claims (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -211,6 +229,11 @@ CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_domain
     ON source_registry(workspace_id, domain);
 CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_trust
     ON source_registry(workspace_id, trust_level);
+CREATE INDEX IF NOT EXISTS idx_evidence_embeddings_workspace
+    ON evidence_embeddings(workspace_id, project_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_embeddings_vector
+    ON evidence_embeddings USING ivfflat (embedding vector_cosine_ops)
+    WITH (lists = 100);
 CREATE INDEX IF NOT EXISTS idx_claims_project_competitor
     ON knowledge_claims(project_id, competitor_id);
 CREATE INDEX IF NOT EXISTS idx_claim_evidence_evidence
@@ -246,6 +269,12 @@ SET canonical_url = COALESCE(NULLIF(canonical_url, ''), url, '')
 WHERE canonical_url = '';
 CREATE INDEX IF NOT EXISTS idx_evidence_canonical_url
     ON evidence_records(workspace_id, canonical_url);
+ALTER TABLE evidence_records
+ADD COLUMN IF NOT EXISTS search_vector TSVECTOR GENERATED ALWAYS AS (
+    to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(snippet, ''))
+) STORED;
+CREATE INDEX IF NOT EXISTS idx_evidence_search
+    ON evidence_records USING GIN(search_vector);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_report_versions_workspace_group_unique
     ON report_versions (

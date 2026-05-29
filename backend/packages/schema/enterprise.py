@@ -119,6 +119,36 @@ class SourceRegistryRecord(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class EvidenceEmbeddingRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    workspace_id: str
+    project_id: str
+    evidence_id: str
+    embedding_model: str
+    embedding_dimensions: int = Field(default=384, ge=1)
+    embedding_hash: str
+    embedding_text: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EvidenceSearchHit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence: EvidenceRecord
+    score: float = Field(ge=-1.0, le=1.0)
+    embedding_model: str
+
+
+class EvidenceReindexResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    indexed_count: int = Field(ge=0)
+
+
 class ClaimRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

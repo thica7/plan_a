@@ -27,6 +27,8 @@ from packages.schema.enterprise import (
     EvidenceQualityUpdateRequest,
     EvidenceQualityUpdateResult,
     EvidenceRecord,
+    EvidenceReindexResult,
+    EvidenceSearchHit,
     ProjectReadinessScore,
     ProjectRecord,
     RedTeamReport,
@@ -250,6 +252,31 @@ def upsert_evidence(
     store: EnterpriseStoreDep,
 ) -> EvidenceRecord:
     return store.upsert_evidence(evidence)
+
+
+@router.get("/enterprise/evidence/search", response_model=list[EvidenceSearchHit])
+def search_evidence(
+    store: EnterpriseStoreDep,
+    workspace_id: str,
+    query: str,
+    project_id: str | None = None,
+    limit: int = 10,
+) -> list[EvidenceSearchHit]:
+    return store.search_evidence(
+        workspace_id=workspace_id,
+        query=query,
+        project_id=project_id,
+        limit=limit,
+    )
+
+
+@router.post("/enterprise/evidence/reindex", response_model=EvidenceReindexResult)
+def reindex_evidence_embeddings(
+    store: EnterpriseStoreDep,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+) -> EvidenceReindexResult:
+    return store.reindex_evidence_embeddings(workspace_id=workspace_id, project_id=project_id)
 
 
 @router.get("/enterprise/source-registry", response_model=list[SourceRegistryRecord])

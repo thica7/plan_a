@@ -57,6 +57,7 @@ def test_postgres_schema_contains_enterprise_core_tables() -> None:
         "competitors",
         "evidence_records",
         "source_registry",
+        "evidence_embeddings",
         "knowledge_claims",
         "report_versions",
         "audit_logs",

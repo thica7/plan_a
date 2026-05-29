@@ -8,6 +8,11 @@ from threading import RLock
 from typing import Protocol
 from urllib.parse import urlparse
 
+from packages.enterprise.embedding_index import (
+    build_evidence_embedding_record,
+    cosine_similarity,
+    deterministic_embedding,
+)
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
@@ -15,8 +20,11 @@ from packages.schema.enterprise import (
     ClaimRecord,
     CompetitorRecord,
     EnterpriseRunProjection,
+    EvidenceEmbeddingRecord,
     EvidenceQualityLabel,
     EvidenceRecord,
+    EvidenceReindexResult,
+    EvidenceSearchHit,
     ProjectCompetitorLink,
     ProjectRecord,
     ReportVersionRecord,
@@ -82,6 +90,27 @@ class EnterpriseStore(Protocol):
 
     def upsert_evidence(self, evidence: EvidenceRecord) -> EvidenceRecord: ...
 
+    def list_evidence_embeddings(
+        self,
+        workspace_id: str | None = None,
+    ) -> list[EvidenceEmbeddingRecord]: ...
+
+    def reindex_evidence_embeddings(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+    ) -> EvidenceReindexResult: ...
+
+    def search_evidence(
+        self,
+        *,
+        workspace_id: str,
+        query: str,
+        project_id: str | None = None,
+        limit: int = 10,
+    ) -> list[EvidenceSearchHit]: ...
+
     def list_source_registry(
         self,
         workspace_id: str | None = None,
@@ -128,6 +157,7 @@ class EnterpriseMemoryStore:
         self.competitors: dict[str, CompetitorRecord] = {}
         self.project_competitors: dict[tuple[str, str], ProjectCompetitorLink] = {}
         self.evidence_records: dict[str, EvidenceRecord] = {}
+        self.evidence_embeddings: dict[str, EvidenceEmbeddingRecord] = {}
         self.source_registry: dict[str, SourceRegistryRecord] = {}
         self.claim_records: dict[str, ClaimRecord] = {}
         self.report_versions: dict[str, ReportVersionRecord] = {}
@@ -306,6 +336,7 @@ class EnterpriseMemoryStore:
                     evidence,
                 )
                 self.evidence_records[evidence.id] = merged_evidence
+                self._upsert_evidence_embedding_locked(merged_evidence)
                 self._upsert_source_registry_locked(
                     source_registry_from_evidence(merged_evidence),
                     actor_id=DEFAULT_USER_ID,
@@ -455,6 +486,7 @@ class EnterpriseMemoryStore:
             before_record = self.evidence_records.get(evidence.id)
             evidence = _merge_evidence_lifecycle(before_record, evidence)
             self.evidence_records[evidence.id] = evidence
+            self._upsert_evidence_embedding_locked(evidence)
             self._upsert_source_registry_locked(
                 source_registry_from_evidence(evidence),
                 actor_id=DEFAULT_USER_ID,
@@ -470,6 +502,64 @@ class EnterpriseMemoryStore:
                 after=evidence.model_dump(mode="json"),
             )
             return evidence
+
+    def list_evidence_embeddings(
+        self,
+        workspace_id: str | None = None,
+    ) -> list[EvidenceEmbeddingRecord]:
+        with self._lock:
+            records = list(self.evidence_embeddings.values())
+            if workspace_id:
+                records = [item for item in records if item.workspace_id == workspace_id]
+            return sorted(records, key=lambda item: (item.workspace_id, item.evidence_id))
+
+    def reindex_evidence_embeddings(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+    ) -> EvidenceReindexResult:
+        with self._lock:
+            evidence = list(self.evidence_records.values())
+            if workspace_id:
+                evidence = [item for item in evidence if item.workspace_id == workspace_id]
+            if project_id:
+                evidence = [item for item in evidence if item.project_id == project_id]
+            for item in evidence:
+                self._upsert_evidence_embedding_locked(item)
+            return EvidenceReindexResult(indexed_count=len(evidence))
+
+    def search_evidence(
+        self,
+        *,
+        workspace_id: str,
+        query: str,
+        project_id: str | None = None,
+        limit: int = 10,
+    ) -> list[EvidenceSearchHit]:
+        with self._lock:
+            query_vector = deterministic_embedding(query)
+            hits: list[EvidenceSearchHit] = []
+            for embedding in self.evidence_embeddings.values():
+                if embedding.workspace_id != workspace_id:
+                    continue
+                evidence = self.evidence_records.get(embedding.evidence_id)
+                if evidence is None:
+                    continue
+                if project_id and evidence.project_id != project_id:
+                    continue
+                score = cosine_similarity(
+                    query_vector,
+                    deterministic_embedding(embedding.embedding_text),
+                )
+                hits.append(
+                    EvidenceSearchHit(
+                        evidence=evidence,
+                        score=score,
+                        embedding_model=embedding.embedding_model,
+                    )
+                )
+            return sorted(hits, key=lambda item: item.score, reverse=True)[: max(1, limit)]
 
     def list_source_registry(
         self,
@@ -613,6 +703,17 @@ class EnterpriseMemoryStore:
             workspace_id,
             WorkspaceRecord(id=workspace_id, name=_title_from_id(workspace_id)),
         )
+
+    def _upsert_evidence_embedding_locked(
+        self,
+        evidence: EvidenceRecord,
+    ) -> EvidenceEmbeddingRecord:
+        record = build_evidence_embedding_record(evidence)
+        existing = self.evidence_embeddings.get(record.id)
+        if existing is not None:
+            record = record.model_copy(update={"created_at": existing.created_at})
+        self.evidence_embeddings[record.id] = record
+        return record
 
     def _upsert_source_registry_locked(
         self,

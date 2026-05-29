@@ -3,7 +3,10 @@ from pydantic import ValidationError
 from packages.identity import compute_competitor_set_hash, compute_evidence_id
 from packages.schema.enterprise import (
     ClaimRecord,
+    EvidenceEmbeddingRecord,
     EvidenceRecord,
+    EvidenceReindexResult,
+    EvidenceSearchHit,
     ProjectRecord,
     ReportVersionRecord,
     SourceRegistryRecord,
@@ -100,6 +103,37 @@ def test_source_registry_record_tracks_source_governance() -> None:
     assert record.trust_level == "verified"
     assert record.robots_status == "allowed"
     assert record.seen_count == 1
+
+
+def test_evidence_embedding_and_search_schema_are_typed() -> None:
+    evidence = EvidenceRecord(
+        id="evidence-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="pricing-1",
+        competitor_id="cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.sh/pricing",
+        snippet="Cursor Pro plan pricing.",
+        content_hash="content-hash",
+    )
+    embedding = EvidenceEmbeddingRecord(
+        id="embedding-evidence-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        evidence_id=evidence.id,
+        embedding_model="hashing-384",
+        embedding_hash="hash",
+        embedding_text="Cursor pricing",
+    )
+    hit = EvidenceSearchHit(evidence=evidence, score=0.5, embedding_model="hashing-384")
+    result = EvidenceReindexResult(indexed_count=1)
+
+    assert embedding.embedding_dimensions == 384
+    assert hit.evidence.id == evidence.id
+    assert result.indexed_count == 1
 
 
 def test_report_version_groups_by_topic_layer_and_competitor_set() -> None:
