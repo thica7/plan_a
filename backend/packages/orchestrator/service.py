@@ -22,7 +22,11 @@ from packages.agents.writer.logic import WriterAgentMixin
 from packages.business_intel import build_business_intel_plan
 from packages.business_intel.homepage import verify_homepages
 from packages.config import Settings
-from packages.enterprise import EnterpriseStore, build_enterprise_projection
+from packages.enterprise import (
+    EnterpriseStore,
+    WorkspaceQuotaExceededError,
+    build_enterprise_projection,
+)
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.llm import DoubaoClient
 from packages.memory import KBCache, RunJournal
@@ -35,7 +39,7 @@ from packages.orchestrator.graph import (
     build_scoped_redo_graph,
 )
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail, RunSummary
-from packages.schema.enterprise import EnterpriseRunProjection
+from packages.schema.enterprise import EnterpriseRunProjection, NotificationRecord
 from packages.schema.models import (
     AgentMessage,
     AnalysisPlan,
@@ -124,6 +128,7 @@ class RunService(
         self._hydrate_runs()
 
     async def create_run(self, request: RunCreateRequest) -> RunDetail:
+        self._ensure_workspace_quota_allows_run(request.workspace_id)
         execution_mode = self._resolve_execution_mode(request.execution_mode)
         competitors = self._normalize_competitor_names(request.competitors)
         homepage_verifications = verify_homepages(competitors)
@@ -1473,6 +1478,7 @@ class RunService(
             competitor_id_map=context.competitor_id_map,
         )
         self._enterprise_store.save_projection(projection)
+        self._record_usage_governance_notification(context.workspace_id, detail.id)
         return projection
 
     def get_enterprise_projection(self, run_id: str) -> EnterpriseRunProjection | None:
@@ -1494,6 +1500,50 @@ class RunService(
                 "report_version_id": projection.report_version.id,
             }
         }
+
+    def _ensure_workspace_quota_allows_run(self, workspace_id: str) -> None:
+        if self._enterprise_store is None:
+            return
+        decision = self._enterprise_store.check_workspace_quota(workspace_id)
+        if not decision.allowed:
+            raise WorkspaceQuotaExceededError(decision)
+
+    def _record_usage_governance_notification(
+        self,
+        workspace_id: str,
+        run_id: str,
+    ) -> None:
+        if self._enterprise_store is None:
+            return
+        decision = self._enterprise_store.check_workspace_quota(workspace_id)
+        if decision.status == "ok":
+            return
+        usage = decision.usage
+        period_key = usage.period_start.strftime("%Y%m")
+        notification = NotificationRecord(
+            id=f"quota-{workspace_id}-{period_key}",
+            workspace_id=workspace_id,
+            notification_type="quota_warning",
+            severity="critical" if decision.status == "exceeded" else "warning",
+            status="queued",
+            title="Workspace quota needs attention",
+            body=decision.reason,
+            resource_type="workspace_usage",
+            resource_id=workspace_id,
+            created_by="system-user",
+            metadata={
+                "run_id": run_id,
+                "period_start": usage.period_start.isoformat(),
+                "period_end": usage.period_end.isoformat(),
+                "run_usage_ratio": usage.run_usage_ratio,
+                "token_usage_ratio": usage.token_usage_ratio,
+                "cost_usage_ratio": usage.cost_usage_ratio,
+                "cost_estimate_usd": usage.cost_estimate_usd,
+                "total_tokens_estimate": usage.total_tokens_estimate,
+                "enforcement": decision.enforcement,
+            },
+        )
+        self._enterprise_store.upsert_notification(notification)
 
     def _hydrate_runs(self) -> None:
         if self._journal is None:

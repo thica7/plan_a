@@ -3,8 +3,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.deps import get_app_settings, get_run_service, get_temporal_workflow_service
+from app.deps import (
+    get_app_settings,
+    get_enterprise_store,
+    get_run_service,
+    get_temporal_workflow_service,
+)
 from packages.config import Settings
+from packages.enterprise import EnterpriseStore, WorkspaceQuotaExceededError
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail, RunSummary, WorkflowStartResponse
 from packages.workflows.service import TemporalWorkflowService
@@ -16,6 +22,7 @@ TemporalWorkflowServiceDep = Annotated[
     TemporalWorkflowService,
     Depends(get_temporal_workflow_service),
 ]
+EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
 
 
 @router.post(
@@ -28,7 +35,9 @@ async def create_run(
     response: Response,
     settings: SettingsDep,
     workflow_service: TemporalWorkflowServiceDep,
+    store: EnterpriseStoreDep,
 ) -> RunDetail | WorkflowStartResponse:
+    _ensure_workspace_quota(store, request.workspace_id)
     if settings.run_orchestration_backend == "temporal":
         try:
             result = await workflow_service.start_competitive_intel(request)
@@ -43,10 +52,24 @@ async def create_run(
     service = get_run_service()
     try:
         detail = await service.create_run(request)
+    except WorkspaceQuotaExceededError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=exc.decision.model_dump(mode="json"),
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     asyncio.create_task(service.run_pipeline(detail.id))
     return detail
+
+
+def _ensure_workspace_quota(store: EnterpriseStore, workspace_id: str) -> None:
+    decision = store.check_workspace_quota(workspace_id)
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=decision.model_dump(mode="json"),
+        )
 
 
 @router.get("/runs", response_model=list[RunSummary])

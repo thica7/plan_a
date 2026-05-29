@@ -47,3 +47,17 @@ Evidence records now carry lifecycle fields:
 
 These fields are the required idempotency base before adding Temporal around
 the LangGraph run.
+
+## Phase 5 Workspace Quota Governance
+
+`WorkspaceRecord` carries monthly governance limits:
+
+- `monthly_run_quota`: maximum runs in the current monthly period.
+- `monthly_token_quota`: estimated input + output tokens allowed per month.
+- `monthly_cost_quota_usd`: estimated LLM/search cost allowed per month.
+- `quota_enforcement`: `block` rejects new runs after exhaustion; `monitor`
+  records warnings but allows execution.
+
+`WorkspaceUsageSummary` is derived from durable run records and their
+`RunMetrics`, while `WorkspaceQuotaDecision` is the admission-control contract
+used by `/runs` and workflow activities.

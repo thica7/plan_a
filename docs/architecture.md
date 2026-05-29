@@ -37,6 +37,7 @@ LLM/search work for stable fixture node implementations.
 - `ReportApprovalWorkflow` is the Phase 4 approval prototype: it marks a report version `in_review`, waits for manual `approve` or `reject` signals, and persists the resulting report status without blocking an activity on a human wait.
 - Phase 5 starts the recurring-monitoring layer with `ScheduledScanWorkflow`: it resolves workspace projects, runs project scans through the existing LangGraph activity boundary, aggregates per-project outcomes, and writes an in-app notification record for the workspace.
 - `MonitorWorkflow` extends Phase 5 into continuous project monitoring: each cycle runs the existing project analysis, compares the new report snapshot against the prior report version, and records an `anomaly_alert` notification when the report body, evidence count, claim count, or scan status changes materially.
+- Phase 5 quota governance derives monthly workspace run/token/cost usage from durable run metrics. `quota_enforcement=block` rejects new runs when usage is exhausted; warning/exceeded states are also surfaced through `quota_warning` notifications.
 - HITL uses native LangGraph interrupt/resume semantics, not a service-level Future wait; manual post-run redo is separated onto `POST /runs/{run_id}/redo`.
 - Knowledge claims use `KnowledgeClaim.source_ids`; QA checks unknown or missing citations.
 - Core knowledge schemas are `FeatureTree`, `PricingModel`, and `UserPersonaModel`.

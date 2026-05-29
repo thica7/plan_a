@@ -9,6 +9,12 @@ CREATE TABLE IF NOT EXISTS workspaces (
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    monthly_run_quota INTEGER NOT NULL DEFAULT 1000 CHECK (monthly_run_quota >= 0),
+    monthly_token_quota INTEGER NOT NULL DEFAULT 2000000 CHECK (monthly_token_quota >= 0),
+    monthly_cost_quota_usd DOUBLE PRECISION NOT NULL DEFAULT 100
+        CHECK (monthly_cost_quota_usd >= 0),
+    quota_enforcement TEXT NOT NULL DEFAULT 'block'
+        CHECK (quota_enforcement IN ('monitor', 'block')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -58,7 +64,8 @@ CREATE TABLE IF NOT EXISTS notifications (
                 'scheduled_scan_failure',
                 'approval_request',
                 'approval_timeout',
-                'anomaly_alert'
+                'anomaly_alert',
+                'quota_warning'
             )
         ),
     channel TEXT NOT NULL DEFAULT 'in_app'
@@ -293,6 +300,41 @@ CREATE INDEX IF NOT EXISTS idx_report_version_evidence_evidence
     ON report_version_evidence(evidence_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_workspace_created
     ON audit_logs(workspace_id, created_at DESC);
+
+ALTER TABLE workspaces
+    ADD COLUMN IF NOT EXISTS monthly_run_quota INTEGER NOT NULL DEFAULT 1000;
+ALTER TABLE workspaces
+    ADD COLUMN IF NOT EXISTS monthly_token_quota INTEGER NOT NULL DEFAULT 2000000;
+ALTER TABLE workspaces
+    ADD COLUMN IF NOT EXISTS monthly_cost_quota_usd DOUBLE PRECISION NOT NULL DEFAULT 100;
+ALTER TABLE workspaces
+    ADD COLUMN IF NOT EXISTS quota_enforcement TEXT NOT NULL DEFAULT 'block';
+ALTER TABLE workspaces DROP CONSTRAINT IF EXISTS workspaces_monthly_run_quota_check;
+ALTER TABLE workspaces
+    ADD CONSTRAINT workspaces_monthly_run_quota_check CHECK (monthly_run_quota >= 0);
+ALTER TABLE workspaces DROP CONSTRAINT IF EXISTS workspaces_monthly_token_quota_check;
+ALTER TABLE workspaces
+    ADD CONSTRAINT workspaces_monthly_token_quota_check CHECK (monthly_token_quota >= 0);
+ALTER TABLE workspaces DROP CONSTRAINT IF EXISTS workspaces_monthly_cost_quota_usd_check;
+ALTER TABLE workspaces
+    ADD CONSTRAINT workspaces_monthly_cost_quota_usd_check CHECK (monthly_cost_quota_usd >= 0);
+ALTER TABLE workspaces DROP CONSTRAINT IF EXISTS workspaces_quota_enforcement_check;
+ALTER TABLE workspaces
+    ADD CONSTRAINT workspaces_quota_enforcement_check
+        CHECK (quota_enforcement IN ('monitor', 'block'));
+
+ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_notification_type_check;
+ALTER TABLE notifications
+    ADD CONSTRAINT notifications_notification_type_check CHECK (
+        notification_type IN (
+            'scheduled_scan_summary',
+            'scheduled_scan_failure',
+            'approval_request',
+            'approval_timeout',
+            'anomaly_alert',
+            'quota_warning'
+        )
+    );
 
 INSERT INTO workspaces (id, name, description)
 VALUES ('default-workspace', 'Default Workspace', 'Phase 1 default workspace')

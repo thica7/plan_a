@@ -1680,6 +1680,56 @@ textarea {
   gap: 8px;
 }
 
+.workspace-usage-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.workspace-usage-panel.warn {
+  border-color: rgba(179, 86, 35, 0.34);
+}
+
+.workspace-usage-panel.exceeded {
+  border-color: rgba(178, 58, 72, 0.42);
+}
+
+.workspace-usage-panel > div,
+.workspace-usage-panel label span {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.workspace-usage-panel strong,
+.workspace-usage-panel span,
+.workspace-usage-panel em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace-usage-panel > div span,
+.workspace-usage-panel em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.workspace-usage-panel label {
+  display: grid;
+  gap: 4px;
+}
+
+.workspace-usage-panel meter {
+  height: 10px;
+  width: 100%;
+}
+
 .notification-item {
   background: var(--surface-2);
   border: 1px solid var(--border);

@@ -19,7 +19,10 @@ NotificationType = Literal[
     "approval_request",
     "approval_timeout",
     "anomaly_alert",
+    "quota_warning",
 ]
+QuotaEnforcementMode = Literal["monitor", "block"]
+WorkspaceUsageStatus = Literal["ok", "warn", "exceeded"]
 
 
 class WorkspaceRecord(BaseModel):
@@ -29,6 +32,10 @@ class WorkspaceRecord(BaseModel):
     name: str
     description: str = ""
     is_active: bool = True
+    monthly_run_quota: int = Field(default=1000, ge=0)
+    monthly_token_quota: int = Field(default=2_000_000, ge=0)
+    monthly_cost_quota_usd: float = Field(default=100.0, ge=0.0)
+    quota_enforcement: QuotaEnforcementMode = "block"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -52,6 +59,50 @@ class WorkspaceMemberRecord(BaseModel):
     role: EnterpriseRole = "viewer"
     status: Literal["active", "disabled"] = "active"
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class WorkspaceQuotaUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    monthly_run_quota: int | None = Field(default=None, ge=0)
+    monthly_token_quota: int | None = Field(default=None, ge=0)
+    monthly_cost_quota_usd: float | None = Field(default=None, ge=0.0)
+    quota_enforcement: QuotaEnforcementMode | None = None
+
+
+class WorkspaceUsageSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str
+    period_start: datetime
+    period_end: datetime
+    run_count: int = Field(default=0, ge=0)
+    completed_run_count: int = Field(default=0, ge=0)
+    failed_run_count: int = Field(default=0, ge=0)
+    interrupted_run_count: int = Field(default=0, ge=0)
+    input_tokens_estimate: int = Field(default=0, ge=0)
+    output_tokens_estimate: int = Field(default=0, ge=0)
+    total_tokens_estimate: int = Field(default=0, ge=0)
+    cost_estimate_usd: float = Field(default=0.0, ge=0.0)
+    monthly_run_quota: int = Field(default=1000, ge=0)
+    monthly_token_quota: int = Field(default=2_000_000, ge=0)
+    monthly_cost_quota_usd: float = Field(default=100.0, ge=0.0)
+    run_usage_ratio: float = Field(default=0.0, ge=0.0)
+    token_usage_ratio: float = Field(default=0.0, ge=0.0)
+    cost_usage_ratio: float = Field(default=0.0, ge=0.0)
+    status: WorkspaceUsageStatus = "ok"
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class WorkspaceQuotaDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str
+    allowed: bool
+    status: WorkspaceUsageStatus
+    enforcement: QuotaEnforcementMode
+    reason: str = ""
+    usage: WorkspaceUsageSummary
 
 
 class NotificationRecord(BaseModel):

@@ -17,6 +17,9 @@ All backend routes are mounted under `/api`.
 | `POST` | `/workflows/report-approval` | Start the Phase 4 report approval workflow prototype |
 | `POST` | `/workflows/report-approval/{report_version_id}/approve` | Signal manual report approval |
 | `POST` | `/workflows/report-approval/{report_version_id}/reject` | Signal manual report rejection |
+| `GET` | `/enterprise/workspaces/{workspace_id}/usage` | Fetch Phase 5 monthly run/token/cost usage |
+| `GET` | `/enterprise/workspaces/{workspace_id}/quota-decision` | Fetch quota status and enforcement decision |
+| `PATCH` | `/enterprise/workspaces/{workspace_id}/quota` | Update workspace run/token/cost quota policy |
 | `GET` | `/enterprise/notifications` | List workspace-scoped enterprise notifications |
 | `POST` | `/enterprise/notifications` | Upsert an in-app notification record |
 | `GET` | `/skills` | List available analysis dimensions |

@@ -39,7 +39,10 @@ from packages.schema.enterprise import (
     ScenarioPack,
     SourceRegistryRecord,
     WorkspaceMemberRecord,
+    WorkspaceQuotaDecision,
+    WorkspaceQuotaUpdateRequest,
     WorkspaceRecord,
+    WorkspaceUsageSummary,
 )
 
 router = APIRouter()
@@ -77,6 +80,50 @@ def upsert_workspace_member(
 ) -> WorkspaceMemberRecord:
     _require_workspace_access(user, member.workspace_id, "workspace:write")
     return store.upsert_workspace_member(member)
+
+
+@router.get(
+    "/enterprise/workspaces/{workspace_id}/usage",
+    response_model=WorkspaceUsageSummary,
+)
+def get_workspace_usage(
+    workspace_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> WorkspaceUsageSummary:
+    _require_workspace_access(user, workspace_id, "workspace:read")
+    return store.get_workspace_usage(workspace_id)
+
+
+@router.get(
+    "/enterprise/workspaces/{workspace_id}/quota-decision",
+    response_model=WorkspaceQuotaDecision,
+)
+def get_workspace_quota_decision(
+    workspace_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> WorkspaceQuotaDecision:
+    _require_workspace_access(user, workspace_id, "workspace:read")
+    return store.check_workspace_quota(workspace_id)
+
+
+@router.patch("/enterprise/workspaces/{workspace_id}/quota", response_model=WorkspaceRecord)
+def update_workspace_quota(
+    workspace_id: str,
+    request: WorkspaceQuotaUpdateRequest,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> WorkspaceRecord:
+    _require_workspace_access(user, workspace_id, "workspace:write")
+    workspace = store.update_workspace_quota(
+        workspace_id,
+        request,
+        actor_id=user.user_id,
+    )
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return workspace
 
 
 @router.get("/enterprise/notifications", response_model=list[NotificationRecord])

@@ -1015,6 +1015,286 @@
         }
       }
     },
+    "/api/enterprise/workspaces/{workspace_id}/usage": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Workspace Usage",
+        "operationId": "get_workspace_usage_api_enterprise_workspaces__workspace_id__usage_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceUsageSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enterprise/workspaces/{workspace_id}/quota-decision": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Workspace Quota Decision",
+        "operationId": "get_workspace_quota_decision_api_enterprise_workspaces__workspace_id__quota_decision_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceQuotaDecision"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enterprise/workspaces/{workspace_id}/quota": {
+      "patch": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Update Workspace Quota",
+        "operationId": "update_workspace_quota_api_enterprise_workspaces__workspace_id__quota_patch",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceQuotaUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enterprise/notifications": {
       "get": {
         "tags": [
@@ -5971,7 +6251,8 @@
               "scheduled_scan_failure",
               "approval_request",
               "approval_timeout",
-              "anomaly_alert"
+              "anomaly_alert",
+              "quota_warning"
             ],
             "title": "Notification Type"
           },
@@ -8722,6 +9003,111 @@
         ],
         "title": "WorkspaceMemberRecord"
       },
+      "WorkspaceQuotaDecision": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "exceeded"
+            ],
+            "title": "Status"
+          },
+          "enforcement": {
+            "type": "string",
+            "enum": [
+              "monitor",
+              "block"
+            ],
+            "title": "Enforcement"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          },
+          "usage": {
+            "$ref": "#/components/schemas/WorkspaceUsageSummary"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "allowed",
+          "status",
+          "enforcement",
+          "usage"
+        ],
+        "title": "WorkspaceQuotaDecision"
+      },
+      "WorkspaceQuotaUpdateRequest": {
+        "properties": {
+          "monthly_run_quota": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Run Quota"
+          },
+          "monthly_token_quota": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Token Quota"
+          },
+          "monthly_cost_quota_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Cost Quota Usd"
+          },
+          "quota_enforcement": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "monitor",
+                  "block"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quota Enforcement"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WorkspaceQuotaUpdateRequest"
+      },
       "WorkspaceRecord": {
         "properties": {
           "id": {
@@ -8742,6 +9128,33 @@
             "title": "Is Active",
             "default": true
           },
+          "monthly_run_quota": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Monthly Run Quota",
+            "default": 1000
+          },
+          "monthly_token_quota": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Monthly Token Quota",
+            "default": 2000000
+          },
+          "monthly_cost_quota_usd": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Monthly Cost Quota Usd",
+            "default": 100.0
+          },
+          "quota_enforcement": {
+            "type": "string",
+            "enum": [
+              "monitor",
+              "block"
+            ],
+            "title": "Quota Enforcement",
+            "default": "block"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -8760,6 +9173,131 @@
           "name"
         ],
         "title": "WorkspaceRecord"
+      },
+      "WorkspaceUsageSummary": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period Start"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period End"
+          },
+          "run_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Run Count",
+            "default": 0
+          },
+          "completed_run_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Completed Run Count",
+            "default": 0
+          },
+          "failed_run_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Failed Run Count",
+            "default": 0
+          },
+          "interrupted_run_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Interrupted Run Count",
+            "default": 0
+          },
+          "input_tokens_estimate": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Input Tokens Estimate",
+            "default": 0
+          },
+          "output_tokens_estimate": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Output Tokens Estimate",
+            "default": 0
+          },
+          "total_tokens_estimate": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Tokens Estimate",
+            "default": 0
+          },
+          "cost_estimate_usd": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Cost Estimate Usd",
+            "default": 0.0
+          },
+          "monthly_run_quota": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Monthly Run Quota",
+            "default": 1000
+          },
+          "monthly_token_quota": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Monthly Token Quota",
+            "default": 2000000
+          },
+          "monthly_cost_quota_usd": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Monthly Cost Quota Usd",
+            "default": 100.0
+          },
+          "run_usage_ratio": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Run Usage Ratio",
+            "default": 0.0
+          },
+          "token_usage_ratio": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Token Usage Ratio",
+            "default": 0.0
+          },
+          "cost_usage_ratio": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Cost Usage Ratio",
+            "default": 0.0
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "exceeded"
+            ],
+            "title": "Status",
+            "default": "ok"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "period_start",
+          "period_end"
+        ],
+        "title": "WorkspaceUsageSummary"
       }
     }
   }

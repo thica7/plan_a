@@ -600,8 +600,50 @@ export interface WorkspaceRecord {
   name: string;
   description: string;
   is_active: boolean;
+  monthly_run_quota: number;
+  monthly_token_quota: number;
+  monthly_cost_quota_usd: number;
+  quota_enforcement: "monitor" | "block";
   created_at: string;
   updated_at: string;
+}
+
+export interface WorkspaceQuotaUpdateRequest {
+  monthly_run_quota?: number | null;
+  monthly_token_quota?: number | null;
+  monthly_cost_quota_usd?: number | null;
+  quota_enforcement?: "monitor" | "block" | null;
+}
+
+export interface WorkspaceUsageSummary {
+  workspace_id: string;
+  period_start: string;
+  period_end: string;
+  run_count: number;
+  completed_run_count: number;
+  failed_run_count: number;
+  interrupted_run_count: number;
+  input_tokens_estimate: number;
+  output_tokens_estimate: number;
+  total_tokens_estimate: number;
+  cost_estimate_usd: number;
+  monthly_run_quota: number;
+  monthly_token_quota: number;
+  monthly_cost_quota_usd: number;
+  run_usage_ratio: number;
+  token_usage_ratio: number;
+  cost_usage_ratio: number;
+  status: "ok" | "warn" | "exceeded";
+  generated_at: string;
+}
+
+export interface WorkspaceQuotaDecision {
+  workspace_id: string;
+  allowed: boolean;
+  status: "ok" | "warn" | "exceeded";
+  enforcement: "monitor" | "block";
+  reason: string;
+  usage: WorkspaceUsageSummary;
 }
 
 export type NotificationType =
@@ -609,7 +651,8 @@ export type NotificationType =
   | "scheduled_scan_failure"
   | "approval_request"
   | "approval_timeout"
-  | "anomaly_alert";
+  | "anomaly_alert"
+  | "quota_warning";
 
 export interface NotificationRecord {
   id: string;

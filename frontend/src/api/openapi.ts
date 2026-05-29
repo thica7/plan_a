@@ -346,6 +346,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/workspaces/{workspace_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Workspace Usage */
+        get: operations["get_workspace_usage_api_enterprise_workspaces__workspace_id__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/workspaces/{workspace_id}/quota-decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Workspace Quota Decision */
+        get: operations["get_workspace_quota_decision_api_enterprise_workspaces__workspace_id__quota_decision_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/workspaces/{workspace_id}/quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Workspace Quota */
+        patch: operations["update_workspace_quota_api_enterprise_workspaces__workspace_id__quota_patch"];
+        trace?: never;
+    };
     "/api/enterprise/notifications": {
         parameters: {
             query?: never;
@@ -1771,7 +1822,7 @@ export interface components {
              * Notification Type
              * @enum {string}
              */
-            notification_type: "scheduled_scan_summary" | "scheduled_scan_failure" | "approval_request" | "approval_timeout" | "anomaly_alert";
+            notification_type: "scheduled_scan_summary" | "scheduled_scan_failure" | "approval_request" | "approval_timeout" | "anomaly_alert" | "quota_warning";
             /**
              * Channel
              * @default in_app
@@ -2984,6 +3035,40 @@ export interface components {
              */
             created_at?: string;
         };
+        /** WorkspaceQuotaDecision */
+        WorkspaceQuotaDecision: {
+            /** Workspace Id */
+            workspace_id: string;
+            /** Allowed */
+            allowed: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "warn" | "exceeded";
+            /**
+             * Enforcement
+             * @enum {string}
+             */
+            enforcement: "monitor" | "block";
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            usage: components["schemas"]["WorkspaceUsageSummary"];
+        };
+        /** WorkspaceQuotaUpdateRequest */
+        WorkspaceQuotaUpdateRequest: {
+            /** Monthly Run Quota */
+            monthly_run_quota?: number | null;
+            /** Monthly Token Quota */
+            monthly_token_quota?: number | null;
+            /** Monthly Cost Quota Usd */
+            monthly_cost_quota_usd?: number | null;
+            /** Quota Enforcement */
+            quota_enforcement?: ("monitor" | "block") | null;
+        };
         /** WorkspaceRecord */
         WorkspaceRecord: {
             /** Id */
@@ -3001,6 +3086,27 @@ export interface components {
              */
             is_active: boolean;
             /**
+             * Monthly Run Quota
+             * @default 1000
+             */
+            monthly_run_quota: number;
+            /**
+             * Monthly Token Quota
+             * @default 2000000
+             */
+            monthly_token_quota: number;
+            /**
+             * Monthly Cost Quota Usd
+             * @default 100
+             */
+            monthly_cost_quota_usd: number;
+            /**
+             * Quota Enforcement
+             * @default block
+             * @enum {string}
+             */
+            quota_enforcement: "monitor" | "block";
+            /**
              * Created At
              * Format: date-time
              */
@@ -3010,6 +3116,102 @@ export interface components {
              * Format: date-time
              */
             updated_at?: string;
+        };
+        /** WorkspaceUsageSummary */
+        WorkspaceUsageSummary: {
+            /** Workspace Id */
+            workspace_id: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
+            /**
+             * Run Count
+             * @default 0
+             */
+            run_count: number;
+            /**
+             * Completed Run Count
+             * @default 0
+             */
+            completed_run_count: number;
+            /**
+             * Failed Run Count
+             * @default 0
+             */
+            failed_run_count: number;
+            /**
+             * Interrupted Run Count
+             * @default 0
+             */
+            interrupted_run_count: number;
+            /**
+             * Input Tokens Estimate
+             * @default 0
+             */
+            input_tokens_estimate: number;
+            /**
+             * Output Tokens Estimate
+             * @default 0
+             */
+            output_tokens_estimate: number;
+            /**
+             * Total Tokens Estimate
+             * @default 0
+             */
+            total_tokens_estimate: number;
+            /**
+             * Cost Estimate Usd
+             * @default 0
+             */
+            cost_estimate_usd: number;
+            /**
+             * Monthly Run Quota
+             * @default 1000
+             */
+            monthly_run_quota: number;
+            /**
+             * Monthly Token Quota
+             * @default 2000000
+             */
+            monthly_token_quota: number;
+            /**
+             * Monthly Cost Quota Usd
+             * @default 100
+             */
+            monthly_cost_quota_usd: number;
+            /**
+             * Run Usage Ratio
+             * @default 0
+             */
+            run_usage_ratio: number;
+            /**
+             * Token Usage Ratio
+             * @default 0
+             */
+            token_usage_ratio: number;
+            /**
+             * Cost Usage Ratio
+             * @default 0
+             */
+            cost_usage_ratio: number;
+            /**
+             * Status
+             * @default ok
+             * @enum {string}
+             */
+            status: "ok" | "warn" | "exceeded";
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
         };
     };
     responses: never;
@@ -3660,6 +3862,115 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceMemberRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workspace_usage_api_enterprise_workspaces__workspace_id__usage_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceUsageSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workspace_quota_decision_api_enterprise_workspaces__workspace_id__quota_decision_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceQuotaDecision"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_workspace_quota_api_enterprise_workspaces__workspace_id__quota_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceQuotaUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceRecord"];
                 };
             };
             /** @description Validation Error */

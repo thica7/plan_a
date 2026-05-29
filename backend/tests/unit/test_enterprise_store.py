@@ -6,18 +6,24 @@ from app.main import create_app
 from packages.config import Settings
 from packages.enterprise import (
     EnterpriseMemoryStore,
+    WorkspaceQuotaExceededError,
     build_enterprise_projection,
     build_report_version_diff,
 )
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
-from packages.schema.enterprise import NotificationRecord, WorkspaceMemberRecord
+from packages.schema.enterprise import (
+    NotificationRecord,
+    WorkspaceMemberRecord,
+    WorkspaceQuotaUpdateRequest,
+)
 from packages.schema.models import (
     AnalysisPlan,
     CompetitorKnowledge,
     KnowledgeClaim,
     PricingModel,
     RawSource,
+    RunMetrics,
 )
 from packages.skills.registry import SkillRegistry
 
@@ -137,6 +143,42 @@ def test_enterprise_store_round_trips_notifications_with_audit() -> None:
     assert store.list_notifications("workspace-a", status="sent") == [notification]
     assert store.list_notifications("workspace-b") == []
     assert any(log.action == "notification.upserted" for log in store.list_audit_logs())
+
+
+def test_enterprise_store_tracks_workspace_usage_and_quota_decision() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail().model_copy(
+        update={
+            "status": "completed",
+            "metrics": RunMetrics(
+                input_tokens_estimate=700,
+                output_tokens_estimate=400,
+                cost_estimate_usd=0.25,
+            ),
+        }
+    )
+
+    context = store.start_run(detail, workspace_id="workspace-a")
+    usage = store.get_workspace_usage(context.workspace_id)
+    updated = store.update_workspace_quota(
+        context.workspace_id,
+        WorkspaceQuotaUpdateRequest(
+            monthly_run_quota=1,
+            monthly_token_quota=1_000,
+            monthly_cost_quota_usd=0.2,
+            quota_enforcement="block",
+        ),
+    )
+    decision = store.check_workspace_quota(context.workspace_id)
+
+    assert usage.run_count == 1
+    assert usage.total_tokens_estimate == 1100
+    assert usage.status == "ok"
+    assert updated is not None
+    assert updated.monthly_cost_quota_usd == 0.2
+    assert decision.status == "exceeded"
+    assert decision.allowed is False
+    assert any(log.action == "workspace.quota_updated" for log in store.list_audit_logs())
 
 
 def test_enterprise_store_round_trips_projection() -> None:
@@ -483,6 +525,33 @@ async def test_run_service_attaches_business_intel_plan_to_project() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_service_blocks_when_workspace_quota_is_exhausted() -> None:
+    store = EnterpriseMemoryStore()
+    store.update_workspace_quota(
+        "default-workspace",
+        WorkspaceQuotaUpdateRequest(monthly_run_quota=0, quota_enforcement="block"),
+    )
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+
+    with pytest.raises(WorkspaceQuotaExceededError) as exc_info:
+        await service.create_run(
+            RunCreateRequest(
+                topic="AI coding assistant comparison",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+
+    assert exc_info.value.decision.allowed is False
+    assert exc_info.value.decision.status == "exceeded"
+
+
+@pytest.mark.asyncio
 async def test_run_service_increments_enterprise_report_versions() -> None:
     store = EnterpriseMemoryStore()
     service = RunService(
@@ -537,6 +606,14 @@ def test_enterprise_router_exposes_projection() -> None:
 
     response = client.get(f"/api/enterprise/runs/{detail.id}/projection")
     workspaces = client.get("/api/enterprise/workspaces")
+    usage = client.get(f"/api/enterprise/workspaces/{context.workspace_id}/usage")
+    quota_update = client.patch(
+        f"/api/enterprise/workspaces/{context.workspace_id}/quota",
+        json={"monthly_run_quota": 1, "quota_enforcement": "monitor"},
+    )
+    quota_decision = client.get(
+        f"/api/enterprise/workspaces/{context.workspace_id}/quota-decision"
+    )
     notification_upsert = client.post(
         "/api/enterprise/notifications",
         json=NotificationRecord(
@@ -599,6 +676,13 @@ def test_enterprise_router_exposes_projection() -> None:
     assert response.json()["report_version"]["id"].startswith("report-run-1")
     assert workspaces.status_code == 200
     assert workspaces.json()[0]["id"] == "default-workspace"
+    assert usage.status_code == 200
+    assert usage.json()["run_count"] == 1
+    assert quota_update.status_code == 200
+    assert quota_update.json()["monthly_run_quota"] == 1
+    assert quota_decision.status_code == 200
+    assert quota_decision.json()["status"] == "exceeded"
+    assert quota_decision.json()["allowed"] is True
     assert notification_upsert.status_code == 200
     assert notification_upsert.json()["id"] == "notification-route-1"
     assert notifications.status_code == 200

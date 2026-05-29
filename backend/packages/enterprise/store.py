@@ -13,6 +13,11 @@ from packages.enterprise.embedding_index import (
     cosine_similarity,
     deterministic_embedding,
 )
+from packages.enterprise.usage import (
+    build_quota_decision,
+    build_workspace_usage_summary,
+    current_month_window,
+)
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
@@ -32,7 +37,10 @@ from packages.schema.enterprise import (
     SourceRegistryRecord,
     UserRecord,
     WorkspaceMemberRecord,
+    WorkspaceQuotaDecision,
+    WorkspaceQuotaUpdateRequest,
     WorkspaceRecord,
+    WorkspaceUsageSummary,
 )
 
 DEFAULT_WORKSPACE_ID = "default-workspace"
@@ -90,6 +98,30 @@ class EnterpriseStore(Protocol):
         workspace_id: str,
         user_id: str,
     ) -> WorkspaceMemberRecord | None: ...
+
+    def update_workspace_quota(
+        self,
+        workspace_id: str,
+        update: WorkspaceQuotaUpdateRequest,
+        *,
+        actor_id: str | None = None,
+    ) -> WorkspaceRecord | None: ...
+
+    def get_workspace_usage(
+        self,
+        workspace_id: str,
+        *,
+        period_start: datetime | None = None,
+        period_end: datetime | None = None,
+    ) -> WorkspaceUsageSummary: ...
+
+    def check_workspace_quota(
+        self,
+        workspace_id: str,
+        *,
+        period_start: datetime | None = None,
+        period_end: datetime | None = None,
+    ) -> WorkspaceQuotaDecision: ...
 
     def list_notifications(
         self,
@@ -186,6 +218,7 @@ class EnterpriseMemoryStore:
         self.users: dict[str, UserRecord] = {}
         self.workspace_members: dict[tuple[str, str], WorkspaceMemberRecord] = {}
         self.notifications: dict[str, NotificationRecord] = {}
+        self.run_details: dict[str, RunDetail] = {}
         self.projects: dict[str, ProjectRecord] = {}
         self.competitors: dict[str, CompetitorRecord] = {}
         self.project_competitors: dict[tuple[str, str], ProjectCompetitorLink] = {}
@@ -353,6 +386,13 @@ class EnterpriseMemoryStore:
                     after={"project_id": project_id, "competitor_id": competitor_id},
                 )
             self._run_contexts[detail.id] = context
+            self.run_details[detail.id] = detail.model_copy(
+                deep=True,
+                update={
+                    "workspace_id": workspace_id,
+                    "project_id": project_id,
+                },
+            )
             if is_new_run:
                 self._append_audit(
                     workspace_id=workspace_id,
@@ -502,6 +542,88 @@ class EnterpriseMemoryStore:
     ) -> WorkspaceMemberRecord | None:
         with self._lock:
             return self.workspace_members.get((workspace_id, user_id))
+
+    def update_workspace_quota(
+        self,
+        workspace_id: str,
+        update: WorkspaceQuotaUpdateRequest,
+        *,
+        actor_id: str | None = None,
+    ) -> WorkspaceRecord | None:
+        with self._lock:
+            workspace = self.workspaces.get(workspace_id)
+            if workspace is None:
+                return None
+            before = workspace.model_dump(mode="json")
+            update_values = {
+                key: value
+                for key, value in update.model_dump(exclude_none=True).items()
+                if value is not None
+            }
+            if update_values:
+                workspace = workspace.model_copy(
+                    update={**update_values, "updated_at": datetime.utcnow()}
+                )
+                self.workspaces[workspace_id] = workspace
+                self._append_audit(
+                    workspace_id=workspace_id,
+                    actor_id=actor_id or DEFAULT_USER_ID,
+                    action="workspace.quota_updated",
+                    resource_type="workspace",
+                    resource_id=workspace_id,
+                    before=before,
+                    after=workspace.model_dump(mode="json"),
+                )
+            return workspace
+
+    def get_workspace_usage(
+        self,
+        workspace_id: str,
+        *,
+        period_start: datetime | None = None,
+        period_end: datetime | None = None,
+    ) -> WorkspaceUsageSummary:
+        with self._lock:
+            self._ensure_workspace(workspace_id)
+            workspace = self.workspaces[workspace_id]
+            period_start, period_end = _usage_period(period_start, period_end)
+            runs = [
+                detail
+                for detail in self.run_details.values()
+                if detail.workspace_id == workspace_id
+                and period_start <= detail.created_at < period_end
+            ]
+            return build_workspace_usage_summary(
+                workspace,
+                period_start=period_start,
+                period_end=period_end,
+                run_count=len(runs),
+                completed_run_count=sum(1 for item in runs if item.status == "completed"),
+                failed_run_count=sum(1 for item in runs if item.status == "failed"),
+                interrupted_run_count=sum(1 for item in runs if item.status == "interrupted"),
+                input_tokens_estimate=sum(
+                    item.metrics.input_tokens_estimate for item in runs
+                ),
+                output_tokens_estimate=sum(
+                    item.metrics.output_tokens_estimate for item in runs
+                ),
+                cost_estimate_usd=sum(item.metrics.cost_estimate_usd for item in runs),
+            )
+
+    def check_workspace_quota(
+        self,
+        workspace_id: str,
+        *,
+        period_start: datetime | None = None,
+        period_end: datetime | None = None,
+    ) -> WorkspaceQuotaDecision:
+        usage = self.get_workspace_usage(
+            workspace_id,
+            period_start=period_start,
+            period_end=period_end,
+        )
+        workspace = self.workspaces[workspace_id]
+        return build_quota_decision(usage, workspace.quota_enforcement)
 
     def list_notifications(
         self,
@@ -944,6 +1066,14 @@ def _normalize_key(value: str) -> str:
 
 def _title_from_id(value: str) -> str:
     return value.replace("-", " ").strip().title() or value
+
+
+def _usage_period(
+    period_start: datetime | None,
+    period_end: datetime | None,
+) -> tuple[datetime, datetime]:
+    default_start, default_end = current_month_window()
+    return period_start or default_start, period_end or default_end
 
 
 def _merge_evidence_lifecycle(

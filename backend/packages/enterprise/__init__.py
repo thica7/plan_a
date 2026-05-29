@@ -12,6 +12,7 @@ from packages.enterprise.store import (
     EnterpriseStore,
     source_registry_from_evidence,
 )
+from packages.enterprise.usage import WorkspaceQuotaExceededError
 
 __all__ = [
     "EnterpriseMemoryStore",
@@ -20,6 +21,7 @@ __all__ = [
     "EnterpriseStore",
     "EMBEDDING_DIMENSIONS",
     "EMBEDDING_MODEL",
+    "WorkspaceQuotaExceededError",
     "build_enterprise_projection",
     "build_report_version_diff",
     "deterministic_embedding",

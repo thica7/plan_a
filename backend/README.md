@@ -71,6 +71,13 @@ workspace projects and writes an in-app notification retrievable from
 `POST /api/workflows/monitor`; each cycle runs the existing project analysis and
 writes `anomaly_alert` notifications when report/evidence/claim signals change.
 
+Phase 5 quota governance is active at the workspace boundary. Use
+`GET /api/enterprise/workspaces/{workspace_id}/usage` for monthly run/token/cost
+usage, `PATCH /api/enterprise/workspaces/{workspace_id}/quota` to adjust quota
+policy, and `GET /api/enterprise/workspaces/{workspace_id}/quota-decision` to
+see whether new runs are allowed. Exhausted workspaces emit `quota_warning`
+notifications and `quota_enforcement=block` rejects new runs.
+
 Real Temporal server smoke:
 
 ```bash

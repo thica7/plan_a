@@ -20,6 +20,11 @@ from packages.enterprise.store import (
     _title_from_id,
     source_registry_from_evidence,
 )
+from packages.enterprise.usage import (
+    build_quota_decision,
+    build_workspace_usage_summary,
+    current_month_window,
+)
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
@@ -37,7 +42,10 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
     SourceRegistryRecord,
     WorkspaceMemberRecord,
+    WorkspaceQuotaDecision,
+    WorkspaceQuotaUpdateRequest,
     WorkspaceRecord,
+    WorkspaceUsageSummary,
 )
 
 
@@ -416,6 +424,158 @@ class EnterprisePostgresStore:
                 (workspace_id, user_id),
             ).fetchone()
         return WorkspaceMemberRecord.model_validate(dict(row)) if row else None
+
+    def update_workspace_quota(
+        self,
+        workspace_id: str,
+        update: WorkspaceQuotaUpdateRequest,
+        *,
+        actor_id: str | None = None,
+    ) -> WorkspaceRecord | None:
+        update_values = update.model_dump(exclude_none=True)
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                before_row = cur.execute(
+                    "SELECT * FROM workspaces WHERE id = %s",
+                    (workspace_id,),
+                ).fetchone()
+                if before_row is None:
+                    return None
+                before = WorkspaceRecord.model_validate(dict(before_row))
+                if update_values:
+                    updated = before.model_copy(
+                        update={**update_values, "updated_at": datetime.utcnow()}
+                    )
+                    cur.execute(
+                        """
+                        UPDATE workspaces
+                        SET monthly_run_quota = %s,
+                            monthly_token_quota = %s,
+                            monthly_cost_quota_usd = %s,
+                            quota_enforcement = %s,
+                            updated_at = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            updated.monthly_run_quota,
+                            updated.monthly_token_quota,
+                            updated.monthly_cost_quota_usd,
+                            updated.quota_enforcement,
+                            updated.updated_at,
+                            workspace_id,
+                        ),
+                    )
+                    self._append_audit(
+                        cur,
+                        workspace_id=workspace_id,
+                        actor_id=actor_id or DEFAULT_USER_ID,
+                        action="workspace.quota_updated",
+                        resource_type="workspace",
+                        resource_id=workspace_id,
+                        before=before.model_dump(mode="json"),
+                        after=updated.model_dump(mode="json"),
+                    )
+                row = cur.execute(
+                    "SELECT * FROM workspaces WHERE id = %s",
+                    (workspace_id,),
+                ).fetchone()
+            conn.commit()
+        return WorkspaceRecord.model_validate(dict(row)) if row else None
+
+    def get_workspace_usage(
+        self,
+        workspace_id: str,
+        *,
+        period_start: datetime | None = None,
+        period_end: datetime | None = None,
+    ) -> WorkspaceUsageSummary:
+        period_start, period_end = _usage_period(period_start, period_end)
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._upsert_workspace(cur, workspace_id)
+                workspace_row = cur.execute(
+                    "SELECT * FROM workspaces WHERE id = %s",
+                    (workspace_id,),
+                ).fetchone()
+                usage_row = cur.execute(
+                    """
+                    SELECT
+                        (COUNT(*))::int AS run_count,
+                        (COUNT(*) FILTER (WHERE status = 'completed'))::int
+                            AS completed_run_count,
+                        (COUNT(*) FILTER (WHERE status = 'failed'))::int
+                            AS failed_run_count,
+                        (COUNT(*) FILTER (WHERE status = 'interrupted'))::int
+                            AS interrupted_run_count,
+                        COALESCE(
+                            SUM(
+                                NULLIF(
+                                    detail_json #>> '{metrics,input_tokens_estimate}',
+                                    ''
+                                )::bigint
+                            ),
+                            0
+                        )::bigint AS input_tokens_estimate,
+                        COALESCE(
+                            SUM(
+                                NULLIF(
+                                    detail_json #>> '{metrics,output_tokens_estimate}',
+                                    ''
+                                )::bigint
+                            ),
+                            0
+                        )::bigint AS output_tokens_estimate,
+                        COALESCE(
+                            SUM(
+                                NULLIF(
+                                    detail_json #>> '{metrics,cost_estimate_usd}',
+                                    ''
+                                )::double precision
+                            ),
+                            0
+                        )::double precision AS cost_estimate_usd
+                    FROM runs
+                    WHERE workspace_id = %s
+                      AND created_at >= %s
+                      AND created_at < %s
+                    """,
+                    (workspace_id, period_start, period_end),
+                ).fetchone()
+            conn.commit()
+        workspace = WorkspaceRecord.model_validate(dict(workspace_row))
+        usage = dict(usage_row or {})
+        return build_workspace_usage_summary(
+            workspace,
+            period_start=period_start,
+            period_end=period_end,
+            run_count=int(usage.get("run_count") or 0),
+            completed_run_count=int(usage.get("completed_run_count") or 0),
+            failed_run_count=int(usage.get("failed_run_count") or 0),
+            interrupted_run_count=int(usage.get("interrupted_run_count") or 0),
+            input_tokens_estimate=int(usage.get("input_tokens_estimate") or 0),
+            output_tokens_estimate=int(usage.get("output_tokens_estimate") or 0),
+            cost_estimate_usd=float(usage.get("cost_estimate_usd") or 0.0),
+        )
+
+    def check_workspace_quota(
+        self,
+        workspace_id: str,
+        *,
+        period_start: datetime | None = None,
+        period_end: datetime | None = None,
+    ) -> WorkspaceQuotaDecision:
+        usage = self.get_workspace_usage(
+            workspace_id,
+            period_start=period_start,
+            period_end=period_end,
+        )
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            row = conn.execute(
+                "SELECT * FROM workspaces WHERE id = %s",
+                (workspace_id,),
+            ).fetchone()
+        workspace = WorkspaceRecord.model_validate(dict(row))
+        return build_quota_decision(usage, workspace.quota_enforcement)
 
     def list_notifications(
         self,
@@ -1631,6 +1791,14 @@ class EnterprisePostgresStore:
 
 def _schema_path() -> Path:
     return Path(__file__).resolve().parents[2] / "db" / "postgres" / "001_enterprise_core.sql"
+
+
+def _usage_period(
+    period_start: datetime | None,
+    period_end: datetime | None,
+) -> tuple[datetime, datetime]:
+    default_start, default_end = current_month_window()
+    return period_start or default_start, period_end or default_end
 
 
 def _split_sql(script: str) -> list[str]:

@@ -32,6 +32,10 @@ import type {
   ToolCallMessage,
   TraceSpan,
   WorkflowStartResponse,
+  WorkspaceQuotaDecision,
+  WorkspaceQuotaUpdateRequest,
+  WorkspaceRecord,
+  WorkspaceUsageSummary,
 } from "./types";
 import type { RunEvent } from "./sse_types";
 
@@ -182,6 +186,31 @@ export function listRuns() {
 export function listEnterpriseProjects(workspaceId?: string) {
   const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
   return request<ProjectRecord[]>(`/enterprise/projects${params}`);
+}
+
+export function getWorkspaceUsage(workspaceId: string) {
+  return request<WorkspaceUsageSummary>(
+    `/enterprise/workspaces/${encodeURIComponent(workspaceId)}/usage`,
+  );
+}
+
+export function getWorkspaceQuotaDecision(workspaceId: string) {
+  return request<WorkspaceQuotaDecision>(
+    `/enterprise/workspaces/${encodeURIComponent(workspaceId)}/quota-decision`,
+  );
+}
+
+export function updateWorkspaceQuota(
+  workspaceId: string,
+  payload: WorkspaceQuotaUpdateRequest,
+) {
+  return request<WorkspaceRecord>(
+    `/enterprise/workspaces/${encodeURIComponent(workspaceId)}/quota`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function listEnterpriseNotifications(params: {

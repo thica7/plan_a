@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import ValidationError
 
 from packages.identity import compute_competitor_set_hash, compute_evidence_id
@@ -11,6 +13,9 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
     SourceRegistryRecord,
     WorkspaceMemberRecord,
+    WorkspaceQuotaUpdateRequest,
+    WorkspaceRecord,
+    WorkspaceUsageSummary,
 )
 
 
@@ -39,6 +44,38 @@ def test_workspace_member_schema_carries_enterprise_role() -> None:
 
     assert member.role == "analyst"
     assert member.status == "active"
+
+
+def test_workspace_schema_carries_phase5_quota_governance() -> None:
+    workspace = WorkspaceRecord(id="workspace-1", name="Workspace 1")
+    update = WorkspaceQuotaUpdateRequest(
+        monthly_run_quota=10,
+        monthly_token_quota=50_000,
+        monthly_cost_quota_usd=15.0,
+        quota_enforcement="monitor",
+    )
+    usage = WorkspaceUsageSummary(
+        workspace_id=workspace.id,
+        period_start=datetime(2026, 5, 1),
+        period_end=datetime(2026, 6, 1),
+        run_count=8,
+        input_tokens_estimate=20_000,
+        output_tokens_estimate=10_000,
+        total_tokens_estimate=30_000,
+        cost_estimate_usd=9.0,
+        monthly_run_quota=update.monthly_run_quota or workspace.monthly_run_quota,
+        monthly_token_quota=update.monthly_token_quota or workspace.monthly_token_quota,
+        monthly_cost_quota_usd=update.monthly_cost_quota_usd
+        or workspace.monthly_cost_quota_usd,
+        run_usage_ratio=0.8,
+        token_usage_ratio=0.6,
+        cost_usage_ratio=0.6,
+        status="warn",
+    )
+
+    assert workspace.quota_enforcement == "block"
+    assert update.quota_enforcement == "monitor"
+    assert usage.status == "warn"
 
 
 def test_evidence_and_claim_records_are_linked_by_stable_ids() -> None:

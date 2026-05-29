@@ -79,5 +79,16 @@ def test_phase5_notifications_schema_is_present() -> None:
 
     assert "CREATE TABLE IF NOT EXISTS notifications" in sql
     assert "scheduled_scan_summary" in sql
+    assert "quota_warning" in sql
     assert "idx_notifications_workspace_created" in sql
     assert "idx_notifications_workspace_status" in sql
+
+
+def test_phase5_workspace_quota_schema_is_present() -> None:
+    sql = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
+
+    assert "monthly_run_quota INTEGER NOT NULL DEFAULT 1000" in sql
+    assert "monthly_token_quota INTEGER NOT NULL DEFAULT 2000000" in sql
+    assert "monthly_cost_quota_usd DOUBLE PRECISION NOT NULL DEFAULT 100" in sql
+    assert "quota_enforcement TEXT NOT NULL DEFAULT 'block'" in sql
+    assert "workspaces_quota_enforcement_check" in sql

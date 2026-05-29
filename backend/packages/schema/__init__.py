@@ -42,7 +42,10 @@ from packages.schema.enterprise import (
     SourceRegistryRecord,
     UserRecord,
     WorkspaceMemberRecord,
+    WorkspaceQuotaDecision,
+    WorkspaceQuotaUpdateRequest,
     WorkspaceRecord,
+    WorkspaceUsageSummary,
 )
 from packages.schema.models import (
     AgentMessage,
@@ -134,6 +137,9 @@ __all__ = [
     "UserPersonaSegment",
     "UserRecord",
     "WorkspaceMemberRecord",
+    "WorkspaceQuotaDecision",
+    "WorkspaceQuotaUpdateRequest",
     "WorkflowStartResponse",
     "WorkspaceRecord",
+    "WorkspaceUsageSummary",
 ]

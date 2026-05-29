@@ -26,6 +26,7 @@ import {
   getProjectReadinessScore,
   getReportVersionDiff,
   getProjectRedTeam,
+  getWorkspaceUsage,
   listEnterpriseCompetitors,
   listEnterpriseNotifications,
   listEnterpriseProjects,
@@ -54,6 +55,7 @@ import type {
   RedTeamReport,
   ReportVersionDiff,
   ReportVersionRecord,
+  WorkspaceUsageSummary,
 } from "../api/types";
 
 type EnterpriseTab = "competitors" | "evidence" | "claims" | "reports";
@@ -76,6 +78,7 @@ export function EnterpriseWorkbench({
   const [competitorScores, setCompetitorScores] = useState<CompetitorScoreReport | null>(null);
   const [evidenceGaps, setEvidenceGaps] = useState<EvidenceGapReport | null>(null);
   const [redTeam, setRedTeam] = useState<RedTeamReport | null>(null);
+  const [workspaceUsage, setWorkspaceUsage] = useState<WorkspaceUsageSummary | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
   const [activeTab, setActiveTab] = useState<EnterpriseTab>(initialTab);
@@ -113,7 +116,8 @@ export function EnterpriseWorkbench({
   }, [initialTab]);
 
   useEffect(() => {
-    if (!selectedProjectId) {
+    const projectForLoad = projects.find((project) => project.id === selectedProjectId) ?? null;
+    if (!selectedProjectId || !projectForLoad) {
       setCompetitors([]);
       setEvidence([]);
       setClaims([]);
@@ -124,6 +128,7 @@ export function EnterpriseWorkbench({
       setCompetitorScores(null);
       setEvidenceGaps(null);
       setRedTeam(null);
+      setWorkspaceUsage(null);
       setSelectedVersionId(null);
       return;
     }
@@ -142,6 +147,7 @@ export function EnterpriseWorkbench({
       getProjectCompetitorScores(selectedProjectId),
       getProjectEvidenceGaps(selectedProjectId),
       getProjectRedTeam(selectedProjectId),
+      getWorkspaceUsage(projectForLoad.workspace_id),
     ])
       .then(
         ([
@@ -155,6 +161,7 @@ export function EnterpriseWorkbench({
           competitorScoresValue,
           evidenceGapsValue,
           redTeamValue,
+          workspaceUsageValue,
         ]) => {
           if (!active) return;
           setCompetitors(competitorItems);
@@ -167,6 +174,7 @@ export function EnterpriseWorkbench({
           setCompetitorScores(competitorScoresValue);
           setEvidenceGaps(evidenceGapsValue);
           setRedTeam(redTeamValue);
+          setWorkspaceUsage(workspaceUsageValue);
           setSelectedVersionId(versionItems[0]?.id ?? null);
         },
       )
@@ -183,6 +191,7 @@ export function EnterpriseWorkbench({
         setCompetitorScores(null);
         setEvidenceGaps(null);
         setRedTeam(null);
+        setWorkspaceUsage(null);
         setSelectedVersionId(null);
       })
       .finally(() => {
@@ -192,7 +201,7 @@ export function EnterpriseWorkbench({
     return () => {
       active = false;
     };
-  }, [selectedProjectId]);
+  }, [projects, selectedProjectId]);
 
   useEffect(() => {
     if (!selectedVersionId) {
@@ -403,6 +412,7 @@ export function EnterpriseWorkbench({
               {isStartingMonitor ? "Starting monitor" : "Monitor selected"}
             </button>
             {scanMessage ? <p className="muted-line">{scanMessage}</p> : null}
+            {workspaceUsage ? <WorkspaceUsagePanel usage={workspaceUsage} /> : null}
             <div className="notification-list">
               {notifications.slice(0, 5).map((notification) => (
                 <article className={`notification-item ${notification.severity}`} key={notification.id}>
@@ -688,6 +698,44 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
       <div>
         <i style={{ width: `${value}%` }} />
       </div>
+    </div>
+  );
+}
+
+function WorkspaceUsagePanel({ usage }: { usage: WorkspaceUsageSummary }) {
+  const rows = [
+    {
+      label: "Runs",
+      value: `${usage.run_count}/${usage.monthly_run_quota}`,
+      ratio: usage.run_usage_ratio,
+    },
+    {
+      label: "Tokens",
+      value: `${usage.total_tokens_estimate}/${usage.monthly_token_quota}`,
+      ratio: usage.token_usage_ratio,
+    },
+    {
+      label: "Cost",
+      value: `$${usage.cost_estimate_usd.toFixed(4)}/$${usage.monthly_cost_quota_usd.toFixed(2)}`,
+      ratio: usage.cost_usage_ratio,
+    },
+  ];
+  return (
+    <div className={`workspace-usage-panel ${usage.status}`}>
+      <div>
+        <Gauge size={14} aria-hidden />
+        <strong>Workspace usage</strong>
+        <span>{usage.status}</span>
+      </div>
+      {rows.map((row) => (
+        <label key={row.label}>
+          <span>
+            {row.label}
+            <em>{row.value}</em>
+          </span>
+          <meter max={1} min={0} value={Math.min(row.ratio, 1)} />
+        </label>
+      ))}
     </div>
   );
 }
