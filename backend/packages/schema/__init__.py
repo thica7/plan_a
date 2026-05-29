@@ -41,6 +41,7 @@ from packages.schema.enterprise import (
     ScenarioPack,
     SourceRegistryRecord,
     UserRecord,
+    WorkspaceMemberRecord,
     WorkspaceRecord,
 )
 from packages.schema.models import (
@@ -132,6 +133,7 @@ __all__ = [
     "UserPersonaModel",
     "UserPersonaSegment",
     "UserRecord",
+    "WorkspaceMemberRecord",
     "WorkflowStartResponse",
     "WorkspaceRecord",
 ]

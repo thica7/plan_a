@@ -328,6 +328,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/workspace-members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Workspace Members */
+        get: operations["list_workspace_members_api_enterprise_workspace_members_get"];
+        put?: never;
+        /** Upsert Workspace Member */
+        post: operations["upsert_workspace_member_api_enterprise_workspace_members_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/scenario-packs": {
         parameters: {
             query?: never;
@@ -544,6 +562,40 @@ export interface paths {
         put?: never;
         /** Upsert Evidence */
         post: operations["upsert_evidence_api_enterprise_evidence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/evidence/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Evidence */
+        get: operations["search_evidence_api_enterprise_evidence_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/evidence/reindex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reindex Evidence Embeddings */
+        post: operations["reindex_evidence_embeddings_api_enterprise_evidence_reindex_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1486,6 +1538,19 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
+        };
+        /** EvidenceReindexResult */
+        EvidenceReindexResult: {
+            /** Indexed Count */
+            indexed_count: number;
+        };
+        /** EvidenceSearchHit */
+        EvidenceSearchHit: {
+            evidence: components["schemas"]["EvidenceRecord"];
+            /** Score */
+            score: number;
+            /** Embedding Model */
+            embedding_model: string;
         };
         /** FeatureNode */
         FeatureNode: {
@@ -2672,6 +2737,30 @@ export interface components {
              */
             status: "started" | "already_started";
         };
+        /** WorkspaceMemberRecord */
+        WorkspaceMemberRecord: {
+            /** Workspace Id */
+            workspace_id: string;
+            /** User Id */
+            user_id: string;
+            /**
+             * Role
+             * @default viewer
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "analyst" | "reviewer" | "viewer";
+            /**
+             * Status
+             * @default active
+             * @enum {string}
+             */
+            status: "active" | "disabled";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+        };
         /** WorkspaceRecord */
         WorkspaceRecord: {
             /** Id */
@@ -3259,7 +3348,11 @@ export interface operations {
     list_workspaces_api_enterprise_workspaces_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3272,6 +3365,87 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_workspace_members_api_enterprise_workspace_members_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceMemberRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_workspace_member_api_enterprise_workspace_members_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceMemberRecord"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceMemberRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -3332,7 +3506,11 @@ export interface operations {
             query?: {
                 workspace_id?: string | null;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3361,7 +3539,11 @@ export interface operations {
     upsert_project_api_enterprise_projects_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3394,7 +3576,11 @@ export interface operations {
     get_project_api_enterprise_projects__project_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3425,7 +3611,11 @@ export interface operations {
     get_project_business_plan_api_enterprise_projects__project_id__business_plan_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3456,7 +3646,11 @@ export interface operations {
     get_project_qa_evaluation_api_enterprise_projects__project_id__qa_evaluation_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3487,7 +3681,11 @@ export interface operations {
     get_project_readiness_score_api_enterprise_projects__project_id__readiness_score_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3518,7 +3716,11 @@ export interface operations {
     get_project_competitor_scores_api_enterprise_projects__project_id__competitor_scores_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3549,7 +3751,11 @@ export interface operations {
     get_project_evidence_gaps_api_enterprise_projects__project_id__evidence_gaps_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3580,7 +3786,11 @@ export interface operations {
     get_project_red_team_api_enterprise_projects__project_id__red_team_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3614,7 +3824,11 @@ export interface operations {
                 workspace_id?: string | null;
                 project_id?: string | null;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3643,7 +3857,11 @@ export interface operations {
     list_project_evidence_api_enterprise_projects__project_id__evidence_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3674,7 +3892,11 @@ export interface operations {
     upsert_evidence_api_enterprise_evidence_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3704,12 +3926,90 @@ export interface operations {
             };
         };
     };
+    search_evidence_api_enterprise_evidence_search_get: {
+        parameters: {
+            query: {
+                workspace_id: string;
+                query: string;
+                project_id?: string | null;
+                limit?: number;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceSearchHit"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reindex_evidence_embeddings_api_enterprise_evidence_reindex_post: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+                project_id?: string | null;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceReindexResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_source_registry_api_enterprise_source_registry_get: {
         parameters: {
             query?: {
                 workspace_id?: string | null;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3738,7 +4038,11 @@ export interface operations {
     upsert_source_registry_api_enterprise_source_registry_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3771,7 +4075,11 @@ export interface operations {
     update_evidence_quality_api_enterprise_evidence__evidence_id__quality_patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 evidence_id: string;
             };
@@ -3806,7 +4114,11 @@ export interface operations {
     list_project_claims_api_enterprise_projects__project_id__claims_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3837,7 +4149,11 @@ export interface operations {
     list_project_report_versions_api_enterprise_projects__project_id__report_versions_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3868,7 +4184,11 @@ export interface operations {
     upsert_report_version_api_enterprise_report_versions_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3901,7 +4221,11 @@ export interface operations {
     get_report_version_api_enterprise_report_versions__version_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 version_id: string;
             };
@@ -3934,7 +4258,11 @@ export interface operations {
             query?: {
                 base_version_id?: string | null;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 version_id: string;
             };
@@ -3965,7 +4293,11 @@ export interface operations {
     get_run_projection_api_enterprise_runs__run_id__projection_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -3998,7 +4330,11 @@ export interface operations {
             query?: {
                 workspace_id?: string | null;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

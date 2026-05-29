@@ -22,6 +22,16 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS workspace_members (
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'viewer'
+        CHECK (role IN ('owner', 'admin', 'analyst', 'reviewer', 'viewer')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -221,6 +231,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_workspace ON projects(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_user
+    ON workspace_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_competitors_workspace ON competitors(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_project_dimension
@@ -254,6 +266,10 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO users (id, email, display_name, role)
 VALUES ('system-user', 'system@local', 'System', 'owner')
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO workspace_members (workspace_id, user_id, role)
+VALUES ('default-workspace', 'system-user', 'owner')
+ON CONFLICT (workspace_id, user_id) DO NOTHING;
 
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
 UPDATE runs SET idempotency_key = id WHERE idempotency_key IS NULL OR idempotency_key = '';

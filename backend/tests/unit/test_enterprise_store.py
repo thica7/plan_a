@@ -11,6 +11,7 @@ from packages.enterprise import (
 )
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
+from packages.schema.enterprise import WorkspaceMemberRecord
 from packages.schema.models import (
     AnalysisPlan,
     CompetitorKnowledge,
@@ -92,6 +93,26 @@ def test_enterprise_store_bootstraps_context_and_deduplicates_audit() -> None:
     assert len(store.project_competitors) == 1
     assert store.get_project(first.project_id) is not None
     assert [item.name for item in store.list_competitors(project_id=first.project_id)] == ["Cursor"]
+    assert store.get_workspace_member(first.workspace_id, "system-user").role == "owner"
+
+
+def test_enterprise_store_upserts_workspace_members() -> None:
+    store = EnterpriseMemoryStore()
+
+    member = store.upsert_workspace_member(
+        WorkspaceMemberRecord(
+            workspace_id="workspace-a",
+            user_id="analyst-1",
+            role="analyst",
+        )
+    )
+
+    assert member.role == "analyst"
+    assert store.get_workspace_member("workspace-a", "analyst-1") == member
+    assert [item.user_id for item in store.list_workspace_members("workspace-a")] == [
+        "analyst-1",
+        "system-user",
+    ]
 
 
 def test_enterprise_store_round_trips_projection() -> None:
@@ -573,6 +594,64 @@ def test_enterprise_router_exposes_projection() -> None:
     assert diff.status_code == 200
     assert diff.json()["base_version"] is None
     assert diff.json()["added_lines"] >= 1
+
+
+def test_enterprise_router_enforces_rbac_workspace_scope() -> None:
+    store = EnterpriseMemoryStore()
+    detail_a = _detail().model_copy(deep=True, update={"id": "run-a"})
+    context_a = store.start_run(detail_a, workspace_id="workspace-a")
+    projection_a = build_enterprise_projection(
+        detail_a,
+        workspace_id=context_a.workspace_id,
+        project_id=context_a.project_id,
+        competitor_id_map=context_a.competitor_id_map,
+    )
+    store.save_projection(projection_a)
+    detail_b = _detail().model_copy(deep=True, update={"id": "run-b"})
+    context_b = store.start_run(detail_b, workspace_id="workspace-b")
+    projection_b = build_enterprise_projection(
+        detail_b,
+        workspace_id=context_b.workspace_id,
+        project_id=context_b.project_id,
+        competitor_id_map=context_b.competitor_id_map,
+    )
+    store.save_projection(projection_b)
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    client = TestClient(app)
+    viewer_headers = {
+        "X-User-Id": "viewer-a",
+        "X-User-Role": "viewer",
+        "X-Workspace-Id": "workspace-a",
+    }
+    reviewer_headers = {
+        "X-User-Id": "reviewer-a",
+        "X-User-Role": "reviewer",
+        "X-Workspace-Id": "workspace-a",
+    }
+
+    scoped_projects = client.get("/api/enterprise/projects", headers=viewer_headers)
+    cross_project = client.get(
+        f"/api/enterprise/projects/{context_b.project_id}",
+        headers=viewer_headers,
+    )
+    forbidden_write = client.post(
+        "/api/enterprise/projects",
+        json=store.get_project(context_a.project_id).model_dump(mode="json"),
+        headers=viewer_headers,
+    )
+    quality = client.patch(
+        f"/api/enterprise/evidence/{projection_a.evidence_records[0].id}/quality",
+        json={"quality_label": "accepted", "note": "Reviewed."},
+        headers=reviewer_headers,
+    )
+
+    assert scoped_projects.status_code == 200
+    assert [item["workspace_id"] for item in scoped_projects.json()] == ["workspace-a"]
+    assert cross_project.status_code == 403
+    assert forbidden_write.status_code == 403
+    assert quality.status_code == 200
+    assert quality.json()["evidence"]["quality_label"] == "accepted"
 
 
 def test_enterprise_router_returns_404_for_missing_project() -> None:

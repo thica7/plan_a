@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 CompetitorLayer = Literal["L1", "L2", "L3", "unknown"]
 EvidenceQualityLabel = Literal["unreviewed", "accepted", "rejected", "stale"]
+EnterpriseRole = Literal["owner", "admin", "analyst", "reviewer", "viewer"]
 SourceRobotsStatus = Literal["unknown", "allowed", "blocked", "error"]
 SourceTrustLevel = Literal["official", "verified", "community", "synthetic", "unknown"]
 
@@ -28,7 +29,17 @@ class UserRecord(BaseModel):
     id: str
     email: str
     display_name: str
-    role: Literal["owner", "admin", "analyst", "reviewer", "viewer"] = "owner"
+    role: EnterpriseRole = "owner"
+    status: Literal["active", "disabled"] = "active"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class WorkspaceMemberRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str
+    user_id: str
+    role: EnterpriseRole = "viewer"
     status: Literal["active", "disabled"] = "active"
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

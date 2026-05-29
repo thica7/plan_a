@@ -16,6 +16,7 @@ def test_phase1_postgres_schema_has_strict_core_tables() -> None:
     assert tables == {
         "workspaces",
         "users",
+        "workspace_members",
         "projects",
         "competitors",
         "project_competitors",
@@ -42,6 +43,14 @@ def test_phase4_prereq_columns_are_present_in_postgres_schema() -> None:
     assert "last_seen_run_id TEXT REFERENCES runs(id)" in sql
     assert "seen_count INTEGER NOT NULL DEFAULT 1" in sql
     assert "idx_report_versions_workspace_group_unique" in sql
+
+
+def test_phase4_workspace_members_schema_is_present() -> None:
+    sql = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS workspace_members" in sql
+    assert "PRIMARY KEY (workspace_id, user_id)" in sql
+    assert "idx_workspace_members_user" in sql
 
 
 def test_phase4_source_registry_schema_is_present() -> None:

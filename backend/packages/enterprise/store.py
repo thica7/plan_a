@@ -30,6 +30,7 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
     SourceRegistryRecord,
     UserRecord,
+    WorkspaceMemberRecord,
     WorkspaceRecord,
 )
 
@@ -72,6 +73,22 @@ class EnterpriseStore(Protocol):
     def get_run_projection(self, run_id: str) -> EnterpriseRunProjection | None: ...
 
     def list_workspaces(self) -> list[WorkspaceRecord]: ...
+
+    def list_workspace_members(
+        self,
+        workspace_id: str | None = None,
+    ) -> list[WorkspaceMemberRecord]: ...
+
+    def upsert_workspace_member(
+        self,
+        member: WorkspaceMemberRecord,
+    ) -> WorkspaceMemberRecord: ...
+
+    def get_workspace_member(
+        self,
+        workspace_id: str,
+        user_id: str,
+    ) -> WorkspaceMemberRecord | None: ...
 
     def list_projects(self, workspace_id: str | None = None) -> list[ProjectRecord]: ...
 
@@ -153,6 +170,7 @@ class EnterpriseMemoryStore:
         self._lock = RLock()
         self.workspaces: dict[str, WorkspaceRecord] = {}
         self.users: dict[str, UserRecord] = {}
+        self.workspace_members: dict[tuple[str, str], WorkspaceMemberRecord] = {}
         self.projects: dict[str, ProjectRecord] = {}
         self.competitors: dict[str, CompetitorRecord] = {}
         self.project_competitors: dict[tuple[str, str], ProjectCompetitorLink] = {}
@@ -181,6 +199,14 @@ class EnterpriseMemoryStore:
                     id=DEFAULT_USER_ID,
                     email="system@local",
                     display_name="System",
+                    role="owner",
+                ),
+            )
+            self.workspace_members.setdefault(
+                (DEFAULT_WORKSPACE_ID, DEFAULT_USER_ID),
+                WorkspaceMemberRecord(
+                    workspace_id=DEFAULT_WORKSPACE_ID,
+                    user_id=DEFAULT_USER_ID,
                     role="owner",
                 ),
             )
@@ -426,6 +452,41 @@ class EnterpriseMemoryStore:
     def list_workspaces(self) -> list[WorkspaceRecord]:
         with self._lock:
             return sorted(self.workspaces.values(), key=lambda item: item.created_at)
+
+    def list_workspace_members(
+        self,
+        workspace_id: str | None = None,
+    ) -> list[WorkspaceMemberRecord]:
+        with self._lock:
+            records = list(self.workspace_members.values())
+            if workspace_id:
+                records = [item for item in records if item.workspace_id == workspace_id]
+            return sorted(records, key=lambda item: (item.workspace_id, item.user_id))
+
+    def upsert_workspace_member(
+        self,
+        member: WorkspaceMemberRecord,
+    ) -> WorkspaceMemberRecord:
+        with self._lock:
+            self._ensure_workspace(member.workspace_id)
+            self.workspace_members[(member.workspace_id, member.user_id)] = member
+            self._append_audit(
+                workspace_id=member.workspace_id,
+                actor_id=DEFAULT_USER_ID,
+                action="workspace_member.upserted",
+                resource_type="workspace_member",
+                resource_id=f"{member.workspace_id}:{member.user_id}",
+                after=member.model_dump(mode="json"),
+            )
+            return member
+
+    def get_workspace_member(
+        self,
+        workspace_id: str,
+        user_id: str,
+    ) -> WorkspaceMemberRecord | None:
+        with self._lock:
+            return self.workspace_members.get((workspace_id, user_id))
 
     def list_projects(self, workspace_id: str | None = None) -> list[ProjectRecord]:
         with self._lock:
@@ -702,6 +763,14 @@ class EnterpriseMemoryStore:
         self.workspaces.setdefault(
             workspace_id,
             WorkspaceRecord(id=workspace_id, name=_title_from_id(workspace_id)),
+        )
+        self.workspace_members.setdefault(
+            (workspace_id, DEFAULT_USER_ID),
+            WorkspaceMemberRecord(
+                workspace_id=workspace_id,
+                user_id=DEFAULT_USER_ID,
+                role="owner",
+            ),
         )
 
     def _upsert_evidence_embedding_locked(

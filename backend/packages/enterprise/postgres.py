@@ -35,6 +35,7 @@ from packages.schema.enterprise import (
     ProjectRecord,
     ReportVersionRecord,
     SourceRegistryRecord,
+    WorkspaceMemberRecord,
     WorkspaceRecord,
 )
 
@@ -339,6 +340,81 @@ class EnterprisePostgresStore:
             (),
             WorkspaceRecord,
         )
+
+    def list_workspace_members(
+        self,
+        workspace_id: str | None = None,
+    ) -> list[WorkspaceMemberRecord]:
+        if workspace_id:
+            return self._list_models(
+                """
+                SELECT *
+                FROM workspace_members
+                WHERE workspace_id = %s
+                ORDER BY workspace_id, user_id
+                """,
+                (workspace_id,),
+                WorkspaceMemberRecord,
+            )
+        return self._list_models(
+            "SELECT * FROM workspace_members ORDER BY workspace_id, user_id",
+            (),
+            WorkspaceMemberRecord,
+        )
+
+    def upsert_workspace_member(
+        self,
+        member: WorkspaceMemberRecord,
+    ) -> WorkspaceMemberRecord:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._upsert_workspace(cur, member.workspace_id)
+                self._upsert_user_placeholder(cur, member.user_id)
+                cur.execute(
+                    """
+                    INSERT INTO workspace_members (
+                        workspace_id, user_id, role, status, created_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (workspace_id, user_id) DO UPDATE SET
+                        role = EXCLUDED.role,
+                        status = EXCLUDED.status
+                    """,
+                    (
+                        member.workspace_id,
+                        member.user_id,
+                        member.role,
+                        member.status,
+                        member.created_at,
+                    ),
+                )
+                self._append_audit(
+                    cur,
+                    workspace_id=member.workspace_id,
+                    actor_id=DEFAULT_USER_ID,
+                    action="workspace_member.upserted",
+                    resource_type="workspace_member",
+                    resource_id=f"{member.workspace_id}:{member.user_id}",
+                    after=member.model_dump(mode="json"),
+                )
+            conn.commit()
+        return member
+
+    def get_workspace_member(
+        self,
+        workspace_id: str,
+        user_id: str,
+    ) -> WorkspaceMemberRecord | None:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM workspace_members
+                WHERE workspace_id = %s AND user_id = %s
+                """,
+                (workspace_id, user_id),
+            ).fetchone()
+        return WorkspaceMemberRecord.model_validate(dict(row)) if row else None
 
     def list_projects(self, workspace_id: str | None = None) -> list[ProjectRecord]:
         if workspace_id:
@@ -846,6 +922,15 @@ class EnterprisePostgresStore:
             """,
             (workspace_id, _title_from_id(workspace_id), "Phase 1 workspace."),
         )
+        self._upsert_default_user(cur)
+        cur.execute(
+            """
+            INSERT INTO workspace_members (workspace_id, user_id, role)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (workspace_id, user_id) DO NOTHING
+            """,
+            (workspace_id, DEFAULT_USER_ID, "owner"),
+        )
 
     def _upsert_default_user(self, cur: Any) -> None:
         cur.execute(
@@ -855,6 +940,16 @@ class EnterprisePostgresStore:
             ON CONFLICT (id) DO NOTHING
             """,
             (DEFAULT_USER_ID, "system@local", "System", "owner"),
+        )
+
+    def _upsert_user_placeholder(self, cur: Any, user_id: str) -> None:
+        cur.execute(
+            """
+            INSERT INTO users (id, email, display_name, role)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (user_id, f"{user_id}@local", _title_from_id(user_id), "viewer"),
         )
 
     def _upsert_project(

@@ -10,6 +10,7 @@ from packages.schema.enterprise import (
     ProjectRecord,
     ReportVersionRecord,
     SourceRegistryRecord,
+    WorkspaceMemberRecord,
 )
 
 
@@ -27,6 +28,17 @@ def test_enterprise_project_schema_carries_phase1_grouping_fields() -> None:
 
     assert project.competitor_layer == "L1"
     assert project.competitor_set_hash == competitor_set_hash
+
+
+def test_workspace_member_schema_carries_enterprise_role() -> None:
+    member = WorkspaceMemberRecord(
+        workspace_id="workspace-1",
+        user_id="user-1",
+        role="analyst",
+    )
+
+    assert member.role == "analyst"
+    assert member.status == "active"
 
 
 def test_evidence_and_claim_records_are_linked_by_stable_ids() -> None:

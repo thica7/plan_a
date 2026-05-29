@@ -2,7 +2,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.deps import get_enterprise_store
+from app.deps import get_enterprise_store, get_enterprise_user_context
+from packages.auth import EnterpriseUserContext, can_access_workspace
 from packages.business_intel import (
     analyze_evidence_gaps,
     analyze_red_team,
@@ -36,18 +37,45 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
     ScenarioPack,
     SourceRegistryRecord,
+    WorkspaceMemberRecord,
     WorkspaceRecord,
 )
 
 router = APIRouter()
 EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
+EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
 
 
 @router.get("/enterprise/workspaces", response_model=list[WorkspaceRecord])
 def list_workspaces(
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> list[WorkspaceRecord]:
-    return store.list_workspaces()
+    workspaces = store.list_workspaces()
+    if user.workspace_id is not None:
+        _require_workspace_access(user, user.workspace_id, "workspace:read")
+        workspaces = [item for item in workspaces if item.id == user.workspace_id]
+    return workspaces
+
+
+@router.get("/enterprise/workspace-members", response_model=list[WorkspaceMemberRecord])
+def list_workspace_members(
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    workspace_id: str | None = None,
+) -> list[WorkspaceMemberRecord]:
+    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "workspace:read")
+    return store.list_workspace_members(workspace_id=scoped_workspace_id)
+
+
+@router.post("/enterprise/workspace-members", response_model=WorkspaceMemberRecord)
+def upsert_workspace_member(
+    member: WorkspaceMemberRecord,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> WorkspaceMemberRecord:
+    _require_workspace_access(user, member.workspace_id, "workspace:write")
+    return store.upsert_workspace_member(member)
 
 
 @router.get("/enterprise/scenario-packs", response_model=list[ScenarioPack])
@@ -65,16 +93,20 @@ def get_qa_rules(
 @router.get("/enterprise/projects", response_model=list[ProjectRecord])
 def list_projects(
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
     workspace_id: str | None = None,
 ) -> list[ProjectRecord]:
-    return store.list_projects(workspace_id=workspace_id)
+    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "project:read")
+    return store.list_projects(workspace_id=scoped_workspace_id)
 
 
 @router.post("/enterprise/projects", response_model=ProjectRecord)
 def upsert_project(
     project: ProjectRecord,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> ProjectRecord:
+    _require_workspace_access(user, project.workspace_id, "project:write")
     return store.upsert_project(project)
 
 
@@ -82,27 +114,27 @@ def upsert_project(
 def get_project(
     project_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> ProjectRecord:
-    project = store.get_project(project_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
+    return _project_or_404(project_id, store, user, "project:read")
 
 
 @router.get("/enterprise/projects/{project_id}/business-plan", response_model=BusinessIntelPlan)
 def get_project_business_plan(
     project_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> BusinessIntelPlan:
-    return _business_plan_for_project(project_id, store)
+    return _business_plan_for_project(project_id, store, user)
 
 
 @router.get("/enterprise/projects/{project_id}/qa-evaluation", response_model=BusinessQAEvaluation)
 def get_project_qa_evaluation(
     project_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> BusinessQAEvaluation:
-    plan = _business_plan_for_project(project_id, store)
+    plan = _business_plan_for_project(project_id, store, user)
     return evaluate_business_qa(
         project_id=project_id,
         plan=plan,
@@ -119,8 +151,9 @@ def get_project_qa_evaluation(
 def get_project_readiness_score(
     project_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> ProjectReadinessScore:
-    plan = _business_plan_for_project(project_id, store)
+    plan = _business_plan_for_project(project_id, store, user)
     competitors = store.list_competitors(project_id=project_id)
     evidence = store.list_evidence(project_id=project_id)
     claims = store.list_claims(project_id=project_id)
@@ -148,8 +181,9 @@ def get_project_readiness_score(
 def get_project_competitor_scores(
     project_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> CompetitorScoreReport:
-    plan = _business_plan_for_project(project_id, store)
+    plan = _business_plan_for_project(project_id, store, user)
     return score_competitors(
         project_id=project_id,
         plan=plan,
@@ -163,8 +197,9 @@ def get_project_competitor_scores(
 def get_project_evidence_gaps(
     project_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> EvidenceGapReport:
-    plan = _business_plan_for_project(project_id, store)
+    plan = _business_plan_for_project(project_id, store, user)
     competitors = store.list_competitors(project_id=project_id)
     evidence = store.list_evidence(project_id=project_id)
     claims = store.list_claims(project_id=project_id)
@@ -189,8 +224,9 @@ def get_project_evidence_gaps(
 def get_project_red_team(
     project_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> RedTeamReport:
-    plan = _business_plan_for_project(project_id, store)
+    plan = _business_plan_for_project(project_id, store, user)
     competitors = store.list_competitors(project_id=project_id)
     evidence = store.list_evidence(project_id=project_id)
     claims = store.list_claims(project_id=project_id)
@@ -212,10 +248,12 @@ def get_project_red_team(
     )
 
 
-def _business_plan_for_project(project_id: str, store: EnterpriseStore) -> BusinessIntelPlan:
-    project = store.get_project(project_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
+def _business_plan_for_project(
+    project_id: str,
+    store: EnterpriseStore,
+    user: EnterpriseUserContext,
+) -> BusinessIntelPlan:
+    project = _project_or_404(project_id, store, user, "project:read")
     competitors = store.list_competitors(project_id=project_id)
     dimensions = sorted({item.dimension for item in store.list_evidence(project_id=project_id)})
     if not dimensions:
@@ -232,9 +270,14 @@ def _business_plan_for_project(project_id: str, store: EnterpriseStore) -> Busin
 @router.get("/enterprise/competitors", response_model=list[CompetitorRecord])
 def list_competitors(
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
     workspace_id: str | None = None,
     project_id: str | None = None,
 ) -> list[CompetitorRecord]:
+    if project_id is not None:
+        _project_or_404(project_id, store, user, "competitor:read")
+    else:
+        workspace_id = _scoped_workspace_id(user, workspace_id, "competitor:read")
     return store.list_competitors(workspace_id=workspace_id, project_id=project_id)
 
 
@@ -242,7 +285,9 @@ def list_competitors(
 def list_project_evidence(
     project_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> list[EvidenceRecord]:
+    _project_or_404(project_id, store, user, "evidence:read")
     return store.list_evidence(project_id=project_id)
 
 
@@ -250,18 +295,27 @@ def list_project_evidence(
 def upsert_evidence(
     evidence: EvidenceRecord,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> EvidenceRecord:
+    _require_workspace_access(user, evidence.workspace_id, "evidence:write")
+    project = store.get_project(evidence.project_id)
+    if project is not None and project.workspace_id != evidence.workspace_id:
+        raise HTTPException(status_code=400, detail="Evidence workspace does not match project")
     return store.upsert_evidence(evidence)
 
 
 @router.get("/enterprise/evidence/search", response_model=list[EvidenceSearchHit])
 def search_evidence(
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
     workspace_id: str,
     query: str,
     project_id: str | None = None,
     limit: int = 10,
 ) -> list[EvidenceSearchHit]:
+    _require_workspace_access(user, workspace_id, "evidence:read")
+    if project_id is not None:
+        _project_or_404(project_id, store, user, "evidence:read")
     return store.search_evidence(
         workspace_id=workspace_id,
         query=query,
@@ -273,25 +327,34 @@ def search_evidence(
 @router.post("/enterprise/evidence/reindex", response_model=EvidenceReindexResult)
 def reindex_evidence_embeddings(
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
     workspace_id: str | None = None,
     project_id: str | None = None,
 ) -> EvidenceReindexResult:
+    workspace_id = _scoped_workspace_id(user, workspace_id, "evidence:write")
+    if project_id is not None:
+        _project_or_404(project_id, store, user, "evidence:write")
     return store.reindex_evidence_embeddings(workspace_id=workspace_id, project_id=project_id)
 
 
 @router.get("/enterprise/source-registry", response_model=list[SourceRegistryRecord])
 def list_source_registry(
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
     workspace_id: str | None = None,
 ) -> list[SourceRegistryRecord]:
-    return store.list_source_registry(workspace_id=workspace_id)
+    return store.list_source_registry(
+        workspace_id=_scoped_workspace_id(user, workspace_id, "source:read")
+    )
 
 
 @router.post("/enterprise/source-registry", response_model=SourceRegistryRecord)
 def upsert_source_registry(
     record: SourceRegistryRecord,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> SourceRegistryRecord:
+    _require_workspace_access(user, record.workspace_id, "source:write")
     return store.upsert_source_registry(record)
 
 
@@ -303,10 +366,14 @@ def update_evidence_quality(
     evidence_id: str,
     request: EvidenceQualityUpdateRequest,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> EvidenceQualityUpdateResult:
+    existing = _evidence_or_404(evidence_id, store)
+    _require_workspace_access(user, existing.workspace_id, "evidence:review")
     evidence = store.update_evidence_quality(
         evidence_id,
         request.quality_label,
+        actor_id=user.user_id,
         note=request.note,
     )
     if evidence is None:
@@ -318,7 +385,9 @@ def update_evidence_quality(
 def list_project_claims(
     project_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> list[ClaimRecord]:
+    _project_or_404(project_id, store, user, "project:read")
     return store.list_claims(project_id=project_id)
 
 
@@ -329,7 +398,9 @@ def list_project_claims(
 def list_project_report_versions(
     project_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> list[ReportVersionRecord]:
+    _project_or_404(project_id, store, user, "report:read")
     return store.list_report_versions(project_id=project_id)
 
 
@@ -337,7 +408,9 @@ def list_project_report_versions(
 def upsert_report_version(
     version: ReportVersionRecord,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> ReportVersionRecord:
+    _require_workspace_access(user, version.workspace_id, "report:write")
     return store.upsert_report_version(version)
 
 
@@ -345,10 +418,12 @@ def upsert_report_version(
 def get_report_version(
     version_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> ReportVersionRecord:
     version = store.get_report_version(version_id)
     if version is None:
         raise HTTPException(status_code=404, detail="Report version not found")
+    _require_workspace_access(user, version.workspace_id, "report:read")
     return version
 
 
@@ -356,15 +431,18 @@ def get_report_version(
 def get_report_version_diff(
     version_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
     base_version_id: str | None = None,
 ) -> ReportVersionDiff:
     target_version = store.get_report_version(version_id)
     if target_version is None:
         raise HTTPException(status_code=404, detail="Report version not found")
+    _require_workspace_access(user, target_version.workspace_id, "report:read")
     if base_version_id:
         base_version = store.get_report_version(base_version_id)
         if base_version is None:
             raise HTTPException(status_code=404, detail="Base report version not found")
+        _require_workspace_access(user, base_version.workspace_id, "report:read")
     else:
         base_version = store.get_previous_report_version(target_version)
     return build_report_version_diff(target_version, base_version=base_version)
@@ -374,16 +452,63 @@ def get_report_version_diff(
 def get_run_projection(
     run_id: str,
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
 ) -> EnterpriseRunProjection:
     projection = store.get_run_projection(run_id)
     if projection is None:
         raise HTTPException(status_code=404, detail="Enterprise projection not found")
+    _require_workspace_access(user, projection.workspace_id, "project:read")
     return projection
 
 
 @router.get("/enterprise/audit-logs", response_model=list[AuditLogRecord])
 def list_audit_logs(
     store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
     workspace_id: str | None = None,
 ) -> list[AuditLogRecord]:
-    return store.list_audit_logs(workspace_id=workspace_id)
+    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "audit:read")
+    return store.list_audit_logs(workspace_id=scoped_workspace_id)
+
+
+def _project_or_404(
+    project_id: str,
+    store: EnterpriseStore,
+    user: EnterpriseUserContext,
+    action: str,
+) -> ProjectRecord:
+    project = store.get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    _require_workspace_access(user, project.workspace_id, action)
+    return project
+
+
+def _evidence_or_404(evidence_id: str, store: EnterpriseStore) -> EvidenceRecord:
+    for evidence in store.list_evidence():
+        if evidence.id == evidence_id:
+            return evidence
+    raise HTTPException(status_code=404, detail="Evidence not found")
+
+
+def _scoped_workspace_id(
+    user: EnterpriseUserContext,
+    workspace_id: str | None,
+    action: str,
+) -> str | None:
+    if workspace_id is not None:
+        _require_workspace_access(user, workspace_id, action)
+        return workspace_id
+    if user.workspace_id is not None:
+        _require_workspace_access(user, user.workspace_id, action)
+        return user.workspace_id
+    return None
+
+
+def _require_workspace_access(
+    user: EnterpriseUserContext,
+    workspace_id: str,
+    action: str,
+) -> None:
+    if not can_access_workspace(user, workspace_id, action):
+        raise HTTPException(status_code=403, detail="Insufficient workspace permission")

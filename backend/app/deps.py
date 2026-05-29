@@ -1,7 +1,12 @@
 from functools import lru_cache
+from typing import Annotated
 
+from fastapi import Header
+
+from packages.auth import EnterpriseUserContext, normalize_role
 from packages.config import Settings, get_settings
 from packages.enterprise import EnterpriseMemoryStore, EnterprisePostgresStore, EnterpriseStore
+from packages.enterprise.store import DEFAULT_USER_ID
 from packages.memory import KBCache, RunJournal
 from packages.observability import TraceStore
 from packages.orchestrator.checkpointer import GraphCheckpointer
@@ -52,6 +57,18 @@ def get_enterprise_store() -> EnterpriseStore:
     if settings.enterprise_store_backend == "memory":
         return EnterpriseMemoryStore()
     raise RuntimeError(f"Unknown enterprise store backend: {settings.enterprise_store_backend}")
+
+
+def get_enterprise_user_context(
+    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
+    x_user_role: Annotated[str | None, Header(alias="X-User-Role")] = None,
+    x_workspace_id: Annotated[str | None, Header(alias="X-Workspace-Id")] = None,
+) -> EnterpriseUserContext:
+    return EnterpriseUserContext(
+        user_id=x_user_id or DEFAULT_USER_ID,
+        role=normalize_role(x_user_role),
+        workspace_id=x_workspace_id or None,
+    )
 
 
 @lru_cache

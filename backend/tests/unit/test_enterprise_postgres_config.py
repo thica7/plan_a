@@ -53,6 +53,7 @@ def test_postgres_schema_contains_enterprise_core_tables() -> None:
 
     for table in [
         "workspaces",
+        "workspace_members",
         "projects",
         "competitors",
         "evidence_records",
