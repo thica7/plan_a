@@ -14,6 +14,7 @@ SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 def get_runtime(settings: SettingsDep) -> RuntimeConfig:
     return RuntimeConfig(
         default_execution_mode=settings.default_execution_mode,
+        run_orchestration_backend=settings.run_orchestration_backend,
         demo_mode=settings.demo_mode,
         has_ark_api_key=bool(settings.ark_api_key),
         has_ark_model=bool(settings.ark_model),
@@ -25,4 +26,7 @@ def get_runtime(settings: SettingsDep) -> RuntimeConfig:
         auto_redo_warn_enabled=settings.auto_redo_warn_enabled,
         hitl_enabled=settings.hitl_enabled,
         hitl_timeout_seconds=settings.hitl_timeout_seconds,
+        temporal_address=settings.temporal_address,
+        temporal_namespace=settings.temporal_namespace,
+        temporal_task_queue=settings.temporal_task_queue,
     )

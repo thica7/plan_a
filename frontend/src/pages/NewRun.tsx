@@ -67,7 +67,7 @@ export function NewRun() {
         execution_mode: executionMode,
         auto_redo_warn_enabled: autoRedoWarn,
       });
-      navigate(`/runs/${run.id}`);
+      navigate(`/runs/${"id" in run ? run.id : run.run_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create run");
     } finally {
@@ -160,6 +160,11 @@ export function NewRun() {
                 {runtime.auto_redo_enabled
                   ? "Automatic scoped redo is enabled."
                   : "Automatic scoped redo is disabled by backend config."}
+              </p>
+              <p className={runtime.run_orchestration_backend === "temporal" ? "runtime-ok" : "runtime-warn"}>
+                {runtime.run_orchestration_backend === "temporal"
+                  ? `Run entry is routed through Temporal on ${runtime.temporal_task_queue}.`
+                  : "Run entry uses direct LangGraph execution."}
               </p>
             </div>
           ) : null}

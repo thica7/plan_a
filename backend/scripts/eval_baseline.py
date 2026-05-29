@@ -5,6 +5,7 @@ import asyncio
 import json
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -158,16 +159,88 @@ async def run_case(case: EvalCase) -> dict[str, object]:
 async def main() -> None:
     args = _parse_args()
     rows = [await run_case(case) for case in load_cases(limit=args.limit)]
-    summary = {
-        "component": "baseline_eval",
-        "ok": all(bool(row["passed"]) for row in rows),
-        "case_count": len(rows),
-        "passed_count": sum(1 for row in rows if row["passed"]),
-        "rows": rows,
-    }
+    summary = build_summary(rows)
+    if args.report:
+        report_path = Path(args.report)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(render_markdown_report(summary), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     if not summary["ok"]:
         raise SystemExit("Phase 1 baseline eval smoke failed.")
+
+
+def build_summary(rows: list[dict[str, object]]) -> dict[str, object]:
+    passed_count = sum(1 for row in rows if row["passed"])
+    coverage_lift_count = sum(1 for row in rows if _has_coverage_lift(row))
+    return {
+        "component": "baseline_eval",
+        "ok": passed_count == len(rows) and coverage_lift_count == len(rows),
+        "generated_at": datetime.now(UTC).isoformat(),
+        "case_count": len(rows),
+        "passed_count": passed_count,
+        "coverage_lift_count": coverage_lift_count,
+        "coverage_lift_rate": coverage_lift_count / len(rows) if rows else 0.0,
+        "rows": rows,
+    }
+
+
+def render_markdown_report(summary: dict[str, object]) -> str:
+    rows = list(summary["rows"])  # type: ignore[arg-type]
+    lines = [
+        "# Golden Eval Report",
+        "",
+        f"- Generated at: {summary['generated_at']}",
+        f"- Case count: {summary['case_count']}",
+        f"- Passed count: {summary['passed_count']}",
+        f"- Coverage lift count: {summary['coverage_lift_count']}",
+        f"- Coverage lift rate: {summary['coverage_lift_rate']:.2%}",
+        f"- Overall: {'PASS' if summary['ok'] else 'FAIL'}",
+        "",
+        "| Case | Status | Evidence | Claims | Report chars | Audit actions |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        system = row["system"]
+        lines.append(
+            "| {case_id} | {status} | {evidence_count} | {claim_count} | "
+            "{report_chars} | {audit_action_count} |".format(
+                case_id=row["case_id"],
+                status=system["status"],
+                evidence_count=system["evidence_count"],
+                claim_count=system["claim_count"],
+                report_chars=system["report_chars"],
+                audit_action_count=system["audit_action_count"],
+            )
+        )
+    lines.extend(
+        [
+            "",
+            "## Method",
+            "",
+            "Each golden case is run through the deterministic demo pipeline and compared "
+            "against an LLM-only fixture with no structured evidence store, claim store, "
+            "report version, or audit actions. A case passes only when the run completes, "
+            "produces enterprise evidence and claims, and records at least five audit "
+            "action types.",
+            "",
+            "## Phase 3 Exit Check",
+            "",
+            "The v2.0 system shows coverage lift when it produces more evidence, claims, "
+            "and report content than the fixture baseline. This report is intended as "
+            "the strict artifact for the Phase 3 golden-set requirement.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _has_coverage_lift(row: dict[str, object]) -> bool:
+    baseline = row["baseline"]
+    system = row["system"]
+    return bool(
+        system["evidence_count"] > baseline["evidence_count"]
+        and system["claim_count"] > baseline["claim_count"]
+        and system["report_chars"] > baseline["report_chars"]
+    )
 
 
 def _parse_args() -> argparse.Namespace:
@@ -177,6 +250,11 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=5,
         help="Number of golden cases to run. Use 0 for all cases.",
+    )
+    parser.add_argument(
+        "--report",
+        default=None,
+        help="Optional markdown report path.",
     )
     args = parser.parse_args()
     if args.limit <= 0:

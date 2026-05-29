@@ -51,7 +51,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunDetail"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RunDetail"
+                    },
+                    {
+                      "$ref": "#/components/schemas/WorkflowStartResponse"
+                    }
+                  ],
+                  "title": "Response Create Run Api Runs Post"
                 }
               }
             }
@@ -5437,6 +5445,14 @@
             ],
             "title": "Default Execution Mode"
           },
+          "run_orchestration_backend": {
+            "type": "string",
+            "enum": [
+              "langgraph",
+              "temporal"
+            ],
+            "title": "Run Orchestration Backend"
+          },
           "demo_mode": {
             "type": "boolean",
             "title": "Demo Mode"
@@ -5487,12 +5503,25 @@
           "hitl_timeout_seconds": {
             "type": "number",
             "title": "Hitl Timeout Seconds"
+          },
+          "temporal_address": {
+            "type": "string",
+            "title": "Temporal Address"
+          },
+          "temporal_namespace": {
+            "type": "string",
+            "title": "Temporal Namespace"
+          },
+          "temporal_task_queue": {
+            "type": "string",
+            "title": "Temporal Task Queue"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "default_execution_mode",
+          "run_orchestration_backend",
           "demo_mode",
           "has_ark_api_key",
           "has_ark_model",
@@ -5502,7 +5531,10 @@
           "auto_redo_enabled",
           "auto_redo_warn_enabled",
           "hitl_enabled",
-          "hitl_timeout_seconds"
+          "hitl_timeout_seconds",
+          "temporal_address",
+          "temporal_namespace",
+          "temporal_task_queue"
         ],
         "title": "RuntimeConfig"
       },

@@ -2268,6 +2268,11 @@ export interface components {
              * @enum {string}
              */
             default_execution_mode: "demo" | "real";
+            /**
+             * Run Orchestration Backend
+             * @enum {string}
+             */
+            run_orchestration_backend: "langgraph" | "temporal";
             /** Demo Mode */
             demo_mode: boolean;
             /** Has Ark Api Key */
@@ -2290,6 +2295,12 @@ export interface components {
             hitl_enabled: boolean;
             /** Hitl Timeout Seconds */
             hitl_timeout_seconds: number;
+            /** Temporal Address */
+            temporal_address: string;
+            /** Temporal Namespace */
+            temporal_namespace: string;
+            /** Temporal Task Queue */
+            temporal_task_queue: string;
         };
         /** ScenarioPack */
         ScenarioPack: {
@@ -2646,7 +2657,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunDetail"];
+                    "application/json": components["schemas"]["RunDetail"] | components["schemas"]["WorkflowStartResponse"];
                 };
             };
             /** @description Validation Error */

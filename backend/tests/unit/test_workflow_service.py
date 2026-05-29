@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.deps import get_temporal_workflow_service
+from app.deps import get_app_settings, get_temporal_workflow_service
 from app.main import create_app
 from packages.config import Settings
 from packages.schema.api_dto import (
@@ -24,18 +24,20 @@ from packages.workflows.service import (
 )
 
 
-def _settings() -> Settings:
-    return Settings(
-        demo_mode=True,
-        ark_api_key=None,
-        ark_model=None,
-        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
-        llm_timeout_seconds=10,
-        llm_temperature=0.2,
-        enterprise_store_backend="memory",
-        enterprise_database_url=None,
-        temporal_task_queue="test-queue",
-    )
+def _settings(**overrides: object) -> Settings:
+    values = {
+        "demo_mode": True,
+        "ark_api_key": None,
+        "ark_model": None,
+        "ark_base_url": "https://ark.cn-beijing.volces.com/api/v3",
+        "llm_timeout_seconds": 10,
+        "llm_temperature": 0.2,
+        "enterprise_store_backend": "memory",
+        "enterprise_database_url": None,
+        "temporal_task_queue": "test-queue",
+    }
+    values.update(overrides)
+    return Settings(**values)
 
 
 def _request(idempotency_key: str | None = None) -> RunCreateRequest:
@@ -218,6 +220,49 @@ def test_workflow_router_returns_accepted_start_response() -> None:
         "workflow_type": "CompetitiveIntelWorkflow",
         "run_id": "run-test",
         "idempotency_key": "route-001",
+        "task_queue": "test-queue",
+        "status": "started",
+    }
+
+
+def test_runs_router_can_cut_over_to_temporal_backend() -> None:
+    class FakeWorkflowService:
+        async def start_competitive_intel(
+            self,
+            request: RunCreateRequest,
+        ) -> WorkflowStartResponse:
+            return WorkflowStartResponse(
+                workflow_id="competitive-intel-cutover",
+                run_id="run-cutover",
+                idempotency_key=request.idempotency_key or "workflow:cutover",
+                task_queue="test-queue",
+                status="started",
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_app_settings] = lambda: _settings(
+        run_orchestration_backend="temporal"
+    )
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/runs",
+        json={
+            "topic": "AI coding assistant workflow cutover",
+            "competitors": ["Cursor"],
+            "dimensions": ["pricing"],
+            "execution_mode": "demo",
+            "idempotency_key": "route-cutover-001",
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "workflow_id": "competitive-intel-cutover",
+        "workflow_type": "CompetitiveIntelWorkflow",
+        "run_id": "run-cutover",
+        "idempotency_key": "route-cutover-001",
         "task_queue": "test-queue",
         "status": "started",
     }

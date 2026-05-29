@@ -344,6 +344,7 @@ export interface SkillSpec {
 
 export interface RuntimeConfig {
   default_execution_mode: "demo" | "real";
+  run_orchestration_backend: "langgraph" | "temporal";
   demo_mode: boolean;
   has_ark_api_key: boolean;
   has_ark_model: boolean;
@@ -355,6 +356,9 @@ export interface RuntimeConfig {
   auto_redo_warn_enabled: boolean;
   hitl_enabled: boolean;
   hitl_timeout_seconds: number;
+  temporal_address: string;
+  temporal_namespace: string;
+  temporal_task_queue: string;
 }
 
 export type CompetitorLayer = "L1" | "L2" | "L3" | "unknown";

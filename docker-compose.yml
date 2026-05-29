@@ -47,6 +47,10 @@ services:
     environment:
       ENTERPRISE_STORE_BACKEND: postgres
       ENTERPRISE_DATABASE_URL: postgresql://competiscope:competiscope@postgres:5432/competiscope?connect_timeout=5
+      RUN_ORCHESTRATION_BACKEND: temporal
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: competitive-intel
     volumes:
       - ./runs:/app/runs
       - ./backend/db:/app/db:ro
@@ -55,6 +59,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      temporal:
+        condition: service_started
 
   temporal-worker:
     build:

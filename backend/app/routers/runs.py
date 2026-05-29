@@ -1,21 +1,46 @@
 import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.deps import get_run_service
+from app.deps import get_app_settings, get_run_service, get_temporal_workflow_service
+from packages.config import Settings
 from packages.orchestrator.service import RunService
-from packages.schema.api_dto import RunCreateRequest, RunDetail, RunSummary
+from packages.schema.api_dto import RunCreateRequest, RunDetail, RunSummary, WorkflowStartResponse
+from packages.workflows.service import TemporalWorkflowService
 
 router = APIRouter()
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+TemporalWorkflowServiceDep = Annotated[
+    TemporalWorkflowService,
+    Depends(get_temporal_workflow_service),
+]
 
 
-@router.post("/runs", response_model=RunDetail, status_code=201)
+@router.post(
+    "/runs",
+    response_model=RunDetail | WorkflowStartResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_run(
     request: RunCreateRequest,
-    service: RunServiceDep,
-) -> RunDetail:
+    response: Response,
+    settings: SettingsDep,
+    workflow_service: TemporalWorkflowServiceDep,
+) -> RunDetail | WorkflowStartResponse:
+    if settings.run_orchestration_backend == "temporal":
+        try:
+            result = await workflow_service.start_competitive_intel(request)
+        except Exception as exc:  # noqa: BLE001 - surface Temporal cutover failures clearly.
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Temporal workflow service is unavailable.",
+            ) from exc
+        response.status_code = status.HTTP_202_ACCEPTED
+        return result
+
+    service = get_run_service()
     try:
         detail = await service.create_run(request)
     except ValueError as exc:

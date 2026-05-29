@@ -128,6 +128,7 @@ class RuntimeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     default_execution_mode: Literal["demo", "real"]
+    run_orchestration_backend: Literal["langgraph", "temporal"]
     demo_mode: bool
     has_ark_api_key: bool
     has_ark_model: bool
@@ -139,6 +140,9 @@ class RuntimeConfig(BaseModel):
     auto_redo_warn_enabled: bool
     hitl_enabled: bool
     hitl_timeout_seconds: float
+    temporal_address: str
+    temporal_namespace: str
+    temporal_task_queue: str
 
 
 class HealthCheck(BaseModel):

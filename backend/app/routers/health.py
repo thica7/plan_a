@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import socket
 from time import perf_counter
 from typing import Annotated
 
@@ -63,6 +64,7 @@ def health(
             detail="run journal opened",
         ),
         _enterprise_store_check(settings),
+        _temporal_server_check(settings),
     ]
     status = _rollup_status(checks)
     return HealthStatus(
@@ -203,6 +205,48 @@ def _enterprise_store_check(settings: Settings) -> HealthCheck:
         status="error",
         detail=f"unknown backend={backend}",
     )
+
+
+def _temporal_server_check(settings: Settings) -> HealthCheck:
+    host, port = _parse_host_port(settings.temporal_address)
+    if host is None or port is None:
+        return HealthCheck(
+            name="temporal_server",
+            status="error" if settings.run_orchestration_backend == "temporal" else "warn",
+            detail=f"invalid address={settings.temporal_address}",
+        )
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            pass
+    except OSError:
+        return HealthCheck(
+            name="temporal_server",
+            status="error" if settings.run_orchestration_backend == "temporal" else "warn",
+            detail=(
+                f"unreachable address={settings.temporal_address} "
+                f"backend={settings.run_orchestration_backend}"
+            ),
+        )
+    return HealthCheck(
+        name="temporal_server",
+        status="ok",
+        detail=(
+            f"address={settings.temporal_address} namespace={settings.temporal_namespace} "
+            f"task_queue={settings.temporal_task_queue}"
+        ),
+    )
+
+
+def _parse_host_port(address: str) -> tuple[str | None, int | None]:
+    if ":" not in address:
+        return None, None
+    host, raw_port = address.rsplit(":", 1)
+    host = host.strip("[]") or "127.0.0.1"
+    try:
+        port = int(raw_port)
+    except ValueError:
+        return None, None
+    return host, port
 
 
 def _elapsed_ms(start: float) -> int:

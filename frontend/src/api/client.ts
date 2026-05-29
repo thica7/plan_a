@@ -66,7 +66,7 @@ export function getRuntime() {
 }
 
 export function createRun(payload: RunCreateRequest) {
-  return request<RunDetail>("/runs", {
+  return request<RunDetail | WorkflowStartResponse>("/runs", {
     method: "POST",
     body: JSON.stringify(payload),
   });
