@@ -16,6 +16,7 @@ from packages.schema.api_dto import (
     ScheduledScanStartRequest,
     ScheduledScanStartResponse,
     WorkflowStartResponse,
+    WorkflowStateResponse,
 )
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
 from packages.workflows.monitor import MonitorWorkflow
@@ -64,6 +65,11 @@ class FakeTemporalHandle:
     def __init__(self, workflow_id: str) -> None:
         self.id = workflow_id
         self.signals: list[dict[str, object]] = []
+        self.state: dict[str, object] = {
+            "workflow_type": "CompetitiveIntelWorkflow",
+            "status": "running",
+            "run_id": "run-test",
+        }
 
     async def signal(
         self,
@@ -72,6 +78,10 @@ class FakeTemporalHandle:
         args: list[object],
     ) -> None:
         self.signals.append({"signal": signal, "args": args})
+
+    async def query(self, query: object) -> dict[str, object]:
+        assert query == "state"
+        return self.state
 
 
 class FakeTemporalClient:
@@ -256,6 +266,34 @@ async def test_temporal_workflow_service_signals_report_approval() -> None:
     ]
 
 
+async def test_temporal_workflow_service_queries_workflow_state() -> None:
+    fake_client = FakeTemporalClient()
+    handle = fake_client.get_workflow_handle("competitive-intel-state")
+    handle.state = {
+        "workflow_type": "CompetitiveIntelWorkflow",
+        "status": "running_langgraph",
+        "run_id": "run-state",
+    }
+
+    async def client_factory(settings: Settings) -> FakeTemporalClient:
+        return fake_client
+
+    service = TemporalWorkflowService(_settings(), client_factory=client_factory)
+
+    response = await service.get_workflow_state("competitive-intel-state")
+
+    assert response == WorkflowStateResponse(
+        workflow_id="competitive-intel-state",
+        task_queue="test-queue",
+        status="running_langgraph",
+        state={
+            "workflow_type": "CompetitiveIntelWorkflow",
+            "status": "running_langgraph",
+            "run_id": "run-state",
+        },
+    )
+
+
 def test_workflow_router_returns_accepted_start_response() -> None:
     class FakeWorkflowService:
         async def start_competitive_intel(
@@ -293,6 +331,31 @@ def test_workflow_router_returns_accepted_start_response() -> None:
         "idempotency_key": "route-001",
         "task_queue": "test-queue",
         "status": "started",
+    }
+
+
+def test_workflow_router_exposes_workflow_state() -> None:
+    class FakeWorkflowService:
+        async def get_workflow_state(self, workflow_id: str) -> WorkflowStateResponse:
+            return WorkflowStateResponse(
+                workflow_id=workflow_id,
+                task_queue="test-queue",
+                status="running",
+                state={"workflow_type": "CompetitiveIntelWorkflow", "status": "running"},
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    client = TestClient(app)
+
+    response = client.get("/api/workflows/competitive-intel-state")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "workflow_id": "competitive-intel-state",
+        "task_queue": "test-queue",
+        "status": "running",
+        "state": {"workflow_type": "CompetitiveIntelWorkflow", "status": "running"},
     }
 
 

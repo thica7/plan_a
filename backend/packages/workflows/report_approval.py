@@ -35,12 +35,17 @@ class ReportApprovalWorkflow:
 
     def __init__(self) -> None:
         self._decision: _ApprovalSignal | None = None
+        self._status = "initialized"
+        self._report_version_id: str | None = None
+        self._approver_id: str | None = None
 
     @workflow.run
     async def run(
         self,
         request: ReportApprovalWorkflowInput,
     ) -> ReportApprovalWorkflowResult:
+        self._status = "running"
+        self._report_version_id = request.report_version_id
         requested = _coerce_approval_state(
             await workflow.execute_activity(
                 REQUEST_REPORT_APPROVAL_ACTIVITY,
@@ -49,6 +54,7 @@ class ReportApprovalWorkflow:
                 retry_policy=RetryPolicy(maximum_attempts=3),
             )
         )
+        self._status = "waiting"
         try:
             await workflow.wait_condition(
                 lambda: self._decision is not None,
@@ -56,11 +62,14 @@ class ReportApprovalWorkflow:
                 timeout_summary=f"report-approval-{request.report_version_id}",
             )
         except TimeoutError:
+            self._status = "timed_out"
             return _approval_result(requested, decision="timed_out")
 
         decision = self._decision
         if decision is None:
+            self._status = "timed_out"
             return _approval_result(requested, decision="timed_out")
+        self._approver_id = decision.approver_id
         activity_input = ReportApprovalDecisionInput(
             report_version_id=request.report_version_id,
             approver_id=decision.approver_id,
@@ -75,6 +84,7 @@ class ReportApprovalWorkflow:
                     retry_policy=RetryPolicy(maximum_attempts=3),
                 )
             )
+            self._status = "completed"
             return _approval_result(
                 final_state,
                 decision="approved",
@@ -89,6 +99,7 @@ class ReportApprovalWorkflow:
                 retry_policy=RetryPolicy(maximum_attempts=3),
             )
         )
+        self._status = "completed"
         return _approval_result(
             final_state,
             decision="rejected",
@@ -111,6 +122,16 @@ class ReportApprovalWorkflow:
             approver_id=approver_id,
             note=note,
         )
+
+    @workflow.query
+    def state(self) -> dict[str, object]:
+        return {
+            "workflow_type": "ReportApprovalWorkflow",
+            "status": self._status,
+            "report_version_id": self._report_version_id,
+            "approver_id": self._approver_id,
+            "decision": self._decision.decision if self._decision else None,
+        }
 
 
 def _approval_result(

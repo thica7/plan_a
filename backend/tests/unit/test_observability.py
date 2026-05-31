@@ -1,5 +1,5 @@
-from packages.compliance import redact_text
-from packages.observability import build_run_event, sanitize_for_trace
+from packages.compliance import CompliancePolicy, redact_text
+from packages.observability import build_run_event, sanitize_for_trace, trace_id_for_run
 
 
 def test_trace_payload_sanitizes_nested_secrets() -> None:
@@ -29,6 +29,7 @@ def test_build_run_event_applies_trace_sanitizer() -> None:
     )
 
     assert event.swimlane == "pricing"
+    assert event.trace_id == trace_id_for_run("run-1")
     assert event.payload == {"api_key": "[redacted]", "query": "pricing"}
 
 
@@ -55,3 +56,14 @@ def test_compliance_redactor_reports_counts_by_kind() -> None:
     assert result.total_count == 3
     assert result.counts == {"bearer_token": 1, "email": 1, "phone": 1}
     assert "[redacted:bearer_token]" in result.text
+
+
+def test_compliance_redactor_obeys_policy() -> None:
+    result = redact_text(
+        "Contact alice@example.com with OPENROUTER_TEST_KEY_REDACTED.",
+        policy=CompliancePolicy(redact_emails=False, redact_api_keys=True),
+    )
+
+    assert "alice@example.com" in result.text
+    assert "[redacted:api_key]" in result.text
+    assert result.counts == {"api_key": 1}

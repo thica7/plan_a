@@ -109,7 +109,16 @@ def metrics(
             f"competiscope_pydantic_ai_available {1 if pydantic_ai_available() else 0}",
             "# HELP competiscope_compliance_redaction_enabled Trace text redaction status.",
             "# TYPE competiscope_compliance_redaction_enabled gauge",
-            "competiscope_compliance_redaction_enabled 1",
+            (
+                "competiscope_compliance_redaction_enabled "
+                f"{1 if settings.compliance_redaction_enabled else 0}"
+            ),
+            "# HELP competiscope_compliance_redactions_total Trace text redactions applied.",
+            "# TYPE competiscope_compliance_redactions_total gauge",
+            (
+                "competiscope_compliance_redactions_total "
+                f"{sum(run.metrics.compliance_redaction_count for run in runs)}"
+            ),
             "# HELP competiscope_notifications_total Enterprise notifications by type and status.",
             "# TYPE competiscope_notifications_total gauge",
         ]

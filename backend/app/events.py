@@ -21,6 +21,7 @@ class RunEvent(BaseModel):
 
     id: int
     run_id: str
+    trace_id: str = ""
     type: RunEventType
     agent: str | None = None
     subagent: str | None = None

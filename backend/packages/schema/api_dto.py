@@ -68,6 +68,29 @@ class WorkflowStartResponse(BaseModel):
     status: Literal["started", "already_started"]
 
 
+class WorkflowStateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str
+    task_queue: str
+    status: Literal[
+        "initialized",
+        "creating_run",
+        "running_langgraph",
+        "loading_projection",
+        "running",
+        "waiting",
+        "completed",
+        "partial",
+        "empty",
+        "interrupted",
+        "timed_out",
+        "failed",
+        "unknown",
+    ] = "unknown"
+    state: dict[str, Any] = Field(default_factory=dict)
+
+
 class ScheduledScanStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -204,6 +227,10 @@ class RuntimeConfig(BaseModel):
     temporal_address: str
     temporal_namespace: str
     temporal_task_queue: str
+    compliance_redaction_enabled: bool
+    compliance_redact_api_keys: bool
+    compliance_redact_emails: bool
+    compliance_redact_phones: bool
 
 
 class HealthCheck(BaseModel):

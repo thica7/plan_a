@@ -791,6 +791,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/report-versions/{version_id}/release-gate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Report Release Gate */
+        get: operations["get_report_release_gate_api_enterprise_report_versions__version_id__release_gate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/report-versions/{version_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Report Version */
+        post: operations["publish_report_version_api_enterprise_report_versions__version_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/runs/{run_id}/projection": {
         parameters: {
             query?: never;
@@ -836,6 +870,23 @@ export interface paths {
         put?: never;
         /** Start Competitive Intel Workflow */
         post: operations["start_competitive_intel_workflow_api_workflows_competitive_intel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/{workflow_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Workflow State */
+        get: operations["get_workflow_state_api_workflows__workflow_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2198,6 +2249,37 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** ReportReleaseGate */
+        ReportReleaseGate: {
+            /** Report Version Id */
+            report_version_id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Allowed */
+            allowed: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "blocked";
+            readiness: components["schemas"]["ProjectReadinessScore"];
+            qa_evaluation: components["schemas"]["BusinessQAEvaluation"];
+            /** Issue Count */
+            issue_count: number;
+            /** Blocker Count */
+            blocker_count: number;
+            /** Warn Count */
+            warn_count: number;
+            /** Issues */
+            issues?: components["schemas"]["BusinessQAFinding"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+        };
         /** ReportVersionDiff */
         ReportVersionDiff: {
             base_version?: components["schemas"]["ReportVersionRecord"] | null;
@@ -2437,6 +2519,11 @@ export interface components {
             /** Run Id */
             run_id: string;
             /**
+             * Trace Id
+             * @default
+             */
+            trace_id: string;
+            /**
              * Type
              * @enum {string}
              */
@@ -2541,6 +2628,11 @@ export interface components {
              * @default 0
              */
             revision_count: number;
+            /**
+             * Compliance Redaction Count
+             * @default 0
+             */
+            compliance_redaction_count: number;
         };
         /** RunSummary */
         RunSummary: {
@@ -2629,6 +2721,14 @@ export interface components {
             temporal_namespace: string;
             /** Temporal Task Queue */
             temporal_task_queue: string;
+            /** Compliance Redaction Enabled */
+            compliance_redaction_enabled: boolean;
+            /** Compliance Redact Api Keys */
+            compliance_redact_api_keys: boolean;
+            /** Compliance Redact Emails */
+            compliance_redact_emails: boolean;
+            /** Compliance Redact Phones */
+            compliance_redact_phones: boolean;
         };
         /** ScenarioPack */
         ScenarioPack: {
@@ -2880,6 +2980,23 @@ export interface components {
             /** Id */
             id: string;
             /**
+             * Trace Id
+             * @default
+             */
+            trace_id: string;
+            /**
+             * Otel Span Id
+             * @default
+             */
+            otel_span_id: string;
+            /** Parent Span Id */
+            parent_span_id?: string | null;
+            /**
+             * Traceparent
+             * @default
+             */
+            traceparent: string;
+            /**
              * Kind
              * @enum {string}
              */
@@ -3018,6 +3135,23 @@ export interface components {
              * @enum {string}
              */
             status: "started" | "already_started";
+        };
+        /** WorkflowStateResponse */
+        WorkflowStateResponse: {
+            /** Workflow Id */
+            workflow_id: string;
+            /** Task Queue */
+            task_queue: string;
+            /**
+             * Status
+             * @default unknown
+             * @enum {string}
+             */
+            status: "initialized" | "creating_run" | "running_langgraph" | "loading_projection" | "running" | "waiting" | "completed" | "partial" | "empty" | "interrupted" | "timed_out" | "failed" | "unknown";
+            /** State */
+            state?: {
+                [key: string]: unknown;
+            };
         };
         /** WorkspaceMemberRecord */
         WorkspaceMemberRecord: {
@@ -4906,6 +5040,76 @@ export interface operations {
             };
         };
     };
+    get_report_release_gate_api_enterprise_report_versions__version_id__release_gate_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportReleaseGate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_report_version_api_enterprise_report_versions__version_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportVersionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_run_projection_api_enterprise_runs__run_id__projection_get: {
         parameters: {
             query?: never;
@@ -4996,6 +5200,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkflowStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workflow_state_api_workflows__workflow_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowStateResponse"];
                 };
             };
             /** @description Validation Error */

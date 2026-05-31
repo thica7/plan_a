@@ -70,6 +70,10 @@ class Settings:
     temporal_address: str = "127.0.0.1:7233"
     temporal_namespace: str = "default"
     temporal_task_queue: str = "competitive-intel"
+    compliance_redaction_enabled: bool = True
+    compliance_redact_api_keys: bool = True
+    compliance_redact_emails: bool = True
+    compliance_redact_phones: bool = True
 
     @property
     def has_llm_credentials(self) -> bool:
@@ -145,4 +149,8 @@ def get_settings() -> Settings:
         temporal_address=os.getenv("TEMPORAL_ADDRESS", "127.0.0.1:7233"),
         temporal_namespace=os.getenv("TEMPORAL_NAMESPACE", "default"),
         temporal_task_queue=os.getenv("TEMPORAL_TASK_QUEUE", "competitive-intel"),
+        compliance_redaction_enabled=_env_bool("COMPLIANCE_REDACTION_ENABLED", True),
+        compliance_redact_api_keys=_env_bool("COMPLIANCE_REDACT_API_KEYS", True),
+        compliance_redact_emails=_env_bool("COMPLIANCE_REDACT_EMAILS", True),
+        compliance_redact_phones=_env_bool("COMPLIANCE_REDACT_PHONES", True),
     )

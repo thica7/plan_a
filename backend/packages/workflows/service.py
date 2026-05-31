@@ -20,6 +20,7 @@ from packages.schema.api_dto import (
     ScheduledScanStartRequest,
     ScheduledScanStartResponse,
     WorkflowStartResponse,
+    WorkflowStateResponse,
 )
 from packages.workflows.client import workflow_id_for_request
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
@@ -213,6 +214,18 @@ class TemporalWorkflowService:
             status="signaled",
         )
 
+    async def get_workflow_state(self, workflow_id: str) -> WorkflowStateResponse:
+        client = await self._client_factory(self._settings)
+        handle = client.get_workflow_handle(workflow_id)
+        state = await handle.query("state")
+        normalized_state = dict(state) if isinstance(state, dict) else {"raw": str(state)}
+        return WorkflowStateResponse(
+            workflow_id=workflow_id,
+            task_queue=self._settings.temporal_task_queue,
+            status=_workflow_state_status(normalized_state.get("status")),
+            state=normalized_state,
+        )
+
 
 def competitive_intel_input_from_run_request(
     request: RunCreateRequest,
@@ -286,6 +299,27 @@ def monitor_workflow_id(request: MonitorWorkflowInput) -> str:
     raw = f"{request.workspace_id}|{request.project_id}|{request.monitor_id}"
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
     return f"monitor-{digest}"
+
+
+def _workflow_state_status(value: object) -> str:
+    allowed = {
+        "initialized",
+        "creating_run",
+        "running_langgraph",
+        "loading_projection",
+        "running",
+        "waiting",
+        "completed",
+        "partial",
+        "empty",
+        "interrupted",
+        "timed_out",
+        "failed",
+        "unknown",
+    }
+    if isinstance(value, str) and value in allowed:
+        return value
+    return "unknown"
 
 
 async def _connect_temporal_client(settings: Settings) -> TemporalClient:

@@ -175,7 +175,53 @@ async def test_trace_spans_redact_sensitive_text_before_storage() -> None:
     assert "[redacted:api_key]" in span.full_input
     assert "[redacted:bearer_token]" in span.full_output
     assert span.metadata["pii_redacted"] is True
+    assert span.trace_id
+    assert span.otel_span_id
+    assert span.traceparent == f"00-{span.trace_id}-{span.otel_span_id}-01"
+    assert record.detail.metrics.compliance_redaction_count == 3
     assert tool_message.arguments["input"] == span.full_input
+
+
+@pytest.mark.asyncio
+async def test_trace_span_compliance_policy_can_disable_redaction() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            compliance_redaction_enabled=False,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+
+    service._append_trace_span(
+        record,
+        kind="tool",
+        agent="collector",
+        subagent="pricing",
+        name="compliance_disabled_probe",
+        status="ok",
+        started=time.perf_counter(),
+        input_text="contact alice@example.com",
+        output_text="ok",
+    )
+
+    span = record.detail.trace_spans[-1]
+    assert "alice@example.com" in span.full_input
+    assert span.metadata["compliance_redaction_enabled"] is False
+    assert record.detail.metrics.compliance_redaction_count == 0
 
 
 def test_qa_marks_unverified_source_without_missing_false_positive() -> None:

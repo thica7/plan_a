@@ -3718,6 +3718,186 @@
         }
       }
     },
+    "/api/enterprise/report-versions/{version_id}/release-gate": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Report Release Gate",
+        "operationId": "get_report_release_gate_api_enterprise_report_versions__version_id__release_gate_get",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportReleaseGate"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enterprise/report-versions/{version_id}/publish": {
+      "post": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Publish Report Version",
+        "operationId": "publish_report_version_api_enterprise_report_versions__version_id__publish_post",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportVersionRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enterprise/runs/{run_id}/projection": {
       "get": {
         "tags": [
@@ -3933,6 +4113,48 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkflowStartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workflows/{workflow_id}": {
+      "get": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Get Workflow State",
+        "operationId": "get_workflow_state_api_workflows__workflow_id__get",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workflow Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStateResponse"
                 }
               }
             }
@@ -6252,7 +6474,8 @@
               "approval_request",
               "approval_timeout",
               "anomaly_alert",
-              "quota_warning"
+              "quota_warning",
+              "release_gate_blocked"
             ],
             "title": "Notification Type"
           },
@@ -7159,6 +7382,82 @@
         ],
         "title": "ReportDiffLine"
       },
+      "ReportReleaseGate": {
+        "properties": {
+          "report_version_id": {
+            "type": "string",
+            "title": "Report Version Id"
+          },
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "blocked"
+            ],
+            "title": "Status"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/ProjectReadinessScore"
+          },
+          "qa_evaluation": {
+            "$ref": "#/components/schemas/BusinessQAEvaluation"
+          },
+          "issue_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Issue Count"
+          },
+          "blocker_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Blocker Count"
+          },
+          "warn_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Warn Count"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/BusinessQAFinding"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report_version_id",
+          "workspace_id",
+          "project_id",
+          "allowed",
+          "status",
+          "readiness",
+          "qa_evaluation",
+          "issue_count",
+          "blocker_count",
+          "warn_count"
+        ],
+        "title": "ReportReleaseGate"
+      },
       "ReportVersionDiff": {
         "properties": {
           "base_version": {
@@ -7747,6 +8046,11 @@
             "type": "string",
             "title": "Run Id"
           },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id",
+            "default": ""
+          },
           "type": {
             "type": "string",
             "enum": [
@@ -7914,6 +8218,12 @@
             "type": "integer",
             "minimum": 0.0,
             "title": "Revision Count",
+            "default": 0
+          },
+          "compliance_redaction_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Compliance Redaction Count",
             "default": 0
           }
         },
@@ -8097,6 +8407,22 @@
           "temporal_task_queue": {
             "type": "string",
             "title": "Temporal Task Queue"
+          },
+          "compliance_redaction_enabled": {
+            "type": "boolean",
+            "title": "Compliance Redaction Enabled"
+          },
+          "compliance_redact_api_keys": {
+            "type": "boolean",
+            "title": "Compliance Redact Api Keys"
+          },
+          "compliance_redact_emails": {
+            "type": "boolean",
+            "title": "Compliance Redact Emails"
+          },
+          "compliance_redact_phones": {
+            "type": "boolean",
+            "title": "Compliance Redact Phones"
           }
         },
         "additionalProperties": false,
@@ -8119,7 +8445,11 @@
           "hitl_timeout_seconds",
           "temporal_address",
           "temporal_namespace",
-          "temporal_task_queue"
+          "temporal_task_queue",
+          "compliance_redaction_enabled",
+          "compliance_redact_api_keys",
+          "compliance_redact_emails",
+          "compliance_redact_phones"
         ],
         "title": "RuntimeConfig"
       },
@@ -8679,6 +9009,32 @@
             "type": "string",
             "title": "Id"
           },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id",
+            "default": ""
+          },
+          "otel_span_id": {
+            "type": "string",
+            "title": "Otel Span Id",
+            "default": ""
+          },
+          "parent_span_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Span Id"
+          },
+          "traceparent": {
+            "type": "string",
+            "title": "Traceparent",
+            "default": ""
+          },
           "kind": {
             "type": "string",
             "enum": [
@@ -8983,6 +9339,50 @@
           "status"
         ],
         "title": "WorkflowStartResponse"
+      },
+      "WorkflowStateResponse": {
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "title": "Workflow Id"
+          },
+          "task_queue": {
+            "type": "string",
+            "title": "Task Queue"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "initialized",
+              "creating_run",
+              "running_langgraph",
+              "loading_projection",
+              "running",
+              "waiting",
+              "completed",
+              "partial",
+              "empty",
+              "interrupted",
+              "timed_out",
+              "failed",
+              "unknown"
+            ],
+            "title": "Status",
+            "default": "unknown"
+          },
+          "state": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "State"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workflow_id",
+          "task_queue"
+        ],
+        "title": "WorkflowStateResponse"
       },
       "WorkspaceMemberRecord": {
         "properties": {

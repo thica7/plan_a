@@ -173,6 +173,10 @@ export interface RevisionRecord {
 
 export interface TraceSpan {
   id: string;
+  trace_id: string;
+  otel_span_id: string;
+  parent_span_id?: string | null;
+  traceparent: string;
   kind: "llm" | "search" | "fetch" | "tool";
   agent: string;
   subagent?: string | null;
@@ -242,6 +246,7 @@ export interface RunMetrics {
   acceptance_rate: number;
   qa_issue_count: number;
   revision_count: number;
+  compliance_redaction_count: number;
 }
 
 export interface RunCreateRequest {
@@ -296,6 +301,26 @@ export interface WorkflowStartResponse {
   idempotency_key: string;
   task_queue: string;
   status: "started" | "already_started";
+}
+
+export interface WorkflowStateResponse {
+  workflow_id: string;
+  task_queue: string;
+  status:
+    | "initialized"
+    | "creating_run"
+    | "running_langgraph"
+    | "loading_projection"
+    | "running"
+    | "waiting"
+    | "completed"
+    | "partial"
+    | "empty"
+    | "interrupted"
+    | "timed_out"
+    | "failed"
+    | "unknown";
+  state: Record<string, unknown>;
 }
 
 export interface ScheduledScanStartRequest {
@@ -404,6 +429,10 @@ export interface RuntimeConfig {
   temporal_address: string;
   temporal_namespace: string;
   temporal_task_queue: string;
+  compliance_redaction_enabled: boolean;
+  compliance_redact_api_keys: boolean;
+  compliance_redact_emails: boolean;
+  compliance_redact_phones: boolean;
 }
 
 export type CompetitorLayer = "L1" | "L2" | "L3" | "unknown";

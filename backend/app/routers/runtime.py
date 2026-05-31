@@ -33,4 +33,8 @@ def get_runtime(settings: SettingsDep) -> RuntimeConfig:
         temporal_address=settings.temporal_address,
         temporal_namespace=settings.temporal_namespace,
         temporal_task_queue=settings.temporal_task_queue,
+        compliance_redaction_enabled=settings.compliance_redaction_enabled,
+        compliance_redact_api_keys=settings.compliance_redact_api_keys,
+        compliance_redact_emails=settings.compliance_redact_emails,
+        compliance_redact_phones=settings.compliance_redact_phones,
     )

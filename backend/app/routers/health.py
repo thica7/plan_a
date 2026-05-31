@@ -63,6 +63,16 @@ def health(
         ),
         _enterprise_store_check(settings),
         _temporal_server_check(settings),
+        HealthCheck(
+            name="compliance",
+            status="ok" if settings.compliance_redaction_enabled else "warn",
+            detail=(
+                f"redaction_enabled={settings.compliance_redaction_enabled} "
+                f"api_keys={settings.compliance_redact_api_keys} "
+                f"emails={settings.compliance_redact_emails} "
+                f"phones={settings.compliance_redact_phones}"
+            ),
+        ),
     ]
     status = _rollup_status(checks)
     return HealthStatus(

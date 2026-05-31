@@ -218,6 +218,10 @@ class TraceSpan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
+    trace_id: str = ""
+    otel_span_id: str = ""
+    parent_span_id: str | None = None
+    traceparent: str = ""
     kind: Literal["llm", "search", "fetch", "tool"]
     agent: str
     subagent: str | None = None
@@ -293,6 +297,7 @@ class RunMetrics(BaseModel):
     acceptance_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     qa_issue_count: int = Field(default=0, ge=0)
     revision_count: int = Field(default=0, ge=0)
+    compliance_redaction_count: int = Field(default=0, ge=0)
 
 
 class SkillOutputSpec(BaseModel):

@@ -169,6 +169,20 @@ def test_temporal_worker_registers_approval_workflow_when_store_is_available() -
     ]
 
 
+def test_temporal_workflows_expose_queryable_state() -> None:
+    competitive = CompetitiveIntelWorkflow()
+    scheduled = ScheduledScanWorkflow()
+    monitor = MonitorWorkflow()
+    approval = ReportApprovalWorkflow()
+
+    assert competitive.state()["workflow_type"] == "CompetitiveIntelWorkflow"
+    assert competitive.state()["status"] == "initialized"
+    assert scheduled.state()["workflow_type"] == "ScheduledScanWorkflow"
+    assert monitor.state()["workflow_type"] == "MonitorWorkflow"
+    assert approval.state()["workflow_type"] == "ReportApprovalWorkflow"
+    assert approval.state()["status"] == "initialized"
+
+
 def test_competitive_intel_workflow_result_preserves_projection_metadata() -> None:
     result = _workflow_result(
         WorkflowRunState(

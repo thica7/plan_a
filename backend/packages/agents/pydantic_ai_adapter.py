@@ -41,6 +41,11 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
         self._handler = handler
         self.system_prompt = system_prompt
         self._agent_class_name, self.pydantic_ai_available = _load_pydantic_ai_agent_class_name()
+        self._runtime_agent = _create_pydantic_ai_agent(
+            name=name,
+            output_type=output_type,
+            system_prompt=system_prompt,
+        )
         self._input_schema_hash = _model_schema_hash(self.input_type)
         self._output_schema_hash = _model_schema_hash(self.output_type)
         self._system_prompt_hash = _text_hash(system_prompt)
@@ -62,6 +67,10 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
                 "framework": "pydantic-ai",
                 "pydantic_ai_available": self.pydantic_ai_available,
                 "pydantic_ai_agent_class": self._agent_class_name,
+                "pydantic_ai_runtime_agent_created": self._runtime_agent is not None,
+                "pydantic_ai_runtime_agent_class": type(self._runtime_agent).__name__
+                if self._runtime_agent is not None
+                else None,
                 "system_prompt": self.system_prompt,
                 "system_prompt_hash": self._system_prompt_hash,
                 "input_schema": self.input_type.__name__,
@@ -90,6 +99,25 @@ def _load_pydantic_ai_agent_class_name() -> tuple[str | None, bool]:
 
 def pydantic_ai_available() -> bool:
     return _load_pydantic_ai_agent_class_name()[1]
+
+
+def _create_pydantic_ai_agent(
+    *,
+    name: str,
+    output_type: type[OutputT],
+    system_prompt: str,
+) -> object | None:
+    try:
+        from pydantic_ai import Agent
+    except Exception:  # pragma: no cover - depends on optional env installation.
+        return None
+    return Agent(
+        None,
+        output_type=output_type,
+        instructions=system_prompt,
+        name=name,
+        defer_model_check=True,
+    )
 
 
 def _model_schema_hash(model_type: type[BaseModel]) -> str:

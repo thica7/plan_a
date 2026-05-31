@@ -21,7 +21,7 @@ from packages.agents.reflector.logic import ReflectorAgentMixin
 from packages.agents.writer.logic import WriterAgentMixin
 from packages.business_intel import build_business_intel_plan, evaluate_report_release_gate
 from packages.business_intel.homepage import verify_homepages
-from packages.compliance import redact_text
+from packages.compliance import compliance_policy_from_settings, redact_text
 from packages.config import Settings
 from packages.enterprise import (
     EnterpriseStore,
@@ -31,7 +31,15 @@ from packages.enterprise import (
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.llm import DoubaoClient
 from packages.memory import KBCache, RunJournal
-from packages.observability import LangfuseAdapter, LangfuseConfig, TraceStore, build_run_event
+from packages.observability import (
+    LangfuseAdapter,
+    LangfuseConfig,
+    TraceStore,
+    build_run_event,
+    otel_span_id_for_span,
+    trace_id_for_run,
+    traceparent_for_span,
+)
 from packages.orchestrator.audit import build_revision_record, convergence_ratio
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.graph import (
@@ -1376,8 +1384,14 @@ class RunService(
             output_text,
         )
         span_id = f"span-{len(record.detail.trace_spans) + 1}"
+        trace_id = trace_id_for_run(record.detail.id)
+        otel_span_id = otel_span_id_for_span(record.detail.id, span_id)
+        traceparent = traceparent_for_span(trace_id, otel_span_id)
         span = TraceSpan(
             id=span_id,
+            trace_id=trace_id,
+            otel_span_id=otel_span_id,
+            traceparent=traceparent,
             kind="tool",
             agent=message.from_agent,
             subagent=self._agent_message_subagent(message),
@@ -1398,6 +1412,9 @@ class RunService(
                 "message_type": message.message_type,
                 "payload_schema": message.payload_schema,
                 "source_message_count": len(message.source_message_ids),
+                "trace_id": trace_id,
+                "otel_span_id": otel_span_id,
+                "traceparent": traceparent,
                 **redaction_metadata,
             },
         )
@@ -2152,14 +2169,22 @@ class RunService(
         input_text: str,
         output_text: str,
     ) -> tuple[str, str, dict[str, str | int | float | bool | None]]:
-        input_redaction = redact_text(input_text)
-        output_redaction = redact_text(output_text)
+        policy = compliance_policy_from_settings(self._settings)
+        input_redaction = redact_text(input_text, policy=policy)
+        output_redaction = redact_text(output_text, policy=policy)
+        policy_metadata: dict[str, str | int | float | bool | None] = {
+            "compliance_redaction_enabled": policy.redaction_enabled,
+            "compliance_redact_api_keys": policy.redact_api_keys,
+            "compliance_redact_emails": policy.redact_emails,
+            "compliance_redact_phones": policy.redact_phones,
+        }
         if input_redaction.total_count == 0 and output_redaction.total_count == 0:
-            return input_text, output_text, {}
+            return input_text, output_text, policy_metadata
         return (
             input_redaction.text,
             output_redaction.text,
             {
+                **policy_metadata,
                 "pii_redacted": True,
                 "input_redaction_count": input_redaction.total_count,
                 "output_redaction_count": output_redaction.total_count,
@@ -2195,8 +2220,24 @@ class RunService(
         )
         span_metadata = {**(metadata or {}), **redaction_metadata}
         span_id = f"span-{len(record.detail.trace_spans) + 1}"
+        trace_id = trace_id_for_run(record.detail.id)
+        otel_span_id = otel_span_id_for_span(record.detail.id, span_id)
+        parent_span_id = self._parent_otel_span_id(record, source_message_id)
+        traceparent = traceparent_for_span(trace_id, otel_span_id)
+        span_metadata = {
+            **span_metadata,
+            "trace_id": trace_id,
+            "otel_span_id": otel_span_id,
+            "traceparent": traceparent,
+        }
+        if parent_span_id is not None:
+            span_metadata["parent_span_id"] = parent_span_id
         span = TraceSpan(
             id=span_id,
+            trace_id=trace_id,
+            otel_span_id=otel_span_id,
+            parent_span_id=parent_span_id,
+            traceparent=traceparent,
             kind=kind,
             agent=agent,
             subagent=subagent,
@@ -2241,6 +2282,18 @@ class RunService(
         record.detail.updated_at = datetime.utcnow()
         return span_id
 
+    def _parent_otel_span_id(
+        self,
+        record: RunRecord,
+        source_message_id: str | None,
+    ) -> str | None:
+        if not source_message_id:
+            return None
+        for message in record.detail.agent_messages:
+            if message.id == source_message_id and message.trace_span_ids:
+                return otel_span_id_for_span(record.detail.id, message.trace_span_ids[-1])
+        return None
+
     def _usage_prompt_tokens(self, usage: Any | None) -> int | None:
         value = getattr(usage, "prompt_tokens", None)
         return int(value) if isinstance(value, int) and value >= 0 else None
@@ -2263,6 +2316,7 @@ class RunService(
             input_tokens_estimate=sum(span.input_tokens_estimate for span in spans),
             output_tokens_estimate=sum(span.output_tokens_estimate for span in spans),
             cost_estimate_usd=round(sum(span.cost_estimate_usd for span in spans), 6),
+            compliance_redaction_count=sum(_span_redaction_count(span) for span in spans),
         )
 
     def _refresh_quality_metrics(self, detail: RunDetail) -> None:
@@ -2581,3 +2635,17 @@ def _run_id_for_idempotency_key(idempotency_key: str | None) -> str | None:
         return None
     digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:32]
     return f"run-{digest}"
+
+
+def _span_redaction_count(span: TraceSpan) -> int:
+    return _metadata_int(span.metadata.get("input_redaction_count")) + _metadata_int(
+        span.metadata.get("output_redaction_count")
+    )
+
+
+def _metadata_int(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return max(0, value)
+    return 0

@@ -28,12 +28,23 @@ from packages.workflows.models import (
 class ScheduledScanWorkflow:
     """Phase 5 Temporal workflow for recurring workspace intelligence scans."""
 
+    def __init__(self) -> None:
+        self._status = "initialized"
+        self._scan_started_at = ""
+        self._target_count = 0
+        self._scanned_project_count = 0
+        self._completed_count = 0
+        self._failed_count = 0
+        self._interrupted_count = 0
+
     @workflow.run
     async def run(
         self,
         request: ScheduledScanWorkflowInput,
     ) -> ScheduledScanWorkflowResult:
         scan_started_at = workflow.now().isoformat()
+        self._scan_started_at = scan_started_at
+        self._status = "running"
         targets = _coerce_targets(
             await workflow.execute_activity(
                 LIST_SCHEDULED_SCAN_TARGETS_ACTIVITY,
@@ -42,6 +53,7 @@ class ScheduledScanWorkflow:
                 retry_policy=RetryPolicy(maximum_attempts=3),
             )
         )
+        self._target_count = len(targets)
         results: list[ScheduledScanProjectResult] = []
         for target in targets:
             project_input = ScheduledScanProjectInput(
@@ -67,6 +79,11 @@ class ScheduledScanWorkflow:
                     )
                 )
 
+            self._scanned_project_count = len(results)
+            self._completed_count = sum(1 for item in results if item.status == "completed")
+            self._failed_count = sum(1 for item in results if item.status == "failed")
+            self._interrupted_count = sum(1 for item in results if item.status == "interrupted")
+
         notification = _coerce_notification_state(
             await workflow.execute_activity(
                 RECORD_SCHEDULED_SCAN_NOTIFICATION_ACTIVITY,
@@ -79,12 +96,27 @@ class ScheduledScanWorkflow:
                 retry_policy=RetryPolicy(maximum_attempts=3),
             )
         )
-        return _scan_result(
+        result = _scan_result(
             request,
             results,
             notification_id=notification.notification_id,
             scan_started_at=scan_started_at,
         )
+        self._status = result.status
+        return result
+
+    @workflow.query
+    def state(self) -> dict[str, object]:
+        return {
+            "workflow_type": "ScheduledScanWorkflow",
+            "status": self._status,
+            "scan_started_at": self._scan_started_at,
+            "target_count": self._target_count,
+            "scanned_project_count": self._scanned_project_count,
+            "completed_count": self._completed_count,
+            "failed_count": self._failed_count,
+            "interrupted_count": self._interrupted_count,
+        }
 
 
 def _scan_result(

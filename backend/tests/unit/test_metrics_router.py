@@ -68,6 +68,7 @@ def test_metrics_exposes_run_and_temporal_operational_gauges() -> None:
     assert 'competiscope_token_estimate_total{kind="total"} 0' in body
     assert "competiscope_pydantic_ai_available " in body
     assert "competiscope_compliance_redaction_enabled 1" in body
+    assert "competiscope_compliance_redactions_total 0" in body
     assert (
         'competiscope_notifications_total{type="release_gate_blocked",status="queued"} 1'
         in body

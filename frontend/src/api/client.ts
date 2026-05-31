@@ -33,6 +33,7 @@ import type {
   ToolCallMessage,
   TraceSpan,
   WorkflowStartResponse,
+  WorkflowStateResponse,
   WorkspaceQuotaDecision,
   WorkspaceQuotaUpdateRequest,
   WorkspaceRecord,
@@ -87,6 +88,10 @@ export function startCompetitiveIntelWorkflow(payload: RunCreateRequest) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function getWorkflowState(workflowId: string) {
+  return request<WorkflowStateResponse>(`/workflows/${workflowId}`);
 }
 
 export function startScheduledScanWorkflow(payload: ScheduledScanStartRequest) {

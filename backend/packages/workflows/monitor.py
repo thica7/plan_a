@@ -29,13 +29,25 @@ from packages.workflows.models import (
 class MonitorWorkflow:
     """Phase 5 long-running project monitor with anomaly notifications."""
 
+    def __init__(self) -> None:
+        self._status = "initialized"
+        self._monitor_started_at = ""
+        self._cycle_index = 0
+        self._cycle_count = 0
+        self._failed_count = 0
+        self._anomaly_count = 0
+
     @workflow.run
     async def run(self, request: MonitorWorkflowInput) -> MonitorWorkflowResult:
         monitor_started_at = workflow.now().isoformat()
+        self._monitor_started_at = monitor_started_at
+        self._status = "running"
         results: list[MonitorCycleResult] = []
         notification_ids: list[str] = []
         cycle_count = max(1, request.max_cycles)
+        self._cycle_count = cycle_count
         for cycle_index in range(cycle_count):
+            self._cycle_index = cycle_index
             cycle_result = _coerce_cycle_result(
                 await workflow.execute_activity(
                     RUN_MONITOR_CYCLE_ACTIVITY,
@@ -64,15 +76,31 @@ class MonitorWorkflow:
                 if notification.notification_id:
                     notification_ids.append(notification.notification_id)
             results.append(cycle_result)
+            self._failed_count = sum(1 for item in results if item.status == "failed")
+            self._anomaly_count = sum(len(item.anomalies) for item in results)
             if cycle_index < cycle_count - 1:
                 await workflow.sleep(timedelta(seconds=max(1, request.interval_seconds)))
 
-        return _monitor_result(
+        result = _monitor_result(
             request,
             results,
             notification_ids=notification_ids,
             monitor_started_at=monitor_started_at,
         )
+        self._status = result.status
+        return result
+
+    @workflow.query
+    def state(self) -> dict[str, object]:
+        return {
+            "workflow_type": "MonitorWorkflow",
+            "status": self._status,
+            "monitor_started_at": self._monitor_started_at,
+            "cycle_index": self._cycle_index,
+            "cycle_count": self._cycle_count,
+            "failed_count": self._failed_count,
+            "anomaly_count": self._anomaly_count,
+        }
 
 
 def _monitor_result(

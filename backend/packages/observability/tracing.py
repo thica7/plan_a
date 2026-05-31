@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any, cast
 
 from app.events import RunEvent, RunEventType
@@ -50,6 +51,7 @@ def build_run_event(
     return RunEvent(
         id=event_id,
         run_id=run_id,
+        trace_id=trace_id_for_run(run_id),
         type=cast(RunEventType, event_type),
         agent=agent,
         subagent=subagent,
@@ -62,3 +64,17 @@ def build_run_event(
 def _is_sensitive_key(key: str) -> bool:
     lowered = key.lower().replace("-", "_")
     return any(part in lowered for part in SENSITIVE_KEY_PARTS)
+
+
+def trace_id_for_run(run_id: str) -> str:
+    return hashlib.sha256(f"competiscope-trace:{run_id}".encode()).hexdigest()[:32]
+
+
+def otel_span_id_for_span(run_id: str, span_id: str) -> str:
+    return hashlib.sha256(f"competiscope-span:{run_id}:{span_id}".encode()).hexdigest()[
+        :16
+    ]
+
+
+def traceparent_for_span(trace_id: str, otel_span_id: str) -> str:
+    return f"00-{trace_id}-{otel_span_id}-01"
