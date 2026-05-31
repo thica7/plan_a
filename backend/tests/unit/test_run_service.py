@@ -1,4 +1,5 @@
 import asyncio
+import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -125,6 +126,56 @@ async def test_create_run_filters_phantom_competitors_with_homepage_gate() -> No
     assert detail.plan.competitors == ["Cursor", "Windsurf"]
     assert detail.plan.homepage_verified == {"Cursor": True, "Windsurf": True}
     assert "FAKE_PRODUCT_NOT_EXISTS" not in detail.plan.homepage_hints
+
+
+@pytest.mark.asyncio
+async def test_trace_spans_redact_sensitive_text_before_storage() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+
+    service._append_trace_span(
+        record,
+        kind="tool",
+        agent="collector",
+        subagent="pricing",
+        name="compliance_probe",
+        status="ok",
+        started=time.perf_counter(),
+        input_text=(
+            "contact alice@example.com with "
+            "OPENROUTER_TEST_KEY_REDACTED"
+        ),
+        output_text="Bearer abcdef1234567890 accepted",
+    )
+
+    span = record.detail.trace_spans[-1]
+    tool_message = record.detail.tool_call_messages[-1]
+    assert "alice@example.com" not in span.full_input
+    assert "sk-or-v1-" not in span.full_input
+    assert "abcdef1234567890" not in span.full_output
+    assert "[redacted:email]" in span.full_input
+    assert "[redacted:api_key]" in span.full_input
+    assert "[redacted:bearer_token]" in span.full_output
+    assert span.metadata["pii_redacted"] is True
+    assert tool_message.arguments["input"] == span.full_input
 
 
 def test_qa_marks_unverified_source_without_missing_false_positive() -> None:

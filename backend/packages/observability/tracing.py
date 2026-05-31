@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from app.events import RunEvent, RunEventType
+from packages.compliance import redact_text
 
 SENSITIVE_KEY_PARTS = (
     "api_key",
@@ -31,6 +32,8 @@ def sanitize_for_trace(value: Any) -> Any:
         return [sanitize_for_trace(item) for item in value]
     if isinstance(value, str) and value.lower().startswith("bearer "):
         return "[redacted]"
+    if isinstance(value, str):
+        return redact_text(value).text
     return value
 
 

@@ -524,9 +524,17 @@ async def test_phase3_pydantic_ai_executors_return_structured_outputs() -> None:
 
     assert gap_result.status == "ok"
     assert gap_result.metadata["framework"] == "pydantic-ai"
+    assert gap_result.metadata["execution_mode"] == "deterministic_handler"
+    assert gap_result.metadata["typed_contract_enforced"] is True
+    assert gap_result.metadata["input_schema_hash"]
+    assert gap_result.metadata["output_schema_hash"]
     assert gap_result.payload["gap_count"] >= 1
     assert red_team_result.status == "ok"
     assert red_team_result.metadata["framework"] == "pydantic-ai"
+    assert red_team_result.metadata["execution_mode"] == "deterministic_handler"
+    assert red_team_result.metadata["typed_contract_enforced"] is True
+    assert red_team_result.metadata["input_schema_hash"]
+    assert red_team_result.metadata["output_schema_hash"]
     assert red_team_result.payload["high_severity_count"] >= 1
 
 

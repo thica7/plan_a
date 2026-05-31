@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 from collections.abc import Callable
 from typing import Generic, TypeVar
@@ -39,6 +41,9 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
         self._handler = handler
         self.system_prompt = system_prompt
         self._agent_class_name, self.pydantic_ai_available = _load_pydantic_ai_agent_class_name()
+        self._input_schema_hash = _model_schema_hash(self.input_type)
+        self._output_schema_hash = _model_schema_hash(self.output_type)
+        self._system_prompt_hash = _text_hash(system_prompt)
 
     async def execute(self, request: AgentExecutionRequest) -> AgentExecutionResult:
         start = time.perf_counter()
@@ -58,6 +63,13 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
                 "pydantic_ai_available": self.pydantic_ai_available,
                 "pydantic_ai_agent_class": self._agent_class_name,
                 "system_prompt": self.system_prompt,
+                "system_prompt_hash": self._system_prompt_hash,
+                "input_schema": self.input_type.__name__,
+                "output_schema": self.output_type.__name__,
+                "input_schema_hash": self._input_schema_hash,
+                "output_schema_hash": self._output_schema_hash,
+                "execution_mode": "deterministic_handler",
+                "typed_contract_enforced": True,
             },
         )
 
@@ -78,3 +90,17 @@ def _load_pydantic_ai_agent_class_name() -> tuple[str | None, bool]:
 
 def pydantic_ai_available() -> bool:
     return _load_pydantic_ai_agent_class_name()[1]
+
+
+def _model_schema_hash(model_type: type[BaseModel]) -> str:
+    schema_json = json.dumps(
+        model_type.model_json_schema(),
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
+    return _text_hash(schema_json)
+
+
+def _text_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]

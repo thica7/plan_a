@@ -5,8 +5,11 @@ from fastapi.testclient import TestClient
 
 from app.deps import get_app_settings, get_run_journal
 from app.main import create_app
+from app.routers.metrics import get_metrics_enterprise_store
 from packages.config import Settings
+from packages.enterprise import EnterpriseMemoryStore
 from packages.memory import RunJournal
+from packages.schema.enterprise import NotificationRecord
 
 
 def _settings(**overrides: object) -> Settings:
@@ -28,9 +31,23 @@ def _settings(**overrides: object) -> Settings:
 
 def test_metrics_exposes_run_and_temporal_operational_gauges() -> None:
     db_path = Path("runs") / f"test-metrics-{uuid4().hex}.db"
+    enterprise_store = EnterpriseMemoryStore()
+    enterprise_store.upsert_notification(
+        NotificationRecord(
+            id="notification-release-gate-blocked",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            notification_type="release_gate_blocked",
+            severity="warning",
+            title="Release gate blocked",
+            resource_type="run",
+            resource_id="run-1",
+        )
+    )
     app = create_app()
     app.dependency_overrides[get_app_settings] = lambda: _settings()
     app.dependency_overrides[get_run_journal] = lambda: RunJournal(db_path)
+    app.dependency_overrides[get_metrics_enterprise_store] = lambda: enterprise_store
     client = TestClient(app)
 
     try:
@@ -46,3 +63,17 @@ def test_metrics_exposes_run_and_temporal_operational_gauges() -> None:
     assert 'competiscope_run_orchestration_backend{backend="temporal"} 1' in body
     assert "competiscope_temporal_server_up 0" in body
     assert "competiscope_enterprise_store_configured 1" in body
+    assert "competiscope_trace_spans_total 0" in body
+    assert "competiscope_llm_calls_total 0" in body
+    assert 'competiscope_token_estimate_total{kind="total"} 0' in body
+    assert "competiscope_pydantic_ai_available " in body
+    assert "competiscope_compliance_redaction_enabled 1" in body
+    assert (
+        'competiscope_notifications_total{type="release_gate_blocked",status="queued"} 1'
+        in body
+    )
+    assert "competiscope_release_gate_blocked_notifications_total 1" in body
+    assert (
+        'competiscope_temporal_workflow_registered_total{workflow="CompetitiveIntelWorkflow"} 1'
+        in body
+    )

@@ -21,6 +21,7 @@ from packages.agents.reflector.logic import ReflectorAgentMixin
 from packages.agents.writer.logic import WriterAgentMixin
 from packages.business_intel import build_business_intel_plan, evaluate_report_release_gate
 from packages.business_intel.homepage import verify_homepages
+from packages.compliance import redact_text
 from packages.config import Settings
 from packages.enterprise import (
     EnterpriseStore,
@@ -1370,6 +1371,10 @@ class RunService(
             },
             ensure_ascii=False,
         )
+        redacted_input_text, redacted_output_text, redaction_metadata = self._redact_trace_texts(
+            input_text,
+            output_text,
+        )
         span_id = f"span-{len(record.detail.trace_spans) + 1}"
         span = TraceSpan(
             id=span_id,
@@ -1383,16 +1388,17 @@ class RunService(
             output_chars=len(output_text),
             input_tokens_estimate=self._estimate_tokens(input_text),
             output_tokens_estimate=self._estimate_tokens(output_text),
-            input_preview=self._preview(input_text),
-            output_preview=self._preview(output_text),
-            full_input=input_text,
-            full_output=output_text,
+            input_preview=self._preview(redacted_input_text),
+            output_preview=self._preview(redacted_output_text),
+            full_input=redacted_input_text,
+            full_output=redacted_output_text,
             metadata={
                 "message_id": message.id,
                 "to_agent": message.to_agent,
                 "message_type": message.message_type,
                 "payload_schema": message.payload_schema,
                 "source_message_count": len(message.source_message_ids),
+                **redaction_metadata,
             },
         )
         record.detail.trace_spans.append(span)
@@ -2141,6 +2147,25 @@ class RunService(
             metadata["total_tokens"] = int(total_tokens)
         return metadata
 
+    def _redact_trace_texts(
+        self,
+        input_text: str,
+        output_text: str,
+    ) -> tuple[str, str, dict[str, str | int | float | bool | None]]:
+        input_redaction = redact_text(input_text)
+        output_redaction = redact_text(output_text)
+        if input_redaction.total_count == 0 and output_redaction.total_count == 0:
+            return input_text, output_text, {}
+        return (
+            input_redaction.text,
+            output_redaction.text,
+            {
+                "pii_redacted": True,
+                "input_redaction_count": input_redaction.total_count,
+                "output_redaction_count": output_redaction.total_count,
+            },
+        )
+
     def _append_trace_span(
         self,
         record: RunRecord,
@@ -2164,6 +2189,11 @@ class RunService(
         output_tokens = self._usage_completion_tokens(token_usage) or self._estimate_tokens(
             output_text
         )
+        redacted_input_text, redacted_output_text, redaction_metadata = self._redact_trace_texts(
+            input_text,
+            output_text,
+        )
+        span_metadata = {**(metadata or {}), **redaction_metadata}
         span_id = f"span-{len(record.detail.trace_spans) + 1}"
         span = TraceSpan(
             id=span_id,
@@ -2184,11 +2214,11 @@ class RunService(
             input_tokens_estimate=input_tokens,
             output_tokens_estimate=output_tokens,
             cost_estimate_usd=self._estimate_span_cost_usd(kind, input_tokens, output_tokens),
-            input_preview=self._preview(input_text),
-            output_preview=self._preview(output_text),
-            full_input=input_text,
-            full_output=output_text,
-            metadata=metadata or {},
+            input_preview=self._preview(redacted_input_text),
+            output_preview=self._preview(redacted_output_text),
+            full_input=redacted_input_text,
+            full_output=redacted_output_text,
+            metadata=span_metadata,
         )
         record.detail.trace_spans.append(span)
         if self._trace_store is not None:
@@ -2201,8 +2231,8 @@ class RunService(
                 agent=agent,
                 subagent=subagent,
                 tool_name=name,
-                arguments={"input": input_text},
-                result={"output": output_text, "metadata": metadata or {}},
+                arguments={"input": redacted_input_text},
+                result={"output": redacted_output_text, "metadata": span_metadata},
                 status=status,
                 trace_span_id=span_id,
                 source_message_id=source_message_id,

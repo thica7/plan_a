@@ -7,19 +7,56 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse
 
-from app.deps import get_app_settings, get_run_journal
+from app.deps import get_app_settings, get_enterprise_store, get_run_journal
+from packages.agents.pydantic_ai_adapter import pydantic_ai_available
 from packages.config import Settings
+from packages.enterprise import EnterpriseStore
 from packages.memory import RunJournal
+from packages.schema.enterprise import NotificationRecord
 
 router = APIRouter()
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 RunJournalDep = Annotated[RunJournal, Depends(get_run_journal)]
 
+TEMPORAL_REGISTERED_WORKFLOWS = (
+    "CompetitiveIntelWorkflow",
+    "MonitorWorkflow",
+    "ReportApprovalWorkflow",
+    "ScheduledScanWorkflow",
+)
+
+
+def get_metrics_enterprise_store(settings: SettingsDep) -> EnterpriseStore | None:
+    if not _enterprise_store_configured(settings):
+        return None
+    try:
+        return get_enterprise_store()
+    except RuntimeError:
+        return None
+
+
+EnterpriseStoreDep = Annotated[EnterpriseStore | None, Depends(get_metrics_enterprise_store)]
+
 
 @router.get("/metrics", response_class=PlainTextResponse)
-def metrics(settings: SettingsDep, journal: RunJournalDep) -> PlainTextResponse:
+def metrics(
+    settings: SettingsDep,
+    journal: RunJournalDep,
+    enterprise_store: EnterpriseStoreDep,
+) -> PlainTextResponse:
     runs = journal.load_runs()
     counts = Counter(run.status for run in runs)
+    notifications = _load_notifications(enterprise_store)
+    notification_counts = Counter(
+        (item.notification_type, item.status) for item in notifications
+    )
+    release_gate_blocked_count = sum(
+        count
+        for (notification_type, _status), count in notification_counts.items()
+        if notification_type == "release_gate_blocked"
+    )
+    input_tokens = sum(run.metrics.input_tokens_estimate for run in runs)
+    output_tokens = sum(run.metrics.output_tokens_estimate for run in runs)
     lines = [
         "# HELP competiscope_api_up Competiscope API process health.",
         "# TYPE competiscope_api_up gauge",
@@ -47,9 +84,73 @@ def metrics(settings: SettingsDep, journal: RunJournalDep) -> PlainTextResponse:
             "# HELP competiscope_enterprise_store_configured Enterprise store config validity.",
             "# TYPE competiscope_enterprise_store_configured gauge",
             f"competiscope_enterprise_store_configured {_enterprise_store_configured(settings)}",
+            "# HELP competiscope_trace_spans_total Trace spans persisted in run details.",
+            "# TYPE competiscope_trace_spans_total gauge",
+            f"competiscope_trace_spans_total {sum(run.metrics.total_spans for run in runs)}",
+            "# HELP competiscope_llm_calls_total LLM calls persisted in run metrics.",
+            "# TYPE competiscope_llm_calls_total gauge",
+            f"competiscope_llm_calls_total {sum(run.metrics.llm_calls for run in runs)}",
+            "# HELP competiscope_token_estimate_total Token estimates persisted in run metrics.",
+            "# TYPE competiscope_token_estimate_total gauge",
+            f'competiscope_token_estimate_total{{kind="input"}} {input_tokens}',
+            f'competiscope_token_estimate_total{{kind="output"}} {output_tokens}',
+            f'competiscope_token_estimate_total{{kind="total"}} {input_tokens + output_tokens}',
+            "# HELP competiscope_cost_estimate_usd_total Estimated LLM cost in USD.",
+            "# TYPE competiscope_cost_estimate_usd_total gauge",
+            (
+                "competiscope_cost_estimate_usd_total "
+                f"{round(sum(run.metrics.cost_estimate_usd for run in runs), 6)}"
+            ),
+            "# HELP competiscope_qa_findings_total QA findings persisted across runs.",
+            "# TYPE competiscope_qa_findings_total gauge",
+            f"competiscope_qa_findings_total {sum(len(run.qa_findings) for run in runs)}",
+            "# HELP competiscope_pydantic_ai_available Pydantic-AI runtime import status.",
+            "# TYPE competiscope_pydantic_ai_available gauge",
+            f"competiscope_pydantic_ai_available {1 if pydantic_ai_available() else 0}",
+            "# HELP competiscope_compliance_redaction_enabled Trace text redaction status.",
+            "# TYPE competiscope_compliance_redaction_enabled gauge",
+            "competiscope_compliance_redaction_enabled 1",
+            "# HELP competiscope_notifications_total Enterprise notifications by type and status.",
+            "# TYPE competiscope_notifications_total gauge",
         ]
     )
+    for notification_type, status in sorted(
+        {("release_gate_blocked", "queued"), *notification_counts.keys()}
+    ):
+        lines.append(
+            "competiscope_notifications_total"
+            f'{{type="{notification_type}",status="{status}"}} '
+            f"{notification_counts[(notification_type, status)]}"
+        )
+    lines.extend(
+        [
+            (
+                "# HELP competiscope_release_gate_blocked_notifications_total "
+                "Blocked release gate notifications."
+            ),
+            "# TYPE competiscope_release_gate_blocked_notifications_total gauge",
+            (
+                "competiscope_release_gate_blocked_notifications_total "
+                f"{release_gate_blocked_count}"
+            ),
+            "# HELP competiscope_temporal_workflow_registered_total Registered Temporal workflows.",
+            "# TYPE competiscope_temporal_workflow_registered_total gauge",
+        ]
+    )
+    for workflow in TEMPORAL_REGISTERED_WORKFLOWS:
+        lines.append(
+            f'competiscope_temporal_workflow_registered_total{{workflow="{workflow}"}} 1'
+        )
     return PlainTextResponse("\n".join(lines) + "\n")
+
+
+def _load_notifications(enterprise_store: EnterpriseStore | None) -> list[NotificationRecord]:
+    if enterprise_store is None:
+        return []
+    try:
+        return enterprise_store.list_notifications(limit=10_000)
+    except Exception:  # noqa: BLE001 - metrics should degrade instead of failing health scrape.
+        return []
 
 
 def _enterprise_store_configured(settings: Settings) -> int:
