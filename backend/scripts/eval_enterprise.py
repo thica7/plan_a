@@ -31,6 +31,21 @@ EvalMode = Literal["demo", "real"]
 JudgeMode = Literal["off", "heuristic", "llm"]
 
 
+class RegressionGatePolicy:
+    def __init__(
+        self,
+        *,
+        min_pass_rate: float = 0.8,
+        min_average_observability_score: float = 0.8,
+        max_compliance_fail_count: int = 0,
+        require_no_failed_cases: bool = False,
+    ) -> None:
+        self.min_pass_rate = min_pass_rate
+        self.min_average_observability_score = min_average_observability_score
+        self.max_compliance_fail_count = max_compliance_fail_count
+        self.require_no_failed_cases = require_no_failed_cases
+
+
 async def run_enterprise_case(
     case: EvalCase,
     *,
@@ -161,27 +176,116 @@ def build_enterprise_summary(
     *,
     eval_mode: EvalMode,
     judge_mode: JudgeMode,
+    gate_policy: RegressionGatePolicy | None = None,
 ) -> dict[str, Any]:
     passed_count = sum(1 for row in rows if row["passed"])
     pass_rate = passed_count / len(rows) if rows else 0.0
-    return {
+    average_observability_score = (
+        sum(float(row["observability_score"]) for row in rows) / len(rows)
+        if rows
+        else 0.0
+    )
+    compliance_fail_count = sum(1 for row in rows if row["compliance_status"] == "fail")
+    summary = {
         "component": "enterprise_eval",
-        "ok": bool(rows) and pass_rate >= 0.8,
+        "ok": False,
         "generated_at": datetime.now(UTC).isoformat(),
         "eval_mode": eval_mode,
         "judge_mode": judge_mode,
         "case_count": len(rows),
         "passed_count": passed_count,
+        "failed_count": len(rows) - passed_count,
         "pass_rate": pass_rate,
-        "average_observability_score": (
-            sum(float(row["observability_score"]) for row in rows) / len(rows)
-            if rows
-            else 0.0
+        "average_observability_score": average_observability_score,
+        "compliance_fail_count": compliance_fail_count,
+        "objective_fail_count": sum(
+            1 for row in rows if not bool(row.get("objective_passed", row.get("passed", False)))
         ),
-        "compliance_fail_count": sum(
-            1 for row in rows if row["compliance_status"] == "fail"
+        "judge_fail_count": sum(
+            1 for row in rows if not bool(row.get("judge", {}).get("passed", True))
         ),
         "rows": rows,
+    }
+    gate = evaluate_regression_gate(summary, gate_policy or RegressionGatePolicy())
+    summary["regression_gate"] = gate
+    summary["ok"] = gate["passed"]
+    return summary
+
+
+def evaluate_regression_gate(
+    summary: dict[str, Any],
+    policy: RegressionGatePolicy,
+) -> dict[str, Any]:
+    checks = [
+        _gate_check(
+            "case_count",
+            actual=int(summary["case_count"]),
+            threshold=1,
+            passed=int(summary["case_count"]) >= 1,
+            message="At least one enterprise eval case must run.",
+        ),
+        _gate_check(
+            "pass_rate",
+            actual=float(summary["pass_rate"]),
+            threshold=policy.min_pass_rate,
+            passed=float(summary["pass_rate"]) >= policy.min_pass_rate,
+            message="Pass rate must meet the configured regression threshold.",
+        ),
+        _gate_check(
+            "average_observability_score",
+            actual=float(summary["average_observability_score"]),
+            threshold=policy.min_average_observability_score,
+            passed=(
+                float(summary["average_observability_score"])
+                >= policy.min_average_observability_score
+            ),
+            message="Average observability score must remain audit-grade.",
+        ),
+        _gate_check(
+            "compliance_fail_count",
+            actual=int(summary["compliance_fail_count"]),
+            threshold=policy.max_compliance_fail_count,
+            passed=int(summary["compliance_fail_count"]) <= policy.max_compliance_fail_count,
+            message="Compliance failures must stay within policy.",
+        ),
+    ]
+    if policy.require_no_failed_cases:
+        checks.append(
+            _gate_check(
+                "failed_count",
+                actual=int(summary["failed_count"]),
+                threshold=0,
+                passed=int(summary["failed_count"]) == 0,
+                message="Strict gate requires every case to pass.",
+            )
+        )
+    return {
+        "passed": all(item["passed"] for item in checks),
+        "policy": {
+            "min_pass_rate": policy.min_pass_rate,
+            "min_average_observability_score": policy.min_average_observability_score,
+            "max_compliance_fail_count": policy.max_compliance_fail_count,
+            "require_no_failed_cases": policy.require_no_failed_cases,
+        },
+        "checks": checks,
+        "failed_checks": [item for item in checks if not item["passed"]],
+    }
+
+
+def _gate_check(
+    check_id: str,
+    *,
+    actual: int | float,
+    threshold: int | float,
+    passed: bool,
+    message: str,
+) -> dict[str, Any]:
+    return {
+        "id": check_id,
+        "passed": passed,
+        "actual": actual,
+        "threshold": threshold,
+        "message": message,
     }
 
 
@@ -197,11 +301,32 @@ def render_markdown_report(summary: dict[str, Any]) -> str:
         f"- Pass rate: {summary['pass_rate']:.2%}",
         f"- Average observability score: {summary['average_observability_score']:.2f}",
         f"- Compliance fail count: {summary['compliance_fail_count']}",
+        f"- Regression gate: {'PASS' if summary['regression_gate']['passed'] else 'FAIL'}",
         f"- Overall: {'PASS' if summary['ok'] else 'FAIL'}",
         "",
-        "| Case | Status | Evidence | Claims | Obs | Compliance | Judge |",
-        "|---|---:|---:|---:|---:|---:|---:|",
+        "## Regression Gate",
+        "",
+        "| Check | Passed | Actual | Threshold |",
+        "|---|---:|---:|---:|",
     ]
+    for check in summary["regression_gate"]["checks"]:
+        lines.append(
+            "| {id} | {passed} | {actual} | {threshold} |".format(
+                id=check["id"],
+                passed="yes" if check["passed"] else "no",
+                actual=check["actual"],
+                threshold=check["threshold"],
+            )
+        )
+    lines.extend(
+        [
+            "",
+            "## Cases",
+            "",
+            "| Case | Status | Evidence | Claims | Obs | Compliance | Judge |",
+            "|---|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
     for row in summary["rows"]:
         lines.append(
             "| {case_id} | {status} | {evidence_count} | {claim_count} | "
@@ -270,7 +395,18 @@ async def main() -> None:
         )
         for case in cases
     ]
-    summary = build_enterprise_summary(rows, eval_mode=args.mode, judge_mode=args.judge_mode)
+    gate_policy = RegressionGatePolicy(
+        min_pass_rate=args.min_pass_rate,
+        min_average_observability_score=args.min_observability_score,
+        max_compliance_fail_count=args.max_compliance_fail_count,
+        require_no_failed_cases=args.require_no_failed_cases,
+    )
+    summary = build_enterprise_summary(
+        rows,
+        eval_mode=args.mode,
+        judge_mode=args.judge_mode,
+        gate_policy=gate_policy,
+    )
     if args.report:
         report_path = Path(args.report)
         report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -286,6 +422,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--mode", choices=["demo", "real"], default="demo")
     parser.add_argument("--judge-mode", choices=["off", "heuristic", "llm"], default="heuristic")
     parser.add_argument("--report", default=None)
+    parser.add_argument("--min-pass-rate", type=float, default=0.8)
+    parser.add_argument("--min-observability-score", type=float, default=0.8)
+    parser.add_argument("--max-compliance-fail-count", type=int, default=0)
+    parser.add_argument("--require-no-failed-cases", action="store_true")
     args = parser.parse_args()
     if args.limit <= 0:
         args.limit = None
