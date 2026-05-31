@@ -32,6 +32,7 @@ class ModelPolicyReport(BaseModel):
     finding_count: int = Field(ge=0)
     blocker_count: int = Field(ge=0)
     warn_count: int = Field(ge=0)
+    blocking_finding_ids: list[str] = Field(default_factory=list)
     findings: list[ModelPolicyFinding] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -100,6 +101,12 @@ def build_model_policy_report(settings: object) -> ModelPolicyReport:
             )
         )
 
+    blocking_finding_ids: list[str] = []
+    if not has_primary and not has_backup:
+        blocking_finding_ids.append("provider.no_real_provider")
+    if not redaction_required:
+        blocking_finding_ids.append("compliance.redaction_disabled")
+
     blocker_count = sum(1 for item in findings if item.severity == "blocker")
     warn_count = sum(1 for item in findings if item.severity == "warn")
     status: Literal["pass", "warn", "fail"] = "pass"
@@ -120,7 +127,16 @@ def build_model_policy_report(settings: object) -> ModelPolicyReport:
         finding_count=len(findings),
         blocker_count=blocker_count,
         warn_count=warn_count,
+        blocking_finding_ids=blocking_finding_ids,
         findings=findings,
+    )
+
+
+def model_policy_block_message(report: ModelPolicyReport) -> str:
+    blocking_ids = report.blocking_finding_ids or ["policy.real_execution_not_allowed"]
+    return (
+        f"Real mode is blocked by model policy {report.policy_version}: "
+        f"{', '.join(blocking_ids)}."
     )
 
 

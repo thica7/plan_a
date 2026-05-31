@@ -6758,6 +6758,13 @@
             "minimum": 0.0,
             "title": "Warn Count"
           },
+          "blocking_finding_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocking Finding Ids"
+          },
           "findings": {
             "items": {
               "$ref": "#/components/schemas/ModelPolicyFinding"

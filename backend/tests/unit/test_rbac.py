@@ -67,6 +67,10 @@ def test_model_policy_report_blocks_disabled_redaction() -> None:
     assert report.status == "fail"
     assert report.real_execution_allowed is False
     assert report.blocker_count == 1
+    assert report.blocking_finding_ids == [
+        "provider.no_real_provider",
+        "compliance.redaction_disabled",
+    ]
     assert {finding.id for finding in report.findings} >= {
         "compliance.redaction_disabled",
         "provider.no_real_provider",

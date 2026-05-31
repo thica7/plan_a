@@ -2,7 +2,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.deps import get_temporal_workflow_service
+from app.deps import get_app_settings, get_temporal_workflow_service
+from app.governance import ensure_model_policy_allows_execution_mode
+from packages.config import Settings
 from packages.schema.api_dto import (
     MonitorStartRequest,
     MonitorStartResponse,
@@ -23,6 +25,7 @@ TemporalWorkflowServiceDep = Annotated[
     TemporalWorkflowService,
     Depends(get_temporal_workflow_service),
 ]
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 
 @router.post(
@@ -33,7 +36,9 @@ TemporalWorkflowServiceDep = Annotated[
 async def start_competitive_intel_workflow(
     request: RunCreateRequest,
     service: TemporalWorkflowServiceDep,
+    settings: SettingsDep,
 ) -> WorkflowStartResponse:
+    ensure_model_policy_allows_execution_mode(request.execution_mode, settings)
     try:
         return await service.start_competitive_intel(request)
     except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
@@ -68,7 +73,9 @@ async def get_workflow_state(
 async def start_scheduled_scan_workflow(
     request: ScheduledScanStartRequest,
     service: TemporalWorkflowServiceDep,
+    settings: SettingsDep,
 ) -> ScheduledScanStartResponse:
+    ensure_model_policy_allows_execution_mode(request.execution_mode, settings)
     try:
         return await service.start_scheduled_scan(request)
     except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
@@ -86,7 +93,9 @@ async def start_scheduled_scan_workflow(
 async def start_monitor_workflow(
     request: MonitorStartRequest,
     service: TemporalWorkflowServiceDep,
+    settings: SettingsDep,
 ) -> MonitorStartResponse:
+    ensure_model_policy_allows_execution_mode(request.execution_mode, settings)
     try:
         return await service.start_monitor(request)
     except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.

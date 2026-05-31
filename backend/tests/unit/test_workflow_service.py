@@ -425,6 +425,95 @@ def test_runs_router_can_cut_over_to_temporal_backend() -> None:
     }
 
 
+def test_runs_router_blocks_real_temporal_cutover_when_model_policy_denies() -> None:
+    class FakeWorkflowService:
+        called = False
+
+        async def start_competitive_intel(
+            self,
+            request: RunCreateRequest,
+        ) -> WorkflowStartResponse:
+            self.called = True
+            return WorkflowStartResponse(
+                workflow_id="should-not-start",
+                run_id="run-blocked",
+                idempotency_key=request.idempotency_key or "workflow:blocked",
+                task_queue="test-queue",
+                status="started",
+            )
+
+    fake_service = FakeWorkflowService()
+    app = create_app()
+    app.dependency_overrides[get_app_settings] = lambda: _settings(
+        run_orchestration_backend="temporal",
+        ark_api_key=None,
+        ark_model=None,
+        backup_llm_api_key=None,
+        backup_llm_model=None,
+    )
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: fake_service
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/runs",
+        json={
+            "topic": "AI coding assistant workflow cutover",
+            "competitors": ["Cursor"],
+            "dimensions": ["pricing"],
+            "execution_mode": "real",
+            "idempotency_key": "route-cutover-blocked",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["blocking_finding_ids"] == ["provider.no_real_provider"]
+    assert fake_service.called is False
+
+
+def test_workflow_router_blocks_real_run_when_model_policy_denies() -> None:
+    class FakeWorkflowService:
+        called = False
+
+        async def start_competitive_intel(
+            self,
+            request: RunCreateRequest,
+        ) -> WorkflowStartResponse:
+            self.called = True
+            return WorkflowStartResponse(
+                workflow_id="should-not-start",
+                run_id="run-blocked",
+                idempotency_key=request.idempotency_key or "workflow:blocked",
+                task_queue="test-queue",
+                status="started",
+            )
+
+    fake_service = FakeWorkflowService()
+    app = create_app()
+    app.dependency_overrides[get_app_settings] = lambda: _settings(
+        ark_api_key="key",
+        ark_model="model",
+        compliance_redaction_enabled=False,
+    )
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: fake_service
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/workflows/competitive-intel",
+        json={
+            "topic": "AI coding assistant workflow route",
+            "competitors": ["Cursor"],
+            "dimensions": ["pricing"],
+            "execution_mode": "real",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["blocking_finding_ids"] == [
+        "compliance.redaction_disabled"
+    ]
+    assert fake_service.called is False
+
+
 def test_workflow_router_exposes_report_approval_start_and_signal() -> None:
     class FakeWorkflowService:
         async def start_report_approval(

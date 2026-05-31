@@ -37,7 +37,7 @@ async def test_real_mode_requires_ark_credentials() -> None:
     )
     service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
 
-    with pytest.raises(ValueError, match="ARK_API_KEY and ARK_MODEL"):
+    with pytest.raises(ValueError, match="provider.no_real_provider"):
         await service.create_run(
             RunCreateRequest(
                 topic="AI research assistant competitive analysis",
@@ -46,6 +46,81 @@ async def test_real_mode_requires_ark_credentials() -> None:
                 execution_mode="real",
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_real_mode_accepts_backup_provider_when_model_policy_allows() -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        backup_llm_api_key="backup-key",
+        backup_llm_model="backup-model",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+
+    assert detail.execution_mode == "real"
+
+
+@pytest.mark.asyncio
+async def test_real_mode_blocks_disabled_redaction_policy() -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key="key",
+        ark_model="model",
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+        compliance_redaction_enabled=False,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+
+    with pytest.raises(ValueError, match="compliance.redaction_disabled"):
+        await service.create_run(
+            RunCreateRequest(
+                topic="AI research assistant competitive analysis",
+                competitors=["Perplexity"],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_auto_mode_falls_back_to_demo_when_model_policy_blocks_real() -> None:
+    settings = Settings(
+        demo_mode=False,
+        ark_api_key="key",
+        ark_model="model",
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+        compliance_redaction_enabled=False,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity"],
+            dimensions=["pricing"],
+            execution_mode="auto",
+        )
+    )
+
+    assert detail.execution_mode == "demo"
 
 
 @pytest.mark.asyncio

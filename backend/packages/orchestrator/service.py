@@ -28,6 +28,7 @@ from packages.enterprise import (
     WorkspaceQuotaExceededError,
     build_enterprise_projection,
 )
+from packages.governance import build_model_policy_report, model_policy_block_message
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.llm import DoubaoClient
 from packages.memory import KBCache, RunJournal
@@ -2485,14 +2486,14 @@ class RunService(
     def _resolve_execution_mode(self, requested: str) -> str:
         if requested == "demo":
             return "demo"
+        model_policy = build_model_policy_report(self._settings)
         if requested == "real":
-            if not self._settings.has_llm_credentials:
-                raise ValueError(
-                    "Real mode requires ARK_API_KEY and ARK_MODEL or "
-                    "BACKUP_LLM_API_KEY and BACKUP_LLM_MODEL in backend environment or .env."
-                )
+            if not model_policy.real_execution_allowed:
+                raise ValueError(model_policy_block_message(model_policy))
             return "real"
-        return self._settings.default_execution_mode
+        if self._settings.default_execution_mode == "real":
+            return "real" if model_policy.real_execution_allowed else "demo"
+        return "demo"
 
     def _normalize_competitor_names(self, value: object) -> list[str]:
         if not isinstance(value, list):

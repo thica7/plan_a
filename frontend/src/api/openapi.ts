@@ -1983,6 +1983,8 @@ export interface components {
             blocker_count: number;
             /** Warn Count */
             warn_count: number;
+            /** Blocking Finding Ids */
+            blocking_finding_ids?: string[];
             /** Findings */
             findings?: components["schemas"]["ModelPolicyFinding"][];
             /**

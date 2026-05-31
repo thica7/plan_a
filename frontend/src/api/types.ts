@@ -319,6 +319,7 @@ export interface ModelPolicyReport {
   finding_count: number;
   blocker_count: number;
   warn_count: number;
+  blocking_finding_ids: string[];
   findings: ModelPolicyFinding[];
   generated_at: string;
 }

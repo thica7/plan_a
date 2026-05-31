@@ -9,6 +9,7 @@ from app.deps import (
     get_run_service,
     get_temporal_workflow_service,
 )
+from app.governance import ensure_model_policy_allows_execution_mode
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore, WorkspaceQuotaExceededError
 from packages.orchestrator.service import RunService
@@ -37,6 +38,7 @@ async def create_run(
     workflow_service: TemporalWorkflowServiceDep,
     store: EnterpriseStoreDep,
 ) -> RunDetail | WorkflowStartResponse:
+    ensure_model_policy_allows_execution_mode(request.execution_mode, settings)
     _ensure_workspace_quota(store, request.workspace_id)
     cutover = decide_temporal_cutover(settings, request)
     response.headers["X-Run-Orchestration-Route"] = cutover.route
