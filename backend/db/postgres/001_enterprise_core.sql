@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS notifications (
                 'approval_request',
                 'approval_timeout',
                 'anomaly_alert',
-                'quota_warning'
+                'quota_warning',
+                'release_gate_blocked'
             )
         ),
     channel TEXT NOT NULL DEFAULT 'in_app'
@@ -332,7 +333,8 @@ ALTER TABLE notifications
             'approval_request',
             'approval_timeout',
             'anomaly_alert',
-            'quota_warning'
+            'quota_warning',
+            'release_gate_blocked'
         )
     );
 

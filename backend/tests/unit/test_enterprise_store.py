@@ -459,6 +459,49 @@ async def test_run_service_writes_enterprise_projection_on_completion() -> None:
     assert projection.evidence_records[0].competitor_id.startswith("competitor-")
     assert len(projection.evidence_records) == 1
     assert record.events[-1].payload["enterprise_projection"]["evidence_count"] == 1
+    assert record.events[-1].payload["enterprise_projection"]["release_gate"]["allowed"] is True
+    assert not [
+        item
+        for item in store.list_notifications(created.workspace_id)
+        if item.notification_type == "release_gate_blocked"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_run_service_records_release_gate_notification_for_weak_report() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+    created = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[created.id]
+    record.detail.report_md = "Weak report without evidence."
+    record.detail.status = "running"
+
+    await service._finalize_demo_pipeline(record)
+
+    projection = store.get_run_projection(created.id)
+    notifications = [
+        item
+        for item in store.list_notifications(created.workspace_id)
+        if item.notification_type == "release_gate_blocked"
+    ]
+    assert projection is not None
+    assert projection.report_version.status == "draft"
+    assert record.events[-1].payload["enterprise_projection"]["release_gate"]["allowed"] is False
+    assert record.events[-1].payload["enterprise_projection"]["release_gate"]["status"] == "blocked"
+    assert notifications
+    assert notifications[0].resource_id == projection.report_version.id
+    assert notifications[0].metadata["issue_count"] >= 1
 
 
 @pytest.mark.asyncio

@@ -19,7 +19,7 @@ from packages.agents.planner.logic import PlannerAgentMixin
 from packages.agents.qa.logic import QualityAgentMixin
 from packages.agents.reflector.logic import ReflectorAgentMixin
 from packages.agents.writer.logic import WriterAgentMixin
-from packages.business_intel import build_business_intel_plan
+from packages.business_intel import build_business_intel_plan, evaluate_report_release_gate
 from packages.business_intel.homepage import verify_homepages
 from packages.config import Settings
 from packages.enterprise import (
@@ -39,7 +39,11 @@ from packages.orchestrator.graph import (
     build_scoped_redo_graph,
 )
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail, RunSummary
-from packages.schema.enterprise import EnterpriseRunProjection, NotificationRecord
+from packages.schema.enterprise import (
+    EnterpriseRunProjection,
+    NotificationRecord,
+    ReportReleaseGate,
+)
 from packages.schema.models import (
     AgentMessage,
     AnalysisPlan,
@@ -606,7 +610,7 @@ class RunService(
         record.detail.status = "completed"
         record.detail.current_node = None
         record.detail.updated_at = datetime.utcnow()
-        projection = self._sync_enterprise_projection(record)
+        projection = self._sync_enterprise_projection(record, notify_release_gate=True)
         await self.emit(
             record.detail.id,
             "run_completed",
@@ -627,7 +631,7 @@ class RunService(
         detail.updated_at = datetime.utcnow()
         if (pending and pending.auto_continue) and await self._maybe_run_auto_redo(record):
             return
-        projection = self._sync_enterprise_projection(record)
+        projection = self._sync_enterprise_projection(record, notify_release_gate=True)
         await self.emit(
             detail.id,
             "run_completed",
@@ -647,7 +651,7 @@ class RunService(
         record.detail.status = "completed"
         record.detail.current_node = None
         record.detail.updated_at = datetime.utcnow()
-        projection = self._sync_enterprise_projection(record)
+        projection = self._sync_enterprise_projection(record, notify_release_gate=True)
         await self.emit(
             record.detail.id,
             "run_completed",
@@ -1445,7 +1449,12 @@ class RunService(
         self._persist_run(record.detail.id)
         return message
 
-    def _sync_enterprise_projection(self, record: RunRecord) -> EnterpriseRunProjection | None:
+    def _sync_enterprise_projection(
+        self,
+        record: RunRecord,
+        *,
+        notify_release_gate: bool = False,
+    ) -> EnterpriseRunProjection | None:
         if self._enterprise_store is None:
             return None
 
@@ -1478,6 +1487,9 @@ class RunService(
             competitor_id_map=context.competitor_id_map,
         )
         self._enterprise_store.save_projection(projection)
+        gate = self._evaluate_report_release_gate(projection)
+        if notify_release_gate:
+            self._record_release_gate_notification(projection, gate)
         self._record_usage_governance_notification(context.workspace_id, detail.id)
         return projection
 
@@ -1498,6 +1510,49 @@ class RunService(
                 "evidence_count": len(projection.evidence_records),
                 "claim_count": len(projection.claim_records),
                 "report_version_id": projection.report_version.id,
+                **self._release_gate_payload(projection),
+            }
+        }
+
+    def _evaluate_report_release_gate(
+        self,
+        projection: EnterpriseRunProjection,
+    ) -> ReportReleaseGate | None:
+        if self._enterprise_store is None:
+            return None
+        project = self._enterprise_store.get_project(projection.project_id)
+        if project is None:
+            return None
+        return evaluate_report_release_gate(
+            project=project,
+            report_version=projection.report_version,
+            competitors=self._enterprise_store.list_competitors(project_id=project.id),
+            evidence=self._enterprise_store.list_evidence(project_id=project.id),
+            claims=self._enterprise_store.list_claims(project_id=project.id),
+        )
+
+    def _release_gate_payload(self, projection: EnterpriseRunProjection) -> dict[str, Any]:
+        gate = self._evaluate_report_release_gate(projection)
+        if gate is None:
+            return {}
+        return {
+            "release_gate": {
+                "allowed": gate.allowed,
+                "status": gate.status,
+                "readiness_score": gate.readiness.score,
+                "readiness_risk_level": gate.readiness.risk_level,
+                "qa_finding_count": gate.qa_evaluation.finding_count,
+                "blocker_count": gate.blocker_count,
+                "warn_count": gate.warn_count,
+                "issue_count": gate.issue_count,
+                "top_issues": [
+                    {
+                        "rule_id": issue.rule_id,
+                        "message": issue.message,
+                        "recommendation": issue.recommendation,
+                    }
+                    for issue in gate.issues[:3]
+                ],
             }
         }
 
@@ -1541,6 +1596,41 @@ class RunService(
                 "cost_estimate_usd": usage.cost_estimate_usd,
                 "total_tokens_estimate": usage.total_tokens_estimate,
                 "enforcement": decision.enforcement,
+            },
+        )
+        self._enterprise_store.upsert_notification(notification)
+
+    def _record_release_gate_notification(
+        self,
+        projection: EnterpriseRunProjection,
+        gate: ReportReleaseGate | None,
+    ) -> None:
+        if self._enterprise_store is None or gate is None or gate.allowed:
+            return
+        top_issue_messages = [issue.message for issue in gate.issues[:3]]
+        notification = NotificationRecord(
+            id=f"release-gate-{projection.report_version.id}",
+            workspace_id=projection.workspace_id,
+            project_id=projection.project_id,
+            notification_type="release_gate_blocked",
+            severity="critical",
+            status="queued",
+            title="Report blocked by release gate",
+            body="; ".join(top_issue_messages)
+            or "Report is not ready for enterprise approval.",
+            resource_type="report_version",
+            resource_id=projection.report_version.id,
+            created_by="system-user",
+            metadata={
+                "run_id": projection.run_id,
+                "report_version_id": projection.report_version.id,
+                "readiness_score": gate.readiness.score,
+                "readiness_risk_level": gate.readiness.risk_level,
+                "qa_finding_count": gate.qa_evaluation.finding_count,
+                "blocker_count": gate.blocker_count,
+                "warn_count": gate.warn_count,
+                "issue_count": gate.issue_count,
+                "issues": [issue.model_dump(mode="json") for issue in gate.issues[:5]],
             },
         )
         self._enterprise_store.upsert_notification(notification)

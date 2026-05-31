@@ -671,7 +671,8 @@ export type NotificationType =
   | "approval_request"
   | "approval_timeout"
   | "anomaly_alert"
-  | "quota_warning";
+  | "quota_warning"
+  | "release_gate_blocked";
 
 export interface NotificationRecord {
   id: string;

@@ -20,6 +20,7 @@ NotificationType = Literal[
     "approval_timeout",
     "anomaly_alert",
     "quota_warning",
+    "release_gate_blocked",
 ]
 QuotaEnforcementMode = Literal["monitor", "block"]
 WorkspaceUsageStatus = Literal["ok", "warn", "exceeded"]

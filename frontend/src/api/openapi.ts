@@ -1822,7 +1822,7 @@ export interface components {
              * Notification Type
              * @enum {string}
              */
-            notification_type: "scheduled_scan_summary" | "scheduled_scan_failure" | "approval_request" | "approval_timeout" | "anomaly_alert" | "quota_warning";
+            notification_type: "scheduled_scan_summary" | "scheduled_scan_failure" | "approval_request" | "approval_timeout" | "anomaly_alert" | "quota_warning" | "release_gate_blocked";
             /**
              * Channel
              * @default in_app

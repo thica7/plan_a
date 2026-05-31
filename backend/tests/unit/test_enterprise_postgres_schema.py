@@ -80,6 +80,7 @@ def test_phase5_notifications_schema_is_present() -> None:
     assert "CREATE TABLE IF NOT EXISTS notifications" in sql
     assert "scheduled_scan_summary" in sql
     assert "quota_warning" in sql
+    assert "release_gate_blocked" in sql
     assert "idx_notifications_workspace_created" in sql
     assert "idx_notifications_workspace_status" in sql
 
