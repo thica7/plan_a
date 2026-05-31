@@ -97,6 +97,8 @@ class Settings:
     compliance_require_trace_context: bool = True
     pydantic_ai_model_backed_enabled: bool = False
     pydantic_ai_model_name: str | None = None
+    artifact_storage_backend: Literal["local"] = "local"
+    artifact_storage_root: str = "data/artifacts"
 
     @property
     def has_llm_credentials(self) -> bool:
@@ -191,4 +193,9 @@ def get_settings() -> Settings:
             False,
         ),
         pydantic_ai_model_name=os.getenv("PYDANTIC_AI_MODEL_NAME") or None,
+        artifact_storage_backend=cast(
+            Literal["local"],
+            _env_choice("ARTIFACT_STORAGE_BACKEND", "local", {"local"}),
+        ),
+        artifact_storage_root=os.getenv("ARTIFACT_STORAGE_ROOT", "data/artifacts"),
     )

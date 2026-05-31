@@ -566,6 +566,8 @@ export interface RuntimeConfig {
   compliance_require_trace_context: boolean;
   pydantic_ai_model_backed_enabled: boolean;
   pydantic_ai_model_name?: string | null;
+  artifact_storage_backend: string;
+  artifact_storage_root: string;
 }
 
 export type CompetitorLayer = "L1" | "L2" | "L3" | "unknown";
@@ -900,6 +902,52 @@ export interface EvidenceRecord {
   quality_label: EvidenceQualityLabel;
   captured_at: string;
   metadata: Record<string, unknown>;
+}
+
+export type ArtifactType =
+  | "web_snapshot"
+  | "pdf"
+  | "screenshot"
+  | "raw_text"
+  | "report_export"
+  | "other";
+
+export interface ArtifactRecord {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  evidence_id?: string | null;
+  run_id?: string | null;
+  artifact_type: ArtifactType;
+  filename: string;
+  media_type: string;
+  storage_backend: "local" | "external";
+  uri: string;
+  byte_size: number;
+  content_hash: string;
+  source_url?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ArtifactCreateRequest {
+  workspace_id: string;
+  project_id: string;
+  evidence_id?: string | null;
+  run_id?: string | null;
+  artifact_type?: ArtifactType;
+  filename: string;
+  media_type?: string;
+  content_text?: string | null;
+  content_base64?: string | null;
+  external_uri?: string | null;
+  source_url?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ArtifactCreateResult {
+  artifact: ArtifactRecord;
 }
 
 export interface ClaimRecord {

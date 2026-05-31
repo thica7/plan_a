@@ -23,6 +23,7 @@ def test_phase1_postgres_schema_has_strict_core_tables() -> None:
         "project_competitors",
         "runs",
         "evidence_records",
+        "artifacts",
         "source_registry",
         "evidence_embeddings",
         "knowledge_claims",
@@ -93,3 +94,13 @@ def test_phase5_workspace_quota_schema_is_present() -> None:
     assert "monthly_cost_quota_usd DOUBLE PRECISION NOT NULL DEFAULT 100" in sql
     assert "quota_enforcement TEXT NOT NULL DEFAULT 'block'" in sql
     assert "workspaces_quota_enforcement_check" in sql
+
+
+def test_phase5_artifact_schema_is_present() -> None:
+    sql = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS artifacts" in sql
+    assert "artifact_type TEXT NOT NULL DEFAULT 'raw_text'" in sql
+    assert "storage_backend TEXT NOT NULL DEFAULT 'local'" in sql
+    assert "idx_artifacts_workspace_project" in sql
+    assert "idx_artifacts_evidence" in sql

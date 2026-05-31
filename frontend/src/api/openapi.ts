@@ -773,6 +773,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Artifacts */
+        get: operations["list_artifacts_api_enterprise_artifacts_get"];
+        put?: never;
+        /** Create Artifact */
+        post: operations["create_artifact_api_enterprise_artifacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/artifacts/{artifact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Artifact */
+        get: operations["get_artifact_api_enterprise_artifacts__artifact_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/source-registry": {
         parameters: {
             query?: never;
@@ -1163,6 +1198,97 @@ export interface components {
              * Format: date-time
              */
             created_at?: string;
+        };
+        /** ArtifactCreateRequest */
+        ArtifactCreateRequest: {
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Artifact Type
+             * @default raw_text
+             * @enum {string}
+             */
+            artifact_type: "web_snapshot" | "pdf" | "screenshot" | "raw_text" | "report_export" | "other";
+            /** Filename */
+            filename: string;
+            /**
+             * Media Type
+             * @default text/plain
+             */
+            media_type: string;
+            /** Content Text */
+            content_text?: string | null;
+            /** Content Base64 */
+            content_base64?: string | null;
+            /** External Uri */
+            external_uri?: string | null;
+            /** Source Url */
+            source_url?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** ArtifactCreateResult */
+        ArtifactCreateResult: {
+            artifact: components["schemas"]["ArtifactRecord"];
+        };
+        /** ArtifactRecord */
+        ArtifactRecord: {
+            /** Id */
+            id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Artifact Type
+             * @default raw_text
+             * @enum {string}
+             */
+            artifact_type: "web_snapshot" | "pdf" | "screenshot" | "raw_text" | "report_export" | "other";
+            /** Filename */
+            filename: string;
+            /**
+             * Media Type
+             * @default application/octet-stream
+             */
+            media_type: string;
+            /**
+             * Storage Backend
+             * @default local
+             * @enum {string}
+             */
+            storage_backend: "local" | "external";
+            /** Uri */
+            uri: string;
+            /** Byte Size */
+            byte_size: number;
+            /** Content Hash */
+            content_hash: string;
+            /** Source Url */
+            source_url?: string | null;
+            /** Created By */
+            created_by?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
         };
         /** AuditLogRecord */
         AuditLogRecord: {
@@ -3093,6 +3219,10 @@ export interface components {
             pydantic_ai_model_backed_enabled: boolean;
             /** Pydantic Ai Model Name */
             pydantic_ai_model_name?: string | null;
+            /** Artifact Storage Backend */
+            artifact_storage_backend: string;
+            /** Artifact Storage Root */
+            artifact_storage_root: string;
         };
         /** ScenarioPack */
         ScenarioPack: {
@@ -5318,6 +5448,115 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvidenceReindexResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_artifacts_api_enterprise_artifacts_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+                project_id?: string | null;
+                evidence_id?: string | null;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_artifact_api_enterprise_artifacts_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtifactCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactCreateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artifact_api_enterprise_artifacts__artifact_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactRecord"];
                 };
             };
             /** @description Validation Error */

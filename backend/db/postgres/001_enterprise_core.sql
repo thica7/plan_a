@@ -146,6 +146,36 @@ CREATE TABLE IF NOT EXISTS evidence_records (
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
+CREATE TABLE IF NOT EXISTS artifacts (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    evidence_id TEXT REFERENCES evidence_records(id) ON DELETE SET NULL,
+    run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+    artifact_type TEXT NOT NULL DEFAULT 'raw_text'
+        CHECK (
+            artifact_type IN (
+                'web_snapshot',
+                'pdf',
+                'screenshot',
+                'raw_text',
+                'report_export',
+                'other'
+            )
+        ),
+    filename TEXT NOT NULL,
+    media_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+    storage_backend TEXT NOT NULL DEFAULT 'local'
+        CHECK (storage_backend IN ('local', 'external')),
+    uri TEXT NOT NULL,
+    byte_size INTEGER NOT NULL DEFAULT 0 CHECK (byte_size >= 0),
+    content_hash TEXT NOT NULL,
+    source_url TEXT,
+    created_by TEXT REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
 CREATE TABLE IF NOT EXISTS source_registry (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -280,6 +310,10 @@ CREATE INDEX IF NOT EXISTS idx_competitors_workspace ON competitors(workspace_id
 CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_project_dimension
     ON evidence_records(project_id, dimension);
+CREATE INDEX IF NOT EXISTS idx_artifacts_workspace_project
+    ON artifacts(workspace_id, project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_artifacts_evidence
+    ON artifacts(evidence_id);
 CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_domain
     ON source_registry(workspace_id, domain);
 CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_trust

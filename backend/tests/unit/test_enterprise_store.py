@@ -1,8 +1,12 @@
+import shutil
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
-from app.deps import get_enterprise_store
+from app.deps import get_artifact_storage, get_enterprise_store
 from app.main import create_app
+from packages.artifacts import LocalArtifactStorage
 from packages.config import Settings
 from packages.enterprise import (
     EnterpriseMemoryStore,
@@ -13,6 +17,7 @@ from packages.enterprise import (
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
+    ArtifactRecord,
     NotificationRecord,
     WorkspaceMemberRecord,
     WorkspaceQuotaUpdateRequest,
@@ -309,6 +314,43 @@ def test_enterprise_store_indexes_and_searches_evidence_embeddings() -> None:
     assert reindexed.indexed_count == 1
     assert [hit.evidence.id for hit in hits] == [projection.evidence_records[0].id]
     assert hits[0].embedding_model == "hashing-384"
+
+
+def test_enterprise_store_round_trips_artifacts_with_audit() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    evidence = projection.evidence_records[0]
+
+    artifact = store.upsert_artifact(
+        ArtifactRecord(
+            id="artifact-1",
+            workspace_id=context.workspace_id,
+            project_id=context.project_id,
+            evidence_id=evidence.id,
+            run_id=detail.id,
+            artifact_type="web_snapshot",
+            filename="pricing.html",
+            media_type="text/html",
+            storage_backend="local",
+            uri="local://default-workspace/artifact-1/pricing.html",
+            byte_size=128,
+            content_hash="hash-artifact",
+            created_by="analyst-1",
+        )
+    )
+
+    assert store.get_artifact(artifact.id) == artifact
+    assert store.list_artifacts(project_id=context.project_id) == [artifact]
+    assert store.list_artifacts(evidence_id=evidence.id) == [artifact]
+    assert any(log.action == "artifact.upserted" for log in store.list_audit_logs())
 
 
 def test_enterprise_store_updates_evidence_quality_with_audit() -> None:
@@ -633,6 +675,8 @@ async def test_run_service_increments_enterprise_report_versions() -> None:
 
 
 def test_enterprise_router_exposes_projection() -> None:
+    artifact_root = Path("backend/.test-artifacts/router")
+    shutil.rmtree(artifact_root, ignore_errors=True)
     store = EnterpriseMemoryStore()
     detail = _detail()
     context = store.start_run(detail)
@@ -645,6 +689,7 @@ def test_enterprise_router_exposes_projection() -> None:
     store.save_projection(projection)
     app = create_app()
     app.dependency_overrides[get_enterprise_store] = lambda: store
+    app.dependency_overrides[get_artifact_storage] = lambda: LocalArtifactStorage(artifact_root)
     client = TestClient(app)
 
     response = client.get(f"/api/enterprise/runs/{detail.id}/projection")
@@ -715,6 +760,27 @@ def test_enterprise_router_exposes_projection() -> None:
         "/api/enterprise/evidence/reindex",
         params={"workspace_id": context.workspace_id},
     )
+    artifact_create = client.post(
+        "/api/enterprise/artifacts",
+        json={
+            "workspace_id": context.workspace_id,
+            "project_id": context.project_id,
+            "evidence_id": projection.evidence_records[0].id,
+            "run_id": detail.id,
+            "artifact_type": "web_snapshot",
+            "filename": "cursor-pricing.html",
+            "media_type": "text/html",
+            "content_text": "<html>Cursor pricing</html>",
+            "source_url": "https://cursor.sh/pricing",
+        },
+    )
+    artifacts = client.get(
+        "/api/enterprise/artifacts",
+        params={
+            "workspace_id": context.workspace_id,
+            "project_id": context.project_id,
+        },
+    )
     release_gate = client.get(
         f"/api/enterprise/report-versions/{projection.report_version.id}/release-gate"
     )
@@ -778,6 +844,14 @@ def test_enterprise_router_exposes_projection() -> None:
     assert evidence_search.json()[0]["evidence"]["id"] == projection.evidence_records[0].id
     assert evidence_reindex.status_code == 200
     assert evidence_reindex.json()["indexed_count"] == 1
+    assert artifact_create.status_code == 200
+    artifact_id = artifact_create.json()["artifact"]["id"]
+    assert artifact_create.json()["artifact"]["evidence_id"] == projection.evidence_records[0].id
+    artifact = client.get(f"/api/enterprise/artifacts/{artifact_id}")
+    assert artifacts.status_code == 200
+    assert artifacts.json()[0]["id"] == artifact_id
+    assert artifact.status_code == 200
+    assert artifact.json()["uri"].startswith("local://default-workspace/")
     assert release_gate.status_code == 200
     assert release_gate.json()["allowed"] is True
     assert publish.status_code == 200
@@ -791,6 +865,7 @@ def test_enterprise_router_exposes_projection() -> None:
     assert diff.status_code == 200
     assert diff.json()["base_version"] is None
     assert diff.json()["added_lines"] >= 1
+    shutil.rmtree(artifact_root, ignore_errors=True)
 
 
 def test_enterprise_router_blocks_report_approval_status_when_gate_fails() -> None:

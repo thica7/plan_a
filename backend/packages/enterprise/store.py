@@ -21,6 +21,7 @@ from packages.enterprise.usage import (
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
+    ArtifactRecord,
     AuditLogRecord,
     ClaimRecord,
     CompetitorRecord,
@@ -174,6 +175,18 @@ class EnterpriseStore(Protocol):
         limit: int = 10,
     ) -> list[EvidenceSearchHit]: ...
 
+    def list_artifacts(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+        evidence_id: str | None = None,
+    ) -> list[ArtifactRecord]: ...
+
+    def get_artifact(self, artifact_id: str) -> ArtifactRecord | None: ...
+
+    def upsert_artifact(self, artifact: ArtifactRecord) -> ArtifactRecord: ...
+
     def list_source_registry(
         self,
         workspace_id: str | None = None,
@@ -224,6 +237,7 @@ class EnterpriseMemoryStore:
         self.project_competitors: dict[tuple[str, str], ProjectCompetitorLink] = {}
         self.evidence_records: dict[str, EvidenceRecord] = {}
         self.evidence_embeddings: dict[str, EvidenceEmbeddingRecord] = {}
+        self.artifacts: dict[str, ArtifactRecord] = {}
         self.source_registry: dict[str, SourceRegistryRecord] = {}
         self.claim_records: dict[str, ClaimRecord] = {}
         self.report_versions: dict[str, ReportVersionRecord] = {}
@@ -793,6 +807,43 @@ class EnterpriseMemoryStore:
                     )
                 )
             return sorted(hits, key=lambda item: item.score, reverse=True)[: max(1, limit)]
+
+    def list_artifacts(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+        evidence_id: str | None = None,
+    ) -> list[ArtifactRecord]:
+        with self._lock:
+            records = list(self.artifacts.values())
+            if workspace_id:
+                records = [item for item in records if item.workspace_id == workspace_id]
+            if project_id:
+                records = [item for item in records if item.project_id == project_id]
+            if evidence_id:
+                records = [item for item in records if item.evidence_id == evidence_id]
+            return sorted(records, key=lambda item: item.created_at, reverse=True)
+
+    def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
+        with self._lock:
+            return self.artifacts.get(artifact_id)
+
+    def upsert_artifact(self, artifact: ArtifactRecord) -> ArtifactRecord:
+        with self._lock:
+            self._ensure_workspace(artifact.workspace_id)
+            before_record = self.artifacts.get(artifact.id)
+            self.artifacts[artifact.id] = artifact
+            self._append_audit(
+                workspace_id=artifact.workspace_id,
+                actor_id=artifact.created_by or DEFAULT_USER_ID,
+                action="artifact.upserted",
+                resource_type="artifact",
+                resource_id=artifact.id,
+                before=before_record.model_dump(mode="json") if before_record else None,
+                after=artifact.model_dump(mode="json"),
+            )
+            return artifact
 
     def list_source_registry(
         self,

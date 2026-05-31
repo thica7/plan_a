@@ -10,6 +10,8 @@ EvidenceQualityLabel = Literal["unreviewed", "accepted", "rejected", "stale"]
 EnterpriseRole = Literal["owner", "admin", "analyst", "reviewer", "viewer"]
 SourceRobotsStatus = Literal["unknown", "allowed", "blocked", "error"]
 SourceTrustLevel = Literal["official", "verified", "community", "synthetic", "unknown"]
+ArtifactType = Literal["web_snapshot", "pdf", "screenshot", "raw_text", "report_export", "other"]
+ArtifactStorageBackend = Literal["local", "external"]
 NotificationChannel = Literal["in_app", "email", "webhook", "feishu"]
 NotificationSeverity = Literal["info", "success", "warning", "critical"]
 NotificationStatus = Literal["queued", "sent", "failed", "read"]
@@ -235,6 +237,50 @@ class EvidenceSearchHit(BaseModel):
     evidence: EvidenceRecord
     score: float = Field(ge=-1.0, le=1.0)
     embedding_model: str
+
+
+class ArtifactRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    workspace_id: str
+    project_id: str
+    evidence_id: str | None = None
+    run_id: str | None = None
+    artifact_type: ArtifactType = "raw_text"
+    filename: str
+    media_type: str = "application/octet-stream"
+    storage_backend: ArtifactStorageBackend = "local"
+    uri: str
+    byte_size: int = Field(ge=0)
+    content_hash: str
+    source_url: HttpUrl | None = None
+    created_by: str | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ArtifactCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str
+    project_id: str
+    evidence_id: str | None = None
+    run_id: str | None = None
+    artifact_type: ArtifactType = "raw_text"
+    filename: str = Field(min_length=1, max_length=180)
+    media_type: str = Field(default="text/plain", min_length=1, max_length=120)
+    content_text: str | None = None
+    content_base64: str | None = None
+    external_uri: str | None = None
+    source_url: HttpUrl | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ArtifactCreateResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact: ArtifactRecord
 
 
 class EvidenceReindexResult(BaseModel):

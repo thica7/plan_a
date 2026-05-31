@@ -28,6 +28,7 @@ from packages.enterprise.usage import (
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
+    ArtifactRecord,
     AuditLogRecord,
     ClaimRecord,
     CompetitorRecord,
@@ -882,6 +883,59 @@ class EnterprisePostgresStore:
             )
         return hits
 
+    def list_artifacts(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+        evidence_id: str | None = None,
+    ) -> list[ArtifactRecord]:
+        sql = "SELECT * FROM artifacts"
+        params: list[str] = []
+        clauses: list[str] = []
+        if workspace_id:
+            clauses.append("workspace_id = %s")
+            params.append(workspace_id)
+        if project_id:
+            clauses.append("project_id = %s")
+            params.append(project_id)
+        if evidence_id:
+            clauses.append("evidence_id = %s")
+            params.append(evidence_id)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY created_at DESC"
+        return self._list_models(sql, tuple(params), ArtifactRecord)
+
+    def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            row = conn.execute("SELECT * FROM artifacts WHERE id = %s", (artifact_id,)).fetchone()
+        return self._model_from_row(ArtifactRecord, row) if row else None
+
+    def upsert_artifact(self, artifact: ArtifactRecord) -> ArtifactRecord:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._upsert_workspace(cur, artifact.workspace_id)
+                before_row = cur.execute(
+                    "SELECT * FROM artifacts WHERE id = %s",
+                    (artifact.id,),
+                ).fetchone()
+                self._upsert_artifact(cur, artifact)
+                self._append_audit(
+                    cur,
+                    workspace_id=artifact.workspace_id,
+                    actor_id=artifact.created_by or DEFAULT_USER_ID,
+                    action="artifact.upserted",
+                    resource_type="artifact",
+                    resource_id=artifact.id,
+                    before=self._model_from_row(ArtifactRecord, before_row).model_dump(mode="json")
+                    if before_row
+                    else None,
+                    after=artifact.model_dump(mode="json"),
+                )
+            conn.commit()
+        return artifact
+
     def list_source_registry(
         self,
         workspace_id: str | None = None,
@@ -1356,6 +1410,45 @@ class EnterprisePostgresStore:
                 evidence.seen_count,
                 evidence.captured_at,
                 self._json(evidence.metadata),
+            ),
+        )
+
+    def _upsert_artifact(self, cur: Any, artifact: ArtifactRecord) -> None:
+        cur.execute(
+            """
+            INSERT INTO artifacts (
+                id, workspace_id, project_id, evidence_id, run_id, artifact_type,
+                filename, media_type, storage_backend, uri, byte_size, content_hash,
+                source_url, created_by, created_at, metadata
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                filename = EXCLUDED.filename,
+                media_type = EXCLUDED.media_type,
+                storage_backend = EXCLUDED.storage_backend,
+                uri = EXCLUDED.uri,
+                byte_size = EXCLUDED.byte_size,
+                content_hash = EXCLUDED.content_hash,
+                source_url = EXCLUDED.source_url,
+                metadata = EXCLUDED.metadata
+            """,
+            (
+                artifact.id,
+                artifact.workspace_id,
+                artifact.project_id,
+                artifact.evidence_id,
+                artifact.run_id,
+                artifact.artifact_type,
+                artifact.filename,
+                artifact.media_type,
+                artifact.storage_backend,
+                artifact.uri,
+                artifact.byte_size,
+                artifact.content_hash,
+                str(artifact.source_url) if artifact.source_url else None,
+                artifact.created_by,
+                artifact.created_at,
+                self._json(artifact.metadata),
             ),
         )
 

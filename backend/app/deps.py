@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import Header
 
+from packages.artifacts import LocalArtifactStorage
 from packages.auth import EnterpriseUserContext, normalize_role
 from packages.config import Settings, get_settings
 from packages.enterprise import EnterpriseMemoryStore, EnterprisePostgresStore, EnterpriseStore
@@ -57,6 +58,14 @@ def get_enterprise_store() -> EnterpriseStore:
     if settings.enterprise_store_backend == "memory":
         return EnterpriseMemoryStore()
     raise RuntimeError(f"Unknown enterprise store backend: {settings.enterprise_store_backend}")
+
+
+@lru_cache
+def get_artifact_storage() -> LocalArtifactStorage:
+    settings = get_app_settings()
+    if settings.artifact_storage_backend != "local":
+        raise RuntimeError(f"Unknown artifact storage backend: {settings.artifact_storage_backend}")
+    return LocalArtifactStorage(settings.artifact_storage_root)
 
 
 def get_enterprise_user_context(

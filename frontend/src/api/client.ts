@@ -1,5 +1,8 @@
 import type {
   AgentMessage,
+  ArtifactCreateRequest,
+  ArtifactCreateResult,
+  ArtifactRecord,
   BusinessIntelPlan,
   BusinessQAEvaluation,
   CompetitorScoreReport,
@@ -278,6 +281,30 @@ export function listEnterpriseCompetitors(params: {
 
 export function listProjectEvidence(projectId: string) {
   return request<EvidenceRecord[]>(`/enterprise/projects/${projectId}/evidence`);
+}
+
+export function listArtifacts(params: {
+  workspaceId?: string;
+  projectId?: string;
+  evidenceId?: string;
+} = {}) {
+  const search = new URLSearchParams();
+  if (params.workspaceId) search.set("workspace_id", params.workspaceId);
+  if (params.projectId) search.set("project_id", params.projectId);
+  if (params.evidenceId) search.set("evidence_id", params.evidenceId);
+  const query = search.toString();
+  return request<ArtifactRecord[]>(`/enterprise/artifacts${query ? `?${query}` : ""}`);
+}
+
+export function createArtifact(payload: ArtifactCreateRequest) {
+  return request<ArtifactCreateResult>("/enterprise/artifacts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getArtifact(artifactId: string) {
+  return request<ArtifactRecord>(`/enterprise/artifacts/${encodeURIComponent(artifactId)}`);
 }
 
 export function getProjectBusinessPlan(projectId: string) {

@@ -44,4 +44,6 @@ def get_runtime(settings: SettingsDep) -> RuntimeConfig:
         compliance_require_trace_context=settings.compliance_require_trace_context,
         pydantic_ai_model_backed_enabled=settings.pydantic_ai_model_backed_enabled,
         pydantic_ai_model_name=settings.pydantic_ai_model_name,
+        artifact_storage_backend=settings.artifact_storage_backend,
+        artifact_storage_root=settings.artifact_storage_root,
     )

@@ -238,6 +238,8 @@ class RuntimeConfig(BaseModel):
     compliance_require_trace_context: bool
     pydantic_ai_model_backed_enabled: bool
     pydantic_ai_model_name: str | None = None
+    artifact_storage_backend: str
+    artifact_storage_root: str
 
 
 class HealthCheck(BaseModel):

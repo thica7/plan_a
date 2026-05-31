@@ -4,8 +4,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
 
-from app.deps import get_app_settings, get_enterprise_store, get_enterprise_user_context
+from app.deps import (
+    get_app_settings,
+    get_artifact_storage,
+    get_enterprise_store,
+    get_enterprise_user_context,
+)
 from packages.agents import AgentExecutionRequest
+from packages.artifacts import ArtifactStorageError, LocalArtifactStorage
 from packages.auth import (
     EnterpriseUserContext,
     PolicyDecision,
@@ -29,6 +35,9 @@ from packages.config import Settings
 from packages.enterprise import EnterpriseStore, build_report_version_diff
 from packages.governance import ModelPolicyReport, build_model_policy_report
 from packages.schema.enterprise import (
+    ArtifactCreateRequest,
+    ArtifactCreateResult,
+    ArtifactRecord,
     AuditLogRecord,
     BusinessIntelPlan,
     BusinessQAEvaluation,
@@ -63,6 +72,7 @@ router = APIRouter()
 EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
 EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+ArtifactStorageDep = Annotated[LocalArtifactStorage, Depends(get_artifact_storage)]
 
 
 @router.get("/enterprise/workspaces", response_model=list[WorkspaceRecord])
@@ -487,6 +497,69 @@ def reindex_evidence_embeddings(
     if project_id is not None:
         _project_or_404(project_id, store, user, "evidence:write")
     return store.reindex_evidence_embeddings(workspace_id=workspace_id, project_id=project_id)
+
+
+@router.get("/enterprise/artifacts", response_model=list[ArtifactRecord])
+def list_artifacts(
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    evidence_id: str | None = None,
+) -> list[ArtifactRecord]:
+    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "artifact:read")
+    if project_id is not None:
+        project = _project_or_404(project_id, store, user, "artifact:read")
+        scoped_workspace_id = project.workspace_id
+    if evidence_id is not None:
+        evidence = _evidence_or_404(evidence_id, store)
+        _require_workspace_access(user, evidence.workspace_id, "artifact:read")
+        scoped_workspace_id = evidence.workspace_id
+        if project_id is not None and evidence.project_id != project_id:
+            raise HTTPException(status_code=400, detail="Evidence does not belong to project")
+    return store.list_artifacts(
+        workspace_id=scoped_workspace_id,
+        project_id=project_id,
+        evidence_id=evidence_id,
+    )
+
+
+@router.post("/enterprise/artifacts", response_model=ArtifactCreateResult)
+def create_artifact(
+    request: ArtifactCreateRequest,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    artifact_storage: ArtifactStorageDep,
+) -> ArtifactCreateResult:
+    _require_workspace_access(user, request.workspace_id, "artifact:write")
+    project = _project_or_404(request.project_id, store, user, "artifact:write")
+    if project.workspace_id != request.workspace_id:
+        raise HTTPException(status_code=400, detail="Artifact workspace does not match project")
+    if request.evidence_id is not None:
+        evidence = _evidence_or_404(request.evidence_id, store)
+        if (
+            evidence.workspace_id != request.workspace_id
+            or evidence.project_id != request.project_id
+        ):
+            raise HTTPException(status_code=400, detail="Artifact evidence scope mismatch")
+    try:
+        artifact = artifact_storage.store(request, actor_id=user.user_id)
+    except ArtifactStorageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ArtifactCreateResult(artifact=store.upsert_artifact(artifact))
+
+
+@router.get("/enterprise/artifacts/{artifact_id}", response_model=ArtifactRecord)
+def get_artifact(
+    artifact_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> ArtifactRecord:
+    artifact = store.get_artifact(artifact_id)
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    _require_workspace_access(user, artifact.workspace_id, "artifact:read")
+    return artifact
 
 
 @router.get("/enterprise/source-registry", response_model=list[SourceRegistryRecord])

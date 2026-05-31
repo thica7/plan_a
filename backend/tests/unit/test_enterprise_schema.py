@@ -4,6 +4,8 @@ from pydantic import ValidationError
 
 from packages.identity import compute_competitor_set_hash, compute_evidence_id
 from packages.schema.enterprise import (
+    ArtifactCreateRequest,
+    ArtifactRecord,
     ClaimRecord,
     EvidenceEmbeddingRecord,
     EvidenceRecord,
@@ -183,6 +185,35 @@ def test_evidence_embedding_and_search_schema_are_typed() -> None:
     assert embedding.embedding_dimensions == 384
     assert hit.evidence.id == evidence.id
     assert result.indexed_count == 1
+
+
+def test_artifact_schema_links_storage_to_evidence() -> None:
+    request = ArtifactCreateRequest(
+        workspace_id="workspace-1",
+        project_id="project-1",
+        evidence_id="evidence-1",
+        artifact_type="web_snapshot",
+        filename="pricing.html",
+        media_type="text/html",
+        content_text="<html>pricing</html>",
+    )
+    record = ArtifactRecord(
+        id="artifact-1",
+        workspace_id=request.workspace_id,
+        project_id=request.project_id,
+        evidence_id=request.evidence_id,
+        artifact_type=request.artifact_type,
+        filename=request.filename,
+        media_type=request.media_type,
+        storage_backend="local",
+        uri="local://workspace-1/artifact-1/pricing.html",
+        byte_size=20,
+        content_hash="hash",
+    )
+
+    assert request.artifact_type == "web_snapshot"
+    assert record.evidence_id == "evidence-1"
+    assert record.storage_backend == "local"
 
 
 def test_report_version_groups_by_topic_layer_and_competitor_set() -> None:
