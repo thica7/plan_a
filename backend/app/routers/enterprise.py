@@ -4,12 +4,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
 
-from app.deps import get_enterprise_store, get_enterprise_user_context
+from app.deps import get_app_settings, get_enterprise_store, get_enterprise_user_context
+from packages.agents import AgentExecutionRequest
 from packages.auth import EnterpriseUserContext, can_access_workspace
 from packages.business_intel import (
-    analyze_evidence_gaps,
-    analyze_red_team,
     build_business_intel_plan,
+    build_evidence_gap_agent,
+    build_red_team_agent,
     evaluate_business_qa,
     evaluate_report_release_gate,
     list_business_qa_rules,
@@ -17,6 +18,7 @@ from packages.business_intel import (
     score_competitors,
     score_project_readiness,
 )
+from packages.config import Settings
 from packages.enterprise import EnterpriseStore, build_report_version_diff
 from packages.schema.enterprise import (
     AuditLogRecord,
@@ -52,6 +54,7 @@ from packages.schema.enterprise import (
 router = APIRouter()
 EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
 EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 
 @router.get("/enterprise/workspaces", response_model=list[WorkspaceRecord])
@@ -279,10 +282,11 @@ def get_project_competitor_scores(
 
 
 @router.get("/enterprise/projects/{project_id}/evidence-gaps", response_model=EvidenceGapReport)
-def get_project_evidence_gaps(
+async def get_project_evidence_gaps(
     project_id: str,
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
+    settings: SettingsDep,
 ) -> EvidenceGapReport:
     plan = _business_plan_for_project(project_id, store, user)
     competitors = store.list_competitors(project_id=project_id)
@@ -295,21 +299,32 @@ def get_project_evidence_gaps(
         evidence=evidence,
         claims=claims,
     )
-    return analyze_evidence_gaps(
-        project_id=project_id,
-        plan=plan,
-        qa_evaluation=qa_evaluation,
-        competitors=competitors,
-        evidence=evidence,
-        claims=claims,
+    result = await build_evidence_gap_agent().execute(
+        AgentExecutionRequest(
+            run_id=f"enterprise:{project_id}:evidence_gap",
+            agent_name="evidence_gap",
+            context=_pydantic_ai_context(settings),
+            payload={
+                "project_id": project_id,
+                "plan": plan.model_dump(mode="json"),
+                "qa_evaluation": qa_evaluation.model_dump(mode="json"),
+                "competitors": [item.model_dump(mode="json") for item in competitors],
+                "evidence": [item.model_dump(mode="json") for item in evidence],
+                "claims": [item.model_dump(mode="json") for item in claims],
+            },
+        )
     )
+    if result.status != "ok":
+        raise HTTPException(status_code=503, detail=result.error or "Evidence gap agent failed.")
+    return EvidenceGapReport.model_validate(result.payload)
 
 
 @router.get("/enterprise/projects/{project_id}/red-team", response_model=RedTeamReport)
-def get_project_red_team(
+async def get_project_red_team(
     project_id: str,
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
+    settings: SettingsDep,
 ) -> RedTeamReport:
     plan = _business_plan_for_project(project_id, store, user)
     competitors = store.list_competitors(project_id=project_id)
@@ -322,15 +337,35 @@ def get_project_red_team(
         evidence=evidence,
         claims=claims,
     )
-    return analyze_red_team(
-        project_id=project_id,
-        plan=plan,
-        qa_evaluation=qa_evaluation,
-        competitors=competitors,
-        evidence=evidence,
-        claims=claims,
-        report_versions=store.list_report_versions(project_id=project_id),
+    report_versions = store.list_report_versions(project_id=project_id)
+    result = await build_red_team_agent().execute(
+        AgentExecutionRequest(
+            run_id=f"enterprise:{project_id}:red_team",
+            agent_name="red_team",
+            context=_pydantic_ai_context(settings),
+            payload={
+                "project_id": project_id,
+                "plan": plan.model_dump(mode="json"),
+                "qa_evaluation": qa_evaluation.model_dump(mode="json"),
+                "competitors": [item.model_dump(mode="json") for item in competitors],
+                "evidence": [item.model_dump(mode="json") for item in evidence],
+                "claims": [item.model_dump(mode="json") for item in claims],
+                "report_versions": [item.model_dump(mode="json") for item in report_versions],
+            },
+        )
     )
+    if result.status != "ok":
+        raise HTTPException(status_code=503, detail=result.error or "Red-team agent failed.")
+    return RedTeamReport.model_validate(result.payload)
+
+
+def _pydantic_ai_context(settings: Settings) -> dict[str, str]:
+    if settings.pydantic_ai_model_backed_enabled and settings.pydantic_ai_model_name:
+        return {
+            "pydantic_ai_execution_mode": "model_backed",
+            "pydantic_ai_model": settings.pydantic_ai_model_name,
+        }
+    return {}
 
 
 def _business_plan_for_project(

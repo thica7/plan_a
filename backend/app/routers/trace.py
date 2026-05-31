@@ -2,13 +2,22 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.deps import get_run_service
+from app.deps import get_app_settings, get_run_service
 from app.events import RunEvent
+from packages.compliance import RunComplianceReport, build_run_compliance_report
+from packages.config import Settings
+from packages.observability import (
+    OtelTraceExport,
+    TraceObservabilityReport,
+    build_otel_trace_export,
+    evaluate_trace_observability,
+)
 from packages.orchestrator.service import RunService
 from packages.schema.models import AgentMessage, ToolCallMessage, TraceSpan
 
 router = APIRouter()
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 
 @router.get("/runs/{run_id}/trace", response_model=list[RunEvent])
@@ -31,6 +40,40 @@ async def get_trace_spans(
     if spans is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return spans
+
+
+@router.get("/runs/{run_id}/trace/otel", response_model=OtelTraceExport)
+async def get_trace_otel_export(
+    run_id: str,
+    service: RunServiceDep,
+) -> OtelTraceExport:
+    spans = service.get_trace_spans(run_id)
+    if spans is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return build_otel_trace_export(run_id, spans)
+
+
+@router.get("/runs/{run_id}/trace/observability", response_model=TraceObservabilityReport)
+async def get_trace_observability_report(
+    run_id: str,
+    service: RunServiceDep,
+) -> TraceObservabilityReport:
+    spans = service.get_trace_spans(run_id)
+    if spans is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return evaluate_trace_observability(run_id, spans)
+
+
+@router.get("/runs/{run_id}/compliance", response_model=RunComplianceReport)
+async def get_run_compliance_report(
+    run_id: str,
+    service: RunServiceDep,
+    settings: SettingsDep,
+) -> RunComplianceReport:
+    detail = service.get_run(run_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return build_run_compliance_report(detail, settings=settings)
 
 
 @router.get("/runs/{run_id}/trace/agent-messages", response_model=list[AgentMessage])

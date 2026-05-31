@@ -3,7 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Awaitable, Callable
-from typing import Protocol
+from dataclasses import dataclass
+from typing import Literal, Protocol
 
 from temporalio.client import Client, WorkflowHandle
 from temporalio.exceptions import WorkflowAlreadyStartedError
@@ -51,6 +52,14 @@ class TemporalClient(Protocol):
 
 
 TemporalClientFactory = Callable[[Settings], Awaitable[TemporalClient]]
+
+
+@dataclass(frozen=True)
+class TemporalCutoverDecision:
+    route: Literal["langgraph", "temporal"]
+    target_percent: int
+    bucket: int
+    reason: str
 
 
 class TemporalWorkflowService:
@@ -272,6 +281,48 @@ def monitor_input_from_request(request: MonitorStartRequest) -> MonitorWorkflowI
     )
 
 
+def decide_temporal_cutover(
+    settings: Settings,
+    request: RunCreateRequest,
+) -> TemporalCutoverDecision:
+    target_percent = max(0, min(100, settings.temporal_traffic_percent))
+    if settings.run_orchestration_backend != "temporal":
+        return TemporalCutoverDecision(
+            route="langgraph",
+            target_percent=target_percent,
+            bucket=0,
+            reason="RUN_ORCHESTRATION_BACKEND is langgraph.",
+        )
+    bucket = _stable_cutover_bucket(request)
+    if target_percent >= 100:
+        return TemporalCutoverDecision(
+            route="temporal",
+            target_percent=target_percent,
+            bucket=bucket,
+            reason="Temporal cutover target is 100%.",
+        )
+    if target_percent <= 0:
+        return TemporalCutoverDecision(
+            route="langgraph",
+            target_percent=target_percent,
+            bucket=bucket,
+            reason="Temporal cutover target is 0%.",
+        )
+    if bucket < target_percent:
+        return TemporalCutoverDecision(
+            route="temporal",
+            target_percent=target_percent,
+            bucket=bucket,
+            reason="Stable request bucket falls inside Temporal cutover target.",
+        )
+    return TemporalCutoverDecision(
+        route="langgraph",
+        target_percent=target_percent,
+        bucket=bucket,
+        reason="Stable request bucket remains on LangGraph during staged cutover.",
+    )
+
+
 def workflow_idempotency_key(request: RunCreateRequest) -> str:
     payload = request.model_dump(mode="json", exclude={"idempotency_key"})
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
@@ -282,6 +333,12 @@ def workflow_idempotency_key(request: RunCreateRequest) -> str:
 def run_id_for_idempotency_key(idempotency_key: str) -> str:
     digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:32]
     return f"run-{digest}"
+
+
+def _stable_cutover_bucket(request: RunCreateRequest) -> int:
+    key = request.idempotency_key or workflow_idempotency_key(request)
+    digest = hashlib.sha256(f"temporal-cutover:{key}".encode()).hexdigest()
+    return int(digest[:8], 16) % 100
 
 
 def report_approval_workflow_id(report_version_id: str) -> str:

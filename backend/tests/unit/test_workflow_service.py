@@ -25,6 +25,7 @@ from packages.workflows.scheduled_scan import ScheduledScanWorkflow
 from packages.workflows.service import (
     TemporalWorkflowService,
     competitive_intel_input_from_run_request,
+    decide_temporal_cutover,
     monitor_input_from_request,
     monitor_workflow_id,
     report_approval_workflow_id,
@@ -138,6 +139,28 @@ def test_workflow_input_preserves_explicit_idempotency_key() -> None:
 
     assert workflow_input.idempotency_key == "approval-demo-001"
     assert workflow_idempotency_key(request) != "approval-demo-001"
+
+
+def test_temporal_cutover_decision_supports_staged_traffic() -> None:
+    request = _request(idempotency_key="temporal-cutover-stable")
+
+    disabled = decide_temporal_cutover(
+        _settings(run_orchestration_backend="langgraph", temporal_traffic_percent=100),
+        request,
+    )
+    zero = decide_temporal_cutover(
+        _settings(run_orchestration_backend="temporal", temporal_traffic_percent=0),
+        request,
+    )
+    full = decide_temporal_cutover(
+        _settings(run_orchestration_backend="temporal", temporal_traffic_percent=100),
+        request,
+    )
+
+    assert disabled.route == "langgraph"
+    assert zero.route == "langgraph"
+    assert full.route == "temporal"
+    assert 0 <= full.bucket <= 99
 
 
 async def test_temporal_workflow_service_starts_competitive_intel_workflow() -> None:

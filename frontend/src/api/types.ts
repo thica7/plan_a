@@ -198,6 +198,72 @@ export interface TraceSpan {
   created_at: string;
 }
 
+export interface OtelSpanExport {
+  trace_id: string;
+  span_id: string;
+  parent_span_id?: string | null;
+  name: string;
+  kind: string;
+  status_code: "OK" | "ERROR";
+  start_time_unix_nano: number;
+  end_time_unix_nano: number;
+  attributes: Record<string, string | number | boolean | null>;
+}
+
+export interface OtelTraceExport {
+  run_id: string;
+  exporter: "otlp-json-compatible";
+  trace_id: string;
+  resource: Record<string, string>;
+  spans: OtelSpanExport[];
+  generated_at: string;
+}
+
+export interface TraceObservabilityIssue {
+  severity: "info" | "warn" | "blocker";
+  field: string;
+  message: string;
+  span_id?: string | null;
+}
+
+export interface TraceObservabilityReport {
+  run_id: string;
+  status: "pass" | "warn" | "fail";
+  span_count: number;
+  trace_id_coverage: number;
+  traceparent_coverage: number;
+  otel_span_id_coverage: number;
+  parent_link_count: number;
+  errored_span_count: number;
+  otel_export_ready: boolean;
+  issues: TraceObservabilityIssue[];
+  generated_at: string;
+}
+
+export interface ComplianceFinding {
+  id: string;
+  severity: "info" | "warn" | "blocker";
+  category: "pii" | "source" | "robots" | "policy" | "trace";
+  target_type: "run" | "source" | "trace_span";
+  target_id: string;
+  message: string;
+  recommendation: string;
+}
+
+export interface RunComplianceReport {
+  run_id: string;
+  status: "pass" | "warn" | "fail";
+  policy: Record<string, unknown>;
+  source_count: number;
+  trace_span_count: number;
+  redaction_count: number;
+  finding_count: number;
+  blocker_count: number;
+  warn_count: number;
+  findings: ComplianceFinding[];
+  generated_at: string;
+}
+
 export interface AgentMessage {
   id: string;
   run_id: string;
@@ -429,10 +495,17 @@ export interface RuntimeConfig {
   temporal_address: string;
   temporal_namespace: string;
   temporal_task_queue: string;
+  temporal_traffic_percent: number;
   compliance_redaction_enabled: boolean;
   compliance_redact_api_keys: boolean;
   compliance_redact_emails: boolean;
   compliance_redact_phones: boolean;
+  compliance_allowed_domains: string[];
+  compliance_blocked_domains: string[];
+  compliance_require_source_urls: boolean;
+  compliance_require_trace_context: boolean;
+  pydantic_ai_model_backed_enabled: boolean;
+  pydantic_ai_model_name?: string | null;
 }
 
 export type CompetitorLayer = "L1" | "L2" | "L3" | "unknown";

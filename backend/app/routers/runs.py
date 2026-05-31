@@ -13,7 +13,7 @@ from packages.config import Settings
 from packages.enterprise import EnterpriseStore, WorkspaceQuotaExceededError
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail, RunSummary, WorkflowStartResponse
-from packages.workflows.service import TemporalWorkflowService
+from packages.workflows.service import TemporalWorkflowService, decide_temporal_cutover
 
 router = APIRouter()
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
@@ -38,7 +38,11 @@ async def create_run(
     store: EnterpriseStoreDep,
 ) -> RunDetail | WorkflowStartResponse:
     _ensure_workspace_quota(store, request.workspace_id)
-    if settings.run_orchestration_backend == "temporal":
+    cutover = decide_temporal_cutover(settings, request)
+    response.headers["X-Run-Orchestration-Route"] = cutover.route
+    response.headers["X-Temporal-Traffic-Percent"] = str(cutover.target_percent)
+    response.headers["X-Temporal-Cutover-Bucket"] = str(cutover.bucket)
+    if cutover.route == "temporal":
         try:
             result = await workflow_service.start_competitive_intel(request)
         except Exception as exc:  # noqa: BLE001 - surface Temporal cutover failures clearly.

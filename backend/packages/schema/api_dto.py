@@ -227,10 +227,17 @@ class RuntimeConfig(BaseModel):
     temporal_address: str
     temporal_namespace: str
     temporal_task_queue: str
+    temporal_traffic_percent: int
     compliance_redaction_enabled: bool
     compliance_redact_api_keys: bool
     compliance_redact_emails: bool
     compliance_redact_phones: bool
+    compliance_allowed_domains: list[str]
+    compliance_blocked_domains: list[str]
+    compliance_require_source_urls: bool
+    compliance_require_trace_context: bool
+    pydantic_ai_model_backed_enabled: bool
+    pydantic_ai_model_name: str | None = None
 
 
 class HealthCheck(BaseModel):

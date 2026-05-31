@@ -243,6 +243,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{run_id}/trace/otel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Trace Otel Export */
+        get: operations["get_trace_otel_export_api_runs__run_id__trace_otel_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/trace/observability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Trace Observability Report */
+        get: operations["get_trace_observability_report_api_runs__run_id__trace_observability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/compliance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run Compliance Report */
+        get: operations["get_run_compliance_report_api_runs__run_id__compliance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{run_id}/trace/agent-messages": {
         parameters: {
             query?: never;
@@ -1505,6 +1556,32 @@ export interface components {
              */
             generated_at?: string;
         };
+        /** ComplianceFinding */
+        ComplianceFinding: {
+            /** Id */
+            id: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "warn" | "blocker";
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "pii" | "source" | "robots" | "policy" | "trace";
+            /**
+             * Target Type
+             * @enum {string}
+             */
+            target_type: "run" | "source" | "trace_span";
+            /** Target Id */
+            target_id: string;
+            /** Message */
+            message: string;
+            /** Recommendation */
+            recommendation: string;
+        };
         /** EnterpriseRunProjection */
         EnterpriseRunProjection: {
             /** Workspace Id */
@@ -1918,6 +1995,56 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
+        };
+        /** OtelSpanExport */
+        OtelSpanExport: {
+            /** Trace Id */
+            trace_id: string;
+            /** Span Id */
+            span_id: string;
+            /** Parent Span Id */
+            parent_span_id?: string | null;
+            /** Name */
+            name: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Status Code
+             * @enum {string}
+             */
+            status_code: "OK" | "ERROR";
+            /** Start Time Unix Nano */
+            start_time_unix_nano: number;
+            /** End Time Unix Nano */
+            end_time_unix_nano: number;
+            /** Attributes */
+            attributes?: {
+                [key: string]: string | number | boolean | null;
+            };
+        };
+        /** OtelTraceExport */
+        OtelTraceExport: {
+            /** Run Id */
+            run_id: string;
+            /**
+             * Exporter
+             * @default otlp-json-compatible
+             * @constant
+             */
+            exporter: "otlp-json-compatible";
+            /** Trace Id */
+            trace_id: string;
+            /** Resource */
+            resource?: {
+                [key: string]: string;
+            };
+            /** Spans */
+            spans?: components["schemas"]["OtelSpanExport"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
         };
         /** PricingModel */
         PricingModel: {
@@ -2400,6 +2527,39 @@ export interface components {
              */
             created_at?: string;
         };
+        /** RunComplianceReport */
+        RunComplianceReport: {
+            /** Run Id */
+            run_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "warn" | "fail";
+            /** Policy */
+            policy?: {
+                [key: string]: unknown;
+            };
+            /** Source Count */
+            source_count: number;
+            /** Trace Span Count */
+            trace_span_count: number;
+            /** Redaction Count */
+            redaction_count: number;
+            /** Finding Count */
+            finding_count: number;
+            /** Blocker Count */
+            blocker_count: number;
+            /** Warn Count */
+            warn_count: number;
+            /** Findings */
+            findings?: components["schemas"]["ComplianceFinding"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+        };
         /** RunCreateRequest */
         RunCreateRequest: {
             /**
@@ -2721,6 +2881,8 @@ export interface components {
             temporal_namespace: string;
             /** Temporal Task Queue */
             temporal_task_queue: string;
+            /** Temporal Traffic Percent */
+            temporal_traffic_percent: number;
             /** Compliance Redaction Enabled */
             compliance_redaction_enabled: boolean;
             /** Compliance Redact Api Keys */
@@ -2729,6 +2891,18 @@ export interface components {
             compliance_redact_emails: boolean;
             /** Compliance Redact Phones */
             compliance_redact_phones: boolean;
+            /** Compliance Allowed Domains */
+            compliance_allowed_domains: string[];
+            /** Compliance Blocked Domains */
+            compliance_blocked_domains: string[];
+            /** Compliance Require Source Urls */
+            compliance_require_source_urls: boolean;
+            /** Compliance Require Trace Context */
+            compliance_require_trace_context: boolean;
+            /** Pydantic Ai Model Backed Enabled */
+            pydantic_ai_model_backed_enabled: boolean;
+            /** Pydantic Ai Model Name */
+            pydantic_ai_model_name?: string | null;
         };
         /** ScenarioPack */
         ScenarioPack: {
@@ -2974,6 +3148,51 @@ export interface components {
              * Format: date-time
              */
             created_at?: string;
+        };
+        /** TraceObservabilityIssue */
+        TraceObservabilityIssue: {
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "warn" | "blocker";
+            /** Field */
+            field: string;
+            /** Message */
+            message: string;
+            /** Span Id */
+            span_id?: string | null;
+        };
+        /** TraceObservabilityReport */
+        TraceObservabilityReport: {
+            /** Run Id */
+            run_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "warn" | "fail";
+            /** Span Count */
+            span_count: number;
+            /** Trace Id Coverage */
+            trace_id_coverage: number;
+            /** Traceparent Coverage */
+            traceparent_coverage: number;
+            /** Otel Span Id Coverage */
+            otel_span_id_coverage: number;
+            /** Parent Link Count */
+            parent_link_count: number;
+            /** Errored Span Count */
+            errored_span_count: number;
+            /** Otel Export Ready */
+            otel_export_ready: boolean;
+            /** Issues */
+            issues?: components["schemas"]["TraceObservabilityIssue"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
         };
         /** TraceSpan */
         TraceSpan: {
@@ -3773,6 +3992,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TraceSpan"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_trace_otel_export_api_runs__run_id__trace_otel_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OtelTraceExport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_trace_observability_report_api_runs__run_id__trace_observability_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceObservabilityReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_compliance_report_api_runs__run_id__compliance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunComplianceReport"];
                 };
             };
             /** @description Validation Error */

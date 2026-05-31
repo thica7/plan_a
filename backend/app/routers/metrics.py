@@ -57,6 +57,8 @@ def metrics(
     )
     input_tokens = sum(run.metrics.input_tokens_estimate for run in runs)
     output_tokens = sum(run.metrics.output_tokens_estimate for run in runs)
+    trace_spans = [span for run in runs for span in run.trace_spans]
+    trace_context_coverage = _trace_context_coverage(trace_spans)
     lines = [
         "# HELP competiscope_api_up Competiscope API process health.",
         "# TYPE competiscope_api_up gauge",
@@ -78,6 +80,12 @@ def metrics(
                 'competiscope_run_orchestration_backend{backend="temporal"} '
                 f'{1 if settings.run_orchestration_backend == "temporal" else 0}'
             ),
+            (
+                "# HELP competiscope_temporal_traffic_percent_target Target percentage "
+                "of run traffic routed through Temporal."
+            ),
+            "# TYPE competiscope_temporal_traffic_percent_target gauge",
+            f"competiscope_temporal_traffic_percent_target {settings.temporal_traffic_percent}",
             "# HELP competiscope_temporal_server_up Temporal frontend socket reachability.",
             "# TYPE competiscope_temporal_server_up gauge",
             f"competiscope_temporal_server_up {_socket_up(settings.temporal_address)}",
@@ -87,6 +95,12 @@ def metrics(
             "# HELP competiscope_trace_spans_total Trace spans persisted in run details.",
             "# TYPE competiscope_trace_spans_total gauge",
             f"competiscope_trace_spans_total {sum(run.metrics.total_spans for run in runs)}",
+            (
+                "# HELP competiscope_trace_context_coverage_ratio Ratio of spans with "
+                "trace_id, otel_span_id, and traceparent."
+            ),
+            "# TYPE competiscope_trace_context_coverage_ratio gauge",
+            f"competiscope_trace_context_coverage_ratio {trace_context_coverage:.6f}",
             "# HELP competiscope_llm_calls_total LLM calls persisted in run metrics.",
             "# TYPE competiscope_llm_calls_total gauge",
             f"competiscope_llm_calls_total {sum(run.metrics.llm_calls for run in runs)}",
@@ -107,6 +121,15 @@ def metrics(
             "# HELP competiscope_pydantic_ai_available Pydantic-AI runtime import status.",
             "# TYPE competiscope_pydantic_ai_available gauge",
             f"competiscope_pydantic_ai_available {1 if pydantic_ai_available() else 0}",
+            (
+                "# HELP competiscope_pydantic_ai_model_backed_enabled Model-backed "
+                "Pydantic-AI execution switch."
+            ),
+            "# TYPE competiscope_pydantic_ai_model_backed_enabled gauge",
+            (
+                "competiscope_pydantic_ai_model_backed_enabled "
+                f"{1 if settings.pydantic_ai_model_backed_enabled else 0}"
+            ),
             "# HELP competiscope_compliance_redaction_enabled Trace text redaction status.",
             "# TYPE competiscope_compliance_redaction_enabled gauge",
             (
@@ -118,6 +141,21 @@ def metrics(
             (
                 "competiscope_compliance_redactions_total "
                 f"{sum(run.metrics.compliance_redaction_count for run in runs)}"
+            ),
+            (
+                "# HELP competiscope_compliance_require_trace_context Compliance "
+                "trace-context requirement."
+            ),
+            "# TYPE competiscope_compliance_require_trace_context gauge",
+            (
+                "competiscope_compliance_require_trace_context "
+                f"{1 if settings.compliance_require_trace_context else 0}"
+            ),
+            "# HELP competiscope_compliance_require_source_urls Compliance source URL requirement.",
+            "# TYPE competiscope_compliance_require_source_urls gauge",
+            (
+                "competiscope_compliance_require_source_urls "
+                f"{1 if settings.compliance_require_source_urls else 0}"
             ),
             "# HELP competiscope_notifications_total Enterprise notifications by type and status.",
             "# TYPE competiscope_notifications_total gauge",
@@ -184,3 +222,16 @@ def _socket_up(address: str) -> int:
     except OSError:
         return 0
     return 1
+
+
+def _trace_context_coverage(spans: list[object]) -> float:
+    if not spans:
+        return 0.0
+    complete = sum(
+        1
+        for span in spans
+        if getattr(span, "trace_id", "")
+        and getattr(span, "otel_span_id", "")
+        and getattr(span, "traceparent", "")
+    )
+    return complete / len(spans)

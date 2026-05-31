@@ -61,14 +61,19 @@ def test_metrics_exposes_run_and_temporal_operational_gauges() -> None:
     assert "competiscope_api_up 1" in body
     assert 'competiscope_runs_total{status="completed"} 0' in body
     assert 'competiscope_run_orchestration_backend{backend="temporal"} 1' in body
+    assert "competiscope_temporal_traffic_percent_target 100" in body
     assert "competiscope_temporal_server_up 0" in body
     assert "competiscope_enterprise_store_configured 1" in body
     assert "competiscope_trace_spans_total 0" in body
+    assert "competiscope_trace_context_coverage_ratio 0.000000" in body
     assert "competiscope_llm_calls_total 0" in body
     assert 'competiscope_token_estimate_total{kind="total"} 0' in body
     assert "competiscope_pydantic_ai_available " in body
+    assert "competiscope_pydantic_ai_model_backed_enabled 0" in body
     assert "competiscope_compliance_redaction_enabled 1" in body
     assert "competiscope_compliance_redactions_total 0" in body
+    assert "competiscope_compliance_require_trace_context 1" in body
+    assert "competiscope_compliance_require_source_urls 0" in body
     assert (
         'competiscope_notifications_total{type="release_gate_blocked",status="queued"} 1'
         in body

@@ -556,6 +556,132 @@
         }
       }
     },
+    "/api/runs/{run_id}/trace/otel": {
+      "get": {
+        "tags": [
+          "trace"
+        ],
+        "summary": "Get Trace Otel Export",
+        "operationId": "get_trace_otel_export_api_runs__run_id__trace_otel_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtelTraceExport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/trace/observability": {
+      "get": {
+        "tags": [
+          "trace"
+        ],
+        "summary": "Get Trace Observability Report",
+        "operationId": "get_trace_observability_report_api_runs__run_id__trace_observability_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceObservabilityReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/compliance": {
+      "get": {
+        "tags": [
+          "trace"
+        ],
+        "summary": "Get Run Compliance Report",
+        "operationId": "get_run_compliance_report_api_runs__run_id__compliance_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunComplianceReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/runs/{run_id}/trace/agent-messages": {
       "get": {
         "tags": [
@@ -5641,6 +5767,67 @@
         ],
         "title": "CompetitorScoreReport"
       },
+      "ComplianceFinding": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warn",
+              "blocker"
+            ],
+            "title": "Severity"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "pii",
+              "source",
+              "robots",
+              "policy",
+              "trace"
+            ],
+            "title": "Category"
+          },
+          "target_type": {
+            "type": "string",
+            "enum": [
+              "run",
+              "source",
+              "trace_span"
+            ],
+            "title": "Target Type"
+          },
+          "target_id": {
+            "type": "string",
+            "title": "Target Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "recommendation": {
+            "type": "string",
+            "title": "Recommendation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "category",
+          "target_type",
+          "target_id",
+          "message",
+          "recommendation"
+        ],
+        "title": "ComplianceFinding"
+      },
       "EnterpriseRunProjection": {
         "properties": {
           "workspace_id": {
@@ -6598,6 +6785,132 @@
           "title"
         ],
         "title": "NotificationRecord"
+      },
+      "OtelSpanExport": {
+        "properties": {
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          },
+          "span_id": {
+            "type": "string",
+            "title": "Span Id"
+          },
+          "parent_span_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Span Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "status_code": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "ERROR"
+            ],
+            "title": "Status Code"
+          },
+          "start_time_unix_nano": {
+            "type": "integer",
+            "title": "Start Time Unix Nano"
+          },
+          "end_time_unix_nano": {
+            "type": "integer",
+            "title": "End Time Unix Nano"
+          },
+          "attributes": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Attributes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "trace_id",
+          "span_id",
+          "name",
+          "kind",
+          "status_code",
+          "start_time_unix_nano",
+          "end_time_unix_nano"
+        ],
+        "title": "OtelSpanExport"
+      },
+      "OtelTraceExport": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "exporter": {
+            "type": "string",
+            "const": "otlp-json-compatible",
+            "title": "Exporter",
+            "default": "otlp-json-compatible"
+          },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          },
+          "resource": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Resource"
+          },
+          "spans": {
+            "items": {
+              "$ref": "#/components/schemas/OtelSpanExport"
+            },
+            "type": "array",
+            "title": "Spans"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id",
+          "trace_id"
+        ],
+        "title": "OtelTraceExport"
       },
       "PricingModel": {
         "properties": {
@@ -7729,6 +8042,83 @@
         ],
         "title": "RevisionRecord"
       },
+      "RunComplianceReport": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "title": "Status"
+          },
+          "policy": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Policy"
+          },
+          "source_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Count"
+          },
+          "trace_span_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Trace Span Count"
+          },
+          "redaction_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Redaction Count"
+          },
+          "finding_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Finding Count"
+          },
+          "blocker_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Blocker Count"
+          },
+          "warn_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Warn Count"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ComplianceFinding"
+            },
+            "type": "array",
+            "title": "Findings"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "source_count",
+          "trace_span_count",
+          "redaction_count",
+          "finding_count",
+          "blocker_count",
+          "warn_count"
+        ],
+        "title": "RunComplianceReport"
+      },
       "RunCreateRequest": {
         "properties": {
           "workspace_id": {
@@ -8408,6 +8798,10 @@
             "type": "string",
             "title": "Temporal Task Queue"
           },
+          "temporal_traffic_percent": {
+            "type": "integer",
+            "title": "Temporal Traffic Percent"
+          },
           "compliance_redaction_enabled": {
             "type": "boolean",
             "title": "Compliance Redaction Enabled"
@@ -8423,6 +8817,43 @@
           "compliance_redact_phones": {
             "type": "boolean",
             "title": "Compliance Redact Phones"
+          },
+          "compliance_allowed_domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Compliance Allowed Domains"
+          },
+          "compliance_blocked_domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Compliance Blocked Domains"
+          },
+          "compliance_require_source_urls": {
+            "type": "boolean",
+            "title": "Compliance Require Source Urls"
+          },
+          "compliance_require_trace_context": {
+            "type": "boolean",
+            "title": "Compliance Require Trace Context"
+          },
+          "pydantic_ai_model_backed_enabled": {
+            "type": "boolean",
+            "title": "Pydantic Ai Model Backed Enabled"
+          },
+          "pydantic_ai_model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pydantic Ai Model Name"
           }
         },
         "additionalProperties": false,
@@ -8446,10 +8877,16 @@
           "temporal_address",
           "temporal_namespace",
           "temporal_task_queue",
+          "temporal_traffic_percent",
           "compliance_redaction_enabled",
           "compliance_redact_api_keys",
           "compliance_redact_emails",
-          "compliance_redact_phones"
+          "compliance_redact_phones",
+          "compliance_allowed_domains",
+          "compliance_blocked_domains",
+          "compliance_require_source_urls",
+          "compliance_require_trace_context",
+          "pydantic_ai_model_backed_enabled"
         ],
         "title": "RuntimeConfig"
       },
@@ -9002,6 +9439,126 @@
           "status"
         ],
         "title": "ToolCallMessage"
+      },
+      "TraceObservabilityIssue": {
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warn",
+              "blocker"
+            ],
+            "title": "Severity"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "span_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "severity",
+          "field",
+          "message"
+        ],
+        "title": "TraceObservabilityIssue"
+      },
+      "TraceObservabilityReport": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "title": "Status"
+          },
+          "span_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Span Count"
+          },
+          "trace_id_coverage": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Trace Id Coverage"
+          },
+          "traceparent_coverage": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Traceparent Coverage"
+          },
+          "otel_span_id_coverage": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Otel Span Id Coverage"
+          },
+          "parent_link_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Parent Link Count"
+          },
+          "errored_span_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Errored Span Count"
+          },
+          "otel_export_ready": {
+            "type": "boolean",
+            "title": "Otel Export Ready"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/TraceObservabilityIssue"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "span_count",
+          "trace_id_coverage",
+          "traceparent_coverage",
+          "otel_span_id_coverage",
+          "parent_link_count",
+          "errored_span_count",
+          "otel_export_ready"
+        ],
+        "title": "TraceObservabilityReport"
       },
       "TraceSpan": {
         "properties": {

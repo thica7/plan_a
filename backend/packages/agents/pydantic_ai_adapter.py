@@ -4,7 +4,7 @@ import hashlib
 import json
 import time
 from collections.abc import Callable
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
 
@@ -34,17 +34,20 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
         output_type: type[OutputT],
         handler: Callable[[InputT], OutputT],
         system_prompt: str,
+        model: object | str | None = None,
     ) -> None:
         self.name = name
         self.input_type = input_type
         self.output_type = output_type
         self._handler = handler
         self.system_prompt = system_prompt
+        self._model = model
         self._agent_class_name, self.pydantic_ai_available = _load_pydantic_ai_agent_class_name()
         self._runtime_agent = _create_pydantic_ai_agent(
             name=name,
             output_type=output_type,
             system_prompt=system_prompt,
+            model=model,
         )
         self._input_schema_hash = _model_schema_hash(self.input_type)
         self._output_schema_hash = _model_schema_hash(self.output_type)
@@ -53,7 +56,10 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
     async def execute(self, request: AgentExecutionRequest) -> AgentExecutionResult:
         start = time.perf_counter()
         agent_input = self.input_type.model_validate(request.payload)
-        output = self.output_type.model_validate(self._handler(agent_input))
+        output, execution_mode, runtime_result_type = await self._execute_typed(
+            agent_input,
+            request.context,
+        )
         return AgentExecutionResult(
             run_id=request.run_id,
             agent_name=self.name,
@@ -71,15 +77,64 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
                 "pydantic_ai_runtime_agent_class": type(self._runtime_agent).__name__
                 if self._runtime_agent is not None
                 else None,
+                "pydantic_ai_model_backed_capable": self.pydantic_ai_available,
+                "pydantic_ai_model_backed_requested": _model_backed_requested(
+                    request.context
+                ),
+                "pydantic_ai_runtime_result_type": runtime_result_type,
                 "system_prompt": self.system_prompt,
                 "system_prompt_hash": self._system_prompt_hash,
                 "input_schema": self.input_type.__name__,
                 "output_schema": self.output_type.__name__,
                 "input_schema_hash": self._input_schema_hash,
                 "output_schema_hash": self._output_schema_hash,
-                "execution_mode": "deterministic_handler",
+                "execution_mode": execution_mode,
                 "typed_contract_enforced": True,
             },
+        )
+
+    async def _execute_typed(
+        self,
+        agent_input: InputT,
+        context: dict[str, Any],
+    ) -> tuple[OutputT, str, str | None]:
+        mode = str(context.get("pydantic_ai_execution_mode") or "").strip().lower()
+        if mode == "test_model":
+            deterministic_output = self.output_type.model_validate(self._handler(agent_input))
+            model = _create_test_model(deterministic_output)
+            runtime_agent = _create_pydantic_ai_agent(
+                name=self.name,
+                output_type=self.output_type,
+                system_prompt=self.system_prompt,
+                model=model,
+            )
+            if runtime_agent is not None:
+                result = await runtime_agent.run(_runtime_prompt(agent_input))
+                return (
+                    self.output_type.model_validate(result.output),
+                    "pydantic_ai_test_model_backed",
+                    type(result).__name__,
+                )
+        if mode == "model_backed":
+            model = context.get("pydantic_ai_model") or self._model
+            if model and self.pydantic_ai_available:
+                runtime_agent = _create_pydantic_ai_agent(
+                    name=self.name,
+                    output_type=self.output_type,
+                    system_prompt=self.system_prompt,
+                    model=model,
+                )
+                if runtime_agent is not None:
+                    result = await runtime_agent.run(_runtime_prompt(agent_input))
+                    return (
+                        self.output_type.model_validate(result.output),
+                        "pydantic_ai_model_backed",
+                        type(result).__name__,
+                    )
+        return (
+            self.output_type.model_validate(self._handler(agent_input)),
+            "deterministic_handler",
+            None,
         )
 
 
@@ -106,18 +161,39 @@ def _create_pydantic_ai_agent(
     name: str,
     output_type: type[OutputT],
     system_prompt: str,
+    model: object | str | None = None,
 ) -> object | None:
     try:
         from pydantic_ai import Agent
     except Exception:  # pragma: no cover - depends on optional env installation.
         return None
     return Agent(
-        None,
+        model,
         output_type=output_type,
         instructions=system_prompt,
         name=name,
         defer_model_check=True,
     )
+
+
+def _create_test_model(output: BaseModel) -> object | None:
+    try:
+        from pydantic_ai.models.test import TestModel
+    except Exception:  # pragma: no cover - depends on optional env installation.
+        return None
+    return TestModel(custom_output_args=output.model_dump(mode="json"))
+
+
+def _runtime_prompt(agent_input: BaseModel) -> str:
+    return (
+        "Validate and return the structured output for this typed agent input:\n"
+        + agent_input.model_dump_json()
+    )
+
+
+def _model_backed_requested(context: dict[str, Any]) -> bool:
+    mode = str(context.get("pydantic_ai_execution_mode") or "").strip().lower()
+    return mode in {"model_backed", "test_model"}
 
 
 def _model_schema_hash(model_type: type[BaseModel]) -> str:

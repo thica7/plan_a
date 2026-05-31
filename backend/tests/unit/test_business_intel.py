@@ -530,6 +530,8 @@ async def test_phase3_pydantic_ai_executors_return_structured_outputs() -> None:
     assert gap_result.metadata["output_schema_hash"]
     assert gap_result.metadata["pydantic_ai_runtime_agent_created"] is True
     assert gap_result.metadata["pydantic_ai_runtime_agent_class"] == "Agent"
+    assert gap_result.metadata["pydantic_ai_model_backed_capable"] is True
+    assert gap_result.metadata["pydantic_ai_model_backed_requested"] is False
     assert gap_result.payload["gap_count"] >= 1
     assert red_team_result.status == "ok"
     assert red_team_result.metadata["framework"] == "pydantic-ai"
@@ -539,7 +541,47 @@ async def test_phase3_pydantic_ai_executors_return_structured_outputs() -> None:
     assert red_team_result.metadata["output_schema_hash"]
     assert red_team_result.metadata["pydantic_ai_runtime_agent_created"] is True
     assert red_team_result.metadata["pydantic_ai_runtime_agent_class"] == "Agent"
+    assert red_team_result.metadata["pydantic_ai_model_backed_capable"] is True
+    assert red_team_result.metadata["pydantic_ai_model_backed_requested"] is False
     assert red_team_result.payload["high_severity_count"] >= 1
+
+
+async def test_pydantic_ai_agent_can_execute_through_test_model_runtime() -> None:
+    plan = build_business_intel_plan(
+        topic="Cursor vs Copilot pricing comparison",
+        competitors=["Cursor", "Copilot"],
+        dimensions=["pricing"],
+        requested_scenario_id="l1_pricing_pack",
+    )
+    evaluation = evaluate_business_qa(
+        project_id="project-1",
+        plan=plan,
+        competitors=[_competitor()],
+        evidence=[],
+        claims=[],
+    )
+
+    result = await build_evidence_gap_agent().execute(
+        AgentExecutionRequest(
+            run_id="run-1",
+            agent_name="evidence_gap",
+            context={"pydantic_ai_execution_mode": "test_model"},
+            payload={
+                "project_id": "project-1",
+                "plan": plan.model_dump(mode="json"),
+                "qa_evaluation": evaluation.model_dump(mode="json"),
+                "competitors": [_competitor().model_dump(mode="json")],
+                "evidence": [],
+                "claims": [],
+            },
+        )
+    )
+
+    assert result.status == "ok"
+    assert result.metadata["execution_mode"] == "pydantic_ai_test_model_backed"
+    assert result.metadata["pydantic_ai_model_backed_requested"] is True
+    assert result.metadata["pydantic_ai_runtime_result_type"] == "AgentRunResult"
+    assert result.payload["gap_count"] >= 1
 
 
 def test_phase3_competitor_scores_return_ranked_scorecards() -> None:

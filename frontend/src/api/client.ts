@@ -12,6 +12,7 @@ import type {
   MonitorStartRequest,
   MonitorStartResponse,
   NotificationRecord,
+  OtelTraceExport,
   ProjectReadinessScore,
   ProjectRecord,
   ReportApprovalSignalRequest,
@@ -31,9 +32,11 @@ import type {
   ScheduledScanStartResponse,
   SkillSpec,
   ToolCallMessage,
+  TraceObservabilityReport,
   TraceSpan,
   WorkflowStartResponse,
   WorkflowStateResponse,
+  RunComplianceReport,
   WorkspaceQuotaDecision,
   WorkspaceQuotaUpdateRequest,
   WorkspaceRecord,
@@ -155,6 +158,18 @@ export function getRunRevisions(runId: string) {
 
 export function getTraceSpans(runId: string) {
   return request<TraceSpan[]>(`/runs/${runId}/trace/spans`);
+}
+
+export function getOtelTraceExport(runId: string) {
+  return request<OtelTraceExport>(`/runs/${runId}/trace/otel`);
+}
+
+export function getTraceObservabilityReport(runId: string) {
+  return request<TraceObservabilityReport>(`/runs/${runId}/trace/observability`);
+}
+
+export function getRunComplianceReport(runId: string) {
+  return request<RunComplianceReport>(`/runs/${runId}/compliance`);
 }
 
 export function getAgentMessages(runId: string) {

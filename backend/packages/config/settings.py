@@ -38,6 +38,22 @@ def _env_choice(name: str, default: str, choices: set[str]) -> str:
     return value
 
 
+def _env_csv(name: str) -> tuple[str, ...]:
+    value = os.getenv(name, "")
+    return tuple(item.strip().lower() for item in value.split(",") if item.strip())
+
+
+def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError:
+        return default
+    return max(minimum, min(maximum, value))
+
+
 @dataclass(frozen=True)
 class Settings:
     demo_mode: bool
@@ -67,6 +83,7 @@ class Settings:
     enterprise_store_backend: str = "postgres"
     enterprise_database_url: str | None = DEFAULT_ENTERPRISE_DATABASE_URL
     run_orchestration_backend: Literal["langgraph", "temporal"] = "langgraph"
+    temporal_traffic_percent: int = 100
     temporal_address: str = "127.0.0.1:7233"
     temporal_namespace: str = "default"
     temporal_task_queue: str = "competitive-intel"
@@ -74,6 +91,12 @@ class Settings:
     compliance_redact_api_keys: bool = True
     compliance_redact_emails: bool = True
     compliance_redact_phones: bool = True
+    compliance_allowed_domains: tuple[str, ...] = ()
+    compliance_blocked_domains: tuple[str, ...] = ()
+    compliance_require_source_urls: bool = False
+    compliance_require_trace_context: bool = True
+    pydantic_ai_model_backed_enabled: bool = False
+    pydantic_ai_model_name: str | None = None
 
     @property
     def has_llm_credentials(self) -> bool:
@@ -149,8 +172,23 @@ def get_settings() -> Settings:
         temporal_address=os.getenv("TEMPORAL_ADDRESS", "127.0.0.1:7233"),
         temporal_namespace=os.getenv("TEMPORAL_NAMESPACE", "default"),
         temporal_task_queue=os.getenv("TEMPORAL_TASK_QUEUE", "competitive-intel"),
+        temporal_traffic_percent=_env_int(
+            "TEMPORAL_TRAFFIC_PERCENT",
+            100,
+            minimum=0,
+            maximum=100,
+        ),
         compliance_redaction_enabled=_env_bool("COMPLIANCE_REDACTION_ENABLED", True),
         compliance_redact_api_keys=_env_bool("COMPLIANCE_REDACT_API_KEYS", True),
         compliance_redact_emails=_env_bool("COMPLIANCE_REDACT_EMAILS", True),
         compliance_redact_phones=_env_bool("COMPLIANCE_REDACT_PHONES", True),
+        compliance_allowed_domains=_env_csv("COMPLIANCE_ALLOWED_DOMAINS"),
+        compliance_blocked_domains=_env_csv("COMPLIANCE_BLOCKED_DOMAINS"),
+        compliance_require_source_urls=_env_bool("COMPLIANCE_REQUIRE_SOURCE_URLS", False),
+        compliance_require_trace_context=_env_bool("COMPLIANCE_REQUIRE_TRACE_CONTEXT", True),
+        pydantic_ai_model_backed_enabled=_env_bool(
+            "PYDANTIC_AI_MODEL_BACKED_ENABLED",
+            False,
+        ),
+        pydantic_ai_model_name=os.getenv("PYDANTIC_AI_MODEL_NAME") or None,
     )
