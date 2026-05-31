@@ -9,10 +9,13 @@ import type {
   EvidenceQualityLabel,
   EvidenceGapReport,
   EvidenceRecord,
+  ModelPolicyReport,
   MonitorStartRequest,
   MonitorStartResponse,
   NotificationRecord,
   OtelTraceExport,
+  PolicyDecision,
+  PolicyEvaluationRequest,
   ProjectReadinessScore,
   ProjectRecord,
   ReportApprovalSignalRequest,
@@ -207,6 +210,21 @@ export function listRuns() {
 export function listEnterpriseProjects(workspaceId?: string) {
   const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
   return request<ProjectRecord[]>(`/enterprise/projects${params}`);
+}
+
+export function getPolicyActions() {
+  return request<Record<string, string>>("/enterprise/policy/actions");
+}
+
+export function evaluatePolicy(payload: PolicyEvaluationRequest) {
+  return request<PolicyDecision>("/enterprise/policy/evaluate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getModelPolicy() {
+  return request<ModelPolicyReport>("/enterprise/model-policy");
 }
 
 export function getWorkspaceUsage(workspaceId: string) {

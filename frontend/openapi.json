@@ -1662,6 +1662,143 @@
         }
       }
     },
+    "/api/enterprise/policy/actions": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Policy Actions",
+        "operationId": "get_policy_actions_api_enterprise_policy_actions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Get Policy Actions Api Enterprise Policy Actions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enterprise/policy/evaluate": {
+      "post": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Evaluate Policy",
+        "operationId": "evaluate_policy_api_enterprise_policy_evaluate_post",
+        "parameters": [
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyEvaluationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyDecision"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enterprise/model-policy": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Model Policy",
+        "operationId": "get_model_policy_api_enterprise_model_policy_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelPolicyReport"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enterprise/qa-rules": {
       "get": {
         "tags": [
@@ -6513,6 +6650,145 @@
         "type": "object",
         "title": "LlmSmokeRequest"
       },
+      "ModelPolicyFinding": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warn",
+              "blocker"
+            ],
+            "title": "Severity"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "provider",
+              "compliance",
+              "cost",
+              "routing"
+            ],
+            "title": "Category"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "recommendation": {
+            "type": "string",
+            "title": "Recommendation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "category",
+          "message",
+          "recommendation"
+        ],
+        "title": "ModelPolicyFinding"
+      },
+      "ModelPolicyReport": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "title": "Status"
+          },
+          "policy_version": {
+            "type": "string",
+            "title": "Policy Version",
+            "default": "2026-05-phase5-model-policy"
+          },
+          "default_execution_mode": {
+            "type": "string",
+            "title": "Default Execution Mode"
+          },
+          "primary_provider_configured": {
+            "type": "boolean",
+            "title": "Primary Provider Configured"
+          },
+          "backup_provider_configured": {
+            "type": "boolean",
+            "title": "Backup Provider Configured"
+          },
+          "real_execution_allowed": {
+            "type": "boolean",
+            "title": "Real Execution Allowed"
+          },
+          "fallback_allowed": {
+            "type": "boolean",
+            "title": "Fallback Allowed"
+          },
+          "redaction_required": {
+            "type": "boolean",
+            "title": "Redaction Required"
+          },
+          "trace_context_required": {
+            "type": "boolean",
+            "title": "Trace Context Required"
+          },
+          "max_timeout_seconds": {
+            "type": "number",
+            "title": "Max Timeout Seconds"
+          },
+          "finding_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Finding Count"
+          },
+          "blocker_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Blocker Count"
+          },
+          "warn_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Warn Count"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ModelPolicyFinding"
+            },
+            "type": "array",
+            "title": "Findings"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "default_execution_mode",
+          "primary_provider_configured",
+          "backup_provider_configured",
+          "real_execution_allowed",
+          "fallback_allowed",
+          "redaction_required",
+          "trace_context_required",
+          "max_timeout_seconds",
+          "finding_count",
+          "blocker_count",
+          "warn_count"
+        ],
+        "title": "ModelPolicyReport"
+      },
       "MonitorStartRequest": {
         "properties": {
           "workspace_id": {
@@ -6911,6 +7187,189 @@
           "trace_id"
         ],
         "title": "OtelTraceExport"
+      },
+      "PolicyDecision": {
+        "properties": {
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ],
+            "title": "Effect"
+          },
+          "engine": {
+            "type": "string",
+            "const": "internal-opa-compatible",
+            "title": "Engine",
+            "default": "internal-opa-compatible"
+          },
+          "policy_version": {
+            "type": "string",
+            "title": "Policy Version",
+            "default": "2026-05-phase5-rbac"
+          },
+          "subject_id": {
+            "type": "string",
+            "title": "Subject Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "analyst",
+              "reviewer",
+              "viewer"
+            ],
+            "title": "Role"
+          },
+          "scoped_workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoped Workspace Id"
+          },
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "target_type": {
+            "type": "string",
+            "title": "Target Type",
+            "default": "workspace"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "required_role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "analyst",
+              "reviewer",
+              "viewer"
+            ],
+            "title": "Required Role"
+          },
+          "matched_rules": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyRuleMatch"
+            },
+            "type": "array",
+            "title": "Matched Rules"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "allowed",
+          "effect",
+          "subject_id",
+          "role",
+          "workspace_id",
+          "action",
+          "required_role",
+          "reason"
+        ],
+        "title": "PolicyDecision"
+      },
+      "PolicyEvaluationRequest": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Workspace Id"
+          },
+          "action": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Action"
+          },
+          "target_type": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Target Type",
+            "default": "workspace"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "action"
+        ],
+        "title": "PolicyEvaluationRequest"
+      },
+      "PolicyRuleMatch": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ],
+            "title": "Effect"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rule_id",
+          "effect",
+          "message"
+        ],
+        "title": "PolicyRuleMatch"
       },
       "PricingModel": {
         "properties": {

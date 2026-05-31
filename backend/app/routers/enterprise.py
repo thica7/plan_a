@@ -6,7 +6,14 @@ from fastapi.encoders import jsonable_encoder
 
 from app.deps import get_app_settings, get_enterprise_store, get_enterprise_user_context
 from packages.agents import AgentExecutionRequest
-from packages.auth import EnterpriseUserContext, can_access_workspace
+from packages.auth import (
+    EnterpriseUserContext,
+    PolicyDecision,
+    PolicyEvaluationRequest,
+    can_access_workspace,
+    evaluate_access_policy,
+    list_policy_actions,
+)
 from packages.business_intel import (
     build_business_intel_plan,
     build_evidence_gap_agent,
@@ -20,6 +27,7 @@ from packages.business_intel import (
 )
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore, build_report_version_diff
+from packages.governance import ModelPolicyReport, build_model_policy_report
 from packages.schema.enterprise import (
     AuditLogRecord,
     BusinessIntelPlan,
@@ -169,6 +177,30 @@ def upsert_notification(
 @router.get("/enterprise/scenario-packs", response_model=list[ScenarioPack])
 def get_scenario_packs() -> list[ScenarioPack]:
     return list_scenario_packs()
+
+
+@router.get("/enterprise/policy/actions", response_model=dict[str, str])
+def get_policy_actions() -> dict[str, str]:
+    return list_policy_actions()
+
+
+@router.post("/enterprise/policy/evaluate", response_model=PolicyDecision)
+def evaluate_policy(
+    request: PolicyEvaluationRequest,
+    user: EnterpriseUserDep,
+) -> PolicyDecision:
+    return evaluate_access_policy(
+        user,
+        request.workspace_id,
+        request.action,
+        target_type=request.target_type,
+        target_id=request.target_id,
+    )
+
+
+@router.get("/enterprise/model-policy", response_model=ModelPolicyReport)
+def get_model_policy(settings: SettingsDep) -> ModelPolicyReport:
+    return build_model_policy_report(settings)
 
 
 @router.get("/enterprise/qa-rules", response_model=list[BusinessQARule])

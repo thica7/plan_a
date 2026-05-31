@@ -264,6 +264,65 @@ export interface RunComplianceReport {
   generated_at: string;
 }
 
+export type EnterpriseRole = "owner" | "admin" | "analyst" | "reviewer" | "viewer";
+export type PolicyEffect = "allow" | "deny";
+
+export interface PolicyEvaluationRequest {
+  workspace_id: string;
+  action: string;
+  target_type?: string;
+  target_id?: string | null;
+}
+
+export interface PolicyRuleMatch {
+  rule_id: string;
+  effect: PolicyEffect;
+  message: string;
+}
+
+export interface PolicyDecision {
+  allowed: boolean;
+  effect: PolicyEffect;
+  engine: "internal-opa-compatible";
+  policy_version: string;
+  subject_id: string;
+  role: EnterpriseRole;
+  scoped_workspace_id?: string | null;
+  workspace_id: string;
+  action: string;
+  target_type: string;
+  target_id?: string | null;
+  required_role: EnterpriseRole;
+  matched_rules: PolicyRuleMatch[];
+  reason: string;
+}
+
+export interface ModelPolicyFinding {
+  id: string;
+  severity: "info" | "warn" | "blocker";
+  category: "provider" | "compliance" | "cost" | "routing";
+  message: string;
+  recommendation: string;
+}
+
+export interface ModelPolicyReport {
+  status: "pass" | "warn" | "fail";
+  policy_version: string;
+  default_execution_mode: string;
+  primary_provider_configured: boolean;
+  backup_provider_configured: boolean;
+  real_execution_allowed: boolean;
+  fallback_allowed: boolean;
+  redaction_required: boolean;
+  trace_context_required: boolean;
+  max_timeout_seconds: number;
+  finding_count: number;
+  blocker_count: number;
+  warn_count: number;
+  findings: ModelPolicyFinding[];
+  generated_at: string;
+}
+
 export interface AgentMessage {
   id: string;
   run_id: string;

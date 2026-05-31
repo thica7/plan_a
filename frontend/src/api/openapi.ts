@@ -483,6 +483,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/policy/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Policy Actions */
+        get: operations["get_policy_actions_api_enterprise_policy_actions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/policy/evaluate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evaluate Policy */
+        post: operations["evaluate_policy_api_enterprise_policy_evaluate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/model-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Model Policy */
+        get: operations["get_model_policy_api_enterprise_model_policy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/qa-rules": {
         parameters: {
             query?: never;
@@ -1879,6 +1930,67 @@ export interface components {
              */
             prompt: string;
         };
+        /** ModelPolicyFinding */
+        ModelPolicyFinding: {
+            /** Id */
+            id: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "warn" | "blocker";
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "provider" | "compliance" | "cost" | "routing";
+            /** Message */
+            message: string;
+            /** Recommendation */
+            recommendation: string;
+        };
+        /** ModelPolicyReport */
+        ModelPolicyReport: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "warn" | "fail";
+            /**
+             * Policy Version
+             * @default 2026-05-phase5-model-policy
+             */
+            policy_version: string;
+            /** Default Execution Mode */
+            default_execution_mode: string;
+            /** Primary Provider Configured */
+            primary_provider_configured: boolean;
+            /** Backup Provider Configured */
+            backup_provider_configured: boolean;
+            /** Real Execution Allowed */
+            real_execution_allowed: boolean;
+            /** Fallback Allowed */
+            fallback_allowed: boolean;
+            /** Redaction Required */
+            redaction_required: boolean;
+            /** Trace Context Required */
+            trace_context_required: boolean;
+            /** Max Timeout Seconds */
+            max_timeout_seconds: number;
+            /** Finding Count */
+            finding_count: number;
+            /** Blocker Count */
+            blocker_count: number;
+            /** Warn Count */
+            warn_count: number;
+            /** Findings */
+            findings?: components["schemas"]["ModelPolicyFinding"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+        };
         /** MonitorStartRequest */
         MonitorStartRequest: {
             /** Workspace Id */
@@ -2045,6 +2157,82 @@ export interface components {
              * Format: date-time
              */
             generated_at?: string;
+        };
+        /** PolicyDecision */
+        PolicyDecision: {
+            /** Allowed */
+            allowed: boolean;
+            /**
+             * Effect
+             * @enum {string}
+             */
+            effect: "allow" | "deny";
+            /**
+             * Engine
+             * @default internal-opa-compatible
+             * @constant
+             */
+            engine: "internal-opa-compatible";
+            /**
+             * Policy Version
+             * @default 2026-05-phase5-rbac
+             */
+            policy_version: string;
+            /** Subject Id */
+            subject_id: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "analyst" | "reviewer" | "viewer";
+            /** Scoped Workspace Id */
+            scoped_workspace_id?: string | null;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Action */
+            action: string;
+            /**
+             * Target Type
+             * @default workspace
+             */
+            target_type: string;
+            /** Target Id */
+            target_id?: string | null;
+            /**
+             * Required Role
+             * @enum {string}
+             */
+            required_role: "owner" | "admin" | "analyst" | "reviewer" | "viewer";
+            /** Matched Rules */
+            matched_rules?: components["schemas"]["PolicyRuleMatch"][];
+            /** Reason */
+            reason: string;
+        };
+        /** PolicyEvaluationRequest */
+        PolicyEvaluationRequest: {
+            /** Workspace Id */
+            workspace_id: string;
+            /** Action */
+            action: string;
+            /**
+             * Target Type
+             * @default workspace
+             */
+            target_type: string;
+            /** Target Id */
+            target_id?: string | null;
+        };
+        /** PolicyRuleMatch */
+        PolicyRuleMatch: {
+            /** Rule Id */
+            rule_id: string;
+            /**
+             * Effect
+             * @enum {string}
+             */
+            effect: "allow" | "deny";
+            /** Message */
+            message: string;
         };
         /** PricingModel */
         PricingModel: {
@@ -4528,6 +4716,85 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScenarioPack"][];
+                };
+            };
+        };
+    };
+    get_policy_actions_api_enterprise_policy_actions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    evaluate_policy_api_enterprise_policy_evaluate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PolicyEvaluationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PolicyDecision"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_model_policy_api_enterprise_model_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelPolicyReport"];
                 };
             };
         };

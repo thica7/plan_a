@@ -671,6 +671,17 @@ def test_enterprise_router_exposes_projection() -> None:
     notifications = client.get(
         f"/api/enterprise/notifications?workspace_id={context.workspace_id}"
     )
+    policy_actions = client.get("/api/enterprise/policy/actions")
+    policy_decision = client.post(
+        "/api/enterprise/policy/evaluate",
+        json={
+            "workspace_id": context.workspace_id,
+            "action": "project:read",
+            "target_type": "project",
+            "target_id": context.project_id,
+        },
+    )
+    model_policy = client.get("/api/enterprise/model-policy")
     project = client.get(f"/api/enterprise/projects/{context.project_id}")
     business_plan = client.get(f"/api/enterprise/projects/{context.project_id}/business-plan")
     qa_evaluation = client.get(f"/api/enterprise/projects/{context.project_id}/qa-evaluation")
@@ -736,6 +747,13 @@ def test_enterprise_router_exposes_projection() -> None:
     assert notification_upsert.json()["id"] == "notification-route-1"
     assert notifications.status_code == 200
     assert notifications.json()[0]["notification_type"] == "scheduled_scan_summary"
+    assert policy_actions.status_code == 200
+    assert policy_actions.json()["project:write"] == "analyst"
+    assert policy_decision.status_code == 200
+    assert policy_decision.json()["allowed"] is True
+    assert policy_decision.json()["engine"] == "internal-opa-compatible"
+    assert model_policy.status_code == 200
+    assert model_policy.json()["policy_version"] == "2026-05-phase5-model-policy"
     assert project.status_code == 200
     assert project.json()["id"] == context.project_id
     assert business_plan.status_code == 200
