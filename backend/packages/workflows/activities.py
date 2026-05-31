@@ -7,10 +7,16 @@ from typing import Literal, cast
 
 from temporalio import activity
 
+from packages.business_intel import evaluate_report_release_gate
 from packages.enterprise import EnterpriseStore
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
-from packages.schema.enterprise import NotificationRecord, ProjectRecord, ReportVersionRecord
+from packages.schema.enterprise import (
+    NotificationRecord,
+    ProjectRecord,
+    ReportReleaseGate,
+    ReportVersionRecord,
+)
 from packages.workflows.models import (
     APPROVE_REPORT_VERSION_ACTIVITY,
     CREATE_RUN_ACTIVITY,
@@ -558,6 +564,7 @@ class ReportApprovalActivities:
         decision: ReportApprovalDecisionInput,
     ) -> ReportApprovalState:
         version = self._require_report_version(decision.report_version_id)
+        self._enforce_release_gate(version)
         updated = version.model_copy(update={"status": "approved"})
         return _approval_state(
             self._store.upsert_report_version(updated),
@@ -583,6 +590,25 @@ class ReportApprovalActivities:
         if version is None:
             raise RuntimeError(f"Report version not found: {report_version_id}")
         return version
+
+    def _enforce_release_gate(self, version: ReportVersionRecord) -> None:
+        gate = self._release_gate(version)
+        if gate.allowed:
+            return
+        reasons = "; ".join(item.message for item in gate.issues[:3])
+        raise RuntimeError(f"Report release gate blocked approval: {reasons}")
+
+    def _release_gate(self, version: ReportVersionRecord) -> ReportReleaseGate:
+        project = self._store.get_project(version.project_id)
+        if project is None:
+            raise RuntimeError(f"Project not found for report version: {version.project_id}")
+        return evaluate_report_release_gate(
+            project=project,
+            report_version=version,
+            competitors=self._store.list_competitors(project_id=project.id),
+            evidence=self._store.list_evidence(project_id=project.id),
+            claims=self._store.list_claims(project_id=project.id),
+        )
 
 
 def _approval_state(

@@ -457,6 +457,23 @@ class ProjectReadinessScore(BaseModel):
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class ReportReleaseGate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report_version_id: str
+    workspace_id: str
+    project_id: str
+    allowed: bool
+    status: Literal["pass", "blocked"]
+    readiness: ProjectReadinessScore
+    qa_evaluation: BusinessQAEvaluation
+    issue_count: int = Field(ge=0)
+    blocker_count: int = Field(ge=0)
+    warn_count: int = Field(ge=0)
+    issues: list[BusinessQAFinding] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class EvidenceGapItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

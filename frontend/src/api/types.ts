@@ -535,6 +535,21 @@ export interface ProjectReadinessScore {
   generated_at: string;
 }
 
+export interface ReportReleaseGate {
+  report_version_id: string;
+  workspace_id: string;
+  project_id: string;
+  allowed: boolean;
+  status: "pass" | "blocked";
+  readiness: ProjectReadinessScore;
+  qa_evaluation: BusinessQAEvaluation;
+  issue_count: number;
+  blocker_count: number;
+  warn_count: number;
+  issues: BusinessQAFinding[];
+  generated_at: string;
+}
+
 export interface EvidenceGapItem {
   id: string;
   severity: "critical" | "high" | "medium" | "low";

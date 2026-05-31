@@ -2598,7 +2598,52 @@ textarea {
 }
 
 .report-reader {
+  display: grid;
+  gap: 14px;
   min-width: 0;
+}
+
+.release-gate-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.release-gate-panel.blocked {
+  border-color: rgba(180, 83, 9, 0.38);
+}
+
+.release-gate-panel.pass {
+  border-color: rgba(15, 139, 141, 0.32);
+}
+
+.release-gate-panel div {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.release-gate-panel strong,
+.release-gate-panel span,
+.release-gate-panel li {
+  overflow-wrap: anywhere;
+}
+
+.release-gate-panel span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.release-gate-panel ul {
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
 }
 
 .report-reader h1,

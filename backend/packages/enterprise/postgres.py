@@ -1538,7 +1538,8 @@ class EnterprisePostgresStore:
                 status = EXCLUDED.status,
                 report_md = EXCLUDED.report_md,
                 claim_ids = EXCLUDED.claim_ids,
-                evidence_ids = EXCLUDED.evidence_ids
+                evidence_ids = EXCLUDED.evidence_ids,
+                published_at = EXCLUDED.published_at
             """,
             (
                 report.id,

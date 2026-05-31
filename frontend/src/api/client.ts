@@ -18,6 +18,7 @@ import type {
   ReportApprovalSignalResponse,
   ReportApprovalStartRequest,
   ReportApprovalStartResponse,
+  ReportReleaseGate,
   RevisionRecord,
   RedTeamReport,
   ReportVersionDiff,
@@ -286,6 +287,16 @@ export function listProjectReportVersions(projectId: string) {
 export function getReportVersionDiff(versionId: string, baseVersionId?: string) {
   const params = baseVersionId ? `?base_version_id=${encodeURIComponent(baseVersionId)}` : "";
   return request<ReportVersionDiff>(`/enterprise/report-versions/${versionId}/diff${params}`);
+}
+
+export function getReportReleaseGate(versionId: string) {
+  return request<ReportReleaseGate>(`/enterprise/report-versions/${versionId}/release-gate`);
+}
+
+export function publishReportVersion(versionId: string) {
+  return request<ReportVersionRecord>(`/enterprise/report-versions/${versionId}/publish`, {
+    method: "POST",
+  });
 }
 
 export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) {

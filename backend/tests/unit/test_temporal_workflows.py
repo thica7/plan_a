@@ -3,10 +3,17 @@ from pathlib import Path
 import pytest
 
 from packages.config import Settings
-from packages.enterprise import EnterpriseMemoryStore
+from packages.enterprise import EnterpriseMemoryStore, build_enterprise_projection
 from packages.orchestrator.service import RunService
-from packages.schema.api_dto import RunCreateRequest
+from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.enterprise import ReportVersionRecord
+from packages.schema.models import (
+    AnalysisPlan,
+    CompetitorKnowledge,
+    KnowledgeClaim,
+    PricingModel,
+    RawSource,
+)
 from packages.skills.registry import SkillRegistry
 from packages.workflows.activities import (
     CompetitiveIntelActivities,
@@ -448,26 +455,44 @@ def test_temporal_activity_payloads_can_cross_json_converter_boundary() -> None:
 @pytest.mark.asyncio
 async def test_report_approval_activities_update_report_version_status() -> None:
     store = EnterpriseMemoryStore()
-    store.upsert_report_version(_report_version("report-version-1"))
+    report_version_id = _seed_valid_report_version(store, "report-version-1")
     activities = ReportApprovalActivities(store)
 
     requested = await activities.request_report_approval(
-        ReportApprovalWorkflowInput(report_version_id="report-version-1")
+        ReportApprovalWorkflowInput(report_version_id=report_version_id)
     )
     approved = await activities.approve_report_version(
         ReportApprovalDecisionInput(
-            report_version_id="report-version-1",
+            report_version_id=report_version_id,
             approver_id="approver-1",
             note="looks good",
         )
     )
-    stored = store.get_report_version("report-version-1")
+    stored = store.get_report_version(report_version_id)
 
     assert requested.status == "in_review"
     assert approved.status == "approved"
     assert approved.approver_id == "approver-1"
     assert stored is not None
     assert stored.status == "approved"
+
+
+@pytest.mark.asyncio
+async def test_report_approval_activities_block_weak_report_version() -> None:
+    store = EnterpriseMemoryStore()
+    report_version_id = _seed_valid_report_version(store, "report-version-weak")
+    version = store.get_report_version(report_version_id)
+    assert version is not None
+    store.upsert_report_version(version.model_copy(update={"claim_ids": []}))
+    activities = ReportApprovalActivities(store)
+
+    with pytest.raises(RuntimeError, match="release gate blocked"):
+        await activities.approve_report_version(
+            ReportApprovalDecisionInput(
+                report_version_id=report_version_id,
+                approver_id="approver-1",
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -520,3 +545,61 @@ def _report_version(version_id: str) -> ReportVersionRecord:
         competitor_set_hash="competitors",
         report_md="demo report",
     )
+
+
+def _seed_valid_report_version(store: EnterpriseMemoryStore, run_id: str) -> str:
+    detail = RunDetail(
+        id=run_id,
+        topic="Cursor vs Copilot pricing comparison",
+        status="completed",
+        execution_mode="demo",
+        created_at="2026-05-29T00:00:00",
+        updated_at="2026-05-29T00:05:00",
+        plan=AnalysisPlan(
+            topic="Cursor vs Copilot pricing comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            competitor_layer="L1",
+            scenario_id="l1_pricing_pack",
+            homepage_hints={"Cursor": "https://cursor.sh"},
+            homepage_verified={"Cursor": True},
+        ),
+        report_md="Cursor publishes pricing. [source:pricing-1]",
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.sh/pricing",
+                snippet="Cursor publishes pricing.",
+                content_hash="hash-1",
+                confidence=0.9,
+            )
+        ],
+        competitor_knowledge={
+            "Cursor": CompetitorKnowledge(
+                competitor="Cursor",
+                pricing_model=PricingModel(
+                    notes=[
+                        KnowledgeClaim(
+                            claim="Cursor publishes pricing.",
+                            source_ids=["pricing-1"],
+                            confidence=0.9,
+                        )
+                    ]
+                ),
+            )
+        },
+    )
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_layer="L1",
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    return projection.report_version.id

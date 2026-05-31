@@ -661,6 +661,12 @@ def test_enterprise_router_exposes_projection() -> None:
         "/api/enterprise/evidence/reindex",
         params={"workspace_id": context.workspace_id},
     )
+    release_gate = client.get(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/release-gate"
+    )
+    publish = client.post(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/publish"
+    )
     quality = client.patch(
         f"/api/enterprise/evidence/{projection.evidence_records[0].id}/quality",
         json={"quality_label": "stale", "note": "Needs review."},
@@ -711,6 +717,10 @@ def test_enterprise_router_exposes_projection() -> None:
     assert evidence_search.json()[0]["evidence"]["id"] == projection.evidence_records[0].id
     assert evidence_reindex.status_code == 200
     assert evidence_reindex.json()["indexed_count"] == 1
+    assert release_gate.status_code == 200
+    assert release_gate.json()["allowed"] is True
+    assert publish.status_code == 200
+    assert publish.json()["status"] == "published"
     assert quality.status_code == 200
     assert quality.json()["evidence"]["quality_label"] == "stale"
     assert report_upsert.status_code == 200
@@ -720,6 +730,34 @@ def test_enterprise_router_exposes_projection() -> None:
     assert diff.status_code == 200
     assert diff.json()["base_version"] is None
     assert diff.json()["added_lines"] >= 1
+
+
+def test_enterprise_router_blocks_report_approval_status_when_gate_fails() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    projection.report_version = projection.report_version.model_copy(update={"claim_ids": []})
+    store.save_projection(projection)
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/enterprise/report-versions",
+        json=projection.report_version.model_copy(update={"status": "approved"}).model_dump(
+            mode="json"
+        ),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["status"] == "blocked"
+    assert response.json()["detail"]["allowed"] is False
 
 
 def test_enterprise_router_enforces_rbac_workspace_scope() -> None:

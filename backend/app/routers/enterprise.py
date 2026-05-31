@@ -1,6 +1,8 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
 
 from app.deps import get_enterprise_store, get_enterprise_user_context
 from packages.auth import EnterpriseUserContext, can_access_workspace
@@ -9,6 +11,7 @@ from packages.business_intel import (
     analyze_red_team,
     build_business_intel_plan,
     evaluate_business_qa,
+    evaluate_report_release_gate,
     list_business_qa_rules,
     list_scenario_packs,
     score_competitors,
@@ -34,6 +37,7 @@ from packages.schema.enterprise import (
     ProjectReadinessScore,
     ProjectRecord,
     RedTeamReport,
+    ReportReleaseGate,
     ReportVersionDiff,
     ReportVersionRecord,
     ScenarioPack,
@@ -492,6 +496,8 @@ def upsert_report_version(
     user: EnterpriseUserDep,
 ) -> ReportVersionRecord:
     _require_workspace_access(user, version.workspace_id, "report:write")
+    if version.status in {"approved", "published"}:
+        _enforce_report_release_gate(version, store, user)
     return store.upsert_report_version(version)
 
 
@@ -527,6 +533,34 @@ def get_report_version_diff(
     else:
         base_version = store.get_previous_report_version(target_version)
     return build_report_version_diff(target_version, base_version=base_version)
+
+
+@router.get(
+    "/enterprise/report-versions/{version_id}/release-gate",
+    response_model=ReportReleaseGate,
+)
+def get_report_release_gate(
+    version_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> ReportReleaseGate:
+    version = _report_version_or_404(version_id, store, user, "report:read")
+    return _report_release_gate_for_version(version, store, user, "report:read")
+
+
+@router.post(
+    "/enterprise/report-versions/{version_id}/publish",
+    response_model=ReportVersionRecord,
+)
+def publish_report_version(
+    version_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> ReportVersionRecord:
+    version = _report_version_or_404(version_id, store, user, "report:write")
+    _enforce_report_release_gate(version, store, user)
+    updated = version.model_copy(update={"status": "published", "published_at": datetime.utcnow()})
+    return store.upsert_report_version(updated)
 
 
 @router.get("/enterprise/runs/{run_id}/projection", response_model=EnterpriseRunProjection)
@@ -570,6 +604,48 @@ def _evidence_or_404(evidence_id: str, store: EnterpriseStore) -> EvidenceRecord
         if evidence.id == evidence_id:
             return evidence
     raise HTTPException(status_code=404, detail="Evidence not found")
+
+
+def _report_version_or_404(
+    version_id: str,
+    store: EnterpriseStore,
+    user: EnterpriseUserContext,
+    action: str,
+) -> ReportVersionRecord:
+    version = store.get_report_version(version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Report version not found")
+    _require_workspace_access(user, version.workspace_id, action)
+    return version
+
+
+def _report_release_gate_for_version(
+    version: ReportVersionRecord,
+    store: EnterpriseStore,
+    user: EnterpriseUserContext,
+    action: str,
+) -> ReportReleaseGate:
+    project = _project_or_404(version.project_id, store, user, action)
+    if project.workspace_id != version.workspace_id:
+        raise HTTPException(status_code=400, detail="Report workspace does not match project")
+    return evaluate_report_release_gate(
+        project=project,
+        report_version=version,
+        competitors=store.list_competitors(project_id=project.id),
+        evidence=store.list_evidence(project_id=project.id),
+        claims=store.list_claims(project_id=project.id),
+    )
+
+
+def _enforce_report_release_gate(
+    version: ReportVersionRecord,
+    store: EnterpriseStore,
+    user: EnterpriseUserContext,
+) -> None:
+    gate = _report_release_gate_for_version(version, store, user, "report:write")
+    if gate.allowed:
+        return
+    raise HTTPException(status_code=409, detail=jsonable_encoder(gate))
 
 
 def _scoped_workspace_id(

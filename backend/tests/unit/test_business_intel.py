@@ -7,6 +7,7 @@ from packages.business_intel import (
     build_red_team_agent,
     business_findings_to_redo_scopes,
     evaluate_business_qa,
+    evaluate_report_release_gate,
     generate_dynamic_scenario_pack,
     list_business_qa_rules,
     list_scenario_packs,
@@ -15,7 +16,13 @@ from packages.business_intel import (
 )
 from packages.business_intel.homepage import verify_homepage
 from packages.business_intel.layers import assess_competitor_layer
-from packages.schema.enterprise import ClaimRecord, CompetitorRecord, EvidenceRecord
+from packages.schema.enterprise import (
+    ClaimRecord,
+    CompetitorRecord,
+    EvidenceRecord,
+    ProjectRecord,
+    ReportVersionRecord,
+)
 
 
 def test_layer_assessment_prefers_direct_for_focused_pricing_comparison() -> None:
@@ -153,6 +160,85 @@ def test_business_qa_evaluator_passes_verified_pricing_pack() -> None:
     assert readiness.risk_level == "ready"
     assert readiness.score >= 85
     assert readiness.recommendations[0].action_type == "approve_report"
+
+
+def test_report_release_gate_requires_clean_qa_and_verified_evidence() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = ReportVersionRecord(
+        id="report-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        version_number=1,
+        topic_normalized="cursor-pricing",
+        competitor_layer="L1",
+        competitor_set_hash="hash",
+        report_md="Cursor publishes pricing. [source:evidence-1]",
+        claim_ids=["claim-1"],
+        evidence_ids=["evidence-1"],
+    )
+    project = ProjectRecord(
+        id="project-1",
+        workspace_id="workspace-1",
+        name="Cursor pricing",
+        topic="Cursor vs Copilot pricing comparison",
+        topic_normalized="cursor-pricing",
+        competitor_layer="L1",
+        competitor_set_hash="hash",
+        scenario_id="l1_pricing_pack",
+    )
+
+    passing = evaluate_report_release_gate(
+        project=project,
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+    blocked = evaluate_report_release_gate(
+        project=project,
+        report_version=report,
+        competitors=[competitor],
+        evidence=[evidence[0].model_copy(update={"quality_label": "stale"})],
+        claims=claims,
+    )
+
+    assert passing.allowed is True
+    assert passing.status == "pass"
+    assert blocked.allowed is False
+    assert blocked.status == "blocked"
+    assert {issue.rule_id for issue in blocked.issues} >= {
+        "business_qa_clean_required",
+        "verified_evidence_rate",
+    }
 
 
 def test_business_qa_evaluator_flags_stale_evidence_and_broken_claim_links() -> None:

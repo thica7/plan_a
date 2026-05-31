@@ -24,6 +24,7 @@ import {
   getProjectCompetitorScores,
   getProjectQAEvaluation,
   getProjectReadinessScore,
+  getReportReleaseGate,
   getReportVersionDiff,
   getProjectRedTeam,
   getWorkspaceUsage,
@@ -53,6 +54,7 @@ import type {
   ProjectRecord,
   RedTeamFinding,
   RedTeamReport,
+  ReportReleaseGate,
   ReportVersionDiff,
   ReportVersionRecord,
   WorkspaceUsageSummary,
@@ -81,6 +83,7 @@ export function EnterpriseWorkbench({
   const [workspaceUsage, setWorkspaceUsage] = useState<WorkspaceUsageSummary | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
+  const [releaseGate, setReleaseGate] = useState<ReportReleaseGate | null>(null);
   const [activeTab, setActiveTab] = useState<EnterpriseTab>(initialTab);
   const [query, setQuery] = useState("");
   const [isLoadingProjects, setLoadingProjects] = useState(true);
@@ -206,16 +209,21 @@ export function EnterpriseWorkbench({
   useEffect(() => {
     if (!selectedVersionId) {
       setDiff(null);
+      setReleaseGate(null);
       return;
     }
 
     let active = true;
-    getReportVersionDiff(selectedVersionId)
-      .then((value) => {
-        if (active) setDiff(value);
+    Promise.all([getReportVersionDiff(selectedVersionId), getReportReleaseGate(selectedVersionId)])
+      .then(([diffValue, releaseGateValue]) => {
+        if (!active) return;
+        setDiff(diffValue);
+        setReleaseGate(releaseGateValue);
       })
       .catch(() => {
-        if (active) setDiff(null);
+        if (!active) return;
+        setDiff(null);
+        setReleaseGate(null);
       });
     return () => {
       active = false;
@@ -553,6 +561,7 @@ export function EnterpriseWorkbench({
                 {activeTab === "reports" ? (
                   <ReportHistory
                     diff={diff}
+                    releaseGate={releaseGate}
                     selectedVersion={selectedVersion}
                     selectedVersionId={selectedVersionId}
                     setSelectedVersionId={setSelectedVersionId}
@@ -1041,12 +1050,14 @@ function ClaimList({
 
 function ReportHistory({
   diff,
+  releaseGate,
   selectedVersion,
   selectedVersionId,
   setSelectedVersionId,
   versions,
 }: {
   diff: ReportVersionDiff | null;
+  releaseGate: ReportReleaseGate | null;
   selectedVersion: ReportVersionRecord | null;
   selectedVersionId: string | null;
   setSelectedVersionId: (value: string) => void;
@@ -1076,6 +1087,7 @@ function ReportHistory({
           <h2>{selectedVersion ? `Report v${selectedVersion.version_number}` : "Report"}</h2>
           <GitCompare size={17} aria-hidden />
         </div>
+        {releaseGate ? <ReleaseGatePanel gate={releaseGate} /> : null}
         {selectedVersion ? (
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedVersion.report_md || "No report body."}</ReactMarkdown>
         ) : null}
@@ -1096,6 +1108,26 @@ function ReportHistory({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function ReleaseGatePanel({ gate }: { gate: ReportReleaseGate }) {
+  return (
+    <section className={`release-gate-panel ${gate.status}`}>
+      <div>
+        <strong>{gate.allowed ? "Release gate passed" : "Release gate blocked"}</strong>
+        <span>
+          {gate.readiness.score} readiness / {gate.qa_evaluation.finding_count} QA finding(s)
+        </span>
+      </div>
+      {gate.issues.length ? (
+        <ul>
+          {gate.issues.slice(0, 3).map((issue) => (
+            <li key={issue.id}>{issue.message}</li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 
