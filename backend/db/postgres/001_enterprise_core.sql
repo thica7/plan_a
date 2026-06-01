@@ -417,3 +417,238 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_report_versions_workspace_group_unique
         competitor_set_hash,
         version_number
     );
+
+-- Phase 5 tenant isolation guardrail.
+-- Production connection pools should set:
+--   SET app.current_workspace_id = '<workspace-id>';
+-- Background jobs and migrations may set:
+--   SET app.service_role = 'on';
+-- Table owners still bypass RLS unless FORCE ROW LEVEL SECURITY is enabled by deployment.
+ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_workspaces ON workspaces;
+CREATE POLICY tenant_isolation_workspaces ON workspaces
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE workspace_members ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_workspace_members ON workspace_members;
+CREATE POLICY tenant_isolation_workspace_members ON workspace_members
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_projects ON projects;
+CREATE POLICY tenant_isolation_projects ON projects
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_notifications ON notifications;
+CREATE POLICY tenant_isolation_notifications ON notifications
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE competitors ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_competitors ON competitors;
+CREATE POLICY tenant_isolation_competitors ON competitors
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE project_competitors ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_project_competitors ON project_competitors;
+CREATE POLICY tenant_isolation_project_competitors ON project_competitors
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR EXISTS (
+            SELECT 1 FROM projects
+            WHERE projects.id = project_competitors.project_id
+              AND projects.workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+        )
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR EXISTS (
+            SELECT 1 FROM projects
+            WHERE projects.id = project_competitors.project_id
+              AND projects.workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+        )
+    );
+
+ALTER TABLE runs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_runs ON runs;
+CREATE POLICY tenant_isolation_runs ON runs
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE evidence_records ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_evidence_records ON evidence_records;
+CREATE POLICY tenant_isolation_evidence_records ON evidence_records
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE artifacts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_artifacts ON artifacts;
+CREATE POLICY tenant_isolation_artifacts ON artifacts
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE source_registry ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_source_registry ON source_registry;
+CREATE POLICY tenant_isolation_source_registry ON source_registry
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE evidence_embeddings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_evidence_embeddings ON evidence_embeddings;
+CREATE POLICY tenant_isolation_evidence_embeddings ON evidence_embeddings
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE knowledge_claims ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_knowledge_claims ON knowledge_claims;
+CREATE POLICY tenant_isolation_knowledge_claims ON knowledge_claims
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE claim_evidence ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_claim_evidence ON claim_evidence;
+CREATE POLICY tenant_isolation_claim_evidence ON claim_evidence
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE report_versions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_report_versions ON report_versions;
+CREATE POLICY tenant_isolation_report_versions ON report_versions
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE report_version_claims ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_report_version_claims ON report_version_claims;
+CREATE POLICY tenant_isolation_report_version_claims ON report_version_claims
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE report_version_evidence ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_report_version_evidence ON report_version_evidence;
+CREATE POLICY tenant_isolation_report_version_evidence ON report_version_evidence
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_audit_logs ON audit_logs;
+CREATE POLICY tenant_isolation_audit_logs ON audit_logs
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );

@@ -104,3 +104,35 @@ def test_phase5_artifact_schema_is_present() -> None:
     assert "storage_backend TEXT NOT NULL DEFAULT 'local'" in sql
     assert "idx_artifacts_workspace_project" in sql
     assert "idx_artifacts_evidence" in sql
+
+
+def test_phase5_postgres_schema_has_workspace_rls_guardrails() -> None:
+    sql = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
+
+    tenant_tables = [
+        "workspaces",
+        "workspace_members",
+        "projects",
+        "notifications",
+        "competitors",
+        "project_competitors",
+        "runs",
+        "evidence_records",
+        "artifacts",
+        "source_registry",
+        "evidence_embeddings",
+        "knowledge_claims",
+        "claim_evidence",
+        "report_versions",
+        "report_version_claims",
+        "report_version_evidence",
+        "audit_logs",
+    ]
+
+    for table in tenant_tables:
+        assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in sql
+        assert f"tenant_isolation_{table}" in sql
+
+    assert "current_setting('app.current_workspace_id', true)" in sql
+    assert "current_setting('app.service_role', true)" in sql
+    assert "DROP POLICY IF EXISTS tenant_isolation_projects ON projects" in sql
