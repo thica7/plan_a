@@ -22,6 +22,7 @@ from packages.schema.api_dto import (
 from packages.search import PerplexitySearchClient, WebSearchError
 from packages.skills.registry import SkillRegistry
 from packages.tools import fetch_page
+from packages.workflows.service import temporal_cutover_status
 
 router = APIRouter()
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
@@ -62,6 +63,7 @@ def health(
             detail="run journal opened",
         ),
         _enterprise_store_check(settings),
+        _temporal_cutover_check(settings),
         _temporal_server_check(settings),
         HealthCheck(
             name="compliance",
@@ -230,6 +232,18 @@ def _enterprise_store_check(settings: Settings) -> HealthCheck:
         name="enterprise_store",
         status="error",
         detail=f"unknown backend={backend}",
+    )
+
+
+def _temporal_cutover_check(settings: Settings) -> HealthCheck:
+    cutover = temporal_cutover_status(settings)
+    return HealthCheck(
+        name="temporal_cutover",
+        status="ok" if cutover.ready else "error",
+        detail=(
+            f"backend={cutover.backend} target_percent={cutover.target_percent} "
+            f"reason={cutover.reason}"
+        ),
     )
 
 

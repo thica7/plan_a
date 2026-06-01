@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from app.deps import get_app_settings
 from packages.config import Settings
 from packages.schema.api_dto import RuntimeConfig
+from packages.workflows.service import temporal_cutover_status
 
 router = APIRouter()
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
@@ -12,6 +13,7 @@ SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 @router.get("/runtime", response_model=RuntimeConfig)
 def get_runtime(settings: SettingsDep) -> RuntimeConfig:
+    cutover = temporal_cutover_status(settings)
     return RuntimeConfig(
         default_execution_mode=settings.default_execution_mode,
         run_orchestration_backend=settings.run_orchestration_backend,
@@ -34,6 +36,8 @@ def get_runtime(settings: SettingsDep) -> RuntimeConfig:
         temporal_namespace=settings.temporal_namespace,
         temporal_task_queue=settings.temporal_task_queue,
         temporal_traffic_percent=settings.temporal_traffic_percent,
+        temporal_cutover_ready=cutover.ready,
+        temporal_cutover_reason=cutover.reason,
         compliance_redaction_enabled=settings.compliance_redaction_enabled,
         compliance_redact_api_keys=settings.compliance_redact_api_keys,
         compliance_redact_emails=settings.compliance_redact_emails,

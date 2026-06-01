@@ -2432,7 +2432,7 @@ class RunService(
                 "with a concrete structured claim."
             ),
             content_hash=content_hash,
-            confidence=0.72,
+            confidence=0.82,
         )
 
     def _demo_reflection(self, dimension: str) -> ReflectionRecord:

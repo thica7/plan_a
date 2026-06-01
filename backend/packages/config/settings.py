@@ -82,7 +82,7 @@ class Settings:
     langfuse_host: str | None = None
     enterprise_store_backend: str = "postgres"
     enterprise_database_url: str | None = DEFAULT_ENTERPRISE_DATABASE_URL
-    run_orchestration_backend: Literal["langgraph", "temporal"] = "langgraph"
+    run_orchestration_backend: Literal["langgraph", "temporal"] = "temporal"
     temporal_traffic_percent: int = 100
     temporal_address: str = "127.0.0.1:7233"
     temporal_namespace: str = "default"
@@ -167,7 +167,7 @@ def get_settings() -> Settings:
             Literal["langgraph", "temporal"],
             _env_choice(
                 "RUN_ORCHESTRATION_BACKEND",
-                "langgraph",
+                "temporal",
                 {"langgraph", "temporal"},
             ),
         ),

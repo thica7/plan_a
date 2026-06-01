@@ -1,11 +1,12 @@
 # Phase 4 Readiness Report
 
-- Generated at: 2026-05-29T06:52:40.172115+00:00
+- Generated at: 2026-06-01T18:40:25.945132+00:00
 - Require Temporal server: True
 - Overall: PASS
 
 | Check | Status | Detail |
 |---|---:|---|
+| temporal_cutover_config | ok | backend=temporal target_percent=100 reason=100% run traffic is routed through Temporal. |
 | temporal_server_socket | ok | reachable address=127.0.0.1:7233 |
 | postgres_schema_workspace_members | ok | marker=CREATE TABLE IF NOT EXISTS workspace_members |
 | postgres_schema_source_registry | ok | marker=CREATE TABLE IF NOT EXISTS source_registry |
@@ -25,6 +26,6 @@
 
 ## Interpretation
 
-This report validates the Phase 4 thin-shell contract: the same idempotency key produces the same run, rerunning the LangGraph activity does not append duplicate trace events, and the enterprise projection contains a report version with evidence and claims. It also checks the enterprise extension surface now expected at Phase 4 closeout: workspace members/RBAC, Source Registry, pgvector evidence embeddings, and full-text evidence search.
+This report validates the Phase 4 thin-shell contract: the same idempotency key produces the same run, rerunning the LangGraph activity does not append duplicate trace events, and the enterprise projection contains a report version with evidence and claims. It also checks the enterprise extension surface now expected at Phase 4 closeout: workspace members/RBAC, Source Registry, pgvector evidence embeddings, full-text evidence search, and the 100% Temporal run-entry cutover config.
 
 Server reachability is reported separately because local development can run the deterministic activity checks without a Temporal Server. Use `--require-server` in release rehearsal to make server reachability a hard gate.

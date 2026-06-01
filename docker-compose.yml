@@ -48,6 +48,7 @@ services:
       ENTERPRISE_STORE_BACKEND: postgres
       ENTERPRISE_DATABASE_URL: postgresql://competiscope:competiscope@postgres:5432/competiscope?connect_timeout=5
       RUN_ORCHESTRATION_BACKEND: temporal
+      TEMPORAL_TRAFFIC_PERCENT: "100"
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: default
       TEMPORAL_TASK_QUEUE: competitive-intel

@@ -15,10 +15,12 @@ from packages.auth import EnterpriseUserContext, can_access_workspace  # noqa: E
 from packages.config import Settings  # noqa: E402
 from packages.enterprise import EnterpriseMemoryStore  # noqa: E402
 from packages.enterprise.store import DEFAULT_USER_ID  # noqa: E402
+from packages.orchestrator.checkpointer import GraphCheckpointer  # noqa: E402
 from packages.orchestrator.service import RunService  # noqa: E402
 from packages.skills.registry import SkillRegistry  # noqa: E402
 from packages.workflows.activities import CompetitiveIntelActivities  # noqa: E402
 from packages.workflows.models import CompetitiveIntelWorkflowInput  # noqa: E402
+from packages.workflows.service import temporal_cutover_status  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,7 @@ async def main() -> None:
         enterprise_database_url=None,
     )
     checks = [
+        _temporal_cutover_config_check(settings),
         _server_socket_check(settings),
         *_schema_extension_checks(),
         *_rbac_policy_checks(),
@@ -68,6 +71,7 @@ async def _activity_idempotency_checks(settings: Settings) -> list[ReadinessChec
         skill_registry=SkillRegistry.from_default_path(),
         settings=settings,
         enterprise_store=store,
+        graph_checkpointer=GraphCheckpointer.in_memory(),
     )
     activities = CompetitiveIntelActivities(service)
     request = CompetitiveIntelWorkflowInput(
@@ -215,6 +219,18 @@ def _rbac_policy_checks() -> list[ReadinessCheck]:
     ]
 
 
+def _temporal_cutover_config_check(settings: Settings) -> ReadinessCheck:
+    cutover = temporal_cutover_status(settings)
+    return ReadinessCheck(
+        name="temporal_cutover_config",
+        status="ok" if cutover.ready else "error",
+        detail=(
+            f"backend={cutover.backend} target_percent={cutover.target_percent} "
+            f"reason={cutover.reason}"
+        ),
+    )
+
+
 def _server_socket_check(settings: Settings) -> ReadinessCheck:
     host, port = _parse_host_port(settings.temporal_address)
     if host is None or port is None:
@@ -282,7 +298,8 @@ def _render_markdown(summary: dict[str, object]) -> str:
             "duplicate trace events, and the enterprise projection contains a report "
             "version with evidence and claims. It also checks the enterprise extension "
             "surface now expected at Phase 4 closeout: workspace members/RBAC, Source "
-            "Registry, pgvector evidence embeddings, and full-text evidence search.",
+            "Registry, pgvector evidence embeddings, full-text evidence search, and the "
+            "100% Temporal run-entry cutover config.",
             "",
             "Server reachability is reported separately because local development can run "
             "the deterministic activity checks without a Temporal Server. Use "

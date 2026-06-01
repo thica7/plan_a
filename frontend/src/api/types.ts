@@ -556,6 +556,8 @@ export interface RuntimeConfig {
   temporal_namespace: string;
   temporal_task_queue: string;
   temporal_traffic_percent: number;
+  temporal_cutover_ready: boolean;
+  temporal_cutover_reason: string;
   compliance_redaction_enabled: boolean;
   compliance_redact_api_keys: boolean;
   compliance_redact_emails: boolean;

@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from packages.config import Settings  # noqa: E402
 from packages.enterprise import EnterpriseMemoryStore  # noqa: E402
+from packages.orchestrator.checkpointer import GraphCheckpointer  # noqa: E402
 from packages.orchestrator.service import RunService  # noqa: E402
 from packages.skills.registry import SkillRegistry  # noqa: E402
 from packages.workflows.client import workflow_id_for_request  # noqa: E402
@@ -68,6 +69,7 @@ async def main() -> None:
             temporal_task_queue=task_queue,
         ),
         enterprise_store=store,
+        graph_checkpointer=GraphCheckpointer.in_memory(),
     )
     components = build_competitive_intel_worker_components(service, enterprise_store=store)
     request = CompetitiveIntelWorkflowInput(

@@ -13,6 +13,7 @@ from packages.config import Settings
 from packages.enterprise import EnterpriseStore
 from packages.memory import RunJournal
 from packages.schema.enterprise import NotificationRecord
+from packages.workflows.service import temporal_cutover_status
 
 router = APIRouter()
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
@@ -59,6 +60,7 @@ def metrics(
     output_tokens = sum(run.metrics.output_tokens_estimate for run in runs)
     trace_spans = [span for run in runs for span in run.trace_spans]
     trace_context_coverage = _trace_context_coverage(trace_spans)
+    temporal_cutover = temporal_cutover_status(settings)
     lines = [
         "# HELP competiscope_api_up Competiscope API process health.",
         "# TYPE competiscope_api_up gauge",
@@ -86,6 +88,9 @@ def metrics(
             ),
             "# TYPE competiscope_temporal_traffic_percent_target gauge",
             f"competiscope_temporal_traffic_percent_target {settings.temporal_traffic_percent}",
+            "# HELP competiscope_temporal_cutover_ready Phase 4 Temporal cutover readiness.",
+            "# TYPE competiscope_temporal_cutover_ready gauge",
+            f"competiscope_temporal_cutover_ready {1 if temporal_cutover.ready else 0}",
             "# HELP competiscope_temporal_server_up Temporal frontend socket reachability.",
             "# TYPE competiscope_temporal_server_up gauge",
             f"competiscope_temporal_server_up {_socket_up(settings.temporal_address)}",

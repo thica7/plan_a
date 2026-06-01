@@ -228,6 +228,8 @@ class RuntimeConfig(BaseModel):
     temporal_namespace: str
     temporal_task_queue: str
     temporal_traffic_percent: int
+    temporal_cutover_ready: bool
+    temporal_cutover_reason: str
     compliance_redaction_enabled: bool
     compliance_redact_api_keys: bool
     compliance_redact_emails: bool

@@ -62,6 +62,14 @@ class TemporalCutoverDecision:
     reason: str
 
 
+@dataclass(frozen=True)
+class TemporalCutoverStatus:
+    ready: bool
+    backend: Literal["langgraph", "temporal"]
+    target_percent: int
+    reason: str
+
+
 class TemporalWorkflowService:
     def __init__(
         self,
@@ -320,6 +328,30 @@ def decide_temporal_cutover(
         target_percent=target_percent,
         bucket=bucket,
         reason="Stable request bucket remains on LangGraph during staged cutover.",
+    )
+
+
+def temporal_cutover_status(settings: Settings) -> TemporalCutoverStatus:
+    target_percent = max(0, min(100, settings.temporal_traffic_percent))
+    if settings.run_orchestration_backend != "temporal":
+        return TemporalCutoverStatus(
+            ready=False,
+            backend=settings.run_orchestration_backend,
+            target_percent=target_percent,
+            reason="RUN_ORCHESTRATION_BACKEND must be temporal for Phase 4 cutover.",
+        )
+    if target_percent < 100:
+        return TemporalCutoverStatus(
+            ready=False,
+            backend="temporal",
+            target_percent=target_percent,
+            reason="TEMPORAL_TRAFFIC_PERCENT must be 100 for Phase 4 cutover.",
+        )
+    return TemporalCutoverStatus(
+        ready=True,
+        backend="temporal",
+        target_percent=target_percent,
+        reason="100% run traffic is routed through Temporal.",
     )
 
 

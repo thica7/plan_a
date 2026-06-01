@@ -33,7 +33,19 @@ def _client(settings: Settings) -> TestClient:
     return TestClient(app)
 
 
-def test_health_reports_foundation_checks() -> None:
+class _FakeSocket:
+    def __enter__(self) -> "_FakeSocket":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+
+def test_health_reports_foundation_checks(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.routers.health.socket.create_connection",
+        lambda *args, **kwargs: _FakeSocket(),  # noqa: ARG005
+    )
     client = _client(_settings())
 
     response = client.get("/api/health")
@@ -49,10 +61,36 @@ def test_health_reports_foundation_checks() -> None:
         "skills",
         "sqlite",
         "enterprise_store",
+        "temporal_cutover",
+        "temporal_server",
     }
     enterprise = [check for check in body["checks"] if check["name"] == "enterprise_store"][0]
+    temporal_cutover = [
+        check for check in body["checks"] if check["name"] == "temporal_cutover"
+    ][0]
+    temporal_server = [
+        check for check in body["checks"] if check["name"] == "temporal_server"
+    ][0]
     assert enterprise["status"] == "ok"
     assert enterprise["detail"] == "backend=memory"
+    assert temporal_cutover["status"] == "ok"
+    assert "target_percent=100" in temporal_cutover["detail"]
+    assert temporal_server["status"] == "ok"
+
+
+def test_health_marks_incomplete_temporal_cutover_as_error() -> None:
+    client = _client(_settings(run_orchestration_backend="langgraph"))
+
+    response = client.get("/api/health")
+
+    assert response.status_code == 200
+    body = response.json()
+    temporal_cutover = [
+        check for check in body["checks"] if check["name"] == "temporal_cutover"
+    ][0]
+    assert body["status"] == "error"
+    assert temporal_cutover["status"] == "error"
+    assert "RUN_ORCHESTRATION_BACKEND must be temporal" in temporal_cutover["detail"]
 
 
 def test_health_marks_misconfigured_postgres_enterprise_store_as_error() -> None:

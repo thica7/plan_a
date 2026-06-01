@@ -32,6 +32,7 @@ from packages.workflows.service import (
     run_id_for_idempotency_key,
     scheduled_scan_input_from_request,
     scheduled_scan_workflow_id,
+    temporal_cutover_status,
     workflow_idempotency_key,
 )
 
@@ -161,6 +162,25 @@ def test_temporal_cutover_decision_supports_staged_traffic() -> None:
     assert zero.route == "langgraph"
     assert full.route == "temporal"
     assert 0 <= full.bucket <= 99
+
+
+def test_temporal_cutover_status_requires_full_temporal_routing() -> None:
+    langgraph = temporal_cutover_status(
+        _settings(run_orchestration_backend="langgraph", temporal_traffic_percent=100)
+    )
+    partial = temporal_cutover_status(
+        _settings(run_orchestration_backend="temporal", temporal_traffic_percent=80)
+    )
+    ready = temporal_cutover_status(
+        _settings(run_orchestration_backend="temporal", temporal_traffic_percent=100)
+    )
+
+    assert langgraph.ready is False
+    assert "RUN_ORCHESTRATION_BACKEND" in langgraph.reason
+    assert partial.ready is False
+    assert "TEMPORAL_TRAFFIC_PERCENT" in partial.reason
+    assert ready.ready is True
+    assert ready.reason == "100% run traffic is routed through Temporal."
 
 
 async def test_temporal_workflow_service_starts_competitive_intel_workflow() -> None:

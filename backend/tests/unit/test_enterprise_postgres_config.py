@@ -19,12 +19,16 @@ def clear_settings_cache():
 def test_enterprise_store_settings_default_to_postgres(monkeypatch) -> None:
     monkeypatch.delenv("ENTERPRISE_STORE_BACKEND", raising=False)
     monkeypatch.delenv("ENTERPRISE_DATABASE_URL", raising=False)
+    monkeypatch.delenv("RUN_ORCHESTRATION_BACKEND", raising=False)
+    monkeypatch.delenv("TEMPORAL_TRAFFIC_PERCENT", raising=False)
     get_settings.cache_clear()
 
     settings = get_settings()
 
     assert settings.enterprise_store_backend == "postgres"
     assert settings.enterprise_database_url == DEFAULT_ENTERPRISE_DATABASE_URL
+    assert settings.run_orchestration_backend == "temporal"
+    assert settings.temporal_traffic_percent == 100
 
 
 def test_enterprise_store_settings_allow_explicit_memory(monkeypatch) -> None:

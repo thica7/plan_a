@@ -55,6 +55,7 @@ def test_metrics_exposes_run_and_temporal_operational_gauges() -> None:
     assert 'competiscope_runs_total{status="completed"} 0' in body
     assert 'competiscope_run_orchestration_backend{backend="temporal"} 1' in body
     assert "competiscope_temporal_traffic_percent_target 100" in body
+    assert "competiscope_temporal_cutover_ready 1" in body
     assert "competiscope_temporal_server_up 0" in body
     assert "competiscope_enterprise_store_configured 1" in body
     assert "competiscope_trace_spans_total 0" in body

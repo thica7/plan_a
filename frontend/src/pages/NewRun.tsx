@@ -170,10 +170,10 @@ export function NewRun() {
                   ? "Automatic scoped redo is enabled."
                   : "Automatic scoped redo is disabled by backend config."}
               </p>
-              <p className={runtime.run_orchestration_backend === "temporal" ? "runtime-ok" : "runtime-warn"}>
-                {runtime.run_orchestration_backend === "temporal"
-                  ? `Run entry is routed through Temporal on ${runtime.temporal_task_queue}.`
-                  : "Run entry uses direct LangGraph execution."}
+              <p className={runtime.temporal_cutover_ready ? "runtime-ok" : "runtime-warn"}>
+                {runtime.temporal_cutover_ready
+                  ? `Run entry is 100% routed through Temporal on ${runtime.temporal_task_queue}.`
+                  : runtime.temporal_cutover_reason}
               </p>
             </div>
           ) : null}
