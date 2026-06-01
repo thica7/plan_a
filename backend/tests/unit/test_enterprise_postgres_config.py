@@ -82,6 +82,38 @@ def test_postgres_store_can_be_constructed_without_migrating() -> None:
     assert store.database_url == "postgresql://user:pass@localhost:5432/db"
 
 
+def test_postgres_store_sets_service_role_rls_context_on_connections() -> None:
+    fake_conn = _FakePostgresConnection()
+    store = object.__new__(EnterprisePostgresStore)
+    store.database_url = "postgresql://user:pass@localhost:5432/db"
+    store._connect_driver = lambda *args, **kwargs: fake_conn  # noqa: ARG005
+    store._dict_row = object()
+
+    with store._service_connection() as conn:
+        assert conn is fake_conn
+
+    assert fake_conn.executed[:2] == [
+        ("SELECT set_config('app.service_role', %s, true)", ("on",)),
+        ("SELECT set_config('app.current_workspace_id', %s, true)", ("",)),
+    ]
+
+
+def test_postgres_store_can_open_tenant_scoped_rls_connection() -> None:
+    fake_conn = _FakePostgresConnection()
+    store = object.__new__(EnterprisePostgresStore)
+    store.database_url = "postgresql://user:pass@localhost:5432/db"
+    store._connect_driver = lambda *args, **kwargs: fake_conn  # noqa: ARG005
+    store._dict_row = object()
+
+    with store._tenant_connection("workspace-a") as conn:
+        assert conn is fake_conn
+
+    assert fake_conn.executed[:2] == [
+        ("SELECT set_config('app.service_role', %s, true)", ("off",)),
+        ("SELECT set_config('app.current_workspace_id', %s, true)", ("workspace-a",)),
+    ]
+
+
 def test_postgres_store_filters_generated_columns_when_validating_rows() -> None:
     if find_spec("psycopg") is None:
         pytest.skip("psycopg is not installed")
@@ -108,3 +140,22 @@ def test_postgres_store_filters_generated_columns_when_validating_rows() -> None
 
     assert evidence.id == "ev-1"
     assert not hasattr(evidence, "search_vector")
+
+
+class _FakePostgresConnection:
+    def __init__(self) -> None:
+        self.executed: list[tuple[str, tuple[str, ...]]] = []
+
+    def __enter__(self) -> "_FakePostgresConnection":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def execute(
+        self,
+        sql: str,
+        params: tuple[str, ...] | None = None,
+    ) -> "_FakePostgresConnection":
+        self.executed.append((sql, params or ()))
+        return self

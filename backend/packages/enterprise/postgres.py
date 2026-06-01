@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -66,15 +68,66 @@ class EnterprisePostgresStore:
                 "Install backend dependencies with `pip install -e .`."
             ) from exc
         self.database_url = database_url
-        self._connect = connect
+        self._connect_driver = connect
         self._dict_row = dict_row
         self._jsonb = Jsonb
         if auto_migrate:
             self.migrate()
 
+    @contextmanager
+    def _connect(
+        self,
+        *args: Any,
+        service_role: bool = True,
+        workspace_id: str | None = None,
+        **kwargs: Any,
+    ) -> Iterator[Any]:
+        with self._connect_driver(*args, **kwargs) as conn:
+            self._apply_rls_context(
+                conn,
+                workspace_id=workspace_id,
+                service_role=service_role,
+            )
+            yield conn
+
+    @contextmanager
+    def _service_connection(self) -> Iterator[Any]:
+        with self._connect(
+            self.database_url,
+            row_factory=self._dict_row,
+            service_role=True,
+        ) as conn:
+            yield conn
+
+    @contextmanager
+    def _tenant_connection(self, workspace_id: str) -> Iterator[Any]:
+        with self._connect(
+            self.database_url,
+            row_factory=self._dict_row,
+            service_role=False,
+            workspace_id=workspace_id,
+        ) as conn:
+            yield conn
+
+    def _apply_rls_context(
+        self,
+        conn: Any,
+        *,
+        workspace_id: str | None,
+        service_role: bool,
+    ) -> None:
+        conn.execute(
+            "SELECT set_config('app.service_role', %s, true)",
+            ("on" if service_role else "off",),
+        )
+        conn.execute(
+            "SELECT set_config('app.current_workspace_id', %s, true)",
+            (workspace_id or "",),
+        )
+
     def migrate(self) -> None:
         script = _schema_path().read_text(encoding="utf-8")
-        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+        with self._service_connection() as conn:
             with conn.cursor() as cur:
                 for statement in _split_sql(script):
                     cur.execute(statement)
@@ -82,7 +135,7 @@ class EnterprisePostgresStore:
             conn.commit()
 
     def ping(self) -> str:
-        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+        with self._service_connection() as conn:
             row = conn.execute("SELECT current_database() AS database_name").fetchone()
         database_name = row["database_name"] if row else "unknown"
         return f"backend=postgres database={database_name}"
