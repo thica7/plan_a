@@ -254,6 +254,7 @@ CREATE TABLE IF NOT EXISTS report_versions (
     report_md TEXT NOT NULL DEFAULT '',
     claim_ids TEXT[] NOT NULL DEFAULT '{}',
     evidence_ids TEXT[] NOT NULL DEFAULT '{}',
+    quality_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     published_at TIMESTAMPTZ,
     UNIQUE (
@@ -393,6 +394,8 @@ ALTER TABLE evidence_records ADD COLUMN IF NOT EXISTS canonical_url TEXT NOT NUL
 ALTER TABLE evidence_records ADD COLUMN IF NOT EXISTS first_seen_run_id TEXT REFERENCES runs(id);
 ALTER TABLE evidence_records ADD COLUMN IF NOT EXISTS last_seen_run_id TEXT REFERENCES runs(id);
 ALTER TABLE evidence_records ADD COLUMN IF NOT EXISTS seen_count INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE report_versions
+    ADD COLUMN IF NOT EXISTS quality_metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 UPDATE evidence_records
 SET canonical_url = COALESCE(NULLIF(canonical_url, ''), url, '')
 WHERE canonical_url = '';

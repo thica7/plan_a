@@ -4,6 +4,7 @@ import pytest
 
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore, build_enterprise_projection
+from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.enterprise import ReportVersionRecord
@@ -73,6 +74,10 @@ def _settings() -> Settings:
     )
 
 
+def _test_graph_checkpointer() -> GraphCheckpointer:
+    return GraphCheckpointer.in_memory()
+
+
 def test_workflow_package_init_is_temporal_sandbox_safe() -> None:
     init_source = Path("backend/packages/workflows/__init__.py").read_text(encoding="utf-8")
 
@@ -88,6 +93,7 @@ async def test_temporal_activities_are_idempotent_around_existing_langgraph() ->
         skill_registry=SkillRegistry.from_default_path(),
         settings=_settings(),
         enterprise_store=store,
+        graph_checkpointer=_test_graph_checkpointer(),
     )
     activities = CompetitiveIntelActivities(service)
     request = CompetitiveIntelWorkflowInput(
@@ -140,6 +146,7 @@ def test_temporal_worker_registers_approval_workflow_when_store_is_available() -
         skill_registry=SkillRegistry.from_default_path(),
         settings=_settings(),
         enterprise_store=store,
+        graph_checkpointer=_test_graph_checkpointer(),
     )
 
     components = build_competitive_intel_worker_components(service, enterprise_store=store)
@@ -219,6 +226,7 @@ async def test_scheduled_scan_activities_scan_projects_and_notify() -> None:
         skill_registry=SkillRegistry.from_default_path(),
         settings=_settings(),
         enterprise_store=store,
+        graph_checkpointer=_test_graph_checkpointer(),
     )
     created = await service.create_run(
         RunCreateRequest(
@@ -259,9 +267,9 @@ async def test_scheduled_scan_activities_scan_projects_and_notify() -> None:
     assert result.run_id is not None
     assert result.report_version_id is not None
     assert notification.notification_id is not None
-    assert store.list_notifications(created.workspace_id)[0].notification_type == (
-        "scheduled_scan_summary"
-    )
+    assert "scheduled_scan_summary" in {
+        item.notification_type for item in store.list_notifications(created.workspace_id)
+    }
 
 
 def test_scheduled_scan_workflow_result_summarizes_partial_runs() -> None:
@@ -302,6 +310,7 @@ async def test_monitor_activities_run_cycle_and_record_anomaly_notification() ->
         skill_registry=SkillRegistry.from_default_path(),
         settings=_settings(),
         enterprise_store=store,
+        graph_checkpointer=_test_graph_checkpointer(),
     )
     created = await service.create_run(
         RunCreateRequest(
@@ -355,7 +364,11 @@ async def test_monitor_activities_run_cycle_and_record_anomaly_notification() ->
     assert cycle.run_id is not None
     assert cycle.current is not None
     assert notification.notification_id is not None
-    [stored] = store.list_notifications(created.workspace_id)
+    stored = next(
+        item
+        for item in store.list_notifications(created.workspace_id)
+        if item.notification_type == "anomaly_alert"
+    )
     assert stored.notification_type == "anomaly_alert"
     assert stored.severity == "warning"
 

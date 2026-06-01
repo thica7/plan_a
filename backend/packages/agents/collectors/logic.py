@@ -5,6 +5,7 @@ import json
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 from packages.agents import SubagentContext
 from packages.agents.collectors.skill_tools import collect_competitor_with_skill_tools
@@ -22,6 +23,35 @@ from packages.tools import (
 )
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+
+KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
+    "cursor": {
+        "pricing": [("Cursor official pricing", "https://cursor.com/pricing")],
+        "security": [("Cursor official security", "https://cursor.com/security")],
+    },
+    "githubcopilot": {
+        "pricing": [
+            (
+                "GitHub Copilot official plans and pricing",
+                "https://github.com/features/copilot/plans",
+            )
+        ],
+        "security": [
+            (
+                "GitHub Copilot enterprise approval resources",
+                "https://docs.github.com/en/enterprise-cloud@latest/copilot/tutorials/roll-out-at-scale/govern-at-scale/resources-for-approval",
+            ),
+            (
+                "GitHub Copilot compliance changelog",
+                "https://github.blog/changelog/2024-06-03-github-copilot-compliance-soc-2-type-1-report-and-iso-iec-270012013-certification-scope/",
+            ),
+        ],
+    },
+    "windsurf": {
+        "pricing": [("Windsurf official pricing", "https://windsurf.com/pricing")],
+        "security": [("Windsurf official security", "https://windsurf.com/security")],
+    },
+}
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
@@ -465,7 +495,7 @@ class CollectorAgentMixin:
                 max_results=3,
                 context=context,
             )
-            for result in results:
+            for result in self._rank_search_results(detail, competitor, dimension, results):
                 source = await self._source_from_search_result(
                     detail,
                     competitor,
@@ -490,7 +520,7 @@ class CollectorAgentMixin:
                     max_results=3,
                     context=context,
                 )
-                for result in results:
+                for result in self._rank_search_results(detail, competitor, dimension, results):
                     source = await self._source_from_search_result(
                         detail,
                         competitor,
@@ -516,6 +546,16 @@ class CollectorAgentMixin:
     ) -> list[RawSource]:
         detail = record.detail
         skill = self._skill_registry.get(dimension)
+        if self._should_collect_official_first(dimension):
+            official_sources = await self._collect_official_sources(
+                record,
+                detail,
+                dimension,
+                competitor,
+                context,
+            )
+            if official_sources:
+                return official_sources
         queries = [self._web_search_query(detail, competitor, dimension)]
         if skill is not None:
             queries.append(f"{competitor} {skill.description}")
@@ -528,7 +568,7 @@ class CollectorAgentMixin:
                 max_results=3,
                 context=context,
             )
-            for result in results:
+            for result in self._rank_search_results(detail, competitor, dimension, results):
                 source = await self._source_from_search_result(
                     detail,
                     competitor,
@@ -540,6 +580,85 @@ class CollectorAgentMixin:
                 if source is not None:
                     return [source]
         return []
+
+    async def _collect_official_sources(
+        self,
+        record: RunRecord,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+        context: SubagentContext,
+    ) -> list[RawSource]:
+        sources: list[RawSource] = []
+        for candidate in self._official_source_candidates(detail, competitor, dimension):
+            source = await self._source_from_search_result(
+                detail,
+                competitor,
+                dimension,
+                candidate,
+                record,
+                context,
+            )
+            if source is None:
+                continue
+            sources.append(source)
+            break
+        if sources:
+            self._trace_local_tool(
+                record,
+                agent="collector",
+                subagent=context.subagent,
+                name="official_source_registry",
+                input_text=json.dumps(
+                    {
+                        "competitor": competitor,
+                        "dimension": dimension,
+                        "homepage_hint": detail.plan.homepage_hints.get(competitor),
+                    },
+                    ensure_ascii=False,
+                ),
+                output_text=json.dumps(
+                    [source.model_dump(mode="json") for source in sources],
+                    ensure_ascii=False,
+                ),
+                context=context,
+                metadata={"source_count": len(sources)},
+            )
+        return sources
+
+    def _official_source_candidates(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+    ) -> list[SearchResult]:
+        normalized_competitor = self._official_registry_key(competitor)
+        normalized_dimension = self._official_dimension_key(dimension)
+        raw_candidates: list[tuple[str, str, str]] = []
+        for title, url in KNOWN_OFFICIAL_SOURCE_HINTS.get(normalized_competitor, {}).get(
+            normalized_dimension, []
+        ):
+            raw_candidates.append((title, url, "Curated official source registry entry."))
+        for candidate in find_official_docs(
+            competitor=competitor,
+            dimension=dimension,
+            homepage_hint=detail.plan.homepage_hints.get(competitor),
+        ):
+            raw_candidates.append((candidate.title, candidate.url, candidate.rationale))
+
+        results: list[SearchResult] = []
+        seen_urls: set[str] = set()
+        for title, url, snippet in raw_candidates:
+            normalized_url = url.rstrip("/")
+            if normalized_url in seen_urls:
+                continue
+            seen_urls.add(normalized_url)
+            results.append(SearchResult(title=title, url=url, snippet=snippet))
+        return results
+
+    def _should_collect_official_first(self, dimension: str) -> bool:
+        key = dimension.casefold()
+        return any(token in key for token in ("pricing", "security", "compliance", "trust"))
 
     async def _collect_competitor_with_skill_tools(
         self,
@@ -566,6 +685,161 @@ class CollectorAgentMixin:
         else:
             query = f"{competitor} {dimension}"
         return f"{query} {detail.topic} official source"
+
+    def _rank_search_results(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        results: list[SearchResult],
+    ) -> list[SearchResult]:
+        homepage_host = self._host(detail.plan.homepage_hints.get(competitor, ""))
+        competitor_terms = [
+            term for term in re.split(r"[^a-z0-9]+", competitor.casefold()) if len(term) >= 3
+        ]
+        dimension_terms = self._dimension_source_terms(dimension)
+
+        def score(result: SearchResult) -> tuple[int, str]:
+            url = result.url.casefold()
+            host = self._host(result.url)
+            haystack = f"{result.title} {result.url} {result.snippet}".casefold()
+            value = 0
+            if homepage_host and (host == homepage_host or host.endswith(f".{homepage_host}")):
+                value += 100
+            if any(term in host for term in competitor_terms):
+                value += 35
+            if any(term in haystack for term in dimension_terms):
+                value += 20
+            if any(token in host for token in ("docs.", "developer.", "help.", "trust.")):
+                value += 12
+            if any(token in url for token in ("/pricing", "/security", "/trust", "/docs")):
+                value += 12
+            if host in {"medium.com", "www.medium.com", "reddit.com", "www.reddit.com"}:
+                value -= 25
+            return (value, result.url)
+
+        return sorted(results, key=score, reverse=True)
+
+    def _dimension_source_terms(self, dimension: str) -> list[str]:
+        normalized = dimension.casefold()
+        if "pricing" in normalized:
+            return ["pricing", "billing", "plans", "price", "cost"]
+        if "security" in normalized:
+            return [
+                "security",
+                "trust",
+                "compliance",
+                "soc",
+                "iso",
+                "saml",
+                "scim",
+                "audit",
+            ]
+        if "persona" in normalized:
+            return ["persona", "customer", "user", "buyer", "case study"]
+        return [normalized, "feature", "docs"]
+
+    def _official_registry_key(self, competitor: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "", competitor.casefold())
+
+    def _official_dimension_key(self, dimension: str) -> str:
+        normalized = dimension.casefold()
+        if "pricing" in normalized:
+            return "pricing"
+        if any(token in normalized for token in ("security", "trust", "compliance")):
+            return "security"
+        return normalized
+
+    def _host(self, url: str) -> str:
+        if not url:
+            return ""
+        return (urlparse(url).hostname or "").casefold().removeprefix("www.")
+
+    def _dimension_evidence_snippet(self, text: str, dimension: str, fallback: str) -> str:
+        collapsed = re.sub(r"\s+", " ", text).strip()
+        if not collapsed:
+            return fallback
+        terms = [*self._dimension_source_terms(dimension), *self._dimension_fact_terms(dimension)]
+        scored_windows: list[tuple[int, int, str]] = []
+        lowered = collapsed.casefold()
+        for term in terms:
+            start = lowered.find(term.casefold())
+            if start < 0:
+                continue
+            window_start = max(0, start - 180)
+            window_end = min(len(collapsed), start + 520)
+            window = collapsed[window_start:window_end].strip(" ,.;|-")
+            if len(window) < 80:
+                continue
+            score = self._dimension_window_score(window, dimension)
+            scored_windows.append((score, start, window))
+        if not scored_windows:
+            return fallback
+        snippets: list[str] = []
+        seen: set[str] = set()
+        for _, _, window in sorted(scored_windows, key=lambda item: item[:2], reverse=True):
+            key = window[:120].casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            snippets.append(window)
+            if len(snippets) >= 2:
+                break
+        return " ... ".join(snippets)[:1000]
+
+    def _dimension_fact_terms(self, dimension: str) -> list[str]:
+        normalized = dimension.casefold()
+        if "pricing" in normalized:
+            return ["$", "usd", "month", "annual", "free", "pro", "team", "enterprise", "seat"]
+        if any(token in normalized for token in ("security", "trust", "compliance")):
+            return [
+                "sso",
+                "scim",
+                "soc 2",
+                "iso",
+                "encryption",
+                "retention",
+                "audit log",
+                "privacy",
+                "indemnity",
+            ]
+        return []
+
+    def _dimension_window_score(self, text: str, dimension: str) -> int:
+        lowered = text.casefold()
+        score = 0
+        for term in self._dimension_source_terms(dimension):
+            if term.casefold() in lowered:
+                score += 3
+        for term in self._dimension_fact_terms(dimension):
+            if term.casefold() in lowered:
+                score += 5
+        if "pricing" in dimension.casefold() and re.search(r"[$€£]\s?\d|\b\d+\s?usd\b", lowered):
+            score += 12
+        return score
+
+    def _verified_source_confidence(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        url: str,
+        snippet: str,
+    ) -> float:
+        homepage_host = self._host(detail.plan.homepage_hints.get(competitor, ""))
+        source_host = self._host(url)
+        official_host = bool(
+            homepage_host
+            and (source_host == homepage_host or source_host.endswith(f".{homepage_host}"))
+        )
+        dimension_fact = self._has_dimension_specific_fact(dimension, snippet.casefold())
+        if official_host and dimension_fact:
+            return 0.96
+        if official_host:
+            return 0.92
+        if dimension_fact:
+            return 0.9
+        return 0.84
 
     def _source_is_usable(self, source: RawSource) -> bool:
         return self._source_quality_problem(source) is None
@@ -777,7 +1051,22 @@ class CollectorAgentMixin:
             else await fetch_page(result.url)
         )
         verified = fetched is not None and fetched.ok
-        snippet = fetched.snippet if verified else result.snippet
+        snippet = (
+            self._dimension_evidence_snippet(fetched.text, dimension, fetched.snippet)
+            if verified
+            else result.snippet
+        )
+        confidence = (
+            self._verified_source_confidence(
+                detail,
+                competitor,
+                dimension,
+                fetched.url,
+                snippet,
+            )
+            if verified and fetched is not None
+            else 0.68
+        )
         provisional = RawSource(
             id=source_id,
             competitor=competitor,
@@ -793,7 +1082,7 @@ class CollectorAgentMixin:
                     :16
                 ]
             ),
-            confidence=0.84 if verified else 0.68,
+            confidence=confidence,
         )
         if not self._source_is_usable(provisional):
             return None
@@ -811,7 +1100,7 @@ class CollectorAgentMixin:
                 if fetched is not None
                 else hashlib.sha256(content_basis.encode()).hexdigest()[:16]
             ),
-            confidence=0.84 if verified else 0.68,
+            confidence=confidence,
         )
 
     async def _real_collector_step(self, record: RunRecord, dimension: str) -> None:
@@ -1091,7 +1380,19 @@ class CollectorAgentMixin:
             "provider": self._settings.web_search_provider,
             "results": [],
         }
-        if self._settings.collector_react_enabled and self._search.is_enabled:
+        if self._should_collect_official_first(dimension):
+            try:
+                sources = await self._collect_official_sources(
+                    record,
+                    detail,
+                    dimension,
+                    competitor,
+                    context,
+                )
+                collect_payload["official_added"] = len(sources)
+            except Exception as exc:  # noqa: BLE001 - official-first should degrade to search.
+                collect_payload["official_error"] = str(exc)
+        if not sources and self._settings.collector_react_enabled and self._search.is_enabled:
             try:
                 sources = await self._run_collector_competitor_react(
                     record, dimension, competitor, context

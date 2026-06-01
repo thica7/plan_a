@@ -9,12 +9,20 @@ from packages.schema.models import AgentMessage, ToolCallMessage, TraceSpan
 class TraceStore:
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._memory_conn: sqlite3.Connection | None = None
+        if str(self._db_path) == ":memory:":
+            self._memory_conn = sqlite3.connect(":memory:")
+        else:
+            self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
     @classmethod
     def from_default_path(cls) -> TraceStore:
         return cls(Path("runs") / "traces.db")
+
+    @classmethod
+    def in_memory(cls) -> TraceStore:
+        return cls(Path(":memory:"))
 
     def append_span(self, run_id: str, span: TraceSpan) -> None:
         conn = self._connect()
@@ -40,7 +48,7 @@ class TraceStore:
             )
             conn.commit()
         finally:
-            conn.close()
+            self._close(conn)
 
     def append_agent_message(self, message: AgentMessage) -> None:
         conn = self._connect()
@@ -64,7 +72,7 @@ class TraceStore:
             )
             conn.commit()
         finally:
-            conn.close()
+            self._close(conn)
 
     def append_tool_call_message(self, message: ToolCallMessage) -> None:
         conn = self._connect()
@@ -89,7 +97,7 @@ class TraceStore:
             )
             conn.commit()
         finally:
-            conn.close()
+            self._close(conn)
 
     def list_spans(self, run_id: str) -> list[TraceSpan]:
         conn = self._connect()
@@ -99,7 +107,7 @@ class TraceStore:
                 (run_id,),
             ).fetchall()
         finally:
-            conn.close()
+            self._close(conn)
         return [TraceSpan.model_validate_json(row[0]) for row in rows]
 
     def list_agent_messages(self, run_id: str) -> list[AgentMessage]:
@@ -110,7 +118,7 @@ class TraceStore:
                 (run_id,),
             ).fetchall()
         finally:
-            conn.close()
+            self._close(conn)
         return [AgentMessage.model_validate_json(row[0]) for row in rows]
 
     def list_tool_call_messages(self, run_id: str) -> list[ToolCallMessage]:
@@ -121,7 +129,7 @@ class TraceStore:
                 (run_id,),
             ).fetchall()
         finally:
-            conn.close()
+            self._close(conn)
         return [ToolCallMessage.model_validate_json(row[0]) for row in rows]
 
     def stats(self) -> dict[str, int]:
@@ -131,7 +139,7 @@ class TraceStore:
             agent_messages = conn.execute("select count(*) from agent_messages").fetchone()[0]
             tool_messages = conn.execute("select count(*) from tool_call_messages").fetchone()[0]
         finally:
-            conn.close()
+            self._close(conn)
         return {
             "trace_spans": int(spans),
             "agent_messages": int(agent_messages),
@@ -139,7 +147,13 @@ class TraceStore:
         }
 
     def _connect(self) -> sqlite3.Connection:
+        if self._memory_conn is not None:
+            return self._memory_conn
         return sqlite3.connect(self._db_path)
+
+    def _close(self, conn: sqlite3.Connection) -> None:
+        if conn is not self._memory_conn:
+            conn.close()
 
     def _init_db(self) -> None:
         conn = self._connect()
@@ -202,4 +216,4 @@ class TraceStore:
             )
             conn.commit()
         finally:
-            conn.close()
+            self._close(conn)

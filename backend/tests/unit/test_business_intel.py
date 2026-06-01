@@ -241,6 +241,114 @@ def test_report_release_gate_requires_clean_qa_and_verified_evidence() -> None:
     }
 
 
+def test_report_release_gate_blocks_unresolved_run_qa_metadata() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        quality_metadata={
+            "run_qa_findings": [
+                {
+                    "id": "qa-1",
+                    "severity": "warn",
+                    "problem": "No granular pricing comparison.",
+                }
+            ]
+        }
+    )
+    project = _project()
+
+    gate = evaluate_report_release_gate(
+        project=project,
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert gate.allowed is False
+    assert "run_qa_findings_unresolved" in {issue.rule_id for issue in gate.issues}
+
+
+def test_report_release_gate_blocks_strong_conclusion_from_search_only_source() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="web_search_result",
+            title="Cursor pricing search result",
+            url="https://example.com/pricing",
+            snippet="Search result summary.",
+            content_hash="hash-1",
+            reliability_score=0.68,
+            quality_label="unreviewed",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor is the pricing winner.",
+            evidence_ids=["evidence-1"],
+            confidence=0.68,
+        )
+    ]
+    report = _report_version(
+        report_md="## Executive Summary\nCursor is the pricing winner. [source:pricing-1]",
+        evidence_ids=["evidence-1"],
+    )
+    project = _project()
+
+    gate = evaluate_report_release_gate(
+        project=project,
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert gate.allowed is False
+    assert {
+        "claim_uses_low_confidence_evidence",
+        "strong_conclusion_uses_weak_source",
+    } <= {issue.rule_id for issue in gate.issues}
+
+
 def test_business_qa_evaluator_flags_stale_evidence_and_broken_claim_links() -> None:
     plan = build_business_intel_plan(
         topic="Cursor vs Copilot pricing comparison",
@@ -653,4 +761,38 @@ def _competitor() -> CompetitorRecord:
         normalized_name="cursor",
         layer="L1",
         metadata={"homepage_verified": True},
+    )
+
+
+def _project() -> ProjectRecord:
+    return ProjectRecord(
+        id="project-1",
+        workspace_id="workspace-1",
+        name="Cursor pricing",
+        topic="Cursor vs Copilot pricing comparison",
+        topic_normalized="cursor-pricing",
+        competitor_layer="L1",
+        competitor_set_hash="hash",
+        scenario_id="l1_pricing_pack",
+    )
+
+
+def _report_version(
+    *,
+    report_md: str = "Cursor publishes pricing. [source:evidence-1]",
+    evidence_ids: list[str] | None = None,
+    quality_metadata: dict[str, object] | None = None,
+) -> ReportVersionRecord:
+    return ReportVersionRecord(
+        id="report-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        version_number=1,
+        topic_normalized="cursor-pricing",
+        competitor_layer="L1",
+        competitor_set_hash="hash",
+        report_md=report_md,
+        claim_ids=["claim-1"],
+        evidence_ids=evidence_ids or ["evidence-1"],
+        quality_metadata=quality_metadata or {},
     )

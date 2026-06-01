@@ -1,7 +1,5 @@
 import asyncio
 import time
-from pathlib import Path
-from uuid import uuid4
 
 import pytest
 
@@ -23,6 +21,10 @@ from packages.schema.models import (
 from packages.search import SearchResult
 from packages.skills.registry import SkillRegistry
 from packages.tools.fetch_page import FetchPageResult
+
+
+def _test_graph_checkpointer() -> GraphCheckpointer:
+    return GraphCheckpointer.in_memory()
 
 
 @pytest.mark.asyncio
@@ -1114,7 +1116,7 @@ async def test_search_result_becomes_unverified_raw_source(monkeypatch: pytest.M
     async def fake_fetch_page(url: str):  # noqa: ANN202 - test double mirrors async tool shape.
         return None
 
-    monkeypatch.setattr("packages.orchestrator.service.fetch_page", fake_fetch_page)
+    monkeypatch.setattr("packages.agents.collectors.logic.fetch_page", fake_fetch_page)
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -1153,9 +1155,102 @@ async def test_search_result_becomes_unverified_raw_source(monkeypatch: pytest.M
     assert str(source.url) == "https://example.com/pricing"
 
 
+def test_collector_official_source_candidates_include_curated_enterprise_urls() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="AI coding assistant security comparison",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant security comparison",
+            competitors=["GitHub Copilot"],
+            dimensions=["security"],
+        ),
+    )
+
+    candidates = service._official_source_candidates(detail, "GitHub Copilot", "security")
+
+    assert any("docs.github.com" in item.url for item in candidates)
+    assert any("github.blog/changelog" in item.url for item in candidates)
+
+
+@pytest.mark.asyncio
+async def test_verified_source_uses_dimension_specific_snippet_and_confidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_fetch_page(url: str) -> FetchPageResult:
+        return FetchPageResult(
+            url=url,
+            ok=True,
+            title="Cursor Pricing",
+            text=(
+                "Skip to main content Open menu Sign in Cookie settings "
+                "Cursor pricing includes a Free plan and a Pro plan at $20 per month. "
+                "Teams can contact sales for Enterprise pricing and annual billing."
+            ),
+            content_hash="pricing-hash",
+            status_code=200,
+        )
+
+    monkeypatch.setattr("packages.agents.collectors.logic.fetch_page", fake_fetch_page)
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Cursor pricing comparison",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(
+            topic="Cursor pricing comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            homepage_hints={"Cursor": "https://cursor.com"},
+        ),
+    )
+
+    source = await service._source_from_search_result(
+        detail,
+        "Cursor",
+        "pricing",
+        SearchResult(
+            title="Cursor official pricing",
+            url="https://cursor.com/pricing",
+            snippet="Official pricing page",
+        ),
+    )
+
+    assert source is not None
+    assert source.source_type == "webpage_verified"
+    assert "$20 per month" in source.snippet
+    assert source.confidence >= 0.95
+
+
 @pytest.mark.asyncio
 async def test_real_pipeline_runs_through_langgraph() -> None:
-    checkpoint_path = Path("runs") / f"test_graph_checkpoints_{uuid4().hex}.db"
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -1166,7 +1261,7 @@ async def test_real_pipeline_runs_through_langgraph() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
         ),
-        graph_checkpointer=GraphCheckpointer(checkpoint_path),
+        graph_checkpointer=_test_graph_checkpointer(),
     )
     order: list[str] = []
 
@@ -1224,16 +1319,13 @@ async def test_real_pipeline_runs_through_langgraph() -> None:
         assert set(order[4:6]) == {"analyst:A:pricing", "analyst:A:feature"}
         assert order[6:] == ["qa:analyst", "comparator", "reflector", "writer", "qa"]
         assert service.get_run(detail.id).status == "completed"  # type: ignore[union-attr]
-        assert checkpoint_path.exists()
+        assert service._graph_checkpointer.saver is not None
     finally:
         await service._graph_checkpointer.aclose()
-        for path in Path("runs").glob(f"{checkpoint_path.stem}*"):
-            path.unlink(missing_ok=True)
 
 
 @pytest.mark.asyncio
 async def test_collector_and_analyst_dimensions_run_concurrently() -> None:
-    checkpoint_path = Path("runs") / f"test_parallel_graph_{uuid4().hex}.db"
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -1244,7 +1336,7 @@ async def test_collector_and_analyst_dimensions_run_concurrently() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
         ),
-        graph_checkpointer=GraphCheckpointer(checkpoint_path),
+        graph_checkpointer=_test_graph_checkpointer(),
     )
     timeline: list[tuple[str, str, float]] = []
 
@@ -1309,13 +1401,10 @@ async def test_collector_and_analyst_dimensions_run_concurrently() -> None:
         assert _overlaps(timeline, "analyst:A:pricing", "analyst:A:feature")
     finally:
         await service._graph_checkpointer.aclose()
-        for path in Path("runs").glob(f"{checkpoint_path.stem}*"):
-            path.unlink(missing_ok=True)
 
 
 @pytest.mark.asyncio
 async def test_collect_qa_blocks_and_retries_collector_before_analyst() -> None:
-    checkpoint_path = Path("runs") / f"test_collect_gate_graph_{uuid4().hex}.db"
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -1327,7 +1416,7 @@ async def test_collect_qa_blocks_and_retries_collector_before_analyst() -> None:
             llm_temperature=0.2,
             max_iterations=2,
         ),
-        graph_checkpointer=GraphCheckpointer(checkpoint_path),
+        graph_checkpointer=_test_graph_checkpointer(),
     )
     order: list[str] = []
     collector_calls = 0
@@ -1412,13 +1501,10 @@ async def test_collect_qa_blocks_and_retries_collector_before_analyst() -> None:
         assert updated.qa_findings == []
     finally:
         await service._graph_checkpointer.aclose()
-        for path in Path("runs").glob(f"{checkpoint_path.stem}*"):
-            path.unlink(missing_ok=True)
 
 
 @pytest.mark.asyncio
 async def test_real_pipeline_auto_runs_scoped_redo_for_qa_findings() -> None:
-    checkpoint_path = Path("runs") / f"test_auto_redo_graph_{uuid4().hex}.db"
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -1430,7 +1516,7 @@ async def test_real_pipeline_auto_runs_scoped_redo_for_qa_findings() -> None:
             llm_temperature=0.2,
             max_iterations=2,
         ),
-        graph_checkpointer=GraphCheckpointer(checkpoint_path),
+        graph_checkpointer=_test_graph_checkpointer(),
     )
     qa_calls = 0
 
@@ -1522,13 +1608,10 @@ async def test_real_pipeline_auto_runs_scoped_redo_for_qa_findings() -> None:
         )
     finally:
         await service._graph_checkpointer.aclose()
-        for path in Path("runs").glob(f"{checkpoint_path.stem}*"):
-            path.unlink(missing_ok=True)
 
 
 @pytest.mark.asyncio
 async def test_real_pipeline_does_not_auto_redo_warn_only_findings() -> None:
-    checkpoint_path = Path("runs") / f"test_auto_redo_warn_graph_{uuid4().hex}.db"
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -1540,7 +1623,7 @@ async def test_real_pipeline_does_not_auto_redo_warn_only_findings() -> None:
             llm_temperature=0.2,
             max_iterations=2,
         ),
-        graph_checkpointer=GraphCheckpointer(checkpoint_path),
+        graph_checkpointer=_test_graph_checkpointer(),
     )
     qa_calls = 0
 
@@ -1629,13 +1712,10 @@ async def test_real_pipeline_does_not_auto_redo_warn_only_findings() -> None:
         )
     finally:
         await service._graph_checkpointer.aclose()
-        for path in Path("runs").glob(f"{checkpoint_path.stem}*"):
-            path.unlink(missing_ok=True)
 
 
 @pytest.mark.asyncio
 async def test_real_pipeline_auto_redoes_warn_when_run_option_enabled() -> None:
-    checkpoint_path = Path("runs") / f"test_auto_redo_warn_enabled_graph_{uuid4().hex}.db"
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -1647,7 +1727,7 @@ async def test_real_pipeline_auto_redoes_warn_when_run_option_enabled() -> None:
             llm_temperature=0.2,
             max_iterations=2,
         ),
-        graph_checkpointer=GraphCheckpointer(checkpoint_path),
+        graph_checkpointer=_test_graph_checkpointer(),
     )
     qa_calls = 0
 
@@ -1742,8 +1822,6 @@ async def test_real_pipeline_auto_redoes_warn_when_run_option_enabled() -> None:
         assert auto_redo_events[0].payload["include_warn"] is True
     finally:
         await service._graph_checkpointer.aclose()
-        for path in Path("runs").glob(f"{checkpoint_path.stem}*"):
-            path.unlink(missing_ok=True)
 
 
 def _overlaps(timeline: list[tuple[str, str, float]], left: str, right: str) -> bool:
@@ -2138,7 +2216,6 @@ async def test_analyst_react_runner_auto_validates_finish() -> None:
 
 @pytest.mark.asyncio
 async def test_real_scoped_redo_runs_through_langgraph() -> None:
-    checkpoint_path = Path("runs") / f"test_scoped_redo_checkpoints_{uuid4().hex}.db"
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -2149,7 +2226,7 @@ async def test_real_scoped_redo_runs_through_langgraph() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
         ),
-        graph_checkpointer=GraphCheckpointer(checkpoint_path),
+        graph_checkpointer=_test_graph_checkpointer(),
     )
     order: list[str] = []
 
@@ -2258,13 +2335,10 @@ async def test_real_scoped_redo_runs_through_langgraph() -> None:
         assert any(source.dimension == "feature" for source in updated.raw_sources)
     finally:
         await service._graph_checkpointer.aclose()
-        for path in Path("runs").glob(f"{checkpoint_path.stem}*"):
-            path.unlink(missing_ok=True)
 
 
 @pytest.mark.asyncio
 async def test_demo_pipeline_uses_same_langgraph_fanout_shape() -> None:
-    checkpoint_path = Path("runs") / f"test_demo_graph_checkpoints_{uuid4().hex}.db"
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -2275,7 +2349,7 @@ async def test_demo_pipeline_uses_same_langgraph_fanout_shape() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
         ),
-        graph_checkpointer=GraphCheckpointer(checkpoint_path),
+        graph_checkpointer=_test_graph_checkpointer(),
     )
     try:
         detail = await service.create_run(
@@ -2303,13 +2377,10 @@ async def test_demo_pipeline_uses_same_langgraph_fanout_shape() -> None:
         assert any(event.agent == "analyst_dispatch" for event in events)
     finally:
         await service._graph_checkpointer.aclose()
-        for path in Path("runs").glob(f"{checkpoint_path.stem}*"):
-            path.unlink(missing_ok=True)
 
 
 @pytest.mark.asyncio
 async def test_hitl_uses_langgraph_command_resume_and_updates_plan() -> None:
-    checkpoint_path = Path("runs") / f"test_hitl_checkpoints_{uuid4().hex}.db"
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -2322,7 +2393,7 @@ async def test_hitl_uses_langgraph_command_resume_and_updates_plan() -> None:
             hitl_enabled=True,
             hitl_timeout_seconds=5,
         ),
-        graph_checkpointer=GraphCheckpointer(checkpoint_path),
+        graph_checkpointer=_test_graph_checkpointer(),
     )
 
     async def fake_planner(record):  # noqa: ANN001, ANN202
@@ -2386,18 +2457,10 @@ async def test_hitl_uses_langgraph_command_resume_and_updates_plan() -> None:
         assert any(event.type == "interrupt" for event in service.get_trace(detail.id) or [])
     finally:
         await service._graph_checkpointer.aclose()
-        for path in Path("runs").glob(f"{checkpoint_path.stem}*"):
-            for _ in range(10):
-                try:
-                    path.unlink(missing_ok=True)
-                    break
-                except PermissionError:
-                    await asyncio.sleep(0.05)
 
 
 @pytest.mark.asyncio
 async def test_hitl_timeout_auto_accepts_interrupt() -> None:
-    checkpoint_path = Path("runs") / f"test_hitl_timeout_checkpoints_{uuid4().hex}.db"
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -2410,7 +2473,7 @@ async def test_hitl_timeout_auto_accepts_interrupt() -> None:
             hitl_enabled=True,
             hitl_timeout_seconds=0.05,
         ),
-        graph_checkpointer=GraphCheckpointer(checkpoint_path),
+        graph_checkpointer=_test_graph_checkpointer(),
     )
 
     async def fake_planner(record):  # noqa: ANN001, ANN202
@@ -2464,10 +2527,3 @@ async def test_hitl_timeout_auto_accepts_interrupt() -> None:
         assert any("auto-accepted" in event.message for event in service.get_trace(detail.id) or [])
     finally:
         await service._graph_checkpointer.aclose()
-        for path in Path("runs").glob(f"{checkpoint_path.stem}*"):
-            for _ in range(10):
-                try:
-                    path.unlink(missing_ok=True)
-                    break
-                except PermissionError:
-                    await asyncio.sleep(0.05)

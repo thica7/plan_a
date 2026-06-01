@@ -1,6 +1,3 @@
-from pathlib import Path
-from uuid import uuid4
-
 from fastapi.testclient import TestClient
 
 from app.deps import get_app_settings, get_run_journal
@@ -30,7 +27,6 @@ def _settings(**overrides: object) -> Settings:
 
 
 def test_metrics_exposes_run_and_temporal_operational_gauges() -> None:
-    db_path = Path("runs") / f"test-metrics-{uuid4().hex}.db"
     enterprise_store = EnterpriseMemoryStore()
     enterprise_store.upsert_notification(
         NotificationRecord(
@@ -46,14 +42,11 @@ def test_metrics_exposes_run_and_temporal_operational_gauges() -> None:
     )
     app = create_app()
     app.dependency_overrides[get_app_settings] = lambda: _settings()
-    app.dependency_overrides[get_run_journal] = lambda: RunJournal(db_path)
+    app.dependency_overrides[get_run_journal] = RunJournal.in_memory
     app.dependency_overrides[get_metrics_enterprise_store] = lambda: enterprise_store
     client = TestClient(app)
 
-    try:
-        response = client.get("/api/metrics")
-    finally:
-        db_path.unlink(missing_ok=True)
+    response = client.get("/api/metrics")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")

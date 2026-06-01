@@ -1,13 +1,9 @@
-from pathlib import Path
-from uuid import uuid4
-
 from packages.memory import KBCache, KBCacheEntry
 from packages.schema.models import CompetitorKnowledge, KnowledgeClaim, PricingModel
 
 
 def test_kb_cache_round_trips_competitor_dimension_slice() -> None:
-    db_path = Path("runs") / f"test-kb-cache-{uuid4().hex}.db"
-    cache = KBCache(db_path)
+    cache = KBCache.in_memory()
     knowledge = CompetitorKnowledge(
         competitor="A",
         pricing_model=PricingModel(
@@ -30,15 +26,12 @@ def test_kb_cache_round_trips_competitor_dimension_slice() -> None:
         knowledge=knowledge,
     )
 
-    try:
-        cache.put(entry)
-        restored = cache.get("A", "pricing", "hash-1")
+    cache.put(entry)
+    restored = cache.get("A", "pricing", "hash-1")
 
-        assert restored is not None
-        assert restored.competitor == "A"
-        assert restored.dimension == "pricing"
-        assert restored.kb_slice == ["A has transparent pricing. [source:pricing-1]"]
-        assert restored.knowledge.pricing_model.notes[0].source_ids == ["pricing-1"]
-        assert cache.stats()["entries"] == 1
-    finally:
-        db_path.unlink(missing_ok=True)
+    assert restored is not None
+    assert restored.competitor == "A"
+    assert restored.dimension == "pricing"
+    assert restored.kb_slice == ["A has transparent pricing. [source:pricing-1]"]
+    assert restored.knowledge.pricing_model.notes[0].source_ids == ["pricing-1"]
+    assert cache.stats()["entries"] == 1

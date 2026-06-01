@@ -1,13 +1,33 @@
-import shutil
 from pathlib import Path
+
+import pytest
 
 from packages.artifacts import ArtifactStorageError, LocalArtifactStorage
 from packages.schema.enterprise import ArtifactCreateRequest
 
 
-def test_local_artifact_storage_writes_text_payload_with_stable_metadata() -> None:
+def test_local_artifact_storage_writes_text_payload_with_stable_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     root = _artifact_root("write-text")
     storage = LocalArtifactStorage(root)
+    written_files: dict[Path, bytes] = {}
+
+    def fake_mkdir(
+        self: Path,
+        mode: int = 0o777,
+        parents: bool = False,
+        exist_ok: bool = False,
+    ) -> None:
+        return None
+
+    def fake_write_bytes(self: Path, data: bytes) -> int:
+        written_files[self] = data
+        return len(data)
+
+    monkeypatch.setattr(Path, "mkdir", fake_mkdir)
+    monkeypatch.setattr(Path, "write_bytes", fake_write_bytes)
+
     request = ArtifactCreateRequest(
         workspace_id="workspace-a",
         project_id="project-a",
@@ -27,10 +47,9 @@ def test_local_artifact_storage_writes_text_payload_with_stable_metadata() -> No
     assert artifact.storage_backend == "local"
     assert artifact.byte_size == len(b"<html>Cursor pricing</html>")
     assert artifact.uri.startswith("local://workspace-a/")
-    assert (root / "workspace-a" / artifact.id / artifact.filename).read_text() == (
-        "<html>Cursor pricing</html>"
-    )
-    shutil.rmtree(root, ignore_errors=True)
+    assert written_files[
+        (root / "workspace-a" / artifact.id / artifact.filename).resolve()
+    ] == b"<html>Cursor pricing</html>"
 
 
 def test_local_artifact_storage_rejects_empty_payload() -> None:
@@ -48,11 +67,7 @@ def test_local_artifact_storage_rejects_empty_payload() -> None:
         assert "required" in str(exc)
     else:
         raise AssertionError("Artifact storage accepted a request without content.")
-    finally:
-        shutil.rmtree(root, ignore_errors=True)
 
 
 def _artifact_root(name: str) -> Path:
-    root = Path("backend/.test-artifacts") / name
-    shutil.rmtree(root, ignore_errors=True)
-    return root
+    return Path("backend/.test-artifacts") / name

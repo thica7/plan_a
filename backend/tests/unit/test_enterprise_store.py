@@ -1,4 +1,5 @@
 import shutil
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -34,13 +35,15 @@ from packages.skills.registry import SkillRegistry
 
 
 def _detail() -> RunDetail:
+    created_at = datetime.utcnow().replace(microsecond=0)
+    updated_at = created_at + timedelta(minutes=5)
     return RunDetail(
         id="run-1",
         topic="AI coding assistant comparison",
         status="completed",
         execution_mode="demo",
-        created_at="2026-05-28T00:00:00",
-        updated_at="2026-05-28T00:05:00",
+        created_at=created_at,
+        updated_at=updated_at,
         plan=AnalysisPlan(
             topic="AI coding assistant comparison",
             competitors=["Cursor"],
@@ -770,7 +773,7 @@ def test_enterprise_router_exposes_projection() -> None:
             "artifact_type": "web_snapshot",
             "filename": "cursor-pricing.html",
             "media_type": "text/html",
-            "content_text": "<html>Cursor pricing</html>",
+            "external_uri": "https://storage.example.test/cursor-pricing.html",
             "source_url": "https://cursor.sh/pricing",
         },
     )
@@ -851,7 +854,8 @@ def test_enterprise_router_exposes_projection() -> None:
     assert artifacts.status_code == 200
     assert artifacts.json()[0]["id"] == artifact_id
     assert artifact.status_code == 200
-    assert artifact.json()["uri"].startswith("local://default-workspace/")
+    assert artifact.json()["storage_backend"] == "external"
+    assert artifact.json()["uri"] == "https://storage.example.test/cursor-pricing.html"
     assert release_gate.status_code == 200
     assert release_gate.json()["allowed"] is True
     assert publish.status_code == 200

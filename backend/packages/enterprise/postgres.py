@@ -1624,14 +1624,15 @@ class EnterprisePostgresStore:
             INSERT INTO report_versions (
                 id, workspace_id, project_id, run_id, parent_version_id, version_number,
                 topic_normalized, competitor_layer, competitor_set_hash, status,
-                report_md, claim_ids, evidence_ids, created_at, published_at
+                report_md, claim_ids, evidence_ids, quality_metadata, created_at, published_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 report_md = EXCLUDED.report_md,
                 claim_ids = EXCLUDED.claim_ids,
                 evidence_ids = EXCLUDED.evidence_ids,
+                quality_metadata = EXCLUDED.quality_metadata,
                 published_at = EXCLUDED.published_at
             """,
             (
@@ -1648,6 +1649,7 @@ class EnterprisePostgresStore:
                 report.report_md,
                 report.claim_ids,
                 report.evidence_ids,
+                self._json(report.quality_metadata),
                 report.created_at,
                 report.published_at,
             ),

@@ -5,7 +5,9 @@ from packages.schema.models import (
     CompetitorKnowledge,
     KnowledgeClaim,
     PricingModel,
+    QCIssue,
     RawSource,
+    RedoScope,
 )
 
 
@@ -74,6 +76,62 @@ def test_build_enterprise_projection_links_evidence_claims_and_report() -> None:
     assert projection.report_version.evidence_ids == [projection.evidence_records[0].id]
     assert projection.report_version.version_number == 2
     assert projection.report_version.competitor_layer == "L1"
+    assert projection.report_version.quality_metadata["run_id"] == "run-1"
+
+
+def test_projection_carries_run_quality_metadata() -> None:
+    detail = RunDetail(
+        id="run-1",
+        topic="AI coding assistant comparison",
+        status="completed",
+        execution_mode="real",
+        created_at="2026-05-28T00:00:00",
+        updated_at="2026-05-28T00:05:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["security"],
+        ),
+        report_md="Cursor security requires review. [source:security-1]",
+        raw_sources=[
+            RawSource(
+                id="security-1",
+                competitor="Cursor",
+                dimension="security",
+                source_type="web_search_result",
+                title="Cursor security comparison",
+                url="https://example.com/cursor-security",
+                snippet="Search-only security summary.",
+                content_hash="hash-1",
+                confidence=0.68,
+            )
+        ],
+        qa_findings=[
+            QCIssue(
+                id="qa-1",
+                severity="warn",
+                detected_by="reflector",
+                target_agent="collector",
+                target_subagent="security",
+                target_competitor="Cursor",
+                field_path="raw_sources[security-1]",
+                problem="Security source is search-only.",
+                redo_scope=RedoScope(
+                    kind="collector",
+                    target_subagent="security",
+                    target_competitor="Cursor",
+                    rationale="Recollect official security evidence.",
+                ),
+            )
+        ],
+    )
+
+    projection = build_enterprise_projection(detail)
+
+    metadata = projection.report_version.quality_metadata
+    assert metadata["run_qa_warning_count"] == 1
+    assert metadata["search_only_source_ids"] == ["security-1"]
+    assert metadata["low_confidence_source_ids"] == ["security-1"]
 
 
 def test_projection_expands_multi_competitor_sources() -> None:

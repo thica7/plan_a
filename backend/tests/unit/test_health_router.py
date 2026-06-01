@@ -1,6 +1,3 @@
-from pathlib import Path
-from uuid import uuid4
-
 from fastapi.testclient import TestClient
 
 from app.deps import get_app_settings, get_run_journal
@@ -29,25 +26,17 @@ def _settings(**overrides: object) -> Settings:
     return Settings(**values)
 
 
-def _client(db_path: Path, settings: Settings) -> TestClient:
+def _client(settings: Settings) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_app_settings] = lambda: settings
-    app.dependency_overrides[get_run_journal] = lambda: RunJournal(db_path)
+    app.dependency_overrides[get_run_journal] = RunJournal.in_memory
     return TestClient(app)
 
 
-def _db_path() -> Path:
-    return Path("runs") / f"test-health-{uuid4().hex}.db"
-
-
 def test_health_reports_foundation_checks() -> None:
-    db_path = _db_path()
-    client = _client(db_path, _settings())
+    client = _client(_settings())
 
-    try:
-        response = client.get("/api/health")
-    finally:
-        db_path.unlink(missing_ok=True)
+    response = client.get("/api/health")
 
     assert response.status_code == 200
     body = response.json()
@@ -67,16 +56,11 @@ def test_health_reports_foundation_checks() -> None:
 
 
 def test_health_marks_misconfigured_postgres_enterprise_store_as_error() -> None:
-    db_path = _db_path()
     client = _client(
-        db_path,
         _settings(enterprise_store_backend="postgres", enterprise_database_url=None),
     )
 
-    try:
-        response = client.get("/api/health")
-    finally:
-        db_path.unlink(missing_ok=True)
+    response = client.get("/api/health")
 
     assert response.status_code == 200
     body = response.json()
@@ -96,19 +80,14 @@ def test_health_pings_configured_postgres_enterprise_store(monkeypatch) -> None:
             return "backend=postgres database=app"
 
     monkeypatch.setattr("app.routers.health.EnterprisePostgresStore", FakePostgresStore)
-    db_path = _db_path()
     client = _client(
-        db_path,
         _settings(
             enterprise_store_backend="postgres",
             enterprise_database_url="postgresql://user:pass@db:5432/app",
         ),
     )
 
-    try:
-        response = client.get("/api/health")
-    finally:
-        db_path.unlink(missing_ok=True)
+    response = client.get("/api/health")
 
     assert response.status_code == 200
     body = response.json()
@@ -126,19 +105,14 @@ def test_health_marks_unreachable_postgres_enterprise_store_as_error(monkeypatch
             raise RuntimeError("contains-secret-password")
 
     monkeypatch.setattr("app.routers.health.EnterprisePostgresStore", FakePostgresStore)
-    db_path = _db_path()
     client = _client(
-        db_path,
         _settings(
             enterprise_store_backend="postgres",
             enterprise_database_url="postgresql://user:secret@db:5432/app",
         ),
     )
 
-    try:
-        response = client.get("/api/health")
-    finally:
-        db_path.unlink(missing_ok=True)
+    response = client.get("/api/health")
 
     assert response.status_code == 200
     body = response.json()
@@ -156,13 +130,9 @@ def test_llm_smoke_uses_real_client_without_exposing_key(
         return "ok"
 
     monkeypatch.setattr("app.routers.health.DoubaoClient.complete_text", fake_complete_text)
-    db_path = _db_path()
-    client = _client(db_path, _settings(ark_api_key="secret", ark_model="model"))
+    client = _client(_settings(ark_api_key="secret", ark_model="model"))
 
-    try:
-        response = client.post("/api/smoke/llm", json={"prompt": "ping"})
-    finally:
-        db_path.unlink(missing_ok=True)
+    response = client.post("/api/smoke/llm", json={"prompt": "ping"})
 
     assert response.status_code == 200
     body = response.json()
@@ -176,13 +146,9 @@ def test_search_smoke_returns_perplexity_results(monkeypatch) -> None:
         return [SearchResult(title="A result", url="https://example.com/a", snippet="snippet")]
 
     monkeypatch.setattr("app.routers.health.PerplexitySearchClient.search", fake_search)
-    db_path = _db_path()
-    client = _client(db_path, _settings(pplx_api_key="pplx-secret"))
+    client = _client(_settings(pplx_api_key="pplx-secret"))
 
-    try:
-        response = client.post("/api/smoke/search", json={"query": "test", "max_results": 1})
-    finally:
-        db_path.unlink(missing_ok=True)
+    response = client.post("/api/smoke/search", json={"query": "test", "max_results": 1})
 
     assert response.status_code == 200
     body = response.json()
@@ -203,13 +169,9 @@ def test_fetch_smoke_returns_fetch_result(monkeypatch) -> None:
         )
 
     monkeypatch.setattr("app.routers.health.fetch_page", fake_fetch_page)
-    db_path = _db_path()
-    client = _client(db_path, _settings())
+    client = _client(_settings())
 
-    try:
-        response = client.post("/api/smoke/fetch", json={"url": "https://example.com"})
-    finally:
-        db_path.unlink(missing_ok=True)
+    response = client.post("/api/smoke/fetch", json={"url": "https://example.com"})
 
     assert response.status_code == 200
     body = response.json()

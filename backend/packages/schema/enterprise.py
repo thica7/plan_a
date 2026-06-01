@@ -322,6 +322,7 @@ class ReportVersionRecord(BaseModel):
     report_md: str = ""
     claim_ids: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
+    quality_metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     published_at: datetime | None = None
 

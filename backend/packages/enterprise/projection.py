@@ -184,6 +184,7 @@ def _build_report_version(
         report_md=detail.report_md,
         claim_ids=[claim.id for claim in claim_records],
         evidence_ids=[evidence.id for evidence in evidence_records],
+        quality_metadata=_build_quality_metadata(detail),
         created_at=_parse_datetime(detail.updated_at),
     )
 
@@ -275,6 +276,48 @@ def _quality_label(source: RawSource) -> str:
     if source.source_type == "webpage_verified":
         return "accepted"
     return "unreviewed"
+
+
+def _build_quality_metadata(detail: RunDetail) -> dict[str, object]:
+    low_confidence_source_ids = [
+        source.id for source in detail.raw_sources if source.confidence < 0.75
+    ]
+    search_only_source_ids = [
+        source.id for source in detail.raw_sources if source.source_type == "web_search_result"
+    ]
+    llm_public_knowledge_source_ids = [
+        source.id for source in detail.raw_sources if source.source_type == "llm_public_knowledge"
+    ]
+    return {
+        "run_id": detail.id,
+        "run_qa_findings": [
+            {
+                "id": issue.id,
+                "severity": issue.severity,
+                "detected_by": issue.detected_by,
+                "target_agent": issue.target_agent,
+                "target_subagent": issue.target_subagent,
+                "target_competitor": issue.target_competitor,
+                "problem": issue.problem,
+            }
+            for issue in detail.qa_findings
+        ],
+        "run_qa_warning_count": sum(1 for issue in detail.qa_findings if issue.severity == "warn"),
+        "run_qa_blocker_count": sum(
+            1 for issue in detail.qa_findings if issue.severity == "blocker"
+        ),
+        "low_confidence_source_ids": low_confidence_source_ids,
+        "search_only_source_ids": search_only_source_ids,
+        "llm_public_knowledge_source_ids": llm_public_knowledge_source_ids,
+        "reflection_gaps": [
+            {
+                "coverage_gaps": reflection.coverage_gaps,
+                "confidence_outliers": reflection.confidence_outliers,
+                "cross_competitor_gaps": reflection.cross_competitor_gaps,
+            }
+            for reflection in detail.reflections[-1:]
+        ],
+    }
 
 
 def _parse_datetime(value: datetime | str) -> datetime:

@@ -46,6 +46,10 @@ class WriterAgentMixin:
             [reflection.model_dump(mode="json") for reflection in detail.reflections],
             ensure_ascii=False,
         )
+        qa_findings_json = json.dumps(
+            [issue.model_dump(mode="json") for issue in detail.qa_findings],
+            ensure_ascii=False,
+        )
         try:
             report_md = await self._trace_llm_text(
                 record,
@@ -53,10 +57,17 @@ class WriterAgentMixin:
                 subagent=None,
                 name="report_writer",
                 system=(
-                    "You are a competitive analysis report writer. Produce markdown. "
-                    "Keep it concise, evidence-aware, and include a Confidence Notes section. "
-                    "Cite factual claims with existing source IDs using [source:ID]. "
-                    "Do not invent source IDs."
+                    "You are a senior enterprise competitive-intelligence analyst. "
+                    "Produce a decision-grade markdown report, not a short summary. "
+                    "Write with consulting depth: executive recommendation, source quality, "
+                    "side-by-side matrices, dimension analysis, risks, buying implications, "
+                    "and explicit next validation tasks. Cite factual claims with existing "
+                    "source IDs using [source:ID]. Do not invent source IDs. "
+                    "Do not use web_search_result or confidence < 0.75 as the sole support "
+                    "for a winner, legal/security certification, pricing, or procurement "
+                    "recommendation. If evidence is incomplete, say the conclusion is "
+                    "tentative and list the exact evidence gap. Do not claim all sources are "
+                    "verified when any source_type is web_search_result or llm_public_knowledge."
                 ),
                 user=(
                     f"Topic: {detail.topic}\n"
@@ -66,7 +77,22 @@ class WriterAgentMixin:
                     f"Competitor Knowledge Schema JSON: {competitor_knowledge_json}\n"
                     f"Comparison Matrix JSON: {comparison_matrix_json}\n"
                     f"Source digest JSON: {source_digest_json}\n"
-                    f"Reflections JSON: {reflections_json}"
+                    f"Reflections JSON: {reflections_json}\n"
+                    f"Run QA Findings JSON: {qa_findings_json}\n\n"
+                    "Required sections:\n"
+                    "1. Executive Summary with confidence level and any caveat before the "
+                    "recommendation.\n"
+                    "2. Source Quality & Coverage, separating official/fetched sources from "
+                    "search-only leads.\n"
+                    "3. Side-by-Side Decision Matrix covering every competitor and dimension.\n"
+                    "4. Dimension Deep Dives with evidence-backed reasoning and no unsupported "
+                    "winner claims.\n"
+                    "5. Enterprise Buying Implications.\n"
+                    "6. Risks, Unknowns, and Evidence Gaps, including unresolved QA findings.\n"
+                    "7. Next Collection / Verification Plan.\n"
+                    "8. Evidence Appendix listing the most important source IDs with type and "
+                    "confidence.\n"
+                    "Prefer complete analysis over brevity, but stay under 12,000 characters."
                 ),
             )
             detail.report_md = self._ensure_report_claim_citations(detail, report_md)

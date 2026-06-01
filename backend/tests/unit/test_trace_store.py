@@ -1,13 +1,9 @@
-from pathlib import Path
-from uuid import uuid4
-
 from packages.observability import TraceStore
 from packages.schema.models import AgentMessage, ToolCallMessage, TraceSpan
 
 
 def test_trace_store_round_trips_spans_and_messages() -> None:
-    db_path = Path("runs") / f"test-traces-{uuid4().hex}.db"
-    store = TraceStore(db_path)
+    store = TraceStore.in_memory()
     span = TraceSpan(
         id="span-1",
         kind="llm",
@@ -41,14 +37,11 @@ def test_trace_store_round_trips_spans_and_messages() -> None:
         trace_span_id="span-2",
     )
 
-    try:
-        store.append_span("run-1", span)
-        store.append_agent_message(agent_message)
-        store.append_tool_call_message(tool_message)
+    store.append_span("run-1", span)
+    store.append_agent_message(agent_message)
+    store.append_tool_call_message(tool_message)
 
-        assert store.list_spans("run-1")[0].name == "planner_scope"
-        assert store.list_agent_messages("run-1")[0].message_type == "analysis_plan_ready"
-        assert store.list_tool_call_messages("run-1")[0].tool_name == "web_search"
-        assert store.stats() == {"trace_spans": 1, "agent_messages": 1, "tool_call_messages": 1}
-    finally:
-        db_path.unlink(missing_ok=True)
+    assert store.list_spans("run-1")[0].name == "planner_scope"
+    assert store.list_agent_messages("run-1")[0].message_type == "analysis_plan_ready"
+    assert store.list_tool_call_messages("run-1")[0].tool_name == "web_search"
+    assert store.stats() == {"trace_spans": 1, "agent_messages": 1, "tool_call_messages": 1}

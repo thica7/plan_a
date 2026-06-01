@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS, evaluate_business_qa
 from packages.business_intel.planning import build_business_intel_plan
@@ -18,6 +19,15 @@ from packages.schema.enterprise import (
 
 MIN_VERIFIED_EVIDENCE_RATE = 0.8
 MIN_READY_SCORE = 85
+MIN_RELEASE_SOURCE_CONFIDENCE = 0.75
+STRONG_CONCLUSION_RE = re.compile(
+    r"\b("
+    r"winner|leading option|best option|safer|safest|recommended|recommendation|"
+    r"dimension winner|executive summary|soc\s*2|iso\s*/?\s*iec|ip indemnity|"
+    r"sso|saml|scim|audit log|pricing transparency"
+    r")\b",
+    flags=re.IGNORECASE,
+)
 
 
 def evaluate_report_release_gate(
@@ -62,6 +72,9 @@ def evaluate_report_release_gate(
     issues = [
         *_report_integrity_issues(report_version, scoped_evidence, scoped_claims),
         *_source_quality_issues(scoped_evidence),
+        *_claim_evidence_quality_issues(scoped_claims, scoped_evidence),
+        *_report_citation_quality_issues(report_version, scoped_evidence),
+        *_run_quality_issues(report_version),
         *_readiness_issues(readiness),
         *_strict_qa_issues(qa_evaluation.findings),
     ]
@@ -179,6 +192,114 @@ def _source_quality_issues(evidence: list[EvidenceRecord]) -> list[BusinessQAFin
     ]
 
 
+def _claim_evidence_quality_issues(
+    claims: list[ClaimRecord],
+    evidence: list[EvidenceRecord],
+) -> list[BusinessQAFinding]:
+    evidence_by_id = {item.id: item for item in evidence}
+    issues: list[BusinessQAFinding] = []
+    for claim in claims:
+        weak = [
+            item
+            for evidence_id in claim.evidence_ids
+            if (item := evidence_by_id.get(evidence_id)) is not None
+            and (
+                item.source_type != "webpage_verified"
+                or item.reliability_score < MIN_RELEASE_SOURCE_CONFIDENCE
+                or item.quality_label in BAD_QUALITY_LABELS
+            )
+        ]
+        if not weak:
+            continue
+        issues.append(
+            _gate_issue(
+                "claim_uses_low_confidence_evidence",
+                "Claim evidence confidence",
+                (
+                    f"Claim {claim.id} depends on {len(weak)} weak evidence item(s); "
+                    "release claims require verified webpage evidence with confidence >= "
+                    f"{MIN_RELEASE_SOURCE_CONFIDENCE:.2f}."
+                ),
+                claim_ids=[claim.id],
+                evidence_ids=[item.id for item in weak],
+                recommendation=(
+                    "Redo collection for this claim using official or fetched webpages before "
+                    "publishing."
+                ),
+            )
+        )
+    return issues
+
+
+def _report_citation_quality_issues(
+    report_version: ReportVersionRecord,
+    evidence: list[EvidenceRecord],
+) -> list[BusinessQAFinding]:
+    evidence_by_token: dict[str, EvidenceRecord] = {}
+    for item in evidence:
+        evidence_by_token[item.id] = item
+        evidence_by_token[item.raw_source_id] = item
+
+    issues: list[BusinessQAFinding] = []
+    for line in report_version.report_md.splitlines():
+        if not STRONG_CONCLUSION_RE.search(line):
+            continue
+        weak = [
+            evidence_by_token[token]
+            for token in _cited_source_tokens(line)
+            if token in evidence_by_token
+            and (
+                evidence_by_token[token].source_type != "webpage_verified"
+                or evidence_by_token[token].reliability_score < MIN_RELEASE_SOURCE_CONFIDENCE
+                or evidence_by_token[token].quality_label in BAD_QUALITY_LABELS
+            )
+        ]
+        if not weak:
+            continue
+        issues.append(
+            _gate_issue(
+                "strong_conclusion_uses_weak_source",
+                "Strong conclusion source quality",
+                (
+                    "A strong report conclusion cites weak or search-only evidence. "
+                    f"Line: {line.strip()[:220]}"
+                ),
+                evidence_ids=[item.id for item in weak],
+                recommendation=(
+                    "Rewrite the conclusion as tentative or recollect official/verified sources."
+                ),
+            )
+        )
+    return issues
+
+
+def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAFinding]:
+    findings = report_version.quality_metadata.get("run_qa_findings", [])
+    if not isinstance(findings, list) or not findings:
+        return []
+    blocker_count = sum(1 for item in findings if _mapping_value(item, "severity") == "blocker")
+    warn_count = sum(1 for item in findings if _mapping_value(item, "severity") == "warn")
+    top_problems = [
+        str(_mapping_value(item, "problem") or _mapping_value(item, "id") or "quality issue")
+        for item in findings[:3]
+    ]
+    return [
+        _gate_issue(
+            "run_qa_findings_unresolved",
+            "Run QA findings unresolved",
+            (
+                "Report release requires a clean run-level QA result; "
+                f"current run has {blocker_count} blocker(s) and {warn_count} warning(s). "
+                f"Top issue(s): {'; '.join(top_problems)}"
+            ),
+            recommendation=(
+                "Run scoped redo for the affected collector/analyst/comparator branches before "
+                "publishing."
+            ),
+        )
+    ]
+
+
 def _readiness_issues(readiness: ProjectReadinessScore) -> list[BusinessQAFinding]:
     if readiness.risk_level == "ready" and readiness.score >= MIN_READY_SCORE:
         return []
@@ -233,3 +354,13 @@ def _gate_issue(
         claim_ids=claim_ids or [],
         recommendation=recommendation,
     )
+
+
+def _cited_source_tokens(line: str) -> list[str]:
+    return re.findall(r"\[source:([A-Za-z0-9_.:-]+)\]", line)
+
+
+def _mapping_value(value: object, key: str) -> object:
+    if isinstance(value, dict):
+        return value.get(key)
+    return None
