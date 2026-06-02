@@ -2298,9 +2298,9 @@ export interface components {
             /**
              * Engine
              * @default internal-opa-compatible
-             * @constant
+             * @enum {string}
              */
-            engine: "internal-opa-compatible";
+            engine: "internal-opa-compatible" | "opa" | "cerbos";
             /**
              * Policy Version
              * @default 2026-05-phase5-rbac
@@ -2784,6 +2784,10 @@ export interface components {
             claim_ids?: string[];
             /** Evidence Ids */
             evidence_ids?: string[];
+            /** Quality Metadata */
+            quality_metadata?: {
+                [key: string]: unknown;
+            };
             /**
              * Created At
              * Format: date-time
@@ -3199,6 +3203,10 @@ export interface components {
             temporal_task_queue: string;
             /** Temporal Traffic Percent */
             temporal_traffic_percent: number;
+            /** Temporal Cutover Ready */
+            temporal_cutover_ready: boolean;
+            /** Temporal Cutover Reason */
+            temporal_cutover_reason: string;
             /** Compliance Redaction Enabled */
             compliance_redaction_enabled: boolean;
             /** Compliance Redact Api Keys */
@@ -3223,6 +3231,10 @@ export interface components {
             artifact_storage_backend: string;
             /** Artifact Storage Root */
             artifact_storage_root: string;
+            /** Auth Policy Engine */
+            auth_policy_engine: string;
+            /** Auth Policy External Configured */
+            auth_policy_external_configured: boolean;
         };
         /** ScenarioPack */
         ScenarioPack: {

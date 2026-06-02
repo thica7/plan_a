@@ -8,4 +8,14 @@ if str(ROOT) not in sys.path:
 
 from app.main import app  # noqa: E402
 
-print(json.dumps(app.openapi(), ensure_ascii=False, indent=2))
+
+def main() -> None:
+    payload = json.dumps(app.openapi(), ensure_ascii=False, indent=2)
+    if len(sys.argv) > 1:
+        Path(sys.argv[1]).write_text(payload + "\n", encoding="utf-8")
+        return
+    print(payload)
+
+
+if __name__ == "__main__":
+    main()

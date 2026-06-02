@@ -61,10 +61,12 @@ def test_health_reports_foundation_checks(monkeypatch) -> None:
         "skills",
         "sqlite",
         "enterprise_store",
+        "auth_policy",
         "temporal_cutover",
         "temporal_server",
     }
     enterprise = [check for check in body["checks"] if check["name"] == "enterprise_store"][0]
+    auth_policy = [check for check in body["checks"] if check["name"] == "auth_policy"][0]
     temporal_cutover = [
         check for check in body["checks"] if check["name"] == "temporal_cutover"
     ][0]
@@ -73,6 +75,8 @@ def test_health_reports_foundation_checks(monkeypatch) -> None:
     ][0]
     assert enterprise["status"] == "ok"
     assert enterprise["detail"] == "backend=memory"
+    assert auth_policy["status"] == "ok"
+    assert auth_policy["detail"] == "engine=internal"
     assert temporal_cutover["status"] == "ok"
     assert "target_percent=100" in temporal_cutover["detail"]
     assert temporal_server["status"] == "ok"
@@ -91,6 +95,19 @@ def test_health_marks_incomplete_temporal_cutover_as_error() -> None:
     assert body["status"] == "error"
     assert temporal_cutover["status"] == "error"
     assert "RUN_ORCHESTRATION_BACKEND must be temporal" in temporal_cutover["detail"]
+
+
+def test_health_marks_external_policy_engine_without_url_as_error() -> None:
+    client = _client(_settings(auth_policy_engine="opa", auth_policy_url=None))
+
+    response = client.get("/api/health")
+
+    assert response.status_code == 200
+    body = response.json()
+    auth_policy = [check for check in body["checks"] if check["name"] == "auth_policy"][0]
+    assert body["status"] == "error"
+    assert auth_policy["status"] == "error"
+    assert "AUTH_POLICY_URL is required" in auth_policy["detail"]
 
 
 def test_health_marks_misconfigured_postgres_enterprise_store_as_error() -> None:

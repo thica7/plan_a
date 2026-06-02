@@ -58,6 +58,10 @@ def test_metrics_exposes_run_and_temporal_operational_gauges() -> None:
     assert "competiscope_temporal_cutover_ready 1" in body
     assert "competiscope_temporal_server_up 0" in body
     assert "competiscope_enterprise_store_configured 1" in body
+    assert 'competiscope_auth_policy_engine{engine="internal"} 1' in body
+    assert 'competiscope_auth_policy_engine{engine="opa"} 0' in body
+    assert 'competiscope_auth_policy_engine{engine="cerbos"} 0' in body
+    assert "competiscope_auth_policy_external_configured 0" in body
     assert "competiscope_trace_spans_total 0" in body
     assert "competiscope_trace_context_coverage_ratio 0.000000" in body
     assert "competiscope_llm_calls_total 0" in body

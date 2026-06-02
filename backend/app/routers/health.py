@@ -63,6 +63,7 @@ def health(
             detail="run journal opened",
         ),
         _enterprise_store_check(settings),
+        _auth_policy_check(settings),
         _temporal_cutover_check(settings),
         _temporal_server_check(settings),
         HealthCheck(
@@ -232,6 +233,27 @@ def _enterprise_store_check(settings: Settings) -> HealthCheck:
         name="enterprise_store",
         status="error",
         detail=f"unknown backend={backend}",
+    )
+
+
+def _auth_policy_check(settings: Settings) -> HealthCheck:
+    engine = settings.auth_policy_engine
+    if engine == "internal":
+        return HealthCheck(
+            name="auth_policy",
+            status="ok",
+            detail="engine=internal",
+        )
+    if not settings.auth_policy_url:
+        return HealthCheck(
+            name="auth_policy",
+            status="error",
+            detail=f"engine={engine} AUTH_POLICY_URL is required",
+        )
+    return HealthCheck(
+        name="auth_policy",
+        status="ok",
+        detail=f"engine={engine} url_configured=true",
     )
 
 

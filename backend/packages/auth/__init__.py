@@ -1,4 +1,5 @@
 from packages.auth.rbac import (
+    AuthPolicyEngine,
     EnterpriseUserContext,
     PolicyDecision,
     PolicyEvaluationRequest,
@@ -13,6 +14,7 @@ from packages.auth.rbac import (
 
 __all__ = [
     "EnterpriseUserContext",
+    "AuthPolicyEngine",
     "PolicyDecision",
     "PolicyEvaluationRequest",
     "PolicyRuleMatch",

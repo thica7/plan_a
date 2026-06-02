@@ -7785,7 +7785,11 @@
           },
           "engine": {
             "type": "string",
-            "const": "internal-opa-compatible",
+            "enum": [
+              "internal-opa-compatible",
+              "opa",
+              "cerbos"
+            ],
             "title": "Engine",
             "default": "internal-opa-compatible"
           },
@@ -8947,6 +8951,11 @@
             "type": "array",
             "title": "Evidence Ids"
           },
+          "quality_metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Quality Metadata"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -9842,6 +9851,14 @@
             "type": "integer",
             "title": "Temporal Traffic Percent"
           },
+          "temporal_cutover_ready": {
+            "type": "boolean",
+            "title": "Temporal Cutover Ready"
+          },
+          "temporal_cutover_reason": {
+            "type": "string",
+            "title": "Temporal Cutover Reason"
+          },
           "compliance_redaction_enabled": {
             "type": "boolean",
             "title": "Compliance Redaction Enabled"
@@ -9902,6 +9919,14 @@
           "artifact_storage_root": {
             "type": "string",
             "title": "Artifact Storage Root"
+          },
+          "auth_policy_engine": {
+            "type": "string",
+            "title": "Auth Policy Engine"
+          },
+          "auth_policy_external_configured": {
+            "type": "boolean",
+            "title": "Auth Policy External Configured"
           }
         },
         "additionalProperties": false,
@@ -9926,6 +9951,8 @@
           "temporal_namespace",
           "temporal_task_queue",
           "temporal_traffic_percent",
+          "temporal_cutover_ready",
+          "temporal_cutover_reason",
           "compliance_redaction_enabled",
           "compliance_redact_api_keys",
           "compliance_redact_emails",
@@ -9936,7 +9963,9 @@
           "compliance_require_trace_context",
           "pydantic_ai_model_backed_enabled",
           "artifact_storage_backend",
-          "artifact_storage_root"
+          "artifact_storage_root",
+          "auth_policy_engine",
+          "auth_policy_external_configured"
         ],
         "title": "RuntimeConfig"
       },

@@ -50,4 +50,6 @@ def get_runtime(settings: SettingsDep) -> RuntimeConfig:
         pydantic_ai_model_name=settings.pydantic_ai_model_name,
         artifact_storage_backend=settings.artifact_storage_backend,
         artifact_storage_root=settings.artifact_storage_root,
+        auth_policy_engine=settings.auth_policy_engine,
+        auth_policy_external_configured=bool(settings.auth_policy_url),
     )

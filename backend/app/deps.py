@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import Header
+from fastapi import Depends, Header
 
 from packages.artifacts import LocalArtifactStorage
 from packages.auth import EnterpriseUserContext, normalize_role
@@ -69,6 +69,7 @@ def get_artifact_storage() -> LocalArtifactStorage:
 
 
 def get_enterprise_user_context(
+    settings: Annotated[Settings, Depends(get_app_settings)],
     x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
     x_user_role: Annotated[str | None, Header(alias="X-User-Role")] = None,
     x_workspace_id: Annotated[str | None, Header(alias="X-Workspace-Id")] = None,
@@ -77,6 +78,9 @@ def get_enterprise_user_context(
         user_id=x_user_id or DEFAULT_USER_ID,
         role=normalize_role(x_user_role),
         workspace_id=x_workspace_id or None,
+        policy_engine=settings.auth_policy_engine,
+        policy_url=settings.auth_policy_url,
+        policy_timeout_seconds=settings.auth_policy_timeout_seconds,
     )
 
 

@@ -242,6 +242,8 @@ class RuntimeConfig(BaseModel):
     pydantic_ai_model_name: str | None = None
     artifact_storage_backend: str
     artifact_storage_root: str
+    auth_policy_engine: str
+    auth_policy_external_configured: bool
 
 
 class HealthCheck(BaseModel):

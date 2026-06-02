@@ -283,7 +283,7 @@ export interface PolicyRuleMatch {
 export interface PolicyDecision {
   allowed: boolean;
   effect: PolicyEffect;
-  engine: "internal-opa-compatible";
+  engine: "internal-opa-compatible" | "opa" | "cerbos";
   policy_version: string;
   subject_id: string;
   role: EnterpriseRole;
@@ -570,6 +570,8 @@ export interface RuntimeConfig {
   pydantic_ai_model_name?: string | null;
   artifact_storage_backend: string;
   artifact_storage_root: string;
+  auth_policy_engine: string;
+  auth_policy_external_configured: boolean;
 }
 
 export type CompetitorLayer = "L1" | "L2" | "L3" | "unknown";

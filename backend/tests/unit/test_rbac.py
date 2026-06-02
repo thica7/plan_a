@@ -51,6 +51,69 @@ def test_policy_decision_explains_denies_and_allows() -> None:
     assert list_policy_actions()["audit:read"] == "admin"
 
 
+def test_external_opa_policy_allows_from_pdp_response(monkeypatch) -> None:
+    def fake_post_policy_json(url: str, payload: dict[str, object], *, timeout_seconds: float):
+        assert url == "http://opa.test/v1/data/competiscope/authz"
+        assert timeout_seconds == 1.5
+        assert payload["input"]["action"] == "project:write"  # type: ignore[index]
+        return {"result": {"allow": True, "reason": "opa allow"}}
+
+    monkeypatch.setattr("packages.auth.rbac._post_policy_json", fake_post_policy_json)
+    user = EnterpriseUserContext(
+        user_id="analyst-1",
+        role="viewer",
+        workspace_id="workspace-a",
+        policy_engine="opa",
+        policy_url="http://opa.test/v1/data/competiscope/authz",
+        policy_timeout_seconds=1.5,
+    )
+
+    decision = evaluate_access_policy(user, "workspace-a", "project:write")
+
+    assert decision.allowed is True
+    assert decision.engine == "opa"
+    assert decision.reason == "opa allow"
+    assert decision.matched_rules[0].rule_id == "external_policy_allow"
+
+
+def test_external_cerbos_policy_denies_from_pdp_response(monkeypatch) -> None:
+    def fake_post_policy_json(url: str, payload: dict[str, object], *, timeout_seconds: float):
+        assert url == "http://cerbos.test/api/check/resources"
+        assert payload["principal"]["roles"] == ["admin"]  # type: ignore[index]
+        return {"results": [{"actions": {"audit:read": "EFFECT_DENY"}}]}
+
+    monkeypatch.setattr("packages.auth.rbac._post_policy_json", fake_post_policy_json)
+    user = EnterpriseUserContext(
+        user_id="admin-1",
+        role="admin",
+        workspace_id="workspace-a",
+        policy_engine="cerbos",
+        policy_url="http://cerbos.test/api/check/resources",
+    )
+
+    decision = evaluate_access_policy(user, "workspace-a", "audit:read")
+
+    assert decision.allowed is False
+    assert decision.engine == "cerbos"
+    assert decision.reason == "Denied by Cerbos policy."
+    assert decision.matched_rules[0].rule_id == "external_policy_deny"
+
+
+def test_external_policy_engine_fails_closed_without_url() -> None:
+    user = EnterpriseUserContext(
+        user_id="owner-1",
+        role="owner",
+        workspace_id="workspace-a",
+        policy_engine="opa",
+    )
+
+    decision = evaluate_access_policy(user, "workspace-a", "project:read")
+
+    assert decision.allowed is False
+    assert decision.engine == "opa"
+    assert decision.matched_rules[0].rule_id == "deny_external_policy_unconfigured"
+
+
 def test_model_policy_report_blocks_disabled_redaction() -> None:
     settings = Settings(
         demo_mode=True,

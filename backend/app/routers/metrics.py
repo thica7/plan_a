@@ -97,6 +97,23 @@ def metrics(
             "# HELP competiscope_enterprise_store_configured Enterprise store config validity.",
             "# TYPE competiscope_enterprise_store_configured gauge",
             f"competiscope_enterprise_store_configured {_enterprise_store_configured(settings)}",
+            "# HELP competiscope_auth_policy_engine Active authorization policy engine.",
+            "# TYPE competiscope_auth_policy_engine gauge",
+            (
+                'competiscope_auth_policy_engine{engine="internal"} '
+                f'{1 if settings.auth_policy_engine == "internal" else 0}'
+            ),
+            (
+                'competiscope_auth_policy_engine{engine="opa"} '
+                f'{1 if settings.auth_policy_engine == "opa" else 0}'
+            ),
+            (
+                'competiscope_auth_policy_engine{engine="cerbos"} '
+                f'{1 if settings.auth_policy_engine == "cerbos" else 0}'
+            ),
+            "# HELP competiscope_auth_policy_external_configured External PDP URL config.",
+            "# TYPE competiscope_auth_policy_external_configured gauge",
+            f"competiscope_auth_policy_external_configured {1 if settings.auth_policy_url else 0}",
             "# HELP competiscope_trace_spans_total Trace spans persisted in run details.",
             "# TYPE competiscope_trace_spans_total gauge",
             f"competiscope_trace_spans_total {sum(run.metrics.total_spans for run in runs)}",

@@ -99,6 +99,9 @@ class Settings:
     pydantic_ai_model_name: str | None = None
     artifact_storage_backend: Literal["local"] = "local"
     artifact_storage_root: str = "data/artifacts"
+    auth_policy_engine: Literal["internal", "opa", "cerbos"] = "internal"
+    auth_policy_url: str | None = None
+    auth_policy_timeout_seconds: float = 1.0
 
     @property
     def has_llm_credentials(self) -> bool:
@@ -198,4 +201,13 @@ def get_settings() -> Settings:
             _env_choice("ARTIFACT_STORAGE_BACKEND", "local", {"local"}),
         ),
         artifact_storage_root=os.getenv("ARTIFACT_STORAGE_ROOT", "data/artifacts"),
+        auth_policy_engine=cast(
+            Literal["internal", "opa", "cerbos"],
+            _env_choice("AUTH_POLICY_ENGINE", "internal", {"internal", "opa", "cerbos"}),
+        ),
+        auth_policy_url=os.getenv("AUTH_POLICY_URL") or None,
+        auth_policy_timeout_seconds=max(
+            0.1,
+            min(10.0, float(os.getenv("AUTH_POLICY_TIMEOUT_SECONDS", "1.0"))),
+        ),
     )
