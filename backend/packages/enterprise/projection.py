@@ -288,6 +288,12 @@ def _build_quality_metadata(detail: RunDetail) -> dict[str, object]:
     llm_public_knowledge_source_ids = [
         source.id for source in detail.raw_sources if source.source_type == "llm_public_knowledge"
     ]
+    survey_source_ids = [
+        source.id for source in detail.raw_sources if source.source_type == "survey_simulated"
+    ]
+    interview_source_ids = [
+        source.id for source in detail.raw_sources if source.source_type == "interview_record"
+    ]
     return {
         "run_id": detail.id,
         "run_qa_findings": [
@@ -309,6 +315,8 @@ def _build_quality_metadata(detail: RunDetail) -> dict[str, object]:
         "low_confidence_source_ids": low_confidence_source_ids,
         "search_only_source_ids": search_only_source_ids,
         "llm_public_knowledge_source_ids": llm_public_knowledge_source_ids,
+        "survey_source_ids": survey_source_ids,
+        "interview_source_ids": interview_source_ids,
         "reflection_gaps": [
             {
                 "coverage_gaps": reflection.coverage_gaps,

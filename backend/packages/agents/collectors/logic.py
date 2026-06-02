@@ -956,6 +956,14 @@ class CollectorAgentMixin:
                     normalized_text,
                 )
             )
+        if "review" in dimension_key or "feedback" in dimension_key:
+            return bool(
+                re.search(
+                    r"(?:review|feedback|rating|complaint|praise|customer|user|adoption|"
+                    r"switching|pain point)",
+                    normalized_text,
+                )
+            )
         if "generic" in dimension_key:
             return bool(
                 re.search(
@@ -1011,6 +1019,19 @@ class CollectorAgentMixin:
                 "use case",
                 "case study",
                 "organization",
+            ]
+        elif "review" in dimension_key or "feedback" in dimension_key:
+            terms = [
+                "review",
+                "feedback",
+                "rating",
+                "complaint",
+                "praise",
+                "customer",
+                "user",
+                "adoption",
+                "switching",
+                "pain point",
             ]
         else:
             terms = [

@@ -41,6 +41,11 @@ async def test_real_graph_uses_send_fanout_for_collector_and_analyst() -> None:
         async def _real_collect_join_step(self, _record, dimensions) -> None:
             calls.append(("collect_join", ",".join(dimensions), None))
 
+        async def _run_survey_interview_enrichment(
+            self, _record, dimensions, competitors
+        ) -> None:
+            calls.append(("survey_interview", ",".join(dimensions), ",".join(competitors)))
+
         async def _real_phase_qa_step(self, _record, phase: str) -> None:
             calls.append((f"{phase}_qa", None, None))
 
@@ -109,4 +114,5 @@ async def test_real_graph_uses_send_fanout_for_collector_and_analyst() -> None:
         ("pricing", "B"),
     ]
     assert ("collect_join", "pricing,feature", None) in calls
+    assert ("survey_interview", "pricing,feature", "A,B") in calls
     assert ("analyst_join", "pricing,feature", "A,B") in calls

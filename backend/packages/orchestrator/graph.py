@@ -24,6 +24,9 @@ from packages.agents import (
     reflector as reflector_agent,
 )
 from packages.agents import (
+    survey as survey_agent,
+)
+from packages.agents import (
     writer as writer_agent,
 )
 from packages.orchestrator.state import GraphState
@@ -38,7 +41,8 @@ def build_real_analysis_graph(service: Any, checkpointer: Any | None = None):
     graph.add_edge("planner_hitl", "collector_dispatch")
     graph.add_conditional_edges("collector_dispatch", _send_collectors, ["collector"])
     graph.add_edge("collector", "collect_join")
-    graph.add_edge("collect_join", "collect_qa")
+    graph.add_edge("collect_join", "survey_interview")
+    graph.add_edge("survey_interview", "collect_qa")
     graph.add_conditional_edges(
         "collect_qa",
         lambda state: service._route_phase_qa(state, "collect"),
@@ -116,7 +120,8 @@ def build_scoped_redo_graph(service: Any, checkpointer: Any | None = None):
     graph.add_edge("planner_hitl", "collector_dispatch")
     graph.add_conditional_edges("collector_dispatch", _send_collectors, ["collector"])
     graph.add_edge("collector", "collect_join")
-    graph.add_edge("collect_join", "collect_qa")
+    graph.add_edge("collect_join", "survey_interview")
+    graph.add_edge("survey_interview", "collect_qa")
     graph.add_conditional_edges(
         "collect_qa",
         lambda state: service._route_phase_qa(state, "collect"),
@@ -159,7 +164,8 @@ def build_demo_analysis_graph(service: Any, checkpointer: Any | None = None):
     graph.add_edge("planner_hitl", "collector_dispatch")
     graph.add_conditional_edges("collector_dispatch", _send_collectors, ["collector"])
     graph.add_edge("collector", "collect_join")
-    graph.add_edge("collect_join", "collect_qa")
+    graph.add_edge("collect_join", "survey_interview")
+    graph.add_edge("survey_interview", "collect_qa")
     graph.add_conditional_edges(
         "collect_qa",
         lambda state: service._route_phase_qa(state, "collect"),
@@ -237,6 +243,19 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
         )
         await collector_agent.join(service, record, list(dimensions))
         return {"current_node": "collect_join", "dimensions": list(dimensions)}
+
+    async def survey_interview(state: GraphState) -> GraphState:
+        record = service._runs[state["run_id"]]
+        dimensions = _ordered_unique(state.get("dimensions") or record.detail.plan.dimensions)
+        competitors = _ordered_unique(
+            state.get("target_competitors") or record.detail.plan.competitors
+        )
+        await survey_agent.run_enrichment(service, record, list(dimensions), list(competitors))
+        return {
+            "current_node": "survey_interview",
+            "dimensions": list(dimensions),
+            "target_competitors": list(competitors),
+        }
 
     async def analyst_dispatch(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
@@ -357,6 +376,7 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
     graph.add_node("collector_dispatch", collector_dispatch)
     graph.add_node("collector", collector)
     graph.add_node("collect_join", collect_join)
+    graph.add_node("survey_interview", survey_interview)
     graph.add_node("collect_qa", collect_qa)
     graph.add_node("analyst_dispatch", analyst_dispatch)
     graph.add_node("analyst", analyst)
@@ -413,6 +433,19 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
         )
         await service._demo_collect_join_step(record, list(dimensions))
         return {"current_node": "collect_join", "dimensions": list(dimensions)}
+
+    async def survey_interview(state: GraphState) -> GraphState:
+        record = service._runs[state["run_id"]]
+        dimensions = _ordered_unique(state.get("dimensions") or record.detail.plan.dimensions)
+        competitors = _ordered_unique(
+            state.get("target_competitors") or record.detail.plan.competitors
+        )
+        await survey_agent.run_enrichment(service, record, list(dimensions), list(competitors))
+        return {
+            "current_node": "survey_interview",
+            "dimensions": list(dimensions),
+            "target_competitors": list(competitors),
+        }
 
     async def collect_qa(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
@@ -509,6 +542,7 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
     graph.add_node("collector_dispatch", collector_dispatch)
     graph.add_node("collector", collector)
     graph.add_node("collect_join", collect_join)
+    graph.add_node("survey_interview", survey_interview)
     graph.add_node("collect_qa", collect_qa)
     graph.add_node("analyst_dispatch", analyst_dispatch)
     graph.add_node("analyst", analyst)

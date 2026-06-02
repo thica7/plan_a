@@ -73,6 +73,12 @@ from packages.schema.models import (
     UserPersonaModel,
     UserPersonaSegment,
 )
+from packages.schema.survey import (
+    InterviewSynthesis,
+    SurveyEvidenceBundle,
+    SurveyQuestion,
+    SurveyResponse,
+)
 
 __all__ = [
     "AnalysisPlan",
@@ -106,6 +112,7 @@ __all__ = [
     "FeatureNode",
     "FeatureTree",
     "HitlResumeRequest",
+    "InterviewSynthesis",
     "KnowledgeClaim",
     "PricingModel",
     "PricingTier",
@@ -132,6 +139,9 @@ __all__ = [
     "ScenarioPack",
     "SkillSpec",
     "SourceRegistryRecord",
+    "SurveyEvidenceBundle",
+    "SurveyQuestion",
+    "SurveyResponse",
     "ToolCallMessage",
     "TraceSpan",
     "UserPersonaModel",

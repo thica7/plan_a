@@ -1206,7 +1206,14 @@ def _source_trust_level(evidence: EvidenceRecord) -> str:
         return "official"
     if source_type in {"webpage_verified", "verified_webpage", "verified_document"}:
         return "verified"
-    if source_type in {"synthetic", "synthesized", "interview_record", "manual_note"}:
+    if source_type in {
+        "synthetic",
+        "synthesized",
+        "survey_simulated",
+        "interview_record",
+        "manual_transcript",
+        "manual_note",
+    }:
         return "synthetic"
     if evidence.url or evidence.canonical_url:
         return "community"

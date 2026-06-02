@@ -18,6 +18,7 @@ from packages.agents.comparator.logic import ComparatorAgentMixin
 from packages.agents.planner.logic import PlannerAgentMixin
 from packages.agents.qa.logic import QualityAgentMixin
 from packages.agents.reflector.logic import ReflectorAgentMixin
+from packages.agents.survey.logic import SurveyInterviewAgentMixin
 from packages.agents.writer.logic import WriterAgentMixin
 from packages.business_intel import build_business_intel_plan, evaluate_report_release_gate
 from packages.business_intel.homepage import verify_homepages
@@ -102,6 +103,7 @@ class RunRecord:
 class RunService(
     PlannerAgentMixin,
     CollectorAgentMixin,
+    SurveyInterviewAgentMixin,
     AnalystAgentMixin,
     ComparatorAgentMixin,
     ReflectorAgentMixin,

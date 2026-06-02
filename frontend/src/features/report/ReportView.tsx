@@ -39,7 +39,7 @@ export function ReportView({ markdown, sources }: Props) {
       <div className="source-strip">
         {sources.map((source) => (
           <span key={source.id} title={`${source.source_type} / ${source.content_hash}`}>
-            {source.dimension} / {source.source_type === "webpage_verified" ? "fetched" : "llm"} /{" "}
+            {source.dimension} / {sourceTypeLabel(source.source_type)} /{" "}
             {Math.round(source.confidence * 100)}%
           </span>
         ))}
@@ -77,4 +77,11 @@ function linkSourceTokens(markdown: string, sourceIds: Set<string>) {
     const target = sourceIds.has(sourceId) ? `#source-${sourceId}` : "#source-list";
     return `[${token}](${target})`;
   });
+}
+
+function sourceTypeLabel(sourceType: string) {
+  if (sourceType === "webpage_verified") return "fetched";
+  if (sourceType === "survey_simulated" || sourceType === "interview_record") return "research";
+  if (sourceType === "web_search_result") return "search";
+  return "llm";
 }

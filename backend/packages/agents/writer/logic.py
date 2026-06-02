@@ -70,6 +70,8 @@ class WriterAgentMixin:
                     "recommendation. If evidence is incomplete, say the conclusion is "
                     "tentative and list the exact evidence gap. Do not claim all sources are "
                     "verified when any source_type is web_search_result or llm_public_knowledge. "
+                    "Treat survey_simulated and interview_record as user-research signals, "
+                    "not as official factual proof. "
                     "Use the requested competitive layer to choose the report shape: L1 is a "
                     "direct battlecard, L2 is adjacent workflow and enterprise-risk analysis, "
                     "and L3 is market landscape and category strategy."
