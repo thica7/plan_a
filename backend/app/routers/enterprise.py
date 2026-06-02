@@ -36,7 +36,7 @@ from packages.business_intel import (
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore, build_report_version_diff
 from packages.governance import ModelPolicyReport, build_model_policy_report
-from packages.rag import decorate_evidence_gap_report_with_retrieval
+from packages.rag import decorate_evidence_gap_report_with_retrieval, fill_evidence_gaps
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
     ArtifactCreateResult,
@@ -50,6 +50,7 @@ from packages.schema.enterprise import (
     CompetitorRecord,
     CompetitorScoreReport,
     EnterpriseRunProjection,
+    EvidenceGapFillResult,
     EvidenceGapReport,
     EvidenceQualityUpdateRequest,
     EvidenceQualityUpdateResult,
@@ -389,6 +390,29 @@ async def get_project_evidence_gaps(
         store=store,
         workspace_id=project.workspace_id,
         project_id=project_id,
+    )
+
+
+@router.post(
+    "/enterprise/projects/{project_id}/evidence-gaps/fill",
+    response_model=EvidenceGapFillResult,
+)
+async def fill_project_evidence_gaps(
+    project_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    settings: SettingsDep,
+) -> EvidenceGapFillResult:
+    project = _project_or_404(project_id, store, user, "report:write")
+    report = await get_project_evidence_gaps(project_id, store, user, settings)
+    versions = store.list_report_versions(project_id=project_id)
+    source_version = versions[0] if versions else None
+    return fill_evidence_gaps(
+        report,
+        store=store,
+        workspace_id=project.workspace_id,
+        project_id=project_id,
+        source_report_version=source_version,
     )
 
 

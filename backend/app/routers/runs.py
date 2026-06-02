@@ -2,7 +2,7 @@ import asyncio
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.deps import (
     get_app_settings,
@@ -11,10 +11,17 @@ from app.deps import (
     get_temporal_workflow_service,
 )
 from app.governance import ensure_model_policy_allows_execution_mode
+from packages.business_intel import compare_run_quality
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore, WorkspaceQuotaExceededError
 from packages.orchestrator.service import RunService
-from packages.schema.api_dto import RunCreateRequest, RunDetail, RunSummary, WorkflowStartResponse
+from packages.schema.api_dto import (
+    RunCreateRequest,
+    RunDetail,
+    RunQualityComparison,
+    RunSummary,
+    WorkflowStartResponse,
+)
 from packages.workflows.service import (
     TemporalWorkflowService,
     decide_temporal_cutover,
@@ -132,3 +139,20 @@ async def get_run(
     if detail is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return detail
+
+
+@router.get("/runs/{run_id}/quality-comparison", response_model=RunQualityComparison)
+async def get_run_quality_comparison(
+    run_id: str,
+    service: RunServiceDep,
+    baseline_run_id: str | None = Query(default=None),
+) -> RunQualityComparison:
+    detail = service.get_run(run_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    baseline = None
+    if baseline_run_id:
+        baseline = service.get_run(baseline_run_id)
+        if baseline is None:
+            raise HTTPException(status_code=404, detail="Baseline run not found")
+    return compare_run_quality(detail, baseline=baseline)

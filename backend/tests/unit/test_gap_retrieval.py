@@ -2,9 +2,15 @@ from packages.enterprise import EnterpriseMemoryStore
 from packages.rag import (
     chunk_evidence,
     decorate_evidence_gap_report_with_retrieval,
+    fill_evidence_gaps,
     retrieve_gap_candidates,
 )
-from packages.schema.enterprise import EvidenceGapItem, EvidenceGapReport, EvidenceRecord
+from packages.schema.enterprise import (
+    EvidenceGapItem,
+    EvidenceGapReport,
+    EvidenceRecord,
+    ReportVersionRecord,
+)
 
 
 def test_gap_retrieval_decorates_report_with_candidate_evidence() -> None:
@@ -167,3 +173,75 @@ def test_gap_retrieval_uses_chunk_level_reranking_and_dedupes_evidence() -> None
     assert len(context.records) == 1
     assert context.records[0].chunk_index >= 0
     assert "audit logs" in context.records[0].snippet.casefold()
+
+
+def test_gap_fill_writes_candidates_back_to_report_version() -> None:
+    store = EnterpriseMemoryStore()
+    store.upsert_evidence(
+        EvidenceRecord(
+            id="evidence-trust-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="trust-1",
+            competitor_id="cursor",
+            dimension="security",
+            source_type="webpage_verified",
+            title="Cursor trust center",
+            snippet="Cursor trust center describes SOC 2, SSO, audit logs, and security controls.",
+            content_hash="trusthash",
+            reliability_score=0.96,
+        )
+    )
+    source_version = store.upsert_report_version(
+        ReportVersionRecord(
+            id="report-v1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            version_number=1,
+            topic_normalized="cursor-security",
+            competitor_layer="L1",
+            competitor_set_hash="competitors-hash",
+            report_md="# Report\n\nCursor security needs more evidence.",
+            evidence_ids=[],
+        )
+    )
+    report = EvidenceGapReport(
+        project_id="project-1",
+        scenario_id="enterprise_risk_review",
+        gap_count=1,
+        medium_count=1,
+        gaps=[
+            EvidenceGapItem(
+                id="gap-security",
+                severity="medium",
+                gap_type="missing_verified_source",
+                competitor_id="cursor",
+                competitor_name="Cursor",
+                dimension="security",
+                source_type_required="webpage_verified",
+                message="Security needs a verified source.",
+                recommended_query="Cursor SOC 2 SSO audit logs trust center",
+            )
+        ],
+    )
+
+    result = fill_evidence_gaps(
+        report,
+        store=store,
+        workspace_id="workspace-1",
+        project_id="project-1",
+        source_report_version=source_version,
+    )
+
+    assert result.filled_gap_count == 1
+    assert result.added_evidence_count == 1
+    assert result.candidate_evidence_ids == ["evidence-trust-1"]
+    assert result.updated_report_version is not None
+    assert result.updated_report_version.parent_version_id == "report-v1"
+    assert result.updated_report_version.version_number == 2
+    assert result.updated_report_version.evidence_ids == ["evidence-trust-1"]
+    assert result.updated_report_version.quality_metadata["rag_gap_fill"][
+        "filled_gap_ids"
+    ] == ["gap-security"]
+    assert "## RAG Gap Fill" in result.updated_report_version.report_md
+    assert store.get_report_version(result.updated_report_version.id) is not None

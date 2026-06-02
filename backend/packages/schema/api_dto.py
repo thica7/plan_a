@@ -213,6 +213,37 @@ class RunDetail(RunSummary):
     current_node: str | None = None
 
 
+class RunQualityMetric(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    target_value: float
+    baseline_value: float | None = None
+    delta: float | None = None
+    weight: float = Field(default=0.0, ge=0.0, le=1.0)
+    direction: Literal["higher_is_better", "lower_is_better"] = "higher_is_better"
+    status: Literal["improved", "regressed", "unchanged", "baseline_missing"]
+
+
+class RunQualityComparison(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_run_id: str
+    baseline_run_id: str | None = None
+    target_execution_mode: Literal["demo", "real"]
+    baseline_execution_mode: Literal["demo", "real"] | None = None
+    target_score: int = Field(ge=0, le=100)
+    baseline_score: int | None = Field(default=None, ge=0, le=100)
+    delta_score: int | None = None
+    verdict: Literal["pass", "warn", "fail"]
+    real_collection_signal: bool = False
+    real_llm_signal: bool = False
+    report_quality_signal: bool = False
+    metrics: list[RunQualityMetric] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class RuntimeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

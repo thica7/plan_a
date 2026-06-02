@@ -1,3 +1,4 @@
+import packages.agents.pydantic_ai_adapter as pydantic_ai_adapter
 from packages.agents.executor import AgentExecutionRequest
 from packages.business_intel import (
     analyze_evidence_gaps,
@@ -757,6 +758,64 @@ async def test_pydantic_ai_agent_can_execute_through_test_model_runtime() -> Non
     assert result.metadata["execution_mode"] == "pydantic_ai_test_model_backed"
     assert result.metadata["pydantic_ai_model_backed_requested"] is True
     assert result.metadata["pydantic_ai_runtime_result_type"] == "AgentRunResult"
+    assert result.payload["gap_count"] >= 1
+
+
+async def test_pydantic_ai_model_backed_path_falls_back_with_typed_metadata(monkeypatch) -> None:
+    class FailingAgent:
+        async def run(self, prompt: str):
+            assert "Output JSON schema" in prompt
+            raise RuntimeError("provider timeout")
+
+    monkeypatch.setattr(
+        pydantic_ai_adapter,
+        "_load_pydantic_ai_agent_class_name",
+        lambda: ("Agent", True),
+    )
+    monkeypatch.setattr(
+        pydantic_ai_adapter,
+        "_create_pydantic_ai_agent",
+        lambda **kwargs: FailingAgent(),
+    )
+    plan = build_business_intel_plan(
+        topic="Cursor vs Copilot pricing comparison",
+        competitors=["Cursor", "Copilot"],
+        dimensions=["pricing"],
+        requested_scenario_id="l1_pricing_pack",
+    )
+    evaluation = evaluate_business_qa(
+        project_id="project-1",
+        plan=plan,
+        competitors=[_competitor()],
+        evidence=[],
+        claims=[],
+    )
+
+    result = await build_evidence_gap_agent().execute(
+        AgentExecutionRequest(
+            run_id="run-1",
+            agent_name="evidence_gap",
+            context={
+                "pydantic_ai_execution_mode": "model_backed",
+                "pydantic_ai_model": "openai:test-model",
+            },
+            payload={
+                "project_id": "project-1",
+                "plan": plan.model_dump(mode="json"),
+                "qa_evaluation": evaluation.model_dump(mode="json"),
+                "competitors": [_competitor().model_dump(mode="json")],
+                "evidence": [],
+                "claims": [],
+            },
+        )
+    )
+
+    assert result.status == "ok"
+    assert result.metadata["execution_mode"] == "pydantic_ai_model_backed_fallback"
+    assert result.metadata["pydantic_ai_model_backed_requested"] is True
+    assert result.metadata["pydantic_ai_model_backed_fallback"] is True
+    assert result.metadata["pydantic_ai_model_backed_error"] == "provider timeout"
+    assert result.metadata["typed_contract_enforced"] is True
     assert result.payload["gap_count"] >= 1
 
 

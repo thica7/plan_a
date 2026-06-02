@@ -637,6 +637,24 @@ class EvidenceGapReport(BaseModel):
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class EvidenceGapFillResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    workspace_id: str
+    source_report_version_id: str | None = None
+    updated_report_version_id: str | None = None
+    gap_count: int = Field(ge=0)
+    filled_gap_count: int = Field(ge=0)
+    added_evidence_count: int = Field(ge=0)
+    candidate_evidence_ids: list[str] = Field(default_factory=list)
+    filled_gap_ids: list[str] = Field(default_factory=list)
+    remaining_gap_ids: list[str] = Field(default_factory=list)
+    report: EvidenceGapReport
+    updated_report_version: ReportVersionRecord | None = None
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class RedTeamFinding(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

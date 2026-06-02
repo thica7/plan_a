@@ -56,10 +56,32 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
     async def execute(self, request: AgentExecutionRequest) -> AgentExecutionResult:
         start = time.perf_counter()
         agent_input = self.input_type.model_validate(request.payload)
-        output, execution_mode, runtime_result_type = await self._execute_typed(
+        output, execution_mode, runtime_result_type, runtime_metadata = await self._execute_typed(
             agent_input,
             request.context,
         )
+        metadata = {
+            "framework": "pydantic-ai",
+            "pydantic_ai_available": self.pydantic_ai_available,
+            "pydantic_ai_agent_class": self._agent_class_name,
+            "pydantic_ai_runtime_agent_created": self._runtime_agent is not None,
+            "pydantic_ai_runtime_agent_class": type(self._runtime_agent).__name__
+            if self._runtime_agent is not None
+            else None,
+            "pydantic_ai_model_backed_capable": self.pydantic_ai_available,
+            "pydantic_ai_model_backed_requested": _model_backed_requested(request.context),
+            "pydantic_ai_model_backed_fallback": execution_mode.endswith("_fallback"),
+            "pydantic_ai_runtime_result_type": runtime_result_type,
+            "system_prompt": self.system_prompt,
+            "system_prompt_hash": self._system_prompt_hash,
+            "input_schema": self.input_type.__name__,
+            "output_schema": self.output_type.__name__,
+            "input_schema_hash": self._input_schema_hash,
+            "output_schema_hash": self._output_schema_hash,
+            "execution_mode": execution_mode,
+            "typed_contract_enforced": True,
+        }
+        metadata.update(runtime_metadata)
         return AgentExecutionResult(
             run_id=request.run_id,
             agent_name=self.name,
@@ -69,35 +91,14 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
             payload=output.model_dump(mode="json"),
             duration_ms=max(0, int((time.perf_counter() - start) * 1000)),
             trace_span_ids=list(request.trace_span_ids),
-            metadata={
-                "framework": "pydantic-ai",
-                "pydantic_ai_available": self.pydantic_ai_available,
-                "pydantic_ai_agent_class": self._agent_class_name,
-                "pydantic_ai_runtime_agent_created": self._runtime_agent is not None,
-                "pydantic_ai_runtime_agent_class": type(self._runtime_agent).__name__
-                if self._runtime_agent is not None
-                else None,
-                "pydantic_ai_model_backed_capable": self.pydantic_ai_available,
-                "pydantic_ai_model_backed_requested": _model_backed_requested(
-                    request.context
-                ),
-                "pydantic_ai_runtime_result_type": runtime_result_type,
-                "system_prompt": self.system_prompt,
-                "system_prompt_hash": self._system_prompt_hash,
-                "input_schema": self.input_type.__name__,
-                "output_schema": self.output_type.__name__,
-                "input_schema_hash": self._input_schema_hash,
-                "output_schema_hash": self._output_schema_hash,
-                "execution_mode": execution_mode,
-                "typed_contract_enforced": True,
-            },
+            metadata=metadata,
         )
 
     async def _execute_typed(
         self,
         agent_input: InputT,
         context: dict[str, Any],
-    ) -> tuple[OutputT, str, str | None]:
+    ) -> tuple[OutputT, str, str | None, dict[str, Any]]:
         mode = str(context.get("pydantic_ai_execution_mode") or "").strip().lower()
         if mode == "test_model":
             deterministic_output = self.output_type.model_validate(self._handler(agent_input))
@@ -109,12 +110,23 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
                 model=model,
             )
             if runtime_agent is not None:
-                result = await runtime_agent.run(_runtime_prompt(agent_input))
-                return (
-                    self.output_type.model_validate(result.output),
-                    "pydantic_ai_test_model_backed",
-                    type(result).__name__,
-                )
+                try:
+                    result = await runtime_agent.run(
+                        _runtime_prompt(agent_input, self.output_type)
+                    )
+                    return (
+                        _validate_runtime_output(result, self.output_type),
+                        "pydantic_ai_test_model_backed",
+                        type(result).__name__,
+                        {},
+                    )
+                except Exception as exc:  # noqa: BLE001 - typed fallback is intentional.
+                    return (
+                        deterministic_output,
+                        "pydantic_ai_test_model_fallback",
+                        None,
+                        {"pydantic_ai_test_model_error": _safe_error(exc)},
+                    )
         if mode == "model_backed":
             model = context.get("pydantic_ai_model") or self._model
             if model and self.pydantic_ai_available:
@@ -125,16 +137,28 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
                     model=model,
                 )
                 if runtime_agent is not None:
-                    result = await runtime_agent.run(_runtime_prompt(agent_input))
-                    return (
-                        self.output_type.model_validate(result.output),
-                        "pydantic_ai_model_backed",
-                        type(result).__name__,
-                    )
+                    try:
+                        result = await runtime_agent.run(
+                            _runtime_prompt(agent_input, self.output_type)
+                        )
+                        return (
+                            _validate_runtime_output(result, self.output_type),
+                            "pydantic_ai_model_backed",
+                            type(result).__name__,
+                            {},
+                        )
+                    except Exception as exc:  # noqa: BLE001 - preserve product availability.
+                        return (
+                            self.output_type.model_validate(self._handler(agent_input)),
+                            "pydantic_ai_model_backed_fallback",
+                            None,
+                            {"pydantic_ai_model_backed_error": _safe_error(exc)},
+                        )
         return (
             self.output_type.model_validate(self._handler(agent_input)),
             "deterministic_handler",
             None,
+            {},
         )
 
 
@@ -184,11 +208,35 @@ def _create_test_model(output: BaseModel) -> object | None:
     return TestModel(custom_output_args=output.model_dump(mode="json"))
 
 
-def _runtime_prompt(agent_input: BaseModel) -> str:
-    return (
-        "Validate and return the structured output for this typed agent input:\n"
-        + agent_input.model_dump_json()
+def _runtime_prompt(agent_input: BaseModel, output_type: type[BaseModel]) -> str:
+    output_schema = json.dumps(
+        output_type.model_json_schema(),
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
     )
+    return (
+        "Execute this typed business-intelligence agent. Return only structured "
+        "output that validates against the JSON schema. Do not include markdown.\n"
+        f"Output JSON schema:\n{output_schema}\n"
+        f"Typed agent input:\n{agent_input.model_dump_json()}"
+    )
+
+
+def _validate_runtime_output(result: object, output_type: type[OutputT]) -> OutputT:
+    output = getattr(result, "output", getattr(result, "data", result))
+    if isinstance(output, output_type):
+        return output
+    if isinstance(output, BaseModel):
+        return output_type.model_validate(output.model_dump(mode="json"))
+    if isinstance(output, str):
+        return output_type.model_validate_json(output)
+    return output_type.model_validate(output)
+
+
+def _safe_error(exc: Exception) -> str:
+    message = " ".join(str(exc).split())
+    return message[:240]
 
 
 def _model_backed_requested(context: dict[str, Any]) -> bool:
