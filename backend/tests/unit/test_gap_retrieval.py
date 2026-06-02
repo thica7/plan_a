@@ -1,16 +1,21 @@
+import pytest
+
 from packages.enterprise import EnterpriseMemoryStore
 from packages.rag import (
     chunk_evidence,
     decorate_evidence_gap_report_with_retrieval,
     fill_evidence_gaps,
+    fill_evidence_gaps_online,
     retrieve_gap_candidates,
 )
+from packages.search import SearchResult
 from packages.schema.enterprise import (
     EvidenceGapItem,
     EvidenceGapReport,
     EvidenceRecord,
     ReportVersionRecord,
 )
+from packages.tools import FetchPageResult
 
 
 def test_gap_retrieval_decorates_report_with_candidate_evidence() -> None:
@@ -245,3 +250,91 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
     ] == ["gap-security"]
     assert "## RAG Gap Fill" in result.updated_report_version.report_md
     assert store.get_report_version(result.updated_report_version.id) is not None
+
+
+@pytest.mark.asyncio
+async def test_online_gap_fill_collects_evidence_then_links_report_version() -> None:
+    store = EnterpriseMemoryStore()
+    source_version = store.upsert_report_version(
+        ReportVersionRecord(
+            id="report-online-v1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            version_number=1,
+            topic_normalized="cursor-security",
+            competitor_layer="L1",
+            competitor_set_hash="competitors-hash",
+            report_md="# Report\n\nCursor security has an evidence gap.",
+            evidence_ids=[],
+        )
+    )
+    report = EvidenceGapReport(
+        project_id="project-1",
+        scenario_id="enterprise_risk_review",
+        gap_count=1,
+        high_count=1,
+        gaps=[
+            EvidenceGapItem(
+                id="gap-online-security",
+                severity="high",
+                gap_type="missing_verified_source",
+                competitor_id="cursor",
+                competitor_name="Cursor",
+                dimension="security",
+                source_type_required="webpage_verified",
+                message="Security needs a verified source.",
+                recommended_query="Cursor SOC 2 SSO audit logs trust center",
+            )
+        ],
+    )
+
+    async def fake_search(query: str, max_results: int) -> list[SearchResult]:
+        assert "Cursor SOC 2" in query
+        assert max_results == 3
+        return [
+            SearchResult(
+                title="Cursor trust center",
+                url="https://cursor.example/trust",
+                snippet="Cursor trust center covers SOC 2, SSO, audit logs, and security controls.",
+            )
+        ]
+
+    async def fake_fetch(url: str) -> FetchPageResult:
+        assert url == "https://cursor.example/trust"
+        return FetchPageResult(
+            url=url,
+            ok=True,
+            title="Cursor trust center",
+            text=(
+                "Cursor trust center covers SOC 2, enterprise SSO, audit logs, "
+                "data controls, and security controls for enterprise customers."
+            ),
+            content_hash="onlinehash",
+            status_code=200,
+        )
+
+    result = await fill_evidence_gaps_online(
+        report,
+        store=store,
+        workspace_id="workspace-1",
+        project_id="project-1",
+        source_report_version=source_version,
+        search=fake_search,
+        fetch=fake_fetch,
+    )
+
+    evidence_items = store.list_evidence(project_id="project-1")
+    assert len(evidence_items) == 1
+    [evidence] = evidence_items
+    assert evidence.source_type == "webpage_verified"
+    assert evidence.metadata["online_gap_fill"] is True
+    assert evidence.metadata["gap_id"] == "gap-online-security"
+    assert "SOC 2" in evidence.metadata["full_text"]
+    assert result.filled_gap_count == 1
+    assert result.added_evidence_count == 1
+    assert result.candidate_evidence_ids == [evidence.id]
+    assert result.updated_report_version is not None
+    metadata = result.updated_report_version.quality_metadata["rag_gap_fill"]
+    assert metadata["online_collected_evidence_ids"] == [evidence.id]
+    assert metadata["online_failures"] == []
+    assert result.updated_report_version.evidence_ids == [evidence.id]

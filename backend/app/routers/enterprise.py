@@ -1,3 +1,4 @@
+import hashlib
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Annotated
@@ -36,7 +37,12 @@ from packages.business_intel import (
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore, build_report_version_diff
 from packages.governance import ModelPolicyReport, build_model_policy_report
-from packages.rag import decorate_evidence_gap_report_with_retrieval, fill_evidence_gaps
+from packages.rag import (
+    decorate_evidence_gap_report_with_retrieval,
+    fill_evidence_gaps,
+    fill_evidence_gaps_online,
+)
+from packages.search import PerplexitySearchClient
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
     ArtifactCreateResult,
@@ -74,6 +80,13 @@ from packages.schema.enterprise import (
     WorkspaceQuotaUpdateRequest,
     WorkspaceRecord,
     WorkspaceUsageSummary,
+)
+from packages.tools import (
+    FetchPageResult,
+    WebSearchRequest,
+    fetch_page,
+    robots_check,
+    web_search,
 )
 
 router = APIRouter()
@@ -407,6 +420,37 @@ async def fill_project_evidence_gaps(
     report = await get_project_evidence_gaps(project_id, store, user, settings)
     versions = store.list_report_versions(project_id=project_id)
     source_version = versions[0] if versions else None
+    if settings.has_web_search_credentials:
+        search_client = PerplexitySearchClient(settings)
+
+        async def search_online(query: str, max_results: int):
+            return await web_search(
+                search_client,
+                WebSearchRequest(query=query, max_results=max_results),
+            )
+
+        async def fetch_with_robots(url: str) -> FetchPageResult:
+            robots = await robots_check(url)
+            if not robots.allowed:
+                return FetchPageResult(
+                    url=url,
+                    ok=False,
+                    title="",
+                    text="",
+                    content_hash=hashlib.sha256(f"robots:{url}".encode()).hexdigest()[:16],
+                    error=f"Blocked by robots.txt at {robots.robots_url}",
+                )
+            return await fetch_page(url)
+
+        return await fill_evidence_gaps_online(
+            report,
+            store=store,
+            workspace_id=project.workspace_id,
+            project_id=project_id,
+            source_report_version=source_version,
+            search=search_online,
+            fetch=fetch_with_robots,
+        )
     return fill_evidence_gaps(
         report,
         store=store,

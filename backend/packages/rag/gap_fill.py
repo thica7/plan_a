@@ -1,22 +1,42 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Protocol
 
-from packages.rag.gap_retrieval import EvidenceRetriever, decorate_evidence_gap_report_with_retrieval
+from packages.identity import (
+    compute_content_hash,
+    compute_evidence_id,
+    normalize_dimension_key,
+    normalize_url,
+)
+from packages.rag.gap_retrieval import (
+    EvidenceRetriever,
+    build_gap_retrieval_query,
+    decorate_evidence_gap_report_with_retrieval,
+)
+from packages.search import SearchResult
 from packages.schema.enterprise import (
     EvidenceGapFillResult,
     EvidenceGapItem,
     EvidenceGapReport,
+    EvidenceRecord,
     ReportVersionRecord,
 )
+from packages.tools import FetchPageResult
 
 
 class GapFillStore(EvidenceRetriever, Protocol):
     def list_report_versions(self, project_id: str | None = None) -> list[ReportVersionRecord]: ...
 
+    def upsert_evidence(self, evidence: EvidenceRecord) -> EvidenceRecord: ...
+
     def upsert_report_version(self, version: ReportVersionRecord) -> ReportVersionRecord: ...
+
+
+OnlineSearch = Callable[[str, int], Awaitable[list[SearchResult]]]
+OnlineFetch = Callable[[str], Awaitable[FetchPageResult]]
 
 
 def fill_evidence_gaps(
@@ -36,6 +56,103 @@ def fill_evidence_gaps(
         project_id=project_id,
         limit=limit,
     )
+    return _finalize_gap_fill(
+        decorated,
+        store=store,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        source_report_version=source_report_version,
+    )
+
+
+async def fill_evidence_gaps_online(
+    report: EvidenceGapReport,
+    *,
+    store: GapFillStore,
+    workspace_id: str,
+    project_id: str | None = None,
+    source_report_version: ReportVersionRecord | None = None,
+    search: OnlineSearch,
+    fetch: OnlineFetch,
+    limit: int = 3,
+    max_search_results: int = 3,
+    max_fetches_per_gap: int = 2,
+) -> EvidenceGapFillResult:
+    project_id = project_id or report.project_id
+    decorated = decorate_evidence_gap_report_with_retrieval(
+        report,
+        store=store,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        limit=limit,
+    )
+    online_collected_ids: list[str] = []
+    online_failures: list[dict[str, str]] = []
+    for gap in decorated.gaps:
+        if gap.retrieval_candidate_ids:
+            continue
+        query = gap.retrieval_query or build_gap_retrieval_query(gap)
+        if not query:
+            continue
+        try:
+            results = await search(query, max_search_results)
+        except Exception as exc:  # noqa: BLE001 - online fill should degrade to local RAG.
+            online_failures.append({"gap_id": gap.id, "stage": "search", "error": str(exc)})
+            continue
+        for result in _unique_search_results(results)[:max_fetches_per_gap]:
+            try:
+                fetched = await fetch(result.url)
+            except Exception as exc:  # noqa: BLE001 - keep remaining search results usable.
+                online_failures.append(
+                    {
+                        "gap_id": gap.id,
+                        "stage": "fetch",
+                        "url": result.url,
+                        "error": str(exc),
+                    }
+                )
+                continue
+            evidence = _online_evidence_from_gap(
+                gap=gap,
+                result=result,
+                fetched=fetched,
+                workspace_id=workspace_id,
+                project_id=project_id,
+                query=query,
+            )
+            if evidence is None:
+                continue
+            stored = store.upsert_evidence(evidence)
+            online_collected_ids.append(stored.id)
+    if online_collected_ids:
+        decorated = decorate_evidence_gap_report_with_retrieval(
+            decorated,
+            store=store,
+            workspace_id=workspace_id,
+            project_id=project_id,
+            limit=limit,
+        )
+    return _finalize_gap_fill(
+        decorated,
+        store=store,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        source_report_version=source_report_version,
+        online_collected_evidence_ids=_unique_ids(online_collected_ids),
+        online_failures=online_failures,
+    )
+
+
+def _finalize_gap_fill(
+    decorated: EvidenceGapReport,
+    *,
+    store: GapFillStore,
+    workspace_id: str,
+    project_id: str,
+    source_report_version: ReportVersionRecord | None,
+    online_collected_evidence_ids: list[str] | None = None,
+    online_failures: list[dict[str, str]] | None = None,
+) -> EvidenceGapFillResult:
     updated_gaps, filled_gap_ids, candidate_ids = _filled_gaps(decorated.gaps)
     updated_report = decorated.model_copy(update={"gaps": updated_gaps})
     remaining_gap_ids = [gap.id for gap in updated_gaps if not gap.evidence_ids]
@@ -47,6 +164,8 @@ def fill_evidence_gaps(
             candidate_ids=candidate_ids,
             filled_gap_ids=filled_gap_ids,
             remaining_gap_ids=remaining_gap_ids,
+            online_collected_evidence_ids=online_collected_evidence_ids or [],
+            online_failures=online_failures or [],
         )
         if source_report_version is not None
         else None
@@ -65,6 +184,87 @@ def fill_evidence_gaps(
         report=updated_report,
         updated_report_version=updated_version,
     )
+
+
+def _unique_search_results(results: list[SearchResult]) -> list[SearchResult]:
+    seen: set[str] = set()
+    unique: list[SearchResult] = []
+    for result in results:
+        url_key = normalize_url(result.url)
+        if not url_key or url_key in seen:
+            continue
+        seen.add(url_key)
+        unique.append(result)
+    return unique
+
+
+def _online_evidence_from_gap(
+    *,
+    gap: EvidenceGapItem,
+    result: SearchResult,
+    fetched: FetchPageResult,
+    workspace_id: str,
+    project_id: str,
+    query: str,
+) -> EvidenceRecord | None:
+    source_type = "webpage_verified" if fetched.ok else "web_search_result"
+    if gap.source_type_required and not _source_type_matches(gap.source_type_required, source_type):
+        return None
+    source_url = normalize_url(fetched.url if fetched.ok else result.url)
+    if not source_url:
+        return None
+    title = (fetched.title if fetched.ok and fetched.title else result.title).strip() or source_url
+    full_text = fetched.text.strip() if fetched.ok else ""
+    snippet = _best_snippet(full_text, result.snippet)
+    content_basis = full_text or result.snippet or title or source_url
+    content_hash = fetched.content_hash if fetched.ok else compute_content_hash(content_basis)[:16]
+    competitor_id = (gap.competitor_id or gap.competitor_name or "unknown").strip()
+    dimension = normalize_dimension_key(gap.dimension or "general")
+    evidence_id = compute_evidence_id(source_url, content_hash, competitor_id, dimension)
+    return EvidenceRecord(
+        id=evidence_id,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        run_id=None,
+        raw_source_id=f"online-gap-{hashlib.sha256(f'{gap.id}|{source_url}'.encode()).hexdigest()[:16]}",
+        competitor_id=competitor_id,
+        dimension=dimension,
+        source_type=source_type,
+        title=title[:240],
+        url=source_url,
+        canonical_url=source_url,
+        snippet=snippet,
+        content_hash=content_hash,
+        reliability_score=0.82 if fetched.ok else 0.64,
+        freshness_score=0.75,
+        quality_label="unreviewed",
+        metadata={
+            "online_gap_fill": True,
+            "gap_id": gap.id,
+            "query": query,
+            "recommended_query": gap.recommended_query,
+            "search_title": result.title,
+            "search_snippet": result.snippet,
+            "search_date": result.date,
+            "search_last_updated": result.last_updated,
+            "fetch_ok": fetched.ok,
+            "fetch_status_code": fetched.status_code,
+            "fetch_error": fetched.error,
+            "full_text": full_text[:12000],
+        },
+    )
+
+
+def _best_snippet(full_text: str, fallback: str) -> str:
+    text = full_text or fallback
+    return " ".join(text.split())[:700]
+
+
+def _source_type_matches(required: str, actual: str) -> bool:
+    required_value = required.casefold().strip()
+    if not required_value or required_value in {"any", "any usable source"}:
+        return True
+    return required_value == actual.casefold().strip()
 
 
 def _filled_gaps(
@@ -96,6 +296,8 @@ def _write_gap_fill_report_version(
     candidate_ids: list[str],
     filled_gap_ids: list[str],
     remaining_gap_ids: list[str],
+    online_collected_evidence_ids: list[str],
+    online_failures: list[dict[str, str]],
 ) -> ReportVersionRecord:
     metadata = dict(source.quality_metadata)
     metadata["rag_gap_fill"] = {
@@ -103,6 +305,8 @@ def _write_gap_fill_report_version(
         "filled_gap_ids": filled_gap_ids,
         "remaining_gap_ids": remaining_gap_ids,
         "candidate_evidence_ids": candidate_ids,
+        "online_collected_evidence_ids": online_collected_evidence_ids,
+        "online_failures": online_failures,
         "retrieval_records": [
             record.model_dump(mode="json")
             for gap in report.gaps

@@ -4,7 +4,7 @@ from packages.rag.gap_retrieval import (
     decorate_evidence_gap_report_with_retrieval,
     retrieve_gap_candidates,
 )
-from packages.rag.gap_fill import fill_evidence_gaps
+from packages.rag.gap_fill import fill_evidence_gaps, fill_evidence_gaps_online
 from packages.rag.retriever import grounded_context, retrieve_grounded_context
 
 __all__ = [
@@ -13,6 +13,7 @@ __all__ = [
     "chunk_evidence",
     "decorate_evidence_gap_report_with_retrieval",
     "fill_evidence_gaps",
+    "fill_evidence_gaps_online",
     "grounded_context",
     "retrieve_gap_candidates",
     "retrieve_grounded_context",
