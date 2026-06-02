@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from app.events import RunEvent
+from packages.paths import runtime_path
 from packages.schema.api_dto import RunDetail
 
 
@@ -19,7 +20,7 @@ class RunJournal:
 
     @classmethod
     def from_default_path(cls) -> RunJournal:
-        return cls(Path("runs") / "run_journal.db")
+        return cls(runtime_path("runs", "run_journal.db"))
 
     @classmethod
     def in_memory(cls) -> RunJournal:

@@ -83,6 +83,7 @@ export function NewRun() {
     setError(null);
     try {
       const run = await createRun({
+        idempotency_key: newRunIdempotencyKey(),
         topic,
         competitors: competitorList,
         dimensions: selected,
@@ -317,4 +318,11 @@ function mergeDimensions(current: string[], required: string[], optional: string
     if (merged.length >= 8) break;
   }
   return merged;
+}
+
+function newRunIdempotencyKey() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `ui-run:${crypto.randomUUID()}`;
+  }
+  return `ui-run:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
 }

@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from packages.paths import runtime_path
 from packages.schema.models import AgentMessage, ToolCallMessage, TraceSpan
 
 
@@ -18,7 +19,7 @@ class TraceStore:
 
     @classmethod
     def from_default_path(cls) -> TraceStore:
-        return cls(Path("runs") / "traces.db")
+        return cls(runtime_path("runs", "traces.db"))
 
     @classmethod
     def in_memory(cls) -> TraceStore:

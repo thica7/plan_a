@@ -1,5 +1,6 @@
 .env
 runs/
+data/runtime/
 logs/
 backups/
 .claude/

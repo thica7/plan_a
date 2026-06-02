@@ -5,6 +5,8 @@ from typing import Any
 
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+from packages.paths import runtime_path
+
 
 class GraphCheckpointer:
     def __init__(self, db_path: Path) -> None:
@@ -16,7 +18,7 @@ class GraphCheckpointer:
 
     @classmethod
     def from_default_path(cls) -> GraphCheckpointer:
-        return cls(Path("runs") / "graph_checkpoints.db")
+        return cls(runtime_path("runs", "graph_checkpoints.db"))
 
     @classmethod
     def in_memory(cls) -> GraphCheckpointer:

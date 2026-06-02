@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.deps import get_app_settings, get_temporal_workflow_service
+from app.deps import get_app_settings, get_run_service, get_temporal_workflow_service
 from app.main import create_app
 from packages.config import Settings
+from packages.enterprise import EnterpriseMemoryStore
+from packages.orchestrator.service import RunService
 from packages.schema.api_dto import (
     MonitorStartRequest,
     MonitorStartResponse,
@@ -18,6 +20,7 @@ from packages.schema.api_dto import (
     WorkflowStartResponse,
     WorkflowStateResponse,
 )
+from packages.skills.registry import SkillRegistry
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
 from packages.workflows.monitor import MonitorWorkflow
 from packages.workflows.report_approval import ReportApprovalWorkflow
@@ -408,10 +411,11 @@ def test_runs_router_can_cut_over_to_temporal_backend() -> None:
             self,
             request: RunCreateRequest,
         ) -> WorkflowStartResponse:
+            idempotency_key = request.idempotency_key or "workflow:cutover"
             return WorkflowStartResponse(
                 workflow_id="competitive-intel-cutover",
-                run_id="run-cutover",
-                idempotency_key=request.idempotency_key or "workflow:cutover",
+                run_id=run_id_for_idempotency_key(idempotency_key),
+                idempotency_key=idempotency_key,
                 task_queue="test-queue",
                 status="started",
             )
@@ -421,6 +425,12 @@ def test_runs_router_can_cut_over_to_temporal_backend() -> None:
         run_orchestration_backend="temporal"
     )
     app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    run_service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(run_orchestration_backend="temporal"),
+        enterprise_store=EnterpriseMemoryStore(),
+    )
+    app.dependency_overrides[get_run_service] = lambda: run_service
     client = TestClient(app)
 
     response = client.post(
@@ -438,11 +448,62 @@ def test_runs_router_can_cut_over_to_temporal_backend() -> None:
     assert response.json() == {
         "workflow_id": "competitive-intel-cutover",
         "workflow_type": "CompetitiveIntelWorkflow",
-        "run_id": "run-cutover",
+        "run_id": run_id_for_idempotency_key("route-cutover-001"),
         "idempotency_key": "route-cutover-001",
         "task_queue": "test-queue",
         "status": "started",
     }
+    visible = client.get(f"/api/runs/{run_id_for_idempotency_key('route-cutover-001')}")
+    assert visible.status_code == 200
+    assert visible.json()["status"] == "queued"
+
+
+def test_runs_router_generates_visible_new_run_keys_for_temporal_cutover() -> None:
+    class FakeWorkflowService:
+        async def start_competitive_intel(
+            self,
+            request: RunCreateRequest,
+        ) -> WorkflowStartResponse:
+            assert request.idempotency_key is not None
+            return WorkflowStartResponse(
+                workflow_id=f"competitive-intel-{request.idempotency_key}",
+                run_id=run_id_for_idempotency_key(request.idempotency_key),
+                idempotency_key=request.idempotency_key,
+                task_queue="test-queue",
+                status="started",
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_app_settings] = lambda: _settings(
+        run_orchestration_backend="temporal"
+    )
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    run_service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(run_orchestration_backend="temporal"),
+        enterprise_store=EnterpriseMemoryStore(),
+    )
+    app.dependency_overrides[get_run_service] = lambda: run_service
+    client = TestClient(app)
+    payload = {
+        "topic": "AI coding assistant workflow cutover",
+        "competitors": ["Cursor"],
+        "dimensions": ["pricing"],
+        "execution_mode": "demo",
+    }
+
+    first = client.post("/api/runs", json=payload)
+    second = client.post("/api/runs", json=payload)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    first_body = first.json()
+    second_body = second.json()
+    assert first_body["idempotency_key"].startswith("ui-run:")
+    assert second_body["idempotency_key"].startswith("ui-run:")
+    assert first_body["run_id"] != second_body["run_id"]
+    assert client.get(f"/api/runs/{first_body['run_id']}").status_code == 200
+    assert client.get(f"/api/runs/{second_body['run_id']}").status_code == 200
 
 
 def test_runs_router_blocks_real_temporal_cutover_when_model_policy_denies() -> None:

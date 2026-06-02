@@ -233,6 +233,11 @@ class RunService(
         )
         return detail
 
+    async def ensure_run_visible(self, request: RunCreateRequest) -> RunDetail:
+        detail = await self.create_run(request)
+        self._persist_run(detail.id)
+        return detail
+
     def list_runs(self) -> list[RunSummary]:
         self._refresh_runs_from_journal()
         return [
