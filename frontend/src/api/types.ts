@@ -426,6 +426,33 @@ export interface RunDetail extends RunSummary {
   current_node?: string | null;
 }
 
+export interface RunQualityMetric {
+  name: string;
+  target_value: number;
+  baseline_value?: number | null;
+  delta?: number | null;
+  weight: number;
+  direction: "higher_is_better" | "lower_is_better";
+  status: "improved" | "regressed" | "unchanged" | "baseline_missing";
+}
+
+export interface RunQualityComparison {
+  target_run_id: string;
+  baseline_run_id?: string | null;
+  target_execution_mode: "demo" | "real";
+  baseline_execution_mode?: "demo" | "real" | null;
+  target_score: number;
+  baseline_score?: number | null;
+  delta_score?: number | null;
+  verdict: "pass" | "warn" | "fail";
+  real_collection_signal: boolean;
+  real_llm_signal: boolean;
+  report_quality_signal: boolean;
+  metrics: RunQualityMetric[];
+  recommendations: string[];
+  generated_at: string;
+}
+
 export interface WorkflowStartResponse {
   workflow_id: string;
   workflow_type: "CompetitiveIntelWorkflow";
@@ -775,6 +802,22 @@ export interface EvidenceGapReport {
   agent_name: string;
   framework: "pydantic-ai";
   pydantic_ai_available: boolean;
+  generated_at: string;
+}
+
+export interface EvidenceGapFillResult {
+  project_id: string;
+  workspace_id: string;
+  source_report_version_id?: string | null;
+  updated_report_version_id?: string | null;
+  gap_count: number;
+  filled_gap_count: number;
+  added_evidence_count: number;
+  candidate_evidence_ids: string[];
+  filled_gap_ids: string[];
+  remaining_gap_ids: string[];
+  report: EvidenceGapReport;
+  updated_report_version?: ReportVersionRecord | null;
   generated_at: string;
 }
 

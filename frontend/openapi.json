@@ -119,6 +119,64 @@
         }
       }
     },
+    "/api/runs/{run_id}/quality-comparison": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Get Run Quality Comparison",
+        "operationId": "get_run_quality_comparison_api_runs__run_id__quality_comparison_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "baseline_run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Baseline Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunQualityComparison"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/runs/{run_id}/stream": {
       "get": {
         "tags": [
@@ -665,6 +723,48 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RunComplianceReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/decision-replay": {
+      "get": {
+        "tags": [
+          "trace"
+        ],
+        "summary": "Get Decision Replay",
+        "operationId": "get_decision_replay_api_runs__run_id__decision_replay_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionReplayReport"
                 }
               }
             }
@@ -2312,6 +2412,96 @@
         }
       }
     },
+    "/api/enterprise/projects/{project_id}/claim-validation": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Project Claim Validation",
+        "operationId": "get_project_claim_validation_api_enterprise_projects__project_id__claim_validation_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimValidationReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enterprise/projects/{project_id}/readiness-score": {
       "get": {
         "tags": [
@@ -2582,6 +2772,96 @@
         }
       }
     },
+    "/api/enterprise/projects/{project_id}/evidence-gaps/fill": {
+      "post": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Fill Project Evidence Gaps",
+        "operationId": "fill_project_evidence_gaps_api_enterprise_projects__project_id__evidence_gaps_fill_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceGapFillResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enterprise/projects/{project_id}/red-team": {
       "get": {
         "tags": [
@@ -2655,6 +2935,96 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RedTeamReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enterprise/projects/{project_id}/quality-matrix": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Project Quality Matrix",
+        "operationId": "get_project_quality_matrix_api_enterprise_projects__project_id__quality_matrix_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualityAgentMatrix"
                 }
               }
             }
@@ -5963,6 +6333,184 @@
         ],
         "title": "ClaimRecord"
       },
+      "ClaimValidationIssue": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "claim_id": {
+            "type": "string",
+            "title": "Claim Id"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "warn",
+              "blocker"
+            ],
+            "title": "Severity"
+          },
+          "issue_type": {
+            "type": "string",
+            "enum": [
+              "missing_evidence",
+              "stale_or_rejected_evidence",
+              "weak_text_support",
+              "low_confidence"
+            ],
+            "title": "Issue Type"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "claim_id",
+          "severity",
+          "issue_type",
+          "message"
+        ],
+        "title": "ClaimValidationIssue"
+      },
+      "ClaimValidationReport": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "total_claims": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Claims",
+            "default": 0
+          },
+          "supported_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Supported Count",
+            "default": 0
+          },
+          "weak_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Weak Count",
+            "default": 0
+          },
+          "unsupported_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Unsupported Count",
+            "default": 0
+          },
+          "blocked_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Blocked Count",
+            "default": 0
+          },
+          "issue_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Issue Count",
+            "default": 0
+          },
+          "blocker_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Blocker Count",
+            "default": 0
+          },
+          "warn_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Warn Count",
+            "default": 0
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimValidationResult"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimValidationIssue"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id"
+        ],
+        "title": "ClaimValidationReport"
+      },
+      "ClaimValidationResult": {
+        "properties": {
+          "claim_id": {
+            "type": "string",
+            "title": "Claim Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "weak",
+              "unsupported",
+              "blocked"
+            ],
+            "title": "Status"
+          },
+          "support_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Support Score"
+          },
+          "usable_evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Usable Evidence Ids"
+          },
+          "issue_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issue Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "claim_id",
+          "status",
+          "support_score"
+        ],
+        "title": "ClaimValidationResult"
+      },
       "ComparisonCell": {
         "properties": {
           "competitor": {
@@ -6539,6 +7087,161 @@
         ],
         "title": "ComplianceFinding"
       },
+      "DecisionReplayEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "agent.started",
+              "agent.finished",
+              "tool.called",
+              "rag.retrieved",
+              "memory.recalled",
+              "claim.validated",
+              "qa.blocked",
+              "redo.routed",
+              "benchmark.scored",
+              "report.ready"
+            ],
+            "title": "Event Type"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "subagent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subagent"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "source_event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Event Id"
+          },
+          "related_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Related Span Ids"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          },
+          "claim_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Claim Ids"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "run_id",
+          "event_type",
+          "message",
+          "created_at"
+        ],
+        "title": "DecisionReplayEvent"
+      },
+      "DecisionReplayReport": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "event_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Event Count"
+          },
+          "blocker_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Blocker Count",
+            "default": 0
+          },
+          "warn_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Warn Count",
+            "default": 0
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionReplayEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "event_count"
+        ],
+        "title": "DecisionReplayReport"
+      },
       "EnterpriseRunProjection": {
         "properties": {
           "workspace_id": {
@@ -6580,6 +7283,105 @@
           "report_version"
         ],
         "title": "EnterpriseRunProjection"
+      },
+      "EvidenceGapFillResult": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "source_report_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Report Version Id"
+          },
+          "updated_report_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated Report Version Id"
+          },
+          "gap_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Gap Count"
+          },
+          "filled_gap_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Filled Gap Count"
+          },
+          "added_evidence_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Added Evidence Count"
+          },
+          "candidate_evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Candidate Evidence Ids"
+          },
+          "filled_gap_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Filled Gap Ids"
+          },
+          "remaining_gap_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Remaining Gap Ids"
+          },
+          "report": {
+            "$ref": "#/components/schemas/EvidenceGapReport"
+          },
+          "updated_report_version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportVersionRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "workspace_id",
+          "gap_count",
+          "filled_gap_count",
+          "added_evidence_count",
+          "report"
+        ],
+        "title": "EvidenceGapFillResult"
       },
       "EvidenceGapItem": {
         "properties": {
@@ -6659,6 +7461,30 @@
           "recommended_query": {
             "type": "string",
             "title": "Recommended Query",
+            "default": ""
+          },
+          "retrieval_query": {
+            "type": "string",
+            "title": "Retrieval Query",
+            "default": ""
+          },
+          "retrieval_candidate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Retrieval Candidate Ids"
+          },
+          "retrieval_records": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievalRecord"
+            },
+            "type": "array",
+            "title": "Retrieval Records"
+          },
+          "retrieval_grounded_context": {
+            "type": "string",
+            "title": "Retrieval Grounded Context",
             "default": ""
           },
           "evidence_ids": {
@@ -8256,6 +9082,122 @@
         ],
         "title": "QCIssue"
       },
+      "QualityAgentMatrix": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "blocker"
+            ],
+            "title": "Status"
+          },
+          "overall_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Overall Score"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/QualityAgentMatrixEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "status",
+          "overall_score"
+        ],
+        "title": "QualityAgentMatrix"
+      },
+      "QualityAgentMatrixEntry": {
+        "properties": {
+          "agent_name": {
+            "type": "string",
+            "title": "Agent Name"
+          },
+          "framework": {
+            "type": "string",
+            "title": "Framework"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "blocker"
+            ],
+            "title": "Status"
+          },
+          "score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "blocker_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Blocker Count",
+            "default": 0
+          },
+          "warn_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Warn Count",
+            "default": 0
+          },
+          "finding_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Finding Count",
+            "default": 0
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          },
+          "claim_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Claim Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agent_name",
+          "framework",
+          "status",
+          "score"
+        ],
+        "title": "QualityAgentMatrixEntry"
+      },
       "RawSource": {
         "properties": {
           "id": {
@@ -8986,6 +9928,88 @@
         ],
         "title": "ReportVersionRecord"
       },
+      "RetrievalRecord": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id",
+            "default": ""
+          },
+          "chunk_index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Chunk Index",
+            "default": 0
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "title": "Score"
+          },
+          "vector_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "title": "Vector Score",
+            "default": 0.0
+          },
+          "bm25_score": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Bm25 Score",
+            "default": 0.0
+          },
+          "rerank_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Rerank Score",
+            "default": 0.0
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet",
+            "default": ""
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url",
+            "default": ""
+          },
+          "retrieval_stage": {
+            "type": "string",
+            "title": "Retrieval Stage",
+            "default": "hybrid_rerank"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "score",
+          "title",
+          "source_type",
+          "dimension"
+        ],
+        "title": "RetrievalRecord"
+      },
       "RevisionRecord": {
         "properties": {
           "id": {
@@ -9323,6 +10347,7 @@
               "running",
               "interrupted",
               "completed",
+              "completed_with_blockers",
               "failed"
             ],
             "title": "Status"
@@ -9670,6 +10695,198 @@
         "type": "object",
         "title": "RunMetrics"
       },
+      "RunQualityComparison": {
+        "properties": {
+          "target_run_id": {
+            "type": "string",
+            "title": "Target Run Id"
+          },
+          "baseline_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Run Id"
+          },
+          "target_execution_mode": {
+            "type": "string",
+            "enum": [
+              "demo",
+              "real"
+            ],
+            "title": "Target Execution Mode"
+          },
+          "baseline_execution_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "demo",
+                  "real"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Execution Mode"
+          },
+          "target_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Target Score"
+          },
+          "baseline_score": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Score"
+          },
+          "delta_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta Score"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "title": "Verdict"
+          },
+          "real_collection_signal": {
+            "type": "boolean",
+            "title": "Real Collection Signal",
+            "default": false
+          },
+          "real_llm_signal": {
+            "type": "boolean",
+            "title": "Real Llm Signal",
+            "default": false
+          },
+          "report_quality_signal": {
+            "type": "boolean",
+            "title": "Report Quality Signal",
+            "default": false
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/RunQualityMetric"
+            },
+            "type": "array",
+            "title": "Metrics"
+          },
+          "recommendations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommendations"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target_run_id",
+          "target_execution_mode",
+          "target_score",
+          "verdict"
+        ],
+        "title": "RunQualityComparison"
+      },
+      "RunQualityMetric": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "target_value": {
+            "type": "number",
+            "title": "Target Value"
+          },
+          "baseline_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Value"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "weight": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Weight",
+            "default": 0.0
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "higher_is_better",
+              "lower_is_better"
+            ],
+            "title": "Direction",
+            "default": "higher_is_better"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "improved",
+              "regressed",
+              "unchanged",
+              "baseline_missing"
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "target_value",
+          "status"
+        ],
+        "title": "RunQualityMetric"
+      },
       "RunSummary": {
         "properties": {
           "id": {
@@ -9708,6 +10925,7 @@
               "running",
               "interrupted",
               "completed",
+              "completed_with_blockers",
               "failed"
             ],
             "title": "Status"

@@ -10,6 +10,7 @@ import type {
   ClaimRecord,
   CompetitorRecord,
   EvidenceQualityLabel,
+  EvidenceGapFillResult,
   EvidenceGapReport,
   EvidenceRecord,
   ModelPolicyReport,
@@ -32,6 +33,7 @@ import type {
   ReportVersionRecord,
   RunCreateRequest,
   RunDetail,
+  RunQualityComparison,
   RunSummary,
   RuntimeConfig,
   ScheduledScanStartRequest,
@@ -153,6 +155,11 @@ export function rejectReportWorkflow(
 
 export function getRun(runId: string) {
   return request<RunDetail>(`/runs/${runId}`);
+}
+
+export function getRunQualityComparison(runId: string, baselineRunId?: string) {
+  const params = baselineRunId ? `?baseline_run_id=${encodeURIComponent(baselineRunId)}` : "";
+  return request<RunQualityComparison>(`/runs/${runId}/quality-comparison${params}`);
 }
 
 export function getRunKb(runId: string) {
@@ -330,6 +337,12 @@ export function getProjectCompetitorScores(projectId: string) {
 
 export function getProjectEvidenceGaps(projectId: string) {
   return request<EvidenceGapReport>(`/enterprise/projects/${projectId}/evidence-gaps`);
+}
+
+export function fillProjectEvidenceGaps(projectId: string) {
+  return request<EvidenceGapFillResult>(`/enterprise/projects/${projectId}/evidence-gaps/fill`, {
+    method: "POST",
+  });
 }
 
 export function getProjectRedTeam(projectId: string) {

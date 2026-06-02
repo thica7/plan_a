@@ -19,6 +19,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import {
+  fillProjectEvidenceGaps,
   getProjectEvidenceGaps,
   getProjectBusinessPlan,
   getProjectCompetitorScores,
@@ -45,6 +46,7 @@ import type {
   ClaimRecord,
   CompetitorScoreReport,
   CompetitorRecord,
+  EvidenceGapFillResult,
   EvidenceGapItem,
   EvidenceGapReport,
   EvidenceQualityLabel,
@@ -79,6 +81,7 @@ export function EnterpriseWorkbench({
   const [readinessScore, setReadinessScore] = useState<ProjectReadinessScore | null>(null);
   const [competitorScores, setCompetitorScores] = useState<CompetitorScoreReport | null>(null);
   const [evidenceGaps, setEvidenceGaps] = useState<EvidenceGapReport | null>(null);
+  const [gapFillResult, setGapFillResult] = useState<EvidenceGapFillResult | null>(null);
   const [redTeam, setRedTeam] = useState<RedTeamReport | null>(null);
   const [workspaceUsage, setWorkspaceUsage] = useState<WorkspaceUsageSummary | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
@@ -90,6 +93,7 @@ export function EnterpriseWorkbench({
   const [isLoadingProject, setLoadingProject] = useState(false);
   const [isStartingScan, setStartingScan] = useState(false);
   const [isStartingMonitor, setStartingMonitor] = useState(false);
+  const [isFillingGaps, setFillingGaps] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,6 +134,7 @@ export function EnterpriseWorkbench({
       setReadinessScore(null);
       setCompetitorScores(null);
       setEvidenceGaps(null);
+      setGapFillResult(null);
       setRedTeam(null);
       setWorkspaceUsage(null);
       setSelectedVersionId(null);
@@ -176,6 +181,7 @@ export function EnterpriseWorkbench({
           setReadinessScore(readinessScoreValue);
           setCompetitorScores(competitorScoresValue);
           setEvidenceGaps(evidenceGapsValue);
+          setGapFillResult(null);
           setRedTeam(redTeamValue);
           setWorkspaceUsage(workspaceUsageValue);
           setSelectedVersionId(versionItems[0]?.id ?? null);
@@ -193,6 +199,7 @@ export function EnterpriseWorkbench({
         setReadinessScore(null);
         setCompetitorScores(null);
         setEvidenceGaps(null);
+        setGapFillResult(null);
         setRedTeam(null);
         setWorkspaceUsage(null);
         setSelectedVersionId(null);
@@ -321,6 +328,46 @@ export function EnterpriseWorkbench({
         setError(err.message);
       })
       .finally(() => setStartingMonitor(false));
+  }
+
+  async function handleFillEvidenceGaps() {
+    if (!selectedProjectId) return;
+    const projectId = selectedProjectId;
+    setFillingGaps(true);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const result = await fillProjectEvidenceGaps(projectId);
+      const [
+        evidenceItems,
+        versionItems,
+        qaEvaluationValue,
+        readinessScoreValue,
+        competitorScoresValue,
+        redTeamValue,
+      ] = await Promise.all([
+        listProjectEvidence(projectId),
+        listProjectReportVersions(projectId),
+        getProjectQAEvaluation(projectId),
+        getProjectReadinessScore(projectId),
+        getProjectCompetitorScores(projectId),
+        getProjectRedTeam(projectId),
+      ]);
+      setGapFillResult(result);
+      setEvidenceGaps(result.report);
+      setEvidence(evidenceItems);
+      setVersions(versionItems);
+      setQaEvaluation(qaEvaluationValue);
+      setReadinessScore(readinessScoreValue);
+      setCompetitorScores(competitorScoresValue);
+      setRedTeam(redTeamValue);
+      setSelectedVersionId(result.updated_report_version_id ?? versionItems[0]?.id ?? null);
+      setScanMessage(`Gap fill linked ${result.added_evidence_count} candidate evidence item(s).`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to fill evidence gaps");
+    } finally {
+      setFillingGaps(false);
+    }
   }
 
   function handleQualityChange(evidenceId: string, qualityLabel: EvidenceQualityLabel) {
@@ -485,7 +532,14 @@ export function EnterpriseWorkbench({
 
               {competitorScores ? <CompetitorScorePanel report={competitorScores} /> : null}
 
-              {evidenceGaps ? <EvidenceGapPanel report={evidenceGaps} /> : null}
+              {evidenceGaps ? (
+                <EvidenceGapPanel
+                  fillResult={gapFillResult}
+                  isFilling={isFillingGaps}
+                  onFill={handleFillEvidenceGaps}
+                  report={evidenceGaps}
+                />
+              ) : null}
 
               {redTeam ? <RedTeamPanel report={redTeam} /> : null}
 
@@ -749,13 +803,31 @@ function WorkspaceUsagePanel({ usage }: { usage: WorkspaceUsageSummary }) {
   );
 }
 
-function EvidenceGapPanel({ report }: { report: EvidenceGapReport }) {
+function EvidenceGapPanel({
+  fillResult,
+  isFilling,
+  onFill,
+  report,
+}: {
+  fillResult: EvidenceGapFillResult | null;
+  isFilling: boolean;
+  onFill: () => void;
+  report: EvidenceGapReport;
+}) {
   const status = report.critical_count > 0 ? "critical" : report.high_count > 0 ? "high" : "clear";
   return (
     <section className={`panel evidence-gap-panel ${status}`}>
       <div className="panel-heading-row">
         <h2>Evidence gaps</h2>
-        {status === "clear" ? <CheckCircle2 size={17} aria-hidden /> : <Search size={17} aria-hidden />}
+        <button
+          className="icon-text-button"
+          disabled={isFilling || report.gap_count === 0}
+          type="button"
+          onClick={onFill}
+        >
+          {isFilling ? <RefreshCw className="spin" size={15} aria-hidden /> : <Search size={15} aria-hidden />}
+          {isFilling ? "Filling" : "Fill gaps"}
+        </button>
       </div>
       <div className="evidence-gap-summary">
         <span>
@@ -775,6 +847,26 @@ function EvidenceGapPanel({ report }: { report: EvidenceGapReport }) {
           <em>Medium</em>
         </span>
       </div>
+      {fillResult ? (
+        <div className="evidence-gap-summary">
+          <span>
+            <strong>{fillResult.filled_gap_count}</strong>
+            <em>Filled gaps</em>
+          </span>
+          <span>
+            <strong>{fillResult.added_evidence_count}</strong>
+            <em>Linked candidates</em>
+          </span>
+          <span>
+            <strong>{fillResult.remaining_gap_ids.length}</strong>
+            <em>Remaining</em>
+          </span>
+          <span>
+            <strong>{fillResult.updated_report_version_id ? "yes" : "no"}</strong>
+            <em>Draft version</em>
+          </span>
+        </div>
+      ) : null}
       {report.gaps.length > 0 ? (
         <div className="evidence-gap-list">
           {report.gaps.slice(0, 5).map((gap) => (

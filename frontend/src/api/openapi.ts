@@ -39,6 +39,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{run_id}/quality-comparison": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run Quality Comparison */
+        get: operations["get_run_quality_comparison_api_runs__run_id__quality_comparison_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{run_id}/stream": {
         parameters: {
             query?: never;
@@ -286,6 +303,23 @@ export interface paths {
         };
         /** Get Run Compliance Report */
         get: operations["get_run_compliance_report_api_runs__run_id__compliance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/decision-replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Decision Replay */
+        get: operations["get_decision_replay_api_runs__run_id__decision_replay_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -620,6 +654,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/projects/{project_id}/claim-validation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project Claim Validation */
+        get: operations["get_project_claim_validation_api_enterprise_projects__project_id__claim_validation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/projects/{project_id}/readiness-score": {
         parameters: {
             query?: never;
@@ -671,6 +722,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/projects/{project_id}/evidence-gaps/fill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Fill Project Evidence Gaps */
+        post: operations["fill_project_evidence_gaps_api_enterprise_projects__project_id__evidence_gaps_fill_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/projects/{project_id}/red-team": {
         parameters: {
             query?: never;
@@ -680,6 +748,23 @@ export interface paths {
         };
         /** Get Project Red Team */
         get: operations["get_project_red_team_api_enterprise_projects__project_id__red_team_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/projects/{project_id}/quality-matrix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project Quality Matrix */
+        get: operations["get_project_quality_matrix_api_enterprise_projects__project_id__quality_matrix_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1516,6 +1601,97 @@ export interface components {
              */
             created_at?: string;
         };
+        /** ClaimValidationIssue */
+        ClaimValidationIssue: {
+            /** Id */
+            id: string;
+            /** Claim Id */
+            claim_id: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "warn" | "blocker";
+            /**
+             * Issue Type
+             * @enum {string}
+             */
+            issue_type: "missing_evidence" | "stale_or_rejected_evidence" | "weak_text_support" | "low_confidence";
+            /** Message */
+            message: string;
+            /** Evidence Ids */
+            evidence_ids?: string[];
+        };
+        /** ClaimValidationReport */
+        ClaimValidationReport: {
+            /** Project Id */
+            project_id: string;
+            /**
+             * Total Claims
+             * @default 0
+             */
+            total_claims: number;
+            /**
+             * Supported Count
+             * @default 0
+             */
+            supported_count: number;
+            /**
+             * Weak Count
+             * @default 0
+             */
+            weak_count: number;
+            /**
+             * Unsupported Count
+             * @default 0
+             */
+            unsupported_count: number;
+            /**
+             * Blocked Count
+             * @default 0
+             */
+            blocked_count: number;
+            /**
+             * Issue Count
+             * @default 0
+             */
+            issue_count: number;
+            /**
+             * Blocker Count
+             * @default 0
+             */
+            blocker_count: number;
+            /**
+             * Warn Count
+             * @default 0
+             */
+            warn_count: number;
+            /** Results */
+            results?: components["schemas"]["ClaimValidationResult"][];
+            /** Issues */
+            issues?: components["schemas"]["ClaimValidationIssue"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+        };
+        /** ClaimValidationResult */
+        ClaimValidationResult: {
+            /** Claim Id */
+            claim_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "supported" | "weak" | "unsupported" | "blocked";
+            /** Support Score */
+            support_score: number;
+            /** Usable Evidence Ids */
+            usable_evidence_ids?: string[];
+            /** Issue Ids */
+            issue_ids?: string[];
+        };
         /** ComparisonCell */
         ComparisonCell: {
             /** Competitor */
@@ -1759,6 +1935,67 @@ export interface components {
             /** Recommendation */
             recommendation: string;
         };
+        /** DecisionReplayEvent */
+        DecisionReplayEvent: {
+            /** Id */
+            id: string;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Event Type
+             * @enum {string}
+             */
+            event_type: "agent.started" | "agent.finished" | "tool.called" | "rag.retrieved" | "memory.recalled" | "claim.validated" | "qa.blocked" | "redo.routed" | "benchmark.scored" | "report.ready";
+            /** Agent */
+            agent?: string | null;
+            /** Subagent */
+            subagent?: string | null;
+            /** Message */
+            message: string;
+            /** Source Event Id */
+            source_event_id?: number | null;
+            /** Related Span Ids */
+            related_span_ids?: string[];
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Claim Ids */
+            claim_ids?: string[];
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** DecisionReplayReport */
+        DecisionReplayReport: {
+            /** Run Id */
+            run_id: string;
+            /** Status */
+            status: string;
+            /** Event Count */
+            event_count: number;
+            /**
+             * Blocker Count
+             * @default 0
+             */
+            blocker_count: number;
+            /**
+             * Warn Count
+             * @default 0
+             */
+            warn_count: number;
+            /** Events */
+            events?: components["schemas"]["DecisionReplayEvent"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+        };
         /** EnterpriseRunProjection */
         EnterpriseRunProjection: {
             /** Workspace Id */
@@ -1772,6 +2009,36 @@ export interface components {
             /** Claim Records */
             claim_records?: components["schemas"]["ClaimRecord"][];
             report_version: components["schemas"]["ReportVersionRecord"];
+        };
+        /** EvidenceGapFillResult */
+        EvidenceGapFillResult: {
+            /** Project Id */
+            project_id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Source Report Version Id */
+            source_report_version_id?: string | null;
+            /** Updated Report Version Id */
+            updated_report_version_id?: string | null;
+            /** Gap Count */
+            gap_count: number;
+            /** Filled Gap Count */
+            filled_gap_count: number;
+            /** Added Evidence Count */
+            added_evidence_count: number;
+            /** Candidate Evidence Ids */
+            candidate_evidence_ids?: string[];
+            /** Filled Gap Ids */
+            filled_gap_ids?: string[];
+            /** Remaining Gap Ids */
+            remaining_gap_ids?: string[];
+            report: components["schemas"]["EvidenceGapReport"];
+            updated_report_version?: components["schemas"]["ReportVersionRecord"] | null;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
         };
         /** EvidenceGapItem */
         EvidenceGapItem: {
@@ -1802,6 +2069,20 @@ export interface components {
              * @default
              */
             recommended_query: string;
+            /**
+             * Retrieval Query
+             * @default
+             */
+            retrieval_query: string;
+            /** Retrieval Candidate Ids */
+            retrieval_candidate_ids?: string[];
+            /** Retrieval Records */
+            retrieval_records?: components["schemas"]["RetrievalRecord"][];
+            /**
+             * Retrieval Grounded Context
+             * @default
+             */
+            retrieval_grounded_context: string;
             /** Evidence Ids */
             evidence_ids?: string[];
             /** Claim Ids */
@@ -2486,6 +2767,63 @@ export interface components {
              */
             self_found: boolean;
         };
+        /** QualityAgentMatrix */
+        QualityAgentMatrix: {
+            /** Project Id */
+            project_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "warn" | "blocker";
+            /** Overall Score */
+            overall_score: number;
+            /** Entries */
+            entries?: components["schemas"]["QualityAgentMatrixEntry"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+        };
+        /** QualityAgentMatrixEntry */
+        QualityAgentMatrixEntry: {
+            /** Agent Name */
+            agent_name: string;
+            /** Framework */
+            framework: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "warn" | "blocker";
+            /** Score */
+            score: number;
+            /**
+             * Blocker Count
+             * @default 0
+             */
+            blocker_count: number;
+            /**
+             * Warn Count
+             * @default 0
+             */
+            warn_count: number;
+            /**
+             * Finding Count
+             * @default 0
+             */
+            finding_count: number;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Claim Ids */
+            claim_ids?: string[];
+        };
         /** RawSource */
         RawSource: {
             /** Id */
@@ -2795,6 +3133,59 @@ export interface components {
             created_at?: string;
             /** Published At */
             published_at?: string | null;
+        };
+        /** RetrievalRecord */
+        RetrievalRecord: {
+            /** Evidence Id */
+            evidence_id: string;
+            /**
+             * Chunk Id
+             * @default
+             */
+            chunk_id: string;
+            /**
+             * Chunk Index
+             * @default 0
+             */
+            chunk_index: number;
+            /** Score */
+            score: number;
+            /**
+             * Vector Score
+             * @default 0
+             */
+            vector_score: number;
+            /**
+             * Bm25 Score
+             * @default 0
+             */
+            bm25_score: number;
+            /**
+             * Rerank Score
+             * @default 0
+             */
+            rerank_score: number;
+            /** Title */
+            title: string;
+            /** Source Type */
+            source_type: string;
+            /** Dimension */
+            dimension: string;
+            /**
+             * Snippet
+             * @default
+             */
+            snippet: string;
+            /**
+             * Source Url
+             * @default
+             */
+            source_url: string;
+            /**
+             * Retrieval Stage
+             * @default hybrid_rerank
+             */
+            retrieval_stage: string;
         };
         /** RevisionRecord */
         RevisionRecord: {
@@ -3113,6 +3504,82 @@ export interface components {
              * @default 0
              */
             compliance_redaction_count: number;
+        };
+        /** RunQualityComparison */
+        RunQualityComparison: {
+            /** Target Run Id */
+            target_run_id: string;
+            /** Baseline Run Id */
+            baseline_run_id?: string | null;
+            /**
+             * Target Execution Mode
+             * @enum {string}
+             */
+            target_execution_mode: "demo" | "real";
+            /** Baseline Execution Mode */
+            baseline_execution_mode?: ("demo" | "real") | null;
+            /** Target Score */
+            target_score: number;
+            /** Baseline Score */
+            baseline_score?: number | null;
+            /** Delta Score */
+            delta_score?: number | null;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "pass" | "warn" | "fail";
+            /**
+             * Real Collection Signal
+             * @default false
+             */
+            real_collection_signal: boolean;
+            /**
+             * Real Llm Signal
+             * @default false
+             */
+            real_llm_signal: boolean;
+            /**
+             * Report Quality Signal
+             * @default false
+             */
+            report_quality_signal: boolean;
+            /** Metrics */
+            metrics?: components["schemas"]["RunQualityMetric"][];
+            /** Recommendations */
+            recommendations?: string[];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+        };
+        /** RunQualityMetric */
+        RunQualityMetric: {
+            /** Name */
+            name: string;
+            /** Target Value */
+            target_value: number;
+            /** Baseline Value */
+            baseline_value?: number | null;
+            /** Delta */
+            delta?: number | null;
+            /**
+             * Weight
+             * @default 0
+             */
+            weight: number;
+            /**
+             * Direction
+             * @default higher_is_better
+             * @enum {string}
+             */
+            direction: "higher_is_better" | "lower_is_better";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "improved" | "regressed" | "unchanged" | "baseline_missing";
         };
         /** RunSummary */
         RunSummary: {
@@ -3999,6 +4466,39 @@ export interface operations {
             };
         };
     };
+    get_run_quality_comparison_api_runs__run_id__quality_comparison_get: {
+        parameters: {
+            query?: {
+                baseline_run_id?: string | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunQualityComparison"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     stream_run_api_runs__run_id__stream_get: {
         parameters: {
             query?: never;
@@ -4417,6 +4917,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunComplianceReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_decision_replay_api_runs__run_id__decision_replay_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionReplayReport"];
                 };
             };
             /** @description Validation Error */
@@ -5151,6 +5682,41 @@ export interface operations {
             };
         };
     };
+    get_project_claim_validation_api_enterprise_projects__project_id__claim_validation_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimValidationReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_project_readiness_score_api_enterprise_projects__project_id__readiness_score_get: {
         parameters: {
             query?: never;
@@ -5256,6 +5822,41 @@ export interface operations {
             };
         };
     };
+    fill_project_evidence_gaps_api_enterprise_projects__project_id__evidence_gaps_fill_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceGapFillResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_project_red_team_api_enterprise_projects__project_id__red_team_get: {
         parameters: {
             query?: never;
@@ -5278,6 +5879,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RedTeamReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_quality_matrix_api_enterprise_projects__project_id__quality_matrix_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityAgentMatrix"];
                 };
             };
             /** @description Validation Error */

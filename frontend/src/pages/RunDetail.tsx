@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
-import { getRun, redoRun, resumeRun, subscribeRun } from "../api/client";
+import { getRun, getRunQualityComparison, redoRun, resumeRun, subscribeRun } from "../api/client";
 import { CompetitorDiscoveryView } from "../features/discovery/CompetitorDiscoveryView";
 import { CostPanel } from "../features/cost/CostPanel";
 import { StaticGraphView } from "../features/graph/StaticGraphView";
@@ -15,7 +15,7 @@ import { SwimlaneView } from "../features/swimlane/SwimlaneView";
 import { TraceList } from "../features/trace/TraceList";
 import { TracePlayback } from "../features/trace/TracePlayback";
 import { useRunStore } from "../stores/run";
-import type { ReflectionRecord } from "../api/types";
+import type { ReflectionRecord, RunQualityComparison } from "../api/types";
 
 export function RunDetail() {
   const { runId } = useParams();
@@ -23,6 +23,7 @@ export function RunDetail() {
   const [error, setError] = useState<string | null>(null);
   const [isRedoing, setRedoing] = useState(false);
   const [planDimensions, setPlanDimensions] = useState("");
+  const [qualityComparison, setQualityComparison] = useState<RunQualityComparison | null>(null);
   const redoLimitReached = detail ? detail.revisions.length >= detail.max_iterations : false;
   const latestInterrupt = useMemo(
     () => [...events].reverse().find((event) => event.type === "interrupt"),
@@ -36,6 +37,7 @@ export function RunDetail() {
     let retryTimer: number | undefined;
     let unsubscribe: (() => void) | undefined;
     reset();
+    setQualityComparison(null);
 
     const load = (attempt: number) => {
       getRun(runId)
@@ -43,6 +45,13 @@ export function RunDetail() {
           if (cancelled) return;
           setError(null);
           setDetail(loaded);
+          void getRunQualityComparison(runId)
+            .then((comparison) => {
+              if (!cancelled) setQualityComparison(comparison);
+            })
+            .catch(() => {
+              if (!cancelled) setQualityComparison(null);
+            });
           unsubscribe = subscribeRun(runId, addEvent);
         })
         .catch((err: Error) => {
@@ -71,6 +80,9 @@ export function RunDetail() {
     if (!runId) return;
     if (events.some((event) => ["interrupt", "run_completed", "run_failed"].includes(event.type))) {
       getRun(runId).then(setDetail).catch((err: Error) => setError(err.message));
+      getRunQualityComparison(runId)
+        .then(setQualityComparison)
+        .catch(() => setQualityComparison(null));
     }
   }, [events, runId, setDetail]);
 
@@ -216,6 +228,7 @@ export function RunDetail() {
         <TracePlayback spans={detail.trace_spans} />
         <RevisionDiff revisions={detail.revisions} />
         <CostPanel metrics={detail.metrics} spans={detail.trace_spans} />
+        <RunQualityPanel comparison={qualityComparison} />
         <aside className="qa-panel">
           <div className="panel-heading-row">
             <h2>QA findings</h2>
@@ -272,6 +285,104 @@ export function RunDetail() {
       </div>
     </section>
   );
+}
+
+function RunQualityPanel({ comparison }: { comparison: RunQualityComparison | null }) {
+  if (!comparison) {
+    return (
+      <aside className="qa-panel run-quality-panel">
+        <div className="panel-heading-row">
+          <h2>Run quality</h2>
+          <Loader2 className="spin" size={16} aria-hidden />
+        </div>
+        <p className="muted-text">Loading quality comparison.</p>
+      </aside>
+    );
+  }
+
+  const signalRows = [
+    ["Real collection", comparison.real_collection_signal],
+    ["Real LLM", comparison.real_llm_signal],
+    ["Report quality", comparison.report_quality_signal],
+  ] as const;
+  const highlightedMetrics = comparison.metrics
+    .filter((metric) => metric.status === "regressed" || metric.status === "baseline_missing")
+    .slice(0, 5);
+
+  return (
+    <aside className={`qa-panel run-quality-panel ${comparison.verdict}`}>
+      <div className="panel-heading-row">
+        <h2>Run quality</h2>
+        {comparison.verdict === "pass" ? (
+          <CheckCircle2 size={16} aria-hidden />
+        ) : (
+          <AlertTriangle size={16} aria-hidden />
+        )}
+      </div>
+      <div className="metric-grid compact">
+        <MetricValue label="Score" value={`${comparison.target_score}/100`} />
+        <MetricValue label="Verdict" value={comparison.verdict} />
+        <MetricValue
+          label="Baseline"
+          value={comparison.baseline_score === null || comparison.baseline_score === undefined ? "none" : `${comparison.baseline_score}/100`}
+        />
+        <MetricValue
+          label="Delta"
+          value={comparison.delta_score === null || comparison.delta_score === undefined ? "n/a" : String(comparison.delta_score)}
+        />
+      </div>
+      <div className="run-quality-signals">
+        {signalRows.map(([label, enabled]) => (
+          <span className={enabled ? "on" : "off"} key={label}>
+            {enabled ? <CheckCircle2 size={13} aria-hidden /> : <AlertTriangle size={13} aria-hidden />}
+            {label}
+          </span>
+        ))}
+      </div>
+      {highlightedMetrics.length > 0 ? (
+        <div className="reflection-review">
+          <h3>Watch metrics</h3>
+          {highlightedMetrics.map((metric) => (
+            <article className="issue-row reflection-row" key={metric.name}>
+              <strong>{metric.status.replace(/_/g, " ")}</strong>
+              <span>
+                {metric.name}: {formatQualityValue(metric.target_value)}
+                {metric.baseline_value !== null && metric.baseline_value !== undefined
+                  ? ` / baseline ${formatQualityValue(metric.baseline_value)}`
+                  : ""}
+              </span>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {comparison.recommendations.length > 0 ? (
+        <div className="reflection-review">
+          <h3>Recommendations</h3>
+          {comparison.recommendations.slice(0, 3).map((item) => (
+            <article className="issue-row reflection-row" key={item}>
+              <strong>next</strong>
+              <span>{item}</span>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </aside>
+  );
+}
+
+function MetricValue({ label, value }: { label: string; value: string }) {
+  return (
+    <span>
+      <i aria-hidden />
+      <strong>{value}</strong>
+      <em>{label}</em>
+    </span>
+  );
+}
+
+function formatQualityValue(value: number) {
+  if (Number.isInteger(value)) return String(value);
+  return Math.abs(value) < 1 ? value.toFixed(2) : value.toFixed(1);
 }
 
 function flattenReflection(reflection: ReflectionRecord) {
