@@ -124,6 +124,13 @@ export function RunDetail() {
             {detail.plan.competitors.join(" vs ")} · {detail.plan.dimensions.join(", ")} ·{" "}
             {detail.execution_mode}
           </p>
+          <div className="run-meta-row">
+            <span>Layer {detail.plan.competitor_layer}</span>
+            <span>Scenario {detail.plan.scenario_id ?? "auto"}</span>
+            {detail.plan.qa_rule_ids.slice(0, 4).map((ruleId) => (
+              <span key={ruleId}>{ruleId}</span>
+            ))}
+          </div>
         </div>
         <div className={`status-chip ${detail.status}`}>
           {detail.status === "completed" ? <CheckCircle2 size={16} aria-hidden /> : <Loader2 size={16} aria-hidden />}

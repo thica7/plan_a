@@ -50,6 +50,8 @@ class WriterAgentMixin:
             [issue.model_dump(mode="json") for issue in detail.qa_findings],
             ensure_ascii=False,
         )
+        layer_context = self._writer_layer_context(detail)
+        required_sections = self._writer_required_sections(detail)
         try:
             report_md = await self._trace_llm_text(
                 record,
@@ -67,31 +69,28 @@ class WriterAgentMixin:
                     "for a winner, legal/security certification, pricing, or procurement "
                     "recommendation. If evidence is incomplete, say the conclusion is "
                     "tentative and list the exact evidence gap. Do not claim all sources are "
-                    "verified when any source_type is web_search_result or llm_public_knowledge."
+                    "verified when any source_type is web_search_result or llm_public_knowledge. "
+                    "Use the requested competitive layer to choose the report shape: L1 is a "
+                    "direct battlecard, L2 is adjacent workflow and enterprise-risk analysis, "
+                    "and L3 is market landscape and category strategy."
                 ),
                 user=(
                     f"Topic: {detail.topic}\n"
                     f"Competitors: {', '.join(detail.plan.competitors)}\n"
                     f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                    f"Competitive Layer: {detail.plan.competitor_layer}\n"
+                    f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
+                    "Scenario Recommended Dimensions: "
+                    f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
+                    f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
+                    f"Layer Report Context: {layer_context}\n"
                     f"Competitor KB JSON: {competitor_kb_json}\n"
                     f"Competitor Knowledge Schema JSON: {competitor_knowledge_json}\n"
                     f"Comparison Matrix JSON: {comparison_matrix_json}\n"
                     f"Source digest JSON: {source_digest_json}\n"
                     f"Reflections JSON: {reflections_json}\n"
                     f"Run QA Findings JSON: {qa_findings_json}\n\n"
-                    "Required sections:\n"
-                    "1. Executive Summary with confidence level and any caveat before the "
-                    "recommendation.\n"
-                    "2. Source Quality & Coverage, separating official/fetched sources from "
-                    "search-only leads.\n"
-                    "3. Side-by-Side Decision Matrix covering every competitor and dimension.\n"
-                    "4. Dimension Deep Dives with evidence-backed reasoning and no unsupported "
-                    "winner claims.\n"
-                    "5. Enterprise Buying Implications.\n"
-                    "6. Risks, Unknowns, and Evidence Gaps, including unresolved QA findings.\n"
-                    "7. Next Collection / Verification Plan.\n"
-                    "8. Evidence Appendix listing the most important source IDs with type and "
-                    "confidence.\n"
+                    f"Required sections:\n{required_sections}\n"
                     "Prefer complete analysis over brevity, but stay under 12,000 characters."
                 ),
             )
@@ -137,8 +136,9 @@ class WriterAgentMixin:
         await self.emit(detail.id, "node_completed", "writer", None, "Writer completed.")
 
     def _fallback_report_markdown(self, detail: RunDetail, reason: str) -> str:
+        layer_label = self._writer_layer_label(detail)
         lines = [
-            f"# {detail.topic} Competitive Analysis Report",
+            f"# {detail.topic} {layer_label}",
             "",
             "## Executive Overview",
         ]
@@ -185,6 +185,82 @@ class WriterAgentMixin:
                 lines.append(f"- {note}{self._format_source_refs(matrix_sources)}")
         lines.extend(["", "## Writer Fallback Reason", f"- {reason}"])
         return "\n".join(lines)
+
+    def _writer_layer_label(self, detail: RunDetail) -> str:
+        if detail.plan.competitor_layer == "L1":
+            return "Direct Battlecard"
+        if detail.plan.competitor_layer == "L2":
+            return "Adjacent Workflow Review"
+        if detail.plan.competitor_layer == "L3":
+            return "Market Landscape"
+        return "Competitive Analysis Report"
+
+    def _writer_layer_context(self, detail: RunDetail) -> str:
+        layer = detail.plan.competitor_layer
+        scenario = detail.plan.scenario_id or "auto"
+        recommended = ", ".join(detail.plan.scenario_recommended_dimensions) or "none"
+        if layer == "L1":
+            focus = (
+                "Direct replacement comparison. Emphasize winner/loser tradeoffs, pricing "
+                "and packaging, feature parity, sales objections, switching triggers, and "
+                "near-term product response."
+            )
+        elif layer == "L2":
+            focus = (
+                "Adjacent workflow comparison. Emphasize workflow overlap, ecosystem and "
+                "integration leverage, enterprise adoption risk, switching cost, and where "
+                "an adjacent product could absorb the user's use case."
+            )
+        elif layer == "L3":
+            focus = (
+                "Market landscape analysis. Emphasize category segmentation, clusters, trend "
+                "signals, benchmark dimensions, uncertainty, and strategy options rather than "
+                "a simplistic direct winner."
+            )
+        else:
+            focus = "General competitive-intelligence report with explicit uncertainty."
+        return f"{focus} Scenario={scenario}. Recommended dimensions={recommended}."
+
+    def _writer_required_sections(self, detail: RunDetail) -> str:
+        common = [
+            "Executive Summary with confidence level and caveats before recommendations.",
+            (
+                "Source Quality & Coverage, separating official/fetched sources from "
+                "search-only leads."
+            ),
+            "Side-by-Side Decision Matrix covering every competitor and dimension.",
+            "Evidence-backed Deep Dives with no unsupported winner claims.",
+        ]
+        layer = detail.plan.competitor_layer
+        if layer == "L1":
+            specific = [
+                "Battlecard: where each competitor wins, loses, and is vulnerable.",
+                "Pricing, packaging, and sales objection handling.",
+                "Recommended product or go-to-market response.",
+            ]
+        elif layer == "L2":
+            specific = [
+                "Workflow overlap and ecosystem leverage.",
+                "Enterprise buying risks, switching costs, and integration exposure.",
+                "Strategic watchlist: what would make this adjacent competitor more dangerous.",
+            ]
+        elif layer == "L3":
+            specific = [
+                "Market segmentation and competitor clusters.",
+                "Trend and benchmark signals by category segment.",
+                "Strategic options with uncertainty and evidence gaps clearly separated.",
+            ]
+        else:
+            specific = ["Business implications and next validation tasks."]
+        ending = [
+            "Risks, Unknowns, and Evidence Gaps, including unresolved QA findings.",
+            "Next Collection / Verification Plan.",
+            "Evidence Appendix listing important source IDs with type and confidence.",
+        ]
+        return "\n".join(
+            f"{index}. {section}"
+            for index, section in enumerate([*common, *specific, *ending], start=1)
+        )
 
     def _matrix_source_ids(self, detail: RunDetail) -> list[str]:
         if detail.comparison_matrix is None:

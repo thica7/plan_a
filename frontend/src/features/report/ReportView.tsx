@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { RawSource } from "../../api/types";
@@ -8,11 +9,30 @@ interface Props {
 }
 
 export function ReportView({ markdown, sources }: Props) {
+  const sourceIds = useMemo(() => new Set(sources.map((source) => source.id)), [sources]);
+  const linkedMarkdown = useMemo(
+    () => linkSourceTokens(markdown, sourceIds),
+    [markdown, sourceIds],
+  );
   return (
     <section className="panel report-panel">
       <h2>Report</h2>
       {markdown ? (
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
+        <ReactMarkdown
+          components={{
+            a({ href, children, ...props }) {
+              const sourceLink = href?.startsWith("#source-");
+              return (
+                <a className={sourceLink ? "source-token-link" : undefined} href={href} {...props}>
+                  {children}
+                </a>
+              );
+            },
+          }}
+          remarkPlugins={[remarkGfm]}
+        >
+          {linkedMarkdown}
+        </ReactMarkdown>
       ) : (
         <p>The writer has not produced a draft yet.</p>
       )}
@@ -25,7 +45,7 @@ export function ReportView({ markdown, sources }: Props) {
         ))}
       </div>
       {sources.length > 0 ? (
-        <div className="source-list">
+        <div className="source-list" id="source-list">
           <h3>Evidence</h3>
           {sources.map((source) => (
             <article className="source-card" id={`source-${source.id}`} key={source.id}>
@@ -50,4 +70,11 @@ export function ReportView({ markdown, sources }: Props) {
       ) : null}
     </section>
   );
+}
+
+function linkSourceTokens(markdown: string, sourceIds: Set<string>) {
+  return markdown.replace(/\[source:([A-Za-z0-9_.:-]+)\]/g, (token, sourceId: string) => {
+    const target = sourceIds.has(sourceId) ? `#source-${sourceId}` : "#source-list";
+    return `[${token}](${target})`;
+  });
 }

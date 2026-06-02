@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { KeyRound, Play, RefreshCw } from "lucide-react";
-import { createRun, getRuntime, listSkills } from "../api/client";
-import type { RuntimeConfig, SkillSpec } from "../api/types";
+import { createRun, getRuntime, listScenarioPacks, listSkills } from "../api/client";
+import type { CompetitorLayer, RuntimeConfig, ScenarioPack, SkillSpec } from "../api/types";
 
 const defaultCompetitors = "Perplexity, Claude, Gemini";
 const coreDimensions = ["pricing", "feature", "persona"];
+type LayerSelection = "auto" | Extract<CompetitorLayer, "L1" | "L2" | "L3">;
 
 export function NewRun() {
   const navigate = useNavigate();
@@ -13,6 +14,9 @@ export function NewRun() {
   const [competitorMode, setCompetitorMode] = useState<"auto" | "manual">("auto");
   const [competitors, setCompetitors] = useState("");
   const [skills, setSkills] = useState<SkillSpec[]>([]);
+  const [scenarioPacks, setScenarioPacks] = useState<ScenarioPack[]>([]);
+  const [selectedLayer, setSelectedLayer] = useState<LayerSelection>("auto");
+  const [scenarioId, setScenarioId] = useState("");
   const [runtime, setRuntime] = useState<RuntimeConfig | null>(null);
   const [selected, setSelected] = useState<string[]>(coreDimensions);
   const [executionMode, setExecutionMode] = useState<"demo" | "real">("demo");
@@ -40,6 +44,10 @@ export function NewRun() {
         }
       })
       .catch((err: Error) => setError(err.message));
+
+    listScenarioPacks()
+      .then(setScenarioPacks)
+      .catch((err: Error) => setError(err.message));
   }, []);
 
   const competitorList = useMemo(
@@ -54,6 +62,20 @@ export function NewRun() {
     },
     [competitorMode, competitors],
   );
+  const selectedScenario = useMemo(
+    () => scenarioPacks.find((pack) => pack.id === scenarioId) ?? null,
+    [scenarioId, scenarioPacks],
+  );
+
+  function applyScenario(pack: ScenarioPack | null) {
+    if (!pack) {
+      setScenarioId("");
+      return;
+    }
+    setScenarioId(pack.id);
+    setSelectedLayer(pack.competitor_layer);
+    setSelected((current) => mergeDimensions(current, pack.required_dimensions, pack.optional_dimensions));
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -64,6 +86,8 @@ export function NewRun() {
         topic,
         competitors: competitorList,
         dimensions: selected,
+        competitor_layer: selectedLayer === "auto" ? null : selectedLayer,
+        scenario_id: scenarioId || null,
         execution_mode: executionMode,
         auto_redo_warn_enabled: autoRedoWarn,
       });
@@ -123,6 +147,60 @@ export function NewRun() {
               Planner will search the market and select direct competitors before collecting evidence.
             </p>
           )}
+        </fieldset>
+
+        <fieldset>
+          <legend>Competitive lens</legend>
+          <div className="segmented-control" role="radiogroup" aria-label="Competitive layer">
+            {(["auto", "L1", "L2", "L3"] as LayerSelection[]).map((layer) => (
+              <button
+                className={selectedLayer === layer ? "active" : ""}
+                key={layer}
+                type="button"
+                onClick={() => {
+                  setSelectedLayer(layer);
+                  if (
+                    scenarioId
+                    && scenarioPacks.find((pack) => pack.id === scenarioId)?.competitor_layer !== layer
+                  ) {
+                    setScenarioId("");
+                  }
+                }}
+              >
+                {layer === "auto" ? "Auto" : layer}
+              </button>
+            ))}
+          </div>
+          <label>
+            Scenario pack
+            <select
+              value={scenarioId}
+              onChange={(event) => {
+                const next = scenarioPacks.find((pack) => pack.id === event.target.value) ?? null;
+                applyScenario(next);
+              }}
+            >
+              <option value="">Auto scenario</option>
+              {scenarioPacks
+                .filter((pack) => selectedLayer === "auto" || pack.competitor_layer === selectedLayer)
+                .map((pack) => (
+                  <option key={pack.id} value={pack.id}>
+                    {pack.competitor_layer} · {pack.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {selectedScenario ? (
+            <div className="scenario-preview">
+              <strong>{selectedScenario.name}</strong>
+              <span>{selectedScenario.description}</span>
+              <div>
+                {[...selectedScenario.required_dimensions, ...selectedScenario.optional_dimensions].map((dimension) => (
+                  <em key={dimension}>{dimension}</em>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </fieldset>
 
         <fieldset>
@@ -226,4 +304,17 @@ export function NewRun() {
       </form>
     </section>
   );
+}
+
+function mergeDimensions(current: string[], required: string[], optional: string[]) {
+  const merged: string[] = [];
+  const seen = new Set<string>();
+  for (const dimension of [...required, ...current, ...optional]) {
+    const key = dimension.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(dimension);
+    if (merged.length >= 8) break;
+  }
+  return merged;
 }

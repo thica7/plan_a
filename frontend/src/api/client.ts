@@ -36,6 +36,7 @@ import type {
   RuntimeConfig,
   ScheduledScanStartRequest,
   ScheduledScanStartResponse,
+  ScenarioPack,
   SkillSpec,
   ToolCallMessage,
   TraceObservabilityReport,
@@ -213,6 +214,10 @@ export function listRuns() {
 export function listEnterpriseProjects(workspaceId?: string) {
   const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
   return request<ProjectRecord[]>(`/enterprise/projects${params}`);
+}
+
+export function listScenarioPacks() {
+  return request<ScenarioPack[]>("/enterprise/scenario-packs");
 }
 
 export function getPolicyActions() {
