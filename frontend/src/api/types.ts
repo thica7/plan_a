@@ -733,6 +733,8 @@ export interface EvidenceGapItem {
   source_type_required?: string | null;
   message: string;
   recommended_query: string;
+  retrieval_query: string;
+  retrieval_candidate_ids: string[];
   evidence_ids: string[];
   claim_ids: string[];
 }

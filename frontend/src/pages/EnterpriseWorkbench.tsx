@@ -800,7 +800,12 @@ function EvidenceGapCard({ gap }: { gap: EvidenceGapItem }) {
         </span>
       </div>
       <p>{gap.message}</p>
-      {gap.recommended_query ? <em>{gap.recommended_query}</em> : null}
+      {gap.retrieval_query || gap.recommended_query ? (
+        <em>{gap.retrieval_query || gap.recommended_query}</em>
+      ) : null}
+      {gap.retrieval_candidate_ids.length > 0 ? (
+        <small>{gap.retrieval_candidate_ids.length} retrieval candidate(s)</small>
+      ) : null}
     </article>
   );
 }

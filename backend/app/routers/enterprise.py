@@ -34,6 +34,7 @@ from packages.business_intel import (
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore, build_report_version_diff
 from packages.governance import ModelPolicyReport, build_model_policy_report
+from packages.rag import decorate_evidence_gap_report_with_retrieval
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
     ArtifactCreateResult,
@@ -358,7 +359,14 @@ async def get_project_evidence_gaps(
     )
     if result.status != "ok":
         raise HTTPException(status_code=503, detail=result.error or "Evidence gap agent failed.")
-    return EvidenceGapReport.model_validate(result.payload)
+    report = EvidenceGapReport.model_validate(result.payload)
+    project = _project_or_404(project_id, store, user, "evidence:read")
+    return decorate_evidence_gap_report_with_retrieval(
+        report,
+        store=store,
+        workspace_id=project.workspace_id,
+        project_id=project_id,
+    )
 
 
 @router.get("/enterprise/projects/{project_id}/red-team", response_model=RedTeamReport)

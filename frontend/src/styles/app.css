@@ -2279,7 +2279,8 @@ select {
 }
 
 .evidence-gap-card span,
-.evidence-gap-card em {
+.evidence-gap-card em,
+.evidence-gap-card small {
   color: var(--muted);
   font-size: 12px;
   font-style: normal;

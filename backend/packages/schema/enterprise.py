@@ -540,6 +540,8 @@ class EvidenceGapItem(BaseModel):
     source_type_required: str | None = None
     message: str
     recommended_query: str = ""
+    retrieval_query: str = ""
+    retrieval_candidate_ids: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
     claim_ids: list[str] = Field(default_factory=list)
 
