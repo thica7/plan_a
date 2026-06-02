@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
+from packages.schema.rag import RetrievalRecord
+
 CompetitorLayer = Literal["L1", "L2", "L3", "unknown"]
 EvidenceQualityLabel = Literal["unreviewed", "accepted", "rejected", "stale"]
 EnterpriseRole = Literal["owner", "admin", "analyst", "reviewer", "viewer"]
@@ -542,6 +544,8 @@ class EvidenceGapItem(BaseModel):
     recommended_query: str = ""
     retrieval_query: str = ""
     retrieval_candidate_ids: list[str] = Field(default_factory=list)
+    retrieval_records: list[RetrievalRecord] = Field(default_factory=list)
+    retrieval_grounded_context: str = ""
     evidence_ids: list[str] = Field(default_factory=list)
     claim_ids: list[str] = Field(default_factory=list)
 

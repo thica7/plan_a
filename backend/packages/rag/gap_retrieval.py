@@ -2,11 +2,19 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from packages.schema.enterprise import EvidenceGapItem, EvidenceGapReport, EvidenceSearchHit
-from packages.schema.rag import GapRetrievalContext, RetrievalRecord
+from packages.rag.retriever import retrieve_grounded_context
+from packages.schema.enterprise import (
+    EvidenceGapItem,
+    EvidenceGapReport,
+    EvidenceRecord,
+    EvidenceSearchHit,
+)
+from packages.schema.rag import GapRetrievalContext
 
 
 class EvidenceRetriever(Protocol):
+    def list_evidence(self, project_id: str | None = None) -> list[EvidenceRecord]: ...
+
     def search_evidence(
         self,
         *,
@@ -42,6 +50,8 @@ def decorate_evidence_gap_report_with_retrieval(
                     update={
                         "retrieval_query": contexts[gap.id].query,
                         "retrieval_candidate_ids": contexts[gap.id].candidate_ids,
+                        "retrieval_records": contexts[gap.id].records,
+                        "retrieval_grounded_context": contexts[gap.id].grounded_context,
                     }
                 )
                 for gap in report.gaps
@@ -61,39 +71,16 @@ def retrieve_gap_candidates(
     query = build_gap_retrieval_query(gap)
     if not query:
         return GapRetrievalContext(gap_id=gap.id, query="")
-    hits = store.search_evidence(
+    return retrieve_grounded_context(
+        store=store,
         workspace_id=workspace_id,
-        project_id=project_id,
-        query=query,
-        limit=max(limit * 3, limit),
-    )
-    records: list[RetrievalRecord] = []
-    seen: set[str] = set()
-    for hit in hits:
-        evidence = hit.evidence
-        if evidence.id in seen or evidence.id in gap.evidence_ids:
-            continue
-        if not _source_type_matches_gap(gap, evidence.source_type):
-            continue
-        seen.add(evidence.id)
-        records.append(
-            RetrievalRecord(
-                evidence_id=evidence.id,
-                score=round(hit.score, 4),
-                title=evidence.title,
-                source_type=evidence.source_type,
-                dimension=evidence.dimension,
-                snippet=evidence.snippet[:360],
-            )
-        )
-        if len(records) >= limit:
-            break
-    return GapRetrievalContext(
         gap_id=gap.id,
         query=query,
-        candidate_ids=[record.evidence_id for record in records],
-        records=records,
-        grounded_context=_grounded_context(records),
+        rewritten_queries=_gap_query_variants(gap, query),
+        project_id=project_id,
+        exclude_evidence_ids=set(gap.evidence_ids),
+        source_type_required=gap.source_type_required,
+        limit=limit,
     )
 
 
@@ -107,18 +94,13 @@ def build_gap_retrieval_query(gap: EvidenceGapItem) -> str:
     return " ".join(part.strip() for part in parts if part and part.strip())
 
 
-def _source_type_matches_gap(gap: EvidenceGapItem, source_type: str) -> bool:
-    required = (gap.source_type_required or "").casefold().strip()
-    if not required or required in {"any usable source", "any"}:
-        return True
-    return required == source_type.casefold().strip()
-
-
-def _grounded_context(records: list[RetrievalRecord]) -> str:
-    lines = []
-    for record in records:
-        lines.append(
-            f"[source:{record.evidence_id}] {record.title} "
-            f"({record.source_type}, score={record.score}): {record.snippet}"
-        )
-    return "\n".join(lines)
+def _gap_query_variants(gap: EvidenceGapItem, primary_query: str) -> list[str]:
+    variants = [primary_query]
+    competitor = gap.competitor_name or gap.competitor_id or ""
+    if competitor and gap.dimension:
+        variants.append(f"{competitor} {gap.dimension}")
+    if gap.recommended_query:
+        variants.append(gap.recommended_query)
+    if competitor and gap.source_type_required:
+        variants.append(f"{competitor} {gap.source_type_required}")
+    return variants

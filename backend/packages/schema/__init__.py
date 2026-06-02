@@ -73,7 +73,7 @@ from packages.schema.models import (
     UserPersonaModel,
     UserPersonaSegment,
 )
-from packages.schema.rag import GapRetrievalContext, RetrievalRecord
+from packages.schema.rag import GapRetrievalContext, RetrievalChunk, RetrievalRecord
 from packages.schema.survey import (
     InterviewSynthesis,
     SurveyEvidenceBundle,
@@ -134,6 +134,7 @@ __all__ = [
     "RedTeamFinding",
     "RedTeamReport",
     "RetrievalRecord",
+    "RetrievalChunk",
     "RunMetrics",
     "RunCreateRequest",
     "RunDetail",

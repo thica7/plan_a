@@ -718,6 +718,22 @@ export interface ReportReleaseGate {
   generated_at: string;
 }
 
+export interface RetrievalRecord {
+  evidence_id: string;
+  chunk_id: string;
+  chunk_index: number;
+  score: number;
+  vector_score: number;
+  bm25_score: number;
+  rerank_score: number;
+  title: string;
+  source_type: string;
+  dimension: string;
+  snippet: string;
+  source_url: string;
+  retrieval_stage: string;
+}
+
 export interface EvidenceGapItem {
   id: string;
   severity: "critical" | "high" | "medium" | "low";
@@ -735,6 +751,8 @@ export interface EvidenceGapItem {
   recommended_query: string;
   retrieval_query: string;
   retrieval_candidate_ids: string[];
+  retrieval_records: RetrievalRecord[];
+  retrieval_grounded_context: string;
   evidence_ids: string[];
   claim_ids: string[];
 }

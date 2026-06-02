@@ -2286,6 +2286,28 @@ select {
   font-style: normal;
 }
 
+.gap-retrieval-list {
+  display: grid;
+  gap: 6px;
+}
+
+.gap-retrieval-list div {
+  background: rgba(15, 139, 141, 0.06);
+  border: 1px solid rgba(15, 139, 141, 0.16);
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+}
+
+.gap-retrieval-list p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .red-team-panel {
   display: grid;
   gap: 12px;

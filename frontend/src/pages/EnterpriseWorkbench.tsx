@@ -806,6 +806,20 @@ function EvidenceGapCard({ gap }: { gap: EvidenceGapItem }) {
       {gap.retrieval_candidate_ids.length > 0 ? (
         <small>{gap.retrieval_candidate_ids.length} retrieval candidate(s)</small>
       ) : null}
+      {gap.retrieval_records.length > 0 ? (
+        <div className="gap-retrieval-list">
+          {gap.retrieval_records.slice(0, 2).map((record) => (
+            <div key={`${record.evidence_id}-${record.chunk_id}`}>
+              <strong>{record.title}</strong>
+              <span>
+                hybrid {record.score.toFixed(2)} / bm25 {record.bm25_score.toFixed(2)} / vector{" "}
+                {record.vector_score.toFixed(2)}
+              </span>
+              <p>{record.snippet}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }
