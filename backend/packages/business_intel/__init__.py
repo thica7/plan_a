@@ -1,3 +1,4 @@
+from packages.business_intel.claim_validator import validate_project_claims
 from packages.business_intel.evaluator import evaluate_business_qa
 from packages.business_intel.evidence_gaps import analyze_evidence_gaps, build_evidence_gap_agent
 from packages.business_intel.planning import build_business_intel_plan
@@ -29,4 +30,5 @@ __all__ = [
     "recommend_scenario_pack",
     "score_competitors",
     "score_project_readiness",
+    "validate_project_claims",
 ]

@@ -13,6 +13,7 @@ from packages.business_intel import (
     list_scenario_packs,
     score_competitors,
     score_project_readiness,
+    validate_project_claims,
 )
 from packages.business_intel.homepage import verify_homepage
 from packages.business_intel.layers import assess_competitor_layer
@@ -239,6 +240,73 @@ def test_report_release_gate_requires_clean_qa_and_verified_evidence() -> None:
         "business_qa_clean_required",
         "verified_evidence_rate",
     }
+
+
+def test_claim_validator_cross_checks_evidence_support() -> None:
+    competitor = _competitor()
+    accepted = EvidenceRecord(
+        id="evidence-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="pricing-1",
+        competitor_id=competitor.id,
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.sh/pricing",
+        snippet="Cursor publishes pricing tiers for teams.",
+        content_hash="hash-1",
+        reliability_score=0.9,
+        quality_label="accepted",
+    )
+    stale = accepted.model_copy(
+        update={"id": "evidence-stale", "quality_label": "stale", "content_hash": "hash-stale"}
+    )
+    claims = [
+        ClaimRecord(
+            id="claim-supported",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing tiers.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        ),
+        ClaimRecord(
+            id="claim-blocked",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor has unpublished discounts.",
+            evidence_ids=["evidence-stale"],
+            confidence=0.9,
+        ),
+        ClaimRecord(
+            id="claim-weak",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="feature",
+            claim_text="Cursor dominates enterprise procurement.",
+            evidence_ids=["evidence-1"],
+            confidence=0.4,
+        ),
+    ]
+
+    report = validate_project_claims(
+        project_id="project-1",
+        claims=claims,
+        evidence=[accepted, stale],
+    )
+
+    statuses = {item.claim_id: item.status for item in report.results}
+    assert statuses["claim-supported"] == "supported"
+    assert statuses["claim-blocked"] == "blocked"
+    assert statuses["claim-weak"] in {"weak", "unsupported"}
+    assert report.blocker_count == 1
+    assert report.warn_count >= 1
 
 
 def test_report_release_gate_blocks_unresolved_run_qa_metadata() -> None:

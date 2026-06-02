@@ -1,5 +1,8 @@
 .env
 runs/
+logs/
+backups/
+.claude/
 
 __pycache__/
 *.py[cod]
@@ -12,3 +15,7 @@ dist/
 *.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts
+
+review/*.html
+review/*_review_*.md
+review/*_review_*.html

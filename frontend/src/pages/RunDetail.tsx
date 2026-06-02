@@ -32,10 +32,39 @@ export function RunDetail() {
 
   useEffect(() => {
     if (!runId) return;
+    let cancelled = false;
+    let retryTimer: number | undefined;
+    let unsubscribe: (() => void) | undefined;
     reset();
-    getRun(runId).then(setDetail).catch((err: Error) => setError(err.message));
-    const unsubscribe = subscribeRun(runId, addEvent);
-    return unsubscribe;
+
+    const load = (attempt: number) => {
+      getRun(runId)
+        .then((loaded) => {
+          if (cancelled) return;
+          setError(null);
+          setDetail(loaded);
+          unsubscribe = subscribeRun(runId, addEvent);
+        })
+        .catch((err: Error) => {
+          if (cancelled) return;
+          if (err.message.includes("Run not found") && attempt < 120) {
+            retryTimer = window.setTimeout(() => load(attempt + 1), 1000);
+            return;
+          }
+          setError(err.message);
+        });
+    };
+
+    load(0);
+    return () => {
+      cancelled = true;
+      if (retryTimer !== undefined) {
+        window.clearTimeout(retryTimer);
+      }
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [addEvent, reset, runId, setDetail]);
 
   useEffect(() => {

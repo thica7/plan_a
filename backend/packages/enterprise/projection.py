@@ -296,6 +296,14 @@ def _build_quality_metadata(detail: RunDetail) -> dict[str, object]:
     ]
     return {
         "run_id": detail.id,
+        "memory_observations": _build_memory_observations(
+            detail,
+            low_confidence_source_ids=low_confidence_source_ids,
+            search_only_source_ids=search_only_source_ids,
+            llm_public_knowledge_source_ids=llm_public_knowledge_source_ids,
+            survey_source_ids=survey_source_ids,
+            interview_source_ids=interview_source_ids,
+        ),
         "run_qa_findings": [
             {
                 "id": issue.id,
@@ -326,6 +334,77 @@ def _build_quality_metadata(detail: RunDetail) -> dict[str, object]:
             for reflection in detail.reflections[-1:]
         ],
     }
+
+
+def _build_memory_observations(
+    detail: RunDetail,
+    *,
+    low_confidence_source_ids: list[str],
+    search_only_source_ids: list[str],
+    llm_public_knowledge_source_ids: list[str],
+    survey_source_ids: list[str],
+    interview_source_ids: list[str],
+) -> list[dict[str, object]]:
+    observations: list[dict[str, object]] = [
+        {
+            "id": f"{detail.id}:plan",
+            "kind": "analysis_plan",
+            "topic": detail.topic,
+            "competitor_layer": detail.plan.competitor_layer,
+            "scenario_id": detail.plan.scenario_id,
+            "dimensions": detail.plan.dimensions,
+            "competitors": detail.plan.competitors,
+            "qa_rule_ids": detail.plan.qa_rule_ids,
+        }
+    ]
+    if low_confidence_source_ids or search_only_source_ids or llm_public_knowledge_source_ids:
+        observations.append(
+            {
+                "id": f"{detail.id}:source-risk",
+                "kind": "source_risk",
+                "low_confidence_source_ids": low_confidence_source_ids,
+                "search_only_source_ids": search_only_source_ids,
+                "llm_public_knowledge_source_ids": llm_public_knowledge_source_ids,
+            }
+        )
+    if survey_source_ids or interview_source_ids:
+        observations.append(
+            {
+                "id": f"{detail.id}:customer-signal",
+                "kind": "customer_signal",
+                "survey_source_ids": survey_source_ids,
+                "interview_source_ids": interview_source_ids,
+            }
+        )
+    if detail.qa_findings:
+        observations.append(
+            {
+                "id": f"{detail.id}:qa-findings",
+                "kind": "quality_pattern",
+                "warn_count": sum(
+                    1 for issue in detail.qa_findings if issue.severity == "warn"
+                ),
+                "blocker_count": sum(
+                    1 for issue in detail.qa_findings if issue.severity == "blocker"
+                ),
+                "target_agents": sorted(
+                    {issue.target_agent for issue in detail.qa_findings if issue.target_agent}
+                ),
+                "problems": [issue.problem for issue in detail.qa_findings[:10]],
+            }
+        )
+    if detail.reflections:
+        latest = detail.reflections[-1]
+        observations.append(
+            {
+                "id": f"{detail.id}:reflection",
+                "kind": "reflection",
+                "coverage_gaps": latest.coverage_gaps,
+                "confidence_outliers": latest.confidence_outliers,
+                "cross_competitor_gaps": latest.cross_competitor_gaps,
+            }
+        )
+    return observations
 
 
 def _parse_datetime(value: datetime | str) -> datetime:

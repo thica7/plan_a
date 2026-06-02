@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Annotated
 
@@ -30,6 +31,7 @@ from packages.business_intel import (
     list_scenario_packs,
     score_competitors,
     score_project_readiness,
+    validate_project_claims,
 )
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore, build_report_version_diff
@@ -44,6 +46,7 @@ from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQARule,
     ClaimRecord,
+    ClaimValidationReport,
     CompetitorRecord,
     CompetitorScoreReport,
     EnterpriseRunProjection,
@@ -56,6 +59,9 @@ from packages.schema.enterprise import (
     NotificationRecord,
     ProjectReadinessScore,
     ProjectRecord,
+    QualityAgentMatrix,
+    QualityAgentMatrixEntry,
+    QualityAgentStatus,
     RedTeamReport,
     ReportReleaseGate,
     ReportVersionDiff,
@@ -276,6 +282,23 @@ def get_project_qa_evaluation(
 
 
 @router.get(
+    "/enterprise/projects/{project_id}/claim-validation",
+    response_model=ClaimValidationReport,
+)
+def get_project_claim_validation(
+    project_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> ClaimValidationReport:
+    _project_or_404(project_id, store, user, "project:read")
+    return validate_project_claims(
+        project_id=project_id,
+        claims=store.list_claims(project_id=project_id),
+        evidence=store.list_evidence(project_id=project_id),
+    )
+
+
+@router.get(
     "/enterprise/projects/{project_id}/readiness-score",
     response_model=ProjectReadinessScore,
 )
@@ -407,6 +430,129 @@ async def get_project_red_team(
     if result.status != "ok":
         raise HTTPException(status_code=503, detail=result.error or "Red-team agent failed.")
     return RedTeamReport.model_validate(result.payload)
+
+
+@router.get(
+    "/enterprise/projects/{project_id}/quality-matrix",
+    response_model=QualityAgentMatrix,
+)
+async def get_project_quality_matrix(
+    project_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    settings: SettingsDep,
+) -> QualityAgentMatrix:
+    plan = _business_plan_for_project(project_id, store, user)
+    competitors = store.list_competitors(project_id=project_id)
+    evidence = store.list_evidence(project_id=project_id)
+    claims = store.list_claims(project_id=project_id)
+    qa_evaluation = evaluate_business_qa(
+        project_id=project_id,
+        plan=plan,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+    )
+    claim_validation = validate_project_claims(
+        project_id=project_id,
+        claims=claims,
+        evidence=evidence,
+    )
+    evidence_gaps = await get_project_evidence_gaps(project_id, store, user, settings)
+    red_team = await get_project_red_team(project_id, store, user, settings)
+
+    entries = [
+        QualityAgentMatrixEntry(
+            agent_name="BusinessQA",
+            framework="deterministic-rules",
+            status=_matrix_status(qa_evaluation.blocker_count, qa_evaluation.warn_count),
+            score=max(0, 100 - qa_evaluation.blocker_count * 35 - qa_evaluation.warn_count * 10),
+            blocker_count=qa_evaluation.blocker_count,
+            warn_count=qa_evaluation.warn_count,
+            finding_count=qa_evaluation.finding_count,
+            summary=f"{qa_evaluation.passed_rules}/{qa_evaluation.total_rules} rules passed.",
+            evidence_ids=_unique_ids(
+                evidence_id
+                for finding in qa_evaluation.findings
+                for evidence_id in finding.evidence_ids
+            ),
+            claim_ids=_unique_ids(
+                claim_id for finding in qa_evaluation.findings for claim_id in finding.claim_ids
+            ),
+        ),
+        QualityAgentMatrixEntry(
+            agent_name="ClaimValidator",
+            framework="deterministic-evidence-crosscheck",
+            status=_matrix_status(claim_validation.blocker_count, claim_validation.warn_count),
+            score=max(
+                0,
+                100
+                - claim_validation.blocked_count * 35
+                - claim_validation.unsupported_count * 25
+                - claim_validation.weak_count * 10,
+            ),
+            blocker_count=claim_validation.blocker_count,
+            warn_count=claim_validation.warn_count,
+            finding_count=claim_validation.issue_count,
+            summary=(
+                f"{claim_validation.supported_count}/{claim_validation.total_claims} "
+                "claims strongly supported."
+            ),
+            evidence_ids=_unique_ids(
+                evidence_id
+                for result in claim_validation.results
+                for evidence_id in result.usable_evidence_ids
+            ),
+            claim_ids=[item.claim_id for item in claim_validation.results],
+        ),
+        QualityAgentMatrixEntry(
+            agent_name="EvidenceGap",
+            framework=evidence_gaps.framework,
+            status=_matrix_status(evidence_gaps.critical_count, evidence_gaps.high_count),
+            score=max(
+                0,
+                100 - evidence_gaps.critical_count * 35 - evidence_gaps.high_count * 15,
+            ),
+            blocker_count=evidence_gaps.critical_count,
+            warn_count=evidence_gaps.high_count + evidence_gaps.medium_count,
+            finding_count=evidence_gaps.gap_count,
+            summary=f"{evidence_gaps.gap_count} evidence gaps detected.",
+            evidence_ids=_unique_ids(
+                evidence_id for gap in evidence_gaps.gaps for evidence_id in gap.evidence_ids
+            ),
+            claim_ids=_unique_ids(
+                claim_id for gap in evidence_gaps.gaps for claim_id in gap.claim_ids
+            ),
+        ),
+        QualityAgentMatrixEntry(
+            agent_name="RedTeam",
+            framework=red_team.framework,
+            status=_matrix_status(
+                sum(1 for finding in red_team.findings if finding.severity == "critical"),
+                red_team.high_severity_count,
+            ),
+            score=max(0, 100 - red_team.high_severity_count * 20),
+            blocker_count=sum(1 for finding in red_team.findings if finding.severity == "critical"),
+            warn_count=red_team.high_severity_count,
+            finding_count=red_team.finding_count,
+            summary=f"{red_team.finding_count} red-team findings detected.",
+            evidence_ids=_unique_ids(
+                evidence_id for finding in red_team.findings for evidence_id in finding.evidence_ids
+            ),
+            claim_ids=_unique_ids(
+                claim_id for finding in red_team.findings for claim_id in finding.claim_ids
+            ),
+        ),
+    ]
+    blocker_count = sum(item.blocker_count for item in entries)
+    warn_count = sum(item.warn_count for item in entries)
+    overall_score = round(sum(item.score for item in entries) / max(len(entries), 1))
+    return QualityAgentMatrix(
+        project_id=project_id,
+        status=_matrix_status(blocker_count, warn_count),
+        overall_score=overall_score,
+        entries=entries,
+    )
 
 
 def _pydantic_ai_context(settings: Settings) -> dict[str, str]:
@@ -817,3 +963,22 @@ def _require_workspace_access(
 ) -> None:
     if not can_access_workspace(user, workspace_id, action):
         raise HTTPException(status_code=403, detail="Insufficient workspace permission")
+
+
+def _matrix_status(blocker_count: int, warn_count: int) -> QualityAgentStatus:
+    if blocker_count > 0:
+        return "blocker"
+    if warn_count > 0:
+        return "warn"
+    return "pass"
+
+
+def _unique_ids(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if not isinstance(value, str) or value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result

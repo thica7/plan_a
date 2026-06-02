@@ -172,7 +172,7 @@ class RunService(
         idempotency_key = request.idempotency_key or f"run:{run_id}"
         if request.idempotency_key:
             async with self._lock:
-                existing = self._runs.get(run_id)
+                existing = self._load_run_record(run_id)
             if existing is not None:
                 return existing.detail
         plan = AnalysisPlan(
@@ -234,6 +234,7 @@ class RunService(
         return detail
 
     def list_runs(self) -> list[RunSummary]:
+        self._refresh_runs_from_journal()
         return [
             RunSummary(
                 id=record.detail.id,
@@ -254,15 +255,15 @@ class RunService(
         ]
 
     def get_run(self, run_id: str) -> RunDetail | None:
-        record = self._runs.get(run_id)
+        record = self._load_run_record(run_id)
         return record.detail if record else None
 
     def get_trace(self, run_id: str) -> list[RunEvent] | None:
-        record = self._runs.get(run_id)
+        record = self._load_run_record(run_id)
         return record.events if record else None
 
     def get_trace_spans(self, run_id: str) -> list[TraceSpan] | None:
-        record = self._runs.get(run_id)
+        record = self._load_run_record(run_id)
         if record is not None:
             return record.detail.trace_spans
         if self._trace_store is not None:
@@ -271,7 +272,7 @@ class RunService(
         return None
 
     def get_agent_messages(self, run_id: str) -> list[AgentMessage] | None:
-        record = self._runs.get(run_id)
+        record = self._load_run_record(run_id)
         if record is not None:
             return record.detail.agent_messages
         if self._trace_store is not None:
@@ -280,7 +281,7 @@ class RunService(
         return None
 
     def get_tool_call_messages(self, run_id: str) -> list[ToolCallMessage] | None:
-        record = self._runs.get(run_id)
+        record = self._load_run_record(run_id)
         if record is not None:
             return record.detail.tool_call_messages
         if self._trace_store is not None:
@@ -467,6 +468,18 @@ class RunService(
             )
 
     async def stream_events(self, run_id: str):
+        if self._journal is not None:
+            yielded_ids: set[int] = set()
+            while True:
+                record = self._load_run_record(run_id)
+                events = record.events if record is not None else self._journal.load_events(run_id)
+                for event in events:
+                    if event.id in yielded_ids:
+                        continue
+                    yielded_ids.add(event.id)
+                    yield event
+                await asyncio.sleep(0.5)
+
         record = self._runs[run_id]
         for event in record.events:
             yield event
@@ -1669,6 +1682,32 @@ class RunService(
                 detail=detail,
                 events=self._journal.load_events(detail.id),
             )
+
+    def _refresh_runs_from_journal(self) -> None:
+        if self._journal is None:
+            return
+        for detail in self._journal.load_runs():
+            self._upsert_journal_run(detail)
+
+    def _load_run_record(self, run_id: str) -> RunRecord | None:
+        record = self._runs.get(run_id)
+        if self._journal is None:
+            return record
+        detail = self._journal.load_run(run_id)
+        if detail is None:
+            return record
+        return self._upsert_journal_run(detail)
+
+    def _upsert_journal_run(self, detail: RunDetail) -> RunRecord:
+        events = self._journal.load_events(detail.id) if self._journal is not None else []
+        record = self._runs.get(detail.id)
+        if record is None:
+            record = RunRecord(detail=detail, events=events)
+            self._runs[detail.id] = record
+            return record
+        record.detail = detail
+        record.events = events
+        return record
 
     def _persist_run(self, run_id: str) -> None:
         if self._journal is None:

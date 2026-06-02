@@ -28,6 +28,8 @@ NotificationType = Literal[
 ]
 QuotaEnforcementMode = Literal["monitor", "block"]
 WorkspaceUsageStatus = Literal["ok", "warn", "exceeded"]
+ClaimValidationStatus = Literal["supported", "weak", "unsupported", "blocked"]
+QualityAgentStatus = Literal["pass", "warn", "blocker"]
 
 
 class WorkspaceRecord(BaseModel):
@@ -521,6 +523,74 @@ class ReportReleaseGate(BaseModel):
     blocker_count: int = Field(ge=0)
     warn_count: int = Field(ge=0)
     issues: list[BusinessQAFinding] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ClaimValidationIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    claim_id: str
+    severity: Literal["warn", "blocker"]
+    issue_type: Literal[
+        "missing_evidence",
+        "stale_or_rejected_evidence",
+        "weak_text_support",
+        "low_confidence",
+    ]
+    message: str
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class ClaimValidationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str
+    status: ClaimValidationStatus
+    support_score: int = Field(ge=0, le=100)
+    usable_evidence_ids: list[str] = Field(default_factory=list)
+    issue_ids: list[str] = Field(default_factory=list)
+
+
+class ClaimValidationReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    total_claims: int = Field(default=0, ge=0)
+    supported_count: int = Field(default=0, ge=0)
+    weak_count: int = Field(default=0, ge=0)
+    unsupported_count: int = Field(default=0, ge=0)
+    blocked_count: int = Field(default=0, ge=0)
+    issue_count: int = Field(default=0, ge=0)
+    blocker_count: int = Field(default=0, ge=0)
+    warn_count: int = Field(default=0, ge=0)
+    results: list[ClaimValidationResult] = Field(default_factory=list)
+    issues: list[ClaimValidationIssue] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class QualityAgentMatrixEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    agent_name: str
+    framework: str
+    status: QualityAgentStatus
+    score: int = Field(ge=0, le=100)
+    blocker_count: int = Field(default=0, ge=0)
+    warn_count: int = Field(default=0, ge=0)
+    finding_count: int = Field(default=0, ge=0)
+    summary: str = ""
+    evidence_ids: list[str] = Field(default_factory=list)
+    claim_ids: list[str] = Field(default_factory=list)
+
+
+class QualityAgentMatrix(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    status: QualityAgentStatus
+    overall_score: int = Field(ge=0, le=100)
+    entries: list[QualityAgentMatrixEntry] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 

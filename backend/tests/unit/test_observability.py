@@ -1,7 +1,9 @@
+from app.events import RunEvent
 from packages.compliance import CompliancePolicy, redact_text
 from packages.compliance.report import build_run_compliance_report
 from packages.config import Settings
 from packages.observability import (
+    build_decision_replay,
     build_otel_trace_export,
     build_run_event,
     evaluate_trace_observability,
@@ -123,6 +125,68 @@ def test_observability_report_flags_missing_trace_context() -> None:
     assert report.status == "fail"
     assert report.otel_export_ready is False
     assert {issue.field for issue in report.issues} >= {"trace_id", "otel_span_id"}
+
+
+def test_decision_replay_maps_trace_into_audit_timeline() -> None:
+    detail = RunDetail(
+        id="run-1",
+        topic="Decision replay run",
+        status="completed",
+        execution_mode="demo",
+        created_at="2026-05-31T00:00:00Z",
+        updated_at="2026-05-31T00:01:00Z",
+        plan=AnalysisPlan(topic="Decision replay run", competitors=["A"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="source-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://example.com/pricing",
+                snippet="A publishes pricing.",
+                content_hash="hash-1",
+                confidence=0.9,
+            )
+        ],
+        metrics=RunMetrics(total_spans=2, source_coverage_rate=1.0),
+    )
+    events = [
+        RunEvent(
+            id=1,
+            run_id="run-1",
+            type="node_started",
+            agent="planner",
+            message="Planner started",
+        ),
+        RunEvent(
+            id=2,
+            run_id="run-1",
+            type="node_completed",
+            agent="collector",
+            message="Collector finished",
+            payload={"source_ids": ["source-1"]},
+        ),
+        RunEvent(
+            id=3,
+            run_id="run-1",
+            type="run_completed",
+            agent="writer",
+            message="Run completed",
+        ),
+    ]
+
+    replay = build_decision_replay(detail, events)
+
+    assert replay.event_count >= 5
+    assert {event.event_type for event in replay.events} >= {
+        "agent.started",
+        "rag.retrieved",
+        "claim.validated",
+        "benchmark.scored",
+        "report.ready",
+    }
+    assert any(event.evidence_ids == ["source-1"] for event in replay.events)
 
 
 def test_run_compliance_report_flags_policy_source_trace_and_pii() -> None:

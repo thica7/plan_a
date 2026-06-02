@@ -1,3 +1,8 @@
+from packages.observability.decision_replay import (
+    DecisionReplayEvent,
+    DecisionReplayReport,
+    build_decision_replay,
+)
 from packages.observability.langfuse_adapter import LangfuseAdapter, LangfuseConfig
 from packages.observability.otel_export import (
     OtelTraceExport,
@@ -17,10 +22,13 @@ from packages.observability.tracing import (
 __all__ = [
     "LangfuseAdapter",
     "LangfuseConfig",
+    "DecisionReplayEvent",
+    "DecisionReplayReport",
     "OtelTraceExport",
     "TraceObservabilityReport",
     "TraceStore",
     "build_otel_trace_export",
+    "build_decision_replay",
     "build_run_event",
     "evaluate_trace_observability",
     "otel_span_id_for_span",

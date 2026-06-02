@@ -74,6 +74,19 @@ class RunJournal:
             self._close(conn)
         return [RunDetail.model_validate_json(row[0]) for row in rows]
 
+    def load_run(self, run_id: str) -> RunDetail | None:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "select detail_json from runs where id = ?",
+                (run_id,),
+            ).fetchone()
+        finally:
+            self._close(conn)
+        if row is None:
+            return None
+        return RunDetail.model_validate_json(row[0])
+
     def load_events(self, run_id: str) -> list[RunEvent]:
         conn = self._connect()
         try:

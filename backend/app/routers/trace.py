@@ -7,8 +7,10 @@ from app.events import RunEvent
 from packages.compliance import RunComplianceReport, build_run_compliance_report
 from packages.config import Settings
 from packages.observability import (
+    DecisionReplayReport,
     OtelTraceExport,
     TraceObservabilityReport,
+    build_decision_replay,
     build_otel_trace_export,
     evaluate_trace_observability,
 )
@@ -74,6 +76,18 @@ async def get_run_compliance_report(
     if detail is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return build_run_compliance_report(detail, settings=settings)
+
+
+@router.get("/runs/{run_id}/decision-replay", response_model=DecisionReplayReport)
+async def get_decision_replay(
+    run_id: str,
+    service: RunServiceDep,
+) -> DecisionReplayReport:
+    detail = service.get_run(run_id)
+    events = service.get_trace(run_id)
+    if detail is None or events is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return build_decision_replay(detail, events)
 
 
 @router.get("/runs/{run_id}/trace/agent-messages", response_model=list[AgentMessage])

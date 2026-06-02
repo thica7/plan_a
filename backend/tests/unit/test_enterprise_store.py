@@ -205,6 +205,9 @@ def test_enterprise_store_round_trips_projection() -> None:
 
     assert loaded is not None
     assert loaded.report_version.id == projection.report_version.id
+    assert loaded.report_version.quality_metadata["memory_observations"][0]["kind"] == (
+        "analysis_plan"
+    )
     assert [item.id for item in loaded.evidence_records] == [
         item.id for item in projection.evidence_records
     ]
@@ -733,8 +736,12 @@ def test_enterprise_router_exposes_projection() -> None:
     project = client.get(f"/api/enterprise/projects/{context.project_id}")
     business_plan = client.get(f"/api/enterprise/projects/{context.project_id}/business-plan")
     qa_evaluation = client.get(f"/api/enterprise/projects/{context.project_id}/qa-evaluation")
+    claim_validation = client.get(
+        f"/api/enterprise/projects/{context.project_id}/claim-validation"
+    )
     readiness = client.get(f"/api/enterprise/projects/{context.project_id}/readiness-score")
     gaps = client.get(f"/api/enterprise/projects/{context.project_id}/evidence-gaps")
+    quality_matrix = client.get(f"/api/enterprise/projects/{context.project_id}/quality-matrix")
     competitors = client.get(f"/api/enterprise/competitors?project_id={context.project_id}")
     source_registry = client.get(
         f"/api/enterprise/source-registry?workspace_id={context.workspace_id}"
@@ -829,10 +836,19 @@ def test_enterprise_router_exposes_projection() -> None:
     assert business_plan.json()["scenario_pack"]["id"]
     assert qa_evaluation.status_code == 200
     assert "finding_count" in qa_evaluation.json()
+    assert claim_validation.status_code == 200
+    assert claim_validation.json()["supported_count"] == 1
     assert readiness.status_code == 200
     assert readiness.json()["risk_level"] in {"ready", "watch", "at_risk", "blocked"}
     assert gaps.status_code == 200
     assert "gap_count" in gaps.json()
+    assert quality_matrix.status_code == 200
+    assert {item["agent_name"] for item in quality_matrix.json()["entries"]} >= {
+        "BusinessQA",
+        "ClaimValidator",
+        "EvidenceGap",
+        "RedTeam",
+    }
     assert competitors.status_code == 200
     assert [item["name"] for item in competitors.json()] == ["Cursor"]
     assert source_registry.status_code == 200

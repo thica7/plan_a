@@ -27,7 +27,11 @@ def test_run_journal_persists_run_and_events() -> None:
     journal.append_event(event)
 
     loaded_runs = journal.load_runs()
+    loaded_run = journal.load_run("run-1")
     loaded_events = journal.load_events("run-1")
 
     assert loaded_runs[0].id == "run-1"
+    assert loaded_run is not None
+    assert loaded_run.id == "run-1"
+    assert journal.load_run("missing") is None
     assert loaded_events[0].type == "run_completed"
