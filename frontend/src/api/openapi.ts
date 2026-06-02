@@ -2932,7 +2932,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "queued" | "running" | "interrupted" | "completed" | "failed";
+            status: "queued" | "running" | "interrupted" | "completed" | "completed_with_blockers" | "failed";
             /**
              * Execution Mode
              * @enum {string}
@@ -3136,7 +3136,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "queued" | "running" | "interrupted" | "completed" | "failed";
+            status: "queued" | "running" | "interrupted" | "completed" | "completed_with_blockers" | "failed";
             /**
              * Execution Mode
              * @enum {string}

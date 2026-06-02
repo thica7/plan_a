@@ -1,6 +1,12 @@
 export type { components, operations, paths } from "./openapi";
 
-export type RunStatus = "queued" | "running" | "interrupted" | "completed" | "failed";
+export type RunStatus =
+  | "queued"
+  | "running"
+  | "interrupted"
+  | "completed"
+  | "completed_with_blockers"
+  | "failed";
 
 export interface AnalysisPlan {
   topic: string;

@@ -19,6 +19,15 @@ from packages.schema.models import (
     TraceSpan,
 )
 
+RunStatus = Literal[
+    "queued",
+    "running",
+    "interrupted",
+    "completed",
+    "completed_with_blockers",
+    "failed",
+]
+
 
 class RunCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -51,7 +60,7 @@ class RunSummary(BaseModel):
     workspace_id: str = "default-workspace"
     project_id: str | None = None
     topic: str
-    status: Literal["queued", "running", "interrupted", "completed", "failed"]
+    status: RunStatus
     execution_mode: Literal["demo", "real"]
     created_at: datetime
     updated_at: datetime

@@ -79,7 +79,7 @@ class CompetitiveIntelActivities:
         detail = self._service.get_run(run_id)
         if detail is None:
             raise RuntimeError(f"Run not found: {run_id}")
-        if detail.status not in {"completed", "interrupted", "failed"}:
+        if detail.status not in {"completed", "completed_with_blockers", "interrupted", "failed"}:
             detail = await self._service.run_pipeline(run_id)
         if detail is None:
             raise RuntimeError(f"Run disappeared during pipeline execution: {run_id}")
@@ -166,7 +166,7 @@ class ScheduledScanActivities:
                 execution_mode=request.execution_mode,
             )
         )
-        if detail.status not in {"completed", "interrupted", "failed"}:
+        if detail.status not in {"completed", "completed_with_blockers", "interrupted", "failed"}:
             detail = await self._service.run_pipeline(detail.id)
         if detail is None:
             raise RuntimeError(f"Scheduled scan run disappeared: {idempotency_key}")
@@ -308,7 +308,12 @@ class MonitorActivities:
                     execution_mode=request.execution_mode,
                 )
             )
-            if detail.status not in {"completed", "interrupted", "failed"}:
+            if detail.status not in {
+                "completed",
+                "completed_with_blockers",
+                "interrupted",
+                "failed",
+            }:
                 detail = await self._service.run_pipeline(detail.id)
             if detail is None:
                 raise RuntimeError("Monitor run disappeared during execution.")

@@ -641,12 +641,13 @@ class RunService(
         record.detail.current_node = None
         record.detail.updated_at = datetime.utcnow()
         projection = self._sync_enterprise_projection(record, notify_release_gate=True)
+        self._apply_release_gate_run_status(record, projection)
         await self.emit(
             record.detail.id,
             "run_completed",
             "orchestrator",
             None,
-            "Real API run completed.",
+            self._run_completed_message(record.detail.status, "Real API run completed."),
             self._enterprise_projection_payload(projection),
         )
 
@@ -662,12 +663,16 @@ class RunService(
         if (pending and pending.auto_continue) and await self._maybe_run_auto_redo(record):
             return
         projection = self._sync_enterprise_projection(record, notify_release_gate=True)
+        self._apply_release_gate_run_status(record, projection)
         await self.emit(
             detail.id,
             "run_completed",
             "orchestrator",
             None,
-            f"Scoped redo completed: {pending.stage if pending else 'redo'}.",
+            self._run_completed_message(
+                detail.status,
+                f"Scoped redo completed: {pending.stage if pending else 'redo'}.",
+            ),
             {
                 "redo_scope": pending.redo_scope.model_dump(mode="json") if pending else None,
                 **self._enterprise_projection_payload(projection),
@@ -682,12 +687,13 @@ class RunService(
         record.detail.current_node = None
         record.detail.updated_at = datetime.utcnow()
         projection = self._sync_enterprise_projection(record, notify_release_gate=True)
+        self._apply_release_gate_run_status(record, projection)
         await self.emit(
             record.detail.id,
             "run_completed",
             "orchestrator",
             None,
-            "Demo graph run completed.",
+            self._run_completed_message(record.detail.status, "Demo graph run completed."),
             self._enterprise_projection_payload(projection),
         )
 
@@ -1599,6 +1605,25 @@ class RunService(
                 ],
             }
         }
+
+    def _apply_release_gate_run_status(
+        self,
+        record: RunRecord,
+        projection: EnterpriseRunProjection | None,
+    ) -> ReportReleaseGate | None:
+        if projection is None or record.detail.status != "completed":
+            return None
+        gate = self._evaluate_report_release_gate(projection)
+        if gate is None or gate.allowed:
+            return gate
+        record.detail.status = "completed_with_blockers"
+        record.detail.updated_at = datetime.utcnow()
+        return gate
+
+    def _run_completed_message(self, status: str, base_message: str) -> str:
+        if status == "completed_with_blockers":
+            return f"{base_message} Release gate blocked the report for review."
+        return base_message
 
     def _ensure_workspace_quota_allows_run(self, workspace_id: str) -> None:
         if self._enterprise_store is None:

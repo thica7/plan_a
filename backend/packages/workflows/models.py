@@ -16,7 +16,14 @@ RUN_MONITOR_CYCLE_ACTIVITY = "run_monitor_cycle"
 RECORD_MONITOR_ANOMALY_NOTIFICATION_ACTIVITY = "record_monitor_anomaly_notification"
 DEFAULT_TEMPORAL_TASK_QUEUE = "competitive-intel"
 
-RunStatus = Literal["queued", "running", "interrupted", "completed", "failed"]
+RunStatus = Literal[
+    "queued",
+    "running",
+    "interrupted",
+    "completed",
+    "completed_with_blockers",
+    "failed",
+]
 ExecutionMode = Literal["auto", "demo", "real"]
 WorkflowStatus = Literal["completed", "interrupted", "failed"]
 ScheduledScanStatus = Literal["completed", "partial", "failed", "empty"]

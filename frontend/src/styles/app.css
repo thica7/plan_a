@@ -567,6 +567,11 @@ select {
   color: var(--accent);
 }
 
+.flow-status.completed_with_blockers {
+  border-color: rgba(217, 159, 54, 0.45);
+  color: #8a641f;
+}
+
 .flow-status.failed {
   border-color: rgba(201, 72, 72, 0.35);
   color: var(--danger);
@@ -930,6 +935,10 @@ select {
 
 .status-chip.completed {
   color: var(--accent);
+}
+
+.status-chip.completed_with_blockers {
+  color: #8a641f;
 }
 
 .source-strip {

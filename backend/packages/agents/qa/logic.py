@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
@@ -177,6 +178,7 @@ class QualityAgentMixin:
         issues = self._build_qa_issues(detail)
         detail.qa_findings = issues
         self._refresh_quality_metrics(detail)
+        self._sync_report_with_final_qa(detail)
         self._append_agent_message(
             record,
             from_agent="qa",
@@ -240,6 +242,65 @@ class QualityAgentMixin:
             {"decision": decision.model_dump(exclude_none=True)},
         )
         return route_state
+
+    def _sync_report_with_final_qa(self, detail: RunDetail) -> None:
+        if not detail.report_md.strip():
+            return
+        detail.report_md = self._strip_stale_qa_claims(detail.report_md)
+        severity_counts = {
+            "blocker": sum(1 for issue in detail.qa_findings if issue.severity == "blocker"),
+            "warn": sum(1 for issue in detail.qa_findings if issue.severity == "warn"),
+            "info": sum(1 for issue in detail.qa_findings if issue.severity == "info"),
+        }
+        if detail.qa_findings:
+            top_issues = "\n".join(
+                f"- {issue.severity}: {issue.problem}"
+                for issue in sorted(
+                    detail.qa_findings,
+                    key=lambda item: {"blocker": 0, "warn": 1, "info": 2}.get(
+                        item.severity, 3
+                    ),
+                )[:8]
+            )
+            section = (
+                "\n\n## Final QA Gate Status\n"
+                "**Status: blocked for review.** "
+                f"QA found {severity_counts['blocker']} blocker(s), "
+                f"{severity_counts['warn']} warning(s), and {severity_counts['info']} "
+                "info item(s). This report is not ready for enterprise publishing until "
+                "these issues are resolved or explicitly force-passed by a reviewer.\n\n"
+                f"{top_issues}"
+            )
+        else:
+            section = (
+                "\n\n## Final QA Gate Status\n"
+                "**Status: passed.** No unresolved deterministic QA findings were recorded "
+                "for this run."
+            )
+        detail.report_md = detail.report_md.rstrip() + section
+
+    def _strip_stale_qa_claims(self, markdown: str) -> str:
+        patterns = [
+            r"\*\*Unresolved QA Findings:\*\*\s*None flagged[^\n]*",
+            r"Unresolved QA Findings:\s*None flagged[^\n]*",
+            r"No unresolved QA findings were recorded[^\n]*",
+            r"all source claims meet minimum confidence thresholds[^\n]*",
+        ]
+        cleaned = markdown
+        for pattern in patterns:
+            cleaned = re.sub(
+                pattern,
+                "Unresolved QA findings are summarized in the Final QA Gate Status section.",
+                cleaned,
+                flags=re.IGNORECASE,
+            )
+        cleaned = re.sub(
+            r"\n+## Final QA Gate Status\n.*\Z",
+            "",
+            cleaned,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        return cleaned.rstrip()
 
     def _build_qa_issues(self, detail: RunDetail) -> list[QCIssue]:
         self._ensure_structured_knowledge(detail)

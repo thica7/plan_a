@@ -95,7 +95,7 @@ export function StaticGraphView({ activeNode, competitors, dimensions, events, r
     <section className="panel graph-panel">
       <div className="panel-heading-row">
         <h2>Flow graph</h2>
-        <span className={`flow-status ${status}`}>{status}</span>
+        <span className={`flow-status ${status}`}>{formatRunStatus(status)}</span>
       </div>
 
       <div className="topology-graph" aria-label="Live LangGraph topology with parallel branches">
@@ -357,7 +357,7 @@ function renderSingleNode(
 }
 
 function resolveActiveNode(events: RunEvent[], activeNode: string | null | undefined, status: RunStatus) {
-  if (status === "completed") return null;
+  if (isFinished(status)) return null;
   const latestInterrupt = [...events].reverse().find((event) => event.type === "interrupt");
   if (latestInterrupt && status === "interrupted") {
     const interruptNode = latestInterrupt.payload.interrupt_node;
@@ -382,7 +382,7 @@ function resolveActiveNode(events: RunEvent[], activeNode: string | null | undef
 }
 
 function resolveVisibleStages(events: RunEvent[], active: string | null | undefined, status: RunStatus) {
-  const completed = status === "completed";
+  const completed = isFinished(status);
   const plannerHitl =
     completed || active === "planner_hitl" || hasAgentEvent(events, "hitl", "planner") || nodeCompleted(events, "planner");
   const collector =
@@ -678,13 +678,13 @@ function resolveNodeState(
   if (status === "interrupted" && active === node) return "interrupted";
   if (active === node) return "active";
   if (node === "planner_hitl") {
-    return nodeCompleted(events, "hitl", "planner") || status === "completed" ? "complete" : "pending";
+    return nodeCompleted(events, "hitl", "planner") || isFinished(status) ? "complete" : "pending";
   }
   if (node === "qa_hitl") {
-    return nodeCompleted(events, "hitl", "qa") || status === "completed" ? "complete" : "pending";
+    return nodeCompleted(events, "hitl", "qa") || isFinished(status) ? "complete" : "pending";
   }
   const completed = events.some((event) => event.type === "node_completed" && event.agent === node);
-  return completed || status === "completed" ? "complete" : "pending";
+  return completed || isFinished(status) ? "complete" : "pending";
 }
 
 function phaseQaState(
@@ -699,7 +699,7 @@ function phaseQaState(
   if (active === node) return "active";
   const phaseEvents = events.filter((event) => event.agent === "qa" && event.subagent === phase);
   if (phaseEvents.some((event) => event.type === "node_completed")) return "complete";
-  return status === "completed" ? "complete" : "pending";
+  return isFinished(status) ? "complete" : "pending";
 }
 
 function branchState(
@@ -715,7 +715,7 @@ function branchState(
   if (status === "interrupted" && active === agent && latest?.type === "node_started") return "interrupted";
   if (latest?.type === "node_started") return "active";
   if (branchEvents.some((event) => event.type === "node_completed")) return "complete";
-  return status === "completed" ? "complete" : "pending";
+  return isFinished(status) ? "complete" : "pending";
 }
 
 function groupState(
@@ -743,7 +743,7 @@ function dispatchState(
   if (status === "interrupted" && active === agent) return "interrupted";
   if (active === agent) return "active";
   if (nodeCompleted(events, agent)) return "complete";
-  return status === "completed" ? "complete" : "pending";
+  return isFinished(status) ? "complete" : "pending";
 }
 
 function joinState(
@@ -753,7 +753,7 @@ function joinState(
   events: RunEvent[],
   status: RunStatus,
 ): NodeState {
-  if (nodeCompleted(events, joinAgent) || status === "completed") return "complete";
+  if (nodeCompleted(events, joinAgent) || isFinished(status)) return "complete";
   if (hasAgentEvent(events, joinAgent)) return "active";
   const completeCount = branches.filter((branch) =>
     events.some((event) => event.type === "node_completed" && event.agent === agent && event.subagent === branch),
@@ -777,6 +777,14 @@ function analystCaption(branch: string) {
   if (dimension === "persona") return "sentiment aggregation";
   if (dimension === "swot") return "cross-competitor view";
   return "citation-checked findings";
+}
+
+function isFinished(status: RunStatus) {
+  return status === "completed" || status === "completed_with_blockers";
+}
+
+function formatRunStatus(status: RunStatus) {
+  return status === "completed_with_blockers" ? "completed, blocked" : status;
 }
 
 function renderStateIcon(state: NodeState) {

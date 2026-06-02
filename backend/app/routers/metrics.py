@@ -68,7 +68,14 @@ def metrics(
         "# HELP competiscope_runs_total Runs recorded by status.",
         "# TYPE competiscope_runs_total gauge",
     ]
-    for status in ("queued", "running", "interrupted", "completed", "failed"):
+    for status in (
+        "queued",
+        "running",
+        "interrupted",
+        "completed",
+        "completed_with_blockers",
+        "failed",
+    ):
         lines.append(f'competiscope_runs_total{{status="{status}"}} {counts[status]}')
     lines.extend(
         [

@@ -380,6 +380,57 @@ def test_qa_marks_missing_dimension_as_blocker() -> None:
     assert issues[0].redo_scope.kind == "collector"
 
 
+def test_final_qa_sync_replaces_stale_clean_report_claim() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        report_md=(
+            "# Report\n\n"
+            "**Unresolved QA Findings:** None flagged; all source claims meet minimum "
+            "confidence thresholds."
+        ),
+        qa_findings=[
+            QCIssue(
+                id="missing-pricing",
+                severity="blocker",
+                detected_by="coverage",
+                target_agent="collector",
+                target_subagent="pricing",
+                field_path="raw_sources[pricing]",
+                problem="No evidence sources were collected for pricing.",
+                redo_scope=RedoScope(
+                    kind="collector",
+                    target_subagent="pricing",
+                    rationale="Missing pricing evidence.",
+                ),
+            )
+        ],
+    )
+
+    service._sync_report_with_final_qa(detail)
+
+    assert "None flagged" not in detail.report_md
+    assert "Final QA Gate Status" in detail.report_md
+    assert "Status: blocked for review" in detail.report_md
+    assert "No evidence sources were collected for pricing." in detail.report_md
+
+
 def test_qa_marks_phantom_citation_as_writer_only_blocker() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

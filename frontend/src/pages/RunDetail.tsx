@@ -162,8 +162,14 @@ export function RunDetail() {
           </div>
         </div>
         <div className={`status-chip ${detail.status}`}>
-          {detail.status === "completed" ? <CheckCircle2 size={16} aria-hidden /> : <Loader2 size={16} aria-hidden />}
-          {detail.status}
+          {detail.status === "completed" ? (
+            <CheckCircle2 size={16} aria-hidden />
+          ) : detail.status === "completed_with_blockers" ? (
+            <AlertTriangle size={16} aria-hidden />
+          ) : (
+            <Loader2 size={16} aria-hidden />
+          )}
+          {detail.status === "completed_with_blockers" ? "completed, blocked" : detail.status}
         </div>
       </header>
 

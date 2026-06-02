@@ -545,8 +545,10 @@ async def test_run_service_records_release_gate_notification_for_weak_report() -
     ]
     assert projection is not None
     assert projection.report_version.status == "draft"
+    assert record.detail.status == "completed_with_blockers"
     assert record.events[-1].payload["enterprise_projection"]["release_gate"]["allowed"] is False
     assert record.events[-1].payload["enterprise_projection"]["release_gate"]["status"] == "blocked"
+    assert "Release gate blocked" in record.events[-1].message
     assert notifications
     assert notifications[0].resource_id == projection.report_version.id
     assert notifications[0].metadata["issue_count"] >= 1

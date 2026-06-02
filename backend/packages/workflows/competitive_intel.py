@@ -162,6 +162,13 @@ def _int(value: object) -> int:
 
 
 def _run_status(value: object) -> RunStatus:
-    if value in {"queued", "running", "interrupted", "completed", "failed"}:
+    if value in {
+        "queued",
+        "running",
+        "interrupted",
+        "completed",
+        "completed_with_blockers",
+        "failed",
+    }:
         return cast(RunStatus, value)
     raise ValueError("Temporal activity payload status field is invalid.")
