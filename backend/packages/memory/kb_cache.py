@@ -6,7 +6,6 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from packages.paths import runtime_path
 from packages.schema.models import CompetitorKnowledge
 
 
@@ -35,7 +34,7 @@ class KBCache:
 
     @classmethod
     def from_default_path(cls) -> KBCache:
-        return cls(runtime_path("runs", "kb_cache.db"))
+        return cls(Path("runs") / "kb_cache.db")
 
     @classmethod
     def in_memory(cls) -> KBCache:
