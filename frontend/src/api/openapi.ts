@@ -842,6 +842,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/projects/{project_id}/schema-suggestions/{suggestion_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Project Schema Suggestion */
+        post: operations["review_project_schema_suggestion_api_enterprise_projects__project_id__schema_suggestions__suggestion_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/projects/{project_id}/evidence-gaps/fill": {
         parameters: {
             query?: never;
@@ -2330,6 +2347,34 @@ export interface components {
              */
             generated_at?: string;
         };
+        /** EvidenceGapFillDecisionEvent */
+        EvidenceGapFillDecisionEvent: {
+            /**
+             * Event Type
+             * @enum {string}
+             */
+            event_type: "rag.retrieved" | "tool.called" | "report.ready";
+            /**
+             * Agent
+             * @default rag_gap_fill
+             */
+            agent: string;
+            /** Message */
+            message: string;
+            /** Gap Ids */
+            gap_ids?: string[];
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+        };
         /** EvidenceGapFillResult */
         EvidenceGapFillResult: {
             /** Project Id */
@@ -2382,6 +2427,8 @@ export interface components {
             filled_gap_ids?: string[];
             /** Remaining Gap Ids */
             remaining_gap_ids?: string[];
+            /** Decision Events */
+            decision_events?: components["schemas"]["EvidenceGapFillDecisionEvent"][];
             report: components["schemas"]["EvidenceGapReport"];
             updated_report_version?: components["schemas"]["ReportVersionRecord"] | null;
             source_release_gate?: components["schemas"]["ReportReleaseGate"] | null;
@@ -2549,6 +2596,13 @@ export interface components {
             pydantic_ai_runtime_result_type?: string | null;
             /** Pydantic Ai Model Name */
             pydantic_ai_model_name?: string | null;
+            /** Pydantic Ai Runtime Prompt Hash */
+            pydantic_ai_runtime_prompt_hash?: string | null;
+            /**
+             * Pydantic Ai Runtime Prompt Chars
+             * @default 0
+             */
+            pydantic_ai_runtime_prompt_chars: number;
             /**
              * Typed Contract Enforced
              * @default true
@@ -3604,6 +3658,13 @@ export interface components {
             pydantic_ai_runtime_result_type?: string | null;
             /** Pydantic Ai Model Name */
             pydantic_ai_model_name?: string | null;
+            /** Pydantic Ai Runtime Prompt Hash */
+            pydantic_ai_runtime_prompt_hash?: string | null;
+            /**
+             * Pydantic Ai Runtime Prompt Chars
+             * @default 0
+             */
+            pydantic_ai_runtime_prompt_chars: number;
             /**
              * Typed Contract Enforced
              * @default true
@@ -4498,6 +4559,64 @@ export interface components {
              * @enum {string}
              */
             status: "started" | "already_started";
+        };
+        /** SchemaEvolutionReviewRecord */
+        SchemaEvolutionReviewRecord: {
+            /** Suggestion Id */
+            suggestion_id: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "accepted" | "rejected";
+            /** Dimension */
+            dimension: string;
+            /** Normalized Dimension */
+            normalized_dimension: string;
+            /** Reason */
+            reason: string;
+            /** Source Gap Ids */
+            source_gap_ids?: string[];
+            proposed_skill: components["schemas"]["SkillSpec"];
+            /** Reviewed By */
+            reviewed_by: string;
+            /**
+             * Reviewed At
+             * Format: date-time
+             */
+            reviewed_at?: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** SchemaEvolutionReviewRequest */
+        SchemaEvolutionReviewRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "accepted" | "rejected";
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            suggestion?: components["schemas"]["SchemaEvolutionSuggestion"] | null;
+        };
+        /** SchemaEvolutionReviewResult */
+        SchemaEvolutionReviewResult: {
+            /** Project Id */
+            project_id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            review: components["schemas"]["SchemaEvolutionReviewRecord"];
+            project: components["schemas"]["ProjectRecord"];
+            /** Accepted Schema Dimensions */
+            accepted_schema_dimensions?: {
+                [key: string]: components["schemas"]["SchemaEvolutionReviewRecord"];
+            };
         };
         /** SchemaEvolutionSuggestion */
         SchemaEvolutionSuggestion: {
@@ -7066,6 +7185,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvidenceGapReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_project_schema_suggestion_api_enterprise_projects__project_id__schema_suggestions__suggestion_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                suggestion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SchemaEvolutionReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchemaEvolutionReviewResult"];
                 };
             };
             /** @description Validation Error */

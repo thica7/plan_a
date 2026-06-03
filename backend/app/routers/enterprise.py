@@ -1036,6 +1036,19 @@ def _with_pydantic_ai_execution_metadata(
             "pydantic_ai_model_name": _optional_str(
                 metadata.get("pydantic_ai_model_name", report.pydantic_ai_model_name)
             ),
+            "pydantic_ai_runtime_prompt_hash": _optional_str(
+                metadata.get(
+                    "runtime_prompt_hash",
+                    report.pydantic_ai_runtime_prompt_hash,
+                )
+            ),
+            "pydantic_ai_runtime_prompt_chars": _optional_int(
+                metadata.get(
+                    "runtime_prompt_chars",
+                    report.pydantic_ai_runtime_prompt_chars,
+                ),
+                default=report.pydantic_ai_runtime_prompt_chars,
+            ),
             "typed_contract_enforced": bool(
                 metadata.get("typed_contract_enforced", report.typed_contract_enforced)
             ),
@@ -1055,6 +1068,8 @@ def _quality_agent_pydantic_ai_metadata(
         "pydantic_ai_runtime_agent_created": report.pydantic_ai_runtime_agent_created,
         "pydantic_ai_runtime_result_type": report.pydantic_ai_runtime_result_type,
         "pydantic_ai_model_name": report.pydantic_ai_model_name,
+        "pydantic_ai_runtime_prompt_hash": report.pydantic_ai_runtime_prompt_hash,
+        "pydantic_ai_runtime_prompt_chars": report.pydantic_ai_runtime_prompt_chars,
         "typed_contract_enforced": report.typed_contract_enforced,
     }
 
@@ -1063,6 +1078,15 @@ def _optional_str(value: object) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _optional_int(value: object, *, default: int = 0) -> int:
+    if value is None:
+        return default
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return default
 
 
 def _business_plan_for_project(

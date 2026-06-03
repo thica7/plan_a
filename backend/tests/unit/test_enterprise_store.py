@@ -1150,11 +1150,15 @@ def test_enterprise_router_exposes_projection() -> None:
     assert gaps.json()["pydantic_ai_execution_mode"] == "deterministic_handler"
     assert gaps.json()["pydantic_ai_model_backed_requested"] is False
     assert gaps.json()["typed_contract_enforced"] is True
+    assert gaps.json()["pydantic_ai_runtime_prompt_hash"]
+    assert gaps.json()["pydantic_ai_runtime_prompt_chars"] > 0
     assert red_team.status_code == 200
     assert red_team.json()["framework"] == "pydantic-ai"
     assert red_team.json()["pydantic_ai_execution_mode"] == "deterministic_handler"
     assert red_team.json()["pydantic_ai_model_backed_requested"] is False
     assert red_team.json()["typed_contract_enforced"] is True
+    assert red_team.json()["pydantic_ai_runtime_prompt_hash"]
+    assert red_team.json()["pydantic_ai_runtime_prompt_chars"] > 0
     assert quality_matrix.status_code == 200
     assert {item["agent_name"] for item in quality_matrix.json()["entries"]} >= {
         "BusinessQA",
@@ -1179,11 +1183,15 @@ def test_enterprise_router_exposes_projection() -> None:
     )
     assert evidence_gap_matrix["metadata"]["pydantic_ai_execution_mode"] == "deterministic_handler"
     assert evidence_gap_matrix["metadata"]["typed_contract_enforced"] is True
+    assert evidence_gap_matrix["metadata"]["pydantic_ai_runtime_prompt_hash"]
+    assert evidence_gap_matrix["metadata"]["pydantic_ai_runtime_prompt_chars"] > 0
     red_team_matrix = next(
         item for item in quality_matrix.json()["entries"] if item["agent_name"] == "RedTeam"
     )
     assert red_team_matrix["metadata"]["pydantic_ai_execution_mode"] == "deterministic_handler"
     assert red_team_matrix["metadata"]["typed_contract_enforced"] is True
+    assert red_team_matrix["metadata"]["pydantic_ai_runtime_prompt_hash"]
+    assert red_team_matrix["metadata"]["pydantic_ai_runtime_prompt_chars"] > 0
     assert set(red_team_matrix["metadata"]["review_targets"]) >= {
         "BusinessQA",
         "ClaimValidator",

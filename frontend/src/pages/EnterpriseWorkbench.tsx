@@ -2306,6 +2306,8 @@ function EvidenceGapPanel({
         modelName={report.pydantic_ai_model_name}
         modelBackedRequested={report.pydantic_ai_model_backed_requested}
         runtimeAgentCreated={report.pydantic_ai_runtime_agent_created}
+        runtimePromptChars={report.pydantic_ai_runtime_prompt_chars}
+        runtimePromptHash={report.pydantic_ai_runtime_prompt_hash}
         typedContractEnforced={report.typed_contract_enforced}
       />
       {fillResult ? (
@@ -2521,6 +2523,8 @@ function RedTeamPanel({ report }: { report: RedTeamReport }) {
         modelName={report.pydantic_ai_model_name}
         modelBackedRequested={report.pydantic_ai_model_backed_requested}
         runtimeAgentCreated={report.pydantic_ai_runtime_agent_created}
+        runtimePromptChars={report.pydantic_ai_runtime_prompt_chars}
+        runtimePromptHash={report.pydantic_ai_runtime_prompt_hash}
         typedContractEnforced={report.typed_contract_enforced}
       />
       {report.findings.length > 0 ? (
@@ -2543,6 +2547,8 @@ function PydanticAiExecutionPanel({
   modelBackedRequested,
   modelName,
   runtimeAgentCreated,
+  runtimePromptChars,
+  runtimePromptHash,
   typedContractEnforced,
 }: {
   available: boolean;
@@ -2551,6 +2557,8 @@ function PydanticAiExecutionPanel({
   modelBackedRequested: boolean;
   modelName?: string | null;
   runtimeAgentCreated: boolean;
+  runtimePromptChars: number;
+  runtimePromptHash?: string | null;
   typedContractEnforced: boolean;
 }) {
   return (
@@ -2578,6 +2586,14 @@ function PydanticAiExecutionPanel({
       <span className={runtimeAgentCreated ? "ok" : "warn"}>
         <strong>{runtimeAgentCreated ? "ready" : "none"}</strong>
         <em>Runtime</em>
+      </span>
+      <span>
+        <strong>{runtimePromptHash ? runtimePromptHash.slice(0, 8) : "none"}</strong>
+        <em>Prompt hash</em>
+      </span>
+      <span>
+        <strong>{runtimePromptChars}</strong>
+        <em>Prompt chars</em>
       </span>
     </div>
   );

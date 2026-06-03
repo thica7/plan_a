@@ -954,6 +954,8 @@ class EvidenceGapReport(BaseModel):
     pydantic_ai_runtime_agent_created: bool = False
     pydantic_ai_runtime_result_type: str | None = None
     pydantic_ai_model_name: str | None = None
+    pydantic_ai_runtime_prompt_hash: str | None = None
+    pydantic_ai_runtime_prompt_chars: int = Field(default=0, ge=0)
     typed_contract_enforced: bool = True
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -1039,6 +1041,8 @@ class RedTeamReport(BaseModel):
     pydantic_ai_runtime_agent_created: bool = False
     pydantic_ai_runtime_result_type: str | None = None
     pydantic_ai_model_name: str | None = None
+    pydantic_ai_runtime_prompt_hash: str | None = None
+    pydantic_ai_runtime_prompt_chars: int = Field(default=0, ge=0)
     typed_contract_enforced: bool = True
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 

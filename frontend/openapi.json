@@ -3544,6 +3544,115 @@
         }
       }
     },
+    "/api/enterprise/projects/{project_id}/schema-suggestions/{suggestion_id}/review": {
+      "post": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Review Project Schema Suggestion",
+        "operationId": "review_project_schema_suggestion_api_enterprise_projects__project_id__schema_suggestions__suggestion_id__review_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "suggestion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Suggestion Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchemaEvolutionReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaEvolutionReviewResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enterprise/projects/{project_id}/evidence-gaps/fill": {
       "post": {
         "tags": [
@@ -8627,6 +8736,59 @@
         ],
         "title": "EvalOpsReport"
       },
+      "EvidenceGapFillDecisionEvent": {
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "rag.retrieved",
+              "tool.called",
+              "report.ready"
+            ],
+            "title": "Event Type"
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agent",
+            "default": "rag_gap_fill"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "gap_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gap Ids"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_type",
+          "message"
+        ],
+        "title": "EvidenceGapFillDecisionEvent"
+      },
       "EvidenceGapFillResult": {
         "properties": {
           "project_id": {
@@ -8730,6 +8892,13 @@
             },
             "type": "array",
             "title": "Remaining Gap Ids"
+          },
+          "decision_events": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceGapFillDecisionEvent"
+            },
+            "type": "array",
+            "title": "Decision Events"
           },
           "report": {
             "$ref": "#/components/schemas/EvidenceGapReport"
@@ -9055,6 +9224,23 @@
             ],
             "title": "Pydantic Ai Model Name"
           },
+          "pydantic_ai_runtime_prompt_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pydantic Ai Runtime Prompt Hash"
+          },
+          "pydantic_ai_runtime_prompt_chars": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Pydantic Ai Runtime Prompt Chars",
+            "default": 0
+          },
           "typed_contract_enforced": {
             "type": "boolean",
             "title": "Typed Contract Enforced",
@@ -9271,6 +9457,12 @@
             "type": "integer",
             "minimum": 0.0,
             "title": "Indexed Count"
+          },
+          "duplicate_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Duplicate Count",
+            "default": 0
           }
         },
         "additionalProperties": false,
@@ -10975,6 +11167,11 @@
             ],
             "title": "Created By"
           },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -11451,6 +11648,23 @@
               }
             ],
             "title": "Pydantic Ai Model Name"
+          },
+          "pydantic_ai_runtime_prompt_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pydantic Ai Runtime Prompt Hash"
+          },
+          "pydantic_ai_runtime_prompt_chars": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Pydantic Ai Runtime Prompt Chars",
+            "default": 0
           },
           "typed_contract_enforced": {
             "type": "boolean",
@@ -13491,6 +13705,138 @@
           "status"
         ],
         "title": "ScheduledScanStartResponse"
+      },
+      "SchemaEvolutionReviewRecord": {
+        "properties": {
+          "suggestion_id": {
+            "type": "string",
+            "title": "Suggestion Id"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "rejected"
+            ],
+            "title": "Decision"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "normalized_dimension": {
+            "type": "string",
+            "title": "Normalized Dimension"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "source_gap_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Gap Ids"
+          },
+          "proposed_skill": {
+            "$ref": "#/components/schemas/SkillSpec"
+          },
+          "reviewed_by": {
+            "type": "string",
+            "title": "Reviewed By"
+          },
+          "reviewed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Reviewed At"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "suggestion_id",
+          "decision",
+          "dimension",
+          "normalized_dimension",
+          "reason",
+          "proposed_skill",
+          "reviewed_by"
+        ],
+        "title": "SchemaEvolutionReviewRecord"
+      },
+      "SchemaEvolutionReviewRequest": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "rejected"
+            ],
+            "title": "Decision"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Note",
+            "default": ""
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SchemaEvolutionSuggestion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "SchemaEvolutionReviewRequest"
+      },
+      "SchemaEvolutionReviewResult": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "review": {
+            "$ref": "#/components/schemas/SchemaEvolutionReviewRecord"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectRecord"
+          },
+          "accepted_schema_dimensions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SchemaEvolutionReviewRecord"
+            },
+            "type": "object",
+            "title": "Accepted Schema Dimensions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "workspace_id",
+          "review",
+          "project"
+        ],
+        "title": "SchemaEvolutionReviewResult"
       },
       "SchemaEvolutionSuggestion": {
         "properties": {
