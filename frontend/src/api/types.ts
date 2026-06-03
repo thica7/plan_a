@@ -401,7 +401,7 @@ export interface EvalOpsCaseResult {
 }
 
 export interface EvalOpsQualityChainStep {
-  step: "real_collection" | "real_llm" | "report_quality" | "decision_replay";
+  step: "real_collection" | "real_llm" | "report_quality" | "rag_gap_fill" | "decision_replay";
   label: string;
   total_count: number;
   passed_count: number;
