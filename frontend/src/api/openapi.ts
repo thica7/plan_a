@@ -2619,6 +2619,11 @@ export interface components {
              * @default 1
              */
             rag_gap_fill_context_rate: number;
+            /**
+             * Rag Gap Fill Section Rate
+             * @default 1
+             */
+            rag_gap_fill_section_rate: number;
             /** Redo Iteration Count */
             redo_iteration_count: number;
             /** Redo Convergence Ratio */

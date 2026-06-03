@@ -87,6 +87,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.hitl_redo_loop_rate == 1.0
     assert report.user_research_evidence_rate == 1.0
     assert report.rag_gap_fill_context_rate == 1.0
+    assert report.rag_gap_fill_section_rate == 1.0
     assert report.redo_iteration_count == 1
     assert report.redo_convergence_ratio == 0.25
     assert report.real_quality_chain_failed_run_ids == []
@@ -99,7 +100,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         "decision_replay",
     }
     assert all(step.pass_rate == 1.0 for step in report.quality_chain_steps)
-    assert report.golden_set_size == 17
+    assert report.golden_set_size == 18
     assert report.golden_set_pass_rate >= 0.8
     assert report.golden_catalog_size >= 50
     assert report.golden_catalog_coverage_rate == 0.0
@@ -215,6 +216,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["hitl_redo_loop_rate"] == 1.0
     assert response.json()["user_research_evidence_rate"] == 1.0
     assert response.json()["rag_gap_fill_context_rate"] == 1.0
+    assert response.json()["rag_gap_fill_section_rate"] == 1.0
     assert response.json()["judge_mode"] == "llm"
     assert response.json()["judge_avg_score"] >= 72
     assert response.json()["llm_judge_avg_score"] is None
@@ -222,7 +224,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["real_quality_chain_failed_run_ids"] == []
     assert response.json()["decision_replay_failed_run_ids"] == []
     assert len(response.json()["quality_chain_steps"]) == 6
-    assert response.json()["golden_set_size"] == 17
+    assert response.json()["golden_set_size"] == 18
     assert response.json()["golden_catalog_size"] >= 50
     assert response.json()["compliance_pass_rate"] == 1.0
     assert response.json()["compliance_fail_count"] == 0
@@ -502,11 +504,14 @@ def test_enterprise_evalops_flags_missing_research_and_gap_fill_context() -> Non
     assert report.hitl_redo_loop_rate == 0.0
     assert report.user_research_evidence_rate == 0.0
     assert report.rag_gap_fill_context_rate == 0.0
+    assert report.rag_gap_fill_section_rate == 0.0
     assert metrics["user_research_evidence_rate"].status == "fail"
     assert metrics["rag_gap_fill_context_rate"].status == "fail"
+    assert metrics["rag_gap_fill_section_score"].status == "fail"
     assert metrics["hitl_redo_loop_rate"].status == "fail"
     assert cases["golden.user_research_evidence"].status == "fail"
     assert cases["golden.rag_gap_fill_context"].status == "fail"
+    assert cases["golden.rag_gap_fill_section"].status == "fail"
     assert cases["golden.hitl_redo_loop"].status == "fail"
     assert {
         issue.id for issue in report.regression_gate_issues if issue.kind == "case"
@@ -526,6 +531,10 @@ def test_enterprise_evalops_flags_missing_research_and_gap_fill_context() -> Non
         for issue in report.regression_gate_issues
     )
     assert any(
+        issue.kind == "metric" and issue.id == "rag_gap_fill_section_score"
+        for issue in report.regression_gate_issues
+    )
+    assert any(
         issue.kind == "metric" and issue.id == "hitl_redo_loop_rate"
         for issue in report.regression_gate_issues
     )
@@ -540,7 +549,9 @@ def test_enterprise_evalops_accepts_reported_rag_gap_fill_context() -> None:
         report_md=(
             f"{_structured_report_md()}\n\n"
             "## RAG Gap Fill\n\n"
-            "- Gap `missing-security`: retrieve official security evidence for Cursor. "
+            "- Gap `missing-security`: Suggested retrieval query: retrieve official "
+            "security evidence for Cursor. Retrieval context should prefer trust-center "
+            "sources. "
             "[source:source-0]\n"
         ),
         project_id="project-a",
@@ -569,8 +580,10 @@ def test_enterprise_evalops_accepts_reported_rag_gap_fill_context() -> None:
     steps = {step.step: step for step in report.quality_chain_steps}
 
     assert report.real_quality_chain_rate == 1.0
+    assert report.rag_gap_fill_section_rate == 1.0
     assert steps["rag_gap_fill"].pass_rate == 1.0
     assert cases["golden.rag_gap_fill_context"].status == "pass"
+    assert cases["golden.rag_gap_fill_section"].status == "pass"
 
 
 class _FakeRunService:

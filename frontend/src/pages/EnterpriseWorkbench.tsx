@@ -1879,8 +1879,13 @@ function EvalOpsPanel({
         />
         <Metric
           icon={<Search size={17} aria-hidden />}
-          label="RAG fill"
+          label="RAG context"
           value={formatPercent(report.rag_gap_fill_context_rate)}
+        />
+        <Metric
+          icon={<ListChecks size={17} aria-hidden />}
+          label="RAG section"
+          value={formatPercent(report.rag_gap_fill_section_rate)}
         />
         <Metric
           icon={<CalendarClock size={17} aria-hidden />}
@@ -1923,7 +1928,8 @@ function EvalOpsPanel({
         <span>HITL {formatPercent(report.hitl_enabled_run_rate)}</span>
         <span>HITL loop {formatPercent(report.hitl_redo_loop_rate)}</span>
         <span>User research {formatPercent(report.user_research_evidence_rate)}</span>
-        <span>RAG fill {formatPercent(report.rag_gap_fill_context_rate)}</span>
+        <span>RAG context {formatPercent(report.rag_gap_fill_context_rate)}</span>
+        <span>RAG section {formatPercent(report.rag_gap_fill_section_rate)}</span>
         <span>Human fix {formatPercent(report.human_correction_rate)}</span>
         <span>Redo {report.redo_iteration_count}</span>
         <span>Convergence {formatPercent(report.redo_convergence_ratio)}</span>

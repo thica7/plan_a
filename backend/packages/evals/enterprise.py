@@ -196,6 +196,12 @@ def build_enterprise_evalops_report(
             for comparison in comparisons
         ]
     )
+    rag_gap_fill_section_rate = _average_float(
+        [
+            _metric_value(comparison, "rag_gap_fill_section_score")
+            for comparison in comparisons
+        ]
+    )
     real_collection_rate = _ratio(
         [comparison.real_collection_signal for comparison in comparisons],
     )
@@ -240,6 +246,7 @@ def build_enterprise_evalops_report(
         compliance_pass_rate=compliance_pass_rate,
         user_research_evidence_rate=user_research_evidence_rate,
         rag_gap_fill_context_rate=rag_gap_fill_context_rate,
+        rag_gap_fill_section_rate=rag_gap_fill_section_rate,
         hitl_redo_loop_rate=hitl_redo_loop_rate,
         decision_replay_rate=decision_replay_rate,
     )
@@ -260,6 +267,7 @@ def build_enterprise_evalops_report(
         _metric("user_research_section_score", user_research_section_rate, 1.0, "ratio"),
         _metric("user_research_evidence_rate", user_research_evidence_rate, 1.0, "ratio"),
         _metric("rag_gap_fill_context_rate", rag_gap_fill_context_rate, 1.0, "ratio"),
+        _metric("rag_gap_fill_section_score", rag_gap_fill_section_rate, 1.0, "ratio"),
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
         _metric("real_quality_chain_rate", real_quality_chain_rate, 0.5, "ratio"),
@@ -330,6 +338,7 @@ def build_enterprise_evalops_report(
         hitl_redo_loop_rate=round(hitl_redo_loop_rate, 3),
         user_research_evidence_rate=round(user_research_evidence_rate, 3),
         rag_gap_fill_context_rate=round(rag_gap_fill_context_rate, 3),
+        rag_gap_fill_section_rate=round(rag_gap_fill_section_rate, 3),
         redo_iteration_count=redo_iteration_count,
         redo_convergence_ratio=round(redo_convergence_ratio, 3),
         golden_set_size=len(cases),
@@ -378,6 +387,7 @@ def _golden_cases(
     compliance_pass_rate: float,
     user_research_evidence_rate: float,
     rag_gap_fill_context_rate: float,
+    rag_gap_fill_section_rate: float,
     hitl_redo_loop_rate: float,
     decision_replay_rate: float,
 ) -> list[EvalOpsCaseResult]:
@@ -500,6 +510,14 @@ def _golden_cases(
             "golden.rag_gap_fill_context",
             "RAG gap-fill context when collector evidence gaps remain",
             round(rag_gap_fill_context_rate * 100),
+            100,
+            target_run_id,
+            baseline_run_id,
+        ),
+        _case(
+            "golden.rag_gap_fill_section",
+            "RAG gap-fill report section when collector evidence gaps remain",
+            round(rag_gap_fill_section_rate * 100),
             100,
             target_run_id,
             baseline_run_id,
@@ -1088,6 +1106,11 @@ def _recommendations(
         recommendations.append(
             "Close collector evidence gaps with RAG gap-fill retrieval context before "
             "reviewing the report."
+        )
+    if metric_names["rag_gap_fill_section_score"].status != "pass":
+        recommendations.append(
+            "Add RAG Gap Fill report sections for open collector evidence gaps so retrieval "
+            "queries and grounded context are reviewable."
         )
     if metric_names["real_collection_rate"].status != "pass":
         recommendations.append(
