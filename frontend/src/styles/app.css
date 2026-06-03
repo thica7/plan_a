@@ -2744,6 +2744,31 @@ select {
   font-style: normal;
 }
 
+.memory-feedback-form {
+  display: grid;
+  gap: 8px;
+}
+
+.memory-feedback-form textarea {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  min-height: 84px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.memory-feedback-form textarea:focus {
+  border-color: #6f8fbf;
+  box-shadow: 0 0 0 3px rgba(111, 143, 191, 0.16);
+  outline: none;
+}
+
+.memory-feedback-form .icon-text-button {
+  justify-self: start;
+}
+
 .competitor-library-grid {
   display: grid;
   gap: 12px;

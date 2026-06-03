@@ -37,6 +37,7 @@ import {
   getProjectRedTeam,
   getToolRegistry,
   getWorkspaceUsage,
+  ingestProjectMemoryFeedback,
   listArtifacts,
   listEnterpriseCompetitors,
   listEnterpriseNotifications,
@@ -132,6 +133,8 @@ export function EnterpriseWorkbench({
   const [isStartingScan, setStartingScan] = useState(false);
   const [isStartingMonitor, setStartingMonitor] = useState(false);
   const [isFillingGaps, setFillingGaps] = useState(false);
+  const [isSavingMemoryFeedback, setSavingMemoryFeedback] = useState(false);
+  const [memoryFeedbackDraft, setMemoryFeedbackDraft] = useState("");
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -472,6 +475,40 @@ export function EnterpriseWorkbench({
     }
   }
 
+  async function handleSubmitMemoryFeedback() {
+    if (!selectedProjectId || !memoryFeedbackDraft.trim()) return;
+    const project = selectedProject;
+    if (!project) return;
+    setSavingMemoryFeedback(true);
+    setError(null);
+    try {
+      const result = await ingestProjectMemoryFeedback(selectedProjectId, {
+        feedback_type: "preference",
+        target_type: "project",
+        target_id: selectedProjectId,
+        message: memoryFeedbackDraft.trim(),
+        auto_confirm: true,
+        tags: ["workbench"],
+      });
+      const [statsValue, recallValue] = await Promise.all([
+        getProjectMemoryStats(selectedProjectId),
+        recallProjectMemory(selectedProjectId, {
+          query: project.topic,
+          limit: 6,
+          includeUnconfirmed: true,
+        }),
+      ]);
+      setMemoryFeedback((current) => [result.feedback, ...current]);
+      setMemoryRecall(recallValue);
+      setMemoryStats(statsValue);
+      setMemoryFeedbackDraft("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save memory feedback");
+    } finally {
+      setSavingMemoryFeedback(false);
+    }
+  }
+
   function handleQualityChange(evidenceId: string, qualityLabel: EvidenceQualityLabel) {
     setEvidence((items) =>
       items.map((item) =>
@@ -649,6 +686,10 @@ export function EnterpriseWorkbench({
 
               <MemoryAgentPanel
                 feedback={memoryFeedback}
+                feedbackDraft={memoryFeedbackDraft}
+                isSubmitting={isSavingMemoryFeedback}
+                onFeedbackDraftChange={setMemoryFeedbackDraft}
+                onSubmitFeedback={handleSubmitMemoryFeedback}
                 recall={memoryRecall}
                 stats={memoryStats}
               />
@@ -1112,10 +1153,18 @@ function GovernanceRuntimePanel({
 
 function MemoryAgentPanel({
   feedback,
+  feedbackDraft,
+  isSubmitting,
+  onFeedbackDraftChange,
+  onSubmitFeedback,
   recall,
   stats,
 }: {
   feedback: UserFeedbackRecord[];
+  feedbackDraft: string;
+  isSubmitting: boolean;
+  onFeedbackDraftChange: (value: string) => void;
+  onSubmitFeedback: () => void;
   recall: MemoryRecallContext | null;
   stats: MemoryStats | null;
 }) {
@@ -1163,6 +1212,33 @@ function MemoryAgentPanel({
         <span>Visible candidates {candidates.length}</span>
         <span>Latest feedback {feedback[0] ? formatDate(feedback[0].created_at) : "none"}</span>
       </div>
+      <form
+        className="memory-feedback-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmitFeedback();
+        }}
+      >
+        <textarea
+          aria-label="Memory feedback"
+          onChange={(event) => onFeedbackDraftChange(event.target.value)}
+          placeholder="Preference, correction, source rule, or writing style"
+          rows={3}
+          value={feedbackDraft}
+        />
+        <button
+          className="icon-text-button"
+          disabled={isSubmitting || !feedbackDraft.trim()}
+          type="submit"
+        >
+          {isSubmitting ? (
+            <RefreshCw className="spin" size={15} aria-hidden />
+          ) : (
+            <CheckCircle2 size={15} aria-hidden />
+          )}
+          {isSubmitting ? "Saving" : "Save memory"}
+        </button>
+      </form>
       {candidates.length > 0 ? (
         <div className="competitor-strip">
           {candidates.slice(0, 5).map((candidate) => (
