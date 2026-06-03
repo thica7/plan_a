@@ -209,6 +209,7 @@ def test_compare_run_quality_flags_missing_real_chain_signals() -> None:
     assert "report_structure_score" in signal_checks["report_quality"].blocking_metric_names
     assert len(comparison.recommendations) == 5
     assert "real webpage" in comparison.recommendations[0]
+    assert all("fallback" not in item.casefold() for item in comparison.recommendations)
     assert any("Claim Validation & Evidence Risk" in item for item in comparison.recommendations)
     assert any("Scenario QA Checklist" in item for item in comparison.recommendations)
 

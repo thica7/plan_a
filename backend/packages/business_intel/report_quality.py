@@ -511,7 +511,7 @@ def _clean_recommendations(
     if not target.real_llm_signal:
         recommendations.append(
             "Capture real LLM trace evidence so real mode can be distinguished from deterministic "
-            "fallback output."
+            "evidence-indexed output."
         )
     if not target.report_quality_signal:
         recommendations.append(
