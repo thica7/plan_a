@@ -4,6 +4,8 @@ import time
 import pytest
 
 from packages.config import Settings
+from packages.enterprise import EnterpriseMemoryStore
+from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
@@ -2534,6 +2536,81 @@ async def test_hitl_uses_langgraph_command_resume_and_updates_plan() -> None:
         assert record.detail.status == "completed"
         assert service.has_pending_interrupt(detail.id) is False
         assert any(event.type == "interrupt" for event in service.get_trace(detail.id) or [])
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_hitl_resume_creates_reviewable_memory_candidate() -> None:
+    memory = PreferenceMemoryStore.in_memory()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        enterprise_store=EnterpriseMemoryStore(),
+        preference_memory=memory,
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    async def fake_resume_graph(run_id, request):  # noqa: ANN001, ANN202
+        return None
+
+    service._resume_interrupted_graph = fake_resume_graph  # type: ignore[method-assign]
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="HITL memory smoke",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="real",
+                project_id="project-hitl-memory",
+            )
+        )
+        record = service._runs[detail.id]
+        record.pending_interrupts["planner"] = {
+            "stage": "planner",
+            "graph_kind": "real",
+            "thread_id": "thread-hitl-memory",
+            "interrupt_node": "planner_hitl",
+        }
+
+        updated = await service.resume(
+            detail.id,
+            HitlResumeRequest(
+                decision="modify_plan",
+                note="Prefer official feature sources before writing recommendations.",
+                dimensions=["feature"],
+            ),
+        )
+
+        assert updated is not None
+        feedback = memory.list_feedback(project_id=updated.project_id or "")
+        recall = memory.recall(
+            workspace_id="default-workspace",
+            project_id=updated.project_id or "",
+            query="feature official source",
+            include_unconfirmed=True,
+        )
+
+        assert updated.plan.dimensions == ["feature"]
+        assert feedback[0].target_type == "dimension"
+        assert feedback[0].run_id == detail.id
+        assert feedback[0].metadata["source"] == "hitl_resume"
+        assert recall.candidates
+        assert all(candidate.status == "candidate" for candidate in recall.candidates)
+        assert {candidate.kind for candidate in recall.candidates} & {
+            "preferred_dimension",
+            "source_preference",
+            "correction",
+        }
     finally:
         await service._graph_checkpointer.aclose()
 

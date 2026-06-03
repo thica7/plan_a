@@ -59,6 +59,7 @@ from packages.schema.enterprise import (
     EnterpriseRunProjection,
     NotificationRecord,
     ReportReleaseGate,
+    UserFeedbackRecord,
 )
 from packages.schema.models import (
     AgentMessage,
@@ -391,6 +392,7 @@ class RunService(
                     request.dimensions,
                     require_core_schema=self._plan_requires_core_schema(record.detail),
                 )
+            self._capture_hitl_memory_feedback(record.detail, request)
             record.detail.status = "running"
             record.detail.updated_at = datetime.utcnow()
             self._persist_run(run_id)
@@ -430,6 +432,7 @@ class RunService(
                 request.dimensions,
                 require_core_schema=self._plan_requires_core_schema(record.detail),
             )
+        self._capture_hitl_memory_feedback(record.detail, request)
         record.detail.status = "running"
         record.detail.updated_at = datetime.utcnow()
         self._persist_run(run_id)
@@ -2854,6 +2857,60 @@ class RunService(
                 seen.add(tag)
                 merged.append(tag)
         return merged
+
+    def _capture_hitl_memory_feedback(
+        self,
+        detail: RunDetail,
+        request: HitlResumeRequest,
+    ) -> None:
+        if self._preference_memory is None or not detail.project_id:
+            return
+        note = (request.note or "").strip()
+        if note.startswith("Auto-accepted after HITL timeout"):
+            return
+        dimensions = [
+            dimension.strip()
+            for dimension in (request.dimensions or [])
+            if dimension.strip()
+        ]
+        if request.decision == "accept" and not note and not dimensions:
+            return
+        feedback_type = (
+            "approval"
+            if request.decision in {"accept", "force_pass"}
+            else "correction"
+        )
+        target_type = "dimension" if dimensions else "project"
+        target_id = ",".join(dimensions) if dimensions else detail.project_id
+        message_parts = [f"HITL decision: {request.decision}."]
+        if note:
+            message_parts.append(note)
+        if dimensions:
+            message_parts.append(
+                "Reviewer adjusted dimensions to " + ", ".join(dimensions) + "."
+            )
+        feedback = self._preference_memory.add_feedback(
+            UserFeedbackRecord(
+                id="",
+                workspace_id=detail.workspace_id,
+                project_id=detail.project_id,
+                user_id="hitl-reviewer",
+                feedback_type=feedback_type,
+                target_type=target_type,
+                target_id=target_id,
+                run_id=detail.id,
+                message=" ".join(message_parts),
+                tags=["hitl", request.decision, *dimensions],
+                metadata={
+                    "source": "hitl_resume",
+                    "decision": request.decision,
+                    "dimensions": dimensions,
+                },
+            ),
+            policy=compliance_policy_from_settings(self._settings),
+        )
+        for candidate in self._preference_memory.extract_candidates(feedback):
+            self._preference_memory.upsert_candidate(candidate)
 
     def _plan_requires_core_schema(self, detail: RunDetail) -> bool:
         available_core = [
