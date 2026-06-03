@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import {
   fillProjectEvidenceGaps,
+  getDecisionReplay,
   getEnterpriseEvalOps,
   getModelPolicy,
   getModelRouteDecision,
@@ -60,6 +61,7 @@ import type {
   ClaimRecord,
   CompetitorScoreReport,
   CompetitorRecord,
+  DecisionReplayReport,
   EvidenceGapFillResult,
   EvidenceGapItem,
   EvidenceGapReport,
@@ -126,6 +128,7 @@ export function EnterpriseWorkbench({
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
   const [releaseGate, setReleaseGate] = useState<ReportReleaseGate | null>(null);
+  const [decisionReplay, setDecisionReplay] = useState<DecisionReplayReport | null>(null);
   const [activeTab, setActiveTab] = useState<EnterpriseTab>(initialTab);
   const [query, setQuery] = useState("");
   const [isLoadingProjects, setLoadingProjects] = useState(true);
@@ -308,6 +311,7 @@ export function EnterpriseWorkbench({
         setMemoryFeedback([]);
         setWorkspaceUsage(null);
         setSelectedVersionId(null);
+        setDecisionReplay(null);
       })
       .finally(() => {
         if (active) setLoadingProject(false);
@@ -350,6 +354,25 @@ export function EnterpriseWorkbench({
     () => versions.find((version) => version.id === selectedVersionId) ?? null,
     [versions, selectedVersionId],
   );
+  useEffect(() => {
+    const runId = selectedVersion?.run_id;
+    if (!runId) {
+      setDecisionReplay(null);
+      return;
+    }
+
+    let active = true;
+    getDecisionReplay(runId)
+      .then((replay) => {
+        if (active) setDecisionReplay(replay);
+      })
+      .catch(() => {
+        if (active) setDecisionReplay(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedVersion?.run_id]);
   const competitorById = useMemo(
     () => new Map(competitors.map((competitor) => [competitor.id, competitor])),
     [competitors],
@@ -675,6 +698,8 @@ export function EnterpriseWorkbench({
 
               {evalOps ? <EvalOpsPanel report={evalOps} /> : null}
 
+              <DecisionReplayPanel replay={decisionReplay} runId={selectedVersion?.run_id} />
+
               {qualityMatrix ? <QualityAgentMatrixPanel matrix={qualityMatrix} /> : null}
 
               {claimValidation ? <ClaimValidationPanel report={claimValidation} /> : null}
@@ -947,6 +972,68 @@ function EvalOpsPanel({ report }: { report: EvalOpsReport }) {
           ))}
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function DecisionReplayPanel({
+  replay,
+  runId,
+}: {
+  replay: DecisionReplayReport | null;
+  runId?: string | null;
+}) {
+  if (!runId) return null;
+
+  const recentEvents = replay?.events.slice(-5).reverse() ?? [];
+  const status = !replay
+    ? "warn"
+    : replay.blocker_count > 0
+      ? "fail"
+      : replay.warn_count > 0
+        ? "warn"
+        : "pass";
+
+  return (
+    <section className={`panel readiness-panel ${status}`}>
+      <div className="panel-heading-row">
+        <h2>Decision replay</h2>
+        {status === "pass" ? (
+          <CheckCircle2 size={17} aria-hidden />
+        ) : (
+          <AlertTriangle size={17} aria-hidden />
+        )}
+      </div>
+      {replay ? (
+        <>
+          <div className="metric-grid compact">
+            <Metric icon={<ListChecks size={17} aria-hidden />} label="Events" value={replay.event_count} />
+            <Metric icon={<Gauge size={17} aria-hidden />} label="Coverage" value={`${replay.replay_coverage_score}%`} />
+            <Metric icon={<AlertTriangle size={17} aria-hidden />} label="Blockers" value={replay.blocker_count} />
+            <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Warnings" value={replay.warn_count} />
+          </div>
+          <div className="project-meta-row">
+            <span>Run {runId}</span>
+            <span>Types {Object.keys(replay.event_type_counts).length}</span>
+            <span>Status {replay.status}</span>
+          </div>
+          {recentEvents.length > 0 ? (
+            <div className="recommendation-list">
+              {recentEvents.map((event) => (
+                <article className={`recommendation-card ${decisionReplayPriority(event.event_type)}`} key={event.id}>
+                  <strong>{event.event_type.replace(/_/g, " ")}</strong>
+                  <span>{event.agent ?? "system"}</span>
+                  <p>{event.message}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="muted-line">No replayable decision events yet.</p>
+          )}
+        </>
+      ) : (
+        <p className="muted-line">Decision replay is unavailable for the selected report run.</p>
+      )}
     </section>
   );
 }
@@ -2164,6 +2251,16 @@ function formatBytes(value: number) {
     return `${(value / 1_000).toFixed(1)} KB`;
   }
   return `${value} B`;
+}
+
+function decisionReplayPriority(eventType: string) {
+  if (eventType.includes("blocker") || eventType.includes("failed")) {
+    return "high";
+  }
+  if (eventType.includes("warn") || eventType.includes("redo") || eventType.includes("hitl")) {
+    return "medium";
+  }
+  return "low";
 }
 
 function qualityEntryPriority(entry: QualityAgentMatrixEntry) {
