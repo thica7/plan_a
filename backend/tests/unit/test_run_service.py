@@ -631,6 +631,63 @@ async def test_l3_market_dimension_survives_run_normalization(
 
 
 @pytest.mark.asyncio
+async def test_create_run_uses_scenario_seed_competitors_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _verified_homepages(competitors: list[str]) -> dict[str, HomepageVerification]:
+        return {
+            competitor: HomepageVerification(
+                competitor=competitor,
+                homepage_url=f"https://{competitor.casefold().replace(' ', '-')}.example.com",
+                verified=True,
+                reason="test_verified",
+            )
+            for competitor in competitors
+        }
+
+    monkeypatch.setattr(
+        "packages.orchestrator.service.verify_homepages",
+        _verified_homepages,
+    )
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant market landscape",
+            competitors=[],
+            dimensions=["market", "persona"],
+            competitor_layer="L3",
+            scenario_id="l3_market_landscape",
+            execution_mode="demo",
+        )
+    )
+
+    assert detail.plan.competitors == [
+        "Cursor",
+        "GitHub Copilot",
+        "Windsurf",
+        "Tabnine",
+        "Codeium",
+    ]
+    assert detail.plan.competitor_layer == "L3"
+    assert "market" in detail.plan.dimensions
+    assert any(
+        task.stage == "collector" and task.dimension == "market"
+        for task in detail.plan.task_decomposition
+    )
+
+
+@pytest.mark.asyncio
 async def test_trace_spans_redact_sensitive_text_before_storage() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

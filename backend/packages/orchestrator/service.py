@@ -23,6 +23,7 @@ from packages.agents.writer.logic import WriterAgentMixin
 from packages.business_intel import (
     build_business_intel_plan,
     evaluate_report_release_gate,
+    get_scenario_pack,
     validate_project_claims,
 )
 from packages.business_intel.homepage import verify_homepages
@@ -182,6 +183,8 @@ class RunService(
         self._ensure_workspace_quota_allows_run(request.workspace_id)
         execution_mode = self._resolve_execution_mode(request.execution_mode)
         competitors = self._normalize_competitor_names(request.competitors)
+        if not competitors:
+            competitors = self._scenario_seed_competitors(request.scenario_id)
         homepage_verifications = verify_homepages(competitors)
         verified_competitors = [
             competitor
@@ -3223,6 +3226,14 @@ class RunService(
                 if dimension in available and dimension not in normalized:
                     normalized.append(dimension)
         return normalized
+
+    def _scenario_seed_competitors(self, scenario_id: str | None) -> list[str]:
+        if not scenario_id:
+            return []
+        pack = get_scenario_pack(scenario_id)
+        if pack is None:
+            return []
+        return self._normalize_competitor_names(pack.seed_competitors)
 
     def _apply_memory_dimension_preferences(
         self,
