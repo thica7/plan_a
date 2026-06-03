@@ -1742,6 +1742,20 @@ function EvidenceGapPanel({
           </span>
         </div>
       ) : null}
+      {report.schema_suggestions.length > 0 ? (
+        <div className="recommendation-list">
+          {report.schema_suggestions.slice(0, 3).map((suggestion) => (
+            <article className="recommendation-card medium" key={suggestion.id}>
+              <strong>{suggestion.normalized_dimension}</strong>
+              <span>{suggestion.status.replace("_", " ")}</span>
+              <p>{suggestion.reason}</p>
+              <em>
+                {suggestion.proposed_skill.subagent_class} / {suggestion.proposed_skill.tools_allowlist.join(", ")}
+              </em>
+            </article>
+          ))}
+        </div>
+      ) : null}
       {report.gaps.length > 0 ? (
         <div className="evidence-gap-list">
           {report.gaps.slice(0, 5).map((gap) => (

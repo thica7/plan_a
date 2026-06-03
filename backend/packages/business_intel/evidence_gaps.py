@@ -17,7 +17,9 @@ from packages.schema.enterprise import (
     EvidenceGapItem,
     EvidenceGapReport,
     EvidenceRecord,
+    SchemaEvolutionSuggestion,
 )
+from packages.schema.models import SkillOutputSpec, SkillSpec
 
 
 class EvidenceGapInput(BaseModel):
@@ -80,6 +82,7 @@ def analyze_evidence_gaps(
         medium_count=len([item for item in gaps if item.severity == "medium"]),
         low_count=len([item for item in gaps if item.severity == "low"]),
         gaps=gaps,
+        schema_suggestions=_schema_evolution_suggestions(plan=plan, gaps=gaps),
         pydantic_ai_available=pydantic_ai_available(),
     )
 
@@ -310,6 +313,74 @@ def _dedupe_gaps(gaps: list[EvidenceGapItem]) -> list[EvidenceGapItem]:
     return sorted(deduped, key=lambda item: (_severity_rank(item.severity), item.gap_type))
 
 
+def _schema_evolution_suggestions(
+    *,
+    plan: BusinessIntelPlan,
+    gaps: list[EvidenceGapItem],
+) -> list[SchemaEvolutionSuggestion]:
+    known_dimensions = {
+        _dimension_key(dimension)
+        for dimension in [
+            *plan.requested_dimensions,
+            *plan.scenario_pack.required_dimensions,
+            *plan.scenario_pack.optional_dimensions,
+        ]
+        if dimension
+    }
+    gaps_by_new_dimension: dict[str, list[EvidenceGapItem]] = {}
+    for gap in gaps:
+        if not gap.dimension:
+            continue
+        dimension_key = _dimension_key(gap.dimension)
+        if not dimension_key or dimension_key in known_dimensions:
+            continue
+        if gap.gap_type not in {"missing_dimension_coverage", "claim_without_usable_evidence"}:
+            continue
+        gaps_by_new_dimension.setdefault(dimension_key, []).append(gap)
+
+    suggestions: list[SchemaEvolutionSuggestion] = []
+    for dimension_key, dimension_gaps in sorted(gaps_by_new_dimension.items()):
+        gap_ids = [gap.id for gap in dimension_gaps]
+        raw = "|".join([dimension_key, *gap_ids])
+        suggestions.append(
+            SchemaEvolutionSuggestion(
+                id=f"schema-suggestion-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}",
+                dimension=dimension_gaps[0].dimension or dimension_key,
+                normalized_dimension=dimension_key,
+                reason=(
+                    f"{len(dimension_gaps)} evidence gap(s) reference a dimension that is not "
+                    "covered by the active scenario schema."
+                ),
+                source_gap_ids=gap_ids,
+                proposed_skill=_draft_skill_spec(dimension_key),
+            )
+        )
+    return suggestions
+
+
+def _draft_skill_spec(dimension_key: str) -> SkillSpec:
+    return SkillSpec(
+        name=dimension_key,
+        subagent_class="GenericCollector",
+        description=(
+            f"Pending collector schema for {dimension_key} evidence discovered by gap analysis."
+        ),
+        tools_allowlist=["web_search", "robots_check", "fetch_page", "extract_facts"],
+        query_templates=[
+            f"{{competitor}} {dimension_key} official documentation",
+            f"{{competitor}} {dimension_key} policy",
+            f"{{competitor}} {dimension_key} evidence",
+        ],
+        source_type="webpage",
+        output=SkillOutputSpec(
+            prefix=dimension_key,
+            confidence_default=0.8,
+            confidence_no_url=0.45,
+            required_dimension=dimension_key,
+        ),
+    )
+
+
 def _query(competitor_name: str, dimension: str) -> str:
     if dimension == "pricing":
         return f"{competitor_name} pricing official"
@@ -326,6 +397,10 @@ def _same_dimension(left: str, right: str) -> bool:
     left_key = left.casefold().strip()
     right_key = right.casefold().strip()
     return left_key == right_key or left_key in right_key or right_key in left_key
+
+
+def _dimension_key(value: str) -> str:
+    return "_".join(value.casefold().strip().replace("-", " ").split())
 
 
 def _severity_from_qa(severity: str) -> str:

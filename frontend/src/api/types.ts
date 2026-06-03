@@ -1027,6 +1027,18 @@ export interface EvidenceGapItem {
   claim_ids: string[];
 }
 
+export interface SchemaEvolutionSuggestion {
+  id: string;
+  status: "pending_review";
+  dimension: string;
+  normalized_dimension: string;
+  reason: string;
+  source_gap_ids: string[];
+  proposed_skill: SkillSpec;
+  created_by: string;
+  generated_at: string;
+}
+
 export interface EvidenceGapReport {
   project_id: string;
   scenario_id: string;
@@ -1036,6 +1048,7 @@ export interface EvidenceGapReport {
   medium_count: number;
   low_count: number;
   gaps: EvidenceGapItem[];
+  schema_suggestions: SchemaEvolutionSuggestion[];
   agent_name: string;
   framework: "pydantic-ai";
   pydantic_ai_available: boolean;

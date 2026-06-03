@@ -19,6 +19,8 @@ from packages.business_intel import (
 from packages.business_intel.homepage import verify_homepage
 from packages.business_intel.layers import assess_competitor_layer
 from packages.schema.enterprise import (
+    BusinessQAEvaluation,
+    BusinessQAFinding,
     ClaimRecord,
     CompetitorRecord,
     EvidenceRecord,
@@ -162,6 +164,65 @@ def test_business_qa_evaluator_passes_verified_pricing_pack() -> None:
     assert readiness.risk_level == "ready"
     assert readiness.score >= 85
     assert readiness.recommendations[0].action_type == "approve_report"
+
+
+def test_evidence_gaps_generate_pending_schema_suggestions_for_new_dimensions() -> None:
+    plan = build_business_intel_plan(
+        topic="Cursor vs Copilot pricing battlecard",
+        competitors=["Cursor", "Copilot"],
+        dimensions=["pricing"],
+        requested_scenario_id="l1_pricing_pack",
+    )
+    qa_evaluation = BusinessQAEvaluation(
+        project_id="project-1",
+        scenario_id=plan.scenario_pack.id,
+        competitor_layer=plan.competitor_layer.layer,
+        total_rules=1,
+        warn_count=2,
+        finding_count=2,
+        findings=[
+            BusinessQAFinding(
+                id="qa-compliance-cursor",
+                severity="warn",
+                rule_id="emergent_dimension",
+                rule_name="Emergent dimension",
+                message="Cursor needs compliance evidence.",
+                recommendation="Collect official compliance evidence.",
+                competitor_id="competitor-cursor",
+                competitor_name="Cursor",
+                dimension="compliance",
+            ),
+            BusinessQAFinding(
+                id="qa-compliance-copilot",
+                severity="warn",
+                rule_id="emergent_dimension",
+                rule_name="Emergent dimension",
+                message="Copilot needs compliance evidence.",
+                recommendation="Collect official compliance evidence.",
+                competitor_id="competitor-copilot",
+                competitor_name="Copilot",
+                dimension="compliance",
+            ),
+        ],
+    )
+
+    report = analyze_evidence_gaps(
+        project_id="project-1",
+        plan=plan,
+        qa_evaluation=qa_evaluation,
+        competitors=[],
+        evidence=[],
+        claims=[],
+    )
+
+    assert len(report.schema_suggestions) == 1
+    suggestion = report.schema_suggestions[0]
+    assert suggestion.status == "pending_review"
+    assert suggestion.normalized_dimension == "compliance"
+    assert suggestion.source_gap_ids
+    assert suggestion.proposed_skill.name == "compliance"
+    assert suggestion.proposed_skill.output.required_dimension == "compliance"
+    assert "fetch_page" in suggestion.proposed_skill.tools_allowlist
 
 
 def test_report_release_gate_requires_clean_qa_and_verified_evidence() -> None:

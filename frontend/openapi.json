@@ -8973,6 +8973,13 @@
             "type": "array",
             "title": "Gaps"
           },
+          "schema_suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/SchemaEvolutionSuggestion"
+            },
+            "type": "array",
+            "title": "Schema Suggestions"
+          },
           "agent_name": {
             "type": "string",
             "title": "Agent Name",
@@ -13465,6 +13472,62 @@
           "status"
         ],
         "title": "ScheduledScanStartResponse"
+      },
+      "SchemaEvolutionSuggestion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "pending_review",
+            "title": "Status",
+            "default": "pending_review"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "normalized_dimension": {
+            "type": "string",
+            "title": "Normalized Dimension"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "source_gap_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Gap Ids"
+          },
+          "proposed_skill": {
+            "$ref": "#/components/schemas/SkillSpec"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "default": "evidence_gap_agent"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "dimension",
+          "normalized_dimension",
+          "reason",
+          "proposed_skill"
+        ],
+        "title": "SchemaEvolutionSuggestion"
       },
       "SearchSmokeRequest": {
         "properties": {

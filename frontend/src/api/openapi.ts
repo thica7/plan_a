@@ -2493,6 +2493,8 @@ export interface components {
             low_count: number;
             /** Gaps */
             gaps?: components["schemas"]["EvidenceGapItem"][];
+            /** Schema Suggestions */
+            schema_suggestions?: components["schemas"]["SchemaEvolutionSuggestion"][];
             /**
              * Agent Name
              * @default pydantic_ai_evidence_gap
@@ -4472,6 +4474,36 @@ export interface components {
              * @enum {string}
              */
             status: "started" | "already_started";
+        };
+        /** SchemaEvolutionSuggestion */
+        SchemaEvolutionSuggestion: {
+            /** Id */
+            id: string;
+            /**
+             * Status
+             * @default pending_review
+             * @constant
+             */
+            status: "pending_review";
+            /** Dimension */
+            dimension: string;
+            /** Normalized Dimension */
+            normalized_dimension: string;
+            /** Reason */
+            reason: string;
+            /** Source Gap Ids */
+            source_gap_ids?: string[];
+            proposed_skill: components["schemas"]["SkillSpec"];
+            /**
+             * Created By
+             * @default evidence_gap_agent
+             */
+            created_by: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
         };
         /** SearchSmokeRequest */
         SearchSmokeRequest: {

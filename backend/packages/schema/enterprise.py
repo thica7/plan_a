@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
+from packages.schema.models import SkillSpec
 from packages.schema.rag import RetrievalRecord
 
 CompetitorLayer = Literal["L1", "L2", "L3", "unknown"]
@@ -875,6 +876,20 @@ class EvidenceGapItem(BaseModel):
     claim_ids: list[str] = Field(default_factory=list)
 
 
+class SchemaEvolutionSuggestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    status: Literal["pending_review"] = "pending_review"
+    dimension: str
+    normalized_dimension: str
+    reason: str
+    source_gap_ids: list[str] = Field(default_factory=list)
+    proposed_skill: SkillSpec
+    created_by: str = "evidence_gap_agent"
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class EvidenceGapReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -886,6 +901,7 @@ class EvidenceGapReport(BaseModel):
     medium_count: int = 0
     low_count: int = 0
     gaps: list[EvidenceGapItem] = Field(default_factory=list)
+    schema_suggestions: list[SchemaEvolutionSuggestion] = Field(default_factory=list)
     agent_name: str = "pydantic_ai_evidence_gap"
     framework: str = "pydantic-ai"
     pydantic_ai_available: bool = False
