@@ -14,6 +14,7 @@ from packages.schema.evals import (
 
 MANUAL_BASELINE_HOURS_PER_REPORT = 6.0
 AUTOMATION_FLOOR_HOURS_PER_REPORT = 0.08
+EVAL_REPORT_STATUSES = {"completed"}
 
 
 def build_enterprise_evalops_report(
@@ -23,7 +24,10 @@ def build_enterprise_evalops_report(
     limit: int = 30,
     judge_mode: EvalJudgeMode = "heuristic",
 ) -> EvalOpsReport:
-    recent_runs = sorted(runs, key=lambda item: item.updated_at, reverse=True)[: max(1, limit)]
+    evaluable_runs = [run for run in runs if run.status in EVAL_REPORT_STATUSES]
+    recent_runs = sorted(evaluable_runs, key=lambda item: item.updated_at, reverse=True)[
+        : max(1, limit)
+    ]
     comparisons = [
         compare_run_quality(run, baseline=baseline if baseline is not None and baseline.id != run.id else None)
         for run in recent_runs

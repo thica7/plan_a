@@ -53,10 +53,20 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
             )
         ],
     )
+    interrupted = _run_detail(
+        run_id="interrupted-run",
+        execution_mode="real",
+        source_count=4,
+        quality_score=1.0,
+        report_md="",
+        project_id="project-a",
+        status="interrupted",
+    )
 
-    report = build_enterprise_evalops_report([target], baseline=baseline)
+    report = build_enterprise_evalops_report([interrupted, target], baseline=baseline)
 
     assert report.run_count == 1
+    assert report.evaluated_run_ids == ["real-run"]
     assert report.baseline_run_id == "baseline-run"
     assert report.real_run_count == 1
     assert report.demo_run_count == 0
@@ -246,6 +256,7 @@ def _run_detail(
     quality_score: float,
     report_md: str,
     project_id: str = "project-a",
+    status: str = "completed",
     human_override_rate: float = 0.0,
     revisions: list[RevisionRecord] | None = None,
 ) -> RunDetail:
@@ -268,7 +279,7 @@ def _run_detail(
         workspace_id="workspace-1",
         project_id=project_id,
         topic="Cursor vs Copilot pricing",
-        status="completed",
+        status=status,
         execution_mode=execution_mode,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
