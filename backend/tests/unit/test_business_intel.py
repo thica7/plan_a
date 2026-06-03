@@ -1026,6 +1026,33 @@ def test_report_release_gate_blocks_unclosed_rag_gap_fill_chain() -> None:
     assert "gap-security" in issues["rag_gap_fill_chain_unclosed"].message
 
 
+def test_report_release_gate_reads_remaining_gap_ids_from_gap_fill_metadata() -> None:
+    competitor = _competitor()
+    report = _report_version(
+        quality_metadata={
+            "rag_gap_fill": {
+                "before_gap_count": 2,
+                "after_gap_count": 1,
+                "gap_fill_chain_closed": False,
+                "remaining_gap_ids": ["gap-pricing"],
+                "gap_evidence_links": {},
+            }
+        }
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=[],
+        claims=[],
+    )
+
+    issues = {issue.rule_id: issue for issue in gate.issues}
+    assert "rag_gap_fill_chain_unclosed" in issues
+    assert "gap-pricing" in issues["rag_gap_fill_chain_unclosed"].message
+
+
 def test_report_release_gate_allows_closed_rag_gap_fill_chain() -> None:
     competitor = _competitor()
     evidence = [

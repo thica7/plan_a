@@ -586,7 +586,9 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
     if isinstance(rag_gap_fill, dict):
         chain_closed = rag_gap_fill.get("gap_fill_chain_closed")
         after_gap_count = rag_gap_fill.get("after_gap_count")
-        unfilled_gap_ids = _string_list(rag_gap_fill.get("unfilled_gap_ids"))
+        unfilled_gap_ids = _string_list(
+            rag_gap_fill.get("unfilled_gap_ids") or rag_gap_fill.get("remaining_gap_ids")
+        )
         gap_evidence_links = rag_gap_fill.get("gap_evidence_links")
         has_links = isinstance(gap_evidence_links, dict) and any(gap_evidence_links.values())
         unresolved_count = (

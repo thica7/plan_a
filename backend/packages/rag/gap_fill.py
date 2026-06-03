@@ -376,6 +376,7 @@ def _write_gap_fill_report_version(
         "filled_gap_ids": filled_gap_ids,
         "gap_evidence_links": gap_evidence_links,
         "remaining_gap_ids": remaining_gap_ids,
+        "unfilled_gap_ids": remaining_gap_ids,
         "candidate_evidence_ids": candidate_ids,
         "gap_fill_chain_closed": (
             bool(filled_gap_ids and candidate_ids) and not remaining_gap_ids

@@ -372,6 +372,7 @@ def test_gap_fill_chain_stays_open_until_all_gaps_are_filled() -> None:
     metadata = result.updated_report_version.quality_metadata["rag_gap_fill"]
     assert metadata["gap_fill_chain_closed"] is False
     assert metadata["remaining_gap_ids"] == ["gap-pricing"]
+    assert metadata["unfilled_gap_ids"] == ["gap-pricing"]
 
 
 @pytest.mark.asyncio
