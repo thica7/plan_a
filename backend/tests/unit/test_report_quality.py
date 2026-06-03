@@ -287,12 +287,44 @@ def test_writer_hardens_thin_success_report_without_fallback_labels() -> None:
     assert "Cursor has a clearer pricing position than Copilot. [source:source-0]" in report
 
 
+def test_writer_repairs_dimension_named_source_tokens() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="dimension-source-token",
+        execution_mode="real",
+        source_count=2,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.raw_sources[0].dimension = "pricing"
+    detail.raw_sources[1].dimension = "feature"
+
+    report = writer._harden_report_markdown(
+        detail,
+        """
+# Cursor vs Copilot
+
+## Executive Summary
+Pricing is material. [source:pricing]
+Feature parity is still under review. [source:feature]
+Already valid. [source:source-0]
+""".strip(),
+    )
+
+    assert "[source:pricing]" not in report
+    assert "[source:feature]" not in report
+    assert "Pricing is material. [source:source-0]" in report
+    assert "Feature parity is still under review. [source:source-1]" in report
+    assert "Already valid. [source:source-0]" in report
+
+
 def _structured_report_md() -> str:
     return """
 # Cursor vs Copilot Direct Battlecard
 
 ## Executive Summary
-Cursor has stronger pricing transparency, while Copilot has integration breadth. [source:source-0] [source:source-1]
+Cursor has stronger pricing transparency, while Copilot has integration breadth.
+[source:source-0] [source:source-1]
 
 ## Source Quality & Coverage
 The run uses verified pages for both target competitors. [source:source-0] [source:source-1]
@@ -308,10 +340,12 @@ review before publication. [source:source-0] [source:source-1]
 | Feature | focused agent workflow [source:source-2] | broad IDE integration [source:source-3] |
 
 ## Battlecard
-Sales should use pricing transparency and switching objections as the first battlecard line. [source:source-0]
+Sales should use pricing transparency and switching objections as the first battlecard line.
+[source:source-0]
 The battlecard should avoid absolute winner language until security, SSO, and procurement evidence
 are independently verified. Cursor is easier to explain on standalone pricing, while Copilot can
-defend through bundled distribution and existing Microsoft procurement paths. [source:source-0] [source:source-1]
+defend through bundled distribution and existing Microsoft procurement paths.
+[source:source-0] [source:source-1]
 
 ## Next Collection / Verification Plan
 Verify procurement and security evidence before publication. [source:source-2]

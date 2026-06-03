@@ -260,7 +260,10 @@ class WriterAgentMixin:
             "Use this fallback as an evidence-indexed interim readout until the writer "
             "can regenerate a fuller narrative."
             if fallback
-            else "Use this section as an evidence-indexed business readout with explicit uncertainty."
+            else (
+                "Use this section as an evidence-indexed business readout with explicit "
+                "uncertainty."
+            )
         )
         return [
             "",
@@ -307,7 +310,9 @@ class WriterAgentMixin:
             planned += 1
             lines.append(f"- Resolve QA finding `{issue.rule_id}`: {issue.problem}")
         if planned == 0:
-            lines.append("- Re-run collection only for stale, rejected, or low-confidence evidence.")
+            lines.append(
+                "- Re-run collection only for stale, rejected, or low-confidence evidence."
+            )
         return lines
 
     def _fallback_evidence_appendix(self, detail: RunDetail) -> list[str]:
@@ -328,7 +333,10 @@ class WriterAgentMixin:
     def _harden_report_markdown(self, detail: RunDetail, markdown: str) -> str:
         return self._ensure_report_claim_citations(
             detail,
-            self._ensure_report_required_sections(detail, markdown),
+            self._repair_report_source_tokens(
+                detail,
+                self._ensure_report_required_sections(detail, markdown),
+            ),
         )
 
     def _ensure_report_required_sections(self, detail: RunDetail, markdown: str) -> str:
@@ -487,6 +495,48 @@ class WriterAgentMixin:
         for pattern in patterns:
             cited.update(re.findall(pattern, report_md, flags=re.IGNORECASE))
         return cited
+
+    def _repair_report_source_tokens(self, detail: RunDetail, markdown: str) -> str:
+        valid_source_ids = {source.id for source in detail.raw_sources}
+        if not valid_source_ids:
+            return markdown
+
+        repaired_lines: list[str] = []
+        for line in markdown.splitlines():
+            repaired_lines.append(
+                re.sub(
+                    r"\[source:([A-Za-z0-9_.:#-]+)\]",
+                    lambda match, current_line=line: self._repair_report_source_token(
+                        detail,
+                        current_line,
+                        match.group(1),
+                        valid_source_ids,
+                    ),
+                    line,
+                )
+            )
+        return "\n".join(repaired_lines)
+
+    def _repair_report_source_token(
+        self,
+        detail: RunDetail,
+        line: str,
+        token: str,
+        valid_source_ids: set[str],
+    ) -> str:
+        source_id = token.split("#", 1)[0]
+        if source_id in valid_source_ids:
+            return f"[source:{token}]"
+
+        dimension_match = [
+            source.id
+            for source in detail.raw_sources
+            if source.dimension.casefold() == source_id.casefold()
+        ]
+        replacement_ids = dimension_match or self._source_ids_for_report_line(detail, line)
+        if not replacement_ids:
+            return f"[source:{token}]"
+        return f"[source:{replacement_ids[0]}]"
 
     def _ensure_report_claim_citations(self, detail: RunDetail, markdown: str) -> str:
         hardened_lines: list[str] = []
