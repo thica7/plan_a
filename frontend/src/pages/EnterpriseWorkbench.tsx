@@ -3110,6 +3110,7 @@ function EvidenceGapPanel({
         available={report.pydantic_ai_available}
         executionMode={report.pydantic_ai_execution_mode}
         fallback={report.pydantic_ai_model_backed_fallback}
+        fallbackReason={report.pydantic_ai_fallback_reason}
         modelName={report.pydantic_ai_model_name}
         modelBackedRequested={report.pydantic_ai_model_backed_requested}
         runtimeAgentCreated={report.pydantic_ai_runtime_agent_created}
@@ -3329,6 +3330,7 @@ function RedTeamPanel({ report }: { report: RedTeamReport }) {
         available={report.pydantic_ai_available}
         executionMode={report.pydantic_ai_execution_mode}
         fallback={report.pydantic_ai_model_backed_fallback}
+        fallbackReason={report.pydantic_ai_fallback_reason}
         modelName={report.pydantic_ai_model_name}
         modelBackedRequested={report.pydantic_ai_model_backed_requested}
         runtimeAgentCreated={report.pydantic_ai_runtime_agent_created}
@@ -3355,6 +3357,7 @@ function PydanticAiExecutionPanel({
   available,
   executionMode,
   fallback,
+  fallbackReason,
   modelBackedRequested,
   modelName,
   inputSchemaHash,
@@ -3367,6 +3370,7 @@ function PydanticAiExecutionPanel({
   available: boolean;
   executionMode: string;
   fallback: boolean;
+  fallbackReason?: string | null;
   modelBackedRequested: boolean;
   modelName?: string | null;
   inputSchemaHash?: string | null;
@@ -3418,6 +3422,12 @@ function PydanticAiExecutionPanel({
         <strong>{runtimePromptChars}</strong>
         <em>Prompt chars</em>
       </span>
+      {fallbackReason ? (
+        <span className="warn">
+          <strong>{fallbackReason}</strong>
+          <em>Reason</em>
+        </span>
+      ) : null}
     </div>
   );
 }

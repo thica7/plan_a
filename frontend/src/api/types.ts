@@ -1223,6 +1223,7 @@ export interface EvidenceGapReport {
   pydantic_ai_execution_mode: string;
   pydantic_ai_model_backed_requested: boolean;
   pydantic_ai_model_backed_fallback: boolean;
+  pydantic_ai_fallback_reason: string;
   pydantic_ai_runtime_agent_created: boolean;
   pydantic_ai_runtime_result_type?: string | null;
   pydantic_ai_model_name?: string | null;
@@ -1303,6 +1304,7 @@ export interface RedTeamReport {
   pydantic_ai_execution_mode: string;
   pydantic_ai_model_backed_requested: boolean;
   pydantic_ai_model_backed_fallback: boolean;
+  pydantic_ai_fallback_reason: string;
   pydantic_ai_runtime_agent_created: boolean;
   pydantic_ai_runtime_result_type?: string | null;
   pydantic_ai_model_name?: string | null;
