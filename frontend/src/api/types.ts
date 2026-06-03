@@ -1062,6 +1062,30 @@ export interface RedTeamReport {
   generated_at: string;
 }
 
+export type QualityAgentStatus = "pass" | "warn" | "blocker";
+
+export interface QualityAgentMatrixEntry {
+  agent_name: string;
+  framework: string;
+  status: QualityAgentStatus;
+  score: number;
+  blocker_count: number;
+  warn_count: number;
+  finding_count: number;
+  summary: string;
+  evidence_ids: string[];
+  claim_ids: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface QualityAgentMatrix {
+  project_id: string;
+  status: QualityAgentStatus;
+  overall_score: number;
+  entries: QualityAgentMatrixEntry[];
+  generated_at: string;
+}
+
 export interface WorkspaceRecord {
   id: string;
   name: string;

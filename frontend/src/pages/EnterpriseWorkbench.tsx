@@ -29,6 +29,7 @@ import {
   getProjectCompetitorScores,
   getProjectKnowledgeGraph,
   getProjectQAEvaluation,
+  getProjectQualityMatrix,
   getProjectReadinessScore,
   getReportReleaseGate,
   getReportVersionDiff,
@@ -70,6 +71,8 @@ import type {
   NotificationRecord,
   ProjectReadinessScore,
   ProjectRecord,
+  QualityAgentMatrix,
+  QualityAgentMatrixEntry,
   RedTeamFinding,
   RedTeamReport,
   ReportReleaseGate,
@@ -102,6 +105,7 @@ export function EnterpriseWorkbench({
   const [evidenceGaps, setEvidenceGaps] = useState<EvidenceGapReport | null>(null);
   const [gapFillResult, setGapFillResult] = useState<EvidenceGapFillResult | null>(null);
   const [redTeam, setRedTeam] = useState<RedTeamReport | null>(null);
+  const [qualityMatrix, setQualityMatrix] = useState<QualityAgentMatrix | null>(null);
   const [evalOps, setEvalOps] = useState<EvalOpsReport | null>(null);
   const [sourceRegistry, setSourceRegistry] = useState<SourceRegistryRecord[]>([]);
   const [modelPolicy, setModelPolicy] = useState<ModelPolicyReport | null>(null);
@@ -164,6 +168,7 @@ export function EnterpriseWorkbench({
       setEvidenceGaps(null);
       setGapFillResult(null);
       setRedTeam(null);
+      setQualityMatrix(null);
       setEvalOps(null);
       setSourceRegistry([]);
       setModelPolicy(null);
@@ -192,6 +197,7 @@ export function EnterpriseWorkbench({
       getProjectCompetitorScores(selectedProjectId),
       getProjectEvidenceGaps(selectedProjectId),
       getProjectRedTeam(selectedProjectId),
+      getProjectQualityMatrix(selectedProjectId),
       getEnterpriseEvalOps({ projectId: selectedProjectId }),
       listSourceRegistry(projectForLoad.workspace_id),
       getModelPolicy(),
@@ -219,6 +225,7 @@ export function EnterpriseWorkbench({
           competitorScoresValue,
           evidenceGapsValue,
           redTeamValue,
+          qualityMatrixValue,
           evalOpsValue,
           sourceRegistryValue,
           modelPolicyValue,
@@ -242,6 +249,7 @@ export function EnterpriseWorkbench({
           setEvidenceGaps(evidenceGapsValue);
           setGapFillResult(null);
           setRedTeam(redTeamValue);
+          setQualityMatrix(qualityMatrixValue);
           setEvalOps(evalOpsValue);
           setSourceRegistry(sourceRegistryValue);
           setModelPolicy(modelPolicyValue);
@@ -269,6 +277,7 @@ export function EnterpriseWorkbench({
         setEvidenceGaps(null);
         setGapFillResult(null);
         setRedTeam(null);
+        setQualityMatrix(null);
         setEvalOps(null);
         setSourceRegistry([]);
         setModelPolicy(null);
@@ -609,6 +618,8 @@ export function EnterpriseWorkbench({
 
               {evalOps ? <EvalOpsPanel report={evalOps} /> : null}
 
+              {qualityMatrix ? <QualityAgentMatrixPanel matrix={qualityMatrix} /> : null}
+
               <SourceRegistryPanel sources={sourceRegistry} />
 
               <GovernanceRuntimePanel
@@ -847,6 +858,46 @@ function EvalOpsPanel({ report }: { report: EvalOpsReport }) {
           ))}
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function QualityAgentMatrixPanel({ matrix }: { matrix: QualityAgentMatrix }) {
+  const blockerCount = matrix.entries.reduce((total, entry) => total + entry.blocker_count, 0);
+  const warnCount = matrix.entries.reduce((total, entry) => total + entry.warn_count, 0);
+  const watchEntries = [...matrix.entries]
+    .sort((left, right) => qualityStatusRank(right.status) - qualityStatusRank(left.status))
+    .slice(0, 5);
+
+  return (
+    <section className={`panel readiness-panel ${matrix.status}`}>
+      <div className="panel-heading-row">
+        <h2>Quality matrix</h2>
+        {matrix.status === "pass" ? (
+          <CheckCircle2 size={17} aria-hidden />
+        ) : (
+          <AlertTriangle size={17} aria-hidden />
+        )}
+      </div>
+      <div className="metric-grid compact">
+        <Metric icon={<Gauge size={17} aria-hidden />} label="Score" value={matrix.overall_score} />
+        <Metric icon={<ListChecks size={17} aria-hidden />} label="Agents" value={matrix.entries.length} />
+        <Metric icon={<AlertTriangle size={17} aria-hidden />} label="Blockers" value={blockerCount} />
+        <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Warnings" value={warnCount} />
+      </div>
+      <div className="project-meta-row">
+        <span>Status {matrix.status}</span>
+        <span>Generated {formatDate(matrix.generated_at)}</span>
+      </div>
+      <div className="recommendation-list">
+        {watchEntries.map((entry) => (
+          <article className={`recommendation-card ${qualityEntryPriority(entry)}`} key={entry.agent_name}>
+            <strong>{entry.agent_name}</strong>
+            <span>{entry.status} / {entry.framework}</span>
+            <p>{entry.summary}</p>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
@@ -1740,6 +1791,20 @@ function formatRouteCandidate(candidate?: ModelRouteDecision["selected"]) {
     return "none";
   }
   return candidate.model_name ? `${candidate.provider_name} / ${candidate.model_name}` : candidate.provider_name;
+}
+
+function qualityEntryPriority(entry: QualityAgentMatrixEntry) {
+  if (entry.status === "blocker") {
+    return "high";
+  }
+  if (entry.status === "warn") {
+    return "medium";
+  }
+  return "low";
+}
+
+function qualityStatusRank(status: QualityAgentMatrixEntry["status"]) {
+  return status === "blocker" ? 3 : status === "warn" ? 2 : 1;
 }
 
 function metricProgressPercent(metric: EvalOpsMetric) {

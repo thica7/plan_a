@@ -31,6 +31,7 @@ import type {
   PolicyEvaluationRequest,
   ProjectReadinessScore,
   ProjectRecord,
+  QualityAgentMatrix,
   ReportApprovalSignalRequest,
   ReportApprovalSignalResponse,
   ReportApprovalStartRequest,
@@ -449,6 +450,12 @@ export function fillProjectEvidenceGaps(projectId: string) {
 
 export function getProjectRedTeam(projectId: string) {
   return request<RedTeamReport>(`/enterprise/projects/${projectId}/red-team`);
+}
+
+export function getProjectQualityMatrix(projectId: string) {
+  return request<QualityAgentMatrix>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/quality-matrix`,
+  );
 }
 
 export function updateEvidenceQuality(
