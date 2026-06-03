@@ -740,6 +740,48 @@
         }
       }
     },
+    "/api/runs/{run_id}/compliance/export": {
+      "post": {
+        "tags": [
+          "trace"
+        ],
+        "summary": "Export Run Compliance Report",
+        "operationId": "export_run_compliance_report_api_runs__run_id__compliance_export_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactCreateResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/runs/{run_id}/decision-replay": {
       "get": {
         "tags": [
@@ -1404,6 +1446,96 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkspaceQuotaDecision"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enterprise/workspaces/{workspace_id}/retention": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Workspace Retention Report",
+        "operationId": "get_workspace_retention_report_api_enterprise_workspaces__workspace_id__retention_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataRetentionReport"
                 }
               }
             }
@@ -5629,6 +5761,206 @@
         }
       }
     },
+    "/api/enterprise/report-versions/{version_id}/manual-revision": {
+      "post": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Create Manual Report Revision",
+        "operationId": "create_manual_report_revision_api_enterprise_report_versions__version_id__manual_revision_post",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualReportRevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportVersionRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enterprise/report-versions/{version_id}/export": {
+      "post": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Export Report Version",
+        "operationId": "export_report_version_api_enterprise_report_versions__version_id__export_post",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "markdown",
+              "title": "Format"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactCreateResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enterprise/report-versions/{version_id}/diff": {
       "get": {
         "tags": [
@@ -6717,6 +7049,13 @@
             "type": "object",
             "title": "Homepage Verified"
           },
+          "task_decomposition": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisPlanTask"
+            },
+            "type": "array",
+            "title": "Task Decomposition"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -6731,6 +7070,75 @@
           "dimensions"
         ],
         "title": "AnalysisPlan"
+      },
+      "AnalysisPlanTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "collector",
+              "analyst",
+              "survey_interview"
+            ],
+            "title": "Stage"
+          },
+          "competitor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competitor"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Priority",
+            "default": "medium"
+          },
+          "max_turns": {
+            "type": "integer",
+            "maximum": 6.0,
+            "minimum": 1.0,
+            "title": "Max Turns",
+            "default": 1
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          },
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Depends On"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "stage",
+          "dimension"
+        ],
+        "title": "AnalysisPlanTask"
       },
       "ArtifactCreateRequest": {
         "properties": {
@@ -8385,6 +8793,131 @@
         ],
         "title": "ComplianceFinding"
       },
+      "DataRetentionPolicy": {
+        "properties": {
+          "project_days": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Project Days",
+            "default": 1095
+          },
+          "evidence_days": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Evidence Days",
+            "default": 730
+          },
+          "artifact_days": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Artifact Days",
+            "default": 730
+          },
+          "report_version_days": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Report Version Days",
+            "default": 1095
+          },
+          "audit_log_days": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Audit Log Days",
+            "default": 2555
+          },
+          "expiring_soon_days": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expiring Soon Days",
+            "default": 30
+          },
+          "physical_delete_enabled": {
+            "type": "boolean",
+            "title": "Physical Delete Enabled",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DataRetentionPolicy"
+      },
+      "DataRetentionReport": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "title": "Status"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/DataRetentionPolicy"
+          },
+          "bucket_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Bucket Count"
+          },
+          "total_record_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Record Count"
+          },
+          "expired_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expired Count"
+          },
+          "expiring_soon_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expiring Soon Count"
+          },
+          "physical_delete_enabled": {
+            "type": "boolean",
+            "title": "Physical Delete Enabled",
+            "default": false
+          },
+          "recommendations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommendations"
+          },
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/RetentionBucket"
+            },
+            "type": "array",
+            "title": "Buckets"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "status",
+          "policy",
+          "bucket_count",
+          "total_record_count",
+          "expired_count",
+          "expiring_soon_count",
+          "buckets"
+        ],
+        "title": "DataRetentionReport"
+      },
       "DecisionReplayEvent": {
         "properties": {
           "id": {
@@ -8404,6 +8937,7 @@
               "rag.retrieved",
               "memory.recalled",
               "memory.feedback_captured",
+              "hitl.reviewed",
               "self_consistency.sampled",
               "claim.validated",
               "qa.blocked",
@@ -8661,6 +9195,46 @@
         ],
         "title": "EvalOpsCaseResult"
       },
+      "EvalOpsGoldenCohortSummary": {
+        "properties": {
+          "cohort": {
+            "type": "string",
+            "title": "Cohort"
+          },
+          "case_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Case Count"
+          },
+          "matched_run_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Matched Run Count"
+          },
+          "coverage_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Coverage Rate"
+          },
+          "expected_layers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Expected Layers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cohort",
+          "case_count",
+          "matched_run_count",
+          "coverage_rate"
+        ],
+        "title": "EvalOpsGoldenCohortSummary"
+      },
       "EvalOpsMetric": {
         "properties": {
           "name": {
@@ -8704,6 +9278,106 @@
           "status"
         ],
         "title": "EvalOpsMetric"
+      },
+      "EvalOpsQualityChainStep": {
+        "properties": {
+          "step": {
+            "type": "string",
+            "enum": [
+              "real_collection",
+              "real_llm",
+              "report_quality"
+            ],
+            "title": "Step"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "total_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Count"
+          },
+          "passed_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Passed Count"
+          },
+          "failed_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Failed Count"
+          },
+          "pass_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Pass Rate"
+          },
+          "failed_run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Failed Run Ids"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "step",
+          "label",
+          "total_count",
+          "passed_count",
+          "failed_count",
+          "pass_rate"
+        ],
+        "title": "EvalOpsQualityChainStep"
+      },
+      "EvalOpsRegressionGateIssue": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "comparison",
+              "metric",
+              "case"
+            ],
+            "title": "Kind"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "title": "Status"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "status"
+        ],
+        "title": "EvalOpsRegressionGateIssue"
       },
       "EvalOpsReport": {
         "properties": {
@@ -8751,6 +9425,20 @@
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Real Quality Chain Rate"
+          },
+          "real_quality_chain_failed_run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Real Quality Chain Failed Run Ids"
+          },
+          "quality_chain_steps": {
+            "items": {
+              "$ref": "#/components/schemas/EvalOpsQualityChainStep"
+            },
+            "type": "array",
+            "title": "Quality Chain Steps"
           },
           "average_delta_score": {
             "anyOf": [
@@ -8835,6 +9523,32 @@
             "minimum": 0.0,
             "title": "Golden Set Pass Rate"
           },
+          "golden_catalog_size": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Golden Catalog Size",
+            "default": 0
+          },
+          "golden_catalog_covered_case_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Golden Catalog Covered Case Count",
+            "default": 0
+          },
+          "golden_catalog_coverage_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Golden Catalog Coverage Rate",
+            "default": 0.0
+          },
+          "golden_catalog_cohorts": {
+            "items": {
+              "$ref": "#/components/schemas/EvalOpsGoldenCohortSummary"
+            },
+            "type": "array",
+            "title": "Golden Catalog Cohorts"
+          },
           "report_quality_score": {
             "type": "integer",
             "maximum": 100.0,
@@ -8846,6 +9560,25 @@
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Source Recall"
+          },
+          "compliance_pass_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Compliance Pass Rate",
+            "default": 0.0
+          },
+          "compliance_fail_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Compliance Fail Count",
+            "default": 0
+          },
+          "compliance_blocker_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Compliance Blocker Count",
+            "default": 0
           },
           "manual_baseline_hours_per_report": {
             "type": "number",
@@ -8890,6 +9623,13 @@
           "regression_gate_reason": {
             "type": "string",
             "title": "Regression Gate Reason"
+          },
+          "regression_gate_issues": {
+            "items": {
+              "$ref": "#/components/schemas/EvalOpsRegressionGateIssue"
+            },
+            "type": "array",
+            "title": "Regression Gate Issues"
           },
           "metrics": {
             "items": {
@@ -9095,6 +9835,16 @@
             },
             "type": "array",
             "title": "Filled Gap Ids"
+          },
+          "gap_evidence_links": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Gap Evidence Links"
           },
           "remaining_gap_ids": {
             "items": {
@@ -9407,6 +10157,11 @@
             "title": "Pydantic Ai Model Backed Fallback",
             "default": false
           },
+          "pydantic_ai_fallback_reason": {
+            "type": "string",
+            "title": "Pydantic Ai Fallback Reason",
+            "default": ""
+          },
           "pydantic_ai_runtime_agent_created": {
             "type": "boolean",
             "title": "Pydantic Ai Runtime Agent Created",
@@ -9444,6 +10199,28 @@
               }
             ],
             "title": "Pydantic Ai Runtime Prompt Hash"
+          },
+          "pydantic_ai_input_schema_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pydantic Ai Input Schema Hash"
+          },
+          "pydantic_ai_output_schema_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pydantic Ai Output Schema Hash"
           },
           "pydantic_ai_runtime_prompt_chars": {
             "type": "integer",
@@ -10219,6 +10996,28 @@
         "type": "object",
         "title": "LlmSmokeRequest"
       },
+      "ManualReportRevisionRequest": {
+        "properties": {
+          "report_md": {
+            "type": "string",
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Report Md"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report_md"
+        ],
+        "title": "ManualReportRevisionRequest"
+      },
       "MemoryCandidate": {
         "properties": {
           "id": {
@@ -10240,6 +11039,8 @@
               "source_preference",
               "writing_preference",
               "risk_preference",
+              "failure_pattern",
+              "qa_policy",
               "correction"
             ],
             "title": "Kind"
@@ -11729,6 +12530,13 @@
             "type": "array",
             "title": "Claim Ids"
           },
+          "suggested_redos": {
+            "items": {
+              "$ref": "#/components/schemas/RedoScope"
+            },
+            "type": "array",
+            "title": "Suggested Redos"
+          },
           "metadata": {
             "additionalProperties": true,
             "type": "object",
@@ -11970,6 +12778,11 @@
             "title": "Pydantic Ai Model Backed Fallback",
             "default": false
           },
+          "pydantic_ai_fallback_reason": {
+            "type": "string",
+            "title": "Pydantic Ai Fallback Reason",
+            "default": ""
+          },
           "pydantic_ai_runtime_agent_created": {
             "type": "boolean",
             "title": "Pydantic Ai Runtime Agent Created",
@@ -12007,6 +12820,28 @@
               }
             ],
             "title": "Pydantic Ai Runtime Prompt Hash"
+          },
+          "pydantic_ai_input_schema_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pydantic Ai Input Schema Hash"
+          },
+          "pydantic_ai_output_schema_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pydantic Ai Output Schema Hash"
           },
           "pydantic_ai_runtime_prompt_chars": {
             "type": "integer",
@@ -12539,6 +13374,75 @@
           "competitor_set_hash"
         ],
         "title": "ReportVersionRecord"
+      },
+      "RetentionBucket": {
+        "properties": {
+          "resource_type": {
+            "type": "string",
+            "enum": [
+              "project",
+              "evidence",
+              "artifact",
+              "report_version",
+              "audit_log"
+            ],
+            "title": "Resource Type"
+          },
+          "retention_days": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Retention Days"
+          },
+          "total_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Count"
+          },
+          "expired_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expired Count"
+          },
+          "expiring_soon_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expiring Soon Count"
+          },
+          "oldest_created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Created At"
+          },
+          "next_expiry_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Expiry At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "resource_type",
+          "retention_days",
+          "total_count",
+          "expired_count",
+          "expiring_soon_count"
+        ],
+        "title": "RetentionBucket"
       },
       "RetrievalRecord": {
         "properties": {
@@ -13162,6 +14066,7 @@
               "self_consistency.sampled",
               "memory.recalled",
               "memory.feedback_captured",
+              "hitl.reviewed",
               "claim.validated",
               "qa.blocked",
               "redo.routed",
@@ -13429,6 +14334,13 @@
             "title": "Report Quality Signal",
             "default": false
           },
+          "signal_checks": {
+            "items": {
+              "$ref": "#/components/schemas/RunQualitySignalCheck"
+            },
+            "type": "array",
+            "title": "Signal Checks"
+          },
           "metrics": {
             "items": {
               "$ref": "#/components/schemas/RunQualityMetric"
@@ -13526,6 +14438,47 @@
           "status"
         ],
         "title": "RunQualityMetric"
+      },
+      "RunQualitySignalCheck": {
+        "properties": {
+          "signal": {
+            "type": "string",
+            "enum": [
+              "real_collection",
+              "real_llm",
+              "report_quality"
+            ],
+            "title": "Signal"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "Passed"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "blocking_metric_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocking Metric Names"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "signal",
+          "label",
+          "passed",
+          "reason"
+        ],
+        "title": "RunQualitySignalCheck"
       },
       "RunSummary": {
         "properties": {

@@ -311,6 +311,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{run_id}/compliance/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export Run Compliance Report */
+        post: operations["export_run_compliance_report_api_runs__run_id__compliance_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{run_id}/decision-replay": {
         parameters: {
             query?: never;
@@ -457,6 +474,23 @@ export interface paths {
         };
         /** Get Workspace Quota Decision */
         get: operations["get_workspace_quota_decision_api_enterprise_workspaces__workspace_id__quota_decision_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/workspaces/{workspace_id}/retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Workspace Retention Report */
+        get: operations["get_workspace_retention_report_api_enterprise_workspaces__workspace_id__retention_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1167,23 +1201,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/enterprise/report-versions/{version_id}/diff": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Report Version Diff */
-        get: operations["get_report_version_diff_api_enterprise_report_versions__version_id__diff_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/enterprise/report-versions/{version_id}/manual-revision": {
         parameters: {
             query?: never;
@@ -1195,6 +1212,40 @@ export interface paths {
         put?: never;
         /** Create Manual Report Revision */
         post: operations["create_manual_report_revision_api_enterprise_report_versions__version_id__manual_revision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/report-versions/{version_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export Report Version */
+        post: operations["export_report_version_api_enterprise_report_versions__version_id__export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/report-versions/{version_id}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Report Version Diff */
+        get: operations["get_report_version_diff_api_enterprise_report_versions__version_id__diff_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1492,11 +1543,45 @@ export interface components {
             homepage_verified?: {
                 [key: string]: boolean;
             };
+            /** Task Decomposition */
+            task_decomposition?: components["schemas"]["AnalysisPlanTask"][];
             /**
              * Created At
              * Format: date-time
              */
             created_at?: string;
+        };
+        /** AnalysisPlanTask */
+        AnalysisPlanTask: {
+            /** Id */
+            id: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "collector" | "analyst" | "survey_interview";
+            /** Competitor */
+            competitor?: string | null;
+            /** Dimension */
+            dimension: string;
+            /**
+             * Priority
+             * @default medium
+             * @enum {string}
+             */
+            priority: "low" | "medium" | "high";
+            /**
+             * Max Turns
+             * @default 1
+             */
+            max_turns: number;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Depends On */
+            depends_on?: string[];
         };
         /** ArtifactCreateRequest */
         ArtifactCreateRequest: {
@@ -2206,6 +2291,77 @@ export interface components {
             /** Recommendation */
             recommendation: string;
         };
+        /** DataRetentionPolicy */
+        DataRetentionPolicy: {
+            /**
+             * Project Days
+             * @default 1095
+             */
+            project_days: number;
+            /**
+             * Evidence Days
+             * @default 730
+             */
+            evidence_days: number;
+            /**
+             * Artifact Days
+             * @default 730
+             */
+            artifact_days: number;
+            /**
+             * Report Version Days
+             * @default 1095
+             */
+            report_version_days: number;
+            /**
+             * Audit Log Days
+             * @default 2555
+             */
+            audit_log_days: number;
+            /**
+             * Expiring Soon Days
+             * @default 30
+             */
+            expiring_soon_days: number;
+            /**
+             * Physical Delete Enabled
+             * @default false
+             */
+            physical_delete_enabled: boolean;
+        };
+        /** DataRetentionReport */
+        DataRetentionReport: {
+            /** Workspace Id */
+            workspace_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "warn" | "fail";
+            policy: components["schemas"]["DataRetentionPolicy"];
+            /** Bucket Count */
+            bucket_count: number;
+            /** Total Record Count */
+            total_record_count: number;
+            /** Expired Count */
+            expired_count: number;
+            /** Expiring Soon Count */
+            expiring_soon_count: number;
+            /**
+             * Physical Delete Enabled
+             * @default false
+             */
+            physical_delete_enabled: boolean;
+            /** Recommendations */
+            recommendations?: string[];
+            /** Buckets */
+            buckets: components["schemas"]["RetentionBucket"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+        };
         /** DecisionReplayEvent */
         DecisionReplayEvent: {
             /** Id */
@@ -2313,6 +2469,19 @@ export interface components {
              */
             summary: string;
         };
+        /** EvalOpsGoldenCohortSummary */
+        EvalOpsGoldenCohortSummary: {
+            /** Cohort */
+            cohort: string;
+            /** Case Count */
+            case_count: number;
+            /** Matched Run Count */
+            matched_run_count: number;
+            /** Coverage Rate */
+            coverage_rate: number;
+            /** Expected Layers */
+            expected_layers?: string[];
+        };
         /** EvalOpsMetric */
         EvalOpsMetric: {
             /** Name */
@@ -2382,19 +2551,6 @@ export interface components {
              */
             summary: string;
         };
-        /** EvalOpsGoldenCohortSummary */
-        EvalOpsGoldenCohortSummary: {
-            /** Cohort */
-            cohort: string;
-            /** Case Count */
-            case_count: number;
-            /** Matched Run Count */
-            matched_run_count: number;
-            /** Coverage Rate */
-            coverage_rate: number;
-            /** Expected Layers */
-            expected_layers?: string[];
-        };
         /** EvalOpsReport */
         EvalOpsReport: {
             /** Run Count */
@@ -2449,11 +2605,20 @@ export interface components {
             golden_set_size: number;
             /** Golden Set Pass Rate */
             golden_set_pass_rate: number;
-            /** Golden Catalog Size */
+            /**
+             * Golden Catalog Size
+             * @default 0
+             */
             golden_catalog_size: number;
-            /** Golden Catalog Covered Case Count */
+            /**
+             * Golden Catalog Covered Case Count
+             * @default 0
+             */
             golden_catalog_covered_case_count: number;
-            /** Golden Catalog Coverage Rate */
+            /**
+             * Golden Catalog Coverage Rate
+             * @default 0
+             */
             golden_catalog_coverage_rate: number;
             /** Golden Catalog Cohorts */
             golden_catalog_cohorts?: components["schemas"]["EvalOpsGoldenCohortSummary"][];
@@ -2461,11 +2626,20 @@ export interface components {
             report_quality_score: number;
             /** Source Recall */
             source_recall: number;
-            /** Compliance Pass Rate */
+            /**
+             * Compliance Pass Rate
+             * @default 0
+             */
             compliance_pass_rate: number;
-            /** Compliance Fail Count */
+            /**
+             * Compliance Fail Count
+             * @default 0
+             */
             compliance_fail_count: number;
-            /** Compliance Blocker Count */
+            /**
+             * Compliance Blocker Count
+             * @default 0
+             */
             compliance_blocker_count: number;
             /** Manual Baseline Hours Per Report */
             manual_baseline_hours_per_report: number;
@@ -2578,6 +2752,10 @@ export interface components {
             candidate_evidence_ids?: string[];
             /** Filled Gap Ids */
             filled_gap_ids?: string[];
+            /** Gap Evidence Links */
+            gap_evidence_links?: {
+                [key: string]: string[];
+            };
             /** Remaining Gap Ids */
             remaining_gap_ids?: string[];
             /** Decision Events */
@@ -2740,6 +2918,11 @@ export interface components {
              * @default false
              */
             pydantic_ai_model_backed_fallback: boolean;
+            /**
+             * Pydantic Ai Fallback Reason
+             * @default
+             */
+            pydantic_ai_fallback_reason: string;
             /**
              * Pydantic Ai Runtime Agent Created
              * @default false
@@ -3071,6 +3254,16 @@ export interface components {
              * @default Reply with exactly: ok
              */
             prompt: string;
+        };
+        /** ManualReportRevisionRequest */
+        ManualReportRevisionRequest: {
+            /** Report Md */
+            report_md: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
         };
         /** MemoryCandidate */
         MemoryCandidate: {
@@ -3701,16 +3894,6 @@ export interface components {
              */
             generated_at?: string;
         };
-        /** ManualReportRevisionRequest */
-        ManualReportRevisionRequest: {
-            /** Report Md */
-            report_md: string;
-            /**
-             * Note
-             * @default
-             */
-            note: string;
-        };
         /** QualityAgentMatrixEntry */
         QualityAgentMatrixEntry: {
             /** Agent Name */
@@ -3861,6 +4044,11 @@ export interface components {
              * @default false
              */
             pydantic_ai_model_backed_fallback: boolean;
+            /**
+             * Pydantic Ai Fallback Reason
+             * @default
+             */
+            pydantic_ai_fallback_reason: string;
             /**
              * Pydantic Ai Runtime Agent Created
              * @default false
@@ -4104,6 +4292,26 @@ export interface components {
             created_at?: string;
             /** Published At */
             published_at?: string | null;
+        };
+        /** RetentionBucket */
+        RetentionBucket: {
+            /**
+             * Resource Type
+             * @enum {string}
+             */
+            resource_type: "project" | "evidence" | "artifact" | "report_version" | "audit_log";
+            /** Retention Days */
+            retention_days: number;
+            /** Total Count */
+            total_count: number;
+            /** Expired Count */
+            expired_count: number;
+            /** Expiring Soon Count */
+            expiring_soon_count: number;
+            /** Oldest Created At */
+            oldest_created_at?: string | null;
+            /** Next Expiry At */
+            next_expiry_at?: string | null;
         };
         /** RetrievalRecord */
         RetrievalRecord: {
@@ -6251,6 +6459,37 @@ export interface operations {
             };
         };
     };
+    export_run_compliance_report_api_runs__run_id__compliance_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactCreateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_decision_replay_api_runs__run_id__decision_replay_get: {
         parameters: {
             query?: never;
@@ -6570,6 +6809,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceQuotaDecision"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workspace_retention_report_api_enterprise_workspaces__workspace_id__retention_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataRetentionReport"];
                 };
             };
             /** @description Validation Error */
@@ -8223,6 +8497,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReportVersionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_report_version_api_enterprise_report_versions__version_id__export_post: {
+        parameters: {
+            query?: {
+                format?: string;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactCreateResult"];
                 };
             };
             /** @description Validation Error */
