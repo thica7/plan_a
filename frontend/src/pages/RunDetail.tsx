@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
 import {
   getDecisionReplay,
   getRun,
+  getRunComplianceReport,
   getRunQualityComparison,
   redoRun,
   resumeRun,
@@ -22,7 +23,12 @@ import { SwimlaneView } from "../features/swimlane/SwimlaneView";
 import { TraceList } from "../features/trace/TraceList";
 import { TracePlayback } from "../features/trace/TracePlayback";
 import { useRunStore } from "../stores/run";
-import type { DecisionReplayReport, ReflectionRecord, RunQualityComparison } from "../api/types";
+import type {
+  DecisionReplayReport,
+  ReflectionRecord,
+  RunComplianceReport,
+  RunQualityComparison,
+} from "../api/types";
 
 export function RunDetail() {
   const { runId } = useParams();
@@ -32,6 +38,7 @@ export function RunDetail() {
   const [planDimensions, setPlanDimensions] = useState("");
   const [qualityComparison, setQualityComparison] = useState<RunQualityComparison | null>(null);
   const [decisionReplay, setDecisionReplay] = useState<DecisionReplayReport | null>(null);
+  const [complianceReport, setComplianceReport] = useState<RunComplianceReport | null>(null);
   const redoLimitReached = detail ? detail.revisions.length >= detail.max_iterations : false;
   const latestInterrupt = useMemo(
     () => [...events].reverse().find((event) => event.type === "interrupt"),
@@ -47,6 +54,7 @@ export function RunDetail() {
     reset();
     setQualityComparison(null);
     setDecisionReplay(null);
+    setComplianceReport(null);
 
     const load = (attempt: number) => {
       getRun(runId)
@@ -67,6 +75,13 @@ export function RunDetail() {
             })
             .catch(() => {
               if (!cancelled) setDecisionReplay(null);
+            });
+          void getRunComplianceReport(runId)
+            .then((report) => {
+              if (!cancelled) setComplianceReport(report);
+            })
+            .catch(() => {
+              if (!cancelled) setComplianceReport(null);
             });
           unsubscribe = subscribeRun(runId, addEvent);
         })
@@ -102,6 +117,9 @@ export function RunDetail() {
       getDecisionReplay(runId)
         .then(setDecisionReplay)
         .catch(() => setDecisionReplay(null));
+      getRunComplianceReport(runId)
+        .then(setComplianceReport)
+        .catch(() => setComplianceReport(null));
     }
   }, [events, runId, setDetail]);
 
@@ -248,6 +266,7 @@ export function RunDetail() {
         <RevisionDiff revisions={detail.revisions} />
         <CostPanel metrics={detail.metrics} spans={detail.trace_spans} />
         <RunQualityPanel comparison={qualityComparison} />
+        <CompliancePanel report={complianceReport} />
         <aside className="qa-panel">
           <div className="panel-heading-row">
             <h2>QA findings</h2>
@@ -308,6 +327,81 @@ export function RunDetail() {
         />
       </div>
     </section>
+  );
+}
+
+function CompliancePanel({ report }: { report: RunComplianceReport | null }) {
+  if (!report) {
+    return (
+      <aside className="qa-panel run-quality-panel">
+        <div className="panel-heading-row">
+          <h2>Compliance</h2>
+          <Loader2 className="spin" size={16} aria-hidden />
+        </div>
+        <p className="muted-text">Loading compliance report.</p>
+      </aside>
+    );
+  }
+
+  const topFindings = report.findings.slice(0, 5);
+  return (
+    <aside className={`qa-panel run-quality-panel ${report.status}`}>
+      <div className="panel-heading-row">
+        <h2>Compliance</h2>
+        {report.status === "pass" ? (
+          <CheckCircle2 size={16} aria-hidden />
+        ) : (
+          <AlertTriangle size={16} aria-hidden />
+        )}
+      </div>
+      <div className="metric-grid compact">
+        <MetricValue label="Status" value={report.status} />
+        <MetricValue label="Findings" value={String(report.finding_count)} />
+        <MetricValue label="Blockers" value={String(report.blocker_count)} />
+        <MetricValue label="Redactions" value={String(report.redaction_count)} />
+      </div>
+      <div className="run-quality-signals">
+        <span className={report.policy.redaction_enabled ? "on" : "off"}>
+          {report.policy.redaction_enabled ? (
+            <CheckCircle2 size={13} aria-hidden />
+          ) : (
+            <AlertTriangle size={13} aria-hidden />
+          )}
+          Redaction
+        </span>
+        <span className={report.policy.require_trace_context ? "on" : "off"}>
+          {report.policy.require_trace_context ? (
+            <CheckCircle2 size={13} aria-hidden />
+          ) : (
+            <AlertTriangle size={13} aria-hidden />
+          )}
+          Trace context
+        </span>
+        <span className={report.policy.require_source_urls ? "on" : "off"}>
+          {report.policy.require_source_urls ? (
+            <CheckCircle2 size={13} aria-hidden />
+          ) : (
+            <AlertTriangle size={13} aria-hidden />
+          )}
+          Source URLs
+        </span>
+      </div>
+      {topFindings.length > 0 ? (
+        <div className="reflection-review">
+          <h3>Findings</h3>
+          {topFindings.map((finding) => (
+            <article className="issue-row reflection-row" key={finding.id}>
+              <strong>{finding.severity}</strong>
+              <span>
+                {finding.category}: {finding.message}
+              </span>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="muted-text">No compliance findings.</p>
+      )}
+    </aside>
   );
 }
 
