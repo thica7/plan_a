@@ -2326,10 +2326,40 @@ export interface components {
             updated_report_version_id?: string | null;
             /** Gap Count */
             gap_count: number;
+            /**
+             * Before Gap Count
+             * @default 0
+             */
+            before_gap_count: number;
+            /**
+             * After Gap Count
+             * @default 0
+             */
+            after_gap_count: number;
+            /**
+             * Gap Closure Rate
+             * @default 0
+             */
+            gap_closure_rate: number;
             /** Filled Gap Count */
             filled_gap_count: number;
             /** Added Evidence Count */
             added_evidence_count: number;
+            /**
+             * Online Collected Evidence Count
+             * @default 0
+             */
+            online_collected_evidence_count: number;
+            /**
+             * Online Failure Count
+             * @default 0
+             */
+            online_failure_count: number;
+            /**
+             * Gap Fill Chain Closed
+             * @default false
+             */
+            gap_fill_chain_closed: boolean;
             /** Candidate Evidence Ids */
             candidate_evidence_ids?: string[];
             /** Filled Gap Ids */

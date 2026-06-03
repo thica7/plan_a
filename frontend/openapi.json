@@ -8613,6 +8613,25 @@
             "minimum": 0.0,
             "title": "Gap Count"
           },
+          "before_gap_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Before Gap Count",
+            "default": 0
+          },
+          "after_gap_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "After Gap Count",
+            "default": 0
+          },
+          "gap_closure_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Gap Closure Rate",
+            "default": 0.0
+          },
           "filled_gap_count": {
             "type": "integer",
             "minimum": 0.0,
@@ -8622,6 +8641,23 @@
             "type": "integer",
             "minimum": 0.0,
             "title": "Added Evidence Count"
+          },
+          "online_collected_evidence_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Online Collected Evidence Count",
+            "default": 0
+          },
+          "online_failure_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Online Failure Count",
+            "default": 0
+          },
+          "gap_fill_chain_closed": {
+            "type": "boolean",
+            "title": "Gap Fill Chain Closed",
+            "default": false
           },
           "candidate_evidence_ids": {
             "items": {

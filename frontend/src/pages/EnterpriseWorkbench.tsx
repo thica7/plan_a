@@ -950,16 +950,32 @@ function EvidenceGapPanel({
             <em>Filled gaps</em>
           </span>
           <span>
+            <strong>{formatPercent(fillResult.gap_closure_rate)}</strong>
+            <em>Closure</em>
+          </span>
+          <span>
             <strong>{fillResult.added_evidence_count}</strong>
             <em>Linked candidates</em>
           </span>
           <span>
-            <strong>{fillResult.remaining_gap_ids.length}</strong>
+            <strong>{fillResult.online_collected_evidence_count}</strong>
+            <em>Online collected</em>
+          </span>
+          <span>
+            <strong>{fillResult.online_failure_count}</strong>
+            <em>Online failures</em>
+          </span>
+          <span>
+            <strong>{fillResult.after_gap_count}</strong>
             <em>Remaining</em>
           </span>
           <span>
             <strong>{fillResult.updated_report_version_id ? "yes" : "no"}</strong>
             <em>Draft version</em>
+          </span>
+          <span>
+            <strong>{fillResult.gap_fill_chain_closed ? "yes" : "no"}</strong>
+            <em>Closed loop</em>
           </span>
           <span>
             <strong>{fillResult.release_gate_blocker_delta}</strong>

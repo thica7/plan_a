@@ -911,8 +911,14 @@ export interface EvidenceGapFillResult {
   source_report_version_id?: string | null;
   updated_report_version_id?: string | null;
   gap_count: number;
+  before_gap_count: number;
+  after_gap_count: number;
+  gap_closure_rate: number;
   filled_gap_count: number;
   added_evidence_count: number;
+  online_collected_evidence_count: number;
+  online_failure_count: number;
+  gap_fill_chain_closed: boolean;
   candidate_evidence_ids: string[];
   filled_gap_ids: string[];
   remaining_gap_ids: string[];

@@ -907,8 +907,14 @@ class EvidenceGapFillResult(BaseModel):
     source_report_version_id: str | None = None
     updated_report_version_id: str | None = None
     gap_count: int = Field(ge=0)
+    before_gap_count: int = Field(default=0, ge=0)
+    after_gap_count: int = Field(default=0, ge=0)
+    gap_closure_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     filled_gap_count: int = Field(ge=0)
     added_evidence_count: int = Field(ge=0)
+    online_collected_evidence_count: int = Field(default=0, ge=0)
+    online_failure_count: int = Field(default=0, ge=0)
+    gap_fill_chain_closed: bool = False
     candidate_evidence_ids: list[str] = Field(default_factory=list)
     filled_gap_ids: list[str] = Field(default_factory=list)
     remaining_gap_ids: list[str] = Field(default_factory=list)

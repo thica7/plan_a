@@ -156,6 +156,10 @@ def _finalize_gap_fill(
     updated_gaps, filled_gap_ids, candidate_ids = _filled_gaps(decorated.gaps)
     updated_report = decorated.model_copy(update={"gaps": updated_gaps})
     remaining_gap_ids = [gap.id for gap in updated_gaps if not gap.evidence_ids]
+    before_gap_count = len(updated_gaps)
+    after_gap_count = len(remaining_gap_ids)
+    online_collected_ids = online_collected_evidence_ids or []
+    online_failure_items = online_failures or []
     updated_version = (
         _write_gap_fill_report_version(
             source=source_report_version,
@@ -164,20 +168,28 @@ def _finalize_gap_fill(
             candidate_ids=candidate_ids,
             filled_gap_ids=filled_gap_ids,
             remaining_gap_ids=remaining_gap_ids,
-            online_collected_evidence_ids=online_collected_evidence_ids or [],
-            online_failures=online_failures or [],
+            online_collected_evidence_ids=online_collected_ids,
+            online_failures=online_failure_items,
         )
         if source_report_version is not None
         else None
     )
+    gap_closure_rate = len(filled_gap_ids) / before_gap_count if before_gap_count else 0.0
+    gap_fill_chain_closed = bool(filled_gap_ids and candidate_ids and updated_version is not None)
     return EvidenceGapFillResult(
         project_id=project_id,
         workspace_id=workspace_id,
         source_report_version_id=source_report_version.id if source_report_version else None,
         updated_report_version_id=updated_version.id if updated_version else None,
         gap_count=len(updated_gaps),
+        before_gap_count=before_gap_count,
+        after_gap_count=after_gap_count,
+        gap_closure_rate=round(gap_closure_rate, 3),
         filled_gap_count=len(filled_gap_ids),
         added_evidence_count=len(candidate_ids),
+        online_collected_evidence_count=len(online_collected_ids),
+        online_failure_count=len(online_failure_items),
+        gap_fill_chain_closed=gap_fill_chain_closed,
         candidate_evidence_ids=candidate_ids,
         filled_gap_ids=filled_gap_ids,
         remaining_gap_ids=remaining_gap_ids,
@@ -302,9 +314,17 @@ def _write_gap_fill_report_version(
     metadata = dict(source.quality_metadata)
     metadata["rag_gap_fill"] = {
         "source_report_version_id": source.id,
+        "before_gap_count": len(filled_gap_ids) + len(remaining_gap_ids),
+        "after_gap_count": len(remaining_gap_ids),
+        "gap_closure_rate": (
+            round(len(filled_gap_ids) / (len(filled_gap_ids) + len(remaining_gap_ids)), 3)
+            if filled_gap_ids or remaining_gap_ids
+            else 0.0
+        ),
         "filled_gap_ids": filled_gap_ids,
         "remaining_gap_ids": remaining_gap_ids,
         "candidate_evidence_ids": candidate_ids,
+        "gap_fill_chain_closed": bool(filled_gap_ids and candidate_ids),
         "online_collected_evidence_ids": online_collected_evidence_ids,
         "online_failures": online_failures,
         "retrieval_records": [

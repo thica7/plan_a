@@ -240,6 +240,10 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
 
     assert result.filled_gap_count == 1
     assert result.added_evidence_count == 1
+    assert result.before_gap_count == 1
+    assert result.after_gap_count == 0
+    assert result.gap_closure_rate == 1.0
+    assert result.gap_fill_chain_closed is True
     assert result.candidate_evidence_ids == ["evidence-trust-1"]
     assert result.updated_report_version is not None
     assert result.updated_report_version.parent_version_id == "report-v1"
@@ -332,9 +336,17 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version() -> 
     assert "SOC 2" in evidence.metadata["full_text"]
     assert result.filled_gap_count == 1
     assert result.added_evidence_count == 1
+    assert result.online_collected_evidence_count == 1
+    assert result.online_failure_count == 0
+    assert result.gap_closure_rate == 1.0
+    assert result.gap_fill_chain_closed is True
     assert result.candidate_evidence_ids == [evidence.id]
     assert result.updated_report_version is not None
     metadata = result.updated_report_version.quality_metadata["rag_gap_fill"]
+    assert metadata["before_gap_count"] == 1
+    assert metadata["after_gap_count"] == 0
+    assert metadata["gap_closure_rate"] == 1.0
+    assert metadata["gap_fill_chain_closed"] is True
     assert metadata["online_collected_evidence_ids"] == [evidence.id]
     assert metadata["online_failures"] == []
     assert result.updated_report_version.evidence_ids == [evidence.id]
