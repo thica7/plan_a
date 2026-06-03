@@ -293,6 +293,87 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
     assert store.get_report_version(result.updated_report_version.id) is not None
 
 
+def test_gap_fill_chain_stays_open_until_all_gaps_are_filled() -> None:
+    store = EnterpriseMemoryStore()
+    store.upsert_evidence(
+        EvidenceRecord(
+            id="evidence-trust-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="trust-1",
+            competitor_id="cursor",
+            dimension="security",
+            source_type="webpage_verified",
+            title="Cursor trust center",
+            snippet="Cursor trust center describes SOC 2, SSO, and audit logs.",
+            content_hash="trusthash",
+            reliability_score=0.96,
+        )
+    )
+    source_version = store.upsert_report_version(
+        ReportVersionRecord(
+            id="report-partial-v1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            version_number=1,
+            topic_normalized="cursor-security",
+            competitor_layer="L1",
+            competitor_set_hash="competitors-hash",
+            report_md="# Report\n\nCursor security and pricing need evidence.",
+            evidence_ids=[],
+        )
+    )
+    report = EvidenceGapReport(
+        project_id="project-1",
+        scenario_id="enterprise_risk_review",
+        gap_count=2,
+        medium_count=2,
+        gaps=[
+            EvidenceGapItem(
+                id="gap-security",
+                severity="medium",
+                gap_type="missing_verified_source",
+                competitor_id="cursor",
+                competitor_name="Cursor",
+                dimension="security",
+                source_type_required="webpage_verified",
+                message="Security needs a verified source.",
+                recommended_query="Cursor SOC 2 SSO audit logs trust center",
+            ),
+            EvidenceGapItem(
+                id="gap-pricing",
+                severity="medium",
+                gap_type="missing_verified_source",
+                competitor_id="cursor",
+                competitor_name="Cursor",
+                dimension="pricing",
+                source_type_required="official_pricing",
+                message="Pricing needs an official pricing source.",
+                recommended_query="Cursor enterprise pricing official page",
+            ),
+        ],
+    )
+
+    result = fill_evidence_gaps(
+        report,
+        store=store,
+        workspace_id="workspace-1",
+        project_id="project-1",
+        source_report_version=source_version,
+    )
+
+    assert result.filled_gap_count == 1
+    assert result.before_gap_count == 2
+    assert result.after_gap_count == 1
+    assert result.remaining_gap_ids == ["gap-pricing"]
+    assert result.gap_fill_chain_closed is False
+    assert result.decision_events[-1].payload["gap_fill_chain_closed"] is False
+    assert result.updated_report_version is not None
+    metadata = result.updated_report_version.quality_metadata["rag_gap_fill"]
+    assert metadata["gap_fill_chain_closed"] is False
+    assert metadata["remaining_gap_ids"] == ["gap-pricing"]
+
+
 @pytest.mark.asyncio
 async def test_online_gap_fill_collects_evidence_then_links_report_version() -> None:
     store = EnterpriseMemoryStore()

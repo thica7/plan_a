@@ -203,7 +203,11 @@ def _finalize_gap_fill(
         else None
     )
     gap_closure_rate = len(filled_gap_ids) / before_gap_count if before_gap_count else 0.0
-    gap_fill_chain_closed = bool(filled_gap_ids and candidate_ids and updated_version is not None)
+    gap_fill_chain_closed = (
+        before_gap_count > 0
+        and after_gap_count == 0
+        and bool(filled_gap_ids and candidate_ids and updated_version is not None)
+    )
     return EvidenceGapFillResult(
         project_id=project_id,
         workspace_id=workspace_id,
@@ -373,7 +377,9 @@ def _write_gap_fill_report_version(
         "gap_evidence_links": gap_evidence_links,
         "remaining_gap_ids": remaining_gap_ids,
         "candidate_evidence_ids": candidate_ids,
-        "gap_fill_chain_closed": bool(filled_gap_ids and candidate_ids),
+        "gap_fill_chain_closed": (
+            bool(filled_gap_ids and candidate_ids) and not remaining_gap_ids
+        ),
         "online_collected_evidence_ids": online_collected_evidence_ids,
         "online_failures": online_failures,
         "retrieval_records": [
@@ -499,7 +505,9 @@ def _gap_fill_decision_events(
                         filled_gap_ids,
                         candidate_ids,
                     ),
-                    "gap_fill_chain_closed": bool(filled_gap_ids and candidate_ids),
+                    "gap_fill_chain_closed": (
+                        bool(filled_gap_ids and candidate_ids) and after_gap_count == 0
+                    ),
                     "candidate_ids": candidate_ids,
                     "gap_evidence_links": gap_evidence_links,
                 },
