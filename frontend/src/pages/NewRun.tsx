@@ -1,9 +1,16 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { KeyRound, Play, RefreshCw } from "lucide-react";
-import { createRun, getRuntime, listScenarioPacks, listSkills } from "../api/client";
-import type { CompetitorLayer, RuntimeConfig, ScenarioPack, SkillSpec } from "../api/types";
+import { createRun, getRuntime, getWorkspaceQuotaDecision, listScenarioPacks, listSkills } from "../api/client";
+import type {
+  CompetitorLayer,
+  RuntimeConfig,
+  ScenarioPack,
+  SkillSpec,
+  WorkspaceQuotaDecision,
+} from "../api/types";
 
+const defaultWorkspaceId = "default-workspace";
 const defaultCompetitors = "Perplexity, Claude, Gemini";
 const coreDimensions = ["pricing", "feature", "persona"];
 type LayerSelection = "auto" | Extract<CompetitorLayer, "L1" | "L2" | "L3">;
@@ -18,6 +25,7 @@ export function NewRun() {
   const [selectedLayer, setSelectedLayer] = useState<LayerSelection>("auto");
   const [scenarioId, setScenarioId] = useState("");
   const [runtime, setRuntime] = useState<RuntimeConfig | null>(null);
+  const [quotaDecision, setQuotaDecision] = useState<WorkspaceQuotaDecision | null>(null);
   const [selected, setSelected] = useState<string[]>(coreDimensions);
   const [executionMode, setExecutionMode] = useState<"demo" | "real">("demo");
   const [autoRedoWarn, setAutoRedoWarn] = useState(false);
@@ -48,6 +56,10 @@ export function NewRun() {
     listScenarioPacks()
       .then(setScenarioPacks)
       .catch((err: Error) => setError(err.message));
+
+    getWorkspaceQuotaDecision(defaultWorkspaceId)
+      .then(setQuotaDecision)
+      .catch(() => setQuotaDecision(null));
   }, []);
 
   const competitorList = useMemo(
@@ -66,6 +78,7 @@ export function NewRun() {
     () => scenarioPacks.find((pack) => pack.id === scenarioId) ?? null,
     [scenarioId, scenarioPacks],
   );
+  const runBlockedByQuota = quotaDecision?.allowed === false;
 
   function applyScenario(pack: ScenarioPack | null) {
     if (!pack) {
@@ -79,6 +92,10 @@ export function NewRun() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (runBlockedByQuota) {
+      setError(quotaDecision?.reason ?? "Workspace quota blocks new runs.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -264,6 +281,13 @@ export function NewRun() {
                   ? `Run entry is 100% routed through Temporal on ${runtime.temporal_task_queue}.`
                   : runtime.temporal_cutover_reason}
               </p>
+              {quotaDecision ? (
+                <p className={quotaDecision.allowed ? "runtime-ok" : "runtime-warn"}>
+                  {quotaDecision.allowed
+                    ? `Workspace quota allows new runs (${quotaDecision.status}, ${quotaDecision.enforcement}).`
+                    : quotaDecision.reason}
+                </p>
+              ) : null}
             </div>
           ) : null}
           <label className="toggle-row">
@@ -308,7 +332,11 @@ export function NewRun() {
 
         {error ? <p className="error-line">{error}</p> : null}
 
-        <button className="primary-button" type="submit" disabled={isSubmitting || selected.length === 0}>
+        <button
+          className="primary-button"
+          type="submit"
+          disabled={isSubmitting || selected.length === 0 || runBlockedByQuota}
+        >
           {isSubmitting ? <RefreshCw size={18} aria-hidden /> : <Play size={18} aria-hidden />}
           Start run
         </button>
