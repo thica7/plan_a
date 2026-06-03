@@ -57,6 +57,10 @@ export function TraceList({ events, metrics, spans, replay }: Props) {
           <strong>{Math.round(metrics.claim_citation_rate * 100)}%</strong>
         </span>
         <span>
+          Schema
+          <strong>{Math.round(metrics.schema_pass_rate * 100)}%</strong>
+        </span>
+        <span>
           QA
           <strong>{metrics.qa_issue_count}</strong>
         </span>
