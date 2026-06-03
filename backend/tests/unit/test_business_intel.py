@@ -447,6 +447,80 @@ def test_report_release_gate_blocks_unstructured_report() -> None:
     assert "report_structure_required" in {issue.rule_id for issue in gate.issues}
 
 
+def test_report_release_gate_blocks_structured_but_thin_report() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    thin_structured = """
+# Cursor Direct Battlecard
+
+## Executive Summary
+Cursor publishes pricing. [source:evidence-1]
+
+## Source Quality & Coverage
+Accepted pricing source. [source:evidence-1]
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor |
+| --- | --- |
+| Pricing | Published. [source:evidence-1] |
+
+## Battlecard
+Pricing is visible. [source:evidence-1]
+
+## Claim Validation & Evidence Risk
+Claim is backed. [source:evidence-1]
+
+## Next Collection / Verification Plan
+Collect feature evidence next. [source:evidence-1]
+
+## Evidence Appendix
+- evidence-1. [source:evidence-1]
+""".strip()
+    report = _report_version(report_md=thin_structured)
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+    rule_ids = {issue.rule_id for issue in gate.issues}
+
+    assert len(thin_structured) < 900
+    assert gate.allowed is False
+    assert "report_depth_required" in rule_ids
+    assert "report_structure_required" not in rule_ids
+
+
 def test_claim_validator_cross_checks_evidence_support() -> None:
     competitor = _competitor()
     accepted = EvidenceRecord(

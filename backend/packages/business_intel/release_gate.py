@@ -22,6 +22,7 @@ MIN_VERIFIED_EVIDENCE_RATE = 0.8
 MIN_READY_SCORE = 85
 MIN_RELEASE_SOURCE_CONFIDENCE = 0.75
 MIN_REPORT_STRUCTURE_SCORE = 0.7
+MIN_REPORT_BODY_CHARS = 900
 STRONG_CONCLUSION_RE = re.compile(
     r"\b("
     r"winner|leading option|best option|safer|safest|recommended|recommendation|"
@@ -75,6 +76,7 @@ def evaluate_report_release_gate(
         *_report_status_issues(report_version),
         *_report_integrity_issues(report_version, scoped_evidence, scoped_claims),
         *_report_structure_issues(report_version),
+        *_report_depth_issues(report_version),
         *_source_quality_issues(scoped_evidence),
         *_claim_evidence_quality_issues(scoped_claims, scoped_evidence),
         *_claim_validation_issues(scoped_claims, scoped_evidence),
@@ -311,6 +313,26 @@ def _report_structure_score(report_version: ReportVersionRecord) -> tuple[float,
     passed = sum(1 for _name, ok in checks if ok)
     missing = [name for name, ok in checks if not ok]
     return passed / len(checks), missing
+
+
+def _report_depth_issues(report_version: ReportVersionRecord) -> list[BusinessQAFinding]:
+    body_chars = len(report_version.report_md.strip())
+    if body_chars >= MIN_REPORT_BODY_CHARS:
+        return []
+    return [
+        _gate_issue(
+            "report_depth_required",
+            "Report depth required",
+            (
+                f"Report body has {body_chars} character(s); enterprise release requires "
+                f"at least {MIN_REPORT_BODY_CHARS} characters of decision-grade analysis."
+            ),
+            recommendation=(
+                "Regenerate or revise the report with concrete evidence-backed analysis, "
+                "tradeoffs, risk notes, and next validation tasks before release."
+            ),
+        )
+    ]
 
 
 def _has_layer_heading(report_version: ReportVersionRecord) -> bool:
