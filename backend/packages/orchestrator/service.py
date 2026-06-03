@@ -240,6 +240,11 @@ class RunService(
                 if request.auto_redo_warn_enabled is None
                 else request.auto_redo_warn_enabled
             ),
+            hitl_enabled=(
+                self._settings.hitl_enabled
+                if request.hitl_enabled is None
+                else request.hitl_enabled
+            ),
             current_node="planner",
         )
         async with self._lock:
@@ -988,7 +993,7 @@ class RunService(
 
     async def _maybe_run_auto_redo(self, record: RunRecord) -> bool:
         detail = record.detail
-        if self._settings.hitl_enabled or not self._settings.auto_redo_enabled:
+        if detail.hitl_enabled or not self._settings.auto_redo_enabled:
             return False
         redo_issues = [
             issue
@@ -1040,9 +1045,9 @@ class RunService(
         message: str,
         payload: dict[str, object],
     ) -> HitlResumeRequest:
-        if not self._settings.hitl_enabled:
-            return HitlResumeRequest(decision="accept")
         detail = record.detail
+        if not detail.hitl_enabled:
+            return HitlResumeRequest(decision="accept")
         interrupt_node = f"{stage}_hitl" if stage in {"planner", "qa"} else stage
         if stage not in record.pending_interrupts:
             detail.status = "interrupted"

@@ -56,13 +56,17 @@ def _settings(**overrides: object) -> Settings:
     return Settings(**values)
 
 
-def _request(idempotency_key: str | None = None) -> RunCreateRequest:
+def _request(idempotency_key: str | None = None, **overrides: object) -> RunCreateRequest:
+    values = {
+        "topic": "AI coding assistant workflow route",
+        "competitors": ["Cursor", "GitHub Copilot"],
+        "dimensions": ["pricing"],
+        "execution_mode": "demo",
+        "idempotency_key": idempotency_key,
+    }
+    values.update(overrides)
     return RunCreateRequest(
-        topic="AI coding assistant workflow route",
-        competitors=["Cursor", "GitHub Copilot"],
-        dimensions=["pricing"],
-        execution_mode="demo",
-        idempotency_key=idempotency_key,
+        **values,
     )
 
 
@@ -143,6 +147,15 @@ def test_workflow_input_preserves_explicit_idempotency_key() -> None:
 
     assert workflow_input.idempotency_key == "approval-demo-001"
     assert workflow_idempotency_key(request) != "approval-demo-001"
+
+
+def test_workflow_input_preserves_run_level_hitl_setting() -> None:
+    request = _request(hitl_enabled=True, auto_redo_warn_enabled=False)
+
+    workflow_input = competitive_intel_input_from_run_request(request)
+
+    assert workflow_input.hitl_enabled is True
+    assert workflow_input.auto_redo_warn_enabled is False
 
 
 def test_temporal_cutover_decision_supports_staged_traffic() -> None:

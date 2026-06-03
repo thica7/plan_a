@@ -126,6 +126,34 @@ async def test_auto_mode_falls_back_to_demo_when_model_policy_blocks_real() -> N
 
 
 @pytest.mark.asyncio
+async def test_run_request_can_enable_hitl_per_run() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=False,
+        ),
+    )
+
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+            hitl_enabled=True,
+        )
+    )
+
+    assert detail.hitl_enabled is True
+
+
+@pytest.mark.asyncio
 async def test_topic_only_run_discovers_competitors_in_planner() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

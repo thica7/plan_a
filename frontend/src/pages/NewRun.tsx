@@ -29,6 +29,7 @@ export function NewRun() {
   const [selected, setSelected] = useState<string[]>(coreDimensions);
   const [executionMode, setExecutionMode] = useState<"demo" | "real">("demo");
   const [autoRedoWarn, setAutoRedoWarn] = useState(false);
+  const [hitlEnabled, setHitlEnabled] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +39,7 @@ export function NewRun() {
         setRuntime(config);
         setExecutionMode(config.default_execution_mode);
         setAutoRedoWarn(config.auto_redo_warn_enabled);
+        setHitlEnabled(config.hitl_enabled);
       })
       .catch((err: Error) => setError(err.message));
 
@@ -108,6 +110,7 @@ export function NewRun() {
         scenario_id: scenarioId || null,
         execution_mode: executionMode,
         auto_redo_warn_enabled: autoRedoWarn,
+        hitl_enabled: hitlEnabled,
       });
       navigate(`/runs/${"id" in run ? run.id : run.run_id}`);
     } catch (err) {
@@ -293,13 +296,30 @@ export function NewRun() {
           <label className="toggle-row">
             <input
               checked={autoRedoWarn}
-              disabled={runtime?.auto_redo_enabled === false}
+              disabled={runtime?.auto_redo_enabled === false || hitlEnabled}
               onChange={(event) => setAutoRedoWarn(event.target.checked)}
               type="checkbox"
             />
             <span>
               <strong>Auto-redo warnings</strong>
               <em>When enabled, warn-level QA findings can trigger automatic redo. Blockers always can.</em>
+            </span>
+          </label>
+          <label className="toggle-row">
+            <input
+              checked={hitlEnabled}
+              onChange={(event) => {
+                const enabled = event.target.checked;
+                setHitlEnabled(enabled);
+                if (enabled) {
+                  setAutoRedoWarn(false);
+                }
+              }}
+              type="checkbox"
+            />
+            <span>
+              <strong>Human review pauses</strong>
+              <em>Pause this run at planner and QA checkpoints for manual resume or redo.</em>
             </span>
           </label>
         </fieldset>

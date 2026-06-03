@@ -70,6 +70,7 @@ class CompetitiveIntelActivities:
                 scenario_id=request.scenario_id,
                 execution_mode=request.execution_mode,
                 auto_redo_warn_enabled=request.auto_redo_warn_enabled,
+                hitl_enabled=request.hitl_enabled,
             )
         )
         return _run_state(detail)

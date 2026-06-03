@@ -55,6 +55,7 @@ class CompetitiveIntelWorkflowInput:
     scenario_id: str | None = None
     execution_mode: ExecutionMode = "auto"
     auto_redo_warn_enabled: bool | None = None
+    hitl_enabled: bool | None = None
 
 
 @dataclass(frozen=True)

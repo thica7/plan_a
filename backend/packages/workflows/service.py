@@ -259,6 +259,7 @@ def competitive_intel_input_from_run_request(
         scenario_id=request.scenario_id,
         execution_mode=request.execution_mode,
         auto_redo_warn_enabled=request.auto_redo_warn_enabled,
+        hitl_enabled=request.hitl_enabled,
     )
 
 

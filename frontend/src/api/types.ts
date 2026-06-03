@@ -471,6 +471,7 @@ export interface RunCreateRequest {
   scenario_id?: string | null;
   execution_mode: "auto" | "demo" | "real";
   auto_redo_warn_enabled?: boolean;
+  hitl_enabled?: boolean;
 }
 
 export interface RunSummary {
@@ -489,6 +490,7 @@ export interface RunDetail extends RunSummary {
   plan: AnalysisPlan;
   max_iterations: number;
   auto_redo_warn_enabled: boolean;
+  hitl_enabled: boolean;
   report_md: string;
   raw_sources: RawSource[];
   competitor_kbs: Record<string, CompetitorKB>;
