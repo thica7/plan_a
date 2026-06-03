@@ -523,7 +523,7 @@ async def test_report_approval_activities_block_weak_report_version() -> None:
 
 
 @pytest.mark.asyncio
-async def test_report_approval_activities_can_reject_to_draft() -> None:
+async def test_report_approval_activities_can_reject_report_version() -> None:
     store = EnterpriseMemoryStore()
     store.upsert_report_version(_report_version("report-version-2"))
     activities = ReportApprovalActivities(store)
@@ -540,10 +540,10 @@ async def test_report_approval_activities_can_reject_to_draft() -> None:
     )
     stored = store.get_report_version("report-version-2")
 
-    assert rejected.status == "draft"
+    assert rejected.status == "rejected"
     assert rejected.note == "needs revision"
     assert stored is not None
-    assert stored.status == "draft"
+    assert stored.status == "rejected"
 
 
 def test_report_approval_payloads_can_cross_json_converter_boundary() -> None:

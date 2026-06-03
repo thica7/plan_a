@@ -1519,7 +1519,7 @@ export interface ReportVersionRecord {
   topic_normalized: string;
   competitor_layer: CompetitorLayer;
   competitor_set_hash: string;
-  status: "draft" | "in_review" | "approved" | "published" | "archived";
+  status: "draft" | "in_review" | "approved" | "rejected" | "published" | "archived";
   report_md: string;
   claim_ids: string[];
   evidence_ids: string[];

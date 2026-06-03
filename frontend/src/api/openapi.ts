@@ -3806,7 +3806,7 @@ export interface components {
              * @default draft
              * @enum {string}
              */
-            status: "draft" | "in_review" | "approved" | "published" | "archived";
+            status: "draft" | "in_review" | "approved" | "rejected" | "published" | "archived";
             /**
              * Report Md
              * @default

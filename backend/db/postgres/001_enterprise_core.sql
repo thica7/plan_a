@@ -251,7 +251,7 @@ CREATE TABLE IF NOT EXISTS report_versions (
         CHECK (competitor_layer IN ('L1', 'L2', 'L3', 'unknown')),
     competitor_set_hash TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'draft'
-        CHECK (status IN ('draft', 'in_review', 'approved', 'published', 'archived')),
+        CHECK (status IN ('draft', 'in_review', 'approved', 'rejected', 'published', 'archived')),
     report_md TEXT NOT NULL DEFAULT '',
     claim_ids TEXT[] NOT NULL DEFAULT '{}',
     evidence_ids TEXT[] NOT NULL DEFAULT '{}',

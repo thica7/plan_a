@@ -485,7 +485,7 @@ class ReportVersionRecord(BaseModel):
     topic_normalized: str
     competitor_layer: CompetitorLayer = "unknown"
     competitor_set_hash: str
-    status: Literal["draft", "in_review", "approved", "published", "archived"] = "draft"
+    status: Literal["draft", "in_review", "approved", "rejected", "published", "archived"] = "draft"
     report_md: str = ""
     claim_ids: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)

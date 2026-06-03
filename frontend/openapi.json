@@ -11917,6 +11917,7 @@
               "draft",
               "in_review",
               "approved",
+              "rejected",
               "published",
               "archived"
             ],

@@ -40,7 +40,9 @@ MonitorAnomalyType = Literal[
 ]
 ReportApprovalDecision = Literal["approved", "rejected", "timed_out"]
 ReportApprovalSignalDecision = Literal["approved", "rejected"]
-ReportVersionWorkflowStatus = Literal["draft", "in_review", "approved", "published", "archived"]
+ReportVersionWorkflowStatus = Literal[
+    "draft", "in_review", "approved", "rejected", "published", "archived"
+]
 
 
 @dataclass(frozen=True)

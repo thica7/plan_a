@@ -584,7 +584,7 @@ class ReportApprovalActivities:
         decision: ReportApprovalDecisionInput,
     ) -> ReportApprovalState:
         version = self._require_report_version(decision.report_version_id)
-        updated = version.model_copy(update={"status": "draft"})
+        updated = version.model_copy(update={"status": "rejected"})
         return _approval_state(
             self._store.upsert_report_version(updated),
             approver_id=decision.approver_id,
