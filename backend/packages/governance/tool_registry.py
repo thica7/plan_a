@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from packages.schema.enterprise import ToolRegistryEntry, ToolRegistryReport
 
 
@@ -7,6 +10,10 @@ def build_tool_registry_report(settings: object) -> ToolRegistryReport:
     has_search = bool(getattr(settings, "has_web_search_credentials", False))
     redaction_enabled = bool(getattr(settings, "compliance_redaction_enabled", True))
     trace_required = bool(getattr(settings, "compliance_require_trace_context", True))
+    advanced_fetch_root = Path(
+        os.getenv("WEBFETCH_V2_ROOT", r"D:\codex_workspace\webfetch_v2")
+    )
+    advanced_fetch_configured = advanced_fetch_root.exists()
     entries = [
         ToolRegistryEntry(
             name="web_search",
@@ -37,6 +44,30 @@ def build_tool_registry_report(settings: object) -> ToolRegistryReport:
             status="enabled" if trace_required else "guarded",
             allowed_in_real_mode=trace_required,
             reason="Fetch is allowed when trace context records source lineage.",
+        ),
+        ToolRegistryEntry(
+            name="advanced_fetch_page",
+            category="collection",
+            description=(
+                "Optional external webfetch_v2 boundary for JavaScript-heavy pages, "
+                "quality diagnostics, markdown extraction, and screenshots."
+            ),
+            input_schema="AdvancedFetchRequest",
+            output_schema="AdvancedFetchResult",
+            estimated_cost_usd=0.0,
+            side_effects=["network_read", "file_write"],
+            policy_tags=[
+                "requires_robots",
+                "requires_trace",
+                "human_review_recommended",
+            ],
+            status="enabled" if advanced_fetch_configured and trace_required else "guarded",
+            allowed_in_real_mode=advanced_fetch_configured and trace_required,
+            reason=(
+                f"webfetch_v2 root is configured at {advanced_fetch_root}."
+                if advanced_fetch_configured and trace_required
+                else "Requires WEBFETCH_V2_ROOT and trace context before real browser fetches."
+            ),
         ),
         ToolRegistryEntry(
             name="rag_search_evidence",
