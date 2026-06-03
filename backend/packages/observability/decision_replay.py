@@ -268,6 +268,25 @@ def _report_version_decisions(
                 continue
             payload = raw_event.get("payload")
             payload_dict = dict(payload) if isinstance(payload, dict) else {}
+            release_gate_delta = gap_fill.get("release_gate_delta")
+            if event_type == "report.ready" and isinstance(release_gate_delta, dict):
+                payload_dict.setdefault("release_gate_delta", release_gate_delta)
+                payload_dict.setdefault(
+                    "release_gate_improved",
+                    release_gate_delta.get("release_gate_improved"),
+                )
+                payload_dict.setdefault(
+                    "release_gate_blocker_delta",
+                    release_gate_delta.get("release_gate_blocker_delta"),
+                )
+                payload_dict.setdefault(
+                    "release_gate_warn_delta",
+                    release_gate_delta.get("release_gate_warn_delta"),
+                )
+                payload_dict.setdefault(
+                    "readiness_score_delta",
+                    release_gate_delta.get("readiness_score_delta"),
+                )
             payload_dict.setdefault("gap_ids", _string_list(raw_event.get("gap_ids")))
             payload_dict.setdefault("report_version_id", version.id)
             payload_dict.setdefault("source", "report_version_quality_metadata")
@@ -352,6 +371,11 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "node",
         "redo_scope",
         "release_gate",
+        "release_gate_delta",
+        "release_gate_improved",
+        "release_gate_blocker_delta",
+        "release_gate_warn_delta",
+        "readiness_score_delta",
         "enterprise_projection",
         "report_version_id",
         "tool",

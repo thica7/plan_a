@@ -288,6 +288,21 @@ function formatDecisionPayload(event: DecisionReplayEvent) {
     const score = numberPayload(event, "score");
     if (score !== null) parts.push(`score ${score}`);
   }
+  if (event.event_type === "report.ready") {
+    const versionId =
+      stringPayload(event, "updated_report_version_id") ||
+      stringPayload(event, "report_version_id");
+    const releaseDelta = objectPayload(event, "release_gate_delta");
+    if (versionId) parts.push(`version ${versionId}`);
+    if (releaseDelta) {
+      const improved = booleanValue(releaseDelta.release_gate_improved);
+      const blockerDelta = numberValue(releaseDelta.release_gate_blocker_delta);
+      const readinessDelta = numberValue(releaseDelta.readiness_score_delta);
+      if (improved !== null) parts.push(`gate improved ${improved ? "yes" : "no"}`);
+      if (blockerDelta !== null) parts.push(`blocker delta ${blockerDelta}`);
+      if (readinessDelta !== null) parts.push(`readiness ${readinessDelta}`);
+    }
+  }
   return parts.join(" / ");
 }
 
@@ -313,6 +328,10 @@ function arrayPayload(event: DecisionReplayEvent, key: string) {
 
 function numberValue(value: unknown) {
   return typeof value === "number" ? value : null;
+}
+
+function booleanValue(value: unknown) {
+  return typeof value === "boolean" ? value : null;
 }
 
 function stringValue(value: unknown) {

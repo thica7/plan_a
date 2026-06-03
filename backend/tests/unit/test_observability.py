@@ -416,7 +416,17 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
                         },
                         "created_at": "2026-05-31T00:03:00Z",
                     },
-                ]
+                ],
+                "release_gate_delta": {
+                    "source_report_version_id": "report-gap-fill-v1",
+                    "updated_report_version_id": "report-gap-fill-v2",
+                    "source_status": "blocked",
+                    "updated_status": "pass",
+                    "release_gate_improved": True,
+                    "release_gate_blocker_delta": 2,
+                    "release_gate_warn_delta": 1,
+                    "readiness_score_delta": 12,
+                },
             }
         },
     )
@@ -433,6 +443,9 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
     assert gap_events[0].payload["report_version_id"] == "report-gap-fill-v2"
     assert gap_events[1].payload["gap_ids"] == ["gap-security"]
     assert gap_events[1].payload["gap_fill_chain_closed"] is True
+    assert gap_events[1].payload["release_gate_delta"]["release_gate_improved"] is True
+    assert gap_events[1].payload["release_gate_blocker_delta"] == 2
+    assert gap_events[1].payload["readiness_score_delta"] == 12
     assert replay.event_type_counts["rag.retrieved"] >= 1
 
 

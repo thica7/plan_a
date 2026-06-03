@@ -4016,8 +4016,17 @@ function decisionPayloadSummary(event: DecisionReplayEvent) {
   } else if (event.event_type === "report.ready") {
     const versionId = payloadString(payload, "updated_report_version_id", "report_version_id");
     const releaseGate = payloadRecord(payload, "release_gate");
+    const releaseDelta = payloadRecord(payload, "release_gate_delta");
     if (versionId) parts.push(`version ${versionId}`);
     if (releaseGate) parts.push(`gate ${String(releaseGate.status ?? "unknown")}`);
+    if (releaseDelta) {
+      const improved = releaseDelta.release_gate_improved === true;
+      const blockerDelta = payloadNumber(releaseDelta, "release_gate_blocker_delta");
+      const readinessDelta = payloadNumber(releaseDelta, "readiness_score_delta");
+      parts.push(`gate improved ${improved ? "yes" : "no"}`);
+      if (blockerDelta !== null) parts.push(`blocker delta ${blockerDelta}`);
+      if (readinessDelta !== null) parts.push(`readiness ${formatScoreDelta(readinessDelta)}`);
+    }
   }
 
   if (parts.length === 0) {
