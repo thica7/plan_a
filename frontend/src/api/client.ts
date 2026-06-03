@@ -46,6 +46,7 @@ import type {
   SkillSpec,
   SourceSnapshotCreateRequest,
   SourceSnapshotResult,
+  SourceRegistryRecord,
   ToolRegistryReport,
   ToolCallMessage,
   TraceObservabilityReport,
@@ -347,6 +348,11 @@ export function createSourceSnapshot(payload: SourceSnapshotCreateRequest) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function listSourceRegistry(workspaceId?: string) {
+  const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
+  return request<SourceRegistryRecord[]>(`/enterprise/source-registry${params}`);
 }
 
 export function getArtifact(artifactId: string) {

@@ -36,6 +36,7 @@ import {
   listProjectClaims,
   listProjectEvidence,
   listProjectReportVersions,
+  listSourceRegistry,
   startMonitorWorkflow,
   startScheduledScanWorkflow,
   updateEvidenceQuality,
@@ -62,6 +63,7 @@ import type {
   ReportReleaseGate,
   ReportVersionDiff,
   ReportVersionRecord,
+  SourceRegistryRecord,
   WorkspaceUsageSummary,
 } from "../api/types";
 
@@ -87,6 +89,7 @@ export function EnterpriseWorkbench({
   const [gapFillResult, setGapFillResult] = useState<EvidenceGapFillResult | null>(null);
   const [redTeam, setRedTeam] = useState<RedTeamReport | null>(null);
   const [evalOps, setEvalOps] = useState<EvalOpsReport | null>(null);
+  const [sourceRegistry, setSourceRegistry] = useState<SourceRegistryRecord[]>([]);
   const [workspaceUsage, setWorkspaceUsage] = useState<WorkspaceUsageSummary | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
@@ -141,6 +144,7 @@ export function EnterpriseWorkbench({
       setGapFillResult(null);
       setRedTeam(null);
       setEvalOps(null);
+      setSourceRegistry([]);
       setWorkspaceUsage(null);
       setSelectedVersionId(null);
       return;
@@ -161,6 +165,7 @@ export function EnterpriseWorkbench({
       getProjectEvidenceGaps(selectedProjectId),
       getProjectRedTeam(selectedProjectId),
       getEnterpriseEvalOps({ projectId: selectedProjectId }),
+      listSourceRegistry(projectForLoad.workspace_id),
       getWorkspaceUsage(projectForLoad.workspace_id),
     ])
       .then(
@@ -176,6 +181,7 @@ export function EnterpriseWorkbench({
           evidenceGapsValue,
           redTeamValue,
           evalOpsValue,
+          sourceRegistryValue,
           workspaceUsageValue,
         ]) => {
           if (!active) return;
@@ -191,6 +197,7 @@ export function EnterpriseWorkbench({
           setGapFillResult(null);
           setRedTeam(redTeamValue);
           setEvalOps(evalOpsValue);
+          setSourceRegistry(sourceRegistryValue);
           setWorkspaceUsage(workspaceUsageValue);
           setSelectedVersionId(versionItems[0]?.id ?? null);
         },
@@ -210,6 +217,7 @@ export function EnterpriseWorkbench({
         setGapFillResult(null);
         setRedTeam(null);
         setEvalOps(null);
+        setSourceRegistry([]);
         setWorkspaceUsage(null);
         setSelectedVersionId(null);
       })
@@ -541,6 +549,8 @@ export function EnterpriseWorkbench({
 
               {evalOps ? <EvalOpsPanel report={evalOps} /> : null}
 
+              <SourceRegistryPanel sources={sourceRegistry} />
+
               {competitorScores ? <CompetitorScorePanel report={competitorScores} /> : null}
 
               {evidenceGaps ? (
@@ -764,6 +774,53 @@ function EvalOpsPanel({ report }: { report: EvalOpsReport }) {
           ))}
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function SourceRegistryPanel({ sources }: { sources: SourceRegistryRecord[] }) {
+  const activeSources = sources.filter((source) => source.is_active);
+  const allowedSources = sources.filter((source) => source.robots_status === "allowed");
+  const blockedSources = sources.filter((source) => source.robots_status === "blocked");
+  const trustedSources = sources.filter((source) =>
+    ["official", "verified"].includes(source.trust_level),
+  );
+  const recentSources = [...sources]
+    .sort((left, right) => right.last_seen_at.localeCompare(left.last_seen_at))
+    .slice(0, 4);
+
+  return (
+    <section className={`panel readiness-panel ${blockedSources.length > 0 ? "warn" : "pass"}`}>
+      <div className="panel-heading-row">
+        <h2>Source registry</h2>
+        {blockedSources.length > 0 ? (
+          <AlertTriangle size={17} aria-hidden />
+        ) : (
+          <ShieldCheck size={17} aria-hidden />
+        )}
+      </div>
+      <div className="metric-grid compact">
+        <Metric icon={<Database size={17} aria-hidden />} label="Sources" value={sources.length} />
+        <Metric icon={<CheckCircle2 size={17} aria-hidden />} label="Active" value={activeSources.length} />
+        <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Allowed" value={allowedSources.length} />
+        <Metric icon={<AlertTriangle size={17} aria-hidden />} label="Blocked" value={blockedSources.length} />
+      </div>
+      <div className="project-meta-row">
+        <span>Trusted {formatPercent(sources.length ? trustedSources.length / sources.length : 0)}</span>
+        <span>Robots known {formatPercent(sources.length ? (allowedSources.length + blockedSources.length) / sources.length : 0)}</span>
+      </div>
+      {recentSources.length > 0 ? (
+        <div className="competitor-strip">
+          {recentSources.map((source) => (
+            <span key={source.id} title={source.homepage_url ?? source.domain}>
+              {source.display_name || source.domain}
+              <em>{source.trust_level} / {source.robots_status}</em>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="muted-line">No source registry entries yet.</p>
+      )}
     </section>
   );
 }
