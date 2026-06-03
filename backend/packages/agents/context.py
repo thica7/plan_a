@@ -21,6 +21,7 @@ class SubagentContext:
 
     def add_tool_call(self, name: str, detail: str) -> None:
         self.tool_trace.append({"name": name, "detail": detail})
+        self.add_message("tool", f"{name}: {detail}")
 
     def metadata(self) -> dict[str, str | int]:
         return {

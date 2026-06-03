@@ -2080,6 +2080,7 @@ async def test_collector_react_runner_searches_fetches_and_finishes(
     ]
     finish_span = next(span for span in traced_action_spans if span.name == "pricing_react_turn_3")
     assert finish_span.metadata["tool_call_count"] == 3
+    assert finish_span.metadata["message_count"] == 12
     assert "context_id" in finish_span.metadata
 
 
@@ -2230,6 +2231,7 @@ async def test_analyst_react_runner_inspects_validates_and_finishes() -> None:
     ]
     finish_span = record.detail.trace_spans[-1]
     assert finish_span.metadata["tool_call_count"] == 2
+    assert finish_span.metadata["message_count"] == 11
     assert "context_id" in finish_span.metadata
 
 
