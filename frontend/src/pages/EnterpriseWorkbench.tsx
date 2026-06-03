@@ -1388,6 +1388,7 @@ function QualityAgentMatrixPanel({ matrix }: { matrix: QualityAgentMatrix }) {
             <strong>{entry.agent_name}</strong>
             <span>{entry.status} / {entry.framework}</span>
             <p>{entry.summary}</p>
+            <TargetAnchorLinks evidenceIds={entry.evidence_ids} claimIds={entry.claim_ids} />
           </article>
         ))}
       </div>
