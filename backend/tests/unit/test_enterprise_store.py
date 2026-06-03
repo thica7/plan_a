@@ -871,6 +871,8 @@ async def test_run_service_applies_confirmed_memory_to_plan() -> None:
     assert any("battlecard" in item for item in created.plan.memory_prompt_context)
     report_md = service._demo_report(created)
     assert "## Memory Context" in report_md
+    assert "## Scenario QA Checklist" in report_md
+    assert "## Claim Validation & Evidence Risk" in report_md
     assert created.plan.memory_candidate_ids[0] in report_md
     assert "Confirmed MemoryAgent preferences" in report_md
 
