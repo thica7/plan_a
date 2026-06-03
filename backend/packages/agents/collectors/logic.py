@@ -1311,7 +1311,22 @@ class CollectorAgentMixin:
             "collector",
             dimension,
             f"Collector returned {added} {dimension} evidence candidates.",
-            {"collector": payload, "web_search": web_payload, "context": context.metadata()},
+            {
+                "collector": payload,
+                "web_search": web_payload,
+                "context": context.metadata(),
+                "dimension": dimension,
+                "source_count": added,
+                "source_ids": [
+                    source.id for source in detail.raw_sources if source.dimension == dimension
+                ],
+                "sources": [
+                    source.model_dump(mode="json")
+                    for source in detail.raw_sources
+                    if source.dimension == dimension
+                ],
+                "retrieval_stage": "collector_finish",
+            },
         )
 
     async def _real_collector_dispatch_step(
@@ -1505,6 +1520,10 @@ class CollectorAgentMixin:
                 "context": context.metadata(),
                 "dimension": dimension,
                 "competitor": competitor,
+                "source_count": len(sources),
+                "source_ids": [source.id for source in sources],
+                "sources": [source.model_dump(mode="json") for source in sources],
+                "retrieval_stage": "collector_branch_finish",
                 "message_id": message.id,
             },
         )

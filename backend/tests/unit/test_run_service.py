@@ -7,6 +7,7 @@ import pytest
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
 from packages.memory import PreferenceMemoryStore
+from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
@@ -1472,6 +1473,78 @@ async def test_real_pipeline_runs_through_langgraph() -> None:
         assert service._graph_checkpointer.saver is not None
     finally:
         await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_real_collector_replay_links_rag_event_to_source_ids() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    async def fake_official_sources(  # noqa: ANN001
+        record,
+        detail,
+        dimension,
+        competitor,
+        context,
+    ) -> list[RawSource]:
+        return [
+            RawSource(
+                id="source-pricing-1",
+                competitor=competitor,
+                dimension=dimension,
+                source_type="webpage_verified",
+                title="Cursor official pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor publishes pricing plans.",
+                content_hash="hash-pricing-1",
+                confidence=0.94,
+            )
+        ]
+
+    service._collect_official_sources = fake_official_sources  # type: ignore[method-assign]
+
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    await service._real_collector_branch_step(record, "pricing", "Cursor")
+
+    events = service.get_trace(detail.id) or []
+    collector_done = next(
+        event
+        for event in events
+        if event.type == "node_completed" and event.agent == "collector"
+    )
+    assert collector_done.payload["source_ids"] == ["source-pricing-1"]
+    assert collector_done.payload["source_count"] == 1
+    assert collector_done.payload["retrieval_stage"] == "collector_branch_finish"
+
+    updated = service.get_run(detail.id)
+    assert updated is not None
+    replay = build_decision_replay(updated, events)
+    rag_event = next(
+        event
+        for event in replay.events
+        if event.event_type == "rag.retrieved" and event.source_event_id == collector_done.id
+    )
+
+    assert rag_event.evidence_ids == ["source-pricing-1"]
+    assert rag_event.payload["source_ids"] == ["source-pricing-1"]
 
 
 @pytest.mark.asyncio
