@@ -72,6 +72,7 @@ def evaluate_report_release_gate(
         claims=scoped_claims,
     )
     issues = [
+        *_report_status_issues(report_version),
         *_report_integrity_issues(report_version, scoped_evidence, scoped_claims),
         *_report_structure_issues(report_version),
         *_source_quality_issues(scoped_evidence),
@@ -115,6 +116,19 @@ def _scope_claims(
 ) -> list[ClaimRecord]:
     allowed_ids = set(report_version.claim_ids)
     return [item for item in claims if item.id in allowed_ids]
+
+
+def _report_status_issues(report_version: ReportVersionRecord) -> list[BusinessQAFinding]:
+    if report_version.status not in {"rejected", "archived"}:
+        return []
+    return [
+        _gate_issue(
+            "report_status_releasable",
+            "Report status releasable",
+            f"Report version status is {report_version.status}; it cannot be released.",
+            recommendation="Create a new draft or restart approval before publishing this report.",
+        )
+    ]
 
 
 def _report_integrity_issues(
