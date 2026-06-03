@@ -225,7 +225,7 @@ function formatSpanMeta(span: TraceSpan) {
   return parts.join(" / ");
 }
 
-function formatDecisionPayload(event: DecisionReplayEvent) {
+export function formatDecisionPayload(event: DecisionReplayEvent) {
   const parts: string[] = [];
   if (event.event_type === "claim.validated") {
     const claimCount = numberPayload(event, "claim_count") ?? arrayPayload(event, "claim_ids").length;
@@ -302,6 +302,8 @@ function formatDecisionPayload(event: DecisionReplayEvent) {
     if (dimensions.length > 0) parts.push(`${dimensions.length} dimensions`);
   }
   if (event.event_type === "qa.blocked" || event.event_type === "redo.routed") {
+    const issueId = stringPayload(event, "issue_id");
+    const problem = stringPayload(event, "problem");
     const severity = stringPayload(event, "severity");
     const scope = objectPayload(event, "redo_scope");
     const scopeText = stringPayload(event, "redo_scope");
@@ -310,6 +312,8 @@ function formatDecisionPayload(event: DecisionReplayEvent) {
     const competitor = scope ? stringValue(scope.target_competitor) : "";
     const claimCount = arrayPayload(event, "claim_ids").length || event.claim_ids.length;
     const evidenceCount = arrayPayload(event, "evidence_ids").length || event.evidence_ids.length;
+    if (issueId) parts.push(`issue ${issueId}`);
+    if (problem) parts.push(clipPayloadText(problem));
     if (severity) parts.push(`severity ${severity}`);
     if (kind) parts.push(`scope ${kind}`);
     if (!kind && scopeText) parts.push(`scope ${scopeText}`);
@@ -370,6 +374,10 @@ function booleanValue(value: unknown) {
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function clipPayloadText(value: string) {
+  return value.length > 140 ? `${value.slice(0, 137)}...` : value;
 }
 
 function numberMeta(span: TraceSpan, key: string) {
