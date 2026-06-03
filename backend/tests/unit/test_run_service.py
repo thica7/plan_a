@@ -2601,6 +2601,7 @@ async def test_hitl_resume_creates_reviewable_memory_candidate() -> None:
         )
 
         assert updated.plan.dimensions == ["feature"]
+        assert updated.metrics.human_override_rate == 1.0
         assert feedback[0].target_type == "dimension"
         assert feedback[0].run_id == detail.id
         assert feedback[0].metadata["source"] == "hitl_resume"
@@ -2621,6 +2622,13 @@ async def test_hitl_resume_creates_reviewable_memory_candidate() -> None:
         assert set(memory_events[0].payload["candidate_ids"]) == {
             candidate.id for candidate in recall.candidates
         }
+        hitl_messages = [
+            message
+            for message in updated.agent_messages
+            if message.message_type == "hitl_memory_feedback_captured"
+        ]
+        assert hitl_messages
+        assert hitl_messages[0].payload["has_note"] is True
     finally:
         await service._graph_checkpointer.aclose()
 

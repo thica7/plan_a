@@ -392,7 +392,9 @@ class RunService(
                     request.dimensions,
                     require_core_schema=self._plan_requires_core_schema(record.detail),
                 )
-            memory_feedback_payload = self._capture_hitl_memory_feedback(record.detail, request)
+            memory_feedback_payload = self._capture_hitl_memory_feedback(record, request)
+            if memory_feedback_payload is not None:
+                self._refresh_quality_metrics(record.detail)
             record.detail.status = "running"
             record.detail.updated_at = datetime.utcnow()
             self._persist_run(run_id)
@@ -441,7 +443,9 @@ class RunService(
                 request.dimensions,
                 require_core_schema=self._plan_requires_core_schema(record.detail),
             )
-        memory_feedback_payload = self._capture_hitl_memory_feedback(record.detail, request)
+        memory_feedback_payload = self._capture_hitl_memory_feedback(record, request)
+        if memory_feedback_payload is not None:
+            self._refresh_quality_metrics(record.detail)
         record.detail.status = "running"
         record.detail.updated_at = datetime.utcnow()
         self._persist_run(run_id)
@@ -2643,8 +2647,17 @@ class RunService(
         metrics.revision_count = len(detail.revisions)
         schema_issue_count = sum(1 for issue in detail.qa_findings if issue.detected_by == "schema")
         metrics.schema_pass_rate = 0.0 if schema_issue_count else 1.0
+        hitl_override_count = _hitl_override_count(detail)
+        human_override_count = len(detail.revisions) + hitl_override_count
+        human_override_denominator = max(
+            len(detail.qa_findings),
+            _hitl_review_decision_count(detail),
+            1,
+        )
         metrics.human_override_rate = (
-            round(len(detail.revisions) / len(detail.qa_findings), 3) if detail.qa_findings else 0.0
+            round(min(1.0, human_override_count / human_override_denominator), 3)
+            if human_override_count
+            else 0.0
         )
         blocker_count = sum(1 for issue in detail.qa_findings if issue.severity == "blocker")
         metrics.acceptance_rate = 0.0 if blocker_count else 1.0
@@ -2878,9 +2891,10 @@ class RunService(
 
     def _capture_hitl_memory_feedback(
         self,
-        detail: RunDetail,
+        record: RunRecord,
         request: HitlResumeRequest,
     ) -> dict[str, object] | None:
+        detail = record.detail
         if self._preference_memory is None or not detail.project_id:
             return None
         note = (request.note or "").strip()
@@ -2931,16 +2945,26 @@ class RunService(
             self._preference_memory.upsert_candidate(candidate)
             for candidate in self._preference_memory.extract_candidates(feedback)
         ]
-        return {
+        payload: dict[str, object] = {
             "feedback_id": feedback.id,
             "feedback_type": feedback.feedback_type,
             "target_type": feedback.target_type,
             "target_id": feedback.target_id,
             "decision": request.decision,
+            "has_note": bool(note),
             "dimensions": dimensions,
             "candidate_ids": [candidate.id for candidate in candidates],
             "candidate_count": len(candidates),
         }
+        self._append_agent_message(
+            record,
+            from_agent="hitl",
+            to_agent="memory",
+            message_type="hitl_memory_feedback_captured",
+            payload_schema="HitlMemoryFeedbackPayload",
+            payload=payload,
+        )
+        return payload
 
     def _plan_requires_core_schema(self, detail: RunDetail) -> bool:
         available_core = [
@@ -3048,6 +3072,30 @@ def _span_redaction_count(span: TraceSpan) -> int:
     return _metadata_int(span.metadata.get("input_redaction_count")) + _metadata_int(
         span.metadata.get("output_redaction_count")
     )
+
+
+def _hitl_review_decision_count(detail: RunDetail) -> int:
+    return len(_hitl_review_messages(detail))
+
+
+def _hitl_override_count(detail: RunDetail) -> int:
+    count = 0
+    for message in _hitl_review_messages(detail):
+        decision = str(message.payload.get("decision") or "")
+        dimensions = message.payload.get("dimensions")
+        has_dimensions = isinstance(dimensions, list) and bool(dimensions)
+        has_note = message.payload.get("has_note") is True
+        if decision in {"modify_plan", "force_pass", "redo"} or has_dimensions or has_note:
+            count += 1
+    return count
+
+
+def _hitl_review_messages(detail: RunDetail) -> list[AgentMessage]:
+    return [
+        message
+        for message in detail.agent_messages
+        if message.message_type == "hitl_memory_feedback_captured"
+    ]
 
 
 def _metadata_int(value: object) -> int:
