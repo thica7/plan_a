@@ -284,6 +284,15 @@ function formatDecisionPayload(event: DecisionReplayEvent) {
     if (score !== null) parts.push(`recall ${score}`);
     if (candidates.length > 0) parts.push(`${candidates.length} memories`);
   }
+  if (event.event_type === "memory.feedback_captured") {
+    const feedbackId = stringPayload(event, "feedback_id");
+    const candidateCount =
+      numberPayload(event, "candidate_count") ?? arrayPayload(event, "candidate_ids").length;
+    const targetType = stringPayload(event, "target_type");
+    if (feedbackId) parts.push(`feedback ${feedbackId}`);
+    if (candidateCount > 0) parts.push(`${candidateCount} candidates`);
+    if (targetType) parts.push(`target ${targetType}`);
+  }
   if (event.event_type === "hitl.reviewed") {
     const decision = stringPayload(event, "decision");
     const stage = stringPayload(event, "stage") ?? event.subagent;
@@ -291,6 +300,23 @@ function formatDecisionPayload(event: DecisionReplayEvent) {
     if (decision) parts.push(`decision ${decision}`);
     if (stage) parts.push(`stage ${stage}`);
     if (dimensions.length > 0) parts.push(`${dimensions.length} dimensions`);
+  }
+  if (event.event_type === "qa.blocked" || event.event_type === "redo.routed") {
+    const severity = stringPayload(event, "severity");
+    const scope = objectPayload(event, "redo_scope");
+    const scopeText = stringPayload(event, "redo_scope");
+    const kind = scope ? stringValue(scope.kind) : "";
+    const subagent = scope ? stringValue(scope.target_subagent) : "";
+    const competitor = scope ? stringValue(scope.target_competitor) : "";
+    const claimCount = arrayPayload(event, "claim_ids").length || event.claim_ids.length;
+    const evidenceCount = arrayPayload(event, "evidence_ids").length || event.evidence_ids.length;
+    if (severity) parts.push(`severity ${severity}`);
+    if (kind) parts.push(`scope ${kind}`);
+    if (!kind && scopeText) parts.push(`scope ${scopeText}`);
+    if (subagent) parts.push(`subagent ${subagent}`);
+    if (competitor) parts.push(`competitor ${competitor}`);
+    if (claimCount > 0) parts.push(`${claimCount} claims`);
+    if (evidenceCount > 0) parts.push(`${evidenceCount} evidence`);
   }
   if (event.event_type === "benchmark.scored") {
     const score = numberPayload(event, "score");
