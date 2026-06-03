@@ -944,6 +944,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/projects/{project_id}/evidence/seed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Project Evidence Seed */
+        post: operations["ingest_project_evidence_seed_api_enterprise_projects__project_id__evidence_seed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/evidence": {
         parameters: {
             query?: never;
@@ -2717,6 +2734,49 @@ export interface components {
             score: number;
             /** Embedding Model */
             embedding_model: string;
+        };
+        /** EvidenceSeedIngestRequest */
+        EvidenceSeedIngestRequest: {
+            /** Topic */
+            topic?: string | null;
+            /** Competitors */
+            competitors?: string[];
+            /** Dimensions */
+            dimensions?: string[];
+            /** Run Id */
+            run_id?: string | null;
+            /** Limit */
+            limit?: number | null;
+        };
+        /** EvidenceSeedIngestResult */
+        EvidenceSeedIngestResult: {
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Seed Path */
+            seed_path: string;
+            /** Loaded Count */
+            loaded_count: number;
+            /** Matched Count */
+            matched_count: number;
+            /** Ingested Count */
+            ingested_count: number;
+            /** Indexed Count */
+            indexed_count: number;
+            /**
+             * Duplicate Count
+             * @default 0
+             */
+            duplicate_count: number;
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Topics */
+            topics?: string[];
+            /** Competitors */
+            competitors?: string[];
+            /** Dimensions */
+            dimensions?: string[];
         };
         /** FeatureNode */
         FeatureNode: {
@@ -7401,6 +7461,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvidenceRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_project_evidence_seed_api_enterprise_projects__project_id__evidence_seed_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvidenceSeedIngestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceSeedIngestResult"];
                 };
             };
             /** @description Validation Error */

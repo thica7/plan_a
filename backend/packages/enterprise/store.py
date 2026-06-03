@@ -1347,7 +1347,14 @@ def _source_location(evidence: EvidenceRecord) -> tuple[str, str | None]:
 
 def _source_trust_level(evidence: EvidenceRecord) -> str:
     source_type = evidence.source_type.casefold()
-    if source_type in {"official", "official_site", "official_docs"}:
+    if source_type in {
+        "official",
+        "official_site",
+        "official_docs",
+        "official_pricing",
+        "official_api",
+        "trust_center",
+    }:
         return "official"
     if source_type in {"webpage_verified", "verified_webpage", "verified_document"}:
         return "verified"

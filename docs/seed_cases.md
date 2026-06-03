@@ -10,3 +10,12 @@ The current cases cover:
 - AI coding assistant
 - Customer support chatbot
 - Product analytics platform
+
+## Evidence Seed Corpus
+
+`data/evidence_seed.jsonl` is a validated offline evidence corpus, not just a
+static fixture. Use `POST /api/enterprise/projects/{project_id}/evidence/seed`
+with optional `topic`, `competitors`, `dimensions`, `run_id`, and `limit` fields
+to ingest matching seed rows into the enterprise evidence store. Ingested rows
+become `EvidenceRecord` objects, are indexed immediately, and can be retrieved by
+the RAG gap-fill pipeline when live web collection is unavailable.

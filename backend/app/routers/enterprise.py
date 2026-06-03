@@ -1,4 +1,5 @@
 import hashlib
+import re
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Annotated
@@ -54,6 +55,7 @@ from packages.rag import (
     decorate_evidence_gap_report_with_retrieval,
     fill_evidence_gaps,
     fill_evidence_gaps_online,
+    ingest_evidence_seed_corpus,
 )
 from packages.search import PerplexitySearchClient
 from packages.schema.enterprise import (
@@ -76,6 +78,8 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     EvidenceReindexResult,
     EvidenceSearchHit,
+    EvidenceSeedIngestRequest,
+    EvidenceSeedIngestResult,
     KnowledgeGraphReadModel,
     MemoryCandidate,
     MemoryFeedbackIngestResult,
@@ -1139,6 +1143,33 @@ def list_project_evidence(
     return store.list_evidence(project_id=project_id)
 
 
+@router.post(
+    "/enterprise/projects/{project_id}/evidence/seed",
+    response_model=EvidenceSeedIngestResult,
+)
+def ingest_project_evidence_seed(
+    project_id: str,
+    request: EvidenceSeedIngestRequest,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> EvidenceSeedIngestResult:
+    project = _project_or_404(project_id, store, user, "evidence:write")
+    try:
+        return ingest_evidence_seed_corpus(
+            store=store,
+            workspace_id=project.workspace_id,
+            project_id=project_id,
+            topic=request.topic or project.topic,
+            competitors=request.competitors,
+            dimensions=request.dimensions,
+            run_id=request.run_id,
+            limit=request.limit,
+            competitor_id_map=_competitor_id_map_for_project(project_id, store),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @router.post("/enterprise/evidence", response_model=EvidenceRecord)
 def upsert_evidence(
     evidence: EvidenceRecord,
@@ -1474,6 +1505,24 @@ def _evidence_or_404(evidence_id: str, store: EnterpriseStore) -> EvidenceRecord
         if evidence.id == evidence_id:
             return evidence
     raise HTTPException(status_code=404, detail="Evidence not found")
+
+
+def _competitor_id_map_for_project(
+    project_id: str,
+    store: EnterpriseStore,
+) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for competitor in store.list_competitors(project_id=project_id):
+        keys = [competitor.name, competitor.normalized_name, *competitor.aliases]
+        for key in keys:
+            normalized = _slug_key(key)
+            if normalized:
+                mapping[normalized] = competitor.id
+    return mapping
+
+
+def _slug_key(value: str) -> str:
+    return "-".join(re.findall(r"[a-z0-9]+", value.casefold()))
 
 
 def _report_version_or_404(

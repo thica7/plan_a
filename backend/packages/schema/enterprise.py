@@ -456,6 +456,45 @@ class EvidenceReindexResult(BaseModel):
     duplicate_count: int = Field(default=0, ge=0)
 
 
+class EvidenceSeedRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    topic: str = Field(min_length=1)
+    competitor: str = Field(min_length=1)
+    dimension: str = Field(min_length=1)
+    source_type: str = Field(min_length=1)
+    url: HttpUrl | None = None
+    reliability: float = Field(ge=0.0, le=1.0)
+
+
+class EvidenceSeedIngestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    topic: str | None = None
+    competitors: list[str] = Field(default_factory=list)
+    dimensions: list[str] = Field(default_factory=list)
+    run_id: str | None = None
+    limit: int | None = Field(default=None, ge=1, le=500)
+
+
+class EvidenceSeedIngestResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str
+    project_id: str
+    seed_path: str
+    loaded_count: int = Field(ge=0)
+    matched_count: int = Field(ge=0)
+    ingested_count: int = Field(ge=0)
+    indexed_count: int = Field(ge=0)
+    duplicate_count: int = Field(default=0, ge=0)
+    evidence_ids: list[str] = Field(default_factory=list)
+    topics: list[str] = Field(default_factory=list)
+    competitors: list[str] = Field(default_factory=list)
+    dimensions: list[str] = Field(default_factory=list)
+
+
 class ClaimRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

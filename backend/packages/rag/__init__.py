@@ -6,6 +6,12 @@ from packages.rag.gap_retrieval import (
 )
 from packages.rag.gap_fill import fill_evidence_gaps, fill_evidence_gaps_online
 from packages.rag.retriever import grounded_context, retrieve_grounded_context
+from packages.rag.seed_corpus import (
+    filter_evidence_seed_rows,
+    ingest_evidence_seed_corpus,
+    load_evidence_seed_rows,
+    seed_row_to_evidence_record,
+)
 
 __all__ = [
     "build_gap_retrieval_query",
@@ -14,7 +20,11 @@ __all__ = [
     "decorate_evidence_gap_report_with_retrieval",
     "fill_evidence_gaps",
     "fill_evidence_gaps_online",
+    "filter_evidence_seed_rows",
     "grounded_context",
+    "ingest_evidence_seed_corpus",
+    "load_evidence_seed_rows",
     "retrieve_gap_candidates",
     "retrieve_grounded_context",
+    "seed_row_to_evidence_record",
 ]
