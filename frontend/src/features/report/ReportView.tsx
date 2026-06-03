@@ -10,6 +10,13 @@ interface Props {
 
 export function ReportView({ markdown, sources }: Props) {
   const sourceIds = useMemo(() => new Set(sources.map((source) => source.id)), [sources]);
+  const missingSourceIds = useMemo(
+    () =>
+      extractSourceTokens(markdown).filter(
+        (sourceId, index, tokens) => !sourceIds.has(sourceId) && tokens.indexOf(sourceId) === index,
+      ),
+    [markdown, sourceIds],
+  );
   const linkedMarkdown = useMemo(
     () => linkSourceTokens(markdown, sourceIds),
     [markdown, sourceIds],
@@ -22,8 +29,18 @@ export function ReportView({ markdown, sources }: Props) {
           components={{
             a({ href, children, ...props }) {
               const sourceLink = href?.startsWith("#source-");
+              const missingSourceLink = href?.startsWith("#missing-source-");
               return (
-                <a className={sourceLink ? "source-token-link" : undefined} href={href} {...props}>
+                <a
+                  className={
+                    sourceLink || missingSourceLink
+                      ? `source-token-link${missingSourceLink ? " missing" : ""}`
+                      : undefined
+                  }
+                  href={href}
+                  title={missingSourceLink ? "Missing source token" : undefined}
+                  {...props}
+                >
                   {children}
                 </a>
               );
@@ -68,15 +85,30 @@ export function ReportView({ markdown, sources }: Props) {
           ))}
         </div>
       ) : null}
+      {missingSourceIds.length > 0 ? (
+        <div className="missing-source-list" id="missing-source-list">
+          <h3>Missing sources</h3>
+          {missingSourceIds.map((sourceId) => (
+            <article className="missing-source-card" id={`missing-source-${sourceId}`} key={sourceId}>
+              <strong>[source:{sourceId}]</strong>
+              <span>No matching RawSource id exists in this run.</span>
+            </article>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }
 
 function linkSourceTokens(markdown: string, sourceIds: Set<string>) {
   return markdown.replace(/\[source:([A-Za-z0-9_.:-]+)\]/g, (token, sourceId: string) => {
-    const target = sourceIds.has(sourceId) ? `#source-${sourceId}` : "#source-list";
+    const target = sourceIds.has(sourceId) ? `#source-${sourceId}` : `#missing-source-${sourceId}`;
     return `[${token}](${target})`;
   });
+}
+
+function extractSourceTokens(markdown: string) {
+  return Array.from(markdown.matchAll(/\[source:([A-Za-z0-9_.:-]+)\]/g), (match) => match[1]);
 }
 
 function sourceTypeLabel(sourceType: string) {

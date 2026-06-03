@@ -75,6 +75,7 @@ def evaluate_report_release_gate(
         *_source_quality_issues(scoped_evidence),
         *_claim_evidence_quality_issues(scoped_claims, scoped_evidence),
         *_claim_validation_issues(scoped_claims, scoped_evidence),
+        *_missing_report_citation_issues(report_version, scoped_evidence),
         *_report_citation_quality_issues(report_version, scoped_evidence),
         *_run_quality_issues(report_version),
         *_readiness_issues(readiness),
@@ -308,6 +309,39 @@ def _report_citation_quality_issues(
             )
         )
     return issues
+
+
+def _missing_report_citation_issues(
+    report_version: ReportVersionRecord,
+    evidence: list[EvidenceRecord],
+) -> list[BusinessQAFinding]:
+    evidence_by_token: dict[str, EvidenceRecord] = {}
+    for item in evidence:
+        evidence_by_token[item.id] = item
+        evidence_by_token[item.raw_source_id] = item
+    missing = sorted(
+        {
+            token
+            for token in _cited_source_tokens(report_version.report_md)
+            if token not in evidence_by_token
+        }
+    )
+    if not missing:
+        return []
+    return [
+        _gate_issue(
+            "report_citation_resolves",
+            "Report citations resolve",
+            (
+                "Report contains source token(s) that do not resolve to scoped evidence: "
+                f"{', '.join(missing[:8])}."
+            ),
+            recommendation=(
+                "Replace missing source tokens with EvidenceRecord ids/raw source ids or remove "
+                "the unsupported sentence."
+            ),
+        )
+    ]
 
 
 def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAFinding]:
