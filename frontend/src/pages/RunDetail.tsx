@@ -153,6 +153,9 @@ export function RunDetail() {
 
   const latestReflection = detail.reflections.length > 0 ? detail.reflections[detail.reflections.length - 1] : null;
   const reflectionItems = latestReflection ? flattenReflection(latestReflection) : [];
+  const recommendedDimensions = detail.plan.scenario_recommended_dimensions.filter(
+    (dimension) => !detail.plan.dimensions.includes(dimension),
+  );
 
   async function handleRedo() {
     if (!runId) return;
@@ -205,9 +208,13 @@ export function RunDetail() {
           <div className="run-meta-row">
             <span>Layer {detail.plan.competitor_layer}</span>
             <span>Scenario {detail.plan.scenario_id ?? "auto"}</span>
+            <span>QA rules {detail.plan.qa_rule_ids.length}</span>
             {detail.plan.qa_rule_ids.slice(0, 4).map((ruleId) => (
               <span key={ruleId}>{ruleId}</span>
             ))}
+            {recommendedDimensions.length > 0 ? (
+              <span>Recommended {recommendedDimensions.join(", ")}</span>
+            ) : null}
           </div>
         </div>
         <div className={`status-chip ${detail.status}`}>
