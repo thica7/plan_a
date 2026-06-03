@@ -2821,11 +2821,13 @@ function EvidenceTable({
               const competitor = competitorById.get(item.competitor_id)?.name ?? item.competitor_id;
               const isCaptured = capturedEvidenceIds.has(item.id);
               const isSnapshotting = snapshottingEvidenceId === item.id;
+              const dedupeSummary = evidenceDedupeSummary(item);
               return (
                 <tr id={`evidence-${item.id}`} key={item.id}>
                   <td>
                     <strong>{item.title}</strong>
                     <span>{item.snippet}</span>
+                    {dedupeSummary ? <span>{dedupeSummary}</span> : null}
                     {item.url ? (
                       <a href={item.url} rel="noreferrer" target="_blank">
                         <ExternalLink size={13} aria-hidden />
@@ -2878,6 +2880,20 @@ function EvidenceTable({
       {evidence.length === 0 ? <p className="muted-line">No matching evidence.</p> : null}
     </div>
   );
+}
+
+function evidenceDedupeSummary(item: EvidenceRecord) {
+  const duplicateOf = payloadString(item.metadata, "embedding_duplicate_of");
+  if (duplicateOf) {
+    return `Duplicate of ${duplicateOf}`;
+  }
+  const duplicateCount =
+    payloadNumber(item.metadata, "embedding_duplicate_count") ??
+    payloadListCount(item.metadata, "embedding_duplicate_ids");
+  if (duplicateCount !== null && duplicateCount > 0) {
+    return `Canonical evidence; ${duplicateCount} duplicate item(s) folded.`;
+  }
+  return null;
 }
 
 function ClaimList({
