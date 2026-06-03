@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.deps import get_artifact_storage, get_enterprise_store, get_preference_memory
 from app.main import create_app
+from app.routers.enterprise import _with_gap_fill_release_gate_delta
 from packages.artifacts import LocalArtifactStorage
 from packages.config import Settings
 from packages.enterprise import (
@@ -20,6 +21,8 @@ from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
     ArtifactRecord,
+    EvidenceGapFillResult,
+    EvidenceGapReport,
     NotificationRecord,
     UserFeedbackRecord,
     WorkspaceMemberRecord,
@@ -1025,6 +1028,58 @@ def test_enterprise_router_blocks_report_approval_status_when_gate_fails() -> No
     assert response.status_code == 409
     assert response.json()["detail"]["status"] == "blocked"
     assert response.json()["detail"]["allowed"] is False
+
+
+def test_gap_fill_result_carries_release_gate_improvement_delta() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    source_version = projection.report_version.model_copy(
+        update={
+            "id": "report-source-gapped",
+            "version_number": 1,
+            "evidence_ids": [],
+            "claim_ids": [],
+        }
+    )
+    store.upsert_report_version(source_version)
+    project = store.get_project(context.project_id)
+    assert project is not None
+    result = EvidenceGapFillResult(
+        project_id=context.project_id,
+        workspace_id=context.workspace_id,
+        source_report_version_id=source_version.id,
+        updated_report_version_id=projection.report_version.id,
+        gap_count=1,
+        filled_gap_count=1,
+        added_evidence_count=1,
+        candidate_evidence_ids=projection.report_version.evidence_ids,
+        filled_gap_ids=["gap-pricing"],
+        remaining_gap_ids=[],
+        report=EvidenceGapReport(
+            project_id=context.project_id,
+            scenario_id="l1_pricing_pack",
+            gap_count=0,
+        ),
+        updated_report_version=projection.report_version,
+    )
+
+    enriched = _with_gap_fill_release_gate_delta(result, project=project, store=store)
+
+    assert enriched.source_release_gate is not None
+    assert enriched.updated_release_gate is not None
+    assert enriched.source_release_gate.allowed is False
+    assert enriched.updated_release_gate.allowed is True
+    assert enriched.release_gate_improved is True
+    assert enriched.release_gate_blocker_delta > 0
+    assert enriched.readiness_score_delta >= 0
 
 
 def test_enterprise_router_enforces_rbac_workspace_scope() -> None:

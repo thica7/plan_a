@@ -897,6 +897,12 @@ export interface EvidenceGapFillResult {
   remaining_gap_ids: string[];
   report: EvidenceGapReport;
   updated_report_version?: ReportVersionRecord | null;
+  source_release_gate?: ReportReleaseGate | null;
+  updated_release_gate?: ReportReleaseGate | null;
+  release_gate_improved: boolean;
+  release_gate_blocker_delta: number;
+  release_gate_warn_delta: number;
+  readiness_score_delta: number;
   generated_at: string;
 }
 

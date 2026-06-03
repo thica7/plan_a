@@ -906,6 +906,12 @@ class EvidenceGapFillResult(BaseModel):
     remaining_gap_ids: list[str] = Field(default_factory=list)
     report: EvidenceGapReport
     updated_report_version: ReportVersionRecord | None = None
+    source_release_gate: ReportReleaseGate | None = None
+    updated_release_gate: ReportReleaseGate | None = None
+    release_gate_improved: bool = False
+    release_gate_blocker_delta: int = 0
+    release_gate_warn_delta: int = 0
+    readiness_score_delta: int = 0
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 

@@ -632,7 +632,7 @@ async def fill_project_evidence_gaps(
                 )
             return await fetch_page(url)
 
-        return await fill_evidence_gaps_online(
+        result = await fill_evidence_gaps_online(
             report,
             store=store,
             workspace_id=project.workspace_id,
@@ -641,13 +641,15 @@ async def fill_project_evidence_gaps(
             search=search_online,
             fetch=fetch_with_robots,
         )
-    return fill_evidence_gaps(
+        return _with_gap_fill_release_gate_delta(result, project=project, store=store)
+    result = fill_evidence_gaps(
         report,
         store=store,
         workspace_id=project.workspace_id,
         project_id=project_id,
         source_report_version=source_version,
     )
+    return _with_gap_fill_release_gate_delta(result, project=project, store=store)
 
 
 @router.get("/enterprise/projects/{project_id}/red-team", response_model=RedTeamReport)
@@ -1286,6 +1288,74 @@ def _report_release_gate_for_version(
     project = _project_or_404(version.project_id, store, user, action)
     if project.workspace_id != version.workspace_id:
         raise HTTPException(status_code=400, detail="Report workspace does not match project")
+    return evaluate_report_release_gate(
+        project=project,
+        report_version=version,
+        competitors=store.list_competitors(project_id=project.id),
+        evidence=store.list_evidence(project_id=project.id),
+        claims=store.list_claims(project_id=project.id),
+    )
+
+
+def _with_gap_fill_release_gate_delta(
+    result: EvidenceGapFillResult,
+    *,
+    project: ProjectRecord,
+    store: EnterpriseStore,
+) -> EvidenceGapFillResult:
+    source_gate = _release_gate_for_report_version_id(
+        result.source_report_version_id,
+        project=project,
+        store=store,
+    )
+    updated_gate = _release_gate_for_report_version_id(
+        result.updated_report_version_id,
+        project=project,
+        store=store,
+    )
+    if source_gate is None or updated_gate is None:
+        return result.model_copy(
+            update={
+                "source_release_gate": source_gate,
+                "updated_release_gate": updated_gate,
+            }
+        )
+    blocker_delta = source_gate.blocker_count - updated_gate.blocker_count
+    warn_delta = source_gate.warn_count - updated_gate.warn_count
+    readiness_delta = updated_gate.readiness.score - source_gate.readiness.score
+    not_worse = (
+        updated_gate.blocker_count <= source_gate.blocker_count
+        and updated_gate.warn_count <= source_gate.warn_count
+    )
+    return result.model_copy(
+        update={
+            "source_release_gate": source_gate,
+            "updated_release_gate": updated_gate,
+            "release_gate_blocker_delta": blocker_delta,
+            "release_gate_warn_delta": warn_delta,
+            "readiness_score_delta": readiness_delta,
+            "release_gate_improved": not_worse
+            and (
+                (updated_gate.allowed and not source_gate.allowed)
+                or blocker_delta > 0
+                or warn_delta > 0
+                or readiness_delta > 0
+            ),
+        }
+    )
+
+
+def _release_gate_for_report_version_id(
+    version_id: str | None,
+    *,
+    project: ProjectRecord,
+    store: EnterpriseStore,
+) -> ReportReleaseGate | None:
+    if version_id is None:
+        return None
+    version = store.get_report_version(version_id)
+    if version is None:
+        return None
     return evaluate_report_release_gate(
         project=project,
         report_version=version,

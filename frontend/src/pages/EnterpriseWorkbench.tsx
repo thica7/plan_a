@@ -942,6 +942,21 @@ function EvidenceGapPanel({
             <strong>{fillResult.updated_report_version_id ? "yes" : "no"}</strong>
             <em>Draft version</em>
           </span>
+          <span>
+            <strong>{fillResult.release_gate_blocker_delta}</strong>
+            <em>Blocker delta</em>
+          </span>
+          <span>
+            <strong>{fillResult.release_gate_warn_delta}</strong>
+            <em>Warn delta</em>
+          </span>
+          <span>
+            <strong>
+              {fillResult.readiness_score_delta > 0 ? "+" : ""}
+              {fillResult.readiness_score_delta}
+            </strong>
+            <em>Readiness</em>
+          </span>
         </div>
       ) : null}
       {report.gaps.length > 0 ? (
