@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
 
 from packages.config import Settings  # noqa: E402
 from packages.orchestrator.checkpointer import GraphCheckpointer  # noqa: E402
+from packages.orchestrator.redo_seed_cases import redo_scope_seed_snapshot  # noqa: E402
 from packages.orchestrator.service import RunService  # noqa: E402
 from packages.schema.api_dto import RunCreateRequest  # noqa: E402
 from packages.skills.registry import SkillRegistry  # noqa: E402
@@ -57,6 +58,21 @@ async def main() -> None:
     print("topic,status,sources,revisions")
     for row in rows:
         print(",".join(str(item) for item in row))
+    print("")
+    print("redo_scope_kind,case_id,issue_id,target_agent,target_subagent,target_competitor")
+    for item in redo_scope_seed_snapshot():
+        print(
+            ",".join(
+                [
+                    str(item["assigned_kind"]),
+                    str(item["id"]),
+                    str(item["issue_id"]),
+                    str(item["target_agent"]),
+                    str(item["target_subagent"] or ""),
+                    str(item["target_competitor"] or ""),
+                ]
+            )
+        )
 
 
 if __name__ == "__main__":

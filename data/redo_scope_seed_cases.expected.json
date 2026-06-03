@@ -1,0 +1,62 @@
+[
+  {
+    "id": "writer_phantom_citation",
+    "issue_id": "seed-writer-phantom-citation",
+    "detected_by": "citation",
+    "target_agent": "writer",
+    "field_path": "report_md",
+    "expected_kind": "writer_only",
+    "assigned_kind": "writer_only",
+    "target_subagent": null,
+    "target_competitor": null,
+    "rationale": "phantom citation only"
+  },
+  {
+    "id": "comparator_matrix_mismatch",
+    "issue_id": "seed-comparator-matrix-mismatch",
+    "detected_by": "consistency",
+    "target_agent": "comparator",
+    "field_path": "comparison_matrix.cells[pricing][Cursor]",
+    "expected_kind": "comparator",
+    "assigned_kind": "comparator",
+    "target_subagent": "pricing",
+    "target_competitor": null,
+    "rationale": "comparison matrix mismatch"
+  },
+  {
+    "id": "analyst_empty_slice",
+    "issue_id": "seed-analyst-empty-slice",
+    "detected_by": "schema",
+    "target_agent": "analyst",
+    "field_path": "competitor_kbs[Glean].slices[security]",
+    "expected_kind": "analyst",
+    "assigned_kind": "analyst",
+    "target_subagent": "security",
+    "target_competitor": "Glean",
+    "rationale": "Security analyst did not produce structured findings for Glean."
+  },
+  {
+    "id": "collector_missing_verified_source",
+    "issue_id": "seed-collector-missing-verified-source",
+    "detected_by": "coverage",
+    "target_agent": "collector",
+    "field_path": "raw_sources[Cursor][pricing]",
+    "expected_kind": "collector",
+    "assigned_kind": "collector",
+    "target_subagent": "pricing",
+    "target_competitor": "Cursor",
+    "rationale": "No verified pricing source was collected for Cursor."
+  },
+  {
+    "id": "full_unscoped_schema_break",
+    "issue_id": "seed-full-unscoped-schema-break",
+    "detected_by": "schema",
+    "target_agent": "planner",
+    "field_path": "analysis_plan.competitors",
+    "expected_kind": "full",
+    "assigned_kind": "full",
+    "target_subagent": null,
+    "target_competitor": null,
+    "rationale": "unscoped blocker"
+  }
+]

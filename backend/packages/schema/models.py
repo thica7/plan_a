@@ -31,6 +31,16 @@ class QCIssue(BaseModel):
     self_found: bool = False
 
 
+class RedoScopeSeedCase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    description: str
+    issue: QCIssue
+    expected_scope: RedoScope
+    assigned_scope: RedoScope
+
+
 class ReflectionRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

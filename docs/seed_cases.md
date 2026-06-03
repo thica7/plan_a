@@ -19,3 +19,11 @@ with optional `topic`, `competitors`, `dimensions`, `run_id`, and `limit` fields
 to ingest matching seed rows into the enterprise evidence store. Ingested rows
 become `EvidenceRecord` objects, are indexed immediately, and can be retrieved by
 the RAG gap-fill pipeline when live web collection is unavailable.
+
+## RedoScope Seed Fixtures
+
+`data/redo_scope_seed_cases.expected.json` locks five deterministic scoped-redo
+cases: `writer_only`, `comparator`, `analyst`, `collector`, and `full`.
+`seed_cases.py` prints these fixtures after the demo run rows, and
+`backend/tests/unit/test_redo_seed_cases.py` verifies the snapshot so the
+presentation can prove all redo routes are covered.
