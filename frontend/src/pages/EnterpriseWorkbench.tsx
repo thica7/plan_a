@@ -52,6 +52,7 @@ import {
   startMonitorWorkflow,
   startScheduledScanWorkflow,
   updateEvidenceQuality,
+  updateProjectMemoryCandidate,
 } from "../api/client";
 import { ReportView } from "../features/report/ReportView";
 import type {
@@ -73,6 +74,7 @@ import type {
   EvalOpsMetric,
   EvalOpsReport,
   KnowledgeGraphReadModel,
+  MemoryCandidateStatus,
   MemoryRecallContext,
   MemoryStats,
   ModelPolicyReport,
@@ -144,6 +146,7 @@ export function EnterpriseWorkbench({
   const [isFillingGaps, setFillingGaps] = useState(false);
   const [isLoadingEvalOps, setLoadingEvalOps] = useState(false);
   const [isSavingMemoryFeedback, setSavingMemoryFeedback] = useState(false);
+  const [reviewingMemoryCandidateId, setReviewingMemoryCandidateId] = useState<string | null>(null);
   const [reviewingSchemaSuggestionId, setReviewingSchemaSuggestionId] = useState<string | null>(null);
   const [snapshottingEvidenceId, setSnapshottingEvidenceId] = useState<string | null>(null);
   const [memoryFeedbackDraft, setMemoryFeedbackDraft] = useState("");
@@ -620,6 +623,35 @@ export function EnterpriseWorkbench({
     }
   }
 
+  async function handleMemoryCandidateStatusChange(
+    candidateId: string,
+    status: MemoryCandidateStatus,
+  ) {
+    if (!selectedProjectId || reviewingMemoryCandidateId) return;
+    const projectId = selectedProjectId;
+    setReviewingMemoryCandidateId(candidateId);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const updated = await updateProjectMemoryCandidate(projectId, candidateId, status);
+      const [statsValue, recallValue] = await Promise.all([
+        getProjectMemoryStats(projectId),
+        recallProjectMemory(projectId, {
+          query: selectedProject?.topic ?? "",
+          limit: 6,
+          includeUnconfirmed: true,
+        }),
+      ]);
+      setMemoryStats(statsValue);
+      setMemoryRecall(recallValue);
+      setScanMessage(`Memory ${updated.kind.replace(/_/g, " ")} marked ${updated.status}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update memory candidate");
+    } finally {
+      setReviewingMemoryCandidateId(null);
+    }
+  }
+
   async function handleCreateEvidenceSnapshot(item: EvidenceRecord) {
     if (!selectedProject) return;
     setSnapshottingEvidenceId(item.id);
@@ -841,6 +873,8 @@ export function EnterpriseWorkbench({
                 feedback={memoryFeedback}
                 feedbackDraft={memoryFeedbackDraft}
                 isSubmitting={isSavingMemoryFeedback}
+                reviewingCandidateId={reviewingMemoryCandidateId}
+                onCandidateStatusChange={handleMemoryCandidateStatusChange}
                 onFeedbackDraftChange={setMemoryFeedbackDraft}
                 onSubmitFeedback={handleSubmitMemoryFeedback}
                 recall={memoryRecall}
@@ -1622,6 +1656,8 @@ function MemoryAgentPanel({
   feedback,
   feedbackDraft,
   isSubmitting,
+  reviewingCandidateId,
+  onCandidateStatusChange,
   onFeedbackDraftChange,
   onSubmitFeedback,
   recall,
@@ -1630,6 +1666,8 @@ function MemoryAgentPanel({
   feedback: UserFeedbackRecord[];
   feedbackDraft: string;
   isSubmitting: boolean;
+  reviewingCandidateId: string | null;
+  onCandidateStatusChange: (candidateId: string, status: MemoryCandidateStatus) => void;
   onFeedbackDraftChange: (value: string) => void;
   onSubmitFeedback: () => void;
   recall: MemoryRecallContext | null;
@@ -1707,12 +1745,47 @@ function MemoryAgentPanel({
         </button>
       </form>
       {candidates.length > 0 ? (
-        <div className="competitor-strip">
+        <div className="recommendation-list">
           {candidates.slice(0, 5).map((candidate) => (
-            <span key={candidate.id} title={candidate.statement}>
-              {candidate.kind.replace(/_/g, " ")}
-              <em>{candidate.status} / {formatPercent(candidate.match_score)}</em>
-            </span>
+            <article
+              className={`recommendation-card ${memoryCandidatePriority(candidate.status)}`}
+              key={candidate.id}
+            >
+              <strong>{candidate.kind.replace(/_/g, " ")}</strong>
+              <span>{candidate.status} / {formatPercent(candidate.match_score)}</span>
+              <p>{candidate.statement}</p>
+              <div className="project-meta-row">
+                <span>Weight {formatPercent(candidate.weight)}</span>
+                <span>Used {candidate.used_count}</span>
+                <span>{candidate.tags.slice(0, 3).join(", ") || "untagged"}</span>
+              </div>
+              {candidate.status === "candidate" ? (
+                <div className="panel-heading-actions">
+                  <button
+                    className="icon-text-button"
+                    disabled={reviewingCandidateId !== null}
+                    type="button"
+                    onClick={() => onCandidateStatusChange(candidate.id, "confirmed")}
+                  >
+                    {reviewingCandidateId === candidate.id ? (
+                      <RefreshCw className="spin" size={15} aria-hidden />
+                    ) : (
+                      <CheckCircle2 size={15} aria-hidden />
+                    )}
+                    Confirm
+                  </button>
+                  <button
+                    className="icon-text-button"
+                    disabled={reviewingCandidateId !== null}
+                    type="button"
+                    onClick={() => onCandidateStatusChange(candidate.id, "rejected")}
+                  >
+                    <AlertTriangle size={15} aria-hidden />
+                    Reject
+                  </button>
+                </div>
+              ) : null}
+            </article>
           ))}
         </div>
       ) : (
@@ -2704,6 +2777,12 @@ function evalOpsCasePriority(status: EvalOpsReport["regression_gate_status"]) {
   if (status === "fail") return "high";
   if (status === "warn") return "medium";
   return "low";
+}
+
+function memoryCandidatePriority(status: MemoryCandidateStatus) {
+  if (status === "candidate") return "medium";
+  if (status === "confirmed") return "low";
+  return "high";
 }
 
 function acceptedSchemaDimensionSet(metadata?: Record<string, unknown>) {
