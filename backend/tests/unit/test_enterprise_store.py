@@ -824,6 +824,7 @@ def test_enterprise_router_exposes_projection() -> None:
     memory_stats = client.get(f"/api/enterprise/projects/{context.project_id}/memory/stats")
     readiness = client.get(f"/api/enterprise/projects/{context.project_id}/readiness-score")
     gaps = client.get(f"/api/enterprise/projects/{context.project_id}/evidence-gaps")
+    red_team = client.get(f"/api/enterprise/projects/{context.project_id}/red-team")
     quality_matrix = client.get(f"/api/enterprise/projects/{context.project_id}/quality-matrix")
     competitors = client.get(f"/api/enterprise/competitors?project_id={context.project_id}")
     source_registry = client.get(
@@ -938,6 +939,15 @@ def test_enterprise_router_exposes_projection() -> None:
     assert readiness.json()["risk_level"] in {"ready", "watch", "at_risk", "blocked"}
     assert gaps.status_code == 200
     assert "gap_count" in gaps.json()
+    assert gaps.json()["framework"] == "pydantic-ai"
+    assert gaps.json()["pydantic_ai_execution_mode"] == "deterministic_handler"
+    assert gaps.json()["pydantic_ai_model_backed_requested"] is False
+    assert gaps.json()["typed_contract_enforced"] is True
+    assert red_team.status_code == 200
+    assert red_team.json()["framework"] == "pydantic-ai"
+    assert red_team.json()["pydantic_ai_execution_mode"] == "deterministic_handler"
+    assert red_team.json()["pydantic_ai_model_backed_requested"] is False
+    assert red_team.json()["typed_contract_enforced"] is True
     assert quality_matrix.status_code == 200
     assert {item["agent_name"] for item in quality_matrix.json()["entries"]} >= {
         "BusinessQA",

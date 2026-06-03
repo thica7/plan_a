@@ -2326,6 +2326,28 @@ export interface components {
             remaining_gap_ids?: string[];
             report: components["schemas"]["EvidenceGapReport"];
             updated_report_version?: components["schemas"]["ReportVersionRecord"] | null;
+            source_release_gate?: components["schemas"]["ReportReleaseGate"] | null;
+            updated_release_gate?: components["schemas"]["ReportReleaseGate"] | null;
+            /**
+             * Release Gate Improved
+             * @default false
+             */
+            release_gate_improved: boolean;
+            /**
+             * Release Gate Blocker Delta
+             * @default 0
+             */
+            release_gate_blocker_delta: number;
+            /**
+             * Release Gate Warn Delta
+             * @default 0
+             */
+            release_gate_warn_delta: number;
+            /**
+             * Readiness Score Delta
+             * @default 0
+             */
+            readiness_score_delta: number;
             /**
              * Generated At
              * Format: date-time
@@ -2428,6 +2450,35 @@ export interface components {
              * @default false
              */
             pydantic_ai_available: boolean;
+            /**
+             * Pydantic Ai Execution Mode
+             * @default deterministic_handler
+             */
+            pydantic_ai_execution_mode: string;
+            /**
+             * Pydantic Ai Model Backed Requested
+             * @default false
+             */
+            pydantic_ai_model_backed_requested: boolean;
+            /**
+             * Pydantic Ai Model Backed Fallback
+             * @default false
+             */
+            pydantic_ai_model_backed_fallback: boolean;
+            /**
+             * Pydantic Ai Runtime Agent Created
+             * @default false
+             */
+            pydantic_ai_runtime_agent_created: boolean;
+            /** Pydantic Ai Runtime Result Type */
+            pydantic_ai_runtime_result_type?: string | null;
+            /** Pydantic Ai Model Name */
+            pydantic_ai_model_name?: string | null;
+            /**
+             * Typed Contract Enforced
+             * @default true
+             */
+            typed_contract_enforced: boolean;
             /**
              * Generated At
              * Format: date-time
@@ -3442,6 +3493,35 @@ export interface components {
              */
             pydantic_ai_available: boolean;
             /**
+             * Pydantic Ai Execution Mode
+             * @default deterministic_handler
+             */
+            pydantic_ai_execution_mode: string;
+            /**
+             * Pydantic Ai Model Backed Requested
+             * @default false
+             */
+            pydantic_ai_model_backed_requested: boolean;
+            /**
+             * Pydantic Ai Model Backed Fallback
+             * @default false
+             */
+            pydantic_ai_model_backed_fallback: boolean;
+            /**
+             * Pydantic Ai Runtime Agent Created
+             * @default false
+             */
+            pydantic_ai_runtime_agent_created: boolean;
+            /** Pydantic Ai Runtime Result Type */
+            pydantic_ai_runtime_result_type?: string | null;
+            /** Pydantic Ai Model Name */
+            pydantic_ai_model_name?: string | null;
+            /**
+             * Typed Contract Enforced
+             * @default true
+             */
+            typed_contract_enforced: boolean;
+            /**
              * Generated At
              * Format: date-time
              */
@@ -3826,6 +3906,8 @@ export interface components {
             execution_mode: "auto" | "demo" | "real";
             /** Auto Redo Warn Enabled */
             auto_redo_warn_enabled?: boolean | null;
+            /** Hitl Enabled */
+            hitl_enabled?: boolean | null;
         };
         /** RunDetail */
         RunDetail: {
@@ -3876,6 +3958,11 @@ export interface components {
              * @default false
              */
             auto_redo_warn_enabled: boolean;
+            /**
+             * Hitl Enabled
+             * @default false
+             */
+            hitl_enabled: boolean;
             /**
              * Report Md
              * @default
@@ -4188,6 +4275,12 @@ export interface components {
             hitl_enabled: boolean;
             /** Hitl Timeout Seconds */
             hitl_timeout_seconds: number;
+            /** Hitl Demo Ready */
+            hitl_demo_ready: boolean;
+            /** Hitl Ready Reason */
+            hitl_ready_reason: string;
+            /** Hitl Review Checkpoints */
+            hitl_review_checkpoints: string[];
             /** Temporal Address */
             temporal_address: string;
             /** Temporal Namespace */
@@ -4220,6 +4313,12 @@ export interface components {
             pydantic_ai_model_backed_enabled: boolean;
             /** Pydantic Ai Model Name */
             pydantic_ai_model_name?: string | null;
+            /** Pydantic Ai Available */
+            pydantic_ai_available: boolean;
+            /** Pydantic Ai Model Backed Ready */
+            pydantic_ai_model_backed_ready: boolean;
+            /** Pydantic Ai Model Backed Reason */
+            pydantic_ai_model_backed_reason: string;
             /** Artifact Storage Backend */
             artifact_storage_backend: string;
             /** Artifact Storage Root */

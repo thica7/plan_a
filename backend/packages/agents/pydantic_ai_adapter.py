@@ -72,6 +72,7 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
             "pydantic_ai_model_backed_requested": _model_backed_requested(request.context),
             "pydantic_ai_model_backed_fallback": execution_mode.endswith("_fallback"),
             "pydantic_ai_runtime_result_type": runtime_result_type,
+            "pydantic_ai_model_name": _model_name_from_context(request.context, self._model),
             "system_prompt": self.system_prompt,
             "system_prompt_hash": self._system_prompt_hash,
             "input_schema": self.input_type.__name__,
@@ -242,6 +243,15 @@ def _safe_error(exc: Exception) -> str:
 def _model_backed_requested(context: dict[str, Any]) -> bool:
     mode = str(context.get("pydantic_ai_execution_mode") or "").strip().lower()
     return mode in {"model_backed", "test_model"}
+
+
+def _model_name_from_context(context: dict[str, Any], default_model: object | str | None) -> str | None:
+    model = context.get("pydantic_ai_model") or default_model
+    if model is None:
+        return None
+    if isinstance(model, str):
+        return model
+    return type(model).__name__
 
 
 def _model_schema_hash(model_type: type[BaseModel]) -> str:

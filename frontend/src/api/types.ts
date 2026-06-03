@@ -889,6 +889,13 @@ export interface EvidenceGapReport {
   agent_name: string;
   framework: "pydantic-ai";
   pydantic_ai_available: boolean;
+  pydantic_ai_execution_mode: string;
+  pydantic_ai_model_backed_requested: boolean;
+  pydantic_ai_model_backed_fallback: boolean;
+  pydantic_ai_runtime_agent_created: boolean;
+  pydantic_ai_runtime_result_type?: string | null;
+  pydantic_ai_model_name?: string | null;
+  typed_contract_enforced: boolean;
   generated_at: string;
 }
 
@@ -941,6 +948,13 @@ export interface RedTeamReport {
   agent_name: string;
   framework: "pydantic-ai";
   pydantic_ai_available: boolean;
+  pydantic_ai_execution_mode: string;
+  pydantic_ai_model_backed_requested: boolean;
+  pydantic_ai_model_backed_fallback: boolean;
+  pydantic_ai_runtime_agent_created: boolean;
+  pydantic_ai_runtime_result_type?: string | null;
+  pydantic_ai_model_name?: string | null;
+  typed_contract_enforced: boolean;
   generated_at: string;
 }
 

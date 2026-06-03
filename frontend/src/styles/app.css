@@ -2443,6 +2443,57 @@ select {
   font-style: normal;
 }
 
+.agent-runtime-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+}
+
+.agent-runtime-row span {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  min-height: 54px;
+  padding: 9px 10px;
+}
+
+.agent-runtime-row strong,
+.agent-runtime-row em {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.agent-runtime-row strong {
+  color: #252c39;
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.agent-runtime-row em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.agent-runtime-row span.ok {
+  border-color: rgba(15, 139, 141, 0.22);
+}
+
+.agent-runtime-row span.ok strong {
+  color: var(--accent);
+}
+
+.agent-runtime-row span.warn {
+  border-color: rgba(201, 72, 72, 0.24);
+}
+
+.agent-runtime-row span.warn strong {
+  color: var(--danger);
+}
+
 .evidence-gap-list {
   display: grid;
   gap: 8px;

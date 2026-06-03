@@ -924,6 +924,15 @@ function EvidenceGapPanel({
           <em>Medium</em>
         </span>
       </div>
+      <PydanticAiExecutionPanel
+        available={report.pydantic_ai_available}
+        executionMode={report.pydantic_ai_execution_mode}
+        fallback={report.pydantic_ai_model_backed_fallback}
+        modelName={report.pydantic_ai_model_name}
+        modelBackedRequested={report.pydantic_ai_model_backed_requested}
+        runtimeAgentCreated={report.pydantic_ai_runtime_agent_created}
+        typedContractEnforced={report.typed_contract_enforced}
+      />
       {fillResult ? (
         <div className="evidence-gap-summary">
           <span>
@@ -1030,6 +1039,15 @@ function RedTeamPanel({ report }: { report: RedTeamReport }) {
           <em>Pydantic-AI</em>
         </span>
       </div>
+      <PydanticAiExecutionPanel
+        available={report.pydantic_ai_available}
+        executionMode={report.pydantic_ai_execution_mode}
+        fallback={report.pydantic_ai_model_backed_fallback}
+        modelName={report.pydantic_ai_model_name}
+        modelBackedRequested={report.pydantic_ai_model_backed_requested}
+        runtimeAgentCreated={report.pydantic_ai_runtime_agent_created}
+        typedContractEnforced={report.typed_contract_enforced}
+      />
       {report.findings.length > 0 ? (
         <div className="red-team-list">
           {report.findings.slice(0, 5).map((finding) => (
@@ -1040,6 +1058,53 @@ function RedTeamPanel({ report }: { report: RedTeamReport }) {
         <p className="muted-line">No red-team findings for the active project.</p>
       )}
     </section>
+  );
+}
+
+function PydanticAiExecutionPanel({
+  available,
+  executionMode,
+  fallback,
+  modelBackedRequested,
+  modelName,
+  runtimeAgentCreated,
+  typedContractEnforced,
+}: {
+  available: boolean;
+  executionMode: string;
+  fallback: boolean;
+  modelBackedRequested: boolean;
+  modelName?: string | null;
+  runtimeAgentCreated: boolean;
+  typedContractEnforced: boolean;
+}) {
+  return (
+    <div className="agent-runtime-row">
+      <span className={available ? "ok" : "warn"}>
+        <strong>{available ? "on" : "off"}</strong>
+        <em>Pydantic-AI</em>
+      </span>
+      <span className={modelBackedRequested ? "ok" : undefined}>
+        <strong>{executionMode.replace(/^pydantic_ai_/, "").replace(/_/g, " ")}</strong>
+        <em>Execution</em>
+      </span>
+      <span className={fallback ? "warn" : "ok"}>
+        <strong>{fallback ? "yes" : "no"}</strong>
+        <em>Fallback</em>
+      </span>
+      <span>
+        <strong>{modelName || "default"}</strong>
+        <em>Model</em>
+      </span>
+      <span className={typedContractEnforced ? "ok" : "warn"}>
+        <strong>{typedContractEnforced ? "typed" : "loose"}</strong>
+        <em>Schema</em>
+      </span>
+      <span className={runtimeAgentCreated ? "ok" : "warn"}>
+        <strong>{runtimeAgentCreated ? "ready" : "none"}</strong>
+        <em>Runtime</em>
+      </span>
+    </div>
   );
 }
 

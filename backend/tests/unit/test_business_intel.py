@@ -978,6 +978,7 @@ async def test_pydantic_ai_model_backed_path_falls_back_with_typed_metadata(monk
     assert result.metadata["pydantic_ai_model_backed_requested"] is True
     assert result.metadata["pydantic_ai_model_backed_fallback"] is True
     assert result.metadata["pydantic_ai_model_backed_error"] == "provider timeout"
+    assert result.metadata["pydantic_ai_model_name"] == "openai:test-model"
     assert result.metadata["typed_contract_enforced"] is True
     assert result.payload["gap_count"] >= 1
 

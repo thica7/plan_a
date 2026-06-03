@@ -8614,6 +8614,46 @@
               }
             ]
           },
+          "source_release_gate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportReleaseGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_release_gate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportReleaseGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "release_gate_improved": {
+            "type": "boolean",
+            "title": "Release Gate Improved",
+            "default": false
+          },
+          "release_gate_blocker_delta": {
+            "type": "integer",
+            "title": "Release Gate Blocker Delta",
+            "default": 0
+          },
+          "release_gate_warn_delta": {
+            "type": "integer",
+            "title": "Release Gate Warn Delta",
+            "default": 0
+          },
+          "readiness_score_delta": {
+            "type": "integer",
+            "title": "Readiness Score Delta",
+            "default": 0
+          },
           "generated_at": {
             "type": "string",
             "format": "date-time",
@@ -8817,6 +8857,53 @@
             "type": "boolean",
             "title": "Pydantic Ai Available",
             "default": false
+          },
+          "pydantic_ai_execution_mode": {
+            "type": "string",
+            "title": "Pydantic Ai Execution Mode",
+            "default": "deterministic_handler"
+          },
+          "pydantic_ai_model_backed_requested": {
+            "type": "boolean",
+            "title": "Pydantic Ai Model Backed Requested",
+            "default": false
+          },
+          "pydantic_ai_model_backed_fallback": {
+            "type": "boolean",
+            "title": "Pydantic Ai Model Backed Fallback",
+            "default": false
+          },
+          "pydantic_ai_runtime_agent_created": {
+            "type": "boolean",
+            "title": "Pydantic Ai Runtime Agent Created",
+            "default": false
+          },
+          "pydantic_ai_runtime_result_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pydantic Ai Runtime Result Type"
+          },
+          "pydantic_ai_model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pydantic Ai Model Name"
+          },
+          "typed_contract_enforced": {
+            "type": "boolean",
+            "title": "Typed Contract Enforced",
+            "default": true
           },
           "generated_at": {
             "type": "string",
@@ -11163,6 +11250,53 @@
             "title": "Pydantic Ai Available",
             "default": false
           },
+          "pydantic_ai_execution_mode": {
+            "type": "string",
+            "title": "Pydantic Ai Execution Mode",
+            "default": "deterministic_handler"
+          },
+          "pydantic_ai_model_backed_requested": {
+            "type": "boolean",
+            "title": "Pydantic Ai Model Backed Requested",
+            "default": false
+          },
+          "pydantic_ai_model_backed_fallback": {
+            "type": "boolean",
+            "title": "Pydantic Ai Model Backed Fallback",
+            "default": false
+          },
+          "pydantic_ai_runtime_agent_created": {
+            "type": "boolean",
+            "title": "Pydantic Ai Runtime Agent Created",
+            "default": false
+          },
+          "pydantic_ai_runtime_result_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pydantic Ai Runtime Result Type"
+          },
+          "pydantic_ai_model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pydantic Ai Model Name"
+          },
+          "typed_contract_enforced": {
+            "type": "boolean",
+            "title": "Typed Contract Enforced",
+            "default": true
+          },
           "generated_at": {
             "type": "string",
             "format": "date-time",
@@ -12054,6 +12188,17 @@
               }
             ],
             "title": "Auto Redo Warn Enabled"
+          },
+          "hitl_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hitl Enabled"
           }
         },
         "additionalProperties": false,
@@ -12137,6 +12282,11 @@
           "auto_redo_warn_enabled": {
             "type": "boolean",
             "title": "Auto Redo Warn Enabled",
+            "default": false
+          },
+          "hitl_enabled": {
+            "type": "boolean",
+            "title": "Hitl Enabled",
             "default": false
           },
           "report_md": {
@@ -12819,6 +12969,21 @@
             "type": "number",
             "title": "Hitl Timeout Seconds"
           },
+          "hitl_demo_ready": {
+            "type": "boolean",
+            "title": "Hitl Demo Ready"
+          },
+          "hitl_ready_reason": {
+            "type": "string",
+            "title": "Hitl Ready Reason"
+          },
+          "hitl_review_checkpoints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hitl Review Checkpoints"
+          },
           "temporal_address": {
             "type": "string",
             "title": "Temporal Address"
@@ -12896,6 +13061,18 @@
             ],
             "title": "Pydantic Ai Model Name"
           },
+          "pydantic_ai_available": {
+            "type": "boolean",
+            "title": "Pydantic Ai Available"
+          },
+          "pydantic_ai_model_backed_ready": {
+            "type": "boolean",
+            "title": "Pydantic Ai Model Backed Ready"
+          },
+          "pydantic_ai_model_backed_reason": {
+            "type": "string",
+            "title": "Pydantic Ai Model Backed Reason"
+          },
           "artifact_storage_backend": {
             "type": "string",
             "title": "Artifact Storage Backend"
@@ -12931,6 +13108,9 @@
           "auto_redo_warn_enabled",
           "hitl_enabled",
           "hitl_timeout_seconds",
+          "hitl_demo_ready",
+          "hitl_ready_reason",
+          "hitl_review_checkpoints",
           "temporal_address",
           "temporal_namespace",
           "temporal_task_queue",
@@ -12946,6 +13126,9 @@
           "compliance_require_source_urls",
           "compliance_require_trace_context",
           "pydantic_ai_model_backed_enabled",
+          "pydantic_ai_available",
+          "pydantic_ai_model_backed_ready",
+          "pydantic_ai_model_backed_reason",
           "artifact_storage_backend",
           "artifact_storage_root",
           "auth_policy_engine",

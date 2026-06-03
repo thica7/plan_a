@@ -13,7 +13,7 @@ from app.deps import (
     get_enterprise_user_context,
     get_preference_memory,
 )
-from packages.agents import AgentExecutionRequest
+from packages.agents import AgentExecutionRequest, AgentExecutionResult
 from packages.artifacts import ArtifactStorageError, LocalArtifactStorage
 from packages.auth import (
     EnterpriseUserContext,
@@ -586,7 +586,10 @@ async def get_project_evidence_gaps(
     )
     if result.status != "ok":
         raise HTTPException(status_code=503, detail=result.error or "Evidence gap agent failed.")
-    report = EvidenceGapReport.model_validate(result.payload)
+    report = _with_pydantic_ai_execution_metadata(
+        EvidenceGapReport.model_validate(result.payload),
+        result,
+    )
     project = _project_or_404(project_id, store, user, "evidence:read")
     return decorate_evidence_gap_report_with_retrieval(
         report,
@@ -689,7 +692,7 @@ async def get_project_red_team(
     )
     if result.status != "ok":
         raise HTTPException(status_code=503, detail=result.error or "Red-team agent failed.")
-    return RedTeamReport.model_validate(result.payload)
+    return _with_pydantic_ai_execution_metadata(RedTeamReport.model_validate(result.payload), result)
 
 
 @router.get(
@@ -899,6 +902,57 @@ def _pydantic_ai_context(settings: Settings) -> dict[str, str]:
             "pydantic_ai_model": settings.pydantic_ai_model_name,
         }
     return {}
+
+
+def _with_pydantic_ai_execution_metadata(
+    report: EvidenceGapReport | RedTeamReport,
+    result: AgentExecutionResult,
+) -> EvidenceGapReport | RedTeamReport:
+    metadata = result.metadata
+    return report.model_copy(
+        update={
+            "pydantic_ai_available": bool(metadata.get("pydantic_ai_available", report.pydantic_ai_available)),
+            "pydantic_ai_execution_mode": str(
+                metadata.get("execution_mode", report.pydantic_ai_execution_mode)
+            ),
+            "pydantic_ai_model_backed_requested": bool(
+                metadata.get(
+                    "pydantic_ai_model_backed_requested",
+                    report.pydantic_ai_model_backed_requested,
+                )
+            ),
+            "pydantic_ai_model_backed_fallback": bool(
+                metadata.get(
+                    "pydantic_ai_model_backed_fallback",
+                    report.pydantic_ai_model_backed_fallback,
+                )
+            ),
+            "pydantic_ai_runtime_agent_created": bool(
+                metadata.get(
+                    "pydantic_ai_runtime_agent_created",
+                    report.pydantic_ai_runtime_agent_created,
+                )
+            ),
+            "pydantic_ai_runtime_result_type": _optional_str(
+                metadata.get(
+                    "pydantic_ai_runtime_result_type",
+                    report.pydantic_ai_runtime_result_type,
+                )
+            ),
+            "pydantic_ai_model_name": _optional_str(
+                metadata.get("pydantic_ai_model_name", report.pydantic_ai_model_name)
+            ),
+            "typed_contract_enforced": bool(
+                metadata.get("typed_contract_enforced", report.typed_contract_enforced)
+            ),
+        }
+    )
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
 
 
 def _business_plan_for_project(

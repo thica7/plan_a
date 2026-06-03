@@ -888,6 +888,13 @@ class EvidenceGapReport(BaseModel):
     agent_name: str = "pydantic_ai_evidence_gap"
     framework: str = "pydantic-ai"
     pydantic_ai_available: bool = False
+    pydantic_ai_execution_mode: str = "deterministic_handler"
+    pydantic_ai_model_backed_requested: bool = False
+    pydantic_ai_model_backed_fallback: bool = False
+    pydantic_ai_runtime_agent_created: bool = False
+    pydantic_ai_runtime_result_type: str | None = None
+    pydantic_ai_model_name: str | None = None
+    typed_contract_enforced: bool = True
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -947,6 +954,13 @@ class RedTeamReport(BaseModel):
     agent_name: str = "pydantic_ai_red_team"
     framework: str = "pydantic-ai"
     pydantic_ai_available: bool = False
+    pydantic_ai_execution_mode: str = "deterministic_handler"
+    pydantic_ai_model_backed_requested: bool = False
+    pydantic_ai_model_backed_fallback: bool = False
+    pydantic_ai_runtime_agent_created: bool = False
+    pydantic_ai_runtime_result_type: str | None = None
+    pydantic_ai_model_name: str | None = None
+    typed_contract_enforced: bool = True
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
