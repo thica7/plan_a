@@ -160,9 +160,15 @@ def test_tool_registry_and_model_router_explain_enterprise_policy() -> None:
 
     tools = build_tool_registry_report(settings)
     route = build_model_route_decision(settings)
+    tool_names = {entry.name for entry in tools.entries}
 
-    assert tools.total_count >= 6
-    assert "source_snapshot" in {entry.name for entry in tools.entries}
+    assert tools.total_count >= 9
+    assert {
+        "source_snapshot",
+        "memory_recall",
+        "claim_validator",
+        "self_consistency_sampler",
+    } <= tool_names
     assert tools.side_effect_tool_count >= 3
     assert route.status == "fallback"
     assert route.selected is not None
