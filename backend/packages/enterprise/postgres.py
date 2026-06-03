@@ -43,6 +43,7 @@ from packages.schema.enterprise import (
     NotificationRecord,
     ProjectRecord,
     ReportVersionRecord,
+    SchemaEvolutionReviewRecord,
     SourceRegistryRecord,
     WorkspaceMemberRecord,
     WorkspaceQuotaDecision,
@@ -765,6 +766,34 @@ class EnterprisePostgresStore:
                 )
             conn.commit()
         return project
+
+    def audit_schema_evolution_review(
+        self,
+        project: ProjectRecord,
+        review: SchemaEvolutionReviewRecord,
+        *,
+        actor_id: str | None = None,
+    ) -> None:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._append_audit(
+                    cur,
+                    workspace_id=project.workspace_id,
+                    actor_id=actor_id or review.reviewed_by,
+                    action="schema_evolution.reviewed",
+                    resource_type="schema_evolution_suggestion",
+                    resource_id=f"{project.id}:{review.suggestion_id}",
+                    after={
+                        "project_id": project.id,
+                        "suggestion_id": review.suggestion_id,
+                        "decision": review.decision,
+                        "dimension": review.dimension,
+                        "normalized_dimension": review.normalized_dimension,
+                        "source_gap_ids": review.source_gap_ids,
+                        "note": review.note,
+                    },
+                )
+            conn.commit()
 
     def list_competitors(
         self,

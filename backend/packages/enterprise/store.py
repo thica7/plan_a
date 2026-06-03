@@ -35,6 +35,7 @@ from packages.schema.enterprise import (
     ProjectCompetitorLink,
     ProjectRecord,
     ReportVersionRecord,
+    SchemaEvolutionReviewRecord,
     SourceRegistryRecord,
     UserRecord,
     WorkspaceMemberRecord,
@@ -220,6 +221,14 @@ class EnterpriseStore(Protocol):
     ) -> ReportVersionRecord | None: ...
 
     def list_audit_logs(self, workspace_id: str | None = None) -> list[AuditLogRecord]: ...
+
+    def audit_schema_evolution_review(
+        self,
+        project: ProjectRecord,
+        review: SchemaEvolutionReviewRecord,
+        *,
+        actor_id: str | None = None,
+    ) -> None: ...
 
 
 class EnterpriseMemoryStore:
@@ -701,6 +710,31 @@ class EnterpriseMemoryStore:
                 after=project.model_dump(mode="json"),
             )
             return project
+
+    def audit_schema_evolution_review(
+        self,
+        project: ProjectRecord,
+        review: SchemaEvolutionReviewRecord,
+        *,
+        actor_id: str | None = None,
+    ) -> None:
+        with self._lock:
+            self._append_audit(
+                workspace_id=project.workspace_id,
+                actor_id=actor_id or review.reviewed_by,
+                action="schema_evolution.reviewed",
+                resource_type="schema_evolution_suggestion",
+                resource_id=f"{project.id}:{review.suggestion_id}",
+                after={
+                    "project_id": project.id,
+                    "suggestion_id": review.suggestion_id,
+                    "decision": review.decision,
+                    "dimension": review.dimension,
+                    "normalized_dimension": review.normalized_dimension,
+                    "source_gap_ids": review.source_gap_ids,
+                    "note": review.note,
+                },
+            )
 
     def list_competitors(
         self,

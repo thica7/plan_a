@@ -642,6 +642,7 @@ async def review_project_schema_suggestion(
     updated_project = store.upsert_project(
         _project_with_schema_review(project, review)
     )
+    store.audit_schema_evolution_review(updated_project, review, actor_id=user.user_id)
     return SchemaEvolutionReviewResult(
         project_id=project_id,
         workspace_id=project.workspace_id,

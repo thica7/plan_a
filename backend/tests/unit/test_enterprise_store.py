@@ -476,6 +476,14 @@ def test_schema_suggestion_review_persists_metadata_and_updates_plan_dimensions(
         and "accepted_schema_dimensions" in log.after.get("metadata", {})
         for log in store.list_audit_logs()
     )
+    assert any(
+        log.action == "schema_evolution.reviewed"
+        and log.resource_type == "schema_evolution_suggestion"
+        and log.resource_id == f"{context.project_id}:{suggestion.id}"
+        and log.after["decision"] == "accepted"
+        and log.after["normalized_dimension"] == "enterprise_sso"
+        for log in store.list_audit_logs()
+    )
 
 
 def test_enterprise_store_round_trips_artifacts_with_audit() -> None:
