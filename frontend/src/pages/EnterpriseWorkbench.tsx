@@ -445,6 +445,16 @@ export function EnterpriseWorkbench({
       ? evidence.reduce((total, item) => total + item.reliability_score, 0) / evidence.length
       : 0;
 
+  async function refreshAuditLogsForWorkspace(workspaceId: string | null | undefined) {
+    if (!workspaceId) return;
+    try {
+      const items = await listEnterpriseAuditLogs(workspaceId);
+      setAuditLogs(items);
+    } catch (err) {
+      console.warn("Unable to refresh audit logs", err);
+    }
+  }
+
   async function handleEvalOpsBaselineChange(nextRunId: string | null) {
     if (!selectedProjectId) return;
     const projectId = selectedProjectId;
@@ -492,7 +502,10 @@ export function EnterpriseWorkbench({
           limit: 8,
         });
       })
-      .then(setNotifications)
+      .then((notificationItems) => {
+        setNotifications(notificationItems);
+        return refreshAuditLogsForWorkspace(selectedProject.workspace_id);
+      })
       .catch((err: Error) => {
         setError(err.message);
       })
@@ -521,7 +534,10 @@ export function EnterpriseWorkbench({
           limit: 8,
         });
       })
-      .then(setNotifications)
+      .then((notificationItems) => {
+        setNotifications(notificationItems);
+        return refreshAuditLogsForWorkspace(selectedProject.workspace_id);
+      })
       .catch((err: Error) => {
         setError(err.message);
       })
@@ -542,6 +558,7 @@ export function EnterpriseWorkbench({
       });
       const versionItems = await listProjectReportVersions(selectedProject.id);
       setVersions(versionItems);
+      await refreshAuditLogsForWorkspace(selectedProject.workspace_id);
       setScanMessage(`Report approval ${response.status}: ${response.workflow_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to start report approval");
@@ -573,6 +590,7 @@ export function EnterpriseWorkbench({
       ]);
       setVersions(versionItems);
       setReleaseGate(gateValue);
+      await refreshAuditLogsForWorkspace(selectedProject.workspace_id);
       setScanMessage(`Report approval ${response.decision}: ${response.workflow_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update report approval");
@@ -595,6 +613,7 @@ export function EnterpriseWorkbench({
       setVersions(versionItems);
       setSelectedVersionId(updated.id);
       setReleaseGate(gateValue);
+      await refreshAuditLogsForWorkspace(selectedProject.workspace_id);
       setScanMessage(`Report v${updated.version_number} published.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to publish report");
@@ -635,6 +654,7 @@ export function EnterpriseWorkbench({
       setCompetitorScores(competitorScoresValue);
       setRedTeam(redTeamValue);
       setSelectedVersionId(result.updated_report_version_id ?? versionItems[0]?.id ?? null);
+      await refreshAuditLogsForWorkspace(selectedProject?.workspace_id);
       setScanMessage(`Gap fill linked ${result.added_evidence_count} candidate evidence item(s).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to fill evidence gaps");
@@ -669,6 +689,7 @@ export function EnterpriseWorkbench({
       setProjects(projectItems.map((item) => (item.id === result.project.id ? result.project : item)));
       setEvidenceGaps(gapsValue);
       setBusinessPlan(planValue);
+      await refreshAuditLogsForWorkspace(result.project.workspace_id);
       setScanMessage(
         `${decision === "accepted" ? "Accepted" : "Rejected"} schema dimension ${suggestion.normalized_dimension}.`,
       );
@@ -706,6 +727,7 @@ export function EnterpriseWorkbench({
       setMemoryRecall(recallValue);
       setMemoryStats(statsValue);
       setMemoryFeedbackDraft("");
+      await refreshAuditLogsForWorkspace(project.workspace_id);
       setScanMessage(
         result.candidates.length > 0
           ? `Memory feedback saved with ${result.candidates.length} candidate(s) pending review.`
@@ -739,6 +761,7 @@ export function EnterpriseWorkbench({
       ]);
       setMemoryStats(statsValue);
       setMemoryRecall(recallValue);
+      await refreshAuditLogsForWorkspace(selectedProject?.workspace_id);
       setScanMessage(`Memory ${updated.kind.replace(/_/g, " ")} marked ${updated.status}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update memory candidate");
@@ -763,6 +786,7 @@ export function EnterpriseWorkbench({
       ]);
       setArtifacts(artifactItems);
       setSourceRegistry(sourceRegistryValue);
+      await refreshAuditLogsForWorkspace(selectedProject.workspace_id);
       setScanMessage(
         `Snapshot captured: ${result.artifact.filename} (${result.snapshot_quality_score}/100).`,
       );
@@ -797,6 +821,7 @@ export function EnterpriseWorkbench({
             setRedTeam(redTeamValue);
           });
         }
+        void refreshAuditLogsForWorkspace(selectedProject?.workspace_id);
       })
       .catch((err: Error) => {
         setError(err.message);
