@@ -9,10 +9,15 @@ import type {
   SkillSpec,
   WorkspaceQuotaDecision,
 } from "../api/types";
+import {
+  coreDimensions,
+  isDimensionLocked,
+  lockedDimensionsForScenario,
+  mergeDimensions,
+} from "./newRunDimensions";
 
 const defaultWorkspaceId = "default-workspace";
 const defaultCompetitors = "Perplexity, Claude, Gemini";
-const coreDimensions = ["pricing", "feature", "persona"];
 type LayerSelection = "auto" | Extract<CompetitorLayer, "L1" | "L2" | "L3">;
 
 export function NewRun() {
@@ -80,7 +85,15 @@ export function NewRun() {
     () => scenarioPacks.find((pack) => pack.id === scenarioId) ?? null,
     [scenarioId, scenarioPacks],
   );
+  const lockedDimensions = useMemo(
+    () => lockedDimensionsForScenario(selectedScenario),
+    [selectedScenario],
+  );
   const runBlockedByQuota = quotaDecision?.allowed === false;
+
+  useEffect(() => {
+    setSelected((current) => mergeDimensions(current, lockedDimensions, []));
+  }, [lockedDimensions]);
 
   function applyScenario(pack: ScenarioPack | null) {
     if (!pack) {
@@ -329,7 +342,7 @@ export function NewRun() {
           <div className="skill-grid">
             {skills.map((skill) => {
               const active = selected.includes(skill.name);
-              const locked = coreDimensions.includes(skill.name);
+              const locked = isDimensionLocked(skill.name, lockedDimensions);
               return (
                 <button
                   className={active ? "skill-tile active" : "skill-tile"}
@@ -343,7 +356,13 @@ export function NewRun() {
                   }
                 >
                   <strong>{skill.name}</strong>
-                  <span>{locked ? `${skill.description} Required schema dimension.` : skill.description}</span>
+                  <span>
+                    {locked
+                      ? selectedScenario
+                        ? `${skill.description} Required by selected ScenarioPack.`
+                        : `${skill.description} Required schema dimension.`
+                      : skill.description}
+                  </span>
                 </button>
               );
             })}
@@ -363,19 +382,6 @@ export function NewRun() {
       </form>
     </section>
   );
-}
-
-function mergeDimensions(current: string[], required: string[], optional: string[]) {
-  const merged: string[] = [];
-  const seen = new Set<string>();
-  for (const dimension of [...required, ...current, ...optional]) {
-    const key = dimension.trim().toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    merged.push(dimension);
-    if (merged.length >= 8) break;
-  }
-  return merged;
 }
 
 function newRunIdempotencyKey() {
