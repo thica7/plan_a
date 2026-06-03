@@ -866,6 +866,8 @@ def test_report_release_gate_warns_on_high_risk_single_source_claim() -> None:
     ]
     assert consistency_issues
     assert consistency_issues[0].severity == "warn"
+    assert "single_source_support" in consistency_issues[0].message
+    assert "listed claim-validation issue types" in consistency_issues[0].recommendation
 
 
 def test_report_release_gate_blocks_unresolved_run_qa_metadata() -> None:

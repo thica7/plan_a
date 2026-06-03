@@ -462,11 +462,28 @@ def _claim_validation_issues(
         return []
     project_id = claims[0].project_id
     validation = validate_project_claims(project_id=project_id, claims=claims, evidence=evidence)
+    validation_issues_by_id = {issue.id: issue for issue in validation.issues}
     issues: list[BusinessQAFinding] = []
     for result in validation.results:
         if result.status == "supported":
             continue
         severity = "blocker" if result.status in {"blocked", "unsupported"} else "warn"
+        claim_issue_types = [
+            issue.issue_type
+            for issue_id in result.issue_ids
+            if (issue := validation_issues_by_id.get(issue_id)) is not None
+        ]
+        failed_checkers = [
+            sample.checker for sample in result.validation_samples if sample.vote == "fail"
+        ]
+        issue_summary = (
+            f"; issue_types={', '.join(claim_issue_types)}"
+            if claim_issue_types
+            else ""
+        )
+        checker_summary = (
+            f"; failed_checks={', '.join(failed_checkers)}" if failed_checkers else ""
+        )
         issues.append(
             _gate_issue(
                 "claim_self_consistency_required",
@@ -476,13 +493,15 @@ def _claim_validation_issues(
                     f"self-consistency={result.self_consistency_score}, "
                     f"text={result.text_support_score}, "
                     f"evidence={result.evidence_quality_score}, "
-                    f"triangulation={result.triangulation_score}."
+                    f"triangulation={result.triangulation_score}"
+                    f"{issue_summary}{checker_summary}."
                 ),
                 severity=severity,
                 claim_ids=[result.claim_id],
                 evidence_ids=result.usable_evidence_ids,
                 recommendation=(
-                    "Collect stronger independent evidence or downgrade the claim before release."
+                    "Collect stronger independent evidence, resolve the listed claim-validation "
+                    "issue types, or downgrade the claim before release."
                 ),
             )
         )
