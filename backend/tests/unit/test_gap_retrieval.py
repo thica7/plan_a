@@ -4,8 +4,11 @@ from packages.enterprise import EnterpriseMemoryStore
 from packages.rag import (
     chunk_evidence,
     decorate_evidence_gap_report_with_retrieval,
+    embed_text,
     fill_evidence_gaps,
     fill_evidence_gaps_online,
+    recall_evidence,
+    recall_evidence_scores,
     retrieve_gap_candidates,
 )
 from packages.schema.enterprise import (
@@ -82,6 +85,47 @@ def test_gap_retrieval_decorates_report_with_candidate_evidence() -> None:
     assert context.records[0].retrieval_stage == "hybrid_rerank"
     assert context.records[0].bm25_score > 0
     assert "[source:evidence-security-1#chunk:" in context.grounded_context
+
+
+def test_rag_embedder_and_vector_store_boundary_recall_evidence() -> None:
+    store = EnterpriseMemoryStore()
+    store.upsert_evidence(
+        EvidenceRecord(
+            id="evidence-pricing-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id="cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor pricing includes monthly team plans and enterprise packaging.",
+            content_hash="pricinghash",
+            reliability_score=0.91,
+        )
+    )
+
+    embedding = embed_text("Cursor pricing enterprise packaging")
+    recalled = recall_evidence(
+        store=store,
+        workspace_id="workspace-1",
+        project_id="project-1",
+        queries=["Cursor pricing", "Cursor pricing"],
+        recall_limit=5,
+    )
+    scores = recall_evidence_scores(
+        store=store,
+        workspace_id="workspace-1",
+        project_id="project-1",
+        queries=["Cursor pricing", "enterprise packaging"],
+        recall_limit=5,
+    )
+
+    assert embedding.embedding_model == "hashing-384"
+    assert embedding.embedding_dimensions == 384
+    assert embedding.embedding_hash
+    assert [item.id for item in recalled] == ["evidence-pricing-1"]
+    assert scores["evidence-pricing-1"] > 0
 
 
 def test_gap_retrieval_filters_existing_and_wrong_source_type() -> None:

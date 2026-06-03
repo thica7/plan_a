@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from packages.enterprise.embedding_index import cosine_similarity, deterministic_embedding
+from packages.enterprise.embedding_index import cosine_similarity
 from packages.rag.bm25 import BM25Index
 from packages.rag.chunker import chunk_corpus
+from packages.rag.embedder import embed_text
 from packages.rag.grounded_prompt import format_retrieval_records_for_prompt
 from packages.rag.reranker import RetrievalCandidate, rerank_candidates
+from packages.rag.vector_store import recall_evidence, recall_evidence_scores
 from packages.schema.enterprise import EvidenceRecord, EvidenceSearchHit
 from packages.schema.rag import GapRetrievalContext, RetrievalRecord
 
@@ -39,7 +41,7 @@ def retrieve_grounded_context(
     queries = _dedupe_queries([query, *(rewritten_queries or [])])
     if not queries:
         return GapRetrievalContext(gap_id=gap_id, query="")
-    evidence = _candidate_evidence(
+    evidence = recall_evidence(
         store=store,
         workspace_id=workspace_id,
         project_id=project_id,
@@ -59,8 +61,8 @@ def retrieve_grounded_context(
     if not chunks:
         return GapRetrievalContext(gap_id=gap_id, query=queries[0], rewritten_queries=queries)
     bm25 = BM25Index(chunks)
-    query_vector = deterministic_embedding(" ".join(queries))
-    recall_scores = _recall_scores(
+    query_vector = embed_text(" ".join(queries)).vector
+    recall_scores = recall_evidence_scores(
         store=store,
         workspace_id=workspace_id,
         project_id=project_id,
@@ -77,7 +79,7 @@ def retrieve_grounded_context(
             RetrievalCandidate(
                 chunk=chunk,
                 evidence=evidence_item,
-                vector_score=cosine_similarity(query_vector, deterministic_embedding(chunk.text)),
+                vector_score=cosine_similarity(query_vector, embed_text(chunk.text).vector),
                 bm25_score=max(bm25.score(item, chunk) for item in queries),
                 recall_score=recall_scores.get(chunk.evidence_id, 0.0),
             )
@@ -99,50 +101,6 @@ def retrieve_grounded_context(
 
 def grounded_context(records: list[RetrievalRecord]) -> str:
     return format_retrieval_records_for_prompt(records)
-
-
-def _candidate_evidence(
-    *,
-    store: EvidenceCorpusStore,
-    workspace_id: str,
-    project_id: str | None,
-    queries: list[str],
-    recall_limit: int,
-) -> list[EvidenceRecord]:
-    evidence_by_id = {
-        item.id: item
-        for item in store.list_evidence(project_id=project_id)
-        if item.workspace_id == workspace_id
-    }
-    for query in queries:
-        for hit in store.search_evidence(
-            workspace_id=workspace_id,
-            project_id=project_id,
-            query=query,
-            limit=recall_limit,
-        ):
-            evidence_by_id[hit.evidence.id] = hit.evidence
-    return list(evidence_by_id.values())
-
-
-def _recall_scores(
-    *,
-    store: EvidenceCorpusStore,
-    workspace_id: str,
-    project_id: str | None,
-    queries: list[str],
-    recall_limit: int,
-) -> dict[str, float]:
-    scores: dict[str, float] = {}
-    for query in queries:
-        for hit in store.search_evidence(
-            workspace_id=workspace_id,
-            project_id=project_id,
-            query=query,
-            limit=recall_limit,
-        ):
-            scores[hit.evidence.id] = max(scores.get(hit.evidence.id, -1.0), hit.score)
-    return scores
 
 
 def _source_type_matches(required: str | None, actual: str) -> bool:
