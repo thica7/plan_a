@@ -296,6 +296,7 @@ def _build_quality_metadata(detail: RunDetail) -> dict[str, object]:
     ]
     return {
         "run_id": detail.id,
+        "schema_pass_rate": detail.metrics.schema_pass_rate,
         "memory_used": {
             "candidate_ids": detail.plan.memory_candidate_ids,
             "prompt_context": detail.plan.memory_prompt_context,

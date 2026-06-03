@@ -404,16 +404,33 @@ def _missing_report_citation_issues(
 
 
 def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAFinding]:
+    issues: list[BusinessQAFinding] = []
+    schema_pass_rate = report_version.quality_metadata.get("schema_pass_rate")
+    if isinstance(schema_pass_rate, (int, float)) and float(schema_pass_rate) < 1.0:
+        issues.append(
+            _gate_issue(
+                "run_schema_validation_failed",
+                "Run schema validation",
+                (
+                    "Report release requires all schema-first outputs to validate; "
+                    f"schema pass rate is {float(schema_pass_rate):.0%}."
+                ),
+                recommendation=(
+                    "Redo the failing agent branch or repair the typed output before approval."
+                ),
+            )
+        )
+
     findings = report_version.quality_metadata.get("run_qa_findings", [])
     if not isinstance(findings, list) or not findings:
-        return []
+        return issues
     blocker_count = sum(1 for item in findings if _mapping_value(item, "severity") == "blocker")
     warn_count = sum(1 for item in findings if _mapping_value(item, "severity") == "warn")
     top_problems = [
         str(_mapping_value(item, "problem") or _mapping_value(item, "id") or "quality issue")
         for item in findings[:3]
     ]
-    return [
+    issues.append(
         _gate_issue(
             "run_qa_findings_unresolved",
             "Run QA findings unresolved",
@@ -427,7 +444,8 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
                 "publishing."
             ),
         )
-    ]
+    )
+    return issues
 
 
 def _readiness_issues(readiness: ProjectReadinessScore) -> list[BusinessQAFinding]:

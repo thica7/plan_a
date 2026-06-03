@@ -8,6 +8,7 @@ from packages.schema.models import (
     QCIssue,
     RawSource,
     RedoScope,
+    RunMetrics,
 )
 
 
@@ -93,6 +94,7 @@ def test_projection_carries_run_quality_metadata() -> None:
             dimensions=["security"],
         ),
         report_md="Cursor security requires review. [source:security-1]",
+        metrics=RunMetrics(schema_pass_rate=0.5),
         raw_sources=[
             RawSource(
                 id="security-1",
@@ -130,6 +132,7 @@ def test_projection_carries_run_quality_metadata() -> None:
 
     metadata = projection.report_version.quality_metadata
     assert metadata["run_qa_warning_count"] == 1
+    assert metadata["schema_pass_rate"] == 0.5
     assert metadata["search_only_source_ids"] == ["security-1"]
     assert metadata["low_confidence_source_ids"] == ["security-1"]
 
