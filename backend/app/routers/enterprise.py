@@ -835,6 +835,8 @@ async def get_project_quality_matrix(
         if memory_stats.candidate_count > 0 and memory_stats.confirmed_candidate_count == 0
         else "pass"
     )
+    evidence_gap_runtime_warn_count = _pydantic_ai_runtime_warn_count(evidence_gaps)
+    red_team_runtime_warn_count = _pydantic_ai_runtime_warn_count(red_team)
 
     entries = [
         QualityAgentMatrixEntry(
@@ -910,15 +912,28 @@ async def get_project_quality_matrix(
         QualityAgentMatrixEntry(
             agent_name="EvidenceGap",
             framework=evidence_gaps.framework,
-            status=_matrix_status(evidence_gaps.critical_count, evidence_gaps.high_count),
+            status=_matrix_status(
+                evidence_gaps.critical_count,
+                evidence_gaps.high_count + evidence_gap_runtime_warn_count,
+            ),
             score=max(
                 0,
-                100 - evidence_gaps.critical_count * 35 - evidence_gaps.high_count * 15,
+                100
+                - evidence_gaps.critical_count * 35
+                - evidence_gaps.high_count * 15
+                - _pydantic_ai_runtime_score_penalty(evidence_gaps),
             ),
             blocker_count=evidence_gaps.critical_count,
-            warn_count=evidence_gaps.high_count + evidence_gaps.medium_count,
+            warn_count=(
+                evidence_gaps.high_count
+                + evidence_gaps.medium_count
+                + evidence_gap_runtime_warn_count
+            ),
             finding_count=evidence_gaps.gap_count,
-            summary=f"{evidence_gaps.gap_count} evidence gaps detected.",
+            summary=(
+                f"{evidence_gaps.gap_count} evidence gaps detected."
+                f"{_pydantic_ai_runtime_summary_suffix(evidence_gaps)}"
+            ),
             evidence_ids=_unique_ids(
                 evidence_id for gap in evidence_gaps.gaps for evidence_id in gap.evidence_ids
             ),
@@ -933,13 +948,21 @@ async def get_project_quality_matrix(
             framework=red_team.framework,
             status=_matrix_status(
                 sum(1 for finding in red_team.findings if finding.severity == "critical"),
-                red_team.high_severity_count,
+                red_team.high_severity_count + red_team_runtime_warn_count,
             ),
-            score=max(0, 100 - red_team.high_severity_count * 20),
+            score=max(
+                0,
+                100
+                - red_team.high_severity_count * 20
+                - _pydantic_ai_runtime_score_penalty(red_team),
+            ),
             blocker_count=sum(1 for finding in red_team.findings if finding.severity == "critical"),
-            warn_count=red_team.high_severity_count,
+            warn_count=red_team.high_severity_count + red_team_runtime_warn_count,
             finding_count=red_team.finding_count,
-            summary=f"{red_team.finding_count} red-team findings detected.",
+            summary=(
+                f"{red_team.finding_count} red-team findings detected."
+                f"{_pydantic_ai_runtime_summary_suffix(red_team)}"
+            ),
             evidence_ids=_unique_ids(
                 evidence_id for finding in red_team.findings for evidence_id in finding.evidence_ids
             ),
@@ -1264,6 +1287,31 @@ def _quality_agent_pydantic_ai_metadata(
         "pydantic_ai_runtime_prompt_chars": report.pydantic_ai_runtime_prompt_chars,
         "typed_contract_enforced": report.typed_contract_enforced,
     }
+
+
+def _pydantic_ai_runtime_warn_count(report: EvidenceGapReport | RedTeamReport) -> int:
+    if not report.pydantic_ai_model_backed_requested:
+        return 0
+    if report.pydantic_ai_model_backed_fallback:
+        return 1
+    if not report.pydantic_ai_runtime_agent_created:
+        return 1
+    return 0
+
+
+def _pydantic_ai_runtime_score_penalty(report: EvidenceGapReport | RedTeamReport) -> int:
+    return 12 if _pydantic_ai_runtime_warn_count(report) else 0
+
+
+def _pydantic_ai_runtime_summary_suffix(report: EvidenceGapReport | RedTeamReport) -> str:
+    if not report.pydantic_ai_model_backed_requested:
+        return ""
+    if report.pydantic_ai_model_backed_fallback:
+        reason = report.pydantic_ai_fallback_reason or report.pydantic_ai_execution_mode
+        return f" Pydantic-AI model-backed path fell back ({reason})."
+    if not report.pydantic_ai_runtime_agent_created:
+        return " Pydantic-AI model-backed path was requested but no runtime agent was created."
+    return " Pydantic-AI model-backed path completed."
 
 
 def _optional_str(value: object) -> str | None:

@@ -8,6 +8,9 @@ from fastapi.testclient import TestClient
 from app.deps import get_artifact_storage, get_enterprise_store, get_preference_memory
 from app.main import create_app
 from app.routers.enterprise import (
+    _pydantic_ai_runtime_score_penalty,
+    _pydantic_ai_runtime_summary_suffix,
+    _pydantic_ai_runtime_warn_count,
     _quality_agent_pydantic_ai_metadata,
     _with_gap_fill_release_gate_delta,
     _with_pydantic_ai_execution_metadata,
@@ -226,6 +229,29 @@ def test_pydantic_ai_metadata_preserves_model_backed_fallback_reason() -> None:
     assert updated.pydantic_ai_fallback_reason == "provider timeout"
     assert updated.pydantic_ai_model_name == "openai:test-model"
     assert matrix_metadata["pydantic_ai_fallback_reason"] == "provider timeout"
+
+
+def test_pydantic_ai_fallback_counts_as_quality_matrix_warning() -> None:
+    report = EvidenceGapReport(project_id="project-1", scenario_id="l1_pricing_pack")
+    result = AgentExecutionResult(
+        run_id="run-1",
+        agent_name="evidence_gap",
+        output_schema="EvidenceGapReport",
+        payload=report.model_dump(mode="json"),
+        metadata={
+            "execution_mode": "pydantic_ai_model_backed_fallback",
+            "pydantic_ai_model_backed_requested": True,
+            "pydantic_ai_model_backed_fallback": True,
+            "pydantic_ai_model_backed_error": "provider timeout",
+            "typed_contract_enforced": True,
+        },
+    )
+
+    updated = _with_pydantic_ai_execution_metadata(report, result)
+
+    assert _pydantic_ai_runtime_warn_count(updated) == 1
+    assert _pydantic_ai_runtime_score_penalty(updated) == 12
+    assert "fell back (provider timeout)" in _pydantic_ai_runtime_summary_suffix(updated)
 
 
 def test_enterprise_store_tracks_workspace_usage_and_quota_decision() -> None:
