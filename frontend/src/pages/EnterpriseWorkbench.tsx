@@ -3604,6 +3604,13 @@ function ReportQualityMetadataPanel({ version }: { version: ReportVersionRecord 
   const onlineCount = payloadListCount(ragGapFill, "online_collected_evidence_ids") ?? 0;
   const onlineFailureCount = payloadListCount(ragGapFill, "online_failures") ?? 0;
   const chainClosed = ragGapFill.gap_fill_chain_closed === true;
+  const releaseDelta = payloadRecord(ragGapFill, "release_gate_delta");
+  const gateImproved = releaseDelta?.release_gate_improved === true;
+  const blockerDelta = releaseDelta ? payloadNumber(releaseDelta, "release_gate_blocker_delta") ?? 0 : null;
+  const warnDelta = releaseDelta ? payloadNumber(releaseDelta, "release_gate_warn_delta") ?? 0 : null;
+  const readinessDelta = releaseDelta ? payloadNumber(releaseDelta, "readiness_score_delta") ?? 0 : null;
+  const sourceStatus = releaseDelta ? payloadString(releaseDelta, "source_status") : null;
+  const updatedStatus = releaseDelta ? payloadString(releaseDelta, "updated_status") : null;
   const status = chainClosed ? "pass" : filledGapCount > 0 || candidateCount > 0 ? "warn" : "empty";
 
   return (
@@ -3646,6 +3653,32 @@ function ReportQualityMetadataPanel({ version }: { version: ReportVersionRecord 
           <strong>{onlineCount}</strong>
           <em>Online collected / {onlineFailureCount} failed</em>
         </span>
+        {releaseDelta ? (
+          <>
+            <span className={gateImproved ? undefined : "warn"}>
+              <strong>{gateImproved ? "yes" : "no"}</strong>
+              <em>Gate improved</em>
+            </span>
+            <span>
+              <strong>{blockerDelta ?? 0}</strong>
+              <em>Blocker delta</em>
+            </span>
+            <span>
+              <strong>{warnDelta ?? 0}</strong>
+              <em>Warn delta</em>
+            </span>
+            <span>
+              <strong>{formatScoreDelta(readinessDelta)}</strong>
+              <em>Readiness</em>
+            </span>
+            <span>
+              <strong>
+                {sourceStatus ?? "n/a"} to {updatedStatus ?? "n/a"}
+              </strong>
+              <em>Release gate</em>
+            </span>
+          </>
+        ) : null}
       </div>
     </section>
   );

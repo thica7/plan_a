@@ -1421,6 +1421,21 @@ def test_gap_fill_result_carries_release_gate_improvement_delta() -> None:
     assert enriched.release_gate_improved is True
     assert enriched.release_gate_blocker_delta > 0
     assert enriched.readiness_score_delta >= 0
+    assert enriched.updated_report_version is not None
+    release_delta = enriched.updated_report_version.quality_metadata["rag_gap_fill"][
+        "release_gate_delta"
+    ]
+    assert release_delta["source_report_version_id"] == source_version.id
+    assert release_delta["updated_report_version_id"] == projection.report_version.id
+    assert release_delta["source_allowed"] is False
+    assert release_delta["updated_allowed"] is True
+    assert release_delta["release_gate_improved"] is True
+    assert release_delta["release_gate_blocker_delta"] == enriched.release_gate_blocker_delta
+    stored_version = store.get_report_version(projection.report_version.id)
+    assert stored_version is not None
+    assert stored_version.quality_metadata["rag_gap_fill"]["release_gate_delta"][
+        "release_gate_improved"
+    ] is True
 
 
 def test_enterprise_router_enforces_rbac_workspace_scope() -> None:

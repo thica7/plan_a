@@ -1837,7 +1837,7 @@ def _with_gap_fill_release_gate_delta(
         updated_gate.blocker_count <= source_gate.blocker_count
         and updated_gate.warn_count <= source_gate.warn_count
     )
-    return result.model_copy(
+    enriched = result.model_copy(
         update={
             "source_release_gate": source_gate,
             "updated_release_gate": updated_gate,
@@ -1853,6 +1853,59 @@ def _with_gap_fill_release_gate_delta(
             ),
         }
     )
+    return _persist_gap_fill_release_gate_delta(enriched, store=store)
+
+
+def _persist_gap_fill_release_gate_delta(
+    result: EvidenceGapFillResult,
+    *,
+    store: EnterpriseStore,
+) -> EvidenceGapFillResult:
+    if result.updated_report_version_id is None:
+        return result
+    version = store.get_report_version(result.updated_report_version_id)
+    if version is None:
+        return result
+    metadata = dict(version.quality_metadata)
+    gap_fill = _metadata_mapping(metadata.get("rag_gap_fill"))
+    gap_fill["release_gate_delta"] = {
+        "source_report_version_id": result.source_report_version_id,
+        "updated_report_version_id": result.updated_report_version_id,
+        "source_allowed": result.source_release_gate.allowed
+        if result.source_release_gate is not None
+        else None,
+        "updated_allowed": result.updated_release_gate.allowed
+        if result.updated_release_gate is not None
+        else None,
+        "source_status": result.source_release_gate.status
+        if result.source_release_gate is not None
+        else None,
+        "updated_status": result.updated_release_gate.status
+        if result.updated_release_gate is not None
+        else None,
+        "source_blocker_count": result.source_release_gate.blocker_count
+        if result.source_release_gate is not None
+        else None,
+        "updated_blocker_count": result.updated_release_gate.blocker_count
+        if result.updated_release_gate is not None
+        else None,
+        "source_warn_count": result.source_release_gate.warn_count
+        if result.source_release_gate is not None
+        else None,
+        "updated_warn_count": result.updated_release_gate.warn_count
+        if result.updated_release_gate is not None
+        else None,
+        "release_gate_blocker_delta": result.release_gate_blocker_delta,
+        "release_gate_warn_delta": result.release_gate_warn_delta,
+        "readiness_score_delta": result.readiness_score_delta,
+        "release_gate_improved": result.release_gate_improved,
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+    metadata["rag_gap_fill"] = gap_fill
+    updated_version = store.upsert_report_version(
+        version.model_copy(update={"quality_metadata": metadata})
+    )
+    return result.model_copy(update={"updated_report_version": updated_version})
 
 
 def _release_gate_for_report_version_id(
