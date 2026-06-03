@@ -22,6 +22,13 @@ from packages.schema.enterprise import (
 )
 from packages.schema.models import CompetitorKnowledge, KnowledgeClaim, RawSource
 
+_SURVEY_SOURCE_TYPES = {"survey_simulated", "survey_response"}
+_INTERVIEW_SOURCE_TYPES = {"interview_record"}
+_MANUAL_RESEARCH_SOURCE_TYPES = {"manual_transcript", "manual_note", "manual"}
+_USER_RESEARCH_SOURCE_TYPES = (
+    _SURVEY_SOURCE_TYPES | _INTERVIEW_SOURCE_TYPES | _MANUAL_RESEARCH_SOURCE_TYPES
+)
+
 
 def build_enterprise_projection(
     detail: RunDetail,
@@ -288,12 +295,7 @@ def _build_quality_metadata(detail: RunDetail) -> dict[str, object]:
     llm_public_knowledge_source_ids = [
         source.id for source in detail.raw_sources if source.source_type == "llm_public_knowledge"
     ]
-    survey_source_ids = [
-        source.id for source in detail.raw_sources if source.source_type == "survey_simulated"
-    ]
-    interview_source_ids = [
-        source.id for source in detail.raw_sources if source.source_type == "interview_record"
-    ]
+    research_source_ids = _classify_user_research_sources(detail.raw_sources)
     return {
         "run_id": detail.id,
         "schema_pass_rate": detail.metrics.schema_pass_rate,
@@ -307,8 +309,10 @@ def _build_quality_metadata(detail: RunDetail) -> dict[str, object]:
             low_confidence_source_ids=low_confidence_source_ids,
             search_only_source_ids=search_only_source_ids,
             llm_public_knowledge_source_ids=llm_public_knowledge_source_ids,
-            survey_source_ids=survey_source_ids,
-            interview_source_ids=interview_source_ids,
+            survey_source_ids=research_source_ids["survey_source_ids"],
+            interview_source_ids=research_source_ids["interview_source_ids"],
+            manual_research_source_ids=research_source_ids["manual_research_source_ids"],
+            user_research_source_ids=research_source_ids["user_research_source_ids"],
         ),
         "run_qa_findings": [
             {
@@ -329,8 +333,7 @@ def _build_quality_metadata(detail: RunDetail) -> dict[str, object]:
         "low_confidence_source_ids": low_confidence_source_ids,
         "search_only_source_ids": search_only_source_ids,
         "llm_public_knowledge_source_ids": llm_public_knowledge_source_ids,
-        "survey_source_ids": survey_source_ids,
-        "interview_source_ids": interview_source_ids,
+        **research_source_ids,
         "reflection_gaps": [
             {
                 "coverage_gaps": reflection.coverage_gaps,
@@ -350,6 +353,8 @@ def _build_memory_observations(
     llm_public_knowledge_source_ids: list[str],
     survey_source_ids: list[str],
     interview_source_ids: list[str],
+    manual_research_source_ids: list[str],
+    user_research_source_ids: list[str],
 ) -> list[dict[str, object]]:
     observations: list[dict[str, object]] = [
         {
@@ -373,13 +378,15 @@ def _build_memory_observations(
                 "llm_public_knowledge_source_ids": llm_public_knowledge_source_ids,
             }
         )
-    if survey_source_ids or interview_source_ids:
+    if user_research_source_ids:
         observations.append(
             {
                 "id": f"{detail.id}:customer-signal",
                 "kind": "customer_signal",
                 "survey_source_ids": survey_source_ids,
                 "interview_source_ids": interview_source_ids,
+                "manual_research_source_ids": manual_research_source_ids,
+                "user_research_source_ids": user_research_source_ids,
             }
         )
     if detail.qa_findings:
@@ -411,6 +418,34 @@ def _build_memory_observations(
             }
         )
     return observations
+
+
+def _classify_user_research_sources(raw_sources: list[RawSource]) -> dict[str, list[str]]:
+    survey_source_ids = [
+        source.id
+        for source in raw_sources
+        if source.source_type.casefold() in _SURVEY_SOURCE_TYPES
+    ]
+    interview_source_ids = [
+        source.id
+        for source in raw_sources
+        if source.source_type.casefold() in _INTERVIEW_SOURCE_TYPES
+    ]
+    manual_research_source_ids = [
+        source.id
+        for source in raw_sources
+        if source.source_type.casefold() in _MANUAL_RESEARCH_SOURCE_TYPES
+    ]
+    return {
+        "survey_source_ids": survey_source_ids,
+        "interview_source_ids": interview_source_ids,
+        "manual_research_source_ids": manual_research_source_ids,
+        "user_research_source_ids": [
+            source.id
+            for source in raw_sources
+            if source.source_type.casefold() in _USER_RESEARCH_SOURCE_TYPES
+        ],
+    }
 
 
 def _parse_datetime(value: datetime | str) -> datetime:

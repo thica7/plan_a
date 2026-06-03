@@ -196,6 +196,16 @@ def test_survey_evidence_projects_as_synthetic_enterprise_source() -> None:
                 confidence=0.58,
             ),
             RawSource(
+                id="persona-survey-response-1",
+                competitor="Acme",
+                dimension="persona",
+                source_type="survey_response",
+                title="Acme persona survey response",
+                snippet="Customer survey response: teams cited workflow fit and adoption friction.",
+                content_hash="surveyresponsehash",
+                confidence=0.82,
+            ),
+            RawSource(
                 id="persona-interview-1",
                 competitor="Acme",
                 dimension="persona",
@@ -207,6 +217,16 @@ def test_survey_evidence_projects_as_synthetic_enterprise_source() -> None:
                 ),
                 content_hash="interviewhash",
                 confidence=0.62,
+            ),
+            RawSource(
+                id="persona-manual-note-1",
+                competitor="Acme",
+                dimension="persona",
+                source_type="manual_note",
+                title="Acme persona analyst note",
+                snippet="Manual research note: adoption risk is driven by onboarding effort.",
+                content_hash="manualnotehash",
+                confidence=0.8,
             ),
         ],
     )
@@ -222,17 +242,43 @@ def test_survey_evidence_projects_as_synthetic_enterprise_source() -> None:
 
     assert {evidence.source_type for evidence in projection.evidence_records} == {
         "survey_simulated",
+        "survey_response",
         "interview_record",
+        "manual_note",
     }
     source_registry = store.list_source_registry(workspace_id=context.workspace_id)
     assert projection.report_version.quality_metadata["survey_source_ids"] == [
-        "persona-survey-1"
+        "persona-survey-1",
+        "persona-survey-response-1",
     ]
     assert projection.report_version.quality_metadata["interview_source_ids"] == [
         "persona-interview-1"
     ]
+    assert projection.report_version.quality_metadata["manual_research_source_ids"] == [
+        "persona-manual-note-1"
+    ]
+    assert projection.report_version.quality_metadata["user_research_source_ids"] == [
+        "persona-survey-1",
+        "persona-survey-response-1",
+        "persona-interview-1",
+        "persona-manual-note-1",
+    ]
+    customer_signal = next(
+        observation
+        for observation in projection.report_version.quality_metadata["memory_observations"]
+        if observation["kind"] == "customer_signal"
+    )
+    assert customer_signal["manual_research_source_ids"] == ["persona-manual-note-1"]
+    assert customer_signal["user_research_source_ids"] == [
+        "persona-survey-1",
+        "persona-survey-response-1",
+        "persona-interview-1",
+        "persona-manual-note-1",
+    ]
     assert {source.domain for source in source_registry} == {
         "interview-record",
+        "manual-note",
         "survey-simulated",
+        "survey-response",
     }
     assert {source.trust_level for source in source_registry} == {"synthetic"}

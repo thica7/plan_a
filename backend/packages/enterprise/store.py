@@ -1403,6 +1403,7 @@ def _source_trust_level(evidence: EvidenceRecord) -> str:
         "synthetic",
         "synthesized",
         "survey_simulated",
+        "survey_response",
         "interview_record",
         "manual_transcript",
         "manual_note",
