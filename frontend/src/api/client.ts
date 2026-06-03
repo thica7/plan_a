@@ -10,6 +10,7 @@ import type {
   ClaimRecord,
   CompetitorRecord,
   DecisionReplayReport,
+  EvalOpsReport,
   EvidenceQualityLabel,
   EvidenceGapFillResult,
   EvidenceGapReport,
@@ -161,6 +162,14 @@ export function getRun(runId: string) {
 export function getRunQualityComparison(runId: string, baselineRunId?: string) {
   const params = baselineRunId ? `?baseline_run_id=${encodeURIComponent(baselineRunId)}` : "";
   return request<RunQualityComparison>(`/runs/${runId}/quality-comparison${params}`);
+}
+
+export function getEnterpriseEvalOps(options: { projectId?: string; baselineRunId?: string } = {}) {
+  const params = new URLSearchParams();
+  if (options.projectId) params.set("project_id", options.projectId);
+  if (options.baselineRunId) params.set("baseline_run_id", options.baselineRunId);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request<EvalOpsReport>(`/evals/enterprise${suffix}`);
 }
 
 export function getRunKb(runId: string) {

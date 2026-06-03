@@ -1150,6 +1150,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/evals/enterprise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Enterprise Evalops Report */
+        get: operations["get_enterprise_evalops_report_api_evals_enterprise_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workflows/competitive-intel": {
         parameters: {
             query?: never;
@@ -2130,6 +2147,92 @@ export interface components {
             /** Claim Records */
             claim_records?: components["schemas"]["ClaimRecord"][];
             report_version: components["schemas"]["ReportVersionRecord"];
+        };
+        /** EvalOpsCaseResult */
+        EvalOpsCaseResult: {
+            /** Case Id */
+            case_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "warn" | "fail";
+            /** Score */
+            score: number;
+            /** Target Run Id */
+            target_run_id?: string | null;
+            /** Baseline Run Id */
+            baseline_run_id?: string | null;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+        };
+        /** EvalOpsMetric */
+        EvalOpsMetric: {
+            /** Name */
+            name: string;
+            /** Value */
+            value: number;
+            /** Target */
+            target: number;
+            /**
+             * Unit
+             * @default
+             */
+            unit: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "warn" | "fail";
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+        };
+        /** EvalOpsReport */
+        EvalOpsReport: {
+            /** Run Count */
+            run_count: number;
+            /** Evaluated Run Ids */
+            evaluated_run_ids?: string[];
+            /** Baseline Run Id */
+            baseline_run_id?: string | null;
+            /** Golden Set Size */
+            golden_set_size: number;
+            /** Golden Set Pass Rate */
+            golden_set_pass_rate: number;
+            /** Report Quality Score */
+            report_quality_score: number;
+            /** Source Recall */
+            source_recall: number;
+            /** Task Time Saved Hours */
+            task_time_saved_hours: number;
+            /** Cost Per Report Usd */
+            cost_per_report_usd: number;
+            /**
+             * Regression Gate Status
+             * @enum {string}
+             */
+            regression_gate_status: "pass" | "warn" | "fail";
+            /** Regression Gate Reason */
+            regression_gate_reason: string;
+            /** Metrics */
+            metrics?: components["schemas"]["EvalOpsMetric"][];
+            /** Cases */
+            cases?: components["schemas"]["EvalOpsCaseResult"][];
+            /** Recommendations */
+            recommendations?: string[];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
         };
         /** EvidenceGapFillResult */
         EvidenceGapFillResult: {
@@ -7147,6 +7250,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditLogRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_enterprise_evalops_report_api_evals_enterprise_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                baseline_run_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalOpsReport"];
                 };
             };
             /** @description Validation Error */

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import {
   fillProjectEvidenceGaps,
+  getEnterpriseEvalOps,
   getProjectEvidenceGaps,
   getProjectBusinessPlan,
   getProjectCompetitorScores,
@@ -51,6 +52,7 @@ import type {
   EvidenceGapReport,
   EvidenceQualityLabel,
   EvidenceRecord,
+  EvalOpsReport,
   NotificationRecord,
   ProjectReadinessScore,
   ProjectRecord,
@@ -83,6 +85,7 @@ export function EnterpriseWorkbench({
   const [evidenceGaps, setEvidenceGaps] = useState<EvidenceGapReport | null>(null);
   const [gapFillResult, setGapFillResult] = useState<EvidenceGapFillResult | null>(null);
   const [redTeam, setRedTeam] = useState<RedTeamReport | null>(null);
+  const [evalOps, setEvalOps] = useState<EvalOpsReport | null>(null);
   const [workspaceUsage, setWorkspaceUsage] = useState<WorkspaceUsageSummary | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
@@ -136,6 +139,7 @@ export function EnterpriseWorkbench({
       setEvidenceGaps(null);
       setGapFillResult(null);
       setRedTeam(null);
+      setEvalOps(null);
       setWorkspaceUsage(null);
       setSelectedVersionId(null);
       return;
@@ -155,6 +159,7 @@ export function EnterpriseWorkbench({
       getProjectCompetitorScores(selectedProjectId),
       getProjectEvidenceGaps(selectedProjectId),
       getProjectRedTeam(selectedProjectId),
+      getEnterpriseEvalOps({ projectId: selectedProjectId }),
       getWorkspaceUsage(projectForLoad.workspace_id),
     ])
       .then(
@@ -169,6 +174,7 @@ export function EnterpriseWorkbench({
           competitorScoresValue,
           evidenceGapsValue,
           redTeamValue,
+          evalOpsValue,
           workspaceUsageValue,
         ]) => {
           if (!active) return;
@@ -183,6 +189,7 @@ export function EnterpriseWorkbench({
           setEvidenceGaps(evidenceGapsValue);
           setGapFillResult(null);
           setRedTeam(redTeamValue);
+          setEvalOps(evalOpsValue);
           setWorkspaceUsage(workspaceUsageValue);
           setSelectedVersionId(versionItems[0]?.id ?? null);
         },
@@ -201,6 +208,7 @@ export function EnterpriseWorkbench({
         setEvidenceGaps(null);
         setGapFillResult(null);
         setRedTeam(null);
+        setEvalOps(null);
         setWorkspaceUsage(null);
         setSelectedVersionId(null);
       })
@@ -530,6 +538,8 @@ export function EnterpriseWorkbench({
 
               {readinessScore ? <ReadinessScorePanel readinessScore={readinessScore} /> : null}
 
+              {evalOps ? <EvalOpsPanel report={evalOps} /> : null}
+
               {competitorScores ? <CompetitorScorePanel report={competitorScores} /> : null}
 
               {evidenceGaps ? (
@@ -674,6 +684,73 @@ function CompetitorLibrary({
         );
       })}
     </div>
+  );
+}
+
+function EvalOpsPanel({ report }: { report: EvalOpsReport }) {
+  const watchMetrics = report.metrics.filter((metric) => metric.status !== "pass").slice(0, 4);
+  return (
+    <section className={`panel readiness-panel ${report.regression_gate_status}`}>
+      <div className="panel-heading-row">
+        <h2>EvalOps</h2>
+        {report.regression_gate_status === "pass" ? (
+          <CheckCircle2 size={17} aria-hidden />
+        ) : (
+          <AlertTriangle size={17} aria-hidden />
+        )}
+      </div>
+      <div className="metric-grid compact">
+        <Metric
+          icon={<Gauge size={17} aria-hidden />}
+          label="Quality"
+          value={report.report_quality_score}
+        />
+        <Metric
+          icon={<ListChecks size={17} aria-hidden />}
+          label="Golden"
+          value={formatPercent(report.golden_set_pass_rate)}
+        />
+        <Metric
+          icon={<Search size={17} aria-hidden />}
+          label="Recall"
+          value={formatPercent(report.source_recall)}
+        />
+        <Metric
+          icon={<CalendarClock size={17} aria-hidden />}
+          label="Hours saved"
+          value={report.task_time_saved_hours.toFixed(1)}
+        />
+      </div>
+      <div className="project-meta-row">
+        <span>{report.regression_gate_status}</span>
+        <span>{report.run_count} run(s)</span>
+        <span>${report.cost_per_report_usd.toFixed(4)} / report</span>
+        <span>{report.golden_set_size} golden cases</span>
+      </div>
+      <p>{report.regression_gate_reason}</p>
+      {watchMetrics.length > 0 ? (
+        <div className="readiness-breakdown">
+          {watchMetrics.map((metric) => (
+            <ScoreBar
+              key={metric.name}
+              label={metric.name.replace(/_/g, " ")}
+              value={Math.max(0, Math.min(100, Math.round((metric.value / metric.target) * 100)))}
+            />
+          ))}
+        </div>
+      ) : null}
+      {report.recommendations.length > 0 ? (
+        <div className="recommendation-list">
+          {report.recommendations.slice(0, 3).map((item) => (
+            <article className="recommendation-card medium" key={item}>
+              <strong>EvalOps</strong>
+              <span>next</span>
+              <p>{item}</p>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

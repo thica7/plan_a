@@ -83,6 +83,7 @@ def test_compare_run_quality_flags_missing_real_chain_signals() -> None:
     assert comparison.real_llm_signal is False
     assert comparison.report_quality_signal is False
     assert len(comparison.recommendations) == 3
+    assert "real webpage" in comparison.recommendations[0]
 
 
 def _run_detail(

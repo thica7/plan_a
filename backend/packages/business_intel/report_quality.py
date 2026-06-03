@@ -61,7 +61,7 @@ def compare_run_quality(
         real_llm_signal=target_snapshot.real_llm_signal,
         report_quality_signal=target_snapshot.report_quality_signal,
         metrics=metrics,
-        recommendations=_recommendations(target_snapshot, baseline_snapshot),
+        recommendations=_clean_recommendations(target_snapshot, baseline_snapshot),
     )
 
 
@@ -255,4 +255,32 @@ def _recommendations(
         recommendations.append("提升报告长度、引用覆盖和竞品覆盖，确保结论可被证据链支撑。")
     if baseline is not None and target.score < baseline.score:
         recommendations.append("与基线 run 相比质量下降，优先检查采集覆盖、引用率和 QA blocker。")
+    return recommendations
+
+
+def _clean_recommendations(
+    target: _QualitySnapshot,
+    baseline: _QualitySnapshot | None,
+) -> list[str]:
+    recommendations: list[str] = []
+    if not target.real_collection_signal:
+        recommendations.append(
+            "Add real webpage or search evidence so the report is not relying on demo fixtures "
+            "or weak source signals."
+        )
+    if not target.real_llm_signal:
+        recommendations.append(
+            "Capture real LLM trace evidence so real mode can be distinguished from deterministic "
+            "fallback output."
+        )
+    if not target.report_quality_signal:
+        recommendations.append(
+            "Increase report depth, citation coverage, and competitor coverage so conclusions are "
+            "supported by an evidence chain."
+        )
+    if baseline is not None and target.score < baseline.score:
+        recommendations.append(
+            "Quality regressed against the baseline run; inspect collection coverage, citation "
+            "rate, and QA blockers first."
+        )
     return recommendations

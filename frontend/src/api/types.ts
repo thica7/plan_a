@@ -310,6 +310,45 @@ export interface DecisionReplayReport {
   generated_at: string;
 }
 
+export type EvalOpsStatus = "pass" | "warn" | "fail";
+
+export interface EvalOpsMetric {
+  name: string;
+  value: number;
+  target: number;
+  unit: string;
+  status: EvalOpsStatus;
+  summary: string;
+}
+
+export interface EvalOpsCaseResult {
+  case_id: string;
+  name: string;
+  status: EvalOpsStatus;
+  score: number;
+  target_run_id?: string | null;
+  baseline_run_id?: string | null;
+  summary: string;
+}
+
+export interface EvalOpsReport {
+  run_count: number;
+  evaluated_run_ids: string[];
+  baseline_run_id?: string | null;
+  golden_set_size: number;
+  golden_set_pass_rate: number;
+  report_quality_score: number;
+  source_recall: number;
+  task_time_saved_hours: number;
+  cost_per_report_usd: number;
+  regression_gate_status: EvalOpsStatus;
+  regression_gate_reason: string;
+  metrics: EvalOpsMetric[];
+  cases: EvalOpsCaseResult[];
+  recommendations: string[];
+  generated_at: string;
+}
+
 export type EnterpriseRole = "owner" | "admin" | "analyst" | "reviewer" | "viewer";
 export type PolicyEffect = "allow" | "deny";
 

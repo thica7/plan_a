@@ -5554,6 +5554,83 @@
         }
       }
     },
+    "/api/evals/enterprise": {
+      "get": {
+        "tags": [
+          "evals"
+        ],
+        "summary": "Get Enterprise Evalops Report",
+        "operationId": "get_enterprise_evalops_report_api_evals_enterprise_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "baseline_run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Baseline Run Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalOpsReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workflows/competitive-intel": {
       "post": {
         "tags": [
@@ -7890,6 +7967,226 @@
           "report_version"
         ],
         "title": "EnterpriseRunProjection"
+      },
+      "EvalOpsCaseResult": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "title": "Status"
+          },
+          "score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "target_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Run Id"
+          },
+          "baseline_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Run Id"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "case_id",
+          "name",
+          "status",
+          "score"
+        ],
+        "title": "EvalOpsCaseResult"
+      },
+      "EvalOpsMetric": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value"
+          },
+          "target": {
+            "type": "number",
+            "title": "Target"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "default": ""
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "title": "Status"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "value",
+          "target",
+          "status"
+        ],
+        "title": "EvalOpsMetric"
+      },
+      "EvalOpsReport": {
+        "properties": {
+          "run_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Run Count"
+          },
+          "evaluated_run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evaluated Run Ids"
+          },
+          "baseline_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Run Id"
+          },
+          "golden_set_size": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Golden Set Size"
+          },
+          "golden_set_pass_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Golden Set Pass Rate"
+          },
+          "report_quality_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Report Quality Score"
+          },
+          "source_recall": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Source Recall"
+          },
+          "task_time_saved_hours": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Task Time Saved Hours"
+          },
+          "cost_per_report_usd": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Cost Per Report Usd"
+          },
+          "regression_gate_status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "title": "Regression Gate Status"
+          },
+          "regression_gate_reason": {
+            "type": "string",
+            "title": "Regression Gate Reason"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/EvalOpsMetric"
+            },
+            "type": "array",
+            "title": "Metrics"
+          },
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/EvalOpsCaseResult"
+            },
+            "type": "array",
+            "title": "Cases"
+          },
+          "recommendations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommendations"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_count",
+          "golden_set_size",
+          "golden_set_pass_rate",
+          "report_quality_score",
+          "source_recall",
+          "task_time_saved_hours",
+          "cost_per_report_usd",
+          "regression_gate_status",
+          "regression_gate_reason"
+        ],
+        "title": "EvalOpsReport"
       },
       "EvidenceGapFillResult": {
         "properties": {
