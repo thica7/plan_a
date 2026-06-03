@@ -2,10 +2,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.deps import get_app_settings, get_run_service
+from app.deps import get_app_settings, get_enterprise_store, get_run_service
 from app.events import RunEvent
 from packages.compliance import RunComplianceReport, build_run_compliance_report
 from packages.config import Settings
+from packages.enterprise import EnterpriseStore
 from packages.observability import (
     DecisionReplayReport,
     OtelTraceExport,
@@ -20,6 +21,7 @@ from packages.schema.models import AgentMessage, ToolCallMessage, TraceSpan
 router = APIRouter()
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
 
 
 @router.get("/runs/{run_id}/trace", response_model=list[RunEvent])
@@ -82,12 +84,23 @@ async def get_run_compliance_report(
 async def get_decision_replay(
     run_id: str,
     service: RunServiceDep,
+    store: EnterpriseStoreDep,
 ) -> DecisionReplayReport:
     detail = service.get_run(run_id)
     events = service.get_trace(run_id)
     if detail is None or events is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    return build_decision_replay(detail, events)
+    project_id = store.project_id_for_run(run_id)
+    report_versions = (
+        [
+            version
+            for version in store.list_report_versions(project_id=project_id)
+            if version.run_id == run_id
+        ]
+        if project_id
+        else []
+    )
+    return build_decision_replay(detail, events, report_versions=report_versions)
 
 
 @router.get("/runs/{run_id}/trace/agent-messages", response_model=list[AgentMessage])

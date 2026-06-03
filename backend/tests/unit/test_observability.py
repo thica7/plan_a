@@ -13,6 +13,7 @@ from packages.observability import (
     traceparent_for_span,
 )
 from packages.schema.api_dto import RunDetail
+from packages.schema.enterprise import ReportVersionRecord
 from packages.schema.models import AnalysisPlan, RawSource, RunMetrics, TraceSpan
 
 
@@ -266,6 +267,91 @@ def test_decision_replay_prefers_real_claim_validation_events() -> None:
     assert claim_events[0].evidence_ids == ["source-1"]
     assert claim_events[0].payload["claim_count"] == 1
     assert claim_events[0].payload["release_gate"] == {"status": "blocked", "issue_count": 2}
+
+
+def test_decision_replay_includes_report_version_gap_fill_events() -> None:
+    detail = RunDetail(
+        id="run-gap-fill",
+        topic="Decision replay gap fill",
+        status="completed",
+        execution_mode="demo",
+        created_at="2026-05-31T00:00:00Z",
+        updated_at="2026-05-31T00:01:00Z",
+        plan=AnalysisPlan(
+            topic="Decision replay gap fill",
+            competitors=["A"],
+            dimensions=["security"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="source-1",
+                competitor="A",
+                dimension="security",
+                source_type="webpage_verified",
+                title="A security",
+                url="https://example.com/security",
+                snippet="A publishes security controls.",
+                content_hash="hash-1",
+                confidence=0.9,
+            )
+        ],
+        metrics=RunMetrics(source_coverage_rate=1.0),
+    )
+    version = ReportVersionRecord(
+        id="report-gap-fill-v2",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-gap-fill",
+        parent_version_id="report-gap-fill-v1",
+        version_number=2,
+        topic_normalized="decision-replay-gap-fill",
+        competitor_layer="L1",
+        competitor_set_hash="competitor-set",
+        report_md="# Report",
+        evidence_ids=["evidence-gap-1"],
+        quality_metadata={
+            "rag_gap_fill": {
+                "decision_events": [
+                    {
+                        "event_type": "rag.retrieved",
+                        "agent": "rag_gap_fill",
+                        "message": "Retrieved one candidate.",
+                        "evidence_ids": ["evidence-gap-1"],
+                        "payload": {
+                            "gap_closure_rate": 1.0,
+                            "retrieval_record_count": 1,
+                            "updated_report_version_id": "report-gap-fill-v2",
+                        },
+                        "created_at": "2026-05-31T00:02:00Z",
+                    },
+                    {
+                        "event_type": "report.ready",
+                        "agent": "rag_gap_fill",
+                        "message": "Draft report ready.",
+                        "evidence_ids": ["evidence-gap-1"],
+                        "payload": {
+                            "source_report_version_id": "report-gap-fill-v1",
+                            "updated_report_version_id": "report-gap-fill-v2",
+                            "gap_fill_chain_closed": True,
+                        },
+                        "created_at": "2026-05-31T00:03:00Z",
+                    },
+                ]
+            }
+        },
+    )
+
+    replay = build_decision_replay(detail, [], report_versions=[version])
+    gap_events = [
+        event for event in replay.events if event.id.startswith("run-gap-fill:report-version:")
+    ]
+
+    assert [event.event_type for event in gap_events] == ["rag.retrieved", "report.ready"]
+    assert gap_events[0].evidence_ids == ["evidence-gap-1"]
+    assert gap_events[0].payload["gap_closure_rate"] == 1.0
+    assert gap_events[0].payload["report_version_id"] == "report-gap-fill-v2"
+    assert gap_events[1].payload["gap_fill_chain_closed"] is True
+    assert replay.event_type_counts["rag.retrieved"] >= 1
 
 
 def test_run_compliance_report_flags_policy_source_trace_and_pii() -> None:

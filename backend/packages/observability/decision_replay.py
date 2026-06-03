@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.events import RunEvent
 from packages.schema.api_dto import RunDetail
+from packages.schema.enterprise import ReportVersionRecord
 
 DecisionEventType = Literal[
     "agent.started",
@@ -57,6 +58,8 @@ class DecisionReplayReport(BaseModel):
 def build_decision_replay(
     detail: RunDetail,
     events: list[RunEvent],
+    *,
+    report_versions: list[ReportVersionRecord] | None = None,
 ) -> DecisionReplayReport:
     replay_events: list[DecisionReplayEvent] = []
     for event in events:
@@ -64,6 +67,7 @@ def build_decision_replay(
         if mapped is not None:
             replay_events.append(mapped)
 
+    replay_events.extend(_report_version_decisions(detail, report_versions or []))
     replay_events.extend(_synthetic_decisions(detail, {event.event_type for event in replay_events}))
     replay_events.sort(key=lambda item: (item.created_at, item.id))
     event_type_counts = _event_type_counts(replay_events)
@@ -236,6 +240,46 @@ def _synthetic_decisions(
     return decisions
 
 
+def _report_version_decisions(
+    detail: RunDetail,
+    report_versions: list[ReportVersionRecord],
+) -> list[DecisionReplayEvent]:
+    decisions: list[DecisionReplayEvent] = []
+    for version in report_versions:
+        if version.run_id and version.run_id != detail.id:
+            continue
+        gap_fill = version.quality_metadata.get("rag_gap_fill")
+        if not isinstance(gap_fill, dict):
+            continue
+        raw_events = gap_fill.get("decision_events")
+        if not isinstance(raw_events, list):
+            continue
+        for index, raw_event in enumerate(raw_events):
+            if not isinstance(raw_event, dict):
+                continue
+            event_type = raw_event.get("event_type")
+            if event_type not in _SPECIAL_EVENT_TYPES:
+                continue
+            payload = raw_event.get("payload")
+            payload_dict = dict(payload) if isinstance(payload, dict) else {}
+            payload_dict.setdefault("report_version_id", version.id)
+            payload_dict.setdefault("source", "report_version_quality_metadata")
+            decisions.append(
+                DecisionReplayEvent(
+                    id=f"{detail.id}:report-version:{version.id}:{index}:{event_type}",
+                    run_id=detail.id,
+                    event_type=event_type,
+                    agent=_optional_string(raw_event.get("agent")) or "rag_gap_fill",
+                    message=_optional_string(raw_event.get("message")) or "Report quality event.",
+                    evidence_ids=_string_list(raw_event.get("evidence_ids")),
+                    claim_ids=_string_list(raw_event.get("claim_ids")),
+                    payload=_safe_payload(payload_dict),
+                    created_at=_coerce_datetime(raw_event.get("created_at"), version.created_at),
+                )
+            )
+    return decisions
+
+
 def _knowledge_claim_count(detail: RunDetail) -> int:
     count = 0
     for knowledge in detail.competitor_knowledge.values():
@@ -325,6 +369,22 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "claim_citation_rate",
         "source_coverage_rate",
         "validated_from",
+        "gap_count",
+        "before_gap_count",
+        "after_gap_count",
+        "gap_closure_rate",
+        "filled_gap_ids",
+        "remaining_gap_ids",
+        "retrieval_records",
+        "retrieval_record_count",
+        "online_collected_evidence_ids",
+        "online_failure_count",
+        "online_failures",
+        "source_report_version_id",
+        "parent_report_version_id",
+        "updated_report_version_id",
+        "gap_fill_chain_closed",
+        "source",
     ):
         if key in payload:
             allowed[key] = payload[key]
@@ -373,7 +433,30 @@ def _detail_updated_at(detail: RunDetail) -> datetime:
     return datetime.utcnow()
 
 
+def _coerce_datetime(value: Any, fallback: datetime) -> datetime:
+    if isinstance(value, datetime):
+        return _normalize_datetime(value)
+    if isinstance(value, str):
+        try:
+            return _normalize_datetime(datetime.fromisoformat(value.replace("Z", "+00:00")))
+        except ValueError:
+            pass
+    return _normalize_datetime(fallback)
+
+
 def _normalize_datetime(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value
     return value.replace(tzinfo=None)
+
+
+def _optional_string(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
