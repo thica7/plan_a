@@ -951,6 +951,20 @@ class EnterpriseMemoryStore:
                 before=before_record.model_dump(mode="json") if before_record else None,
                 after=version.model_dump(mode="json"),
             )
+            if before_record is not None and before_record.status != version.status:
+                self._append_audit(
+                    workspace_id=version.workspace_id,
+                    actor_id=DEFAULT_USER_ID,
+                    action="report_version.status_changed",
+                    resource_type="report_version",
+                    resource_id=version.id,
+                    before={"status": before_record.status},
+                    after={
+                        "status": version.status,
+                        "project_id": version.project_id,
+                        "version_number": version.version_number,
+                    },
+                )
             return version
 
     def get_previous_report_version(

@@ -555,6 +555,32 @@ def test_enterprise_store_increments_report_version_by_group() -> None:
     assert next_version == 2
 
 
+def test_enterprise_store_audits_report_version_status_changes() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+
+    store.upsert_report_version(projection.report_version.model_copy(update={"status": "approved"}))
+    status_logs = [
+        log
+        for log in store.list_audit_logs()
+        if log.action == "report_version.status_changed"
+    ]
+
+    assert len(status_logs) == 1
+    assert status_logs[0].resource_id == projection.report_version.id
+    assert status_logs[0].before == {"status": "draft"}
+    assert status_logs[0].after["status"] == "approved"
+    assert status_logs[0].after["project_id"] == projection.project_id
+
+
 def test_report_version_diff_uses_previous_version() -> None:
     store = EnterpriseMemoryStore()
     first_detail = _detail()

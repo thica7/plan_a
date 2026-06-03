@@ -1160,6 +1160,11 @@ class EnterprisePostgresStore:
                     "SELECT * FROM report_versions WHERE id = %s",
                     (version.id,),
                 ).fetchone()
+                before_record = (
+                    self._model_from_row(ReportVersionRecord, before_row)
+                    if before_row
+                    else None
+                )
                 self._upsert_report_version(cur, version)
                 self._append_audit(
                     cur,
@@ -1168,13 +1173,24 @@ class EnterprisePostgresStore:
                     action="report_version.upserted",
                     resource_type="report_version",
                     resource_id=version.id,
-                    before=self._model_from_row(ReportVersionRecord, before_row).model_dump(
-                        mode="json"
-                    )
-                    if before_row
-                    else None,
+                    before=before_record.model_dump(mode="json") if before_record else None,
                     after=version.model_dump(mode="json"),
                 )
+                if before_record is not None and before_record.status != version.status:
+                    self._append_audit(
+                        cur,
+                        workspace_id=version.workspace_id,
+                        actor_id=DEFAULT_USER_ID,
+                        action="report_version.status_changed",
+                        resource_type="report_version",
+                        resource_id=version.id,
+                        before={"status": before_record.status},
+                        after={
+                            "status": version.status,
+                            "project_id": version.project_id,
+                            "version_number": version.version_number,
+                        },
+                    )
             conn.commit()
         return version
 
