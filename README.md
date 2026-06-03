@@ -10,6 +10,22 @@ make dev-backend
 make dev-frontend
 ```
 
+Windows one-command real-run startup:
+
+```powershell
+.\scripts\dev_start.ps1
+```
+
+This starts local Postgres, Temporal, Temporal UI, the FastAPI backend, the
+Temporal worker, and the Vite frontend. The backend and worker are launched
+with the `bd-competiscope-v2` conda environment's `python.exe`; the frontend is
+launched with `node.exe` and Vite. To stop or inspect the local stack:
+
+```powershell
+.\scripts\dev_stop.ps1
+.\scripts\dev_status.ps1
+```
+
 The backend runs on `http://localhost:8000`. The frontend runs on `http://localhost:5173` and proxies `/api` to the backend.
 Temporal dev services expose gRPC on `127.0.0.1:7233` and UI on `http://localhost:8233`
 when the full compose stack is running.
