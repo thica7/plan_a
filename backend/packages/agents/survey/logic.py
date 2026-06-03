@@ -33,6 +33,12 @@ USER_RESEARCH_DIMENSION_HINTS = (
     "use_case",
     "use case",
 )
+USER_RESEARCH_SOURCE_TYPES = {
+    "survey_simulated",
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+}
 
 
 class SurveyInterviewAgentMixin:
@@ -165,7 +171,7 @@ class SurveyInterviewAgentMixin:
     ) -> bool:
         return any(
             source.dimension == dimension
-            and source.source_type in {"survey_simulated", "interview_record", "manual_transcript"}
+            and source.source_type in USER_RESEARCH_SOURCE_TYPES
             and self._source_matches_competitor(source, competitor)
             for source in detail.raw_sources
         )

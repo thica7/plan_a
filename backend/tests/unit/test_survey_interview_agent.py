@@ -100,6 +100,50 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
     assert "[redacted:api_key]" in span.full_output
 
 
+@pytest.mark.asyncio
+async def test_survey_interview_enrichment_reuses_attached_survey_response() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant user adoption comparison",
+            competitors=["Acme"],
+            dimensions=["persona"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources.append(
+        RawSource(
+            id="persona-survey-response-1",
+            competitor="Acme",
+            dimension="persona",
+            source_type="survey_response",
+            title="Acme buyer survey",
+            snippet="Enterprise buyer survey says onboarding effort shapes adoption.",
+            content_hash="surveyresponsehash",
+            confidence=0.83,
+        )
+    )
+
+    await service._run_survey_interview_enrichment(record, ["persona"], ["Acme"])
+
+    assert [source.source_type for source in record.detail.raw_sources] == ["survey_response"]
+    assert record.detail.agent_messages[-1].message_type == "survey_interview_evidence_collected"
+    assert record.detail.agent_messages[-1].payload["source_ids"] == []
+    assert record.detail.agent_messages[-1].payload["bundles"] == []
+
+
 def test_survey_evidence_projects_as_synthetic_enterprise_source() -> None:
     store = EnterpriseMemoryStore()
     detail = RunDetail(
