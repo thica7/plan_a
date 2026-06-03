@@ -3274,7 +3274,9 @@ function decisionPayloadSummary(event: DecisionReplayEvent) {
   if (event.event_type === "rag.retrieved") {
     const retrievalCount = payloadNumber(payload, "retrieval_record_count");
     const closureRate = payloadNumber(payload, "gap_closure_rate");
+    const gapCount = payloadListCount(payload, "gap_ids") ?? payloadNumber(payload, "gap_count");
     parts.push(`retrieval ${retrievalCount ?? event.evidence_ids.length}`);
+    if (gapCount !== null) parts.push(`gaps ${gapCount}`);
     if (closureRate !== null) parts.push(`closure ${formatPercent(closureRate)}`);
   } else if (event.event_type === "memory.recalled") {
     const candidateCount = payloadListCount(payload, "candidate_ids", "memory_candidate_ids");

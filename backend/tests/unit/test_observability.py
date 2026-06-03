@@ -316,6 +316,7 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
                         "event_type": "rag.retrieved",
                         "agent": "rag_gap_fill",
                         "message": "Retrieved one candidate.",
+                        "gap_ids": ["gap-security"],
                         "evidence_ids": ["evidence-gap-1"],
                         "payload": {
                             "gap_closure_rate": 1.0,
@@ -328,6 +329,7 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
                         "event_type": "report.ready",
                         "agent": "rag_gap_fill",
                         "message": "Draft report ready.",
+                        "gap_ids": ["gap-security"],
                         "evidence_ids": ["evidence-gap-1"],
                         "payload": {
                             "source_report_version_id": "report-gap-fill-v1",
@@ -348,8 +350,10 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
 
     assert [event.event_type for event in gap_events] == ["rag.retrieved", "report.ready"]
     assert gap_events[0].evidence_ids == ["evidence-gap-1"]
+    assert gap_events[0].payload["gap_ids"] == ["gap-security"]
     assert gap_events[0].payload["gap_closure_rate"] == 1.0
     assert gap_events[0].payload["report_version_id"] == "report-gap-fill-v2"
+    assert gap_events[1].payload["gap_ids"] == ["gap-security"]
     assert gap_events[1].payload["gap_fill_chain_closed"] is True
     assert replay.event_type_counts["rag.retrieved"] >= 1
 

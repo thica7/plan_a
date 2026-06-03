@@ -262,6 +262,7 @@ def _report_version_decisions(
                 continue
             payload = raw_event.get("payload")
             payload_dict = dict(payload) if isinstance(payload, dict) else {}
+            payload_dict.setdefault("gap_ids", _string_list(raw_event.get("gap_ids")))
             payload_dict.setdefault("report_version_id", version.id)
             payload_dict.setdefault("source", "report_version_quality_metadata")
             decisions.append(
@@ -370,6 +371,7 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "source_coverage_rate",
         "validated_from",
         "gap_count",
+        "gap_ids",
         "before_gap_count",
         "after_gap_count",
         "gap_closure_rate",
