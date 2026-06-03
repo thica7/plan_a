@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
-import { getRun, getRunQualityComparison, redoRun, resumeRun, subscribeRun } from "../api/client";
+import {
+  getDecisionReplay,
+  getRun,
+  getRunQualityComparison,
+  redoRun,
+  resumeRun,
+  subscribeRun,
+} from "../api/client";
 import { CompetitorDiscoveryView } from "../features/discovery/CompetitorDiscoveryView";
 import { CostPanel } from "../features/cost/CostPanel";
 import { StaticGraphView } from "../features/graph/StaticGraphView";
@@ -15,7 +22,7 @@ import { SwimlaneView } from "../features/swimlane/SwimlaneView";
 import { TraceList } from "../features/trace/TraceList";
 import { TracePlayback } from "../features/trace/TracePlayback";
 import { useRunStore } from "../stores/run";
-import type { ReflectionRecord, RunQualityComparison } from "../api/types";
+import type { DecisionReplayReport, ReflectionRecord, RunQualityComparison } from "../api/types";
 
 export function RunDetail() {
   const { runId } = useParams();
@@ -24,6 +31,7 @@ export function RunDetail() {
   const [isRedoing, setRedoing] = useState(false);
   const [planDimensions, setPlanDimensions] = useState("");
   const [qualityComparison, setQualityComparison] = useState<RunQualityComparison | null>(null);
+  const [decisionReplay, setDecisionReplay] = useState<DecisionReplayReport | null>(null);
   const redoLimitReached = detail ? detail.revisions.length >= detail.max_iterations : false;
   const latestInterrupt = useMemo(
     () => [...events].reverse().find((event) => event.type === "interrupt"),
@@ -38,6 +46,7 @@ export function RunDetail() {
     let unsubscribe: (() => void) | undefined;
     reset();
     setQualityComparison(null);
+    setDecisionReplay(null);
 
     const load = (attempt: number) => {
       getRun(runId)
@@ -51,6 +60,13 @@ export function RunDetail() {
             })
             .catch(() => {
               if (!cancelled) setQualityComparison(null);
+            });
+          void getDecisionReplay(runId)
+            .then((replay) => {
+              if (!cancelled) setDecisionReplay(replay);
+            })
+            .catch(() => {
+              if (!cancelled) setDecisionReplay(null);
             });
           unsubscribe = subscribeRun(runId, addEvent);
         })
@@ -83,6 +99,9 @@ export function RunDetail() {
       getRunQualityComparison(runId)
         .then(setQualityComparison)
         .catch(() => setQualityComparison(null));
+      getDecisionReplay(runId)
+        .then(setDecisionReplay)
+        .catch(() => setDecisionReplay(null));
     }
   }, [events, runId, setDetail]);
 
@@ -281,7 +300,12 @@ export function RunDetail() {
             </div>
           ) : null}
         </aside>
-        <TraceList events={events} metrics={detail.metrics} spans={detail.trace_spans} />
+        <TraceList
+          events={events}
+          metrics={detail.metrics}
+          replay={decisionReplay}
+          spans={detail.trace_spans}
+        />
       </div>
     </section>
   );

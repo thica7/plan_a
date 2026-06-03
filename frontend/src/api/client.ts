@@ -9,6 +9,7 @@ import type {
   CompetitorKnowledge,
   ClaimRecord,
   CompetitorRecord,
+  DecisionReplayReport,
   EvidenceQualityLabel,
   EvidenceGapFillResult,
   EvidenceGapReport,
@@ -180,6 +181,10 @@ export function getOtelTraceExport(runId: string) {
 
 export function getTraceObservabilityReport(runId: string) {
   return request<TraceObservabilityReport>(`/runs/${runId}/trace/observability`);
+}
+
+export function getDecisionReplay(runId: string) {
+  return request<DecisionReplayReport>(`/runs/${runId}/decision-replay`);
 }
 
 export function getRunComplianceReport(runId: string) {
@@ -397,6 +402,17 @@ export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) 
     "revision_recorded",
     "run_completed",
     "run_failed",
+    "agent.started",
+    "agent.finished",
+    "tool.called",
+    "rag.retrieved",
+    "self_consistency.sampled",
+    "memory.recalled",
+    "claim.validated",
+    "qa.blocked",
+    "redo.routed",
+    "benchmark.scored",
+    "report.ready",
   ];
   for (const type of eventTypes) {
     source.addEventListener(type, (message) => {

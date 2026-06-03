@@ -508,6 +508,11 @@ async def test_run_service_writes_enterprise_projection_on_completion() -> None:
     assert projection.project_id == record.detail.project_id
     assert projection.evidence_records[0].competitor_id.startswith("competitor-")
     assert len(projection.evidence_records) == 1
+    assert {event.type for event in record.events} >= {
+        "claim.validated",
+        "self_consistency.sampled",
+        "benchmark.scored",
+    }
     assert record.events[-1].payload["enterprise_projection"]["evidence_count"] == 1
     assert record.events[-1].payload["enterprise_projection"]["release_gate"]["allowed"] is True
     assert not [

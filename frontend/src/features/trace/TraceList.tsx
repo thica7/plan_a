@@ -1,14 +1,16 @@
 import type { RunEvent } from "../../api/sse_types";
-import type { RunMetrics, TraceSpan } from "../../api/types";
+import type { DecisionReplayReport, RunMetrics, TraceSpan } from "../../api/types";
 
 interface Props {
   events: RunEvent[];
   metrics: RunMetrics;
   spans: TraceSpan[];
+  replay?: DecisionReplayReport | null;
 }
 
-export function TraceList({ events, metrics, spans }: Props) {
+export function TraceList({ events, metrics, spans, replay }: Props) {
   const contextRows = buildContextRows(spans);
+  const replayEvents = replay?.events.slice(0, 12) ?? [];
 
   return (
     <section className="panel trace-panel">
@@ -59,6 +61,50 @@ export function TraceList({ events, metrics, spans }: Props) {
           <strong>{metrics.qa_issue_count}</strong>
         </span>
       </div>
+      {replay ? (
+        <div className="decision-replay">
+          <div className="panel-heading-row">
+            <h3>Decision replay</h3>
+            <span className="muted-text">{replay.replay_coverage_score}% coverage</span>
+          </div>
+          <div className="trace-metrics compact">
+            <span>
+              Events
+              <strong>{replay.event_count}</strong>
+            </span>
+            <span>
+              Blockers
+              <strong>{replay.blocker_count}</strong>
+            </span>
+            <span>
+              Warnings
+              <strong>{replay.warn_count}</strong>
+            </span>
+            <span>
+              Types
+              <strong>{Object.keys(replay.event_type_counts).length}</strong>
+            </span>
+          </div>
+          {replayEvents.length > 0 ? (
+            <ol className="trace-list replay-list">
+              {replayEvents.map((event) => (
+                <li key={event.id}>
+                  <span>{event.source_event_id ?? "S"}</span>
+                  <strong>{event.event_type}</strong>
+                  <em>{event.agent || "system"}{event.subagent ? `/${event.subagent}` : ""}</em>
+                  <p>{event.message}</p>
+                  <small>
+                    {event.evidence_ids.length} evidence / {event.claim_ids.length} claims /{" "}
+                    {event.related_span_ids.length} spans
+                  </small>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p>No replay events yet.</p>
+          )}
+        </div>
+      ) : null}
       {contextRows.length > 0 ? (
         <div className="context-list" aria-label="Subagent contexts">
           {contextRows.map((row) => (

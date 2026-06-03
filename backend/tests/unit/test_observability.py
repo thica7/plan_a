@@ -170,6 +170,26 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
         RunEvent(
             id=3,
             run_id="run-1",
+            type="memory.recalled",
+            agent="memory",
+            message="Memory recalled",
+            payload={"candidate_ids": ["memory-1"], "score": 86},
+        ),
+        RunEvent(
+            id=4,
+            run_id="run-1",
+            type="self_consistency.sampled",
+            agent="quality",
+            message="Consistency sampled",
+            payload={
+                "self_consistency_score": 88,
+                "claim_ids": ["claim-1"],
+                "evidence_ids": ["source-1"],
+            },
+        ),
+        RunEvent(
+            id=5,
+            run_id="run-1",
             type="run_completed",
             agent="writer",
             message="Run completed",
@@ -182,10 +202,14 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
     assert {event.event_type for event in replay.events} >= {
         "agent.started",
         "rag.retrieved",
+        "memory.recalled",
+        "self_consistency.sampled",
         "claim.validated",
         "benchmark.scored",
         "report.ready",
     }
+    assert replay.replay_coverage_score >= 85
+    assert replay.event_type_counts["memory.recalled"] >= 1
     assert any(event.evidence_ids == ["source-1"] for event in replay.events)
 
 

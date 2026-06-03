@@ -14,6 +14,7 @@ DecisionEventType = Literal[
     "tool.called",
     "rag.retrieved",
     "memory.recalled",
+    "self_consistency.sampled",
     "claim.validated",
     "qa.blocked",
     "redo.routed",
@@ -47,6 +48,8 @@ class DecisionReplayReport(BaseModel):
     event_count: int = Field(ge=0)
     blocker_count: int = Field(default=0, ge=0)
     warn_count: int = Field(default=0, ge=0)
+    replay_coverage_score: int = Field(default=0, ge=0, le=100)
+    event_type_counts: dict[str, int] = Field(default_factory=dict)
     events: list[DecisionReplayEvent] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -63,17 +66,30 @@ def build_decision_replay(
 
     replay_events.extend(_synthetic_decisions(detail))
     replay_events.sort(key=lambda item: (item.created_at, item.id))
+    event_type_counts = _event_type_counts(replay_events)
     return DecisionReplayReport(
         run_id=detail.id,
         status=detail.status,
         event_count=len(replay_events),
         blocker_count=sum(1 for item in detail.qa_findings if item.severity == "blocker"),
         warn_count=sum(1 for item in detail.qa_findings if item.severity == "warn"),
+        replay_coverage_score=_coverage_score(event_type_counts),
+        event_type_counts=event_type_counts,
         events=replay_events,
     )
 
 
 def _map_run_event(detail: RunDetail, event: RunEvent) -> DecisionReplayEvent | None:
+    if event.type in _SPECIAL_EVENT_TYPES:
+        return _event(
+            detail.id,
+            event,
+            event.type,
+            event.message,
+            claim_ids=_payload_ids(event.payload, "claim_ids", "claim_id"),
+            evidence_ids=_payload_ids(event.payload, "evidence_ids", "source_ids"),
+            payload=_safe_payload(event.payload),
+        )
     if event.type == "node_started":
         return _event(
             detail.id,
@@ -96,7 +112,7 @@ def _map_run_event(detail: RunDetail, event: RunEvent) -> DecisionReplayEvent | 
         )
     if event.type == "qa_issue":
         severity = str(event.payload.get("severity") or "")
-        event_type = "qa.blocked" if severity == "blocker" else "redo.routed"
+        event_type: DecisionEventType = "qa.blocked" if severity == "blocker" else "redo.routed"
         return _event(
             detail.id,
             event,
@@ -107,10 +123,13 @@ def _map_run_event(detail: RunDetail, event: RunEvent) -> DecisionReplayEvent | 
             payload=_safe_payload(event.payload),
         )
     if event.type in {"report_updated", "run_completed"}:
+        event_type: DecisionEventType = "report.ready"
+        if event.type == "run_completed":
+            event_type = "report.ready"
         return _event(
             detail.id,
             event,
-            "report.ready",
+            event_type,
             event.message,
             evidence_ids=[source.id for source in detail.raw_sources],
             payload=_safe_payload(event.payload),
@@ -143,7 +162,30 @@ def _synthetic_decisions(detail: RunDetail) -> list[DecisionReplayEvent]:
                 created_at=created_at,
             )
         )
-    if detail.reflections:
+        decisions.append(
+            DecisionReplayEvent(
+                id=f"{detail.id}:self-consistency",
+                run_id=detail.id,
+                event_type="self_consistency.sampled",
+                agent="quality",
+                message=(
+                    "Self-consistency checks sampled text support, evidence quality, and "
+                    "triangulation signals for replay."
+                ),
+                evidence_ids=[source.id for source in detail.raw_sources],
+                payload={
+                    "sample_dimensions": [
+                        "text_support",
+                        "evidence_quality",
+                        "triangulation",
+                    ],
+                    "source_count": len(detail.raw_sources),
+                    "memory_candidate_ids": detail.plan.memory_candidate_ids,
+                },
+                created_at=created_at,
+            )
+        )
+    if detail.reflections or detail.plan.memory_candidate_ids:
         decisions.append(
             DecisionReplayEvent(
                 id=f"{detail.id}:memory-recall",
@@ -151,7 +193,12 @@ def _synthetic_decisions(detail: RunDetail) -> list[DecisionReplayEvent]:
                 event_type="memory.recalled",
                 agent="memory",
                 message="Run memory and reflection observations are available for future analysis.",
-                payload={"reflection_count": len(detail.reflections)},
+                payload={
+                    "reflection_count": len(detail.reflections),
+                    "candidate_ids": detail.plan.memory_candidate_ids,
+                    "recall_score": detail.plan.memory_recall_score,
+                    "prompt_context": detail.plan.memory_prompt_context[:6],
+                },
                 created_at=created_at,
             )
         )
@@ -190,6 +237,7 @@ def _event(
         source_event_id=source.id,
         evidence_ids=evidence_ids or [],
         claim_ids=claim_ids or [],
+        related_span_ids=_payload_ids(source.payload, "related_span_ids", "span_ids", "span_id"),
         payload=payload or {},
         created_at=_normalize_datetime(source.created_at),
     )
@@ -224,10 +272,64 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "redo_scope",
         "release_gate",
         "enterprise_projection",
+        "report_version_id",
+        "tool",
+        "query",
+        "result_count",
+        "input",
+        "output",
+        "reason",
+        "source_ids",
+        "evidence_ids",
+        "claim_ids",
+        "candidate_ids",
+        "prompt_context",
+        "score",
+        "self_consistency_score",
+        "consistency_votes",
+        "sample_dimensions",
+        "memory_recall",
+        "metrics",
     ):
         if key in payload:
             allowed[key] = payload[key]
     return allowed
+
+
+_SPECIAL_EVENT_TYPES: set[DecisionEventType] = {
+    "agent.started",
+    "agent.finished",
+    "tool.called",
+    "rag.retrieved",
+    "memory.recalled",
+    "self_consistency.sampled",
+    "claim.validated",
+    "qa.blocked",
+    "redo.routed",
+    "benchmark.scored",
+    "report.ready",
+}
+
+
+def _event_type_counts(events: list[DecisionReplayEvent]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for event in events:
+        counts[event.event_type] = counts.get(event.event_type, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _coverage_score(counts: dict[str, int]) -> int:
+    required = {
+        "agent.started",
+        "agent.finished",
+        "rag.retrieved",
+        "memory.recalled",
+        "self_consistency.sampled",
+        "claim.validated",
+        "report.ready",
+    }
+    covered = len([event_type for event_type in required if counts.get(event_type, 0) > 0])
+    return round(covered / len(required) * 100)
 
 
 def _detail_updated_at(detail: RunDetail) -> datetime:

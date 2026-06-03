@@ -2057,7 +2057,7 @@ export interface components {
              * Event Type
              * @enum {string}
              */
-            event_type: "agent.started" | "agent.finished" | "tool.called" | "rag.retrieved" | "memory.recalled" | "claim.validated" | "qa.blocked" | "redo.routed" | "benchmark.scored" | "report.ready";
+            event_type: "agent.started" | "agent.finished" | "tool.called" | "rag.retrieved" | "memory.recalled" | "self_consistency.sampled" | "claim.validated" | "qa.blocked" | "redo.routed" | "benchmark.scored" | "report.ready";
             /** Agent */
             agent?: string | null;
             /** Subagent */
@@ -2100,6 +2100,15 @@ export interface components {
              * @default 0
              */
             warn_count: number;
+            /**
+             * Replay Coverage Score
+             * @default 0
+             */
+            replay_coverage_score: number;
+            /** Event Type Counts */
+            event_type_counts?: {
+                [key: string]: number;
+            };
             /** Events */
             events?: components["schemas"]["DecisionReplayEvent"][];
             /**
@@ -3627,7 +3636,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "run_created" | "node_started" | "node_completed" | "interrupt" | "qa_issue" | "report_updated" | "revision_recorded" | "run_completed" | "run_failed";
+            type: "run_created" | "node_started" | "node_completed" | "interrupt" | "qa_issue" | "report_updated" | "revision_recorded" | "run_completed" | "run_failed" | "agent.started" | "agent.finished" | "tool.called" | "rag.retrieved" | "self_consistency.sampled" | "memory.recalled" | "claim.validated" | "qa.blocked" | "redo.routed" | "benchmark.scored" | "report.ready";
             /** Agent */
             agent?: string | null;
             /** Subagent */

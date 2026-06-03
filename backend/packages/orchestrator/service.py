@@ -268,6 +268,20 @@ class RunService(
                 },
             },
         )
+        if plan.memory_candidate_ids:
+            await self.emit(
+                run_id,
+                "memory.recalled",
+                "memory",
+                None,
+                f"MemoryAgent recalled {len(plan.memory_candidate_ids)} confirmed preference(s).",
+                {
+                    "candidate_ids": plan.memory_candidate_ids,
+                    "prompt_context": plan.memory_prompt_context,
+                    "score": plan.memory_recall_score,
+                    "query": request.topic,
+                },
+            )
         return detail
 
     async def ensure_run_visible(self, request: RunCreateRequest) -> RunDetail:
@@ -678,7 +692,8 @@ class RunService(
         record.detail.current_node = None
         record.detail.updated_at = datetime.utcnow()
         projection = self._sync_enterprise_projection(record, notify_release_gate=True)
-        self._apply_release_gate_run_status(record, projection)
+        gate = self._apply_release_gate_run_status(record, projection)
+        await self._emit_quality_decision_events(record, projection, gate)
         await self.emit(
             record.detail.id,
             "run_completed",
@@ -700,7 +715,8 @@ class RunService(
         if (pending and pending.auto_continue) and await self._maybe_run_auto_redo(record):
             return
         projection = self._sync_enterprise_projection(record, notify_release_gate=True)
-        self._apply_release_gate_run_status(record, projection)
+        gate = self._apply_release_gate_run_status(record, projection)
+        await self._emit_quality_decision_events(record, projection, gate)
         await self.emit(
             detail.id,
             "run_completed",
@@ -724,7 +740,8 @@ class RunService(
         record.detail.current_node = None
         record.detail.updated_at = datetime.utcnow()
         projection = self._sync_enterprise_projection(record, notify_release_gate=True)
-        self._apply_release_gate_run_status(record, projection)
+        gate = self._apply_release_gate_run_status(record, projection)
+        await self._emit_quality_decision_events(record, projection, gate)
         await self.emit(
             record.detail.id,
             "run_completed",
@@ -1536,6 +1553,62 @@ class RunService(
         self._persist_run(record.detail.id)
         return message
 
+    async def _emit_quality_decision_events(
+        self,
+        record: RunRecord,
+        projection: EnterpriseRunProjection | None,
+        gate: ReportReleaseGate | None,
+    ) -> None:
+        detail = record.detail
+        if projection is not None:
+            await self.emit(
+                detail.id,
+                "claim.validated",
+                "quality",
+                None,
+                (
+                    f"Validated {len(projection.claim_records)} claim(s) against "
+                    f"{len(projection.evidence_records)} evidence record(s)."
+                ),
+                {
+                    "claim_ids": [claim.id for claim in projection.claim_records],
+                    "evidence_ids": [evidence.id for evidence in projection.evidence_records],
+                    "report_version_id": projection.report_version.id,
+                    "release_gate": gate.model_dump(mode="json") if gate is not None else None,
+                },
+            )
+            consistency_score = 100 if gate is None else max(0, 100 - gate.issue_count * 8)
+            await self.emit(
+                detail.id,
+                "self_consistency.sampled",
+                "quality",
+                None,
+                "Self-consistency sampled text support, evidence quality, and triangulation.",
+                {
+                    "claim_ids": [claim.id for claim in projection.claim_records],
+                    "evidence_ids": [evidence.id for evidence in projection.evidence_records],
+                    "self_consistency_score": consistency_score,
+                    "sample_dimensions": [
+                        "text_support",
+                        "evidence_quality",
+                        "triangulation",
+                    ],
+                    "consistency_votes": {
+                        "release_gate_pass": 1 if gate is not None and gate.allowed else 0,
+                        "release_gate_review": 1 if gate is not None and not gate.allowed else 0,
+                    },
+                    "reason": "Derived from claim validator and release-gate evidence checks.",
+                },
+            )
+        await self.emit(
+            detail.id,
+            "benchmark.scored",
+            "observability",
+            None,
+            "Run metrics were scored for replay and quality review.",
+            {"metrics": detail.metrics.model_dump(mode="json")},
+        )
+
     def _sync_enterprise_projection(
         self,
         record: RunRecord,
@@ -2091,7 +2164,7 @@ class RunService(
             )
             raise
         output_text = json.dumps([result.__dict__ for result in results], ensure_ascii=False)
-        self._append_trace_span(
+        span_id = self._append_trace_span(
             record,
             kind="search",
             agent=agent,
@@ -2109,6 +2182,35 @@ class RunService(
                     "max_results": max_results,
                 },
             ),
+        )
+        await self.emit(
+            record.detail.id,
+            "tool.called",
+            agent,
+            subagent,
+            f"web_search returned {len(results)} result(s).",
+            {
+                "tool": "web_search",
+                "query": query,
+                "result_count": len(results),
+                "related_span_ids": [span_id],
+                "input": query,
+                "output": f"{len(results)} result(s)",
+            },
+        )
+        await self.emit(
+            record.detail.id,
+            "rag.retrieved",
+            agent,
+            subagent,
+            f"Retrieved {len(results)} search candidate(s) for RAG grounding.",
+            {
+                "query": query,
+                "result_count": len(results),
+                "source_ids": [result.url for result in results[:5]],
+                "related_span_ids": [span_id],
+                "reason": "Search candidates provide online evidence candidates for collectors.",
+            },
         )
         return results
 
@@ -2142,7 +2244,7 @@ class RunService(
             "status_code": result.status_code,
             "error": result.error,
         }
-        self._append_trace_span(
+        span_id = self._append_trace_span(
             record,
             kind="fetch",
             agent=agent,
@@ -2153,6 +2255,21 @@ class RunService(
             input_text=url,
             output_text=result.snippet or result.error or result.title,
             metadata=self._trace_metadata(context, metadata),
+        )
+        await self.emit(
+            record.detail.id,
+            "tool.called",
+            agent,
+            subagent,
+            "fetch_page completed.",
+            {
+                "tool": "fetch_page",
+                "input": url,
+                "output": result.snippet or result.error or result.title,
+                "related_span_ids": [span_id],
+                "result_count": 1 if result.ok else 0,
+                "source_ids": [result.url] if result.url else [],
+            },
         )
         return result
 

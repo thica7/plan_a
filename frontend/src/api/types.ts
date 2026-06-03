@@ -270,6 +270,46 @@ export interface RunComplianceReport {
   generated_at: string;
 }
 
+export type DecisionEventType =
+  | "agent.started"
+  | "agent.finished"
+  | "tool.called"
+  | "rag.retrieved"
+  | "memory.recalled"
+  | "self_consistency.sampled"
+  | "claim.validated"
+  | "qa.blocked"
+  | "redo.routed"
+  | "benchmark.scored"
+  | "report.ready";
+
+export interface DecisionReplayEvent {
+  id: string;
+  run_id: string;
+  event_type: DecisionEventType;
+  agent?: string | null;
+  subagent?: string | null;
+  message: string;
+  source_event_id?: number | null;
+  related_span_ids: string[];
+  evidence_ids: string[];
+  claim_ids: string[];
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface DecisionReplayReport {
+  run_id: string;
+  status: string;
+  event_count: number;
+  blocker_count: number;
+  warn_count: number;
+  replay_coverage_score: number;
+  event_type_counts: Record<string, number>;
+  events: DecisionReplayEvent[];
+  generated_at: string;
+}
+
 export type EnterpriseRole = "owner" | "admin" | "analyst" | "reviewer" | "viewer";
 export type PolicyEffect = "allow" | "deny";
 
