@@ -49,6 +49,7 @@ QualityChainStepName = Literal[
     "real_collection",
     "real_llm",
     "report_quality",
+    "rag_gap_fill",
     "decision_replay",
 ]
 DECISION_REPLAY_MESSAGE_HINTS = {
@@ -100,22 +101,16 @@ def build_enterprise_evalops_report(
     real_run_count = sum(1 for run in recent_runs if run.execution_mode == "real")
     demo_run_count = len(recent_runs) - real_run_count
     real_run_ratio = _ratio([run.execution_mode == "real" for run in recent_runs])
-    real_quality_chain_rate = _ratio(
-        [
-            comparison.real_collection_signal
-            and comparison.real_llm_signal
-            and comparison.report_quality_signal
-            for comparison in comparisons
-        ]
-    )
+    runs_by_id = {run.id: run for run in recent_runs}
+    real_quality_chain_passes = [
+        _run_quality_chain_passed(comparison, runs_by_id)
+        for comparison in comparisons
+    ]
+    real_quality_chain_rate = _ratio(real_quality_chain_passes)
     real_quality_chain_failed_run_ids = [
         comparison.target_run_id
-        for comparison in comparisons
-        if not (
-            comparison.real_collection_signal
-            and comparison.real_llm_signal
-            and comparison.report_quality_signal
-        )
+        for comparison, passed in zip(comparisons, real_quality_chain_passes, strict=True)
+        if not passed
     ]
     decision_replay_rate = _ratio(
         [_run_has_decision_replay_signal(run) for run in recent_runs]
@@ -638,6 +633,12 @@ def _quality_chain_steps(
             "The report is long enough, cited, structured, and review-ready.",
         ),
         (
+            "rag_gap_fill",
+            "RAG gap fill",
+            "Collector evidence gaps are backed by retrieval context or an explicit "
+            "RAG Gap Fill section.",
+        ),
+        (
             "decision_replay",
             "Decision replay",
             "Trace, agent protocol, tool or collection, evidence, and outcome signals "
@@ -790,6 +791,8 @@ def _run_has_collector_gap_signal(run: RunDetail) -> bool:
 
 
 def _run_has_rag_gap_fill_context(run: RunDetail) -> bool:
+    if not _run_has_collector_gap_signal(run):
+        return True
     report = run.report_md.casefold()
     if "## rag gap fill" in report or "rag gap fill" in report:
         return True
@@ -840,10 +843,29 @@ def _quality_chain_step_passed(
         return comparison.real_llm_signal
     if step == "report_quality":
         return comparison.report_quality_signal
+    if step == "rag_gap_fill":
+        run = runs_by_id.get(comparison.target_run_id)
+        return run is not None and _run_has_rag_gap_fill_context(run)
     if step == "decision_replay":
         run = runs_by_id.get(comparison.target_run_id)
         return run is not None and _run_has_decision_replay_signal(run)
     return False
+
+
+def _run_quality_chain_passed(
+    comparison: RunQualityComparison,
+    runs_by_id: dict[str, RunDetail],
+) -> bool:
+    required_steps: tuple[QualityChainStepName, ...] = (
+        "real_collection",
+        "real_llm",
+        "report_quality",
+        "rag_gap_fill",
+    )
+    return all(
+        _quality_chain_step_passed(comparison, step, runs_by_id)
+        for step in required_steps
+    )
 
 
 def _case(

@@ -35,7 +35,13 @@ class EvalOpsCaseResult(BaseModel):
 class EvalOpsQualityChainStep(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    step: Literal["real_collection", "real_llm", "report_quality", "decision_replay"]
+    step: Literal[
+        "real_collection",
+        "real_llm",
+        "report_quality",
+        "rag_gap_fill",
+        "decision_replay",
+    ]
     label: str
     total_count: int = Field(ge=0)
     passed_count: int = Field(ge=0)
