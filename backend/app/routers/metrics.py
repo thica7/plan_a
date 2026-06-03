@@ -12,6 +12,7 @@ from packages.agents.pydantic_ai_adapter import pydantic_ai_available
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore
 from packages.memory import RunJournal
+from packages.observability import LangfuseAdapter, LangfuseConfig
 from packages.schema.enterprise import NotificationRecord
 from packages.workflows.service import temporal_cutover_status
 
@@ -60,6 +61,21 @@ def metrics(
     output_tokens = sum(run.metrics.output_tokens_estimate for run in runs)
     trace_spans = [span for run in runs for span in run.trace_spans]
     trace_context_coverage = _trace_context_coverage(trace_spans)
+    langfuse_health = LangfuseAdapter(
+        LangfuseConfig(
+            public_key=settings.langfuse_public_key,
+            secret_key=settings.langfuse_secret_key,
+            host=settings.langfuse_host,
+        )
+    ).health()
+    langfuse_disabled_reason = _metric_label_value(
+        str(langfuse_health["disabled_reason"] or "none")
+    )
+    langfuse_mirror_errors = sum(
+        1
+        for span in trace_spans
+        if getattr(span, "metadata", {}).get("langfuse_mirror_status") == "error"
+    )
     temporal_cutover = temporal_cutover_status(settings)
     lines = [
         "# HELP competiscope_api_up Competiscope API process health.",
@@ -150,6 +166,30 @@ def metrics(
             "# HELP competiscope_pydantic_ai_available Pydantic-AI runtime import status.",
             "# TYPE competiscope_pydantic_ai_available gauge",
             f"competiscope_pydantic_ai_available {1 if pydantic_ai_available() else 0}",
+            "# HELP competiscope_langfuse_configured Langfuse key configuration status.",
+            "# TYPE competiscope_langfuse_configured gauge",
+            f"competiscope_langfuse_configured {_bool_metric(langfuse_health['configured'])}",
+            "# HELP competiscope_langfuse_enabled Langfuse client availability status.",
+            "# TYPE competiscope_langfuse_enabled gauge",
+            f"competiscope_langfuse_enabled {_bool_metric(langfuse_health['enabled'])}",
+            "# HELP competiscope_langfuse_errors_total Langfuse adapter errors observed.",
+            "# TYPE competiscope_langfuse_errors_total gauge",
+            f"competiscope_langfuse_errors_total {langfuse_health['error_count']}",
+            (
+                "# HELP competiscope_langfuse_disabled Langfuse disabled state by "
+                "fixed reason."
+            ),
+            "# TYPE competiscope_langfuse_disabled gauge",
+            (
+                f'competiscope_langfuse_disabled{{reason="{langfuse_disabled_reason}"}} '
+                f"{0 if langfuse_health['enabled'] else 1}"
+            ),
+            (
+                "# HELP competiscope_langfuse_mirror_errors_total Persisted run spans "
+                "whose Langfuse mirror failed."
+            ),
+            "# TYPE competiscope_langfuse_mirror_errors_total gauge",
+            f"competiscope_langfuse_mirror_errors_total {langfuse_mirror_errors}",
             (
                 "# HELP competiscope_pydantic_ai_model_backed_enabled Model-backed "
                 "Pydantic-AI execution switch."
@@ -264,3 +304,11 @@ def _trace_context_coverage(spans: list[object]) -> float:
         and getattr(span, "traceparent", "")
     )
     return complete / len(spans)
+
+
+def _bool_metric(value: object) -> int:
+    return 1 if value is True else 0
+
+
+def _metric_label_value(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")

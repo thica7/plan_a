@@ -1,8 +1,14 @@
+import builtins
+import sys
+import types
+
 from app.events import RunEvent
 from packages.compliance import CompliancePolicy, redact_text
 from packages.compliance.report import build_run_compliance_report
 from packages.config import Settings
 from packages.observability import (
+    LangfuseAdapter,
+    LangfuseConfig,
     build_decision_replay,
     build_otel_trace_export,
     build_run_event,
@@ -451,3 +457,63 @@ def test_run_compliance_report_flags_policy_source_trace_and_pii() -> None:
         "trace",
         "pii",
     }
+
+
+def test_langfuse_adapter_records_import_failure(monkeypatch) -> None:
+    monkeypatch.delitem(sys.modules, "langfuse", raising=False)
+    real_import = builtins.__import__
+
+    def blocked_import(name, *args, **kwargs):
+        if name == "langfuse":
+            raise ImportError("missing langfuse")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked_import)
+
+    adapter = LangfuseAdapter(
+        LangfuseConfig(public_key="pk-test", secret_key="sk-test-value", host=None)
+    )
+
+    assert adapter.configured is True
+    assert adapter.enabled is False
+    assert adapter.disabled_reason == "dependency_unavailable"
+    assert adapter.error_count == 1
+    assert "missing langfuse" in adapter.last_error
+    assert adapter.health()["enabled"] is False
+
+
+def test_langfuse_adapter_records_mirror_failure(monkeypatch) -> None:
+    class FailingTrace:
+        def span(self, **_kwargs) -> None:
+            raise RuntimeError("mirror failed with Bearer abcdef1234567890")
+
+    class FakeLangfuse:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def trace(self, **_kwargs) -> FailingTrace:
+            return FailingTrace()
+
+    module = types.ModuleType("langfuse")
+    module.Langfuse = FakeLangfuse
+    monkeypatch.setitem(sys.modules, "langfuse", module)
+    span = TraceSpan(
+        id="span-1",
+        kind="llm",
+        agent="writer",
+        name="Write",
+        status="ok",
+        duration_ms=1,
+    )
+    adapter = LangfuseAdapter(
+        LangfuseConfig(public_key="pk-test", secret_key="sk-test-value", host=None)
+    )
+
+    mirrored = adapter.mirror_span("run-1", span)
+
+    assert mirrored is False
+    assert adapter.enabled is True
+    assert adapter.error_count == 1
+    assert adapter.last_error.startswith("mirror_failed:")
+    assert "Bearer [redacted]" in adapter.last_error
+    assert "abcdef1234567890" not in adapter.last_error

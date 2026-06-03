@@ -1600,10 +1600,9 @@ class RunService(
             },
         )
         record.detail.trace_spans.append(span)
+        self._mirror_langfuse_span(record.detail.id, span)
         if self._trace_store is not None:
             self._trace_store.append_span(record.detail.id, span)
-        if self._langfuse.enabled:
-            self._langfuse.mirror_span(record.detail.id, span)
         self._rebuild_metrics(record.detail)
         return span_id
 
@@ -2664,10 +2663,9 @@ class RunService(
             metadata=span_metadata,
         )
         record.detail.trace_spans.append(span)
+        self._mirror_langfuse_span(record.detail.id, span)
         if self._trace_store is not None:
             self._trace_store.append_span(record.detail.id, span)
-        if self._langfuse.enabled:
-            self._langfuse.mirror_span(record.detail.id, span)
         if kind in {"search", "fetch", "tool"}:
             self._append_tool_call_message(
                 record,
@@ -2683,6 +2681,22 @@ class RunService(
         self._rebuild_metrics(record.detail)
         record.detail.updated_at = datetime.utcnow()
         return span_id
+
+    def _mirror_langfuse_span(self, run_id: str, span: TraceSpan) -> None:
+        if not self._langfuse.configured:
+            return
+        if not self._langfuse.enabled:
+            span.metadata["langfuse_mirror_status"] = "disabled"
+            span.metadata["langfuse_disabled_reason"] = self._langfuse.disabled_reason
+            if self._langfuse.last_error:
+                span.metadata["langfuse_last_error"] = self._langfuse.last_error
+            return
+        if self._langfuse.mirror_span(run_id, span):
+            span.metadata["langfuse_mirror_status"] = "ok"
+            return
+        span.metadata["langfuse_mirror_status"] = "error"
+        if self._langfuse.last_error:
+            span.metadata["langfuse_last_error"] = self._langfuse.last_error
 
     def _parent_otel_span_id(
         self,
