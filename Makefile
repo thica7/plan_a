@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 SHELL := bash
 
-.PHONY: dev-backend dev-frontend temporal-worker test-backend test-frontend sync-openapi smoke-llm smoke-search smoke-fetch smoke-minimal-run smoke-enterprise-postgres smoke-temporal-thin-shell smoke-temporal-server smoke-phase2-business-intel smoke-phase3-strict phase4-readiness eval-baseline eval-baseline-full m0-check demo-build demo demo-down demo-logs help
+.PHONY: dev-backend dev-frontend temporal-worker test-backend test-frontend sync-openapi secret-scan smoke-llm smoke-search smoke-fetch smoke-minimal-run smoke-enterprise-postgres smoke-temporal-thin-shell smoke-temporal-server smoke-phase2-business-intel smoke-phase3-strict phase4-readiness eval-baseline eval-baseline-full m0-check demo-build demo demo-down demo-logs help
 
 dev-backend: ## Start FastAPI in reload mode
 	conda run -n bd-competiscope-v2 uvicorn app.main:app --reload --port 8000 --app-dir backend
@@ -21,6 +21,9 @@ test-frontend: ## Run frontend tests
 sync-openapi: ## Export OpenAPI and generate frontend types
 	conda run -n bd-competiscope-v2 python backend/scripts/export_openapi.py > frontend/openapi.json
 	cd frontend && pnpm openapi-typescript openapi.json -o src/api/openapi.ts
+
+secret-scan: ## Fail if tracked project files contain provider key patterns
+	conda run -n bd-competiscope-v2 python backend/scripts/scan_secrets.py
 
 smoke-llm: ## Run a real Doubao/ARK LLM smoke test
 	conda run -n bd-competiscope-v2 python backend/scripts/smoke_llm.py
@@ -59,7 +62,7 @@ eval-baseline: ## Run Phase 1 baseline eval smoke cases without external APIs
 eval-baseline-full: ## Run all Phase 2 golden-set baseline eval cases
 	conda run -n bd-competiscope-v2 python backend/scripts/eval_baseline.py --limit 0 --report docs/reports/golden_eval_report.md
 
-m0-check: test-backend smoke-minimal-run eval-baseline ## Verify M0 foundation without external APIs
+m0-check: secret-scan test-backend smoke-minimal-run eval-baseline ## Verify M0 foundation without external APIs
 
 demo-build: ## Build demo containers
 	docker compose build

@@ -11,6 +11,7 @@ Use this checklist before packaging a deliverable, opening a demo machine, or cr
 
 ## Required Checks
 
+- `conda run -n bd-competiscope-v2 python backend\scripts\scan_secrets.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests`
 - `pnpm.cmd --dir frontend build`
 - `conda run -n bd-competiscope-v2 python backend\scripts\phase4_readiness_report.py --require-server`
