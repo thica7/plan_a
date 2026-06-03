@@ -9,6 +9,7 @@ SCENARIO_PACKS: tuple[ScenarioPack, ...] = (
         name="Direct battlecard",
         description="Direct replacement comparison for sales, product, and pricing decisions.",
         competitor_layer="L1",
+        seed_competitors=["Cursor", "GitHub Copilot", "Windsurf"],
         required_dimensions=["pricing", "feature", "security"],
         optional_dimensions=["integrations", "persona"],
         analyst_questions=[
@@ -33,6 +34,7 @@ SCENARIO_PACKS: tuple[ScenarioPack, ...] = (
         name="Pricing and packaging",
         description="Focused pricing-packaging comparison for monetization decisions.",
         competitor_layer="L1",
+        seed_competitors=["Cursor", "GitHub Copilot", "Windsurf"],
         required_dimensions=["pricing"],
         optional_dimensions=["feature", "persona"],
         analyst_questions=[
@@ -58,6 +60,7 @@ SCENARIO_PACKS: tuple[ScenarioPack, ...] = (
             "Adjacent alternative analysis for workflow expansion and ecosystem positioning."
         ),
         competitor_layer="L2",
+        seed_competitors=["Glean", "Coveo", "Elastic"],
         required_dimensions=["feature", "integrations"],
         optional_dimensions=["pricing", "persona", "security"],
         analyst_questions=[
@@ -81,6 +84,7 @@ SCENARIO_PACKS: tuple[ScenarioPack, ...] = (
         name="Market landscape",
         description="Category-level landscape for segmentation, trend, and benchmark decisions.",
         competitor_layer="L3",
+        seed_competitors=["Cursor", "GitHub Copilot", "Windsurf", "Tabnine", "Codeium"],
         required_dimensions=["feature", "persona", "market"],
         optional_dimensions=["pricing", "integrations", "security"],
         analyst_questions=[
@@ -107,6 +111,7 @@ SCENARIO_PACKS: tuple[ScenarioPack, ...] = (
             "Enterprise buying-risk review across security, governance, and deployment readiness."
         ),
         competitor_layer="L2",
+        seed_competitors=["Glean", "Coveo", "Elastic"],
         required_dimensions=["security", "integrations"],
         optional_dimensions=["pricing", "feature"],
         analyst_questions=[
@@ -196,6 +201,7 @@ def generate_dynamic_scenario_pack(
         name=f"Dynamic {layer} scenario",
         description=f"Generated scenario pack for {topic}.",
         competitor_layer=layer,
+        seed_competitors=competitors[:5],
         required_dimensions=required_dimensions,
         optional_dimensions=[
             item

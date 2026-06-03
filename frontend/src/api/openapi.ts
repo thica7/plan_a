@@ -4932,6 +4932,8 @@ export interface components {
              * @enum {string}
              */
             competitor_layer: "L1" | "L2" | "L3";
+            /** Seed Competitors */
+            seed_competitors?: string[];
             /** Required Dimensions */
             required_dimensions?: string[];
             /** Optional Dimensions */

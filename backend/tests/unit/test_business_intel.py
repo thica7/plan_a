@@ -89,6 +89,7 @@ def test_scenario_pack_catalog_and_qa_rules_are_loaded() -> None:
     assert packs_by_id["l2_adjacent_workflow"].competitor_layer == "L2"
     assert packs_by_id["l3_market_landscape"].competitor_layer == "L3"
     assert all(packs_by_id[item].required_dimensions for item in packs_by_id)
+    assert all(packs_by_id[item].seed_competitors for item in packs_by_id)
     assert any(rule.id == "claim_has_evidence" for rule in rules)
     assert any(rule.id == "homepage_verified" for rule in rules)
 
@@ -157,6 +158,7 @@ def test_dynamic_scenario_pack_and_homepage_gate_are_deterministic() -> None:
 
     assert pack.is_dynamic is True
     assert pack.competitor_layer == "L3"
+    assert pack.seed_competitors == ["Fathom", "Otter", "Fireflies", "Avoma"]
     assert "market" in pack.required_dimensions
     assert good.verified is True
     assert phantom.verified is False

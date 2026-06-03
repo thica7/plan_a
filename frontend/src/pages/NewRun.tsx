@@ -14,6 +14,7 @@ import {
   isDimensionLocked,
   lockedDimensionsForScenario,
   mergeDimensions,
+  scenarioCompetitorPreset,
 } from "./newRunDimensions";
 
 const defaultWorkspaceId = "default-workspace";
@@ -103,6 +104,11 @@ export function NewRun() {
     setScenarioId(pack.id);
     setSelectedLayer(pack.competitor_layer);
     setSelected((current) => mergeDimensions(current, pack.required_dimensions, pack.optional_dimensions));
+    const seededCompetitors = scenarioCompetitorPreset(pack);
+    if (seededCompetitors) {
+      setCompetitorMode("manual");
+      setCompetitors(seededCompetitors);
+    }
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -233,6 +239,9 @@ export function NewRun() {
                   <em key={dimension}>{dimension}</em>
                 ))}
               </div>
+              {selectedScenario.seed_competitors.length > 0 ? (
+                <small>{selectedScenario.seed_competitors.join(", ")}</small>
+              ) : null}
             </div>
           ) : null}
         </fieldset>

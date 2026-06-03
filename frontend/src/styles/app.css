@@ -283,6 +283,13 @@ select {
   line-height: 1.45;
 }
 
+.scenario-preview small {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .scenario-preview div {
   display: flex;
   flex-wrap: wrap;

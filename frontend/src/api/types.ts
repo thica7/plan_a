@@ -949,6 +949,7 @@ export interface ScenarioPack {
   name: string;
   description: string;
   competitor_layer: "L1" | "L2" | "L3";
+  seed_competitors: string[];
   required_dimensions: string[];
   optional_dimensions: string[];
   analyst_questions: string[];

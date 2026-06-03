@@ -5,6 +5,7 @@ import {
   isDimensionLocked,
   lockedDimensionsForScenario,
   mergeDimensions,
+  scenarioCompetitorPreset,
 } from "./newRunDimensions";
 
 describe("New Run dimension helpers", () => {
@@ -47,6 +48,15 @@ describe("New Run dimension helpers", () => {
       "benchmark",
     ]);
   });
+
+  it("formats ScenarioPack seed competitors for the manual competitor field", () => {
+    const pack = scenarioPack({
+      seed_competitors: ["Cursor", " GitHub Copilot ", "", "Windsurf"],
+    });
+
+    expect(scenarioCompetitorPreset(pack)).toBe("Cursor, GitHub Copilot, Windsurf");
+    expect(scenarioCompetitorPreset(null)).toBe("");
+  });
 });
 
 function scenarioPack(overrides: Partial<ScenarioPack>): ScenarioPack {
@@ -55,6 +65,7 @@ function scenarioPack(overrides: Partial<ScenarioPack>): ScenarioPack {
     name: "Market landscape",
     description: "Category-level landscape.",
     competitor_layer: "L3",
+    seed_competitors: [],
     required_dimensions: [],
     optional_dimensions: [],
     analyst_questions: [],

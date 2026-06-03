@@ -672,6 +672,7 @@ class ScenarioPack(BaseModel):
     name: str
     description: str
     competitor_layer: Literal["L1", "L2", "L3"]
+    seed_competitors: list[str] = Field(default_factory=list)
     required_dimensions: list[str] = Field(default_factory=list)
     optional_dimensions: list[str] = Field(default_factory=list)
     analyst_questions: list[str] = Field(default_factory=list)

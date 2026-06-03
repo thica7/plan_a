@@ -14836,6 +14836,13 @@
             ],
             "title": "Competitor Layer"
           },
+          "seed_competitors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Seed Competitors"
+          },
           "required_dimensions": {
             "items": {
               "type": "string"
