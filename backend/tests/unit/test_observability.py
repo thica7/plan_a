@@ -213,6 +213,61 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
     assert any(event.evidence_ids == ["source-1"] for event in replay.events)
 
 
+def test_decision_replay_prefers_real_claim_validation_events() -> None:
+    detail = RunDetail(
+        id="run-claim-validation",
+        topic="Decision replay claim validation",
+        status="completed",
+        execution_mode="demo",
+        created_at="2026-05-31T00:00:00Z",
+        updated_at="2026-05-31T00:01:00Z",
+        plan=AnalysisPlan(
+            topic="Decision replay claim validation",
+            competitors=["A"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="source-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://example.com/pricing",
+                snippet="A publishes pricing.",
+                content_hash="hash-1",
+                confidence=0.9,
+            )
+        ],
+        metrics=RunMetrics(claim_citation_rate=1.0, source_coverage_rate=1.0),
+    )
+    events = [
+        RunEvent(
+            id=1,
+            run_id="run-claim-validation",
+            type="claim.validated",
+            agent="quality",
+            message="Validated claims through release gate.",
+            payload={
+                "claim_ids": ["claim-1"],
+                "evidence_ids": ["source-1"],
+                "claim_count": 1,
+                "source_count": 1,
+                "release_gate": {"status": "blocked", "issue_count": 2},
+            },
+        )
+    ]
+
+    replay = build_decision_replay(detail, events)
+    claim_events = [event for event in replay.events if event.event_type == "claim.validated"]
+
+    assert len(claim_events) == 1
+    assert claim_events[0].claim_ids == ["claim-1"]
+    assert claim_events[0].evidence_ids == ["source-1"]
+    assert claim_events[0].payload["claim_count"] == 1
+    assert claim_events[0].payload["release_gate"] == {"status": "blocked", "issue_count": 2}
+
+
 def test_run_compliance_report_flags_policy_source_trace_and_pii() -> None:
     settings = Settings(
         demo_mode=True,

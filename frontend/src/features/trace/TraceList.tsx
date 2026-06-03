@@ -1,5 +1,5 @@
 import type { RunEvent } from "../../api/sse_types";
-import type { DecisionReplayReport, RunMetrics, TraceSpan } from "../../api/types";
+import type { DecisionReplayEvent, DecisionReplayReport, RunMetrics, TraceSpan } from "../../api/types";
 
 interface Props {
   events: RunEvent[];
@@ -87,18 +87,22 @@ export function TraceList({ events, metrics, spans, replay }: Props) {
           </div>
           {replayEvents.length > 0 ? (
             <ol className="trace-list replay-list">
-              {replayEvents.map((event) => (
-                <li key={event.id}>
-                  <span>{event.source_event_id ?? "S"}</span>
-                  <strong>{event.event_type}</strong>
-                  <em>{event.agent || "system"}{event.subagent ? `/${event.subagent}` : ""}</em>
-                  <p>{event.message}</p>
-                  <small>
-                    {event.evidence_ids.length} evidence / {event.claim_ids.length} claims /{" "}
-                    {event.related_span_ids.length} spans
-                  </small>
-                </li>
-              ))}
+              {replayEvents.map((event) => {
+                const payloadSummary = formatDecisionPayload(event);
+                return (
+                  <li key={event.id}>
+                    <span>{event.source_event_id ?? "S"}</span>
+                    <strong>{event.event_type}</strong>
+                    <em>{event.agent || "system"}{event.subagent ? `/${event.subagent}` : ""}</em>
+                    <p>{event.message}</p>
+                    <small>
+                      {event.evidence_ids.length} evidence / {event.claim_ids.length} claims /{" "}
+                      {event.related_span_ids.length} spans
+                    </small>
+                    {payloadSummary ? <small className="replay-payload">{payloadSummary}</small> : null}
+                  </li>
+                );
+              })}
             </ol>
           ) : (
             <p>No replay events yet.</p>
@@ -215,6 +219,77 @@ function formatSpanMeta(span: TraceSpan) {
   if (typeof validCount === "number") parts.push(`${validCount} valid refs`);
   if (typeof unknownCount === "number" && unknownCount > 0) parts.push(`${unknownCount} unknown refs`);
   return parts.join(" / ");
+}
+
+function formatDecisionPayload(event: DecisionReplayEvent) {
+  const parts: string[] = [];
+  if (event.event_type === "claim.validated") {
+    const claimCount = numberPayload(event, "claim_count");
+    const sourceCount = numberPayload(event, "source_count");
+    const releaseGate = objectPayload(event, "release_gate");
+    if (claimCount !== null) parts.push(`${claimCount} validated claims`);
+    if (sourceCount !== null) parts.push(`${sourceCount} scoped sources`);
+    if (releaseGate) {
+      const status = stringValue(releaseGate.status);
+      const issues = numberValue(releaseGate.issue_count);
+      if (status) parts.push(`release gate ${status}`);
+      if (issues !== null) parts.push(`${issues} gate issues`);
+    }
+  }
+  if (event.event_type === "self_consistency.sampled") {
+    const score = numberPayload(event, "self_consistency_score");
+    const votes = objectPayload(event, "consistency_votes");
+    if (score !== null) parts.push(`score ${score}`);
+    if (votes) {
+      const passedVotes = Object.values(votes).filter((value) => value === 1).length;
+      parts.push(`${passedVotes}/${Object.keys(votes).length} checks passed`);
+    }
+  }
+  if (event.event_type === "rag.retrieved") {
+    const query = stringPayload(event, "query");
+    const resultCount = numberPayload(event, "result_count");
+    if (query) parts.push(`query: ${query}`);
+    if (resultCount !== null) parts.push(`${resultCount} results`);
+  }
+  if (event.event_type === "memory.recalled") {
+    const score = numberPayload(event, "score") ?? numberPayload(event, "recall_score");
+    const candidates = arrayPayload(event, "candidate_ids");
+    if (score !== null) parts.push(`recall ${score}`);
+    if (candidates.length > 0) parts.push(`${candidates.length} memories`);
+  }
+  if (event.event_type === "benchmark.scored") {
+    const score = numberPayload(event, "score");
+    if (score !== null) parts.push(`score ${score}`);
+  }
+  return parts.join(" / ");
+}
+
+function numberPayload(event: DecisionReplayEvent, key: string) {
+  return numberValue(event.payload[key]);
+}
+
+function stringPayload(event: DecisionReplayEvent, key: string) {
+  return stringValue(event.payload[key]);
+}
+
+function objectPayload(event: DecisionReplayEvent, key: string) {
+  const value = event.payload[key];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function arrayPayload(event: DecisionReplayEvent, key: string) {
+  const value = event.payload[key];
+  return Array.isArray(value) ? value : [];
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" ? value : null;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
 }
 
 function numberMeta(span: TraceSpan, key: string) {
