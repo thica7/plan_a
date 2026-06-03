@@ -8,13 +8,13 @@ from packages.rag import (
     fill_evidence_gaps_online,
     retrieve_gap_candidates,
 )
-from packages.search import SearchResult
 from packages.schema.enterprise import (
     EvidenceGapItem,
     EvidenceGapReport,
     EvidenceRecord,
     ReportVersionRecord,
 )
+from packages.search import SearchResult
 from packages.tools import FetchPageResult
 
 
@@ -383,3 +383,78 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version() -> 
     ]
     assert result.updated_report_version.evidence_ids == [evidence.id]
     assert f"[source:{evidence.id}]" in result.updated_report_version.report_md
+
+
+@pytest.mark.asyncio
+async def test_online_gap_fill_does_not_store_robots_blocked_search_fallback() -> None:
+    store = EnterpriseMemoryStore()
+    source_version = store.upsert_report_version(
+        ReportVersionRecord(
+            id="report-robots-v1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            version_number=1,
+            topic_normalized="cursor-robots",
+            competitor_layer="L1",
+            competitor_set_hash="competitors-hash",
+            report_md="# Report\n\nCursor onboarding has an evidence gap.",
+            evidence_ids=[],
+        )
+    )
+    report = EvidenceGapReport(
+        project_id="project-1",
+        scenario_id="l1_pricing_pack",
+        gap_count=1,
+        medium_count=1,
+        gaps=[
+            EvidenceGapItem(
+                id="gap-robots-onboarding",
+                severity="medium",
+                gap_type="missing_dimension_coverage",
+                competitor_id="cursor",
+                competitor_name="Cursor",
+                dimension="onboarding",
+                source_type_required="any usable source",
+                message="Onboarding needs any usable evidence.",
+                recommended_query="Cursor onboarding enterprise evidence",
+            )
+        ],
+    )
+
+    async def fake_search(query: str, max_results: int) -> list[SearchResult]:
+        return [
+            SearchResult(
+                title="Cursor onboarding",
+                url="https://cursor.example/onboarding",
+                snippet="Cursor onboarding overview.",
+            )
+        ]
+
+    async def fake_fetch(url: str) -> FetchPageResult:
+        return FetchPageResult(
+            url=url,
+            ok=False,
+            title="",
+            text="",
+            content_hash="robotshash",
+            error="Blocked by robots.txt at https://cursor.example/robots.txt",
+        )
+
+    result = await fill_evidence_gaps_online(
+        report,
+        store=store,
+        workspace_id="workspace-1",
+        project_id="project-1",
+        source_report_version=source_version,
+        search=fake_search,
+        fetch=fake_fetch,
+    )
+
+    assert store.list_evidence(project_id="project-1") == []
+    assert result.filled_gap_count == 0
+    assert result.added_evidence_count == 0
+    assert result.online_collected_evidence_count == 0
+    assert result.online_failure_count == 1
+    assert result.gap_fill_chain_closed is False
+    assert result.decision_events[1].event_type == "tool.called"
+    assert result.decision_events[1].payload["online_failures"][0]["stage"] == "robots"

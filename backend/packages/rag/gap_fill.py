@@ -16,7 +16,6 @@ from packages.rag.gap_retrieval import (
     build_gap_retrieval_query,
     decorate_evidence_gap_report_with_retrieval,
 )
-from packages.search import SearchResult
 from packages.schema.enterprise import (
     EvidenceGapFillDecisionEvent,
     EvidenceGapFillResult,
@@ -25,6 +24,7 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     ReportVersionRecord,
 )
+from packages.search import SearchResult
 from packages.tools import FetchPageResult
 
 
@@ -110,6 +110,16 @@ async def fill_evidence_gaps_online(
                         "stage": "fetch",
                         "url": result.url,
                         "error": str(exc),
+                    }
+                )
+                continue
+            if _robots_blocked_fetch(fetched):
+                online_failures.append(
+                    {
+                        "gap_id": gap.id,
+                        "stage": "robots",
+                        "url": fetched.url or result.url,
+                        "error": fetched.error or "Blocked by robots/source policy.",
                     }
                 )
                 continue
@@ -224,6 +234,11 @@ def _unique_search_results(results: list[SearchResult]) -> list[SearchResult]:
     return unique
 
 
+def _robots_blocked_fetch(fetched: FetchPageResult) -> bool:
+    error = (fetched.error or "").casefold()
+    return not fetched.ok and "robots" in error and "blocked" in error
+
+
 def _online_evidence_from_gap(
     *,
     gap: EvidenceGapItem,
@@ -309,7 +324,11 @@ def _filled_gaps(
             filled_gap_ids.append(gap.id)
             all_candidate_ids.extend(new_candidate_ids)
         updated_gaps.append(
-            gap.model_copy(update={"evidence_ids": _unique_ids(gap.evidence_ids + new_candidate_ids)})
+            gap.model_copy(
+                update={
+                    "evidence_ids": _unique_ids(gap.evidence_ids + new_candidate_ids)
+                }
+            )
         )
     return updated_gaps, _unique_ids(filled_gap_ids), _unique_ids(all_candidate_ids)
 
