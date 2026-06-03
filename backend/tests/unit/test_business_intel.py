@@ -533,6 +533,54 @@ def test_report_release_gate_blocks_missing_source_tokens() -> None:
     assert "report_citation_resolves" in {issue.rule_id for issue in gate.issues}
 
 
+def test_report_release_gate_resolves_rag_chunk_source_tokens() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        report_md="Cursor publishes pricing. [source:evidence-1#chunk:0]",
+        evidence_ids=["evidence-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert gate.allowed is True
+    assert "report_citation_resolves" not in {issue.rule_id for issue in gate.issues}
+
+
 def test_business_qa_evaluator_flags_stale_evidence_and_broken_claim_links() -> None:
     plan = build_business_intel_plan(
         topic="Cursor vs Copilot pricing comparison",

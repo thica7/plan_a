@@ -283,13 +283,13 @@ def _report_citation_quality_issues(
         if not STRONG_CONCLUSION_RE.search(line):
             continue
         weak = [
-            evidence_by_token[token]
+            evidence_by_token[normalized]
             for token in _cited_source_tokens(line)
-            if token in evidence_by_token
+            if (normalized := _normalize_source_token(token)) in evidence_by_token
             and (
-                evidence_by_token[token].source_type != "webpage_verified"
-                or evidence_by_token[token].reliability_score < MIN_RELEASE_SOURCE_CONFIDENCE
-                or evidence_by_token[token].quality_label in BAD_QUALITY_LABELS
+                evidence_by_token[normalized].source_type != "webpage_verified"
+                or evidence_by_token[normalized].reliability_score < MIN_RELEASE_SOURCE_CONFIDENCE
+                or evidence_by_token[normalized].quality_label in BAD_QUALITY_LABELS
             )
         ]
         if not weak:
@@ -323,7 +323,7 @@ def _missing_report_citation_issues(
         {
             token
             for token in _cited_source_tokens(report_version.report_md)
-            if token not in evidence_by_token
+            if _normalize_source_token(token) not in evidence_by_token
         }
     )
     if not missing:
@@ -429,7 +429,13 @@ def _gate_issue(
 
 
 def _cited_source_tokens(line: str) -> list[str]:
-    return re.findall(r"\[source:([A-Za-z0-9_.:-]+)\]", line)
+    return re.findall(r"\[source:([A-Za-z0-9_.:#-]+)\]", line)
+
+
+def _normalize_source_token(token: str) -> str:
+    """Resolve chunk-level RAG citations back to their EvidenceRecord id."""
+
+    return token.split("#", 1)[0]
 
 
 def _mapping_value(value: object, key: str) -> object:
