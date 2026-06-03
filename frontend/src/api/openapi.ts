@@ -3041,7 +3041,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "preferred_dimension" | "source_preference" | "writing_preference" | "risk_preference" | "correction";
+            kind: "preferred_dimension" | "source_preference" | "writing_preference" | "risk_preference" | "failure_pattern" | "qa_policy" | "correction";
             /**
              * Status
              * @default candidate

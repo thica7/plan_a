@@ -39,6 +39,8 @@ MemoryCandidateKind = Literal[
     "source_preference",
     "writing_preference",
     "risk_preference",
+    "failure_pattern",
+    "qa_policy",
     "correction",
 ]
 MemoryCandidateStatus = Literal["candidate", "confirmed", "rejected", "archived"]

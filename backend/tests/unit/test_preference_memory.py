@@ -15,7 +15,8 @@ def test_preference_memory_redacts_feedback_and_recalls_confirmed_candidates() -
             target_id="report-1",
             message=(
                 "Email user@example.com. Prefer official pricing docs, concise battlecard "
-                "tables, and explicit evidence gap risks."
+                "tables, explicit evidence gap risks, and QA release gate rules that must "
+                "block redo regressions."
             ),
             tags=[],
         )
@@ -41,7 +42,10 @@ def test_preference_memory_redacts_feedback_and_recalls_confirmed_candidates() -
         "source_preference",
         "writing_preference",
         "risk_preference",
+        "failure_pattern",
+        "qa_policy",
     }
+    assert any(candidate.kind == "qa_policy" for candidate in recall.candidates)
     assert recall.candidates
     assert recall.candidates[0].status == "confirmed"
     assert recall.candidates[0].used_count == 1

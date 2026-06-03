@@ -472,6 +472,8 @@ export type MemoryCandidateKind =
   | "source_preference"
   | "writing_preference"
   | "risk_preference"
+  | "failure_pattern"
+  | "qa_policy"
   | "correction";
 export type MemoryCandidateStatus = "candidate" | "confirmed" | "rejected" | "archived";
 

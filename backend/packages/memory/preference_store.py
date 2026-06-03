@@ -16,7 +16,6 @@ from packages.schema.enterprise import (
     UserFeedbackRecord,
 )
 
-
 _DIMENSION_KEYWORDS: dict[str, tuple[str, ...]] = {
     "pricing": ("pricing", "price", "cost", "seat", "package", "费用", "价格", "定价"),
     "security": ("security", "sso", "saml", "soc", "iso", "scim", "安全", "合规"),
@@ -53,6 +52,29 @@ _RISK_KEYWORDS = (
     "风险",
     "不确定",
     "证据不足",
+)
+
+_FAILURE_KEYWORDS = (
+    "failed",
+    "failure",
+    "regression",
+    "retry",
+    "redo",
+    "re-run",
+    "rerun",
+    "blocked",
+    "blocker",
+    "defect",
+)
+_QA_POLICY_KEYWORDS = (
+    "qa",
+    "quality gate",
+    "release gate",
+    "policy",
+    "must",
+    "require",
+    "threshold",
+    "acceptance",
 )
 
 
@@ -202,6 +224,36 @@ class PreferenceMemoryStore:
                     tags=["risk", "evidence_gap"],
                     weight=0.8,
                     confidence=0.8,
+                    auto_confirm=auto_confirm,
+                )
+            )
+        if _has_any(feedback.message, _FAILURE_KEYWORDS) or feedback.feedback_type == "rejection":
+            candidates.append(
+                self._candidate(
+                    feedback,
+                    kind="failure_pattern",
+                    statement=(
+                        "Treat repeated blockers, redo requests, or quality regressions as "
+                        "failure patterns to check before the next run is released."
+                    ),
+                    tags=["failure_pattern", "redo", *tags[:3]],
+                    weight=0.84,
+                    confidence=0.8,
+                    auto_confirm=auto_confirm,
+                )
+            )
+        if _has_any(feedback.message, _QA_POLICY_KEYWORDS):
+            candidates.append(
+                self._candidate(
+                    feedback,
+                    kind="qa_policy",
+                    statement=(
+                        "Apply this feedback as a QA policy: enforce explicit evidence, "
+                        "release-gate thresholds, and reviewer-required checks before publish."
+                    ),
+                    tags=["qa_policy", "quality_gate", *tags[:3]],
+                    weight=0.86,
+                    confidence=0.82,
                     auto_confirm=auto_confirm,
                 )
             )
@@ -411,7 +463,9 @@ class PreferenceMemoryStore:
         updated = candidate.model_copy(
             update={"used_count": candidate.used_count + 1, "updated_at": datetime.utcnow()}
         )
-        return self.upsert_candidate(updated).model_copy(update={"match_score": candidate.match_score})
+        return self.upsert_candidate(updated).model_copy(
+            update={"match_score": candidate.match_score}
+        )
 
     def _connect(self) -> sqlite3.Connection:
         if self._memory_conn is not None:
