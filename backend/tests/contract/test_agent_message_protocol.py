@@ -135,6 +135,9 @@ async def test_agent_message_consumption_populates_subagent_context() -> None:
             "dimension": "pricing",
             "competitor": "A",
             "homepage_hint": "x" * 500,
+            "task_id": "collector-pricing-a",
+            "task_priority": "high",
+            "task_max_turns": 3,
         },
     )
 
@@ -147,6 +150,8 @@ async def test_agent_message_consumption_populates_subagent_context() -> None:
 
     assert context.messages[-1]["role"] == "agent_message"
     assert '"message_type": "collect_task"' in context.messages[-1]["content"]
+    assert '"task_id": "collector-pricing-a"' in context.messages[-1]["content"]
+    assert '"task_max_turns": 3' in context.messages[-1]["content"]
     assert "homepage_hint" not in context.messages[-1]["content"]
     consume_span = next(
         span

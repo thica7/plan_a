@@ -65,6 +65,7 @@ from packages.schema.messages import validate_agent_message_payload
 from packages.schema.models import (
     AgentMessage,
     AnalysisPlan,
+    AnalysisPlanTask,
     CompetitorCandidate,
     CompetitorDiscovery,
     QCIssue,
@@ -255,6 +256,7 @@ class RunService(
                 name: homepage_verifications[name].verified for name in competitors
             },
         )
+        self._refresh_task_decomposition(plan)
         detail = RunDetail(
             id=run_id,
             idempotency_key=idempotency_key,
@@ -395,6 +397,174 @@ class RunService(
         record = self._runs.get(run_id)
         return bool(record and record.pending_interrupts)
 
+    def _refresh_task_decomposition(self, plan: AnalysisPlan) -> None:
+        plan.task_decomposition = self._build_task_decomposition(plan)
+
+    def _build_task_decomposition(self, plan: AnalysisPlan) -> list[AnalysisPlanTask]:
+        tasks: list[AnalysisPlanTask] = []
+        for competitor in plan.competitors:
+            for dimension in plan.dimensions:
+                priority = self._task_priority(plan, dimension)
+                collector_id = self._plan_task_id("collector", dimension, competitor)
+                tasks.append(
+                    AnalysisPlanTask(
+                        id=collector_id,
+                        stage="collector",
+                        competitor=competitor,
+                        dimension=dimension,
+                        priority=priority,
+                        max_turns=self._adaptive_task_max_turns(
+                            base=self._settings.collector_react_max_turns,
+                            priority=priority,
+                        ),
+                        reason=self._task_reason(plan, dimension, competitor),
+                    )
+                )
+                tasks.append(
+                    AnalysisPlanTask(
+                        id=self._plan_task_id("analyst", dimension, competitor),
+                        stage="analyst",
+                        competitor=competitor,
+                        dimension=dimension,
+                        priority=priority,
+                        max_turns=self._adaptive_task_max_turns(
+                            base=self._settings.analyst_react_max_turns,
+                            priority=priority,
+                        ),
+                        reason="Analyze the collected slice with schema-first source support.",
+                        depends_on=[collector_id],
+                    )
+                )
+                if self._dimension_uses_user_research(dimension):
+                    tasks.append(
+                        AnalysisPlanTask(
+                            id=self._plan_task_id("survey_interview", dimension, competitor),
+                            stage="survey_interview",
+                            competitor=competitor,
+                            dimension=dimension,
+                            priority=priority,
+                            max_turns=1,
+                            reason=(
+                                "Generate user-research evidence for persona or "
+                                "buying criteria."
+                            ),
+                            depends_on=[collector_id],
+                        )
+                    )
+        return tasks
+
+    def _collector_task_max_turns(
+        self, plan: AnalysisPlan, dimension: str, competitor: str | None = None
+    ) -> int:
+        return self._plan_task_max_turns(
+            plan,
+            stage="collector",
+            dimension=dimension,
+            competitor=competitor,
+            default=self._settings.collector_react_max_turns,
+        )
+
+    def _analyst_task_max_turns(
+        self, plan: AnalysisPlan, dimension: str, competitor: str | None = None
+    ) -> int:
+        return self._plan_task_max_turns(
+            plan,
+            stage="analyst",
+            dimension=dimension,
+            competitor=competitor,
+            default=self._settings.analyst_react_max_turns,
+        )
+
+    def _plan_task_metadata(
+        self, plan: AnalysisPlan, stage: str, dimension: str, competitor: str
+    ) -> dict[str, object]:
+        task = self._plan_task(plan, stage, dimension, competitor)
+        if task is None:
+            return {}
+        return {
+            "task_id": task.id,
+            "task_priority": task.priority,
+            "task_max_turns": task.max_turns,
+            "task_reason": task.reason,
+            "depends_on": list(task.depends_on),
+        }
+
+    def _plan_task_max_turns(
+        self,
+        plan: AnalysisPlan,
+        *,
+        stage: str,
+        dimension: str,
+        competitor: str | None,
+        default: int,
+    ) -> int:
+        task = self._plan_task(plan, stage, dimension, competitor)
+        if task is not None:
+            return task.max_turns
+        candidates = [
+            item.max_turns
+            for item in plan.task_decomposition
+            if item.stage == stage and item.dimension.casefold() == dimension.casefold()
+        ]
+        return max(candidates, default=default)
+
+    def _plan_task(
+        self, plan: AnalysisPlan, stage: str, dimension: str, competitor: str | None
+    ) -> AnalysisPlanTask | None:
+        competitor_key = competitor.casefold() if competitor else None
+        dimension_key = dimension.casefold()
+        return next(
+            (
+                task
+                for task in plan.task_decomposition
+                if task.stage == stage
+                and task.dimension.casefold() == dimension_key
+                and (
+                    competitor_key is None
+                    or (task.competitor or "").casefold() == competitor_key
+                )
+            ),
+            None,
+        )
+
+    def _adaptive_task_max_turns(self, *, base: int, priority: str) -> int:
+        base = max(1, min(6, base))
+        if priority == "low":
+            return 1
+        if priority == "medium":
+            return min(base, 2)
+        return base
+
+    def _task_priority(
+        self, plan: AnalysisPlan, dimension: str
+    ) -> Literal["low", "medium", "high"]:
+        dimension_key = dimension.casefold()
+        high_risk_tokens = ("security", "compliance", "privacy", "sso", "enterprise", "pricing")
+        if plan.complexity == "high" or any(token in dimension_key for token in high_risk_tokens):
+            return "high"
+        if plan.complexity == "low" and len(plan.competitors) * len(plan.dimensions) <= 2:
+            return "low"
+        return "medium"
+
+    def _task_reason(self, plan: AnalysisPlan, dimension: str, competitor: str) -> str:
+        return (
+            f"{plan.competitor_layer} {plan.scenario_id or 'auto'} branch for "
+            f"{competitor} / {dimension}."
+        )
+
+    def _dimension_uses_user_research(self, dimension: str) -> bool:
+        key = dimension.casefold()
+        return any(token in key for token in ("persona", "user", "review", "buying"))
+
+    def _plan_task_id(self, stage: str, dimension: str, competitor: str) -> str:
+        raw = f"{stage}|{dimension.casefold()}|{competitor.casefold()}"
+        digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:10]
+        return f"{stage}-{self._task_slug(dimension)}-{self._task_slug(competitor)}-{digest}"
+
+    def _task_slug(self, value: str) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
+        return slug[:40] or "item"
+
     async def resume(self, run_id: str, request: HitlResumeRequest) -> RunDetail | None:
         record = self._runs.get(run_id)
         if record is None:
@@ -406,6 +576,7 @@ class RunService(
                     request.dimensions,
                     require_core_schema=self._plan_requires_core_schema(record.detail),
                 )
+                self._refresh_task_decomposition(record.detail.plan)
             memory_feedback_payload = self._capture_hitl_memory_feedback(record, request)
             if memory_feedback_payload is not None:
                 self._refresh_quality_metrics(record.detail)
@@ -457,6 +628,7 @@ class RunService(
                 request.dimensions,
                 require_core_schema=self._plan_requires_core_schema(record.detail),
             )
+            self._refresh_task_decomposition(record.detail.plan)
         memory_feedback_payload = self._capture_hitl_memory_feedback(record, request)
         if memory_feedback_payload is not None:
             self._refresh_quality_metrics(record.detail)
@@ -1157,6 +1329,7 @@ class RunService(
                 decision.dimensions,
                 require_core_schema=self._plan_requires_core_schema(detail),
             )
+            self._refresh_task_decomposition(detail.plan)
         return decision
 
     def _schedule_hitl_timeout(self, record: RunRecord, stage: str) -> None:
@@ -1497,6 +1670,9 @@ class RunService(
             "redo_scope",
             "branch_count",
             "count",
+            "task_id",
+            "task_priority",
+            "task_max_turns",
         ):
             if key in payload:
                 compact_payload[key] = payload[key]

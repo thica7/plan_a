@@ -51,6 +51,19 @@ class ReflectionRecord(BaseModel):
     suggested_redos: list[RedoScope] = Field(default_factory=list)
 
 
+class AnalysisPlanTask(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    stage: Literal["collector", "analyst", "survey_interview"]
+    competitor: str | None = None
+    dimension: str
+    priority: Literal["low", "medium", "high"] = "medium"
+    max_turns: int = Field(default=1, ge=1, le=6)
+    reason: str = ""
+    depends_on: list[str] = Field(default_factory=list)
+
+
 class AnalysisPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -67,6 +80,7 @@ class AnalysisPlan(BaseModel):
     memory_recall_score: int = Field(default=0, ge=0, le=100)
     homepage_hints: dict[str, str] = Field(default_factory=dict)
     homepage_verified: dict[str, bool] = Field(default_factory=dict)
+    task_decomposition: list[AnalysisPlanTask] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

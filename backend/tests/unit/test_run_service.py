@@ -286,6 +286,100 @@ async def test_topic_only_run_discovers_competitors_in_planner() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_run_builds_adaptive_task_decomposition() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            collector_react_max_turns=3,
+            analyst_react_max_turns=3,
+        ),
+    )
+
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Cursor buyer research",
+            competitors=["Cursor"],
+            dimensions=["pricing", "persona"],
+            execution_mode="real",
+        )
+    )
+
+    tasks = detail.plan.task_decomposition
+    pricing_collector = next(
+        task
+        for task in tasks
+        if task.stage == "collector" and task.dimension == "pricing"
+    )
+    persona_collector = next(
+        task
+        for task in tasks
+        if task.stage == "collector" and task.dimension == "persona"
+    )
+    persona_survey = next(
+        task
+        for task in tasks
+        if task.stage == "survey_interview" and task.dimension == "persona"
+    )
+
+    assert {task.stage for task in tasks} >= {"collector", "analyst", "survey_interview"}
+    assert pricing_collector.priority == "high"
+    assert pricing_collector.max_turns == 3
+    assert persona_collector.priority == "medium"
+    assert persona_collector.max_turns == 2
+    assert persona_survey.depends_on == [persona_collector.id]
+
+
+@pytest.mark.asyncio
+async def test_planner_complexity_refreshes_task_decomposition_budget() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            collector_react_max_turns=3,
+            analyst_react_max_turns=3,
+        ),
+    )
+
+    async def fake_complete_json(*, system: str, user: str, schema_hint: str) -> dict:
+        return {"complexity": "low", "homepage_hints": {"Cursor": "https://cursor.com"}}
+
+    service._llm.complete_json = fake_complete_json  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Cursor feature check",
+            competitors=["Cursor"],
+            dimensions=["feature"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    await service._real_planner_step(record)
+
+    task = record.detail.plan.task_decomposition[0]
+    message = record.detail.agent_messages[-1]
+    plan_payload = message.payload["plan"]
+
+    assert record.detail.plan.complexity == "low"
+    assert task.stage == "collector"
+    assert task.max_turns == 1
+    assert service._collector_task_max_turns(record.detail.plan, "feature", "Cursor") == 1
+    assert service._analyst_task_max_turns(record.detail.plan, "feature", "Cursor") == 1
+    assert plan_payload["task_decomposition"][0]["max_turns"] == 1
+
+
+@pytest.mark.asyncio
 async def test_topic_only_planner_filters_phantom_discovery_with_homepage_gate() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

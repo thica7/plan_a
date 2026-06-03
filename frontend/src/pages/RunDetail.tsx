@@ -228,6 +228,7 @@ export function RunDetail() {
             <span>Layer {detail.plan.competitor_layer}</span>
             <span>Scenario {detail.plan.scenario_id ?? "auto"}</span>
             <span>QA rules {detail.plan.qa_rule_ids.length}</span>
+            <span>Tasks {detail.plan.task_decomposition.length}</span>
             {detail.plan.qa_rule_ids.slice(0, 4).map((ruleId) => (
               <span key={ruleId}>{ruleId}</span>
             ))}

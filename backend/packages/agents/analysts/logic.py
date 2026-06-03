@@ -102,7 +102,8 @@ class AnalystAgentMixin:
             for competitor in detail.plan.competitors
             for item in self._qa_feedback_for_branch(detail, "analyst", dimension, competitor)
         ]
-        for turn in range(1, self._settings.analyst_react_max_turns + 1):
+        max_turns = self._analyst_task_max_turns(detail.plan, dimension)
+        for turn in range(1, max_turns + 1):
             payload = await self._trace_llm_json(
                 record,
                 agent="analyst",
@@ -202,7 +203,7 @@ class AnalystAgentMixin:
                     )
                     if (
                         observation["unknown_source_ids"]
-                        and turn < self._settings.analyst_react_max_turns
+                        and turn < max_turns
                     ):
                         continue
                 return self._ensure_analyst_citations(detail, dimension, payload, normalized)
@@ -334,7 +335,8 @@ class AnalystAgentMixin:
         inspected = False
         validated_source_ids: set[str] = set()
         qa_feedback = self._qa_feedback_for_branch(detail, "analyst", dimension, competitor)
-        for turn in range(1, self._settings.analyst_react_max_turns + 1):
+        max_turns = self._analyst_task_max_turns(detail.plan, dimension, competitor)
+        for turn in range(1, max_turns + 1):
             payload = await self._trace_llm_json(
                 record,
                 agent="analyst",
@@ -439,7 +441,7 @@ class AnalystAgentMixin:
                     )
                     if (
                         observation["unknown_source_ids"]
-                        and turn < self._settings.analyst_react_max_turns
+                        and turn < max_turns
                     ):
                         continue
                 return payload
@@ -456,6 +458,9 @@ class AnalystAgentMixin:
         context = SubagentContext(run_id=detail.id, agent="analyst", subagent=branch_id)
         detail.current_node = "analyst"
         qa_feedback = self._qa_feedback_for_branch(detail, "analyst", dimension, competitor)
+        task_metadata = self._plan_task_metadata(
+            detail.plan, "analyst", dimension, competitor
+        )
         task_message = self._append_agent_message(
             record,
             from_agent="analyst_dispatch",
@@ -472,6 +477,7 @@ class AnalystAgentMixin:
                     )
                 ],
                 "qa_feedback": qa_feedback,
+                **task_metadata,
             },
         )
         self._consume_agent_message(record, task_message, consumer_agent="analyst", context=context)
@@ -481,7 +487,12 @@ class AnalystAgentMixin:
             "analyst",
             branch_id,
             f"Calling {competitor} / {dimension} analyst.",
-            {"context": context.metadata(), "dimension": dimension, "competitor": competitor},
+            {
+                "context": context.metadata(),
+                "dimension": dimension,
+                "competitor": competitor,
+                **task_metadata,
+            },
         )
         dimension_sources = [
             source.model_dump(mode="json")
@@ -521,6 +532,7 @@ class AnalystAgentMixin:
                         "context": context.metadata(),
                         "dimension": dimension,
                         "competitor": competitor,
+                        **task_metadata,
                     },
                 )
                 return
@@ -563,6 +575,7 @@ class AnalystAgentMixin:
                             "context": context.metadata(),
                             "dimension": dimension,
                             "competitor": competitor,
+                            **task_metadata,
                         },
                     )
                     return
@@ -620,6 +633,7 @@ class AnalystAgentMixin:
                 "context": context.metadata(),
                 "dimension": dimension,
                 "competitor": competitor,
+                **task_metadata,
             },
         )
 

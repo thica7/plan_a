@@ -73,6 +73,7 @@ class PlannerAgentMixin:
         complexity = payload.get("complexity")
         if complexity in {"low", "medium", "high"}:
             detail.plan.complexity = complexity
+        self._refresh_task_decomposition(detail.plan)
         hints = payload.get("homepage_hints")
         if isinstance(hints, dict):
             selected_competitors = {name.casefold() for name in detail.plan.competitors}

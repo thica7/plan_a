@@ -18,7 +18,19 @@ export interface AnalysisPlan {
   scenario_recommended_dimensions: string[];
   qa_rule_ids: string[];
   homepage_hints: Record<string, string>;
+  task_decomposition: AnalysisPlanTask[];
   created_at: string;
+}
+
+export interface AnalysisPlanTask {
+  id: string;
+  stage: "collector" | "analyst" | "survey_interview";
+  competitor?: string | null;
+  dimension: string;
+  priority: "low" | "medium" | "high";
+  max_turns: number;
+  reason: string;
+  depends_on: string[];
 }
 
 export interface RedoScope {

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -48,6 +48,11 @@ class CollectTaskMessagePayload(_MessagePayload):
     required_output_schema: str | None = None
     qa_feedback: list[dict[str, Any]] = Field(default_factory=list)
     mode: str | None = None
+    task_id: str | None = None
+    task_priority: Literal["low", "medium", "high"] | None = None
+    task_max_turns: int | None = Field(default=None, ge=1, le=6)
+    task_reason: str | None = None
+    depends_on: list[str] = Field(default_factory=list)
 
 
 class RawSourceCollectionMessagePayload(_MessagePayload):
@@ -80,6 +85,11 @@ class AnalysisTaskMessagePayload(_MessagePayload):
     dimension: str
     source_ids: list[str] = Field(default_factory=list)
     qa_feedback: list[dict[str, Any]] = Field(default_factory=list)
+    task_id: str | None = None
+    task_priority: Literal["low", "medium", "high"] | None = None
+    task_max_turns: int | None = Field(default=None, ge=1, le=6)
+    task_reason: str | None = None
+    depends_on: list[str] = Field(default_factory=list)
 
 
 class KBCacheEntryMessagePayload(_MessagePayload):

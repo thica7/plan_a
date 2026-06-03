@@ -69,7 +69,8 @@ class CollectorAgentMixin:
         observations: list[dict[str, object]] = []
         fetched_by_url: dict[str, Any] = {}
         added = 0
-        for turn in range(1, self._settings.collector_react_max_turns + 1):
+        max_turns = self._collector_task_max_turns(detail.plan, dimension)
+        for turn in range(1, max_turns + 1):
             payload = await self._trace_llm_json(
                 record,
                 agent="collector",
@@ -171,7 +172,8 @@ class CollectorAgentMixin:
         observations: list[dict[str, object]] = []
         fetched_by_url: dict[str, Any] = {}
         qa_feedback = self._qa_feedback_for_branch(detail, "collector", dimension, competitor)
-        for turn in range(1, self._settings.collector_react_max_turns + 1):
+        max_turns = self._collector_task_max_turns(detail.plan, dimension, competitor)
+        for turn in range(1, max_turns + 1):
             payload = await self._trace_llm_json(
                 record,
                 agent="collector",
@@ -1413,6 +1415,9 @@ class CollectorAgentMixin:
         branch_id = self._analyst_branch_id(dimension, competitor)
         context = SubagentContext(run_id=detail.id, agent="collector", subagent=branch_id)
         qa_feedback = self._qa_feedback_for_branch(detail, "collector", dimension, competitor)
+        task_metadata = self._plan_task_metadata(
+            detail.plan, "collector", dimension, competitor
+        )
         detail.current_node = "collector"
         task_message = self._append_agent_message(
             record,
@@ -1427,6 +1432,7 @@ class CollectorAgentMixin:
                 "homepage_hint": detail.plan.homepage_hints.get(competitor),
                 "required_output_schema": "RawSource[]",
                 "qa_feedback": qa_feedback,
+                **task_metadata,
             },
         )
         self._consume_agent_message(
@@ -1438,12 +1444,18 @@ class CollectorAgentMixin:
             "collector",
             branch_id,
             f"Calling {competitor} / {dimension} collector.",
-            {"context": context.metadata(), "dimension": dimension, "competitor": competitor},
+            {
+                "context": context.metadata(),
+                "dimension": dimension,
+                "competitor": competitor,
+                **task_metadata,
+            },
         )
         sources: list[RawSource] = []
         collect_payload: dict[str, object] = {
             "provider": self._settings.web_search_provider,
             "results": [],
+            **task_metadata,
         }
         if self._should_collect_official_first(dimension):
             try:
