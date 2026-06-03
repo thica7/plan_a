@@ -120,6 +120,7 @@ def build_enterprise_evalops_report(
         run.id for run in recent_runs if not _run_has_decision_replay_signal(run)
     ]
     quality_chain_steps = _quality_chain_steps(comparisons, recent_runs)
+    memory_recall_rate = _memory_recall_rate(recent_runs)
     user_research_evidence_rate = _user_research_evidence_rate(recent_runs)
     rag_gap_fill_context_rate = _rag_gap_fill_context_rate(recent_runs)
     hitl_redo_loop_rate = _hitl_redo_loop_rate(recent_runs)
@@ -244,6 +245,7 @@ def build_enterprise_evalops_report(
         real_llm_rate=real_llm_rate,
         real_quality_chain_rate=real_quality_chain_rate,
         compliance_pass_rate=compliance_pass_rate,
+        memory_recall_rate=memory_recall_rate,
         user_research_evidence_rate=user_research_evidence_rate,
         rag_gap_fill_context_rate=rag_gap_fill_context_rate,
         rag_gap_fill_section_rate=rag_gap_fill_section_rate,
@@ -264,6 +266,7 @@ def build_enterprise_evalops_report(
         _metric("claim_risk_section_score", claim_risk_section_rate, 1.0, "ratio"),
         _metric("scenario_checklist_section_score", scenario_checklist_section_rate, 1.0, "ratio"),
         _metric("memory_context_section_score", memory_context_section_rate, 1.0, "ratio"),
+        _metric("memory_recall_rate", memory_recall_rate, 1.0, "ratio"),
         _metric("user_research_section_score", user_research_section_rate, 1.0, "ratio"),
         _metric("user_research_evidence_rate", user_research_evidence_rate, 1.0, "ratio"),
         _metric("rag_gap_fill_context_rate", rag_gap_fill_context_rate, 1.0, "ratio"),
@@ -336,6 +339,7 @@ def build_enterprise_evalops_report(
         hitl_enabled_run_rate=round(hitl_enabled_run_rate, 3),
         human_correction_rate=round(human_correction_rate, 3),
         hitl_redo_loop_rate=round(hitl_redo_loop_rate, 3),
+        memory_recall_rate=round(memory_recall_rate, 3),
         user_research_evidence_rate=round(user_research_evidence_rate, 3),
         rag_gap_fill_context_rate=round(rag_gap_fill_context_rate, 3),
         rag_gap_fill_section_rate=round(rag_gap_fill_section_rate, 3),
@@ -385,6 +389,7 @@ def _golden_cases(
     real_llm_rate: float,
     real_quality_chain_rate: float,
     compliance_pass_rate: float,
+    memory_recall_rate: float,
     user_research_evidence_rate: float,
     rag_gap_fill_context_rate: float,
     rag_gap_fill_section_rate: float,
@@ -494,6 +499,14 @@ def _golden_cases(
             "golden.compliance",
             "Compliance gate",
             round(compliance_pass_rate * 100),
+            100,
+            target_run_id,
+            baseline_run_id,
+        ),
+        _case(
+            "golden.memory_recall",
+            "MemoryAgent recall when confirmed guidance is used",
+            round(memory_recall_rate * 100),
             100,
             target_run_id,
             baseline_run_id,
@@ -791,6 +804,68 @@ def _user_research_evidence_rate(runs: list[RunDetail]) -> float:
     if not applicable:
         return 1.0
     return _ratio([_run_has_user_research_evidence(run) for run in applicable])
+
+
+def _memory_recall_rate(runs: list[RunDetail]) -> float:
+    applicable = [run for run in runs if _run_needs_memory_recall(run)]
+    if not applicable:
+        return 1.0
+    return _ratio([_run_has_memory_recall(run) for run in applicable])
+
+
+def _run_needs_memory_recall(run: RunDetail) -> bool:
+    return bool(
+        run.plan.memory_candidate_ids
+        or run.plan.memory_prompt_context
+        or _run_has_memory_recall_event(run)
+    )
+
+
+def _run_has_memory_recall(run: RunDetail) -> bool:
+    if (
+        run.plan.memory_candidate_ids
+        and run.plan.memory_prompt_context
+        and run.plan.memory_recall_score > 0
+    ):
+        return True
+    return _run_has_memory_recall_event(run)
+
+
+def _run_has_memory_recall_event(run: RunDetail) -> bool:
+    for message in run.agent_messages:
+        if message.message_type != "memory.recalled":
+            continue
+        candidate_ids = message.payload.get("candidate_ids") or message.payload.get(
+            "memory_candidate_ids"
+        )
+        prompt_context = message.payload.get("prompt_context")
+        score = message.payload.get("score") or message.payload.get("recall_score")
+        if candidate_ids and prompt_context and _positive_number(score):
+            return True
+
+    for span in run.trace_spans:
+        if span.agent != "memory" and span.name not in {"memory_recall", "memory.recalled"}:
+            continue
+        has_candidate = _positive_metadata_number(
+            span.metadata, "candidate_count", "memory_candidate_count"
+        )
+        has_score = _positive_metadata_number(span.metadata, "recall_score", "score")
+        has_context = bool(
+            span.metadata.get("prompt_context")
+            or span.metadata.get("memory_prompt_context")
+            or span.metadata.get("context_count")
+        )
+        if has_candidate and has_context and has_score:
+            return True
+    return False
+
+
+def _positive_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+
+
+def _positive_metadata_number(metadata: dict[str, object], *keys: str) -> bool:
+    return any(_positive_number(metadata.get(key)) for key in keys)
 
 
 def _run_needs_user_research(run: RunDetail) -> bool:
@@ -1091,6 +1166,11 @@ def _recommendations(
     if metric_names["memory_context_section_score"].status != "pass":
         recommendations.append(
             "Add Memory Context to reports that use confirmed MemoryAgent guidance."
+        )
+    if metric_names["memory_recall_rate"].status != "pass":
+        recommendations.append(
+            "Complete MemoryAgent recall by carrying candidate IDs, prompt context, "
+            "and recall score into the run plan or trace."
         )
     if metric_names["user_research_section_score"].status != "pass":
         recommendations.append(

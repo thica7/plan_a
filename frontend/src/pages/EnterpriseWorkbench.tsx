@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Bell,
+  Brain,
   Briefcase,
   CalendarClock,
   CheckCircle2,
@@ -1873,6 +1874,11 @@ function EvalOpsPanel({
           value={formatPercent(report.hitl_redo_loop_rate)}
         />
         <Metric
+          icon={<Brain size={17} aria-hidden />}
+          label="Memory recall"
+          value={formatPercent(report.memory_recall_rate)}
+        />
+        <Metric
           icon={<ListChecks size={17} aria-hidden />}
           label="User research"
           value={formatPercent(report.user_research_evidence_rate)}
@@ -1927,6 +1933,7 @@ function EvalOpsPanel({
         <span>Regressed {report.regressed_run_count}</span>
         <span>HITL {formatPercent(report.hitl_enabled_run_rate)}</span>
         <span>HITL loop {formatPercent(report.hitl_redo_loop_rate)}</span>
+        <span>Memory recall {formatPercent(report.memory_recall_rate)}</span>
         <span>User research {formatPercent(report.user_research_evidence_rate)}</span>
         <span>RAG context {formatPercent(report.rag_gap_fill_context_rate)}</span>
         <span>RAG section {formatPercent(report.rag_gap_fill_section_rate)}</span>

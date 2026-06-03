@@ -2610,6 +2610,11 @@ export interface components {
              */
             hitl_redo_loop_rate: number;
             /**
+             * Memory Recall Rate
+             * @default 1
+             */
+            memory_recall_rate: number;
+            /**
              * User Research Evidence Rate
              * @default 1
              */

@@ -85,6 +85,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.judge_fallback_reason == ""
     assert report.human_correction_rate == 0.25
     assert report.hitl_redo_loop_rate == 1.0
+    assert report.memory_recall_rate == 1.0
     assert report.user_research_evidence_rate == 1.0
     assert report.rag_gap_fill_context_rate == 1.0
     assert report.rag_gap_fill_section_rate == 1.0
@@ -100,7 +101,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         "decision_replay",
     }
     assert all(step.pass_rate == 1.0 for step in report.quality_chain_steps)
-    assert report.golden_set_size == 18
+    assert report.golden_set_size == 19
     assert report.golden_set_pass_rate >= 0.8
     assert report.golden_catalog_size >= 50
     assert report.golden_catalog_coverage_rate == 0.0
@@ -150,6 +151,10 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         for metric in report.metrics
     )
     assert any(
+        metric.name == "memory_recall_rate" and metric.status == "pass"
+        for metric in report.metrics
+    )
+    assert any(
         metric.name == "user_research_section_score" and metric.status == "pass"
         for metric in report.metrics
     )
@@ -163,6 +168,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     )
     assert any(case.case_id == "golden.scenario_checklist" for case in report.cases)
     assert any(case.case_id == "golden.compliance" for case in report.cases)
+    assert any(case.case_id == "golden.memory_recall" for case in report.cases)
     assert any(case.case_id == "golden.user_research_evidence" for case in report.cases)
     assert any(case.case_id == "golden.rag_gap_fill_context" for case in report.cases)
     assert any(case.case_id == "golden.hitl_redo_loop" for case in report.cases)
@@ -214,6 +220,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["real_quality_chain_rate"] == 1.0
     assert response.json()["decision_replay_rate"] == 1.0
     assert response.json()["hitl_redo_loop_rate"] == 1.0
+    assert response.json()["memory_recall_rate"] == 1.0
     assert response.json()["user_research_evidence_rate"] == 1.0
     assert response.json()["rag_gap_fill_context_rate"] == 1.0
     assert response.json()["rag_gap_fill_section_rate"] == 1.0
@@ -224,7 +231,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["real_quality_chain_failed_run_ids"] == []
     assert response.json()["decision_replay_failed_run_ids"] == []
     assert len(response.json()["quality_chain_steps"]) == 6
-    assert response.json()["golden_set_size"] == 18
+    assert response.json()["golden_set_size"] == 19
     assert response.json()["golden_catalog_size"] >= 50
     assert response.json()["compliance_pass_rate"] == 1.0
     assert response.json()["compliance_fail_count"] == 0
@@ -538,6 +545,32 @@ def test_enterprise_evalops_flags_missing_research_and_gap_fill_context() -> Non
         issue.kind == "metric" and issue.id == "hitl_redo_loop_rate"
         for issue in report.regression_gate_issues
     )
+
+
+def test_enterprise_evalops_flags_incomplete_memory_recall_chain() -> None:
+    target = _run_detail(
+        run_id="memory-gap-run",
+        execution_mode="real",
+        source_count=4,
+        quality_score=1.0,
+        report_md=_structured_report_md(),
+        project_id="project-a",
+    )
+    target.plan.memory_candidate_ids = ["memory-battlecard-1"]
+
+    report = build_enterprise_evalops_report([target])
+    metrics = {metric.name: metric for metric in report.metrics}
+    cases = {case.case_id: case for case in report.cases}
+
+    assert report.memory_recall_rate == 0.0
+    assert metrics["memory_recall_rate"].status == "fail"
+    assert cases["golden.memory_recall"].status == "fail"
+    assert report.regression_gate_status == "fail"
+    assert any(
+        issue.kind == "metric" and issue.id == "memory_recall_rate"
+        for issue in report.regression_gate_issues
+    )
+    assert any("MemoryAgent recall" in item for item in report.recommendations)
 
 
 def test_enterprise_evalops_accepts_reported_rag_gap_fill_context() -> None:

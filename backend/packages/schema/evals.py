@@ -94,6 +94,7 @@ class EvalOpsReport(BaseModel):
     hitl_enabled_run_rate: float = Field(ge=0.0, le=1.0)
     human_correction_rate: float = Field(ge=0.0, le=1.0)
     hitl_redo_loop_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    memory_recall_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     user_research_evidence_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     rag_gap_fill_context_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     rag_gap_fill_section_rate: float = Field(default=1.0, ge=0.0, le=1.0)
