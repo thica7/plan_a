@@ -47,6 +47,7 @@ import {
   listProjectEvidence,
   listProjectReportVersions,
   listSourceRegistry,
+  publishReportVersion,
   recallProjectMemory,
   reviewProjectSchemaSuggestion,
   startMonitorWorkflow,
@@ -150,6 +151,7 @@ export function EnterpriseWorkbench({
   const [isFillingGaps, setFillingGaps] = useState(false);
   const [isLoadingEvalOps, setLoadingEvalOps] = useState(false);
   const [isSubmittingReportApproval, setSubmittingReportApproval] = useState(false);
+  const [isPublishingReport, setPublishingReport] = useState(false);
   const [isSavingMemoryFeedback, setSavingMemoryFeedback] = useState(false);
   const [reviewingMemoryCandidateId, setReviewingMemoryCandidateId] = useState<string | null>(null);
   const [reviewingSchemaSuggestionId, setReviewingSchemaSuggestionId] = useState<string | null>(null);
@@ -568,6 +570,28 @@ export function EnterpriseWorkbench({
       setError(err instanceof Error ? err.message : "Unable to update report approval");
     } finally {
       setSubmittingReportApproval(false);
+    }
+  }
+
+  async function handlePublishReport() {
+    if (!selectedProject || !selectedVersion) return;
+    setPublishingReport(true);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const updated = await publishReportVersion(selectedVersion.id);
+      const [versionItems, gateValue] = await Promise.all([
+        listProjectReportVersions(selectedProject.id),
+        getReportReleaseGate(updated.id),
+      ]);
+      setVersions(versionItems);
+      setSelectedVersionId(updated.id);
+      setReleaseGate(gateValue);
+      setScanMessage(`Report v${updated.version_number} published.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to publish report");
+    } finally {
+      setPublishingReport(false);
     }
   }
 
@@ -1038,7 +1062,9 @@ export function EnterpriseWorkbench({
                   <ReportHistory
                     diff={diff}
                     isApprovalSubmitting={isSubmittingReportApproval}
+                    isPublishing={isPublishingReport}
                     onApproveReport={() => handleSignalReportApproval("approved")}
+                    onPublishReport={handlePublishReport}
                     onRejectReport={() => handleSignalReportApproval("rejected")}
                     onStartApproval={handleStartReportApproval}
                     releaseGate={releaseGate}
@@ -2855,7 +2881,9 @@ function buildReportSourceBundle(
 function ReportHistory({
   diff,
   isApprovalSubmitting,
+  isPublishing,
   onApproveReport,
+  onPublishReport,
   onRejectReport,
   onStartApproval,
   releaseGate,
@@ -2868,7 +2896,9 @@ function ReportHistory({
 }: {
   diff: ReportVersionDiff | null;
   isApprovalSubmitting: boolean;
+  isPublishing: boolean;
   onApproveReport: () => void;
+  onPublishReport: () => void;
   onRejectReport: () => void;
   onStartApproval: () => void;
   releaseGate: ReportReleaseGate | null;
@@ -2906,7 +2936,9 @@ function ReportHistory({
         {selectedVersion ? (
           <ReportApprovalPanel
             isSubmitting={isApprovalSubmitting}
+            isPublishing={isPublishing}
             onApprove={onApproveReport}
+            onPublish={onPublishReport}
             onReject={onRejectReport}
             onStart={onStartApproval}
             version={selectedVersion}
@@ -2942,19 +2974,24 @@ function ReportHistory({
 
 function ReportApprovalPanel({
   isSubmitting,
+  isPublishing,
   onApprove,
+  onPublish,
   onReject,
   onStart,
   version,
 }: {
   isSubmitting: boolean;
+  isPublishing: boolean;
   onApprove: () => void;
+  onPublish: () => void;
   onReject: () => void;
   onStart: () => void;
   version: ReportVersionRecord;
 }) {
   const canStart = !["in_review", "approved", "published", "archived"].includes(version.status);
   const canSignal = version.status === "in_review";
+  const canPublish = version.status === "approved";
   return (
     <section className={`report-approval-panel ${version.status}`}>
       <div>
@@ -2990,6 +3027,15 @@ function ReportApprovalPanel({
         >
           <AlertTriangle size={15} aria-hidden />
           Reject
+        </button>
+        <button
+          className="icon-text-button"
+          disabled={isSubmitting || isPublishing || !canPublish}
+          type="button"
+          onClick={onPublish}
+        >
+          <FileText size={15} aria-hidden />
+          {isPublishing ? "Publishing" : "Publish"}
         </button>
       </div>
     </section>
