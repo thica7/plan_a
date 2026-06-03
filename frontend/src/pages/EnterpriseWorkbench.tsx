@@ -766,17 +766,36 @@ export function EnterpriseWorkbench({
         report_md: trimmedReport,
         note,
       });
-      const [versionItems, diffValue, gateValue] = await Promise.all([
+      const [
+        versionItems,
+        diffValue,
+        gateValue,
+        memoryStatsValue,
+        memoryRecallValue,
+        memoryFeedbackValue,
+      ] = await Promise.all([
         listProjectReportVersions(selectedProject.id),
         getReportVersionDiff(updated.id),
         getReportReleaseGate(updated.id),
+        getProjectMemoryStats(selectedProject.id),
+        recallProjectMemory(selectedProject.id, {
+          query: `${selectedProject.topic} manual report correction`,
+          limit: 6,
+          includeUnconfirmed: true,
+        }),
+        listProjectMemoryFeedback(selectedProject.id),
       ]);
       setVersions(versionItems);
       setSelectedVersionId(updated.id);
       setDiff(diffValue);
       setReleaseGate(gateValue);
+      setMemoryStats(memoryStatsValue);
+      setMemoryRecall(memoryRecallValue);
+      setMemoryFeedback(memoryFeedbackValue);
       await refreshWorkspaceGovernance(selectedProject.workspace_id);
-      setScanMessage(`Manual report revision v${updated.version_number} saved as draft.`);
+      setScanMessage(
+        `Manual report revision v${updated.version_number} saved as draft and MemoryAgent refreshed.`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save manual report revision");
     } finally {
