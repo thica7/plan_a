@@ -18,6 +18,24 @@ from packages.schema.evals import (
 MANUAL_BASELINE_HOURS_PER_REPORT = 6.0
 AUTOMATION_FLOOR_HOURS_PER_REPORT = 0.08
 EVAL_REPORT_STATUSES = {"completed"}
+USER_RESEARCH_DIMENSION_HINTS = {
+    "persona",
+    "user",
+    "customer",
+    "buyer",
+    "review",
+    "feedback",
+    "adoption",
+    "switching",
+    "use_case",
+    "use case",
+}
+USER_RESEARCH_SOURCE_TYPES = {
+    "survey_simulated",
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+}
 
 
 def build_enterprise_evalops_report(
@@ -66,6 +84,9 @@ def build_enterprise_evalops_report(
         )
     ]
     quality_chain_steps = _quality_chain_steps(comparisons)
+    user_research_evidence_rate = _user_research_evidence_rate(recent_runs)
+    rag_gap_fill_context_rate = _rag_gap_fill_context_rate(recent_runs)
+    hitl_redo_loop_rate = _hitl_redo_loop_rate(recent_runs)
     delta_scores = [
         comparison.delta_score
         for comparison in comparisons
@@ -169,6 +190,9 @@ def build_enterprise_evalops_report(
         real_llm_rate=real_llm_rate,
         real_quality_chain_rate=real_quality_chain_rate,
         compliance_pass_rate=compliance_pass_rate,
+        user_research_evidence_rate=user_research_evidence_rate,
+        rag_gap_fill_context_rate=rag_gap_fill_context_rate,
+        hitl_redo_loop_rate=hitl_redo_loop_rate,
     )
     golden_set_pass_rate = _ratio([case.status == "pass" for case in cases])
     metrics = [
@@ -284,6 +308,9 @@ def _golden_cases(
     real_llm_rate: float,
     real_quality_chain_rate: float,
     compliance_pass_rate: float,
+    user_research_evidence_rate: float,
+    rag_gap_fill_context_rate: float,
+    hitl_redo_loop_rate: float,
 ) -> list[EvalOpsCaseResult]:
     target_run_id = comparisons[0].target_run_id if comparisons else None
     baseline_run_id = comparisons[0].baseline_run_id if comparisons else None
@@ -392,6 +419,30 @@ def _golden_cases(
             target_run_id,
             baseline_run_id,
         ),
+        _case(
+            "golden.user_research_evidence",
+            "User research evidence when persona/review dimensions are requested",
+            round(user_research_evidence_rate * 100),
+            100,
+            target_run_id,
+            baseline_run_id,
+        ),
+        _case(
+            "golden.rag_gap_fill_context",
+            "RAG gap-fill context when collector evidence gaps remain",
+            round(rag_gap_fill_context_rate * 100),
+            100,
+            target_run_id,
+            baseline_run_id,
+        ),
+        _case(
+            "golden.hitl_redo_loop",
+            "HITL or scoped redo loop when QA intervention is needed",
+            round(hitl_redo_loop_rate * 100),
+            100,
+            target_run_id,
+            baseline_run_id,
+        ),
     ]
 
 
@@ -440,6 +491,81 @@ def _quality_chain_steps(
             )
         )
     return steps
+
+
+def _user_research_evidence_rate(runs: list[RunDetail]) -> float:
+    applicable = [run for run in runs if _run_needs_user_research(run)]
+    if not applicable:
+        return 1.0
+    return _ratio([_run_has_user_research_evidence(run) for run in applicable])
+
+
+def _run_needs_user_research(run: RunDetail) -> bool:
+    return any(
+        any(
+            hint in dimension.casefold().replace("-", "_")
+            for hint in USER_RESEARCH_DIMENSION_HINTS
+        )
+        for dimension in run.plan.dimensions
+    )
+
+
+def _run_has_user_research_evidence(run: RunDetail) -> bool:
+    return any(source.source_type in USER_RESEARCH_SOURCE_TYPES for source in run.raw_sources)
+
+
+def _rag_gap_fill_context_rate(runs: list[RunDetail]) -> float:
+    applicable = [run for run in runs if _run_has_collector_gap_signal(run)]
+    if not applicable:
+        return 1.0
+    return _ratio([_run_has_rag_gap_fill_context(run) for run in applicable])
+
+
+def _run_has_collector_gap_signal(run: RunDetail) -> bool:
+    return any(
+        finding.target_agent == "collector" and finding.severity in {"warn", "blocker"}
+        for finding in run.qa_findings
+    )
+
+
+def _run_has_rag_gap_fill_context(run: RunDetail) -> bool:
+    report = run.report_md.casefold()
+    if "## rag gap fill" in report or "rag gap fill" in report:
+        return True
+    return any(
+        span.agent in {"rag_gap_fill", "evidence_gap"}
+        or span.name in {"rag_gap_fill", "fill_evidence_gaps"}
+        or "retrieval_contexts" in span.metadata
+        or "retrieval_record_count" in span.metadata
+        for span in run.trace_spans
+    )
+
+
+def _hitl_redo_loop_rate(runs: list[RunDetail]) -> float:
+    applicable = [
+        run
+        for run in runs
+        if (
+            run.hitl_enabled
+            or run.qa_findings
+            or run.revisions
+            or run.metrics.human_override_rate > 0
+        )
+    ]
+    if not applicable:
+        return 1.0
+    return _ratio([_run_has_hitl_or_redo_loop(run) for run in applicable])
+
+
+def _run_has_hitl_or_redo_loop(run: RunDetail) -> bool:
+    if run.revisions or run.metrics.human_override_rate > 0:
+        return True
+    return any(
+        "hitl" in message.message_type.casefold()
+        or "review" in message.message_type.casefold()
+        or "redo" in message.message_type.casefold()
+        for message in run.agent_messages
+    )
 
 
 def _quality_chain_step_passed(comparison: RunQualityComparison, step: str) -> bool:

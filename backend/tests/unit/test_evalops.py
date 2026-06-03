@@ -11,6 +11,7 @@ from packages.schema.models import (
     CompetitorKnowledge,
     KnowledgeClaim,
     PricingModel,
+    QCIssue,
     RawSource,
     RedoScope,
     RevisionRecord,
@@ -88,7 +89,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         "report_quality",
     }
     assert all(step.pass_rate == 1.0 for step in report.quality_chain_steps)
-    assert report.golden_set_size == 13
+    assert report.golden_set_size == 16
     assert report.golden_set_pass_rate >= 0.8
     assert report.report_quality_score >= 72
     assert report.source_recall >= 0.6
@@ -124,6 +125,9 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     )
     assert any(case.case_id == "golden.scenario_checklist" for case in report.cases)
     assert any(case.case_id == "golden.compliance" for case in report.cases)
+    assert any(case.case_id == "golden.user_research_evidence" for case in report.cases)
+    assert any(case.case_id == "golden.rag_gap_fill_context" for case in report.cases)
+    assert any(case.case_id == "golden.hitl_redo_loop" for case in report.cases)
     assert any(
         metric.name == "compliance_pass_rate" and metric.status == "pass"
         for metric in report.metrics
@@ -169,7 +173,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert "deterministic rubric" in response.json()["judge_fallback_reason"]
     assert response.json()["real_quality_chain_failed_run_ids"] == []
     assert len(response.json()["quality_chain_steps"]) == 3
-    assert response.json()["golden_set_size"] == 13
+    assert response.json()["golden_set_size"] == 16
     assert response.json()["compliance_pass_rate"] == 1.0
     assert response.json()["compliance_fail_count"] == 0
     assert any(
@@ -276,6 +280,43 @@ def test_enterprise_evalops_explains_real_quality_chain_failures() -> None:
     assert cases["golden.real_quality_chain"].status == "fail"
 
 
+def test_enterprise_evalops_flags_missing_research_and_gap_fill_context() -> None:
+    target = _run_detail(
+        run_id="persona-gap-run",
+        execution_mode="real",
+        source_count=4,
+        quality_score=1.0,
+        report_md=_structured_report_md(),
+        project_id="project-a",
+        dimensions=["persona"],
+        qa_findings=[
+            QCIssue(
+                id="missing-persona-survey",
+                severity="blocker",
+                detected_by="coverage",
+                target_agent="collector",
+                target_subagent="persona",
+                target_competitor="Cursor",
+                field_path="raw_sources[persona][Cursor]",
+                problem="Persona evidence needs user research and RAG gap fill.",
+                redo_scope=RedoScope(
+                    kind="collector",
+                    target_subagent="persona",
+                    target_competitor="Cursor",
+                    rationale="Collect persona user research.",
+                ),
+            )
+        ],
+    )
+
+    report = build_enterprise_evalops_report([target])
+    cases = {case.case_id: case for case in report.cases}
+
+    assert cases["golden.user_research_evidence"].status == "fail"
+    assert cases["golden.rag_gap_fill_context"].status == "fail"
+    assert cases["golden.hitl_redo_loop"].status == "fail"
+
+
 class _FakeRunService:
     def __init__(self, runs: list[RunDetail]) -> None:
         self._runs = {run.id: run for run in runs}
@@ -360,6 +401,8 @@ def _run_detail(
     status: str = "completed",
     human_override_rate: float = 0.0,
     revisions: list[RevisionRecord] | None = None,
+    dimensions: list[str] | None = None,
+    qa_findings: list[QCIssue] | None = None,
 ) -> RunDetail:
     sources = [
         RawSource(
@@ -387,7 +430,7 @@ def _run_detail(
         plan=AnalysisPlan(
             topic="Cursor vs Copilot pricing",
             competitors=["Cursor", "Copilot"],
-            dimensions=["pricing"],
+            dimensions=dimensions or ["pricing"],
         ),
         report_md=report_md,
         raw_sources=sources,
@@ -422,6 +465,7 @@ def _run_detail(
         if execution_mode == "real"
         else [],
         revisions=revisions or [],
+        qa_findings=qa_findings or [],
         metrics=RunMetrics(
             total_duration_ms=90_000,
             cost_estimate_usd=0.42,
