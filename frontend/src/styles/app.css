@@ -2469,9 +2469,22 @@ select {
   border-radius: 999px;
   color: var(--text);
   display: inline-flex;
+  flex-direction: column;
   font-size: 11px;
   line-height: 1.25;
+  max-width: 100%;
   padding: 4px 7px;
+}
+
+.quality-redo-list strong,
+.quality-redo-list em {
+  overflow-wrap: anywhere;
+}
+
+.quality-redo-list em {
+  color: var(--muted);
+  font-style: normal;
+  margin-top: 2px;
 }
 
 .decision-event-types,

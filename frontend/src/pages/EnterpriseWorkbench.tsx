@@ -2150,10 +2150,13 @@ function QualitySuggestedRedoList({ redos }: { redos: RedoScope[] }) {
   return (
     <div className="quality-redo-list">
       {redos.slice(0, 3).map((redo, index) => (
-        <span key={`${redo.kind}-${redo.target_subagent ?? "all"}-${index}`}>
-          Redo {redo.kind}
-          {redo.target_competitor ? ` / ${redo.target_competitor}` : ""}
-          {redo.target_subagent ? ` / ${redo.target_subagent}` : ""}
+        <span key={`${redo.kind}-${redo.target_subagent ?? "all"}-${index}`} title={redo.rationale}>
+          <strong>
+            Redo {redo.kind}
+            {redo.target_competitor ? ` / ${redo.target_competitor}` : ""}
+            {redo.target_subagent ? ` / ${redo.target_subagent}` : ""}
+          </strong>
+          {redo.rationale ? <em>{redo.rationale}</em> : null}
         </span>
       ))}
     </div>
