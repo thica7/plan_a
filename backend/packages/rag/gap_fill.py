@@ -24,6 +24,7 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     ReportVersionRecord,
 )
+from packages.schema.rag import RetrievalRecord
 from packages.search import SearchResult
 from packages.tools import FetchPageResult
 
@@ -402,9 +403,23 @@ def _gap_fill_decision_events(
     source_report_version: ReportVersionRecord | None,
 ) -> list[EvidenceGapFillDecisionEvent]:
     gap_ids = [gap.id for gap in report.gaps]
+    retrieval_contexts = _gap_retrieval_contexts(report)
     retrieval_records = [
         record.model_dump(mode="json") for gap in report.gaps for record in gap.retrieval_records
     ]
+    chunk_ids = _unique_ids(
+        [
+            record.chunk_id
+            for gap in report.gaps
+            for record in gap.retrieval_records
+            if record.chunk_id
+        ]
+    )
+    rerank_scores = {
+        _retrieval_record_key(record): record.rerank_score
+        for gap in report.gaps
+        for record in gap.retrieval_records
+    }
     closure_rate = round(len(filled_gap_ids) / before_gap_count, 3) if before_gap_count else 0.0
     events = [
         EvidenceGapFillDecisionEvent(
@@ -423,6 +438,12 @@ def _gap_fill_decision_events(
                 "filled_gap_ids": filled_gap_ids,
                 "remaining_gap_ids": remaining_gap_ids,
                 "candidate_ids": candidate_ids,
+                "retrieval_queries": [
+                    context["query"] for context in retrieval_contexts if context["query"]
+                ],
+                "retrieval_contexts": retrieval_contexts,
+                "chunk_ids": chunk_ids,
+                "rerank_scores": rerank_scores,
                 "retrieval_records": retrieval_records,
                 "retrieval_record_count": len(retrieval_records),
             },
@@ -468,6 +489,40 @@ def _gap_fill_decision_events(
             )
         )
     return events
+
+
+def _gap_retrieval_contexts(report: EvidenceGapReport) -> list[dict[str, object]]:
+    contexts: list[dict[str, object]] = []
+    for gap in report.gaps:
+        records = gap.retrieval_records
+        if not (
+            gap.retrieval_query
+            or gap.retrieval_candidate_ids
+            or records
+            or gap.retrieval_candidate_chunk_count
+        ):
+            continue
+        contexts.append(
+            {
+                "gap_id": gap.id,
+                "query": gap.retrieval_query,
+                "candidate_ids": gap.retrieval_candidate_ids,
+                "chunk_ids": _unique_ids(
+                    [record.chunk_id for record in records if record.chunk_id]
+                ),
+                "candidate_chunk_count": gap.retrieval_candidate_chunk_count,
+                "unique_evidence_candidate_count": gap.retrieval_unique_evidence_count,
+                "dedupe_drop_count": gap.retrieval_dedupe_drop_count,
+                "rerank_scores": {
+                    _retrieval_record_key(record): record.rerank_score for record in records
+                },
+            }
+        )
+    return contexts
+
+
+def _retrieval_record_key(record: RetrievalRecord) -> str:
+    return record.chunk_id or f"{record.evidence_id}#chunk:{record.chunk_index}"
 
 
 def _append_gap_fill_section(

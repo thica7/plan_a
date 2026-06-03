@@ -254,8 +254,17 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
         "rag.retrieved",
         "report.ready",
     ]
-    assert result.decision_events[0].payload["gap_closure_rate"] == 1.0
-    assert result.decision_events[0].payload["retrieval_record_count"] == 1
+    rag_payload = result.decision_events[0].payload
+    assert rag_payload["gap_closure_rate"] == 1.0
+    assert rag_payload["retrieval_record_count"] == 1
+    assert rag_payload["retrieval_queries"] == [
+        "Cursor SOC 2 SSO audit logs trust center Cursor security webpage_verified"
+    ]
+    assert len(rag_payload["retrieval_contexts"]) == 1
+    assert rag_payload["retrieval_contexts"][0]["gap_id"] == "gap-security"
+    assert rag_payload["retrieval_contexts"][0]["query"] == rag_payload["retrieval_queries"][0]
+    assert rag_payload["chunk_ids"][0].startswith("chunk-")
+    assert set(rag_payload["rerank_scores"]) == set(rag_payload["chunk_ids"])
     assert result.decision_events[1].payload["source_report_version_id"] == "report-v1"
     assert result.updated_report_version is not None
     assert (
@@ -381,6 +390,10 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version() -> 
         "tool.called",
         "report.ready",
     ]
+    rag_payload = metadata["decision_events"][0]["payload"]
+    assert rag_payload["retrieval_contexts"][0]["gap_id"] == "gap-online-security"
+    assert rag_payload["chunk_ids"][0].startswith("chunk-")
+    assert set(rag_payload["rerank_scores"]) == set(rag_payload["chunk_ids"])
     assert result.updated_report_version.evidence_ids == [evidence.id]
     assert f"[source:{evidence.id}]" in result.updated_report_version.report_md
 

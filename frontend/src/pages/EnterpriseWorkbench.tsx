@@ -3961,9 +3961,17 @@ function decisionPayloadSummary(event: DecisionReplayEvent) {
     const retrievalCount = payloadNumber(payload, "retrieval_record_count");
     const closureRate = payloadNumber(payload, "gap_closure_rate");
     const gapCount = payloadListCount(payload, "gap_ids") ?? payloadNumber(payload, "gap_count");
+    const queryCount = payloadListCount(payload, "retrieval_queries");
+    const contextCount = payloadListCount(payload, "retrieval_contexts");
+    const chunkCount = payloadListCount(payload, "chunk_ids");
+    const rerankScores = payloadRecord(payload, "rerank_scores");
     parts.push(`retrieval ${retrievalCount ?? event.evidence_ids.length}`);
     if (gapCount !== null) parts.push(`gaps ${gapCount}`);
     if (closureRate !== null) parts.push(`closure ${formatPercent(closureRate)}`);
+    if (queryCount !== null) parts.push(`queries ${queryCount}`);
+    if (contextCount !== null) parts.push(`contexts ${contextCount}`);
+    if (chunkCount !== null) parts.push(`chunks ${chunkCount}`);
+    if (rerankScores) parts.push(`rerank ${Object.keys(rerankScores).length}`);
   } else if (event.event_type === "memory.recalled") {
     const candidateCount = payloadListCount(payload, "candidate_ids", "memory_candidate_ids");
     const explicitCandidateCount = payloadNumber(payload, "candidate_count");

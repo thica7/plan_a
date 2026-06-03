@@ -264,9 +264,17 @@ function formatDecisionPayload(event: DecisionReplayEvent) {
   }
   if (event.event_type === "rag.retrieved") {
     const query = stringPayload(event, "query");
+    const retrievalQueries = arrayPayload(event, "retrieval_queries");
+    const retrievalContexts = arrayPayload(event, "retrieval_contexts");
+    const chunkIds = arrayPayload(event, "chunk_ids");
+    const rerankScores = objectPayload(event, "rerank_scores");
     const resultCount = numberPayload(event, "result_count");
     const candidateUrls = arrayPayload(event, "candidate_urls");
     if (query) parts.push(`query: ${query}`);
+    if (!query && retrievalQueries.length > 0) parts.push(`${retrievalQueries.length} retrieval queries`);
+    if (retrievalContexts.length > 0) parts.push(`${retrievalContexts.length} gap contexts`);
+    if (chunkIds.length > 0) parts.push(`${chunkIds.length} chunks`);
+    if (rerankScores) parts.push(`${Object.keys(rerankScores).length} rerank scores`);
     if (resultCount !== null) parts.push(`${resultCount} results`);
     if (candidateUrls.length > 0) parts.push(`${candidateUrls.length} candidate URLs`);
   }
