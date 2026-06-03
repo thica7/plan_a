@@ -1174,6 +1174,81 @@ def test_comparison_matrix_maps_multi_competitor_sources() -> None:
     assert detail.competitor_kbs["B"].sources == ["feature-1"]
 
 
+def test_comparison_matrix_majority_vote_overrides_weak_llm_winner() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A", "B"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="pricing-a-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing official",
+                url="https://a.example/pricing",
+                snippet="A has transparent pricing.",
+                content_hash="hash-a-1",
+                confidence=0.9,
+            ),
+            RawSource(
+                id="pricing-a-2",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing docs",
+                url="https://a.example/docs/pricing",
+                snippet="A documents pricing gates.",
+                content_hash="hash-a-2",
+                confidence=0.86,
+            ),
+            RawSource(
+                id="pricing-b-1",
+                competitor="B",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="B pricing",
+                url="https://b.example/pricing",
+                snippet="B pricing lead.",
+                content_hash="hash-b-1",
+                confidence=0.55,
+            ),
+        ],
+    )
+    service._merge_kb_slice(
+        detail,
+        "pricing",
+        {
+            "A": ["A has stronger pricing evidence."],
+            "B": ["B has one pricing note."],
+        },
+    )
+
+    matrix = service._build_comparison_matrix(
+        detail,
+        {"matrix_summary": ["LLM initially preferred B."], "winner_by_dimension": {"pricing": "B"}},
+    )
+
+    assert matrix.winner_by_dimension["pricing"] == "A"
+    assert any("[majority-vote:pricing]" in item for item in matrix.summary)
+    assert any("llm=B" in item and "evidence=A" in item for item in matrix.summary)
+
+
 @pytest.mark.asyncio
 async def test_collect_join_normalizes_covered_competitors_and_dedupes() -> None:
     service = RunService(

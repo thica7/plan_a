@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -89,16 +90,113 @@ class ComparatorAgentMixin:
                     )
                 )
 
-        winners = payload.get("winner_by_dimension")
-        if not isinstance(winners, dict):
-            winners = {}
+        payload_winners = payload.get("winner_by_dimension")
+        if not isinstance(payload_winners, dict):
+            payload_winners = {}
+        voted_winners, vote_summary = self._matrix_majority_vote(
+            detail,
+            cells,
+            {str(key): str(value) for key, value in payload_winners.items()},
+        )
         return ComparisonMatrix(
             competitors=detail.plan.competitors,
             dimensions=detail.plan.dimensions,
             cells=cells,
-            winner_by_dimension={str(key): str(value) for key, value in winners.items()},
-            summary=self._string_list(payload.get("matrix_summary")),
+            winner_by_dimension=voted_winners,
+            summary=[*self._string_list(payload.get("matrix_summary")), *vote_summary],
         )
+
+    def _matrix_majority_vote(
+        self,
+        detail: RunDetail,
+        cells: list[ComparisonCell],
+        payload_winners: dict[str, str],
+    ) -> tuple[dict[str, str], list[str]]:
+        winners: dict[str, str] = {}
+        summary: list[str] = []
+        cell_by_key = {(cell.dimension, cell.competitor): cell for cell in cells}
+        for dimension in detail.plan.dimensions:
+            signals: dict[str, str] = {}
+            evidence_winner = self._winner_from_numeric_signal(
+                {
+                    competitor: len(
+                        self._matrix_cell(cell_by_key, dimension, competitor).source_ids
+                    )
+                    for competitor in detail.plan.competitors
+                }
+            )
+            confidence_winner = self._winner_from_numeric_signal(
+                {
+                    competitor: self._matrix_cell(
+                        cell_by_key, dimension, competitor
+                    ).confidence
+                    for competitor in detail.plan.competitors
+                }
+            )
+            finding_winner = self._winner_from_numeric_signal(
+                {
+                    competitor: self._matrix_finding_count(detail, dimension, competitor)
+                    for competitor in detail.plan.competitors
+                }
+            )
+            if evidence_winner:
+                signals["evidence"] = evidence_winner
+            if confidence_winner:
+                signals["confidence"] = confidence_winner
+            if finding_winner:
+                signals["findings"] = finding_winner
+            llm_winner = payload_winners.get(dimension)
+            if llm_winner in detail.plan.competitors or llm_winner == "tie":
+                signals["llm"] = llm_winner
+            winner = self._winner_from_votes(signals)
+            if winner is None:
+                winner = llm_winner if isinstance(llm_winner, str) and llm_winner else "tie"
+            winners[dimension] = winner
+            summary.append(
+                "[majority-vote:{dimension}] winner={winner}; {signals}".format(
+                    dimension=dimension,
+                    winner=winner,
+                    signals=", ".join(
+                        f"{name}={value}" for name, value in sorted(signals.items())
+                    )
+                    or "no decisive signal",
+                )
+            )
+        return winners, summary
+
+    def _matrix_cell(
+        self,
+        cell_by_key: dict[tuple[str, str], ComparisonCell],
+        dimension: str,
+        competitor: str,
+    ) -> ComparisonCell:
+        return cell_by_key.get(
+            (dimension, competitor),
+            ComparisonCell(competitor=competitor, dimension=dimension, value=""),
+        )
+
+    def _matrix_finding_count(
+        self, detail: RunDetail, dimension: str, competitor: str
+    ) -> int:
+        kb = detail.competitor_kbs.get(competitor)
+        return len(kb.slices.get(dimension, [])) if kb else 0
+
+    def _winner_from_numeric_signal(self, scores: dict[str, float | int]) -> str | None:
+        positive = {key: value for key, value in scores.items() if value > 0}
+        if not positive:
+            return None
+        best = max(positive.values())
+        winners = [key for key, value in positive.items() if value == best]
+        return winners[0] if len(winners) == 1 else "tie"
+
+    def _winner_from_votes(self, signals: dict[str, str]) -> str | None:
+        votes = Counter(value for value in signals.values() if value != "tie")
+        if not votes:
+            return "tie" if "tie" in signals.values() else None
+        [(winner, count), *rest] = votes.most_common()
+        if rest and rest[0][1] == count:
+            return "tie"
+        return winner
 
     def _source_digest(self, sources: list[RawSource]) -> list[dict[str, object]]:
         return [
