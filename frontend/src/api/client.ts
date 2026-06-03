@@ -11,6 +11,7 @@ import type {
   CompetitorKnowledge,
   ClaimRecord,
   CompetitorRecord,
+  DataRetentionReport,
   DecisionReplayReport,
   EvalOpsReport,
   EvidenceQualityLabel,
@@ -306,6 +307,12 @@ export function getWorkspaceUsage(workspaceId: string) {
 export function getWorkspaceQuotaDecision(workspaceId: string) {
   return request<WorkspaceQuotaDecision>(
     `/enterprise/workspaces/${encodeURIComponent(workspaceId)}/quota-decision`,
+  );
+}
+
+export function getWorkspaceRetentionReport(workspaceId: string) {
+  return request<DataRetentionReport>(
+    `/enterprise/workspaces/${encodeURIComponent(workspaceId)}/retention`,
   );
 }
 

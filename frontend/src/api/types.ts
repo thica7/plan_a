@@ -295,6 +295,47 @@ export interface RunComplianceReport {
   generated_at: string;
 }
 
+export type RetentionResourceType =
+  | "project"
+  | "evidence"
+  | "artifact"
+  | "report_version"
+  | "audit_log";
+
+export interface DataRetentionPolicy {
+  project_days: number;
+  evidence_days: number;
+  artifact_days: number;
+  report_version_days: number;
+  audit_log_days: number;
+  expiring_soon_days: number;
+  physical_delete_enabled: boolean;
+}
+
+export interface RetentionBucket {
+  resource_type: RetentionResourceType;
+  retention_days: number;
+  total_count: number;
+  expired_count: number;
+  expiring_soon_count: number;
+  oldest_created_at?: string | null;
+  next_expiry_at?: string | null;
+}
+
+export interface DataRetentionReport {
+  workspace_id: string;
+  status: "pass" | "warn" | "fail";
+  policy: DataRetentionPolicy;
+  bucket_count: number;
+  total_record_count: number;
+  expired_count: number;
+  expiring_soon_count: number;
+  physical_delete_enabled: boolean;
+  recommendations: string[];
+  buckets: RetentionBucket[];
+  generated_at?: string;
+}
+
 export type DecisionEventType =
   | "agent.started"
   | "agent.finished"

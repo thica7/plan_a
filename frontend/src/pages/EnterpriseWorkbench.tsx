@@ -40,6 +40,7 @@ import {
   getRunComplianceReport,
   getToolRegistry,
   getWorkspaceQuotaDecision,
+  getWorkspaceRetentionReport,
   getWorkspaceUsage,
   createSourceSnapshot,
   ingestProjectMemoryFeedback,
@@ -78,6 +79,7 @@ import type {
   ClaimRecord,
   CompetitorScoreReport,
   CompetitorRecord,
+  DataRetentionReport,
   DecisionReplayEvent,
   DecisionReplayReport,
   EvidenceGapFillResult,
@@ -168,6 +170,7 @@ export function EnterpriseWorkbench({
   const [memoryFeedback, setMemoryFeedback] = useState<UserFeedbackRecord[]>([]);
   const [workspaceUsage, setWorkspaceUsage] = useState<WorkspaceUsageSummary | null>(null);
   const [workspaceQuotaDecision, setWorkspaceQuotaDecision] = useState<WorkspaceQuotaDecision | null>(null);
+  const [workspaceRetention, setWorkspaceRetention] = useState<DataRetentionReport | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
@@ -254,6 +257,7 @@ export function EnterpriseWorkbench({
       setMemoryFeedback([]);
       setWorkspaceUsage(null);
       setWorkspaceQuotaDecision(null);
+      setWorkspaceRetention(null);
       setAuditLogs([]);
       setSelectedVersionId(null);
       setRunCompliance(null);
@@ -296,6 +300,7 @@ export function EnterpriseWorkbench({
       listProjectMemoryFeedback(selectedProjectId),
       getWorkspaceUsage(projectForLoad.workspace_id),
       getWorkspaceQuotaDecision(projectForLoad.workspace_id),
+      getWorkspaceRetentionReport(projectForLoad.workspace_id),
       listEnterpriseAuditLogs(projectForLoad.workspace_id),
     ])
       .then(
@@ -324,6 +329,7 @@ export function EnterpriseWorkbench({
           memoryFeedbackValue,
           workspaceUsageValue,
           workspaceQuotaDecisionValue,
+          workspaceRetentionValue,
           auditLogItems,
         ]) => {
           if (!active) return;
@@ -352,6 +358,7 @@ export function EnterpriseWorkbench({
           setMemoryFeedback(memoryFeedbackValue);
           setWorkspaceUsage(workspaceUsageValue);
           setWorkspaceQuotaDecision(workspaceQuotaDecisionValue);
+          setWorkspaceRetention(workspaceRetentionValue);
           setAuditLogs(auditLogItems);
           setSelectedVersionId(versionItems[0]?.id ?? null);
           setEvalOpsBaselineRunId(null);
@@ -385,6 +392,7 @@ export function EnterpriseWorkbench({
         setMemoryFeedback([]);
         setWorkspaceUsage(null);
         setWorkspaceQuotaDecision(null);
+        setWorkspaceRetention(null);
         setAuditLogs([]);
         setSelectedVersionId(null);
         setDecisionReplay(null);
@@ -523,13 +531,15 @@ export function EnterpriseWorkbench({
   async function refreshWorkspaceGovernance(workspaceId: string | null | undefined) {
     if (!workspaceId) return;
     try {
-      const [usageValue, decisionValue, auditLogItems] = await Promise.all([
+      const [usageValue, decisionValue, retentionValue, auditLogItems] = await Promise.all([
         getWorkspaceUsage(workspaceId),
         getWorkspaceQuotaDecision(workspaceId),
+        getWorkspaceRetentionReport(workspaceId),
         listEnterpriseAuditLogs(workspaceId),
       ]);
       setWorkspaceUsage(usageValue);
       setWorkspaceQuotaDecision(decisionValue);
+      setWorkspaceRetention(retentionValue);
       setAuditLogs(auditLogItems);
     } catch (err) {
       console.warn("Unable to refresh workspace governance", err);
@@ -1234,6 +1244,8 @@ export function EnterpriseWorkbench({
                 runId={selectedVersion?.run_id}
               />
 
+              {workspaceRetention ? <DataRetentionPanel report={workspaceRetention} /> : null}
+
               <DecisionReplayPanel replay={decisionReplay} runId={selectedVersion?.run_id} />
 
               {qualityMatrix ? <QualityAgentMatrixPanel matrix={qualityMatrix} /> : null}
@@ -1612,6 +1624,87 @@ function complianceFindingPriority(severity: string) {
   if (severity === "blocker") return "high";
   if (severity === "warn") return "medium";
   return "low";
+}
+
+function DataRetentionPanel({ report }: { report: DataRetentionReport }) {
+  const statusClass = report.status === "pass" ? "pass" : "warn";
+  const StatusIcon = report.status === "pass" ? ShieldCheck : AlertTriangle;
+  const topBuckets = [...report.buckets].sort((left, right) => {
+    if (right.expired_count !== left.expired_count) {
+      return right.expired_count - left.expired_count;
+    }
+    if (right.expiring_soon_count !== left.expiring_soon_count) {
+      return right.expiring_soon_count - left.expiring_soon_count;
+    }
+    return left.resource_type.localeCompare(right.resource_type);
+  });
+
+  return (
+    <section className={`panel readiness-panel ${statusClass}`}>
+      <div className="panel-heading-row">
+        <h2>Data retention</h2>
+        <StatusIcon size={17} aria-hidden />
+      </div>
+      <div className="metric-grid compact">
+        <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Status" value={report.status} />
+        <Metric icon={<Database size={17} aria-hidden />} label="Records" value={report.total_record_count} />
+        <Metric icon={<AlertTriangle size={17} aria-hidden />} label="Expired" value={report.expired_count} />
+        <Metric icon={<CalendarClock size={17} aria-hidden />} label="Expiring" value={report.expiring_soon_count} />
+        <Metric icon={<ListChecks size={17} aria-hidden />} label="Buckets" value={report.bucket_count} />
+        <Metric
+          icon={<ShieldCheck size={17} aria-hidden />}
+          label="Delete mode"
+          value={report.physical_delete_enabled ? "physical" : "report-only"}
+        />
+      </div>
+      <div className="project-meta-row">
+        <span>Workspace {report.workspace_id}</span>
+        <span>Review window {report.policy.expiring_soon_days}d</span>
+        <span>Evidence {report.policy.evidence_days}d</span>
+        <span>Artifacts {report.policy.artifact_days}d</span>
+        <span>Audit {report.policy.audit_log_days}d</span>
+      </div>
+      <div className="recommendation-list">
+        {topBuckets.map((bucket) => (
+          <article
+            className={`recommendation-card ${retentionBucketPriority(bucket)}`}
+            key={bucket.resource_type}
+          >
+            <strong>{formatRetentionResource(bucket.resource_type)}</strong>
+            <span>
+              {bucket.total_count} records / {bucket.retention_days}d retention
+            </span>
+            <p>
+              {bucket.expired_count} expired, {bucket.expiring_soon_count} expiring soon.
+            </p>
+            <div className="project-meta-row">
+              <span>Oldest {bucket.oldest_created_at ? formatDate(bucket.oldest_created_at) : "n/a"}</span>
+              <span>Next expiry {bucket.next_expiry_at ? formatDate(bucket.next_expiry_at) : "n/a"}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+      {report.recommendations.length > 0 ? (
+        <div className="project-meta-row">
+          {report.recommendations.map((recommendation) => (
+            <span key={recommendation}>{recommendation}</span>
+          ))}
+        </div>
+      ) : (
+        <p className="muted-line">Retention windows are clear.</p>
+      )}
+    </section>
+  );
+}
+
+function retentionBucketPriority(bucket: DataRetentionReport["buckets"][number]) {
+  if (bucket.expired_count > 0) return "high";
+  if (bucket.expiring_soon_count > 0) return "medium";
+  return "low";
+}
+
+function formatRetentionResource(resourceType: string) {
+  return resourceType.replace(/_/g, " ");
 }
 
 function EvalOpsPanel({
