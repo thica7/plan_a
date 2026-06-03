@@ -45,6 +45,15 @@ class EvalOpsQualityChainStep(BaseModel):
     summary: str = ""
 
 
+class EvalOpsRegressionGateIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["comparison", "metric", "case"]
+    id: str
+    status: EvalOpsStatus
+    summary: str = ""
+
+
 class EvalOpsReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -82,6 +91,7 @@ class EvalOpsReport(BaseModel):
     cost_per_report_usd: float = Field(ge=0.0)
     regression_gate_status: EvalOpsStatus
     regression_gate_reason: str
+    regression_gate_issues: list[EvalOpsRegressionGateIssue] = Field(default_factory=list)
     metrics: list[EvalOpsMetric] = Field(default_factory=list)
     cases: list[EvalOpsCaseResult] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)

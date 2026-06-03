@@ -358,6 +358,13 @@ export interface EvalOpsQualityChainStep {
   summary: string;
 }
 
+export interface EvalOpsRegressionGateIssue {
+  kind: "comparison" | "metric" | "case";
+  id: string;
+  status: EvalOpsStatus;
+  summary: string;
+}
+
 export interface EvalOpsReport {
   run_count: number;
   evaluated_run_ids: string[];
@@ -393,6 +400,7 @@ export interface EvalOpsReport {
   cost_per_report_usd: number;
   regression_gate_status: EvalOpsStatus;
   regression_gate_reason: string;
+  regression_gate_issues: EvalOpsRegressionGateIssue[];
   metrics: EvalOpsMetric[];
   cases: EvalOpsCaseResult[];
   recommendations: string[];

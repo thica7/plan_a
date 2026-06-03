@@ -142,6 +142,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.task_time_saved_hours > 0
     assert report.time_savings_rate > 0.9
     assert report.regression_gate_status == "pass"
+    assert report.regression_gate_issues == []
 
 
 def test_enterprise_evalops_router_exposes_report() -> None:
@@ -203,6 +204,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["manual_baseline_hours_per_report"] == 6.0
     assert response.json()["time_savings_rate"] > 0.9
     assert response.json()["regression_gate_status"] in {"pass", "warn", "fail"}
+    assert response.json()["regression_gate_issues"] == []
 
 
 def test_enterprise_evalops_measures_citation_validity_separately_from_density() -> None:
@@ -252,6 +254,14 @@ def test_enterprise_evalops_fails_regression_gate_on_compliance_blockers() -> No
     assert metrics["compliance_fail_count"].status == "fail"
     assert cases["golden.compliance"].status == "fail"
     assert report.regression_gate_status == "fail"
+    assert any(
+        issue.kind == "metric" and issue.id == "compliance_pass_rate"
+        for issue in report.regression_gate_issues
+    )
+    assert any(
+        issue.kind == "case" and issue.id == "golden.compliance"
+        for issue in report.regression_gate_issues
+    )
     assert any("compliance blockers" in item for item in report.recommendations)
 
 
@@ -278,6 +288,14 @@ def test_enterprise_evalops_explains_real_quality_chain_failures() -> None:
     assert steps["report_quality"].pass_rate == 0.0
     assert steps["report_quality"].failed_run_ids == ["weak-real-run"]
     assert cases["golden.real_quality_chain"].status == "fail"
+    assert any(
+        issue.kind == "comparison" and issue.id == "weak-real-run"
+        for issue in report.regression_gate_issues
+    )
+    assert any(
+        issue.kind == "case" and issue.id == "golden.real_quality_chain"
+        for issue in report.regression_gate_issues
+    )
 
 
 def test_enterprise_evalops_flags_missing_research_and_gap_fill_context() -> None:
@@ -315,6 +333,15 @@ def test_enterprise_evalops_flags_missing_research_and_gap_fill_context() -> Non
     assert cases["golden.user_research_evidence"].status == "fail"
     assert cases["golden.rag_gap_fill_context"].status == "fail"
     assert cases["golden.hitl_redo_loop"].status == "fail"
+    assert {
+        issue.id for issue in report.regression_gate_issues if issue.kind == "case"
+    }.issuperset(
+        {
+            "golden.user_research_evidence",
+            "golden.rag_gap_fill_context",
+            "golden.hitl_redo_loop",
+        }
+    )
 
 
 class _FakeRunService:

@@ -1395,6 +1395,7 @@ function EvalOpsPanel({
   versions: ReportVersionRecord[];
 }) {
   const watchMetrics = report.metrics.filter((metric) => metric.status !== "pass").slice(0, 4);
+  const gateIssues = (report.regression_gate_issues ?? []).slice(0, 6);
   const coverageLiftRate = evalOpsMetricValue(report, "coverage_lift_rate");
   const citationValidityRate = evalOpsMetricValue(report, "citation_validity_rate");
   const claimRiskSectionRate = evalOpsMetricValue(report, "claim_risk_section_score");
@@ -1532,6 +1533,22 @@ function EvalOpsPanel({
         <span>{report.golden_set_size} golden cases</span>
       </div>
       <p>{report.regression_gate_reason}</p>
+      {gateIssues.length > 0 ? (
+        <div className="recommendation-list">
+          {gateIssues.map((issue) => (
+            <article
+              className={`recommendation-card ${evalOpsCasePriority(issue.status)}`}
+              key={`${issue.kind}:${issue.id}`}
+            >
+              <strong>{issue.id.replace(/_/g, " ")}</strong>
+              <span>
+                {issue.kind} / {issue.status}
+              </span>
+              <p>{issue.summary}</p>
+            </article>
+          ))}
+        </div>
+      ) : null}
       {report.judge_fallback_reason ? <p className="muted-line">{report.judge_fallback_reason}</p> : null}
       {report.quality_chain_steps.length > 0 ? (
         <div className="recommendation-list">

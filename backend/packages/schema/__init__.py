@@ -62,6 +62,7 @@ from packages.schema.evals import (
     EvalOpsCaseResult,
     EvalOpsMetric,
     EvalOpsQualityChainStep,
+    EvalOpsRegressionGateIssue,
     EvalOpsReport,
 )
 from packages.schema.models import (
@@ -129,6 +130,7 @@ __all__ = [
     "EvalOpsCaseResult",
     "EvalOpsMetric",
     "EvalOpsQualityChainStep",
+    "EvalOpsRegressionGateIssue",
     "EvalOpsReport",
     "FeatureNode",
     "FeatureTree",

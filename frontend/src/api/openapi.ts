@@ -2362,6 +2362,26 @@ export interface components {
              */
             summary: string;
         };
+        /** EvalOpsRegressionGateIssue */
+        EvalOpsRegressionGateIssue: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "comparison" | "metric" | "case";
+            /** Id */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "warn" | "fail";
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+        };
         /** EvalOpsReport */
         EvalOpsReport: {
             /** Run Count */
@@ -2445,6 +2465,8 @@ export interface components {
             regression_gate_status: "pass" | "warn" | "fail";
             /** Regression Gate Reason */
             regression_gate_reason: string;
+            /** Regression Gate Issues */
+            regression_gate_issues?: components["schemas"]["EvalOpsRegressionGateIssue"][];
             /** Metrics */
             metrics?: components["schemas"]["EvalOpsMetric"][];
             /** Cases */

@@ -11,6 +11,7 @@ from packages.schema.evals import (
     EvalOpsCaseResult,
     EvalOpsMetric,
     EvalOpsQualityChainStep,
+    EvalOpsRegressionGateIssue,
     EvalOpsReport,
     EvalOpsStatus,
 )
@@ -252,7 +253,7 @@ def build_enterprise_evalops_report(
                 lower_is_better=True,
             )
         )
-    gate_status, gate_reason = _regression_gate(comparisons, metrics)
+    gate_status, gate_reason, gate_issues = _regression_gate(comparisons, metrics, cases)
     return EvalOpsReport(
         run_count=len(recent_runs),
         evaluated_run_ids=[run.id for run in recent_runs],
@@ -288,6 +289,7 @@ def build_enterprise_evalops_report(
         cost_per_report_usd=cost_per_report_usd,
         regression_gate_status=gate_status,
         regression_gate_reason=gate_reason,
+        regression_gate_issues=gate_issues,
         metrics=metrics,
         cases=cases,
         recommendations=_recommendations(metrics, comparisons),
@@ -652,9 +654,22 @@ def _metric_summary(
 def _regression_gate(
     comparisons: list[RunQualityComparison],
     metrics: list[EvalOpsMetric],
-) -> tuple[EvalOpsStatus, str]:
+    cases: list[EvalOpsCaseResult],
+) -> tuple[EvalOpsStatus, str, list[EvalOpsRegressionGateIssue]]:
+    issues = _regression_gate_issues(comparisons, metrics, cases)
     if not comparisons:
-        return "fail", "No runs are available for EvalOps regression gating."
+        return (
+            "fail",
+            "No runs are available for EvalOps regression gating.",
+            [
+                EvalOpsRegressionGateIssue(
+                    kind="comparison",
+                    id="no_evaluable_runs",
+                    status="fail",
+                    summary="No completed runs are available for EvalOps regression gating.",
+                )
+            ],
+        )
     failed_metrics = [metric.name for metric in metrics if metric.status == "fail"]
     warn_metrics = [metric.name for metric in metrics if metric.status == "warn"]
     failed_comparisons = [
@@ -662,10 +677,60 @@ def _regression_gate(
     ]
     if failed_comparisons or failed_metrics:
         reason = ", ".join([*failed_comparisons[:3], *failed_metrics[:3]])
-        return "fail", f"Regression gate failed on {reason}."
+        return "fail", f"Regression gate failed on {reason}.", issues
     if any(comparison.verdict == "warn" for comparison in comparisons) or warn_metrics:
-        return "warn", f"Regression gate has warnings on {', '.join(warn_metrics[:4])}."
-    return "pass", "All EvalOps golden and regression metrics passed."
+        return "warn", f"Regression gate has warnings on {', '.join(warn_metrics[:4])}.", issues
+    return "pass", "All EvalOps regression thresholds passed.", issues
+
+
+def _regression_gate_issues(
+    comparisons: list[RunQualityComparison],
+    metrics: list[EvalOpsMetric],
+    cases: list[EvalOpsCaseResult],
+) -> list[EvalOpsRegressionGateIssue]:
+    issues: list[EvalOpsRegressionGateIssue] = []
+    for comparison in comparisons:
+        if comparison.verdict == "pass":
+            continue
+        issues.append(
+            EvalOpsRegressionGateIssue(
+                kind="comparison",
+                id=comparison.target_run_id,
+                status=comparison.verdict,
+                summary=(
+                    f"Run quality score {comparison.target_score}; "
+                    f"delta {_format_optional_delta(comparison.delta_score)}."
+                ),
+            )
+        )
+    for metric in metrics:
+        if metric.status == "pass":
+            continue
+        issues.append(
+            EvalOpsRegressionGateIssue(
+                kind="metric",
+                id=metric.name,
+                status=metric.status,
+                summary=metric.summary,
+            )
+        )
+    for case in cases:
+        if case.status == "pass":
+            continue
+        issues.append(
+            EvalOpsRegressionGateIssue(
+                kind="case",
+                id=case.case_id,
+                status=case.status,
+                summary=case.summary,
+            )
+        )
+    issues.sort(key=lambda issue: (0 if issue.status == "fail" else 1, issue.kind, issue.id))
+    return issues
+
+
+def _format_optional_delta(delta: int | None) -> str:
+    return str(delta) if delta is not None else "n/a"
 
 
 def _recommendations(
