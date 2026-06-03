@@ -2584,10 +2584,16 @@ class RunService(
             "model_route_status": str(route.status),
             "model_route_policy_version": str(route.routing_policy_version),
         }
+        if route.blocked_reasons:
+            metadata["model_route_blocked_reasons"] = "; ".join(route.blocked_reasons)
         if route.selected is not None:
             metadata["model_route_selected"] = route.selected.provider_kind
+            metadata["model_route_selected_provider"] = route.selected.provider_name
+            metadata["model_route_selected_model"] = route.selected.model_name
         if route.fallback is not None:
             metadata["model_route_fallback"] = route.fallback.provider_kind
+            metadata["model_route_fallback_provider"] = route.fallback.provider_name
+            metadata["model_route_fallback_model"] = route.fallback.model_name
         return metadata
 
     def _redact_trace_texts(

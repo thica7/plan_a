@@ -11,6 +11,7 @@ from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
+from packages.schema.enterprise import ModelRouteCandidate, ModelRouteDecision
 from packages.schema.models import (
     AnalysisPlan,
     ComparisonCell,
@@ -150,6 +151,58 @@ async def test_auto_mode_falls_back_to_demo_when_model_policy_blocks_real() -> N
     )
 
     assert detail.execution_mode == "demo"
+
+
+def test_llm_route_metadata_explains_selected_fallback_and_blockers() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    class FakeLLM:
+        def last_route_decision(self) -> ModelRouteDecision:
+            return ModelRouteDecision(
+                status="fallback",
+                selected=ModelRouteCandidate(
+                    provider_kind="backup",
+                    provider_name="openrouter",
+                    model_name="deepseek/deepseek-v4-pro",
+                    configured=True,
+                    quality_score=82,
+                    cost_score=78,
+                    compliance_score=100,
+                ),
+                fallback=ModelRouteCandidate(
+                    provider_kind="demo",
+                    provider_name="deterministic",
+                    model_name="demo-fixture",
+                    configured=True,
+                    quality_score=58,
+                    cost_score=100,
+                    compliance_score=100,
+                ),
+                candidates=[],
+                blocked_reasons=["Primary provider credentials are missing."],
+            )
+
+    service._llm = FakeLLM()  # type: ignore[assignment]
+
+    metadata = service._llm_usage_metadata(None)
+
+    assert metadata["model_route_status"] == "fallback"
+    assert metadata["model_route_selected"] == "backup"
+    assert metadata["model_route_selected_provider"] == "openrouter"
+    assert metadata["model_route_selected_model"] == "deepseek/deepseek-v4-pro"
+    assert metadata["model_route_fallback"] == "demo"
+    assert metadata["model_route_fallback_model"] == "demo-fixture"
+    assert "Primary provider credentials" in metadata["model_route_blocked_reasons"]
 
 
 @pytest.mark.asyncio
