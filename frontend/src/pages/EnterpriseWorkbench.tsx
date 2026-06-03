@@ -1497,12 +1497,25 @@ function QualityAgentMatrixPanel({ matrix }: { matrix: QualityAgentMatrix }) {
           <article className={`recommendation-card ${qualityEntryPriority(entry)}`} key={entry.agent_name}>
             <strong>{entry.agent_name}</strong>
             <span>{entry.status} / {entry.framework}</span>
+            <QualityPeerReviewLine entry={entry} />
             <p>{entry.summary}</p>
             <TargetAnchorLinks evidenceIds={entry.evidence_ids} claimIds={entry.claim_ids} />
           </article>
         ))}
       </div>
     </section>
+  );
+}
+
+function QualityPeerReviewLine({ entry }: { entry: QualityAgentMatrixEntry }) {
+  const peerReviewedBy = metadataStringList(entry.metadata, "peer_reviewed_by");
+  const reviewTargets = metadataStringList(entry.metadata, "review_targets");
+  if (peerReviewedBy.length === 0 && reviewTargets.length === 0) return null;
+  return (
+    <span>
+      Reviewed by {peerReviewedBy.length ? peerReviewedBy.join(", ") : "none"}
+      {reviewTargets.length ? `; reviews ${reviewTargets.join(", ")}` : ""}
+    </span>
   );
 }
 
@@ -3396,6 +3409,17 @@ function auditMetadataString(
 ) {
   const value = metadata?.[key];
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function metadataStringList(
+  metadata: Record<string, unknown> | null | undefined,
+  key: string,
+) {
+  const value = metadata?.[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0,
+  );
 }
 
 function qualityEntryPriority(entry: QualityAgentMatrixEntry) {

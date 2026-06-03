@@ -939,6 +939,7 @@ async def get_project_quality_matrix(
             ),
         ),
     ]
+    entries = _with_quality_peer_review_metadata(entries)
     blocker_count = sum(item.blocker_count for item in entries)
     warn_count = sum(item.warn_count for item in entries)
     overall_score = round(sum(item.score for item in entries) / max(len(entries), 1))
@@ -948,6 +949,44 @@ async def get_project_quality_matrix(
         overall_score=overall_score,
         entries=entries,
     )
+
+
+def _with_quality_peer_review_metadata(
+    entries: list[QualityAgentMatrixEntry],
+) -> list[QualityAgentMatrixEntry]:
+    available_agents = {entry.agent_name for entry in entries}
+    review_targets = {
+        "BusinessQA": ["EvidenceGap", "ReleaseGate"],
+        "ClaimValidator": ["BusinessQA", "ReleaseGate"],
+        "EvidenceGap": ["BusinessQA", "ReleaseGate"],
+        "RedTeam": ["BusinessQA", "ClaimValidator", "EvidenceGap", "ReleaseGate"],
+        "ReleaseGate": [],
+        "MemoryAgent": ["BusinessQA", "RedTeam"],
+    }
+    reviewed_by: dict[str, list[str]] = {agent: [] for agent in available_agents}
+    for reviewer, targets in review_targets.items():
+        if reviewer not in available_agents:
+            continue
+        for target in targets:
+            if target in available_agents:
+                reviewed_by.setdefault(target, []).append(reviewer)
+    return [
+        entry.model_copy(
+            update={
+                "metadata": {
+                    **entry.metadata,
+                    "peer_review_mode": "deterministic_cross_agent_matrix",
+                    "peer_reviewed_by": sorted(reviewed_by.get(entry.agent_name, [])),
+                    "review_targets": sorted(
+                        target
+                        for target in review_targets.get(entry.agent_name, [])
+                        if target in available_agents
+                    ),
+                }
+            }
+        )
+        for entry in entries
+    ]
 
 
 def _pydantic_ai_context(settings: Settings) -> dict[str, str]:

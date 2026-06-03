@@ -1184,12 +1184,25 @@ def test_enterprise_router_exposes_projection() -> None:
     )
     assert red_team_matrix["metadata"]["pydantic_ai_execution_mode"] == "deterministic_handler"
     assert red_team_matrix["metadata"]["typed_contract_enforced"] is True
+    assert set(red_team_matrix["metadata"]["review_targets"]) >= {
+        "BusinessQA",
+        "ClaimValidator",
+        "EvidenceGap",
+        "ReleaseGate",
+    }
     release_matrix = next(
         item for item in quality_matrix.json()["entries"] if item["agent_name"] == "ReleaseGate"
     )
     assert release_matrix["framework"] == "enterprise-release-gate"
     assert release_matrix["status"] == "pass"
     assert projection.report_version.id in release_matrix["summary"]
+    assert release_matrix["metadata"]["peer_review_mode"] == "deterministic_cross_agent_matrix"
+    assert set(release_matrix["metadata"]["peer_reviewed_by"]) >= {
+        "BusinessQA",
+        "ClaimValidator",
+        "EvidenceGap",
+        "RedTeam",
+    }
     assert competitors.status_code == 200
     assert [item["name"] for item in competitors.json()] == ["Cursor"]
     assert source_registry.status_code == 200
