@@ -21,6 +21,7 @@ from packages.schema.enterprise import (
 MIN_VERIFIED_EVIDENCE_RATE = 0.8
 MIN_READY_SCORE = 85
 MIN_RELEASE_SOURCE_CONFIDENCE = 0.75
+MIN_REPORT_STRUCTURE_SCORE = 0.7
 STRONG_CONCLUSION_RE = re.compile(
     r"\b("
     r"winner|leading option|best option|safer|safest|recommended|recommendation|"
@@ -72,6 +73,7 @@ def evaluate_report_release_gate(
     )
     issues = [
         *_report_integrity_issues(report_version, scoped_evidence, scoped_claims),
+        *_report_structure_issues(report_version),
         *_source_quality_issues(scoped_evidence),
         *_claim_evidence_quality_issues(scoped_claims, scoped_evidence),
         *_claim_validation_issues(scoped_claims, scoped_evidence),
@@ -232,6 +234,63 @@ def _claim_evidence_quality_issues(
             )
         )
     return issues
+
+
+def _report_structure_issues(report_version: ReportVersionRecord) -> list[BusinessQAFinding]:
+    score, missing = _report_structure_score(report_version)
+    if score >= MIN_REPORT_STRUCTURE_SCORE:
+        return []
+    return [
+        _gate_issue(
+            "report_structure_required",
+            "Report structure required",
+            (
+                "Report is missing required decision-grade section(s): "
+                f"{', '.join(missing)}. Structure score={score:.2f}; "
+                f"minimum is {MIN_REPORT_STRUCTURE_SCORE:.2f}."
+            ),
+            recommendation=(
+                "Regenerate or revise the report with executive summary, source quality, "
+                "decision matrix, layer-specific analysis, next collection plan, and evidence appendix."
+            ),
+        )
+    ]
+
+
+def _report_structure_score(report_version: ReportVersionRecord) -> tuple[float, list[str]]:
+    checks = [
+        ("Executive Summary", _has_heading(report_version.report_md, ("executive summary", "executive overview"))),
+        ("Source Quality & Coverage", _has_heading(report_version.report_md, ("source quality", "source coverage"))),
+        ("Decision Matrix", _has_heading(report_version.report_md, ("matrix", "dimension winners", "side-by-side"))),
+        (
+            "Next Collection / Verification Plan",
+            _has_heading(report_version.report_md, ("next collection", "verification plan", "evidence gap")),
+        ),
+        ("Evidence Appendix", _has_heading(report_version.report_md, ("evidence appendix", "source appendix"))),
+        ("Layer-Specific Analysis", _has_layer_heading(report_version)),
+    ]
+    passed = sum(1 for _name, ok in checks if ok)
+    missing = [name for name, ok in checks if not ok]
+    return passed / len(checks), missing
+
+
+def _has_layer_heading(report_version: ReportVersionRecord) -> bool:
+    layer = report_version.competitor_layer
+    if layer == "L1":
+        return _has_heading(report_version.report_md, ("battlecard", "sales objection"))
+    if layer == "L2":
+        return _has_heading(report_version.report_md, ("workflow", "enterprise risk", "switching"))
+    if layer == "L3":
+        return _has_heading(report_version.report_md, ("market landscape", "segmentation", "benchmark"))
+    return _has_heading(report_version.report_md, ("business implication", "strategy"))
+
+
+def _has_heading(markdown: str, needles: tuple[str, ...]) -> bool:
+    headings = [
+        match.group(1).casefold()
+        for match in re.finditer(r"^\s*#{1,4}\s+(.+?)\s*$", markdown, flags=re.MULTILINE)
+    ]
+    return any(any(needle in heading for needle in needles) for heading in headings)
 
 
 def _claim_validation_issues(

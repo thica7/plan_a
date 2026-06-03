@@ -309,7 +309,7 @@ def test_report_release_gate_requires_clean_qa_and_verified_evidence() -> None:
         topic_normalized="cursor-pricing",
         competitor_layer="L1",
         competitor_set_hash="hash",
-        report_md="Cursor publishes pricing. [source:evidence-1]",
+        report_md=_structured_release_report(),
         claim_ids=["claim-1"],
         evidence_ids=["evidence-1"],
     )
@@ -347,6 +347,51 @@ def test_report_release_gate_requires_clean_qa_and_verified_evidence() -> None:
         "business_qa_clean_required",
         "verified_evidence_rate",
     }
+
+
+def test_report_release_gate_blocks_unstructured_report() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(report_md="Cursor publishes pricing. [source:evidence-1]")
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert gate.allowed is False
+    assert "report_structure_required" in {issue.rule_id for issue in gate.issues}
 
 
 def test_claim_validator_cross_checks_evidence_support() -> None:
@@ -671,7 +716,7 @@ def test_report_release_gate_resolves_rag_chunk_source_tokens() -> None:
         )
     ]
     report = _report_version(
-        report_md="Cursor publishes pricing. [source:evidence-1#chunk:0]",
+        report_md=_structured_release_report(source_token="evidence-1#chunk:0"),
         evidence_ids=["evidence-1"],
     )
 
@@ -1176,7 +1221,7 @@ def _project() -> ProjectRecord:
 
 def _report_version(
     *,
-    report_md: str = "Cursor publishes pricing. [source:evidence-1]",
+    report_md: str = "",
     evidence_ids: list[str] | None = None,
     claim_ids: list[str] | None = None,
     quality_metadata: dict[str, object] | None = None,
@@ -1189,8 +1234,38 @@ def _report_version(
         topic_normalized="cursor-pricing",
         competitor_layer="L1",
         competitor_set_hash="hash",
-        report_md=report_md,
+        report_md=report_md or _structured_release_report(),
         claim_ids=claim_ids or ["claim-1"],
         evidence_ids=evidence_ids or ["evidence-1"],
         quality_metadata=quality_metadata or {},
     )
+
+
+def _structured_release_report(source_token: str = "evidence-1") -> str:
+    citation = f"[source:{source_token}]"
+    return f"""
+# Cursor Direct Battlecard
+
+## Executive Summary
+Cursor publishes pricing and can be reviewed as a direct L1 battlecard item. {citation}
+
+## Source Quality & Coverage
+The report uses accepted webpage evidence and keeps the conclusion scoped to verified pricing
+coverage. {citation}
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor |
+| --- | --- |
+| Pricing | Cursor publishes pricing. {citation} |
+
+## Battlecard
+Use pricing transparency as the battlecard point, while keeping security and procurement claims
+out of scope until separately verified. {citation}
+
+## Next Collection / Verification Plan
+Collect additional feature, security, and procurement evidence before making broader release
+recommendations. {citation}
+
+## Evidence Appendix
+- {source_token}: Cursor pricing evidence. {citation}
+""".strip()

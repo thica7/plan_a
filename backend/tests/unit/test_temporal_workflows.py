@@ -570,7 +570,8 @@ def _report_version(version_id: str) -> ReportVersionRecord:
         version_number=1,
         topic_normalized="ai-coding-assistant",
         competitor_set_hash="competitors",
-        report_md="demo report",
+        competitor_layer="L1",
+        report_md=_structured_report_md(),
     )
 
 
@@ -591,7 +592,7 @@ def _seed_valid_report_version(store: EnterpriseMemoryStore, run_id: str) -> str
             homepage_hints={"Cursor": "https://cursor.sh"},
             homepage_verified={"Cursor": True},
         ),
-        report_md="Cursor publishes pricing. [source:pricing-1]",
+        report_md=_structured_report_md(),
         raw_sources=[
             RawSource(
                 id="pricing-1",
@@ -630,3 +631,33 @@ def _seed_valid_report_version(store: EnterpriseMemoryStore, run_id: str) -> str
     )
     store.save_projection(projection)
     return projection.report_version.id
+
+
+def _structured_report_md(source_id: str = "pricing-1") -> str:
+    citation = f"[source:{source_id}]"
+    return f"""
+# Cursor Direct Battlecard
+
+## Executive Summary
+Cursor publishes pricing and the claim is scoped to accepted pricing evidence. {citation}
+
+## Source Quality & Coverage
+The report uses verified webpage evidence and keeps broader enterprise claims out of scope.
+{citation}
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor |
+| --- | --- |
+| Pricing | Cursor publishes pricing. {citation} |
+
+## Battlecard
+Use pricing transparency as the direct battlecard point, pending feature and procurement review.
+{citation}
+
+## Next Collection / Verification Plan
+Collect feature, security, and procurement sources before publishing broader recommendations.
+{citation}
+
+## Evidence Appendix
+- {source_id}: Cursor pricing evidence. {citation}
+""".strip()

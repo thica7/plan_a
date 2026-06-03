@@ -2735,10 +2735,32 @@ class RunService(
     def _demo_report(self, detail: RunDetail) -> str:
         competitors = ", ".join(detail.plan.competitors)
         dimensions = ", ".join(detail.plan.dimensions)
+        source_refs = self._format_source_refs([source.id for source in detail.raw_sources[:4]])
+        if not source_refs:
+            source_refs = ""
         return (
             f"# {detail.plan.topic}\n\n"
-            f"Competitors: {competitors}\n\n"
-            f"Dimensions in scope: {dimensions}\n\n"
+            "## Executive Summary\n"
+            f"This demo run covers {competitors} across {dimensions} and proves that "
+            "events, sources, reflections, QA findings, and report markdown flow through "
+            f"structured DTOs.{source_refs}\n\n"
+            "## Source Quality & Coverage\n"
+            "Demo evidence is projected into the enterprise EvidenceRecord model with source "
+            f"IDs preserved for release-gate and report-view traceability.{source_refs}\n\n"
+            "## Side-by-Side Decision Matrix\n"
+            f"| Dimension | Competitors |\n| --- | --- |\n| {dimensions} | {competitors} {source_refs} |\n\n"
+            "## Battlecard\n"
+            "Use this demo report as a direct battlecard scaffold: verify pricing, feature, "
+            f"and persona claims before using it as a publishable recommendation.{source_refs}\n\n"
+            "## Next Collection / Verification Plan\n"
+            "Replace demo evidence with current official webpages, then rerun claim validation "
+            f"and release gate review before publication.{source_refs}\n\n"
+            "## Evidence Appendix\n"
+            + "\n".join(
+                f"- {source.id}: {source.title} / {source.source_type} [source:{source.id}]"
+                for source in detail.raw_sources[:8]
+            )
+            + "\n\n"
             "This demo run proves the contract: events, sources, reflections, QA findings, "
             "and report markdown all flow through structured DTOs."
         )
