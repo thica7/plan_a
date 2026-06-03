@@ -398,6 +398,17 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
                         "evidence_ids": ["evidence-gap-1"],
                         "payload": {
                             "gap_closure_rate": 1.0,
+                            "retrieval_queries": ["A SOC 2 SSO trust center"],
+                            "retrieval_contexts": [
+                                {
+                                    "gap_id": "gap-security",
+                                    "query": "A SOC 2 SSO trust center",
+                                    "chunk_ids": ["chunk-gap-1"],
+                                    "dedupe_drop_count": 2,
+                                }
+                            ],
+                            "chunk_ids": ["chunk-gap-1"],
+                            "rerank_scores": {"chunk-gap-1": 0.92},
                             "retrieval_record_count": 1,
                             "updated_report_version_id": "report-gap-fill-v2",
                         },
@@ -440,6 +451,10 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
     assert gap_events[0].evidence_ids == ["evidence-gap-1"]
     assert gap_events[0].payload["gap_ids"] == ["gap-security"]
     assert gap_events[0].payload["gap_closure_rate"] == 1.0
+    assert gap_events[0].payload["retrieval_queries"] == ["A SOC 2 SSO trust center"]
+    assert gap_events[0].payload["retrieval_contexts"][0]["chunk_ids"] == ["chunk-gap-1"]
+    assert gap_events[0].payload["chunk_ids"] == ["chunk-gap-1"]
+    assert gap_events[0].payload["rerank_scores"] == {"chunk-gap-1": 0.92}
     assert gap_events[0].payload["report_version_id"] == "report-gap-fill-v2"
     assert gap_events[1].payload["gap_ids"] == ["gap-security"]
     assert gap_events[1].payload["gap_fill_chain_closed"] is True
