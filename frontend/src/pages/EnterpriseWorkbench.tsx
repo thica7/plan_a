@@ -3137,6 +3137,7 @@ function ReportHistory({
           />
         ) : null}
         {releaseGate ? <ReleaseGatePanel gate={releaseGate} /> : null}
+        {selectedVersion ? <ReportQualityMetadataPanel version={selectedVersion} /> : null}
         {selectedVersion ? (
           <ReportView
             markdown={selectedVersion.report_md || "No report body."}
@@ -3161,6 +3162,67 @@ function ReportHistory({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function ReportQualityMetadataPanel({ version }: { version: ReportVersionRecord }) {
+  const ragGapFill = payloadRecord(version.quality_metadata ?? {}, "rag_gap_fill");
+  if (!ragGapFill) {
+    return null;
+  }
+  const beforeGapCount = payloadNumber(ragGapFill, "before_gap_count") ?? 0;
+  const afterGapCount = payloadNumber(ragGapFill, "after_gap_count") ?? 0;
+  const closureRate = payloadNumber(ragGapFill, "gap_closure_rate") ?? 0;
+  const candidateCount = payloadListCount(ragGapFill, "candidate_evidence_ids", "candidate_ids") ?? 0;
+  const filledGapCount = payloadListCount(ragGapFill, "filled_gap_ids") ?? 0;
+  const remainingGapCount = payloadListCount(ragGapFill, "remaining_gap_ids") ?? afterGapCount;
+  const onlineCount = payloadListCount(ragGapFill, "online_collected_evidence_ids") ?? 0;
+  const onlineFailureCount = payloadListCount(ragGapFill, "online_failures") ?? 0;
+  const chainClosed = ragGapFill.gap_fill_chain_closed === true;
+  const status = chainClosed ? "pass" : filledGapCount > 0 || candidateCount > 0 ? "warn" : "empty";
+
+  return (
+    <section className={`report-quality-metadata-panel ${status}`}>
+      <div className="panel-heading-row">
+        <div>
+          <h3>RAG gap fill</h3>
+          <span>
+            {chainClosed
+              ? "Closed with linked evidence and a draft report version."
+              : "Review the linked candidates before publishing this version."}
+          </span>
+        </div>
+        <Search size={17} aria-hidden />
+      </div>
+      <div className="evidence-gap-summary">
+        <span>
+          <strong>
+            {beforeGapCount} to {afterGapCount}
+          </strong>
+          <em>Open gaps</em>
+        </span>
+        <span>
+          <strong>{formatPercent(closureRate)}</strong>
+          <em>Closure</em>
+        </span>
+        <span>
+          <strong>{candidateCount}</strong>
+          <em>Evidence linked</em>
+        </span>
+        <span>
+          <strong>{filledGapCount}</strong>
+          <em>Gaps filled</em>
+        </span>
+        <span>
+          <strong>{remainingGapCount}</strong>
+          <em>Remaining</em>
+        </span>
+        <span className={onlineFailureCount > 0 ? "warn" : undefined}>
+          <strong>{onlineCount}</strong>
+          <em>Online collected / {onlineFailureCount} failed</em>
+        </span>
+      </div>
+    </section>
   );
 }
 

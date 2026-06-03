@@ -1557,6 +1557,7 @@ export interface ReportVersionRecord {
   report_md: string;
   claim_ids: string[];
   evidence_ids: string[];
+  quality_metadata?: Record<string, unknown>;
   created_at: string;
   published_at?: string | null;
 }
