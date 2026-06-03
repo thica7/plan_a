@@ -1217,6 +1217,48 @@ def test_enterprise_router_blocks_report_approval_status_when_gate_fails() -> No
     assert response.json()["detail"]["allowed"] is False
 
 
+def test_enterprise_router_blocks_direct_publish_status_without_approval() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    client = TestClient(app)
+
+    direct_publish = client.post(
+        "/api/enterprise/report-versions",
+        json=projection.report_version.model_copy(update={"status": "published"}).model_dump(
+            mode="json"
+        ),
+    )
+    approved = client.post(
+        "/api/enterprise/report-versions",
+        json=projection.report_version.model_copy(update={"status": "approved"}).model_dump(
+            mode="json"
+        ),
+    )
+    approved_publish = client.post(
+        "/api/enterprise/report-versions",
+        json=projection.report_version.model_copy(update={"status": "published"}).model_dump(
+            mode="json"
+        ),
+    )
+
+    assert direct_publish.status_code == 409
+    assert direct_publish.json()["detail"]["reason"] == "report_approval_required"
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+    assert approved_publish.status_code == 200
+    assert approved_publish.json()["status"] == "published"
+
+
 def test_gap_fill_result_carries_release_gate_improvement_delta() -> None:
     store = EnterpriseMemoryStore()
     detail = _detail()

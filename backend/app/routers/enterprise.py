@@ -1287,6 +1287,8 @@ def upsert_report_version(
     user: EnterpriseUserDep,
 ) -> ReportVersionRecord:
     _require_workspace_access(user, version.workspace_id, "report:write")
+    if version.status == "published":
+        _enforce_report_publish_status(version, store)
     if version.status in {"approved", "published"}:
         _enforce_report_release_gate(version, store, user)
     return store.upsert_report_version(version)
@@ -1558,6 +1560,26 @@ def _enforce_report_release_gate(
     if gate.allowed:
         return
     raise HTTPException(status_code=409, detail=jsonable_encoder(gate))
+
+
+def _enforce_report_publish_status(
+    version: ReportVersionRecord,
+    store: EnterpriseStore,
+) -> None:
+    current = store.get_report_version(version.id)
+    current_status = current.status if current is not None else "missing"
+    if current_status in {"approved", "published"}:
+        return
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "status": "blocked",
+            "reason": "report_approval_required",
+            "message": "Report version must be approved before it can be published.",
+            "report_version_id": version.id,
+            "current_status": current_status,
+        },
+    )
 
 
 def _scoped_workspace_id(
