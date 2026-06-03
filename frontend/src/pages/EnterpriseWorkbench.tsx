@@ -37,6 +37,7 @@ import {
   getProjectRedTeam,
   getToolRegistry,
   getWorkspaceUsage,
+  listArtifacts,
   listEnterpriseCompetitors,
   listEnterpriseNotifications,
   listEnterpriseProjects,
@@ -54,6 +55,7 @@ import type {
   BusinessIntelPlan,
   BusinessQAEvaluation,
   BusinessQAFinding,
+  ArtifactRecord,
   ClaimValidationReport,
   ClaimRecord,
   CompetitorScoreReport,
@@ -97,6 +99,7 @@ export function EnterpriseWorkbench({
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [competitors, setCompetitors] = useState<CompetitorRecord[]>([]);
+  const [artifacts, setArtifacts] = useState<ArtifactRecord[]>([]);
   const [evidence, setEvidence] = useState<EvidenceRecord[]>([]);
   const [claims, setClaims] = useState<ClaimRecord[]>([]);
   const [versions, setVersions] = useState<ReportVersionRecord[]>([]);
@@ -161,6 +164,7 @@ export function EnterpriseWorkbench({
     const projectForLoad = projects.find((project) => project.id === selectedProjectId) ?? null;
     if (!selectedProjectId || !projectForLoad) {
       setCompetitors([]);
+      setArtifacts([]);
       setEvidence([]);
       setClaims([]);
       setVersions([]);
@@ -192,6 +196,7 @@ export function EnterpriseWorkbench({
     setError(null);
     Promise.all([
       listEnterpriseCompetitors({ projectId: selectedProjectId }),
+      listArtifacts({ projectId: selectedProjectId }),
       listProjectEvidence(selectedProjectId),
       listProjectClaims(selectedProjectId),
       listProjectReportVersions(selectedProjectId),
@@ -221,6 +226,7 @@ export function EnterpriseWorkbench({
       .then(
         ([
           competitorItems,
+          artifactItems,
           evidenceItems,
           claimItems,
           versionItems,
@@ -245,6 +251,7 @@ export function EnterpriseWorkbench({
         ]) => {
           if (!active) return;
           setCompetitors(competitorItems);
+          setArtifacts(artifactItems);
           setEvidence(evidenceItems);
           setClaims(claimItems);
           setVersions(versionItems);
@@ -274,6 +281,7 @@ export function EnterpriseWorkbench({
         if (!active) return;
         setError(err.message);
         setCompetitors([]);
+        setArtifacts([]);
         setEvidence([]);
         setClaims([]);
         setVersions([]);
@@ -644,6 +652,8 @@ export function EnterpriseWorkbench({
                 recall={memoryRecall}
                 stats={memoryStats}
               />
+
+              <ArtifactStorePanel artifacts={artifacts} />
 
               {competitorScores ? <CompetitorScorePanel report={competitorScores} /> : null}
 
@@ -1176,6 +1186,51 @@ function MemoryAgentPanel({
           ))}
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function ArtifactStorePanel({ artifacts }: { artifacts: ArtifactRecord[] }) {
+  const snapshotCount = artifacts.filter((artifact) =>
+    ["web_snapshot", "pdf", "screenshot"].includes(artifact.artifact_type),
+  ).length;
+  const linkedCount = artifacts.filter((artifact) => artifact.evidence_id).length;
+  const externalCount = artifacts.filter((artifact) =>
+    ["external", "s3", "oss"].includes(artifact.storage_backend),
+  ).length;
+  const totalBytes = artifacts.reduce((total, artifact) => total + artifact.byte_size, 0);
+  const recentArtifacts = [...artifacts]
+    .sort((left, right) => right.created_at.localeCompare(left.created_at))
+    .slice(0, 4);
+
+  return (
+    <section className="panel readiness-panel pass">
+      <div className="panel-heading-row">
+        <h2>Artifact store</h2>
+        <Database size={17} aria-hidden />
+      </div>
+      <div className="metric-grid compact">
+        <Metric icon={<FileText size={17} aria-hidden />} label="Artifacts" value={artifacts.length} />
+        <Metric icon={<Search size={17} aria-hidden />} label="Snapshots" value={snapshotCount} />
+        <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Linked" value={linkedCount} />
+        <Metric icon={<Database size={17} aria-hidden />} label="External" value={externalCount} />
+      </div>
+      <div className="project-meta-row">
+        <span>Total size {formatBytes(totalBytes)}</span>
+        <span>Evidence link {formatPercent(artifacts.length ? linkedCount / artifacts.length : 0)}</span>
+      </div>
+      {recentArtifacts.length > 0 ? (
+        <div className="competitor-strip">
+          {recentArtifacts.map((artifact) => (
+            <span key={artifact.id} title={artifact.uri}>
+              {artifact.filename}
+              <em>{artifact.artifact_type} / {artifact.storage_backend}</em>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="muted-line">No artifacts or source snapshots captured yet.</p>
+      )}
     </section>
   );
 }
@@ -1857,6 +1912,16 @@ function formatRouteCandidate(candidate?: ModelRouteDecision["selected"]) {
     return "none";
   }
   return candidate.model_name ? `${candidate.provider_name} / ${candidate.model_name}` : candidate.provider_name;
+}
+
+function formatBytes(value: number) {
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)} MB`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(1)} KB`;
+  }
+  return `${value} B`;
 }
 
 function qualityEntryPriority(entry: QualityAgentMatrixEntry) {
