@@ -2652,12 +2652,16 @@ function GovernanceRuntimePanel({
               >
                 <strong>{candidate.provider_name}</strong>
                 <span>
-                  {isActive ? "active" : candidate.configured ? "ready" : "missing"} / {candidate.provider_kind}
+                  {isActive ? "active" : candidate.configured ? "ready" : "missing"} /{" "}
+                  {candidate.provider_kind} / score {candidate.routing_score}
                 </span>
                 <p>
                   Q {candidate.quality_score} / Cost {candidate.cost_score} / Compliance{" "}
                   {candidate.compliance_score}
                 </p>
+                {(candidate.risk_flags ?? []).length ? (
+                  <p>{(candidate.risk_flags ?? []).slice(0, 3).join(", ")}</p>
+                ) : null}
               </article>
             );
           })}

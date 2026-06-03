@@ -1619,8 +1619,11 @@ export interface ModelRouteCandidate {
   quality_score: number;
   cost_score: number;
   compliance_score: number;
+  routing_score: number;
   supports_tool_calling: boolean;
   supports_json_schema: boolean;
+  routing_reasons: string[];
+  risk_flags: string[];
   reason: string;
 }
 

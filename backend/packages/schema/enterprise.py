@@ -419,8 +419,11 @@ class ModelRouteCandidate(BaseModel):
     quality_score: int = Field(ge=0, le=100)
     cost_score: int = Field(ge=0, le=100)
     compliance_score: int = Field(ge=0, le=100)
+    routing_score: int = Field(default=0, ge=0, le=100)
     supports_tool_calling: bool = True
     supports_json_schema: bool = True
+    routing_reasons: list[str] = Field(default_factory=list)
+    risk_flags: list[str] = Field(default_factory=list)
     reason: str = ""
 
 

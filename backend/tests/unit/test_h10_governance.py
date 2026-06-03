@@ -177,6 +177,12 @@ def test_tool_registry_and_model_router_explain_enterprise_policy() -> None:
     assert route.status == "fallback"
     assert route.selected is not None
     assert route.selected.provider_kind == "backup"
+    assert route.selected.routing_score > 0
+    assert route.selected.routing_reasons == [
+        "quality_weight=0.45",
+        "compliance_weight=0.35",
+        "cost_weight=0.20",
+    ]
 
 
 def test_model_router_blocks_real_routes_without_redaction() -> None:
@@ -190,6 +196,32 @@ def test_model_router_blocks_real_routes_without_redaction() -> None:
 
     assert route.status == "blocked"
     assert "redaction" in route.blocked_reasons[0]
+
+
+def test_model_router_scores_configured_candidates_by_policy_weights() -> None:
+    route = build_model_route_decision(
+        _settings(
+            ark_api_key="primary-key",
+            ark_model="primary-model",
+            backup_llm_api_key="backup-key",
+            backup_llm_model="backup-model",
+            compliance_redaction_enabled=True,
+            compliance_require_trace_context=True,
+        )
+    )
+    primary = next(item for item in route.candidates if item.provider_kind == "primary")
+    backup = next(item for item in route.candidates if item.provider_kind == "backup")
+    demo = next(item for item in route.candidates if item.provider_kind == "demo")
+
+    assert route.status == "selected"
+    assert route.selected is not None
+    assert route.selected.provider_kind == "primary"
+    assert route.fallback is not None
+    assert route.fallback.provider_kind == "backup"
+    assert primary.routing_score > backup.routing_score
+    assert primary.routing_score == 89
+    assert "deterministic_demo" in demo.risk_flags
+    assert "limited_tool_calling" in demo.risk_flags
 
 
 def test_h10_enterprise_routes_are_callable() -> None:

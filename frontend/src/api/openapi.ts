@@ -3495,6 +3495,11 @@ export interface components {
             /** Compliance Score */
             compliance_score: number;
             /**
+             * Routing Score
+             * @default 0
+             */
+            routing_score: number;
+            /**
              * Supports Tool Calling
              * @default true
              */
@@ -3504,6 +3509,10 @@ export interface components {
              * @default true
              */
             supports_json_schema: boolean;
+            /** Routing Reasons */
+            routing_reasons?: string[];
+            /** Risk Flags */
+            risk_flags?: string[];
             /**
              * Reason
              * @default
