@@ -524,6 +524,7 @@ def test_writer_hardens_report_with_memory_and_user_research_sections() -> None:
     detail.plan.memory_recall_score = 86
     detail.plan.memory_prompt_context = [
         "Prefer concise battlecard tables with buyer objections.",
+        "[domain fact; weight=0.76] Enterprise buyers compare category benchmarks.",
         "Always separate user research from official evidence.",
     ]
 
@@ -534,8 +535,9 @@ def test_writer_hardens_report_with_memory_and_user_research_sections() -> None:
 
     assert "## Memory Context" in report
     assert "memory-battlecard-1" in report
-    assert "Prefer concise battlecard tables" in report
-    assert "not as factual evidence" in report
+    assert "Guidance: Prefer concise battlecard tables" in report
+    assert "Domain fact: [domain fact; weight=0.76]" in report
+    assert "still needs current evidence" in report
     assert "## User Research Evidence" in report
     assert "directional buyer or user signals" in report
     assert "Survey, interview, and manual-note inputs" in report

@@ -981,7 +981,7 @@ async def test_run_service_applies_confirmed_memory_to_plan() -> None:
     assert "## Scenario QA Checklist" in report_md
     assert "## Claim Validation & Evidence Risk" in report_md
     assert created.plan.memory_candidate_ids[0] in report_md
-    assert "Confirmed MemoryAgent preferences" in report_md
+    assert "Confirmed MemoryAgent guidance" in report_md
 
 
 @pytest.mark.asyncio

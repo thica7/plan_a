@@ -117,7 +117,7 @@ def build_tool_registry_report(settings: object) -> ToolRegistryReport:
         ToolRegistryEntry(
             name="memory_recall",
             category="retrieval",
-            description="Retrieves confirmed MemoryAgent preferences for planner and QA context.",
+            description="Retrieves confirmed MemoryAgent guidance for planner and QA context.",
             input_schema="MemoryRecallQuery",
             output_schema="MemoryRecallResult",
             estimated_cost_usd=0.0,

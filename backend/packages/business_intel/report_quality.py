@@ -514,7 +514,7 @@ def _clean_recommendations(
         )
     if target.values.get("memory_context_section_score", 1.0) < 1.0:
         recommendations.append(
-            "Add a Memory Context section so confirmed MemoryAgent preferences are visible as "
+            "Add a Memory Context section so confirmed MemoryAgent guidance is visible as "
             "guidance, not mistaken for factual evidence."
         )
     if target.values.get("user_research_section_score", 1.0) < 1.0:

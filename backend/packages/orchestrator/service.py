@@ -3174,14 +3174,15 @@ class RunService(
         lines = [
             "## Memory Context",
             (
-                "Confirmed MemoryAgent preferences were used as writing and planning "
-                "guidance, not as factual evidence."
+                "Confirmed MemoryAgent guidance was used as planning and writing context; "
+                "any remembered domain fact still needs current evidence before publication."
             ),
             f"- Candidate IDs: {candidate_ids}",
             f"- Recall score: {detail.plan.memory_recall_score}/100",
         ]
         lines.extend(
-            f"- Preference: {item}" for item in detail.plan.memory_prompt_context[:6]
+            f"- {_memory_context_label(item)}: {item}"
+            for item in detail.plan.memory_prompt_context[:6]
         )
         return "\n".join(lines) + "\n\n"
 
@@ -3523,6 +3524,17 @@ def _hitl_review_messages(detail: RunDetail) -> list[AgentMessage]:
         for message in detail.agent_messages
         if message.message_type == "hitl_memory_feedback_captured"
     ]
+
+
+def _memory_context_label(item: str) -> str:
+    normalized = item.casefold()
+    if normalized.startswith("[domain fact") or "domain fact" in normalized:
+        return "Domain fact"
+    if normalized.startswith("[qa policy") or "qa policy" in normalized:
+        return "QA policy"
+    if normalized.startswith("[failure pattern") or "failure pattern" in normalized:
+        return "Failure pattern"
+    return "Guidance"
 
 
 def _metadata_int(value: object) -> int:
