@@ -1010,6 +1010,14 @@ def test_report_release_gate_blocks_unclosed_rag_gap_fill_chain() -> None:
                 "gap_fill_chain_closed": False,
                 "unfilled_gap_ids": ["gap-security"],
                 "gap_evidence_links": {},
+                "online_failures": [
+                    {
+                        "gap_id": "gap-security",
+                        "stage": "robots",
+                        "url": "https://cursor.example/trust",
+                        "error": "Blocked by robots.txt",
+                    }
+                ],
             }
         }
     )
@@ -1026,6 +1034,10 @@ def test_report_release_gate_blocks_unclosed_rag_gap_fill_chain() -> None:
     issues = {issue.rule_id: issue for issue in gate.issues}
     assert "rag_gap_fill_chain_unclosed" in issues
     assert "gap-security" in issues["rag_gap_fill_chain_unclosed"].message
+    assert "robots" in issues["rag_gap_fill_chain_unclosed"].message
+    assert "online search/fetch/robots failures" in issues[
+        "rag_gap_fill_chain_unclosed"
+    ].recommendation
 
 
 def test_report_release_gate_reads_remaining_gap_ids_from_gap_fill_metadata() -> None:

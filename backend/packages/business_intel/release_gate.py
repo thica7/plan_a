@@ -617,6 +617,14 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
         )
         if chain_closed is False or unresolved_count > 0 or not has_links:
             unfilled_summary = ", ".join(unfilled_gap_ids[:5]) or "n/a"
+            online_failure_summary = _online_failure_summary(
+                rag_gap_fill.get("online_failures")
+            )
+            online_failure_sentence = (
+                f" online_failures={online_failure_summary}."
+                if online_failure_summary
+                else ""
+            )
             issues.append(
                 _gate_issue(
                     "rag_gap_fill_chain_unclosed",
@@ -625,10 +633,12 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
                         "Report release requires the RAG evidence-gap fill chain to close; "
                         f"chain_closed={bool(chain_closed)}, remaining_gap_count="
                         f"{unresolved_count}, unfilled_gap_ids={unfilled_summary}."
+                        f"{online_failure_sentence}"
                     ),
                     recommendation=(
                         "Run online gap fill again, attach verified evidence for each remaining "
-                        "gap, or keep the report in draft with the gap explicitly unresolved."
+                        "gap, review any online search/fetch/robots failures, or keep the report "
+                        "in draft with the gap explicitly unresolved."
                     ),
                 )
             )
@@ -731,6 +741,30 @@ def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item).strip()]
+
+
+def _online_failure_summary(value: object) -> str:
+    if not isinstance(value, list) or not value:
+        return ""
+    summaries: list[str] = []
+    for item in value[:3]:
+        if not isinstance(item, dict):
+            continue
+        stage = str(item.get("stage") or "unknown").strip()
+        gap_id = str(item.get("gap_id") or "unknown-gap").strip()
+        url = str(item.get("url") or "").strip()
+        error = str(item.get("error") or "").strip()
+        parts = [stage, gap_id]
+        if url:
+            parts.append(url[:80])
+        if error:
+            parts.append(error[:120])
+        summaries.append(" / ".join(parts))
+    if not summaries:
+        return f"{len(value)} failure(s)"
+    extra = len(value) - len(summaries)
+    suffix = f"; +{extra} more" if extra > 0 else ""
+    return f"{len(value)} failure(s): " + "; ".join(summaries) + suffix
 
 
 def _mapping_value(value: object, key: str) -> object:
