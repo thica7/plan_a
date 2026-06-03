@@ -290,6 +290,7 @@ export type DecisionEventType =
   | "rag.retrieved"
   | "memory.recalled"
   | "memory.feedback_captured"
+  | "hitl.reviewed"
   | "self_consistency.sampled"
   | "claim.validated"
   | "qa.blocked"

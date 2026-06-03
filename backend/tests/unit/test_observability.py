@@ -201,6 +201,20 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
         RunEvent(
             id=5,
             run_id="run-1",
+            type="node_completed",
+            agent="hitl",
+            subagent="planner",
+            message="HITL decision received: modify_plan",
+            payload={
+                "decision": "modify_plan",
+                "stage": "planner",
+                "dimensions": ["feature"],
+                "note": "Prioritize enterprise workflow evidence.",
+            },
+        ),
+        RunEvent(
+            id=6,
+            run_id="run-1",
             type="self_consistency.sampled",
             agent="quality",
             message="Consistency sampled",
@@ -222,7 +236,7 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
             },
         ),
         RunEvent(
-            id=6,
+            id=7,
             run_id="run-1",
             type="run_completed",
             agent="writer",
@@ -238,6 +252,7 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
         "rag.retrieved",
         "memory.recalled",
         "memory.feedback_captured",
+        "hitl.reviewed",
         "self_consistency.sampled",
         "claim.validated",
         "benchmark.scored",
@@ -246,6 +261,11 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
     assert replay.replay_coverage_score >= 85
     assert replay.event_type_counts["memory.recalled"] >= 1
     assert replay.event_type_counts["memory.feedback_captured"] == 1
+    assert replay.event_type_counts["hitl.reviewed"] == 1
+    hitl_event = next(event for event in replay.events if event.event_type == "hitl.reviewed")
+    assert hitl_event.payload["decision"] == "modify_plan"
+    assert hitl_event.payload["stage"] == "planner"
+    assert hitl_event.payload["dimensions"] == ["feature"]
     feedback_event = next(
         event for event in replay.events if event.event_type == "memory.feedback_captured"
     )

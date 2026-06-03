@@ -572,6 +572,7 @@ export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) 
     "self_consistency.sampled",
     "memory.recalled",
     "memory.feedback_captured",
+    "hitl.reviewed",
     "claim.validated",
     "qa.blocked",
     "redo.routed",

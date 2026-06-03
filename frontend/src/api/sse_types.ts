@@ -17,6 +17,7 @@ export type RunEventType =
   | "self_consistency.sampled"
   | "memory.recalled"
   | "memory.feedback_captured"
+  | "hitl.reviewed"
   | "claim.validated"
   | "qa.blocked"
   | "redo.routed"

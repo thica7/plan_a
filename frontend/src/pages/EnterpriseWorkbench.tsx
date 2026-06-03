@@ -3899,6 +3899,13 @@ function decisionPayloadSummary(event: DecisionReplayEvent) {
     if (feedbackId) parts.push(feedbackId);
     if (candidateCount !== null) parts.push(`candidates ${candidateCount}`);
     if (targetType) parts.push(`target ${targetType}`);
+  } else if (event.event_type === "hitl.reviewed") {
+    const decision = payloadString(payload, "decision");
+    const stage = payloadString(payload, "stage") ?? event.subagent;
+    const dimensions = payloadListCount(payload, "dimensions");
+    if (decision) parts.push(`decision ${decision}`);
+    if (stage) parts.push(`stage ${stage}`);
+    if (dimensions !== null) parts.push(`dimensions ${dimensions}`);
   } else if (event.event_type === "claim.validated") {
     const claimCount = payloadNumber(payload, "claim_count") ?? event.claim_ids.length;
     const supportedCount = payloadNumber(payload, "supported_count");

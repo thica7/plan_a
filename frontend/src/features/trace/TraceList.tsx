@@ -276,6 +276,14 @@ function formatDecisionPayload(event: DecisionReplayEvent) {
     if (score !== null) parts.push(`recall ${score}`);
     if (candidates.length > 0) parts.push(`${candidates.length} memories`);
   }
+  if (event.event_type === "hitl.reviewed") {
+    const decision = stringPayload(event, "decision");
+    const stage = stringPayload(event, "stage") ?? event.subagent;
+    const dimensions = arrayPayload(event, "dimensions");
+    if (decision) parts.push(`decision ${decision}`);
+    if (stage) parts.push(`stage ${stage}`);
+    if (dimensions.length > 0) parts.push(`${dimensions.length} dimensions`);
+  }
   if (event.event_type === "benchmark.scored") {
     const score = numberPayload(event, "score");
     if (score !== null) parts.push(`score ${score}`);

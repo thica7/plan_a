@@ -16,6 +16,7 @@ DecisionEventType = Literal[
     "rag.retrieved",
     "memory.recalled",
     "memory.feedback_captured",
+    "hitl.reviewed",
     "self_consistency.sampled",
     "claim.validated",
     "qa.blocked",
@@ -107,6 +108,8 @@ def _map_run_event(detail: RunDetail, event: RunEvent) -> DecisionReplayEvent | 
         )
     if event.type == "node_completed":
         event_type: DecisionEventType = "agent.finished"
+        if event.agent == "hitl":
+            event_type = "hitl.reviewed"
         if event.agent == "collector" or event.payload.get("retrieval_records"):
             event_type = "rag.retrieved"
         return _event(
@@ -367,6 +370,12 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "candidate_count",
         "target_type",
         "target_id",
+        "stage",
+        "note",
+        "interrupt_node",
+        "interrupt_protocol",
+        "resume_command",
+        "timeout_seconds",
         "prompt_context",
         "decision",
         "dimensions",
@@ -419,6 +428,7 @@ _SPECIAL_EVENT_TYPES: set[DecisionEventType] = {
     "rag.retrieved",
     "memory.recalled",
     "memory.feedback_captured",
+    "hitl.reviewed",
     "self_consistency.sampled",
     "claim.validated",
     "qa.blocked",
