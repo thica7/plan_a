@@ -67,10 +67,15 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.human_correction_rate == 0.25
     assert report.redo_iteration_count == 1
     assert report.redo_convergence_ratio == 0.25
-    assert report.golden_set_size == 7
+    assert report.golden_set_size == 8
     assert report.golden_set_pass_rate >= 0.8
     assert report.report_quality_score >= 72
     assert report.source_recall >= 0.6
+    assert any(
+        metric.name == "schema_pass_rate" and metric.status == "pass"
+        for metric in report.metrics
+    )
+    assert any(case.case_id == "golden.schema_pass" for case in report.cases)
     assert any(
         metric.name == "report_structure_score" and metric.status == "pass"
         for metric in report.metrics
@@ -103,7 +108,11 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["evaluated_run_ids"] == ["real-run"]
     assert response.json()["real_run_count"] == 1
     assert response.json()["real_quality_chain_rate"] == 1.0
-    assert response.json()["golden_set_size"] == 7
+    assert response.json()["golden_set_size"] == 8
+    assert any(
+        metric["name"] == "schema_pass_rate" and metric["status"] == "pass"
+        for metric in response.json()["metrics"]
+    )
     assert any(
         metric["name"] == "report_structure_score" and metric["status"] == "pass"
         for metric in response.json()["metrics"]
@@ -251,6 +260,7 @@ def _run_detail(
             source_coverage_rate=quality_score,
             verified_source_rate=quality_score,
             claim_citation_rate=quality_score,
+            schema_pass_rate=1.0,
             human_override_rate=human_override_rate,
             revision_count=len(revisions or []),
         ),

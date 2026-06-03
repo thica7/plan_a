@@ -68,6 +68,7 @@ def build_enterprise_evalops_report(
     citation_rate = _average_float(
         [_metric_value(comparison, "claim_citation_rate") for comparison in comparisons]
     )
+    schema_pass_rate = _average_float([run.metrics.schema_pass_rate for run in recent_runs])
     report_structure_rate = _average_float(
         [_metric_value(comparison, "report_structure_score") for comparison in comparisons]
     )
@@ -93,6 +94,7 @@ def build_enterprise_evalops_report(
         source_recall=source_recall,
         verified_rate=verified_rate,
         citation_rate=citation_rate,
+        schema_pass_rate=schema_pass_rate,
         report_structure_rate=report_structure_rate,
         real_collection_rate=real_collection_rate,
         real_llm_rate=real_llm_rate,
@@ -104,6 +106,7 @@ def build_enterprise_evalops_report(
         _metric("source_recall", source_recall, 0.6, "ratio"),
         _metric("verified_source_rate", verified_rate, 0.6, "ratio"),
         _metric("claim_citation_rate", citation_rate, 0.6, "ratio"),
+        _metric("schema_pass_rate", schema_pass_rate, 1.0, "ratio"),
         _metric("report_structure_score", report_structure_rate, 0.7, "ratio"),
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
@@ -171,6 +174,7 @@ def _golden_cases(
     source_recall: float,
     verified_rate: float,
     citation_rate: float,
+    schema_pass_rate: float,
     report_structure_rate: float,
     real_collection_rate: float,
     real_llm_rate: float,
@@ -207,6 +211,14 @@ def _golden_cases(
             "Claim citation rate",
             round(citation_rate * 100),
             60,
+            target_run_id,
+            baseline_run_id,
+        ),
+        _case(
+            "golden.schema_pass",
+            "Schema validation pass rate",
+            round(schema_pass_rate * 100),
+            100,
             target_run_id,
             baseline_run_id,
         ),
@@ -323,6 +335,8 @@ def _recommendations(
         recommendations.append("Improve source recall with more competitor-dimension evidence coverage.")
     if metric_names["claim_citation_rate"].status != "pass":
         recommendations.append("Increase claim citation rate before relying on the report in review.")
+    if metric_names["schema_pass_rate"].status != "pass":
+        recommendations.append("Fix schema validation failures before comparing or publishing the report.")
     if metric_names["real_collection_rate"].status != "pass":
         recommendations.append("Run more real collection paths so EvalOps is not dominated by demos.")
     if metric_names["real_quality_chain_rate"].status != "pass":
