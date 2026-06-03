@@ -826,6 +826,7 @@ async def get_project_quality_matrix(
         if report_versions
         else None
     )
+    latest_report_version = report_versions[0] if report_versions else None
     memory_stats = memory.stats(workspace_id=project.workspace_id, project_id=project_id)
     memory_status = (
         "warn"
@@ -946,6 +947,12 @@ async def get_project_quality_matrix(
             suggested_redos=red_team_findings_to_redo_scopes(red_team.findings)[:3],
             metadata=_quality_agent_pydantic_ai_metadata(red_team),
         ),
+        _benchmark_quality_matrix_entry(
+            latest_report_version,
+            latest_release_gate=latest_release_gate,
+            evidence_count=len(evidence),
+            claim_count=len(claims),
+        ),
         (
             QualityAgentMatrixEntry(
                 agent_name="ReleaseGate",
@@ -1024,16 +1031,109 @@ async def get_project_quality_matrix(
     )
 
 
+def _benchmark_quality_matrix_entry(
+    report_version: ReportVersionRecord | None,
+    *,
+    latest_release_gate: ReportReleaseGate | None,
+    evidence_count: int,
+    claim_count: int,
+) -> QualityAgentMatrixEntry:
+    if report_version is None:
+        return QualityAgentMatrixEntry(
+            agent_name="BenchmarkAgent",
+            framework="deterministic-report-benchmark",
+            status="blocker",
+            score=0,
+            blocker_count=1,
+            finding_count=1,
+            summary="No ReportVersion exists yet; report benchmark cannot score quality.",
+            metadata={"benchmark_reason": "missing_report_version"},
+        )
+    report_md = report_version.report_md
+    citation_count = len(_report_source_tokens(report_md))
+    report_length_score = min(100, round(len(report_md.strip()) / 12))
+    evidence_score = min(100, evidence_count * 25)
+    claim_score = min(100, claim_count * 35)
+    citation_score = min(100, citation_count * 20)
+    release_score = latest_release_gate.readiness.score if latest_release_gate is not None else 50
+    score = round(
+        report_length_score * 0.25
+        + evidence_score * 0.2
+        + claim_score * 0.2
+        + citation_score * 0.15
+        + release_score * 0.2
+    )
+    blockers: list[str] = []
+    warnings: list[str] = []
+    if latest_release_gate is not None and latest_release_gate.blocker_count > 0:
+        blockers.append("release_gate_blocked")
+    if evidence_count == 0:
+        blockers.append("missing_evidence")
+    if claim_count == 0:
+        warnings.append("missing_claims")
+    if citation_count == 0:
+        warnings.append("missing_source_tokens")
+    if len(report_md.strip()) < 700:
+        warnings.append("thin_report_body")
+    if latest_release_gate is not None and latest_release_gate.warn_count > 0:
+        warnings.append("release_gate_warnings")
+    blocker_count = len(blockers)
+    warn_count = len(warnings)
+    return QualityAgentMatrixEntry(
+        agent_name="BenchmarkAgent",
+        framework="deterministic-report-benchmark",
+        status=_matrix_status(blocker_count, warn_count),
+        score=max(0, score - blocker_count * 25 - warn_count * 5),
+        blocker_count=blocker_count,
+        warn_count=warn_count,
+        finding_count=blocker_count + warn_count,
+        summary=(
+            f"Report benchmark scored {score}/100 across length, citations, evidence, "
+            f"claims, and release readiness."
+        ),
+        evidence_ids=list(report_version.evidence_ids),
+        claim_ids=list(report_version.claim_ids),
+        metadata={
+            "report_version_id": report_version.id,
+            "report_length_chars": len(report_md.strip()),
+            "source_token_count": citation_count,
+            "evidence_count": evidence_count,
+            "claim_count": claim_count,
+            "release_readiness_score": release_score,
+            "benchmark_blockers": blockers,
+            "benchmark_warnings": warnings,
+            "component_scores": {
+                "report_length_score": report_length_score,
+                "evidence_score": evidence_score,
+                "claim_score": claim_score,
+                "citation_score": citation_score,
+                "release_score": release_score,
+            },
+        },
+    )
+
+
+def _report_source_tokens(report_md: str) -> list[str]:
+    return re.findall(r"\[source:([A-Za-z0-9_.:#-]+)\]", report_md)
+
+
 def _with_quality_peer_review_metadata(
     entries: list[QualityAgentMatrixEntry],
 ) -> list[QualityAgentMatrixEntry]:
     available_agents = {entry.agent_name for entry in entries}
     review_targets = {
-        "BusinessQA": ["EvidenceGap", "ReleaseGate"],
-        "ClaimValidator": ["BusinessQA", "ReleaseGate"],
-        "EvidenceGap": ["BusinessQA", "ReleaseGate"],
-        "RedTeam": ["BusinessQA", "ClaimValidator", "EvidenceGap", "ReleaseGate"],
-        "ReleaseGate": [],
+        "BusinessQA": ["EvidenceGap", "BenchmarkAgent", "ReleaseGate"],
+        "ClaimValidator": ["BusinessQA", "BenchmarkAgent", "ReleaseGate"],
+        "EvidenceGap": ["BusinessQA", "BenchmarkAgent", "ReleaseGate"],
+        "RedTeam": [
+            "BusinessQA",
+            "ClaimValidator",
+            "EvidenceGap",
+            "BenchmarkAgent",
+            "ReleaseGate",
+        ],
+        "BenchmarkAgent": ["ClaimValidator", "EvidenceGap", "RedTeam", "ReleaseGate"],
+        "ReleaseGate": ["BenchmarkAgent"],
         "MemoryAgent": ["BusinessQA", "RedTeam"],
     }
     reviewed_by: dict[str, list[str]] = {agent: [] for agent in available_agents}

@@ -1197,6 +1197,7 @@ def test_enterprise_router_exposes_projection() -> None:
         "ClaimValidator",
         "EvidenceGap",
         "RedTeam",
+        "BenchmarkAgent",
         "ReleaseGate",
         "MemoryAgent",
     }
@@ -1238,6 +1239,27 @@ def test_enterprise_router_exposes_projection() -> None:
         "BusinessQA",
         "ClaimValidator",
         "EvidenceGap",
+        "BenchmarkAgent",
+        "ReleaseGate",
+    }
+    benchmark_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "BenchmarkAgent"
+    )
+    assert benchmark_matrix["framework"] == "deterministic-report-benchmark"
+    assert benchmark_matrix["metadata"]["report_version_id"] == projection.report_version.id
+    assert benchmark_matrix["metadata"]["source_token_count"] >= 1
+    assert benchmark_matrix["metadata"]["component_scores"]["release_score"] >= 80
+    assert set(benchmark_matrix["metadata"]["peer_reviewed_by"]) >= {
+        "BusinessQA",
+        "ClaimValidator",
+        "EvidenceGap",
+        "RedTeam",
+        "ReleaseGate",
+    }
+    assert set(benchmark_matrix["metadata"]["review_targets"]) >= {
+        "ClaimValidator",
+        "EvidenceGap",
+        "RedTeam",
         "ReleaseGate",
     }
     release_matrix = next(
@@ -1252,6 +1274,7 @@ def test_enterprise_router_exposes_projection() -> None:
         "ClaimValidator",
         "EvidenceGap",
         "RedTeam",
+        "BenchmarkAgent",
     }
     assert competitors.status_code == 200
     assert [item["name"] for item in competitors.json()] == ["Cursor"]
