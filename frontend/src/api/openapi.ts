@@ -5195,6 +5195,17 @@ export interface components {
              */
             robots_status: "unknown" | "allowed" | "blocked" | "error";
             /**
+             * Policy Review Status
+             * @default not_required
+             * @enum {string}
+             */
+            policy_review_status: "not_required" | "pending" | "approved" | "rejected";
+            /**
+             * Policy Review Reason
+             * @default
+             */
+            policy_review_reason: string;
+            /**
              * Is Active
              * @default true
              */

@@ -1478,6 +1478,8 @@ export interface SourceRegistryRecord {
   homepage_url?: string | null;
   trust_level: "official" | "verified" | "community" | "synthetic" | "unknown";
   robots_status: "unknown" | "allowed" | "blocked" | "error";
+  policy_review_status: "not_required" | "pending" | "approved" | "rejected";
+  policy_review_reason: string;
   is_active: boolean;
   first_seen_run_id?: string | null;
   last_seen_run_id?: string | null;

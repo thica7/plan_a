@@ -146,6 +146,8 @@ def test_source_registry_record_tracks_source_governance() -> None:
         homepage_url="https://cursor.sh",
         trust_level="verified",
         robots_status="allowed",
+        policy_review_status="approved",
+        policy_review_reason="Domain is on the reviewed source list.",
         first_seen_run_id="run-1",
         last_seen_run_id="run-1",
     )
@@ -153,7 +155,23 @@ def test_source_registry_record_tracks_source_governance() -> None:
     assert record.domain == "cursor.sh"
     assert record.trust_level == "verified"
     assert record.robots_status == "allowed"
+    assert record.policy_review_status == "approved"
     assert record.seen_count == 1
+
+
+def test_source_registry_record_queues_robots_policy_review() -> None:
+    record = SourceRegistryRecord(
+        id="source-robots",
+        workspace_id="workspace-1",
+        domain="example.com",
+        source_type="webpage_verified",
+        display_name="Example",
+        trust_level="community",
+        robots_status="blocked",
+    )
+
+    assert record.policy_review_status == "pending"
+    assert "blocked" in record.policy_review_reason
 
 
 def test_evidence_embedding_and_search_schema_are_typed() -> None:

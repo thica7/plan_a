@@ -1700,11 +1700,12 @@ class EnterprisePostgresStore:
             """
             INSERT INTO source_registry (
                 id, workspace_id, domain, source_type, display_name, homepage_url,
-                trust_level, robots_status, is_active, first_seen_run_id,
+                trust_level, robots_status, policy_review_status, policy_review_reason,
+                is_active, first_seen_run_id,
                 last_seen_run_id, first_seen_at, last_seen_at, seen_count, metadata
             )
             VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON CONFLICT (id) DO UPDATE SET
                 display_name = EXCLUDED.display_name,
@@ -1729,6 +1730,15 @@ class EnterprisePostgresStore:
                     THEN EXCLUDED.robots_status
                     ELSE source_registry.robots_status
                 END,
+                policy_review_status = CASE
+                    WHEN EXCLUDED.policy_review_status <> 'not_required'
+                    THEN EXCLUDED.policy_review_status
+                    ELSE source_registry.policy_review_status
+                END,
+                policy_review_reason = COALESCE(
+                    NULLIF(EXCLUDED.policy_review_reason, ''),
+                    source_registry.policy_review_reason
+                ),
                 is_active = source_registry.is_active,
                 first_seen_run_id = COALESCE(
                     source_registry.first_seen_run_id,
@@ -1758,6 +1768,8 @@ class EnterprisePostgresStore:
                 str(record.homepage_url) if record.homepage_url else None,
                 record.trust_level,
                 record.robots_status,
+                record.policy_review_status,
+                record.policy_review_reason,
                 record.is_active,
                 record.first_seen_run_id,
                 record.last_seen_run_id,

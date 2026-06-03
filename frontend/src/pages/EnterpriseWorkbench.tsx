@@ -1920,6 +1920,9 @@ function SourceRegistryPanel({ sources }: { sources: SourceRegistryRecord[] }) {
   const activeSources = sources.filter((source) => source.is_active);
   const allowedSources = sources.filter((source) => source.robots_status === "allowed");
   const blockedSources = sources.filter((source) => source.robots_status === "blocked");
+  const pendingReviewSources = sources.filter(
+    (source) => source.policy_review_status === "pending",
+  );
   const trustedSources = sources.filter((source) =>
     ["official", "verified"].includes(source.trust_level),
   );
@@ -1928,10 +1931,10 @@ function SourceRegistryPanel({ sources }: { sources: SourceRegistryRecord[] }) {
     .slice(0, 4);
 
   return (
-    <section className={`panel readiness-panel ${blockedSources.length > 0 ? "warn" : "pass"}`}>
+    <section className={`panel readiness-panel ${pendingReviewSources.length > 0 ? "warn" : "pass"}`}>
       <div className="panel-heading-row">
         <h2>Source registry</h2>
-        {blockedSources.length > 0 ? (
+        {pendingReviewSources.length > 0 ? (
           <AlertTriangle size={17} aria-hidden />
         ) : (
           <ShieldCheck size={17} aria-hidden />
@@ -1941,7 +1944,7 @@ function SourceRegistryPanel({ sources }: { sources: SourceRegistryRecord[] }) {
         <Metric icon={<Database size={17} aria-hidden />} label="Sources" value={sources.length} />
         <Metric icon={<CheckCircle2 size={17} aria-hidden />} label="Active" value={activeSources.length} />
         <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Allowed" value={allowedSources.length} />
-        <Metric icon={<AlertTriangle size={17} aria-hidden />} label="Blocked" value={blockedSources.length} />
+        <Metric icon={<AlertTriangle size={17} aria-hidden />} label="Review" value={pendingReviewSources.length} />
       </div>
       <div className="project-meta-row">
         <span>Trusted {formatPercent(sources.length ? trustedSources.length / sources.length : 0)}</span>
@@ -1952,7 +1955,7 @@ function SourceRegistryPanel({ sources }: { sources: SourceRegistryRecord[] }) {
           {recentSources.map((source) => (
             <span key={source.id} title={source.homepage_url ?? source.domain}>
               {source.display_name || source.domain}
-              <em>{source.trust_level} / {source.robots_status}</em>
+              <em>{source.trust_level} / {source.robots_status} / {source.policy_review_status}</em>
             </span>
           ))}
         </div>

@@ -188,6 +188,9 @@ CREATE TABLE IF NOT EXISTS source_registry (
         CHECK (trust_level IN ('official', 'verified', 'community', 'synthetic', 'unknown')),
     robots_status TEXT NOT NULL DEFAULT 'unknown'
         CHECK (robots_status IN ('unknown', 'allowed', 'blocked', 'error')),
+    policy_review_status TEXT NOT NULL DEFAULT 'not_required'
+        CHECK (policy_review_status IN ('not_required', 'pending', 'approved', 'rejected')),
+    policy_review_reason TEXT NOT NULL DEFAULT '',
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     first_seen_run_id TEXT REFERENCES runs(id),
     last_seen_run_id TEXT REFERENCES runs(id),
@@ -320,6 +323,8 @@ CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_domain
     ON source_registry(workspace_id, domain);
 CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_trust
     ON source_registry(workspace_id, trust_level);
+CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_review
+    ON source_registry(workspace_id, policy_review_status);
 CREATE INDEX IF NOT EXISTS idx_evidence_embeddings_workspace
     ON evidence_embeddings(workspace_id, project_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_embeddings_vector
@@ -399,6 +404,15 @@ ALTER TABLE report_versions
     ADD COLUMN IF NOT EXISTS quality_metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE projects
     ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE source_registry
+    ADD COLUMN IF NOT EXISTS policy_review_status TEXT NOT NULL DEFAULT 'not_required';
+ALTER TABLE source_registry
+    ADD COLUMN IF NOT EXISTS policy_review_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE source_registry DROP CONSTRAINT IF EXISTS source_registry_policy_review_status_check;
+ALTER TABLE source_registry
+    ADD CONSTRAINT source_registry_policy_review_status_check CHECK (
+        policy_review_status IN ('not_required', 'pending', 'approved', 'rejected')
+    );
 UPDATE evidence_records
 SET canonical_url = COALESCE(NULLIF(canonical_url, ''), url, '')
 WHERE canonical_url = '';

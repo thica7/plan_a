@@ -50,7 +50,10 @@ def test_phase4_prereq_columns_are_present_in_postgres_schema() -> None:
 def test_report_versions_schema_allows_rejected_approval_status() -> None:
     sql = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
 
-    assert "CHECK (status IN ('draft', 'in_review', 'approved', 'rejected', 'published', 'archived'))" in sql
+    assert (
+        "CHECK (status IN ('draft', 'in_review', 'approved', 'rejected', "
+        "'published', 'archived'))"
+    ) in sql
 
 
 def test_phase4_workspace_members_schema_is_present() -> None:
@@ -68,6 +71,8 @@ def test_phase4_source_registry_schema_is_present() -> None:
     assert "UNIQUE (workspace_id, domain, source_type)" in sql
     assert "trust_level TEXT NOT NULL DEFAULT 'unknown'" in sql
     assert "robots_status TEXT NOT NULL DEFAULT 'unknown'" in sql
+    assert "policy_review_status TEXT NOT NULL DEFAULT 'not_required'" in sql
+    assert "idx_source_registry_workspace_review" in sql
     assert "idx_source_registry_workspace_domain" in sql
 
 

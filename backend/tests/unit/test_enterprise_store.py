@@ -363,10 +363,30 @@ def test_enterprise_store_registers_sources_from_evidence_lifecycle() -> None:
     assert source.trust_level == "verified"
     assert source.homepage_url is not None
     assert str(source.homepage_url) == "https://cursor.sh/"
+    assert source.policy_review_status == "not_required"
     assert source.first_seen_run_id == "run-1"
     assert source.last_seen_run_id == "run-2"
     assert source.seen_count == 2
     assert any(log.action == "source_registry.upserted" for log in store.list_audit_logs())
+
+
+def test_enterprise_store_queues_source_policy_review_from_evidence_metadata() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    detail.raw_sources[0].source_type = "robots_blocked"
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+
+    [source] = store.list_source_registry(workspace_id=context.workspace_id)
+    assert source.robots_status == "blocked"
+    assert source.policy_review_status == "pending"
+    assert source.policy_review_reason == "Robots/source policy status is blocked."
 
 
 def test_enterprise_store_indexes_and_searches_evidence_embeddings() -> None:

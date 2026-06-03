@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 from packages.schema.models import RedoScope, SkillSpec
 from packages.schema.rag import RetrievalRecord
@@ -13,6 +13,7 @@ EvidenceQualityLabel = Literal["unreviewed", "accepted", "rejected", "stale"]
 EnterpriseRole = Literal["owner", "admin", "analyst", "reviewer", "viewer"]
 SourceRobotsStatus = Literal["unknown", "allowed", "blocked", "error"]
 SourceTrustLevel = Literal["official", "verified", "community", "synthetic", "unknown"]
+SourcePolicyReviewStatus = Literal["not_required", "pending", "approved", "rejected"]
 ArtifactType = Literal["web_snapshot", "pdf", "screenshot", "raw_text", "report_export", "other"]
 ArtifactStorageBackend = Literal["local", "external", "s3", "oss"]
 NotificationChannel = Literal["in_app", "email", "webhook", "feishu"]
@@ -255,6 +256,8 @@ class SourceRegistryRecord(BaseModel):
     homepage_url: HttpUrl | None = None
     trust_level: SourceTrustLevel = "unknown"
     robots_status: SourceRobotsStatus = "unknown"
+    policy_review_status: SourcePolicyReviewStatus = "not_required"
+    policy_review_reason: str = ""
     is_active: bool = True
     first_seen_run_id: str | None = None
     last_seen_run_id: str | None = None
@@ -262,6 +265,19 @@ class SourceRegistryRecord(BaseModel):
     last_seen_at: datetime = Field(default_factory=datetime.utcnow)
     seen_count: int = Field(default=1, ge=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def queue_robots_policy_review(self) -> SourceRegistryRecord:
+        if (
+            self.policy_review_status == "not_required"
+            and self.robots_status in {"blocked", "error"}
+        ):
+            self.policy_review_status = "pending"
+            if not self.policy_review_reason:
+                self.policy_review_reason = (
+                    f"Robots/source policy status is {self.robots_status}."
+                )
+        return self
 
 
 class EvidenceEmbeddingRecord(BaseModel):

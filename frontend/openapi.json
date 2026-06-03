@@ -15431,6 +15431,22 @@
             "title": "Robots Status",
             "default": "unknown"
           },
+          "policy_review_status": {
+            "type": "string",
+            "enum": [
+              "not_required",
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "title": "Policy Review Status",
+            "default": "not_required"
+          },
+          "policy_review_reason": {
+            "type": "string",
+            "title": "Policy Review Reason",
+            "default": ""
+          },
           "is_active": {
             "type": "boolean",
             "title": "Is Active",

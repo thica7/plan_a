@@ -1360,6 +1360,8 @@ def source_registry_from_evidence(evidence: EvidenceRecord) -> SourceRegistryRec
         homepage_url=homepage_url,
         trust_level=_source_trust_level(evidence),
         robots_status=_source_robots_status(evidence),
+        policy_review_status=_source_policy_review_status(evidence),
+        policy_review_reason=_source_policy_review_reason(evidence),
         first_seen_run_id=first_seen_run_id,
         last_seen_run_id=last_seen_run_id,
         first_seen_at=evidence.captured_at,
@@ -1416,9 +1418,46 @@ def _source_trust_level(evidence: EvidenceRecord) -> str:
 
 def _source_robots_status(evidence: EvidenceRecord) -> str:
     status = str(evidence.metadata.get("robots_status") or "unknown").casefold()
-    if status in {"unknown", "allowed", "blocked", "error"}:
+    if status in {"allowed", "blocked", "error"}:
         return status
+    source_type = evidence.source_type.casefold()
+    if "robots" in source_type and "blocked" in source_type:
+        return "blocked"
+    if status == "unknown":
+        return "unknown"
     return "unknown"
+
+
+def _source_policy_review_status(evidence: EvidenceRecord) -> str:
+    status = str(
+        evidence.metadata.get("policy_review_status")
+        or evidence.metadata.get("source_policy_review_status")
+        or ""
+    ).casefold()
+    if status in {"not_required", "pending", "approved", "rejected"}:
+        return status
+    robots_status = _source_robots_status(evidence)
+    if robots_status in {"blocked", "error"}:
+        return "pending"
+    if bool(evidence.metadata.get("source_policy_review_required")):
+        return "pending"
+    return "not_required"
+
+
+def _source_policy_review_reason(evidence: EvidenceRecord) -> str:
+    reason = (
+        evidence.metadata.get("policy_review_reason")
+        or evidence.metadata.get("source_policy_review_reason")
+        or ""
+    )
+    if reason:
+        return str(reason)
+    robots_status = _source_robots_status(evidence)
+    if robots_status in {"blocked", "error"}:
+        return f"Robots/source policy status is {robots_status}."
+    if bool(evidence.metadata.get("source_policy_review_required")):
+        return "Source policy requires human review."
+    return ""
 
 
 def _merge_source_registry(
@@ -1440,6 +1479,11 @@ def _merge_source_registry(
             "robots_status": incoming.robots_status
             if incoming.robots_status != "unknown"
             else existing.robots_status,
+            "policy_review_status": incoming.policy_review_status
+            if incoming.policy_review_status != "not_required"
+            else existing.policy_review_status,
+            "policy_review_reason": incoming.policy_review_reason
+            or existing.policy_review_reason,
             "is_active": existing.is_active,
             "first_seen_run_id": existing.first_seen_run_id or incoming.first_seen_run_id,
             "first_seen_at": min(existing.first_seen_at, incoming.first_seen_at),
