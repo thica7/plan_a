@@ -523,6 +523,13 @@ export function publishReportVersion(versionId: string) {
   });
 }
 
+export function exportReportVersion(versionId: string, format: "markdown" | "html" | "csv") {
+  return request<ArtifactCreateResult>(
+    `/enterprise/report-versions/${versionId}/export?format=${encodeURIComponent(format)}`,
+    { method: "POST" },
+  );
+}
+
 export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) {
   const source = new EventSource(`/api/runs/${runId}/stream`);
   source.onmessage = (message) => {

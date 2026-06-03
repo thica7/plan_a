@@ -126,6 +126,10 @@ def test_h10_enterprise_routes_are_callable() -> None:
     graph_response = client.get(
         f"/api/enterprise/projects/{context.project_id}/kg-read-model"
     )
+    report_version_id = store.list_report_versions(project_id=context.project_id)[0].id
+    export_response = client.post(
+        f"/api/enterprise/report-versions/{report_version_id}/export?format=csv"
+    )
     snapshot_response = client.post(
         "/api/enterprise/source-snapshots",
         json={
@@ -145,6 +149,12 @@ def test_h10_enterprise_routes_are_callable() -> None:
     assert route_response.json()["selected"]["provider_kind"] == "backup"
     assert graph_response.status_code == 200
     assert graph_response.json()["node_count"] >= 5
+    assert export_response.status_code == 200
+    export_artifact = export_response.json()["artifact"]
+    assert export_artifact["artifact_type"] == "report_export"
+    assert export_artifact["media_type"] == "text/csv"
+    assert export_artifact["metadata"]["report_version_id"] == report_version_id
+    assert store.get_artifact(export_artifact["id"]) is not None
     assert snapshot_response.status_code == 200
     assert snapshot_response.json()["artifact"]["storage_backend"] == "oss"
     assert snapshot_response.json()["artifact"]["metadata"]["snapshot_quality_score"] >= 80

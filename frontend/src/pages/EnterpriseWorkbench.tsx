@@ -6,6 +6,7 @@ import {
   CalendarClock,
   CheckCircle2,
   Database,
+  Download,
   ExternalLink,
   FileText,
   Gauge,
@@ -17,6 +18,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import {
+  exportReportVersion,
   fillProjectEvidenceGaps,
   getDecisionReplay,
   getEnterpriseEvalOps,
@@ -155,11 +157,13 @@ export function EnterpriseWorkbench({
   const [isLoadingEvalOps, setLoadingEvalOps] = useState(false);
   const [isSubmittingReportApproval, setSubmittingReportApproval] = useState(false);
   const [isPublishingReport, setPublishingReport] = useState(false);
+  const [isExportingReport, setExportingReport] = useState(false);
   const [isSavingMemoryFeedback, setSavingMemoryFeedback] = useState(false);
   const [reviewingMemoryCandidateId, setReviewingMemoryCandidateId] = useState<string | null>(null);
   const [reviewingSchemaSuggestionId, setReviewingSchemaSuggestionId] = useState<string | null>(null);
   const [snapshottingEvidenceId, setSnapshottingEvidenceId] = useState<string | null>(null);
   const [memoryFeedbackDraft, setMemoryFeedbackDraft] = useState("");
+  const [lastReportExport, setLastReportExport] = useState<ArtifactRecord | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -217,6 +221,7 @@ export function EnterpriseWorkbench({
       setWorkspaceUsage(null);
       setAuditLogs([]);
       setSelectedVersionId(null);
+      setLastReportExport(null);
       setEvalOpsBaselineRunId(null);
       return;
     }
@@ -356,8 +361,10 @@ export function EnterpriseWorkbench({
     if (!selectedVersionId) {
       setDiff(null);
       setReleaseGate(null);
+      setLastReportExport(null);
       return;
     }
+    setLastReportExport(null);
 
     let active = true;
     Promise.all([getReportVersionDiff(selectedVersionId), getReportReleaseGate(selectedVersionId)])
@@ -619,6 +626,25 @@ export function EnterpriseWorkbench({
       setError(err instanceof Error ? err.message : "Unable to publish report");
     } finally {
       setPublishingReport(false);
+    }
+  }
+
+  async function handleExportReport(format: "markdown" | "html" | "csv") {
+    if (!selectedProject || !selectedVersion) return;
+    setExportingReport(true);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const result = await exportReportVersion(selectedVersion.id, format);
+      setLastReportExport(result.artifact);
+      const artifactItems = await listArtifacts({ projectId: selectedProject.id });
+      setArtifacts(artifactItems);
+      await refreshAuditLogsForWorkspace(selectedProject.workspace_id);
+      setScanMessage(`Report v${selectedVersion.version_number} exported as ${format}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to export report");
+    } finally {
+      setExportingReport(false);
     }
   }
 
@@ -1097,8 +1123,11 @@ export function EnterpriseWorkbench({
                   <ReportHistory
                     diff={diff}
                     isApprovalSubmitting={isSubmittingReportApproval}
+                    isExporting={isExportingReport}
                     isPublishing={isPublishingReport}
+                    lastExport={lastReportExport}
                     onApproveReport={() => handleSignalReportApproval("approved")}
+                    onExportReport={handleExportReport}
                     onPublishReport={handlePublishReport}
                     onRejectReport={() => handleSignalReportApproval("rejected")}
                     onStartApproval={handleStartReportApproval}
@@ -3031,8 +3060,11 @@ function buildReportSourceBundle(
 function ReportHistory({
   diff,
   isApprovalSubmitting,
+  isExporting,
   isPublishing,
+  lastExport,
   onApproveReport,
+  onExportReport,
   onPublishReport,
   onRejectReport,
   onStartApproval,
@@ -3046,8 +3078,11 @@ function ReportHistory({
 }: {
   diff: ReportVersionDiff | null;
   isApprovalSubmitting: boolean;
+  isExporting: boolean;
   isPublishing: boolean;
+  lastExport: ArtifactRecord | null;
   onApproveReport: () => void;
+  onExportReport: (format: "markdown" | "html" | "csv") => void;
   onPublishReport: () => void;
   onRejectReport: () => void;
   onStartApproval: () => void;
@@ -3092,6 +3127,13 @@ function ReportHistory({
             onReject={onRejectReport}
             onStart={onStartApproval}
             version={selectedVersion}
+          />
+        ) : null}
+        {selectedVersion ? (
+          <ReportExportPanel
+            isExporting={isExporting}
+            lastExport={lastExport}
+            onExport={onExportReport}
           />
         ) : null}
         {releaseGate ? <ReleaseGatePanel gate={releaseGate} /> : null}
@@ -3188,6 +3230,40 @@ function ReportApprovalPanel({
           {isPublishing ? "Publishing" : "Publish"}
         </button>
       </div>
+    </section>
+  );
+}
+
+function ReportExportPanel({
+  isExporting,
+  lastExport,
+  onExport,
+}: {
+  isExporting: boolean;
+  lastExport: ArtifactRecord | null;
+  onExport: (format: "markdown" | "html" | "csv") => void;
+}) {
+  return (
+    <section className="report-export-panel">
+      <div className="approval-action-row">
+        {(["markdown", "html", "csv"] as const).map((format) => (
+          <button
+            className="icon-text-button"
+            disabled={isExporting}
+            key={format}
+            type="button"
+            onClick={() => onExport(format)}
+          >
+            <Download size={15} aria-hidden />
+            {isExporting ? "Exporting" : format.toUpperCase()}
+          </button>
+        ))}
+      </div>
+      {lastExport ? (
+        <p className="muted-line">
+          {lastExport.filename} / {lastExport.uri}
+        </p>
+      ) : null}
     </section>
   );
 }

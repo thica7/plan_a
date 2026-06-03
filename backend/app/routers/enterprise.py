@@ -1,4 +1,7 @@
+import csv
 import hashlib
+import html
+import io
 import re
 from collections.abc import Iterable
 from datetime import datetime
@@ -748,7 +751,10 @@ async def get_project_red_team(
     )
     if result.status != "ok":
         raise HTTPException(status_code=503, detail=result.error or "Red-team agent failed.")
-    return _with_pydantic_ai_execution_metadata(RedTeamReport.model_validate(result.payload), result)
+    return _with_pydantic_ai_execution_metadata(
+        RedTeamReport.model_validate(result.payload),
+        result,
+    )
 
 
 @router.get(
@@ -1034,7 +1040,9 @@ def _with_pydantic_ai_execution_metadata(
     metadata = result.metadata
     return report.model_copy(
         update={
-            "pydantic_ai_available": bool(metadata.get("pydantic_ai_available", report.pydantic_ai_available)),
+            "pydantic_ai_available": bool(
+                metadata.get("pydantic_ai_available", report.pydantic_ai_available)
+            ),
             "pydantic_ai_execution_mode": str(
                 metadata.get("execution_mode", report.pydantic_ai_execution_mode)
             ),
@@ -1427,6 +1435,42 @@ def get_report_version(
     return version
 
 
+@router.post("/enterprise/report-versions/{version_id}/export", response_model=ArtifactCreateResult)
+def export_report_version(
+    version_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    artifact_storage: ArtifactStorageDep,
+    format: str = "markdown",
+) -> ArtifactCreateResult:
+    version = _report_version_or_404(version_id, store, user, "report:read")
+    _require_workspace_access(user, version.workspace_id, "artifact:write")
+    project = _project_or_404(version.project_id, store, user, "artifact:write")
+    if project.workspace_id != version.workspace_id:
+        raise HTTPException(status_code=400, detail="Report workspace does not match project")
+    body, filename, media_type = _report_export_payload(version, format)
+    request = ArtifactCreateRequest(
+        workspace_id=version.workspace_id,
+        project_id=version.project_id,
+        run_id=version.run_id,
+        artifact_type="report_export",
+        filename=filename,
+        media_type=media_type,
+        content_text=body,
+        metadata={
+            "report_version_id": version.id,
+            "report_version_number": version.version_number,
+            "report_status": version.status,
+            "export_format": _normalize_report_export_format(format),
+        },
+    )
+    try:
+        artifact = artifact_storage.store(request, actor_id=user.user_id)
+    except ArtifactStorageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ArtifactCreateResult(artifact=store.upsert_artifact(artifact))
+
+
 @router.get("/enterprise/report-versions/{version_id}/diff", response_model=ReportVersionDiff)
 def get_report_version_diff(
     version_id: str,
@@ -1561,6 +1605,60 @@ def _report_version_or_404(
         raise HTTPException(status_code=404, detail="Report version not found")
     _require_workspace_access(user, version.workspace_id, action)
     return version
+
+
+def _normalize_report_export_format(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized in {"md", "markdown"}:
+        return "markdown"
+    if normalized in {"html", "web"}:
+        return "html"
+    if normalized in {"csv", "excel"}:
+        return "csv"
+    raise HTTPException(
+        status_code=400,
+        detail="Unsupported report export format. Use markdown, html, or csv.",
+    )
+
+
+def _report_export_payload(version: ReportVersionRecord, format: str) -> tuple[str, str, str]:
+    normalized = _normalize_report_export_format(format)
+    filename_base = f"report-v{version.version_number}-{version.id}"
+    if normalized == "markdown":
+        return version.report_md, f"{filename_base}.md", "text/markdown"
+    if normalized == "html":
+        title = html.escape(f"Report v{version.version_number} / {version.topic_normalized}")
+        body = html.escape(version.report_md)
+        return (
+            (
+                "<!doctype html>\n"
+                '<html lang="en">\n'
+                "<head>\n"
+                '  <meta charset="utf-8" />\n'
+                f"  <title>{title}</title>\n"
+                "</head>\n"
+                "<body>\n"
+                f"  <main><h1>{title}</h1><pre>{body}</pre></main>\n"
+                "</body>\n"
+                "</html>\n"
+            ),
+            f"{filename_base}.html",
+            "text/html",
+        )
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(["field", "value"])
+    writer.writerow(["report_version_id", version.id])
+    writer.writerow(["version_number", version.version_number])
+    writer.writerow(["status", version.status])
+    writer.writerow(["run_id", version.run_id or ""])
+    writer.writerow(["competitor_layer", version.competitor_layer])
+    writer.writerow(["topic_normalized", version.topic_normalized])
+    writer.writerow([])
+    writer.writerow(["line_number", "text"])
+    for index, line in enumerate(version.report_md.splitlines(), start=1):
+        writer.writerow([index, line])
+    return output.getvalue(), f"{filename_base}.csv", "text/csv"
 
 
 def _report_release_gate_for_version(
