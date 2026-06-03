@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -47,7 +48,7 @@ def compare_run_quality(
     delta_score = (
         target_snapshot.score - baseline_snapshot.score if baseline_snapshot is not None else None
     )
-    verdict = _verdict(target_snapshot.score, delta_score)
+    verdict = _verdict(target_snapshot.score, delta_score, target_snapshot)
     return RunQualityComparison(
         target_run_id=target.id,
         baseline_run_id=baseline.id if baseline else None,
@@ -91,6 +92,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "real_source_rate": _real_source_rate(detail.raw_sources),
         "llm_call_signal": min(float(detail.metrics.llm_calls) / 3.0, 1.0),
         "report_length_score": min(len(detail.report_md) / 2500.0, 1.0),
+        "report_structure_score": _report_structure_score(detail),
         "qa_blocker_count": float(
             len([finding for finding in detail.qa_findings if finding.severity == "blocker"])
         ),
@@ -103,6 +105,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "real_source_rate": values["real_source_rate"],
         "llm_call_signal": values["llm_call_signal"],
         "report_length_score": values["report_length_score"],
+        "report_structure_score": values["report_structure_score"],
         "qa_blocker_count": max(0.0, 1.0 - min(values["qa_blocker_count"] / 3.0, 1.0)),
     }
     score = round(
@@ -121,6 +124,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         len(detail.report_md) >= 1200
         and values["claim_citation_rate"] >= 0.6
         and values["source_coverage_rate"] >= 0.5
+        and values["report_structure_score"] >= 0.7
     )
     return _QualitySnapshot(
         score=max(0, min(100, score)),
@@ -133,14 +137,15 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
 
 def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower_is_better"]]]:
     return [
-        ("evidence_count", 0.12, "higher_is_better"),
-        ("source_coverage_rate", 0.14, "higher_is_better"),
-        ("verified_source_rate", 0.14, "higher_is_better"),
-        ("claim_citation_rate", 0.16, "higher_is_better"),
-        ("real_source_rate", 0.16, "higher_is_better"),
+        ("evidence_count", 0.11, "higher_is_better"),
+        ("source_coverage_rate", 0.13, "higher_is_better"),
+        ("verified_source_rate", 0.13, "higher_is_better"),
+        ("claim_citation_rate", 0.14, "higher_is_better"),
+        ("real_source_rate", 0.14, "higher_is_better"),
         ("llm_call_signal", 0.1, "higher_is_better"),
-        ("report_length_score", 0.1, "higher_is_better"),
-        ("qa_blocker_count", 0.08, "lower_is_better"),
+        ("report_length_score", 0.08, "higher_is_better"),
+        ("report_structure_score", 0.1, "higher_is_better"),
+        ("qa_blocker_count", 0.07, "lower_is_better"),
     ]
 
 
@@ -232,11 +237,48 @@ def _real_source_rate(sources: list[RawSource]) -> float:
     return len(real_sources) / len(sources)
 
 
-def _verdict(score: int, delta_score: int | None) -> Literal["pass", "warn", "fail"]:
+def _report_structure_score(detail: RunDetail) -> float:
+    checks = [
+        _has_heading(detail.report_md, ("executive summary", "executive overview")),
+        _has_heading(detail.report_md, ("source quality", "source coverage")),
+        _has_heading(detail.report_md, ("matrix", "dimension winners", "side-by-side")),
+        _has_heading(detail.report_md, ("next collection", "verification plan", "evidence gap")),
+        _has_heading(detail.report_md, ("evidence appendix", "source appendix")),
+        _has_layer_heading(detail),
+    ]
+    return sum(1 for item in checks if item) / len(checks)
+
+
+def _has_layer_heading(detail: RunDetail) -> bool:
+    layer = detail.plan.competitor_layer
+    if layer == "L1":
+        return _has_heading(detail.report_md, ("battlecard", "sales objection"))
+    if layer == "L2":
+        return _has_heading(detail.report_md, ("workflow", "enterprise risk", "switching"))
+    if layer == "L3":
+        return _has_heading(detail.report_md, ("market landscape", "segmentation", "benchmark"))
+    return _has_heading(detail.report_md, ("business implication", "strategy"))
+
+
+def _has_heading(markdown: str, needles: tuple[str, ...]) -> bool:
+    headings = [
+        match.group(1).casefold()
+        for match in re.finditer(r"^\s*#{1,4}\s+(.+?)\s*$", markdown, flags=re.MULTILINE)
+    ]
+    return any(any(needle in heading for needle in needles) for heading in headings)
+
+
+def _verdict(
+    score: int,
+    delta_score: int | None,
+    target: _QualitySnapshot,
+) -> Literal["pass", "warn", "fail"]:
     if score < 55:
         return "fail"
     if delta_score is not None and delta_score <= -10:
         return "fail"
+    if target.values.get("report_structure_score", 1.0) < 0.7:
+        return "warn"
     if score < 72 or (delta_score is not None and delta_score < 0):
         return "warn"
     return "pass"

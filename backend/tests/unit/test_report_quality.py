@@ -39,7 +39,7 @@ def test_compare_run_quality_scores_real_run_against_baseline() -> None:
         run_id="real-run",
         execution_mode="real",
         source_count=4,
-        report_md="Real report with evidence. " * 90,
+        report_md=_structured_report_md(),
         metrics=RunMetrics(
             llm_calls=3,
             source_coverage_rate=1.0,
@@ -74,7 +74,44 @@ def test_compare_run_quality_scores_real_run_against_baseline() -> None:
         "real_source_rate",
         "llm_call_signal",
         "claim_citation_rate",
+        "report_structure_score",
     }
+
+
+def test_compare_run_quality_flags_long_unstructured_report() -> None:
+    detail = _run_detail(
+        run_id="long-unstructured",
+        execution_mode="real",
+        source_count=4,
+        report_md="Cursor has evidence and Copilot has evidence. [source:source-0]\n" * 80,
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+
+    comparison = compare_run_quality(detail)
+    structure_metric = next(
+        metric for metric in comparison.metrics if metric.name == "report_structure_score"
+    )
+
+    assert structure_metric.target_value < 0.7
+    assert comparison.report_quality_signal is False
+    assert comparison.verdict == "warn"
 
 
 def test_compare_run_quality_flags_missing_real_chain_signals() -> None:
@@ -171,6 +208,46 @@ def test_writer_hardens_thin_success_report_without_fallback_labels() -> None:
     assert "## Next Collection / Verification Plan" in report
     assert "## Evidence Appendix" in report
     assert "Cursor has a clearer pricing position than Copilot. [source:source-0]" in report
+
+
+def _structured_report_md() -> str:
+    return """
+# Cursor vs Copilot Direct Battlecard
+
+## Executive Summary
+Cursor has stronger pricing transparency, while Copilot has integration breadth. [source:source-0] [source:source-1]
+
+## Source Quality & Coverage
+The run uses verified pages for both target competitors. [source:source-0] [source:source-1]
+The source set separates verified webpages from lower-confidence leads, so the recommendation
+does not treat search snippets as final proof. Cursor pricing is supported by a direct verified
+page, while Copilot evidence is treated as adequate for comparison but still needs procurement
+review before publication. [source:source-0] [source:source-1]
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Copilot |
+| --- | --- | --- |
+| Pricing | transparent pricing [source:source-0] | bundled enterprise offer [source:source-1] |
+| Feature | focused agent workflow [source:source-2] | broad IDE integration [source:source-3] |
+
+## Battlecard
+Sales should use pricing transparency and switching objections as the first battlecard line. [source:source-0]
+The battlecard should avoid absolute winner language until security, SSO, and procurement evidence
+are independently verified. Cursor is easier to explain on standalone pricing, while Copilot can
+defend through bundled distribution and existing Microsoft procurement paths. [source:source-0] [source:source-1]
+
+## Next Collection / Verification Plan
+Verify procurement and security evidence before publication. [source:source-2]
+Collect official enterprise security documentation, current procurement packaging, and buyer
+objection evidence for both competitors. Re-run claim validation after those sources are linked
+to the pricing and feature claims. [source:source-2] [source:source-3]
+
+## Evidence Appendix
+- source-0: Cursor pricing [source:source-0]
+- source-1: Copilot pricing [source:source-1]
+- source-2: Cursor feature evidence [source:source-2]
+- source-3: Copilot feature evidence [source:source-3]
+""".strip()
 
 
 def _run_detail(

@@ -32,7 +32,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         execution_mode="real",
         source_count=4,
         quality_score=1.0,
-        report_md="Decision-grade report with citations. " * 90,
+        report_md=_structured_report_md(),
         project_id="project-a",
         human_override_rate=0.25,
         revisions=[
@@ -85,7 +85,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
         execution_mode="real",
         source_count=4,
         quality_score=1.0,
-        report_md="Decision-grade report with citations. " * 90,
+        report_md=_structured_report_md(),
         project_id="project-a",
     )
     service = _FakeRunService([target])
@@ -126,6 +126,45 @@ class _FakeRunService:
 
     def get_run(self, run_id: str) -> RunDetail | None:
         return self._runs.get(run_id)
+
+
+def _structured_report_md() -> str:
+    return """
+# Cursor vs Copilot Direct Battlecard
+
+## Executive Summary
+Cursor has clearer standalone pricing evidence, while Copilot benefits from broader enterprise
+distribution. The recommendation is evidence-backed but still requires security and procurement
+verification before publication. [source:source-0] [source:source-1]
+
+## Source Quality & Coverage
+The report uses verified webpages for both competitors and separates direct evidence from
+remaining validation tasks. Cursor pricing and Copilot pricing are both represented in scoped
+sources, and the confidence profile is strong enough for a draft release gate review.
+[source:source-0] [source:source-1]
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Copilot |
+| --- | --- | --- |
+| Pricing | transparent standalone pricing [source:source-0] | bundled enterprise path [source:source-1] |
+| Feature | focused AI coding workflow [source:source-2] | broad IDE and ecosystem distribution [source:source-3] |
+
+## Battlecard
+Sales should lead with pricing clarity, workflow focus, and switching objections. The battlecard
+should avoid absolute claims until enterprise security controls, procurement packaging, and buyer
+risk evidence are verified. [source:source-0] [source:source-2]
+
+## Next Collection / Verification Plan
+Collect official security, SSO, procurement, and current packaging evidence for both competitors.
+Then rerun claim validation and release gate review before marking the report publishable.
+[source:source-2] [source:source-3]
+
+## Evidence Appendix
+- source-0: Cursor pricing [source:source-0]
+- source-1: Copilot pricing [source:source-1]
+- source-2: Cursor feature evidence [source:source-2]
+- source-3: Copilot feature evidence [source:source-3]
+""".strip()
 
 
 def _run_detail(
