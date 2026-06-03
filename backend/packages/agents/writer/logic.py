@@ -14,6 +14,16 @@ if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
 
 
+USER_RESEARCH_SOURCE_TYPES = {
+    "survey_simulated",
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+    "manual_note",
+    "manual",
+}
+
+
 class WriterAgentMixin:
     async def _real_writer_step(self, record: RunRecord) -> None:
         detail = record.detail
@@ -376,13 +386,15 @@ class WriterAgentMixin:
                 self._layer_section_heading(detail, fallback=False),
                 self._fallback_layer_sections(detail, source_ids, fallback=False),
             ),
+            ("Memory Context", self._fallback_memory_context_section(detail)),
+            ("User Research Evidence", self._fallback_user_research_section(detail)),
             ("Scenario QA Checklist", self._fallback_scenario_checklist_section(detail)),
             ("Claim Validation & Evidence Risk", self._fallback_claim_validation_section(detail)),
             ("Next Collection / Verification Plan", self._fallback_next_collection_plan(detail)),
             ("Evidence Appendix", self._fallback_evidence_appendix(detail)),
         ]
         for heading, lines in section_groups:
-            if not self._report_has_heading(hardened, heading):
+            if lines and not self._report_has_heading(hardened, heading):
                 hardened = f"{hardened}\n\n{self._section_body(lines)}"
         return hardened
 
@@ -521,6 +533,57 @@ class WriterAgentMixin:
         if not unique:
             return ""
         return " " + " ".join(f"[source:{source_id}]" for source_id in unique)
+
+    def _fallback_memory_context_section(self, detail: RunDetail) -> list[str]:
+        if not detail.plan.memory_prompt_context:
+            return []
+        candidate_ids = ", ".join(detail.plan.memory_candidate_ids) or "none"
+        lines = [
+            "",
+            "## Memory Context",
+            (
+                "Confirmed MemoryAgent preferences were used as writing and planning "
+                "guidance, not as factual evidence."
+            ),
+            f"- Candidate IDs: {candidate_ids}",
+            f"- Recall score: {detail.plan.memory_recall_score}/100",
+        ]
+        lines.extend(f"- Preference: {item}" for item in detail.plan.memory_prompt_context[:6])
+        return lines
+
+    def _fallback_user_research_section(self, detail: RunDetail) -> list[str]:
+        research_sources = [
+            source
+            for source in detail.raw_sources
+            if source.source_type in USER_RESEARCH_SOURCE_TYPES
+        ]
+        persona_requested = any(
+            dimension.casefold().replace("-", "_") in {"persona", "user", "review"}
+            for dimension in detail.plan.dimensions
+        )
+        if not research_sources and not persona_requested:
+            return []
+        lines = [
+            "",
+            "## User Research Evidence",
+            (
+                "Survey, interview, and manual-note inputs are treated as directional "
+                "buyer or user signals, not as official factual proof."
+            ),
+        ]
+        if not research_sources:
+            lines.append(
+                "- Persona or review analysis was requested, but no user-research source "
+                "is attached yet; keep persona conclusions in the evidence-gap lane."
+                f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+            )
+            return lines
+        for source in research_sources[:5]:
+            lines.append(
+                f"- {source.title} / {source.source_type} / confidence {source.confidence:.2f}"
+                f" [source:{source.id}]"
+            )
+        return lines
 
     def _fallback_claim_validation_section(self, detail: RunDetail) -> list[str]:
         lines = ["", "## Claim Validation & Evidence Risk"]

@@ -370,6 +370,40 @@ def test_writer_hardens_report_with_claim_validation_risk_section() -> None:
     assert "[source:source-0]" in report
 
 
+def test_writer_hardens_report_with_memory_and_user_research_sections() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="memory-user-research",
+        execution_mode="real",
+        source_count=3,
+        report_md="",
+        metrics=RunMetrics(),
+        source_types=["survey_simulated", "interview_record", "webpage_verified"],
+    )
+    detail.plan.dimensions = ["pricing", "persona"]
+    detail.plan.memory_candidate_ids = ["memory-battlecard-1"]
+    detail.plan.memory_recall_score = 86
+    detail.plan.memory_prompt_context = [
+        "Prefer concise battlecard tables with buyer objections.",
+        "Always separate user research from official evidence.",
+    ]
+
+    report = writer._harden_report_markdown(
+        detail,
+        "# Cursor vs Copilot\n\nCursor is preferred by developer teams.",
+    )
+
+    assert "## Memory Context" in report
+    assert "memory-battlecard-1" in report
+    assert "Prefer concise battlecard tables" in report
+    assert "not as factual evidence" in report
+    assert "## User Research Evidence" in report
+    assert "directional buyer or user signals" in report
+    assert "Survey, interview, and manual-note inputs" in report
+    assert "[source:source-0]" in report
+    assert "[source:source-1]" in report
+
+
 def test_writer_repairs_dimension_named_source_tokens() -> None:
     writer = _WriterHarness()
     detail = _run_detail(
