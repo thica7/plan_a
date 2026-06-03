@@ -8,6 +8,7 @@ from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.models import AnalysisPlan, QCIssue, RawSource, RedoScope
+from packages.schema.survey import SurveyEvidenceBundle, SurveyResponse
 from packages.skills.registry import SkillRegistry
 
 
@@ -282,3 +283,27 @@ def test_survey_evidence_projects_as_synthetic_enterprise_source() -> None:
         "survey-response",
     }
     assert {source.trust_level for source in source_registry} == {"synthetic"}
+
+
+@pytest.mark.parametrize("source_type", ["manual_transcript", "manual_note", "manual"])
+def test_user_research_schema_accepts_manual_source_types(source_type: str) -> None:
+    response = SurveyResponse(
+        respondent_id="manual-respondent",
+        competitor="Acme",
+        dimension="persona",
+        role="analyst",
+        quote="Manual research input.",
+        source_type=source_type,
+    )
+    bundle = SurveyEvidenceBundle(
+        topic="Acme persona research",
+        competitor="Acme",
+        dimension="persona",
+        responses=[response],
+        evidence_summary="Manual research evidence was imported.",
+        source_type=source_type,
+        content_hash="manualhash",
+    )
+
+    assert response.source_type == source_type
+    assert bundle.source_type == source_type

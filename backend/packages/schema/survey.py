@@ -10,6 +10,8 @@ ResearchSourceType = Literal[
     "survey_response",
     "interview_record",
     "manual_transcript",
+    "manual_note",
+    "manual",
 ]
 
 
