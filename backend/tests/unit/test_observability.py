@@ -474,6 +474,7 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
                             ],
                             "chunk_ids": ["chunk-gap-1"],
                             "rerank_scores": {"chunk-gap-1": 0.92},
+                            "gap_evidence_links": {"gap-security": ["evidence-gap-1"]},
                             "retrieval_record_count": 1,
                             "updated_report_version_id": "report-gap-fill-v2",
                         },
@@ -489,6 +490,7 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
                             "source_report_version_id": "report-gap-fill-v1",
                             "updated_report_version_id": "report-gap-fill-v2",
                             "gap_fill_chain_closed": True,
+                            "gap_evidence_links": {"gap-security": ["evidence-gap-1"]},
                         },
                         "created_at": "2026-05-31T00:03:00Z",
                     },
@@ -520,9 +522,15 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
     assert gap_events[0].payload["retrieval_contexts"][0]["chunk_ids"] == ["chunk-gap-1"]
     assert gap_events[0].payload["chunk_ids"] == ["chunk-gap-1"]
     assert gap_events[0].payload["rerank_scores"] == {"chunk-gap-1": 0.92}
+    assert gap_events[0].payload["gap_evidence_links"] == {
+        "gap-security": ["evidence-gap-1"]
+    }
     assert gap_events[0].payload["report_version_id"] == "report-gap-fill-v2"
     assert gap_events[1].payload["gap_ids"] == ["gap-security"]
     assert gap_events[1].payload["gap_fill_chain_closed"] is True
+    assert gap_events[1].payload["gap_evidence_links"] == {
+        "gap-security": ["evidence-gap-1"]
+    }
     assert gap_events[1].payload["release_gate_delta"]["release_gate_improved"] is True
     assert gap_events[1].payload["release_gate_blocker_delta"] == 2
     assert gap_events[1].payload["readiness_score_delta"] == 12

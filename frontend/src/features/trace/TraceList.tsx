@@ -268,6 +268,7 @@ export function formatDecisionPayload(event: DecisionReplayEvent) {
     const retrievalContexts = arrayPayload(event, "retrieval_contexts");
     const chunkIds = arrayPayload(event, "chunk_ids");
     const rerankScores = objectPayload(event, "rerank_scores");
+    const gapLinks = objectPayload(event, "gap_evidence_links");
     const resultCount = numberPayload(event, "result_count");
     const candidateUrls = arrayPayload(event, "candidate_urls");
     if (query) parts.push(`query: ${query}`);
@@ -275,6 +276,7 @@ export function formatDecisionPayload(event: DecisionReplayEvent) {
     if (retrievalContexts.length > 0) parts.push(`${retrievalContexts.length} gap contexts`);
     if (chunkIds.length > 0) parts.push(`${chunkIds.length} chunks`);
     if (rerankScores) parts.push(`${Object.keys(rerankScores).length} rerank scores`);
+    if (gapLinks) parts.push(`${Object.keys(gapLinks).length} linked gaps`);
     if (resultCount !== null) parts.push(`${resultCount} results`);
     if (candidateUrls.length > 0) parts.push(`${candidateUrls.length} candidate URLs`);
   }
@@ -331,7 +333,9 @@ export function formatDecisionPayload(event: DecisionReplayEvent) {
       stringPayload(event, "updated_report_version_id") ||
       stringPayload(event, "report_version_id");
     const releaseDelta = objectPayload(event, "release_gate_delta");
+    const gapLinks = objectPayload(event, "gap_evidence_links");
     if (versionId) parts.push(`version ${versionId}`);
+    if (gapLinks) parts.push(`${Object.keys(gapLinks).length} linked gaps`);
     if (releaseDelta) {
       const improved = booleanValue(releaseDelta.release_gate_improved);
       const blockerDelta = numberValue(releaseDelta.release_gate_blocker_delta);

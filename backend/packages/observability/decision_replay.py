@@ -702,6 +702,7 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "gap_closure_rate",
         "filled_gap_ids",
         "remaining_gap_ids",
+        "gap_evidence_links",
         "retrieval_queries",
         "retrieval_contexts",
         "chunk_ids",

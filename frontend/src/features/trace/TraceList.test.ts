@@ -34,4 +34,34 @@ describe("TraceList decision replay formatting", () => {
     expect(summary).toContain("scope collector");
     expect(summary).toContain("subagent pricing");
   });
+
+  it("summarizes RAG gap evidence links", () => {
+    const event: DecisionReplayEvent = {
+      id: "decision-rag",
+      run_id: "run-1",
+      event_type: "rag.retrieved",
+      agent: "rag_gap_fill",
+      subagent: null,
+      message: "Retrieved candidate evidence.",
+      related_span_ids: [],
+      evidence_ids: ["evidence-gap-1"],
+      claim_ids: [],
+      payload: {
+        retrieval_queries: ["A SOC 2 SSO trust center"],
+        retrieval_contexts: [{ gap_id: "gap-security" }],
+        chunk_ids: ["chunk-gap-1"],
+        rerank_scores: { "chunk-gap-1": 0.92 },
+        gap_evidence_links: { "gap-security": ["evidence-gap-1"] },
+      },
+      created_at: "2026-05-31T00:00:00Z",
+    };
+
+    const summary = formatDecisionPayload(event);
+
+    expect(summary).toContain("1 retrieval queries");
+    expect(summary).toContain("1 gap contexts");
+    expect(summary).toContain("1 chunks");
+    expect(summary).toContain("1 rerank scores");
+    expect(summary).toContain("1 linked gaps");
+  });
 });
