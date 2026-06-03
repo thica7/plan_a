@@ -2611,6 +2611,16 @@ async def test_hitl_resume_creates_reviewable_memory_candidate() -> None:
             "source_preference",
             "correction",
         }
+        memory_events = [
+            event
+            for event in service.get_trace(detail.id) or []
+            if event.type == "memory.feedback_captured"
+        ]
+        assert memory_events
+        assert memory_events[0].payload["feedback_id"] == feedback[0].id
+        assert set(memory_events[0].payload["candidate_ids"]) == {
+            candidate.id for candidate in recall.candidates
+        }
     finally:
         await service._graph_checkpointer.aclose()
 

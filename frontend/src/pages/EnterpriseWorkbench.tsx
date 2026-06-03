@@ -3331,6 +3331,13 @@ function decisionPayloadSummary(event: DecisionReplayEvent) {
     if (recallScore !== null) {
       parts.push(`recall ${recallScore > 1 ? recallScore : formatPercent(recallScore)}`);
     }
+  } else if (event.event_type === "memory.feedback_captured") {
+    const feedbackId = payloadString(payload, "feedback_id");
+    const candidateCount = payloadNumber(payload, "candidate_count") ?? payloadListCount(payload, "candidate_ids");
+    const targetType = payloadString(payload, "target_type");
+    if (feedbackId) parts.push(feedbackId);
+    if (candidateCount !== null) parts.push(`candidates ${candidateCount}`);
+    if (targetType) parts.push(`target ${targetType}`);
   } else if (event.event_type === "claim.validated") {
     const claimCount = payloadNumber(payload, "claim_count") ?? event.claim_ids.length;
     const supportedCount = payloadNumber(payload, "supported_count");

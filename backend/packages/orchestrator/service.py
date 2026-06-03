@@ -392,7 +392,7 @@ class RunService(
                     request.dimensions,
                     require_core_schema=self._plan_requires_core_schema(record.detail),
                 )
-            self._capture_hitl_memory_feedback(record.detail, request)
+            memory_feedback_payload = self._capture_hitl_memory_feedback(record.detail, request)
             record.detail.status = "running"
             record.detail.updated_at = datetime.utcnow()
             self._persist_run(run_id)
@@ -404,6 +404,15 @@ class RunService(
                 f"HITL decision received: {request.decision}",
                 request.model_dump(exclude_none=True),
             )
+            if memory_feedback_payload is not None:
+                await self.emit(
+                    run_id,
+                    "memory.feedback_captured",
+                    "memory",
+                    None,
+                    "HITL feedback was captured as reviewable MemoryAgent candidate input.",
+                    memory_feedback_payload,
+                )
             asyncio.create_task(self._resume_interrupted_graph(run_id, request))
             return record.detail
         if request.decision == "redo" and not record.detail.qa_findings:
@@ -432,7 +441,7 @@ class RunService(
                 request.dimensions,
                 require_core_schema=self._plan_requires_core_schema(record.detail),
             )
-        self._capture_hitl_memory_feedback(record.detail, request)
+        memory_feedback_payload = self._capture_hitl_memory_feedback(record.detail, request)
         record.detail.status = "running"
         record.detail.updated_at = datetime.utcnow()
         self._persist_run(run_id)
@@ -444,6 +453,15 @@ class RunService(
             f"HITL decision received: {request.decision}",
             request.model_dump(exclude_none=True),
         )
+        if memory_feedback_payload is not None:
+            await self.emit(
+                run_id,
+                "memory.feedback_captured",
+                "memory",
+                None,
+                "HITL feedback was captured as reviewable MemoryAgent candidate input.",
+                memory_feedback_payload,
+            )
         return record.detail
 
     async def run_scoped_redo(self, run_id: str, *, auto_continue: bool = False) -> None:
@@ -2862,19 +2880,19 @@ class RunService(
         self,
         detail: RunDetail,
         request: HitlResumeRequest,
-    ) -> None:
+    ) -> dict[str, object] | None:
         if self._preference_memory is None or not detail.project_id:
-            return
+            return None
         note = (request.note or "").strip()
         if note.startswith("Auto-accepted after HITL timeout"):
-            return
+            return None
         dimensions = [
             dimension.strip()
             for dimension in (request.dimensions or [])
             if dimension.strip()
         ]
         if request.decision == "accept" and not note and not dimensions:
-            return
+            return None
         feedback_type = (
             "approval"
             if request.decision in {"accept", "force_pass"}
@@ -2909,8 +2927,20 @@ class RunService(
             ),
             policy=compliance_policy_from_settings(self._settings),
         )
-        for candidate in self._preference_memory.extract_candidates(feedback):
+        candidates = [
             self._preference_memory.upsert_candidate(candidate)
+            for candidate in self._preference_memory.extract_candidates(feedback)
+        ]
+        return {
+            "feedback_id": feedback.id,
+            "feedback_type": feedback.feedback_type,
+            "target_type": feedback.target_type,
+            "target_id": feedback.target_id,
+            "decision": request.decision,
+            "dimensions": dimensions,
+            "candidate_ids": [candidate.id for candidate in candidates],
+            "candidate_count": len(candidates),
+        }
 
     def _plan_requires_core_schema(self, detail: RunDetail) -> bool:
         available_core = [

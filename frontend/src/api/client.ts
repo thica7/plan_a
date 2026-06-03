@@ -541,6 +541,7 @@ export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) 
     "rag.retrieved",
     "self_consistency.sampled",
     "memory.recalled",
+    "memory.feedback_captured",
     "claim.validated",
     "qa.blocked",
     "redo.routed",

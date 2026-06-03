@@ -179,6 +179,22 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
         RunEvent(
             id=4,
             run_id="run-1",
+            type="memory.feedback_captured",
+            agent="memory",
+            message="HITL feedback captured",
+            payload={
+                "feedback_id": "feedback-1",
+                "candidate_ids": ["memory-2"],
+                "candidate_count": 1,
+                "target_type": "dimension",
+                "target_id": "feature",
+                "decision": "modify_plan",
+                "dimensions": ["feature"],
+            },
+        ),
+        RunEvent(
+            id=5,
+            run_id="run-1",
             type="self_consistency.sampled",
             agent="quality",
             message="Consistency sampled",
@@ -189,7 +205,7 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
             },
         ),
         RunEvent(
-            id=5,
+            id=6,
             run_id="run-1",
             type="run_completed",
             agent="writer",
@@ -204,6 +220,7 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
         "agent.started",
         "rag.retrieved",
         "memory.recalled",
+        "memory.feedback_captured",
         "self_consistency.sampled",
         "claim.validated",
         "benchmark.scored",
@@ -211,6 +228,12 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
     }
     assert replay.replay_coverage_score >= 85
     assert replay.event_type_counts["memory.recalled"] >= 1
+    assert replay.event_type_counts["memory.feedback_captured"] == 1
+    feedback_event = next(
+        event for event in replay.events if event.event_type == "memory.feedback_captured"
+    )
+    assert feedback_event.payload["feedback_id"] == "feedback-1"
+    assert feedback_event.payload["candidate_count"] == 1
     assert any(event.evidence_ids == ["source-1"] for event in replay.events)
 
 

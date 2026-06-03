@@ -19,6 +19,7 @@ RunEventType = Literal[
     "rag.retrieved",
     "self_consistency.sampled",
     "memory.recalled",
+    "memory.feedback_captured",
     "claim.validated",
     "qa.blocked",
     "redo.routed",
