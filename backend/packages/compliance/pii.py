@@ -31,8 +31,16 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "api_key",
         re.compile(
-            r"(?i)\b(?:sk-or-v1-[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9_-]{16,}|"
-            r"(?:ak|rk|pk|xoxb|ghp)_[A-Za-z0-9_-]{16,})\b"
+            r"(?i)\b(?:"
+            r"sk-or-v1-[A-Za-z0-9_-]{16,}|"
+            r"sk-proj-[A-Za-z0-9_-]{16,}|"
+            r"sk-ant-api03-[A-Za-z0-9_-]{16,}|"
+            r"sk-[A-Za-z0-9_-]{16,}|"
+            r"pplx-[A-Za-z0-9_-]{16,}|"
+            r"AIza[0-9A-Za-z_-]{20,}|"
+            r"AKIA[0-9A-Z]{16}|"
+            r"(?:ak|rk|pk|xoxb|ghp|github_pat|hf|glpat)_[A-Za-z0-9_-]{16,}"
+            r")\b"
         ),
     ),
     (

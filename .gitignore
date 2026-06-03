@@ -19,3 +19,10 @@ frontend/vite.config.d.ts
 review/*.html
 review/*_review_*.md
 review/*_review_*.html
+review/**/*.html
+review/**/*_review_*.md
+review/**/*_review_*.html
+review/strict_*_comparison_*.md
+review/版本/
+codex_review.md
+backend/scripts/tmp_*.py

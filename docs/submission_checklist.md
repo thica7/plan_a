@@ -5,8 +5,8 @@ Use this checklist before packaging a deliverable, opening a demo machine, or cr
 ## Must Not Ship
 
 - `.env` or any file containing provider keys, backup LLM keys, bearer tokens, cookies, or private endpoints.
-- `runs/`, `logs/`, `backups/`, `.claude/`, local screenshots, and temporary comparison scripts.
-- Generated review HTML files unless they are intentionally part of the report appendix.
+- `runs/`, `logs/`, `backups/`, `.claude/`, local screenshots, `codex_review.md`, and `backend/scripts/tmp_*.py`.
+- Generated review HTML/markdown outputs, including nested `review/版本/` files, unless they are intentionally part of the report appendix.
 - Raw enterprise customer documents without explicit redaction and source approval.
 
 ## Required Checks
@@ -31,3 +31,4 @@ Use this checklist before packaging a deliverable, opening a demo machine, or cr
 - Decision replay is available for the run and includes agent, QA, redo, report, and metric events.
 - Report evidence anchors resolve to source records or artifacts.
 - PII redaction and model policy checks pass for the target workspace.
+- Redaction smoke checks cover OpenRouter/OpenAI/Anthropic/Perplexity/Google/AWS/GitHub/Hugging Face/GitLab style provider keys.
