@@ -327,6 +327,75 @@ def test_compare_run_quality_flags_missing_memory_and_user_research_sections() -
     assert any("User Research Evidence" in item for item in comparison.recommendations)
 
 
+def test_compare_run_quality_requires_rag_gap_fill_section_for_collector_gaps() -> None:
+    detail = _run_detail(
+        run_id="missing-rag-gap-fill",
+        execution_mode="real",
+        source_count=4,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+    detail.qa_findings.append(
+        QCIssue(
+            id="gap-security-evidence",
+            severity="warn",
+            detected_by="coverage",
+            target_agent="collector",
+            target_subagent="security",
+            target_competitor="Cursor",
+            field_path="raw_sources[security][Cursor]",
+            problem="Missing official security evidence.",
+            redo_scope=RedoScope(
+                kind="collector",
+                target_subagent="security",
+                target_competitor="Cursor",
+                rationale="Collect official security evidence.",
+            ),
+        )
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    blockers = {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert metrics["rag_gap_fill_section_score"].target_value == 0.0
+    assert comparison.report_quality_signal is False
+    assert "rag_gap_fill_section_score" in blockers
+    assert any("RAG Gap Fill" in item for item in comparison.recommendations)
+
+    detail.report_md = (
+        f"{detail.report_md}\n\n"
+        "## RAG Gap Fill\n"
+        "- Gap gap-security-evidence: Suggested retrieval query: Cursor security SOC 2."
+    )
+    repaired = compare_run_quality(detail)
+    repaired_metrics = {metric.name: metric for metric in repaired.metrics}
+
+    assert repaired_metrics["rag_gap_fill_section_score"].target_value == 1.0
+
+
 def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
     writer = _WriterHarness()
     expected_sections = {

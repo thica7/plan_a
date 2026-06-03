@@ -132,6 +132,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         ),
         "memory_context_section_score": _memory_context_section_score(detail),
         "user_research_section_score": _user_research_section_score(detail),
+        "rag_gap_fill_section_score": _rag_gap_fill_section_score(detail),
         "qa_blocker_count": float(
             len([finding for finding in detail.qa_findings if finding.severity == "blocker"])
         ),
@@ -150,6 +151,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "scenario_checklist_section_score": values["scenario_checklist_section_score"],
         "memory_context_section_score": values["memory_context_section_score"],
         "user_research_section_score": values["user_research_section_score"],
+        "rag_gap_fill_section_score": values["rag_gap_fill_section_score"],
         "qa_blocker_count": max(0.0, 1.0 - min(values["qa_blocker_count"] / 3.0, 1.0)),
     }
     score = round(
@@ -175,6 +177,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         and values["scenario_checklist_section_score"] >= 1.0
         and values["memory_context_section_score"] >= 1.0
         and values["user_research_section_score"] >= 1.0
+        and values["rag_gap_fill_section_score"] >= 1.0
     )
     return _QualitySnapshot(
         score=max(0, min(100, score)),
@@ -187,20 +190,21 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
 
 def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower_is_better"]]]:
     return [
-        ("evidence_count", 0.09, "higher_is_better"),
+        ("evidence_count", 0.08, "higher_is_better"),
         ("source_coverage_rate", 0.10, "higher_is_better"),
         ("verified_source_rate", 0.10, "higher_is_better"),
         ("claim_citation_rate", 0.09, "higher_is_better"),
         ("citation_validity_rate", 0.09, "higher_is_better"),
         ("real_source_rate", 0.10, "higher_is_better"),
         ("llm_call_signal", 0.09, "higher_is_better"),
-        ("report_length_score", 0.04, "higher_is_better"),
+        ("report_length_score", 0.03, "higher_is_better"),
         ("report_structure_score", 0.07, "higher_is_better"),
         ("claim_risk_section_score", 0.06, "higher_is_better"),
         ("scenario_checklist_section_score", 0.04, "higher_is_better"),
         ("memory_context_section_score", 0.03, "higher_is_better"),
         ("user_research_section_score", 0.03, "higher_is_better"),
-        ("qa_blocker_count", 0.07, "lower_is_better"),
+        ("rag_gap_fill_section_score", 0.03, "higher_is_better"),
+        ("qa_blocker_count", 0.06, "lower_is_better"),
     ]
 
 
@@ -266,6 +270,7 @@ def _signal_checks(detail: RunDetail, snapshot: _QualitySnapshot) -> list[RunQua
         ("scenario_checklist_section_score", 1.0),
         ("memory_context_section_score", 1.0),
         ("user_research_section_score", 1.0),
+        ("rag_gap_fill_section_score", 1.0),
     ]:
         if snapshot.values[name] < minimum:
             report_blockers.append(name)
@@ -303,8 +308,8 @@ def _signal_checks(detail: RunDetail, snapshot: _QualitySnapshot) -> list[RunQua
             reason=_signal_reason(
                 snapshot.report_quality_signal,
                 "Report meets citation, coverage, structure, and review-readiness thresholds.",
-                "Needs a longer cited report with structure, source coverage, claim risk, and "
-                "scenario QA sections.",
+                "Needs a longer cited report with structure, source coverage, claim risk, "
+                "scenario QA, and RAG gap-fill coverage when collector gaps exist.",
             ),
             blocking_metric_names=report_blockers,
         ),
@@ -452,6 +457,32 @@ def _user_research_section_score(detail: RunDetail) -> float:
     return 1.0 if _has_heading(detail.report_md, ("user research", "buyer research")) else 0.0
 
 
+def _rag_gap_fill_section_score(detail: RunDetail) -> float:
+    if not _needs_rag_gap_fill_section(detail):
+        return 1.0
+    if not _has_heading(detail.report_md, ("rag gap fill", "evidence gap fill", "retrieval")):
+        return 0.0
+    normalized = detail.report_md.casefold()
+    if any(
+        phrase in normalized
+        for phrase in (
+            "suggested retrieval query",
+            "retrieval context",
+            "grounded context",
+            "retrieval candidate",
+        )
+    ):
+        return 1.0
+    return 0.5
+
+
+def _needs_rag_gap_fill_section(detail: RunDetail) -> bool:
+    return any(
+        finding.target_agent == "collector" and finding.severity in {"warn", "blocker"}
+        for finding in detail.qa_findings
+    )
+
+
 def _needs_user_research_section(detail: RunDetail) -> bool:
     if any(source.source_type in USER_RESEARCH_SOURCE_TYPES for source in detail.raw_sources):
         return True
@@ -521,6 +552,11 @@ def _clean_recommendations(
         recommendations.append(
             "Add a User Research Evidence section so survey, interview, or manual-note signals "
             "are separated from official factual proof."
+        )
+    if target.values.get("rag_gap_fill_section_score", 1.0) < 1.0:
+        recommendations.append(
+            "Add a RAG Gap Fill section with retrieval queries or grounded context for open "
+            "collector evidence gaps."
         )
     if (
         target.values.get("report_source_token_count", 0.0) > 0
