@@ -6357,6 +6357,9 @@
               "missing_evidence",
               "stale_or_rejected_evidence",
               "weak_text_support",
+              "low_evidence_quality",
+              "single_source_support",
+              "low_self_consistency",
               "low_confidence"
             ],
             "title": "Issue Type"
@@ -6438,6 +6441,19 @@
             "title": "Warn Count",
             "default": 0
           },
+          "self_consistency_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Self Consistency Score",
+            "default": 0
+          },
+          "low_consistency_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Low Consistency Count",
+            "default": 0
+          },
           "results": {
             "items": {
               "$ref": "#/components/schemas/ClaimValidationResult"
@@ -6486,6 +6502,41 @@
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Support Score"
+          },
+          "text_support_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Text Support Score",
+            "default": 0
+          },
+          "evidence_quality_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Evidence Quality Score",
+            "default": 0
+          },
+          "triangulation_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Triangulation Score",
+            "default": 0
+          },
+          "self_consistency_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Self Consistency Score",
+            "default": 0
+          },
+          "consistency_votes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Consistency Votes"
           },
           "usable_evidence_ids": {
             "items": {

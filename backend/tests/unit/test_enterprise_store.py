@@ -840,6 +840,8 @@ def test_enterprise_router_exposes_projection() -> None:
     assert "finding_count" in qa_evaluation.json()
     assert claim_validation.status_code == 200
     assert claim_validation.json()["supported_count"] == 1
+    assert claim_validation.json()["self_consistency_score"] >= 70
+    assert claim_validation.json()["results"][0]["self_consistency_score"] >= 70
     assert readiness.status_code == 200
     assert readiness.json()["risk_level"] in {"ready", "watch", "at_risk", "blocked"}
     assert gaps.status_code == 200
@@ -851,6 +853,11 @@ def test_enterprise_router_exposes_projection() -> None:
         "EvidenceGap",
         "RedTeam",
     }
+    claim_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "ClaimValidator"
+    )
+    assert claim_matrix["framework"] == "deterministic-self-consistency"
+    assert "self-consistency" in claim_matrix["summary"]
     assert competitors.status_code == 200
     assert [item["name"] for item in competitors.json()] == ["Cursor"]
     assert source_registry.status_code == 200

@@ -303,11 +303,78 @@ def test_claim_validator_cross_checks_evidence_support() -> None:
     )
 
     statuses = {item.claim_id: item.status for item in report.results}
+    supported = next(item for item in report.results if item.claim_id == "claim-supported")
+    weak = next(item for item in report.results if item.claim_id == "claim-weak")
     assert statuses["claim-supported"] == "supported"
     assert statuses["claim-blocked"] == "blocked"
     assert statuses["claim-weak"] in {"weak", "unsupported"}
+    assert supported.self_consistency_score >= 80
+    assert supported.consistency_votes == {
+        "text_support": 1,
+        "evidence_quality": 1,
+        "triangulation": 1,
+    }
+    assert weak.self_consistency_score < supported.self_consistency_score
+    assert weak.triangulation_score == 70
+    assert report.self_consistency_score >= 70
     assert report.blocker_count == 1
     assert report.warn_count >= 1
+
+
+def test_report_release_gate_warns_on_high_risk_single_source_claim() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-security-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="security-1",
+            competitor_id=competitor.id,
+            dimension="security",
+            source_type="webpage_verified",
+            title="Cursor security",
+            url="https://cursor.sh/security",
+            snippet="Cursor documents SSO, audit logs, and SOC 2 controls.",
+            content_hash="hash-security",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-security",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="security",
+            claim_text="Cursor has SOC 2, SSO, and audit log controls.",
+            evidence_ids=["evidence-security-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        evidence_ids=["evidence-security-1"],
+        claim_ids=["claim-security"],
+        report_md=(
+            "# Report\n\nCursor has SOC 2, SSO, and audit log controls "
+            "[source:evidence-security-1]."
+        ),
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert gate.allowed is False
+    consistency_issues = [
+        issue for issue in gate.issues if issue.rule_id == "claim_self_consistency_required"
+    ]
+    assert consistency_issues
+    assert consistency_issues[0].severity == "warn"
 
 
 def test_report_release_gate_blocks_unresolved_run_qa_metadata() -> None:
@@ -908,6 +975,7 @@ def _report_version(
     *,
     report_md: str = "Cursor publishes pricing. [source:evidence-1]",
     evidence_ids: list[str] | None = None,
+    claim_ids: list[str] | None = None,
     quality_metadata: dict[str, object] | None = None,
 ) -> ReportVersionRecord:
     return ReportVersionRecord(
@@ -919,7 +987,7 @@ def _report_version(
         competitor_layer="L1",
         competitor_set_hash="hash",
         report_md=report_md,
-        claim_ids=["claim-1"],
+        claim_ids=claim_ids or ["claim-1"],
         evidence_ids=evidence_ids or ["evidence-1"],
         quality_metadata=quality_metadata or {},
     )

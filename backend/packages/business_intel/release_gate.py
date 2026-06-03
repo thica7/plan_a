@@ -4,6 +4,7 @@ import hashlib
 import re
 
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS, evaluate_business_qa
+from packages.business_intel.claim_validator import validate_project_claims
 from packages.business_intel.planning import build_business_intel_plan
 from packages.business_intel.scorer import score_project_readiness
 from packages.schema.enterprise import (
@@ -73,6 +74,7 @@ def evaluate_report_release_gate(
         *_report_integrity_issues(report_version, scoped_evidence, scoped_claims),
         *_source_quality_issues(scoped_evidence),
         *_claim_evidence_quality_issues(scoped_claims, scoped_evidence),
+        *_claim_validation_issues(scoped_claims, scoped_evidence),
         *_report_citation_quality_issues(report_version, scoped_evidence),
         *_run_quality_issues(report_version),
         *_readiness_issues(readiness),
@@ -231,6 +233,41 @@ def _claim_evidence_quality_issues(
     return issues
 
 
+def _claim_validation_issues(
+    claims: list[ClaimRecord],
+    evidence: list[EvidenceRecord],
+) -> list[BusinessQAFinding]:
+    if not claims:
+        return []
+    project_id = claims[0].project_id
+    validation = validate_project_claims(project_id=project_id, claims=claims, evidence=evidence)
+    issues: list[BusinessQAFinding] = []
+    for result in validation.results:
+        if result.status == "supported":
+            continue
+        severity = "blocker" if result.status in {"blocked", "unsupported"} else "warn"
+        issues.append(
+            _gate_issue(
+                "claim_self_consistency_required",
+                "Claim self-consistency",
+                (
+                    f"Claim {result.claim_id} validation is {result.status}; "
+                    f"self-consistency={result.self_consistency_score}, "
+                    f"text={result.text_support_score}, "
+                    f"evidence={result.evidence_quality_score}, "
+                    f"triangulation={result.triangulation_score}."
+                ),
+                severity=severity,
+                claim_ids=[result.claim_id],
+                evidence_ids=result.usable_evidence_ids,
+                recommendation=(
+                    "Collect stronger independent evidence or downgrade the claim before release."
+                ),
+            )
+        )
+    return issues
+
+
 def _report_citation_quality_issues(
     report_version: ReportVersionRecord,
     evidence: list[EvidenceRecord],
@@ -341,6 +378,7 @@ def _gate_issue(
     *,
     evidence_ids: list[str] | None = None,
     claim_ids: list[str] | None = None,
+    severity: str = "blocker",
     recommendation: str,
 ) -> BusinessQAFinding:
     raw = "|".join([rule_id, message, ",".join(evidence_ids or []), ",".join(claim_ids or [])])
@@ -348,7 +386,7 @@ def _gate_issue(
         id=f"release-gate-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}",
         rule_id=rule_id,
         rule_name=rule_name,
-        severity="blocker",
+        severity=severity,  # type: ignore[arg-type]
         message=message,
         evidence_ids=evidence_ids or [],
         claim_ids=claim_ids or [],

@@ -536,6 +536,9 @@ class ClaimValidationIssue(BaseModel):
         "missing_evidence",
         "stale_or_rejected_evidence",
         "weak_text_support",
+        "low_evidence_quality",
+        "single_source_support",
+        "low_self_consistency",
         "low_confidence",
     ]
     message: str
@@ -548,6 +551,11 @@ class ClaimValidationResult(BaseModel):
     claim_id: str
     status: ClaimValidationStatus
     support_score: int = Field(ge=0, le=100)
+    text_support_score: int = Field(default=0, ge=0, le=100)
+    evidence_quality_score: int = Field(default=0, ge=0, le=100)
+    triangulation_score: int = Field(default=0, ge=0, le=100)
+    self_consistency_score: int = Field(default=0, ge=0, le=100)
+    consistency_votes: dict[str, int] = Field(default_factory=dict)
     usable_evidence_ids: list[str] = Field(default_factory=list)
     issue_ids: list[str] = Field(default_factory=list)
 
@@ -564,6 +572,8 @@ class ClaimValidationReport(BaseModel):
     issue_count: int = Field(default=0, ge=0)
     blocker_count: int = Field(default=0, ge=0)
     warn_count: int = Field(default=0, ge=0)
+    self_consistency_score: int = Field(default=0, ge=0, le=100)
+    low_consistency_count: int = Field(default=0, ge=0)
     results: list[ClaimValidationResult] = Field(default_factory=list)
     issues: list[ClaimValidationIssue] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=datetime.utcnow)

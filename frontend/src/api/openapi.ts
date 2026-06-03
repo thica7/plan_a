@@ -1616,7 +1616,7 @@ export interface components {
              * Issue Type
              * @enum {string}
              */
-            issue_type: "missing_evidence" | "stale_or_rejected_evidence" | "weak_text_support" | "low_confidence";
+            issue_type: "missing_evidence" | "stale_or_rejected_evidence" | "weak_text_support" | "low_evidence_quality" | "single_source_support" | "low_self_consistency" | "low_confidence";
             /** Message */
             message: string;
             /** Evidence Ids */
@@ -1666,6 +1666,16 @@ export interface components {
              * @default 0
              */
             warn_count: number;
+            /**
+             * Self Consistency Score
+             * @default 0
+             */
+            self_consistency_score: number;
+            /**
+             * Low Consistency Count
+             * @default 0
+             */
+            low_consistency_count: number;
             /** Results */
             results?: components["schemas"]["ClaimValidationResult"][];
             /** Issues */
@@ -1687,6 +1697,30 @@ export interface components {
             status: "supported" | "weak" | "unsupported" | "blocked";
             /** Support Score */
             support_score: number;
+            /**
+             * Text Support Score
+             * @default 0
+             */
+            text_support_score: number;
+            /**
+             * Evidence Quality Score
+             * @default 0
+             */
+            evidence_quality_score: number;
+            /**
+             * Triangulation Score
+             * @default 0
+             */
+            triangulation_score: number;
+            /**
+             * Self Consistency Score
+             * @default 0
+             */
+            self_consistency_score: number;
+            /** Consistency Votes */
+            consistency_votes?: {
+                [key: string]: number;
+            };
             /** Usable Evidence Ids */
             usable_evidence_ids?: string[];
             /** Issue Ids */

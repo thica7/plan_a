@@ -550,21 +550,16 @@ async def get_project_quality_matrix(
         ),
         QualityAgentMatrixEntry(
             agent_name="ClaimValidator",
-            framework="deterministic-evidence-crosscheck",
+            framework="deterministic-self-consistency",
             status=_matrix_status(claim_validation.blocker_count, claim_validation.warn_count),
-            score=max(
-                0,
-                100
-                - claim_validation.blocked_count * 35
-                - claim_validation.unsupported_count * 25
-                - claim_validation.weak_count * 10,
-            ),
+            score=max(0, claim_validation.self_consistency_score),
             blocker_count=claim_validation.blocker_count,
             warn_count=claim_validation.warn_count,
             finding_count=claim_validation.issue_count,
             summary=(
                 f"{claim_validation.supported_count}/{claim_validation.total_claims} "
-                "claims strongly supported."
+                "claims strongly supported; "
+                f"self-consistency {claim_validation.self_consistency_score}/100."
             ),
             evidence_ids=_unique_ids(
                 evidence_id
