@@ -21,14 +21,18 @@ import {
 import {
   fillProjectEvidenceGaps,
   getEnterpriseEvalOps,
+  getModelPolicy,
+  getModelRouteDecision,
   getProjectEvidenceGaps,
   getProjectBusinessPlan,
   getProjectCompetitorScores,
+  getProjectKnowledgeGraph,
   getProjectQAEvaluation,
   getProjectReadinessScore,
   getReportReleaseGate,
   getReportVersionDiff,
   getProjectRedTeam,
+  getToolRegistry,
   getWorkspaceUsage,
   listEnterpriseCompetitors,
   listEnterpriseNotifications,
@@ -55,6 +59,9 @@ import type {
   EvidenceRecord,
   EvalOpsMetric,
   EvalOpsReport,
+  KnowledgeGraphReadModel,
+  ModelPolicyReport,
+  ModelRouteDecision,
   NotificationRecord,
   ProjectReadinessScore,
   ProjectRecord,
@@ -64,6 +71,7 @@ import type {
   ReportVersionDiff,
   ReportVersionRecord,
   SourceRegistryRecord,
+  ToolRegistryReport,
   WorkspaceUsageSummary,
 } from "../api/types";
 
@@ -90,6 +98,10 @@ export function EnterpriseWorkbench({
   const [redTeam, setRedTeam] = useState<RedTeamReport | null>(null);
   const [evalOps, setEvalOps] = useState<EvalOpsReport | null>(null);
   const [sourceRegistry, setSourceRegistry] = useState<SourceRegistryRecord[]>([]);
+  const [modelPolicy, setModelPolicy] = useState<ModelPolicyReport | null>(null);
+  const [modelRoute, setModelRoute] = useState<ModelRouteDecision | null>(null);
+  const [toolRegistry, setToolRegistry] = useState<ToolRegistryReport | null>(null);
+  const [knowledgeGraph, setKnowledgeGraph] = useState<KnowledgeGraphReadModel | null>(null);
   const [workspaceUsage, setWorkspaceUsage] = useState<WorkspaceUsageSummary | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
@@ -145,6 +157,10 @@ export function EnterpriseWorkbench({
       setRedTeam(null);
       setEvalOps(null);
       setSourceRegistry([]);
+      setModelPolicy(null);
+      setModelRoute(null);
+      setToolRegistry(null);
+      setKnowledgeGraph(null);
       setWorkspaceUsage(null);
       setSelectedVersionId(null);
       return;
@@ -166,6 +182,10 @@ export function EnterpriseWorkbench({
       getProjectRedTeam(selectedProjectId),
       getEnterpriseEvalOps({ projectId: selectedProjectId }),
       listSourceRegistry(projectForLoad.workspace_id),
+      getModelPolicy(),
+      getModelRouteDecision(),
+      getToolRegistry(),
+      getProjectKnowledgeGraph(selectedProjectId),
       getWorkspaceUsage(projectForLoad.workspace_id),
     ])
       .then(
@@ -182,6 +202,10 @@ export function EnterpriseWorkbench({
           redTeamValue,
           evalOpsValue,
           sourceRegistryValue,
+          modelPolicyValue,
+          modelRouteValue,
+          toolRegistryValue,
+          knowledgeGraphValue,
           workspaceUsageValue,
         ]) => {
           if (!active) return;
@@ -198,6 +222,10 @@ export function EnterpriseWorkbench({
           setRedTeam(redTeamValue);
           setEvalOps(evalOpsValue);
           setSourceRegistry(sourceRegistryValue);
+          setModelPolicy(modelPolicyValue);
+          setModelRoute(modelRouteValue);
+          setToolRegistry(toolRegistryValue);
+          setKnowledgeGraph(knowledgeGraphValue);
           setWorkspaceUsage(workspaceUsageValue);
           setSelectedVersionId(versionItems[0]?.id ?? null);
         },
@@ -218,6 +246,10 @@ export function EnterpriseWorkbench({
         setRedTeam(null);
         setEvalOps(null);
         setSourceRegistry([]);
+        setModelPolicy(null);
+        setModelRoute(null);
+        setToolRegistry(null);
+        setKnowledgeGraph(null);
         setWorkspaceUsage(null);
         setSelectedVersionId(null);
       })
@@ -551,6 +583,13 @@ export function EnterpriseWorkbench({
 
               <SourceRegistryPanel sources={sourceRegistry} />
 
+              <GovernanceRuntimePanel
+                knowledgeGraph={knowledgeGraph}
+                modelPolicy={modelPolicy}
+                modelRoute={modelRoute}
+                toolRegistry={toolRegistry}
+              />
+
               {competitorScores ? <CompetitorScorePanel report={competitorScores} /> : null}
 
               {evidenceGaps ? (
@@ -820,6 +859,91 @@ function SourceRegistryPanel({ sources }: { sources: SourceRegistryRecord[] }) {
         </div>
       ) : (
         <p className="muted-line">No source registry entries yet.</p>
+      )}
+    </section>
+  );
+}
+
+function GovernanceRuntimePanel({
+  knowledgeGraph,
+  modelPolicy,
+  modelRoute,
+  toolRegistry,
+}: {
+  knowledgeGraph: KnowledgeGraphReadModel | null;
+  modelPolicy: ModelPolicyReport | null;
+  modelRoute: ModelRouteDecision | null;
+  toolRegistry: ToolRegistryReport | null;
+}) {
+  const blocked = modelRoute?.status === "blocked" || (modelPolicy?.blocker_count ?? 0) > 0;
+  const guarded = (toolRegistry?.guarded_count ?? 0) + (toolRegistry?.disabled_count ?? 0);
+  const panelStatus = blocked ? "fail" : guarded > 0 ? "warn" : "pass";
+  const governedTools =
+    toolRegistry?.entries
+      .filter((entry) => entry.status !== "enabled" || !entry.allowed_in_real_mode)
+      .slice(0, 4) ?? [];
+
+  return (
+    <section className={`panel readiness-panel ${panelStatus}`}>
+      <div className="panel-heading-row">
+        <h2>Governance runtime</h2>
+        {panelStatus === "pass" ? (
+          <ShieldCheck size={17} aria-hidden />
+        ) : (
+          <AlertTriangle size={17} aria-hidden />
+        )}
+      </div>
+      <div className="metric-grid compact">
+        <Metric
+          icon={<Gauge size={17} aria-hidden />}
+          label="Route"
+          value={modelRoute?.status ?? "loading"}
+        />
+        <Metric
+          icon={<Briefcase size={17} aria-hidden />}
+          label="Model"
+          value={formatRouteCandidate(modelRoute?.selected ?? modelRoute?.fallback)}
+        />
+        <Metric
+          icon={<ListChecks size={17} aria-hidden />}
+          label="Tools"
+          value={toolRegistry?.total_count ?? "-"}
+        />
+        <Metric
+          icon={<GitCompare size={17} aria-hidden />}
+          label="KG edges"
+          value={knowledgeGraph?.edge_count ?? "-"}
+        />
+      </div>
+      <div className="project-meta-row">
+        <span>Policy {modelPolicy?.status ?? "loading"}</span>
+        <span>Real exec {modelPolicy?.real_execution_allowed ? "yes" : "no"}</span>
+        <span>Guarded tools {toolRegistry?.guarded_count ?? "-"}</span>
+        <span>Disabled tools {toolRegistry?.disabled_count ?? "-"}</span>
+        <span>KG nodes {knowledgeGraph?.node_count ?? "-"}</span>
+      </div>
+      {modelRoute?.blocked_reasons.length ? (
+        <div className="recommendation-list">
+          {modelRoute.blocked_reasons.slice(0, 3).map((reason) => (
+            <article className="recommendation-card high" key={reason}>
+              <strong>Model route</strong>
+              <span>blocked</span>
+              <p>{reason}</p>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {governedTools.length > 0 ? (
+        <div className="competitor-strip">
+          {governedTools.map((entry) => (
+            <span key={entry.name} title={entry.reason}>
+              {entry.name}
+              <em>{entry.status} / {entry.category}</em>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="muted-line">Tool registry has no guarded or disabled tools.</p>
       )}
     </section>
   );
@@ -1495,6 +1619,13 @@ function formatScoreDelta(value?: number | null) {
     return "n/a";
   }
   return value > 0 ? `+${value}` : `${value}`;
+}
+
+function formatRouteCandidate(candidate?: ModelRouteDecision["selected"]) {
+  if (!candidate) {
+    return "none";
+  }
+  return candidate.model_name ? `${candidate.provider_name} / ${candidate.model_name}` : candidate.provider_name;
 }
 
 function metricProgressPercent(metric: EvalOpsMetric) {
