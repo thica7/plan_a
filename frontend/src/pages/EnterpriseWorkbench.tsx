@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   AlertTriangle,
   Bell,
@@ -52,6 +50,7 @@ import {
   startScheduledScanWorkflow,
   updateEvidenceQuality,
 } from "../api/client";
+import { ReportView } from "../features/report/ReportView";
 import type {
   BusinessIntelPlan,
   BusinessQAEvaluation,
@@ -78,6 +77,7 @@ import type {
   ProjectRecord,
   QualityAgentMatrix,
   QualityAgentMatrixEntry,
+  RawSource,
   RedTeamFinding,
   RedTeamReport,
   ReportReleaseGate,
@@ -357,6 +357,10 @@ export function EnterpriseWorkbench({
   const evidenceById = useMemo(
     () => new Map(evidence.map((item) => [item.id, item])),
     [evidence],
+  );
+  const reportSources = useMemo(
+    () => buildReportSourceBundle(evidence, competitorById, selectedVersion),
+    [competitorById, evidence, selectedVersion],
   );
   const filteredEvidence = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -782,6 +786,8 @@ export function EnterpriseWorkbench({
                   <ReportHistory
                     diff={diff}
                     releaseGate={releaseGate}
+                    sourceAliases={reportSources.aliases}
+                    sources={reportSources.sources}
                     selectedVersion={selectedVersion}
                     selectedVersionId={selectedVersionId}
                     setSelectedVersionId={setSelectedVersionId}
@@ -1889,9 +1895,55 @@ function ClaimList({
   );
 }
 
+function buildReportSourceBundle(
+  evidence: EvidenceRecord[],
+  competitorById: Map<string, CompetitorRecord>,
+  selectedVersion: ReportVersionRecord | null,
+): { sources: RawSource[]; aliases: Record<string, string> } {
+  const scopedEvidenceIds =
+    selectedVersion && selectedVersion.evidence_ids.length > 0
+      ? new Set(selectedVersion.evidence_ids)
+      : null;
+  const sourcesByRawId = new Map<string, RawSource>();
+  const aliases: Record<string, string> = {};
+
+  for (const item of evidence) {
+    if (scopedEvidenceIds && !scopedEvidenceIds.has(item.id)) continue;
+    const competitorName = competitorById.get(item.competitor_id)?.name ?? item.competitor_id;
+    aliases[item.id] = item.raw_source_id;
+
+    const existing = sourcesByRawId.get(item.raw_source_id);
+    if (existing) {
+      if (!existing.covered_competitors.includes(competitorName)) {
+        existing.covered_competitors = [...existing.covered_competitors, competitorName];
+      }
+      existing.confidence = Math.max(existing.confidence, item.reliability_score);
+      continue;
+    }
+
+    sourcesByRawId.set(item.raw_source_id, {
+      id: item.raw_source_id,
+      competitor: competitorName,
+      covered_competitors: [competitorName],
+      dimension: item.dimension,
+      source_type: item.source_type,
+      title: item.title,
+      url: item.url ?? null,
+      snippet: item.snippet,
+      content_hash: item.content_hash,
+      confidence: item.reliability_score,
+      extracted_at: item.captured_at,
+    });
+  }
+
+  return { sources: Array.from(sourcesByRawId.values()), aliases };
+}
+
 function ReportHistory({
   diff,
   releaseGate,
+  sourceAliases,
+  sources,
   selectedVersion,
   selectedVersionId,
   setSelectedVersionId,
@@ -1899,6 +1951,8 @@ function ReportHistory({
 }: {
   diff: ReportVersionDiff | null;
   releaseGate: ReportReleaseGate | null;
+  sourceAliases: Record<string, string>;
+  sources: RawSource[];
   selectedVersion: ReportVersionRecord | null;
   selectedVersionId: string | null;
   setSelectedVersionId: (value: string) => void;
@@ -1930,7 +1984,11 @@ function ReportHistory({
         </div>
         {releaseGate ? <ReleaseGatePanel gate={releaseGate} /> : null}
         {selectedVersion ? (
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedVersion.report_md || "No report body."}</ReactMarkdown>
+          <ReportView
+            markdown={selectedVersion.report_md || "No report body."}
+            sourceAliases={sourceAliases}
+            sources={sources}
+          />
         ) : null}
         {diff ? (
           <div className="report-diff">

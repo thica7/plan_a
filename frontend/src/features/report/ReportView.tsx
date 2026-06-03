@@ -6,12 +6,18 @@ import type { RawSource } from "../../api/types";
 interface Props {
   markdown: string;
   sources: RawSource[];
+  sourceAliases?: Record<string, string>;
 }
 
-export function ReportView({ markdown, sources }: Props) {
+const EMPTY_SOURCE_ALIASES: Record<string, string> = {};
+
+export function ReportView({ markdown, sources, sourceAliases = EMPTY_SOURCE_ALIASES }: Props) {
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const sourceMap = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources]);
-  const sourceGroups = useMemo(() => collectSourceTokenGroups(markdown, sourceMap), [markdown, sourceMap]);
+  const sourceGroups = useMemo(
+    () => collectSourceTokenGroups(markdown, sourceMap, sourceAliases),
+    [markdown, sourceAliases, sourceMap],
+  );
   const citedSourceGroups = sourceGroups.filter((group) => group.source);
   const missingSourceGroups = sourceGroups.filter((group) => !group.source);
   const citedSourceIds = useMemo(
@@ -19,8 +25,8 @@ export function ReportView({ markdown, sources }: Props) {
     [citedSourceGroups],
   );
   const linkedMarkdown = useMemo(
-    () => linkSourceTokens(markdown, sourceMap),
-    [markdown, sourceMap],
+    () => linkSourceTokens(markdown, sourceMap, sourceAliases),
+    [markdown, sourceAliases, sourceMap],
   );
   const totalCitationCount = sourceGroups.reduce((total, group) => total + group.count, 0);
 
@@ -208,10 +214,14 @@ interface SourceTokenGroup {
 
 const SOURCE_TOKEN_RE = /\[source:([A-Za-z0-9_.:#-]+)\]/g;
 
-function collectSourceTokenGroups(markdown: string, sourceMap: Map<string, RawSource>) {
+function collectSourceTokenGroups(
+  markdown: string,
+  sourceMap: Map<string, RawSource>,
+  sourceAliases: Record<string, string>,
+) {
   const groups = new Map<string, SourceTokenGroup>();
   for (const token of extractSourceTokens(markdown)) {
-    const sourceId = normalizeSourceToken(token);
+    const sourceId = resolveSourceId(token, sourceMap, sourceAliases);
     const existing =
       groups.get(sourceId) ||
       ({
@@ -229,9 +239,13 @@ function collectSourceTokenGroups(markdown: string, sourceMap: Map<string, RawSo
   return Array.from(groups.values());
 }
 
-function linkSourceTokens(markdown: string, sourceMap: Map<string, RawSource>) {
+function linkSourceTokens(
+  markdown: string,
+  sourceMap: Map<string, RawSource>,
+  sourceAliases: Record<string, string>,
+) {
   return markdown.replace(SOURCE_TOKEN_RE, (token, sourceId: string) => {
-    const normalizedSourceId = normalizeSourceToken(sourceId);
+    const normalizedSourceId = resolveSourceId(sourceId, sourceMap, sourceAliases);
     const target = sourceMap.has(normalizedSourceId)
       ? `#source-${normalizedSourceId}`
       : `#missing-source-${normalizedSourceId}`;
@@ -245,6 +259,16 @@ function extractSourceTokens(markdown: string) {
 
 function normalizeSourceToken(token: string) {
   return token.split("#", 1)[0];
+}
+
+function resolveSourceId(
+  token: string,
+  sourceMap: Map<string, RawSource>,
+  sourceAliases: Record<string, string>,
+) {
+  const sourceId = normalizeSourceToken(token);
+  if (sourceMap.has(sourceId)) return sourceId;
+  return sourceAliases[sourceId] ?? sourceId;
 }
 
 function sourceTypeLabel(sourceType: string) {
