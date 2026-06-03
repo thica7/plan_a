@@ -71,12 +71,57 @@ def test_business_plan_selects_scenario_and_rules() -> None:
 def test_scenario_pack_catalog_and_qa_rules_are_loaded() -> None:
     packs = list_scenario_packs()
     rules = list_business_qa_rules()
+    packs_by_id = {pack.id: pack for pack in packs}
 
     assert len(packs) >= 5
     assert len(rules) == 8
-    assert any(pack.id == "l1_direct_battlecard" for pack in packs)
+    assert {"l1_direct_battlecard", "l2_adjacent_workflow", "l3_market_landscape"} <= set(packs_by_id)
+    assert packs_by_id["l1_direct_battlecard"].competitor_layer == "L1"
+    assert packs_by_id["l2_adjacent_workflow"].competitor_layer == "L2"
+    assert packs_by_id["l3_market_landscape"].competitor_layer == "L3"
+    assert all(packs_by_id[item].required_dimensions for item in packs_by_id)
     assert any(rule.id == "claim_has_evidence" for rule in rules)
     assert any(rule.id == "homepage_verified" for rule in rules)
+
+
+def test_l1_l2_l3_presets_build_complete_business_plans() -> None:
+    cases = [
+        (
+            "l1_direct_battlecard",
+            "Cursor vs Copilot battlecard",
+            ["Cursor", "Copilot"],
+            ["pricing", "feature"],
+            "L1",
+        ),
+        (
+            "l2_adjacent_workflow",
+            "Enterprise AI search workflow alternatives",
+            ["Glean", "Coveo", "Elastic"],
+            ["feature", "integrations"],
+            "L2",
+        ),
+        (
+            "l3_market_landscape",
+            "AI coding assistant market landscape",
+            ["Cursor", "Copilot", "Windsurf", "Tabnine", "Codeium"],
+            ["market", "persona"],
+            "L3",
+        ),
+    ]
+
+    for scenario_id, topic, competitors, dimensions, layer in cases:
+        plan = build_business_intel_plan(
+            topic=topic,
+            competitors=competitors,
+            dimensions=dimensions,
+            requested_layer=layer,
+            requested_scenario_id=scenario_id,
+        )
+
+        assert plan.scenario_pack.id == scenario_id
+        assert plan.competitor_layer.layer == layer
+        assert set(plan.scenario_pack.required_dimensions) <= set(plan.recommended_dimensions)
+        assert plan.qa_rules
 
 
 def test_dynamic_scenario_pack_and_homepage_gate_are_deterministic() -> None:
