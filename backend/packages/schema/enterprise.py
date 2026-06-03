@@ -186,6 +186,7 @@ class ProjectRecord(BaseModel):
     competitor_set_hash: str = ""
     scenario_id: str | None = None
     created_by: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -892,6 +893,44 @@ class SchemaEvolutionSuggestion(BaseModel):
     proposed_skill: SkillSpec
     created_by: str = "evidence_gap_agent"
     generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+SchemaEvolutionReviewDecision = Literal["accepted", "rejected"]
+
+
+class SchemaEvolutionReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: SchemaEvolutionReviewDecision
+    note: str = Field(default="", max_length=1000)
+    suggestion: SchemaEvolutionSuggestion | None = None
+
+
+class SchemaEvolutionReviewRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    suggestion_id: str
+    decision: SchemaEvolutionReviewDecision
+    dimension: str
+    normalized_dimension: str
+    reason: str
+    source_gap_ids: list[str] = Field(default_factory=list)
+    proposed_skill: SkillSpec
+    reviewed_by: str
+    reviewed_at: datetime = Field(default_factory=datetime.utcnow)
+    note: str = ""
+
+
+class SchemaEvolutionReviewResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    workspace_id: str
+    review: SchemaEvolutionReviewRecord
+    project: ProjectRecord
+    accepted_schema_dimensions: dict[str, SchemaEvolutionReviewRecord] = Field(
+        default_factory=dict
+    )
 
 
 class EvidenceGapReport(BaseModel):

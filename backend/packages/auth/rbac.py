@@ -37,6 +37,7 @@ _ACTION_MIN_ROLE: dict[str, EnterpriseRole] = {
     "report:read": "viewer",
     "report:write": "analyst",
     "report:review": "reviewer",
+    "schema:review": "reviewer",
     "memory:read": "viewer",
     "memory:write": "analyst",
     "memory:review": "reviewer",

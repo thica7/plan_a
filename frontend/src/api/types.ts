@@ -1042,6 +1042,35 @@ export interface SchemaEvolutionSuggestion {
   generated_at: string;
 }
 
+export type SchemaEvolutionReviewDecision = "accepted" | "rejected";
+
+export interface SchemaEvolutionReviewRequest {
+  decision: SchemaEvolutionReviewDecision;
+  note?: string;
+  suggestion?: SchemaEvolutionSuggestion | null;
+}
+
+export interface SchemaEvolutionReviewRecord {
+  suggestion_id: string;
+  decision: SchemaEvolutionReviewDecision;
+  dimension: string;
+  normalized_dimension: string;
+  reason: string;
+  source_gap_ids: string[];
+  proposed_skill: SkillSpec;
+  reviewed_by: string;
+  reviewed_at: string;
+  note: string;
+}
+
+export interface SchemaEvolutionReviewResult {
+  project_id: string;
+  workspace_id: string;
+  review: SchemaEvolutionReviewRecord;
+  project: ProjectRecord;
+  accepted_schema_dimensions: Record<string, SchemaEvolutionReviewRecord>;
+}
+
 export interface EvidenceGapReport {
   project_id: string;
   scenario_id: string;
@@ -1254,6 +1283,7 @@ export interface ProjectRecord {
   competitor_set_hash: string;
   scenario_id?: string | null;
   created_by?: string | null;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

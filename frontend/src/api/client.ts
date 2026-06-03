@@ -49,6 +49,8 @@ import type {
   RuntimeConfig,
   ScheduledScanStartRequest,
   ScheduledScanStartResponse,
+  SchemaEvolutionReviewRequest,
+  SchemaEvolutionReviewResult,
   ScenarioPack,
   SkillSpec,
   SourceSnapshotCreateRequest,
@@ -453,6 +455,20 @@ export function fillProjectEvidenceGaps(projectId: string) {
   return request<EvidenceGapFillResult>(`/enterprise/projects/${projectId}/evidence-gaps/fill`, {
     method: "POST",
   });
+}
+
+export function reviewProjectSchemaSuggestion(
+  projectId: string,
+  suggestionId: string,
+  payload: SchemaEvolutionReviewRequest,
+) {
+  return request<SchemaEvolutionReviewResult>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/schema-suggestions/${encodeURIComponent(suggestionId)}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function getProjectRedTeam(projectId: string) {

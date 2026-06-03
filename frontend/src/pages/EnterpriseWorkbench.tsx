@@ -48,6 +48,7 @@ import {
   listProjectReportVersions,
   listSourceRegistry,
   recallProjectMemory,
+  reviewProjectSchemaSuggestion,
   startMonitorWorkflow,
   startScheduledScanWorkflow,
   updateEvidenceQuality,
@@ -87,6 +88,7 @@ import type {
   ReportReleaseGate,
   ReportVersionDiff,
   ReportVersionRecord,
+  SchemaEvolutionSuggestion,
   SourceSnapshotCreateRequest,
   SourceRegistryRecord,
   ToolRegistryReport,
@@ -140,6 +142,7 @@ export function EnterpriseWorkbench({
   const [isStartingMonitor, setStartingMonitor] = useState(false);
   const [isFillingGaps, setFillingGaps] = useState(false);
   const [isSavingMemoryFeedback, setSavingMemoryFeedback] = useState(false);
+  const [reviewingSchemaSuggestionId, setReviewingSchemaSuggestionId] = useState<string | null>(null);
   const [snapshottingEvidenceId, setSnapshottingEvidenceId] = useState<string | null>(null);
   const [memoryFeedbackDraft, setMemoryFeedbackDraft] = useState("");
   const [scanMessage, setScanMessage] = useState<string | null>(null);
@@ -354,6 +357,10 @@ export function EnterpriseWorkbench({
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   );
+  const acceptedSchemaDimensions = useMemo(
+    () => acceptedSchemaDimensionSet(selectedProject?.metadata),
+    [selectedProject?.metadata],
+  );
   const selectedVersion = useMemo(
     () => versions.find((version) => version.id === selectedVersionId) ?? null,
     [versions, selectedVersionId],
@@ -512,6 +519,42 @@ export function EnterpriseWorkbench({
       setError(err instanceof Error ? err.message : "Unable to fill evidence gaps");
     } finally {
       setFillingGaps(false);
+    }
+  }
+
+  async function handleReviewSchemaSuggestion(
+    suggestion: SchemaEvolutionSuggestion,
+    decision: "accepted" | "rejected",
+  ) {
+    if (!selectedProjectId) return;
+    const projectId = selectedProjectId;
+    setReviewingSchemaSuggestionId(suggestion.id);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const result = await reviewProjectSchemaSuggestion(projectId, suggestion.id, {
+        decision,
+        note:
+          decision === "accepted"
+            ? "Accepted from Enterprise Workbench evidence-gap panel."
+            : "Rejected from Enterprise Workbench evidence-gap panel.",
+        suggestion,
+      });
+      const [projectItems, gapsValue, planValue] = await Promise.all([
+        listEnterpriseProjects(),
+        getProjectEvidenceGaps(projectId),
+        getProjectBusinessPlan(projectId),
+      ]);
+      setProjects(projectItems.map((item) => (item.id === result.project.id ? result.project : item)));
+      setEvidenceGaps(gapsValue);
+      setBusinessPlan(planValue);
+      setScanMessage(
+        `${decision === "accepted" ? "Accepted" : "Rejected"} schema dimension ${suggestion.normalized_dimension}.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to review schema suggestion");
+    } finally {
+      setReviewingSchemaSuggestionId(null);
     }
   }
 
@@ -774,9 +817,12 @@ export function EnterpriseWorkbench({
 
               {evidenceGaps ? (
                 <EvidenceGapPanel
+                  acceptedSchemaDimensions={acceptedSchemaDimensions}
                   fillResult={gapFillResult}
                   isFilling={isFillingGaps}
+                  reviewingSuggestionId={reviewingSchemaSuggestionId}
                   onFill={handleFillEvidenceGaps}
+                  onReviewSchemaSuggestion={handleReviewSchemaSuggestion}
                   report={evidenceGaps}
                 />
               ) : null}
@@ -1763,14 +1809,23 @@ function WorkspaceUsagePanel({ usage }: { usage: WorkspaceUsageSummary }) {
 }
 
 function EvidenceGapPanel({
+  acceptedSchemaDimensions,
   fillResult,
   isFilling,
+  reviewingSuggestionId,
   onFill,
+  onReviewSchemaSuggestion,
   report,
 }: {
+  acceptedSchemaDimensions: Set<string>;
   fillResult: EvidenceGapFillResult | null;
   isFilling: boolean;
+  reviewingSuggestionId: string | null;
   onFill: () => void;
+  onReviewSchemaSuggestion: (
+    suggestion: SchemaEvolutionSuggestion,
+    decision: "accepted" | "rejected",
+  ) => void;
   report: EvidenceGapReport;
 }) {
   const status = report.critical_count > 0 ? "critical" : report.high_count > 0 ? "high" : "clear";
@@ -1883,11 +1938,36 @@ function EvidenceGapPanel({
           {report.schema_suggestions.slice(0, 3).map((suggestion) => (
             <article className="recommendation-card medium" key={suggestion.id}>
               <strong>{suggestion.normalized_dimension}</strong>
-              <span>{suggestion.status.replace("_", " ")}</span>
+              <span>
+                {acceptedSchemaDimensions.has(suggestion.normalized_dimension)
+                  ? "accepted"
+                  : suggestion.status.replace("_", " ")}
+              </span>
               <p>{suggestion.reason}</p>
               <em>
                 {suggestion.proposed_skill.subagent_class} / {suggestion.proposed_skill.tools_allowlist.join(", ")}
               </em>
+              <div className="inline-actions">
+                <button
+                  className="ghost-button"
+                  disabled={
+                    reviewingSuggestionId === suggestion.id
+                    || acceptedSchemaDimensions.has(suggestion.normalized_dimension)
+                  }
+                  type="button"
+                  onClick={() => onReviewSchemaSuggestion(suggestion, "accepted")}
+                >
+                  Accept
+                </button>
+                <button
+                  className="ghost-button"
+                  disabled={reviewingSuggestionId === suggestion.id}
+                  type="button"
+                  onClick={() => onReviewSchemaSuggestion(suggestion, "rejected")}
+                >
+                  Reject
+                </button>
+              </div>
             </article>
           ))}
         </div>
@@ -2516,6 +2596,14 @@ function formatScoreDelta(value?: number | null) {
     return "n/a";
   }
   return value > 0 ? `+${value}` : `${value}`;
+}
+
+function acceptedSchemaDimensionSet(metadata?: Record<string, unknown>) {
+  const raw = metadata?.accepted_schema_dimensions;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return new Set<string>();
+  }
+  return new Set(Object.keys(raw));
 }
 
 function formatRouteCandidate(candidate?: ModelRouteDecision["selected"]) {

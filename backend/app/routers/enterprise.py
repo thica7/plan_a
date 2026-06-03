@@ -93,6 +93,10 @@ from packages.schema.enterprise import (
     ReportVersionDiff,
     ReportVersionRecord,
     ScenarioPack,
+    SchemaEvolutionReviewRecord,
+    SchemaEvolutionReviewRequest,
+    SchemaEvolutionReviewResult,
+    SchemaEvolutionSuggestion,
     SourceSnapshotCreateRequest,
     SourceSnapshotResult,
     SourceRegistryRecord,
@@ -600,6 +604,54 @@ async def get_project_evidence_gaps(
 
 
 @router.post(
+    "/enterprise/projects/{project_id}/schema-suggestions/{suggestion_id}/review",
+    response_model=SchemaEvolutionReviewResult,
+)
+async def review_project_schema_suggestion(
+    project_id: str,
+    suggestion_id: str,
+    request: SchemaEvolutionReviewRequest,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    settings: SettingsDep,
+) -> SchemaEvolutionReviewResult:
+    project = _project_or_404(project_id, store, user, "schema:review")
+    suggestion = request.suggestion
+    if suggestion is not None and suggestion.id != suggestion_id:
+        raise HTTPException(status_code=400, detail="Suggestion id mismatch")
+    if suggestion is None:
+        report = await get_project_evidence_gaps(project_id, store, user, settings)
+        suggestion = next(
+            (item for item in report.schema_suggestions if item.id == suggestion_id),
+            None,
+        )
+    if suggestion is None:
+        raise HTTPException(status_code=404, detail="Schema suggestion not found")
+
+    review = SchemaEvolutionReviewRecord(
+        suggestion_id=suggestion.id,
+        decision=request.decision,
+        dimension=suggestion.dimension,
+        normalized_dimension=suggestion.normalized_dimension,
+        reason=suggestion.reason,
+        source_gap_ids=suggestion.source_gap_ids,
+        proposed_skill=suggestion.proposed_skill,
+        reviewed_by=user.user_id,
+        note=request.note,
+    )
+    updated_project = store.upsert_project(
+        _project_with_schema_review(project, review)
+    )
+    return SchemaEvolutionReviewResult(
+        project_id=project_id,
+        workspace_id=project.workspace_id,
+        review=review,
+        project=updated_project,
+        accepted_schema_dimensions=_accepted_schema_dimensions(updated_project.metadata),
+    )
+
+
+@router.post(
     "/enterprise/projects/{project_id}/evidence-gaps/fill",
     response_model=EvidenceGapFillResult,
 )
@@ -980,7 +1032,14 @@ def _business_plan_for_project(
 ) -> BusinessIntelPlan:
     project = _project_or_404(project_id, store, user, "project:read")
     competitors = store.list_competitors(project_id=project_id)
-    dimensions = sorted({item.dimension for item in store.list_evidence(project_id=project_id)})
+    accepted_dimensions = _accepted_schema_dimensions(project.metadata)
+    dimensions = sorted(
+        {
+            item.dimension
+            for item in store.list_evidence(project_id=project_id)
+        }
+        | set(accepted_dimensions)
+    )
     if not dimensions:
         dimensions = ["pricing", "feature", "persona"]
     return build_business_intel_plan(
@@ -1367,6 +1426,46 @@ def _report_release_gate_for_version(
         evidence=store.list_evidence(project_id=project.id),
         claims=store.list_claims(project_id=project.id),
     )
+
+
+def _project_with_schema_review(
+    project: ProjectRecord,
+    review: SchemaEvolutionReviewRecord,
+) -> ProjectRecord:
+    metadata = dict(project.metadata)
+    reviews = _metadata_mapping(metadata.get("schema_evolution_reviews"))
+    reviews[review.suggestion_id] = review.model_dump(mode="json")
+    accepted = _metadata_mapping(metadata.get("accepted_schema_dimensions"))
+    if review.decision == "accepted":
+        accepted[review.normalized_dimension] = review.model_dump(mode="json")
+    else:
+        accepted.pop(review.normalized_dimension, None)
+    metadata["schema_evolution_reviews"] = reviews
+    metadata["accepted_schema_dimensions"] = accepted
+    metadata["schema_evolution_last_review"] = review.model_dump(mode="json")
+    return project.model_copy(
+        update={
+            "metadata": metadata,
+            "updated_at": datetime.utcnow(),
+        }
+    )
+
+
+def _accepted_schema_dimensions(
+    metadata: dict[str, object],
+) -> dict[str, SchemaEvolutionReviewRecord]:
+    accepted = _metadata_mapping(metadata.get("accepted_schema_dimensions"))
+    result: dict[str, SchemaEvolutionReviewRecord] = {}
+    for dimension, raw_review in accepted.items():
+        if isinstance(raw_review, dict):
+            result[dimension] = SchemaEvolutionReviewRecord.model_validate(raw_review)
+    return result
+
+
+def _metadata_mapping(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    return {str(key): item for key, item in value.items()}
 
 
 def _with_gap_fill_release_gate_delta(

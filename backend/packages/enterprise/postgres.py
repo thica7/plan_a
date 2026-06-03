@@ -723,9 +723,9 @@ class EnterprisePostgresStore:
                     INSERT INTO projects (
                         id, workspace_id, name, topic, topic_normalized,
                         competitor_layer, competitor_set_hash, scenario_id,
-                        created_by, created_at, updated_at
+                        created_by, metadata, created_at, updated_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO UPDATE SET
                         name = EXCLUDED.name,
                         topic = EXCLUDED.topic,
@@ -733,6 +733,7 @@ class EnterprisePostgresStore:
                         competitor_layer = EXCLUDED.competitor_layer,
                         competitor_set_hash = EXCLUDED.competitor_set_hash,
                         scenario_id = EXCLUDED.scenario_id,
+                        metadata = EXCLUDED.metadata,
                         updated_at = EXCLUDED.updated_at
                     """,
                     (
@@ -745,6 +746,7 @@ class EnterprisePostgresStore:
                         project.competitor_set_hash,
                         project.scenario_id,
                         project.created_by,
+                        self._json(project.metadata),
                         project.created_at,
                         project.updated_at,
                     ),
@@ -1318,20 +1320,26 @@ class EnterprisePostgresStore:
         context: EnterpriseRunContext,
         actor_id: str,
     ) -> None:
+        metadata = {
+            "last_run_id": detail.id,
+            "scenario_id": detail.plan.scenario_id,
+            "qa_rule_ids": detail.plan.qa_rule_ids,
+        }
         cur.execute(
             """
             INSERT INTO projects (
                 id, workspace_id, name, topic, topic_normalized,
                 competitor_layer, competitor_set_hash, scenario_id,
-                created_by, created_at, updated_at
+                created_by, metadata, created_at, updated_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
             ON CONFLICT (id) DO UPDATE SET
                 topic = EXCLUDED.topic,
                 topic_normalized = EXCLUDED.topic_normalized,
                 competitor_layer = EXCLUDED.competitor_layer,
                 competitor_set_hash = EXCLUDED.competitor_set_hash,
                 scenario_id = EXCLUDED.scenario_id,
+                metadata = projects.metadata || EXCLUDED.metadata,
                 updated_at = now()
             """,
             (
@@ -1344,6 +1352,7 @@ class EnterprisePostgresStore:
                 compute_competitor_set_hash(context.competitor_ids),
                 detail.plan.scenario_id,
                 actor_id,
+                self._json(metadata),
                 detail.created_at,
             ),
         )

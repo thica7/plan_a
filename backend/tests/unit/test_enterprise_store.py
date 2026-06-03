@@ -24,6 +24,7 @@ from packages.schema.enterprise import (
     EvidenceGapFillResult,
     EvidenceGapReport,
     NotificationRecord,
+    SchemaEvolutionSuggestion,
     UserFeedbackRecord,
     WorkspaceMemberRecord,
     WorkspaceQuotaUpdateRequest,
@@ -35,6 +36,8 @@ from packages.schema.models import (
     PricingModel,
     RawSource,
     RunMetrics,
+    SkillOutputSpec,
+    SkillSpec,
 )
 from packages.skills.registry import SkillRegistry
 
@@ -399,6 +402,73 @@ def test_enterprise_store_deduplicates_embedding_index_by_content_hash() -> None
     assert (
         store.evidence_records["zz-duplicate-evidence"].metadata["embedding_duplicate_of"]
         == canonical.id
+    )
+
+
+def test_schema_suggestion_review_persists_metadata_and_updates_plan_dimensions() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    suggestion = SchemaEvolutionSuggestion(
+        id="schema-suggestion-enterprise-sso",
+        dimension="enterprise_sso",
+        normalized_dimension="enterprise_sso",
+        reason="Reviewer wants enterprise SSO tracked as a first-class dimension.",
+        source_gap_ids=["gap-enterprise-sso"],
+        proposed_skill=SkillSpec(
+            name="enterprise_sso",
+            subagent_class="GenericCollector",
+            description="Collect enterprise SSO evidence.",
+            tools_allowlist=["web_search", "fetch_page"],
+            query_templates=["{competitor} enterprise SSO official"],
+            source_type="webpage",
+            output=SkillOutputSpec(
+                prefix="enterprise_sso",
+                confidence_default=0.8,
+                confidence_no_url=0.45,
+                required_dimension="enterprise_sso",
+            ),
+        ),
+    )
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    client = TestClient(app)
+
+    response = client.post(
+        f"/api/enterprise/projects/{context.project_id}/schema-suggestions/{suggestion.id}/review",
+        headers={"X-User-Role": "reviewer"},
+        json={
+            "decision": "accepted",
+            "note": "Track enterprise SSO in this project.",
+            "suggestion": suggestion.model_dump(mode="json"),
+        },
+    )
+    plan = client.get(f"/api/enterprise/projects/{context.project_id}/business-plan")
+    gaps = client.get(f"/api/enterprise/projects/{context.project_id}/evidence-gaps")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["review"]["decision"] == "accepted"
+    assert body["accepted_schema_dimensions"]["enterprise_sso"]["reviewed_by"] == "system-user"
+    project = store.get_project(context.project_id)
+    assert project is not None
+    assert "enterprise_sso" in project.metadata["accepted_schema_dimensions"]
+    assert plan.status_code == 200
+    assert "enterprise_sso" in plan.json()["requested_dimensions"]
+    assert gaps.status_code == 200
+    assert any(gap["dimension"] == "enterprise_sso" for gap in gaps.json()["gaps"])
+    assert any(
+        log.action == "project.upserted"
+        and log.resource_id == context.project_id
+        and "accepted_schema_dimensions" in log.after.get("metadata", {})
+        for log in store.list_audit_logs()
     )
 
 

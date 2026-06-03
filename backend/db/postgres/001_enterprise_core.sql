@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS projects (
     competitor_set_hash TEXT NOT NULL DEFAULT '',
     scenario_id TEXT,
     created_by TEXT REFERENCES users(id),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -396,6 +397,8 @@ ALTER TABLE evidence_records ADD COLUMN IF NOT EXISTS last_seen_run_id TEXT REFE
 ALTER TABLE evidence_records ADD COLUMN IF NOT EXISTS seen_count INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE report_versions
     ADD COLUMN IF NOT EXISTS quality_metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE projects
+    ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 UPDATE evidence_records
 SET canonical_url = COALESCE(NULLIF(canonical_url, ''), url, '')
 WHERE canonical_url = '';

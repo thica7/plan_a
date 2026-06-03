@@ -3382,6 +3382,10 @@ export interface components {
             scenario_id?: string | null;
             /** Created By */
             created_by?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
             /**
              * Created At
              * Format: date-time
