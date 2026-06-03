@@ -732,8 +732,12 @@ class EnterpriseMemoryStore:
         with self._lock:
             before_record = self.evidence_records.get(evidence.id)
             evidence = _merge_evidence_lifecycle(before_record, evidence)
+            evidence, duplicate_of = self._apply_embedding_dedupe_locked(evidence)
             self.evidence_records[evidence.id] = evidence
-            self._upsert_evidence_embedding_locked(evidence)
+            if duplicate_of is None:
+                self._upsert_evidence_embedding_locked(evidence)
+            else:
+                self._delete_evidence_embedding_locked(evidence.id)
             self._upsert_source_registry_locked(
                 source_registry_from_evidence(evidence),
                 actor_id=DEFAULT_USER_ID,
@@ -772,9 +776,26 @@ class EnterpriseMemoryStore:
                 evidence = [item for item in evidence if item.workspace_id == workspace_id]
             if project_id:
                 evidence = [item for item in evidence if item.project_id == project_id]
+            target_ids = {item.id for item in evidence}
+            self.evidence_embeddings = {
+                key: value
+                for key, value in self.evidence_embeddings.items()
+                if value.evidence_id not in target_ids
+            }
+            indexed_count = 0
+            duplicate_count = 0
             for item in evidence:
-                self._upsert_evidence_embedding_locked(item)
-            return EvidenceReindexResult(indexed_count=len(evidence))
+                item, duplicate_of = self._apply_embedding_dedupe_locked(item)
+                self.evidence_records[item.id] = item
+                if duplicate_of is None:
+                    self._upsert_evidence_embedding_locked(item)
+                    indexed_count += 1
+                else:
+                    duplicate_count += 1
+            return EvidenceReindexResult(
+                indexed_count=indexed_count,
+                duplicate_count=duplicate_count,
+            )
 
     def search_evidence(
         self,
@@ -1007,6 +1028,48 @@ class EnterpriseMemoryStore:
         self.evidence_embeddings[record.id] = record
         return record
 
+    def _delete_evidence_embedding_locked(self, evidence_id: str) -> None:
+        self.evidence_embeddings = {
+            key: value
+            for key, value in self.evidence_embeddings.items()
+            if value.evidence_id != evidence_id
+        }
+
+    def _apply_embedding_dedupe_locked(
+        self,
+        evidence: EvidenceRecord,
+    ) -> tuple[EvidenceRecord, str | None]:
+        duplicate = self._find_embedding_duplicate_locked(evidence)
+        metadata = dict(evidence.metadata)
+        if duplicate is None:
+            metadata.pop("embedding_duplicate_of", None)
+            metadata.pop("embedding_dedupe_key", None)
+            metadata["embedding_indexed"] = True
+            return evidence.model_copy(update={"metadata": metadata}), None
+        metadata["embedding_duplicate_of"] = duplicate.id
+        metadata["embedding_dedupe_key"] = _embedding_dedupe_key(evidence)
+        metadata["embedding_indexed"] = False
+        return evidence.model_copy(update={"metadata": metadata}), duplicate.id
+
+    def _find_embedding_duplicate_locked(self, evidence: EvidenceRecord) -> EvidenceRecord | None:
+        key = _embedding_dedupe_key(evidence)
+        if not key:
+            return None
+        candidates = [
+            item
+            for item in self.evidence_records.values()
+            if _embedding_dedupe_key(item) == key
+        ]
+        if not candidates:
+            return None
+        canonical = sorted(
+            [*candidates, evidence],
+            key=lambda item: (item.captured_at, item.id),
+        )[0]
+        if canonical.id == evidence.id:
+            return None
+        return canonical
+
     def _upsert_source_registry_locked(
         self,
         record: SourceRegistryRecord,
@@ -1153,6 +1216,19 @@ def _merge_evidence_lifecycle(
             "seen_count": max(1, existing.seen_count + increment),
         }
     )
+
+
+def _embedding_dedupe_key(evidence: EvidenceRecord) -> str:
+    if not evidence.content_hash:
+        return ""
+    parts = [
+        evidence.workspace_id,
+        evidence.project_id,
+        evidence.competitor_id.casefold().strip(),
+        evidence.dimension.casefold().strip(),
+        evidence.content_hash.casefold().strip(),
+    ]
+    return "|".join(parts)
 
 
 def source_registry_id(workspace_id: str, domain: str, source_type: str) -> str:

@@ -357,6 +357,51 @@ def test_enterprise_store_indexes_and_searches_evidence_embeddings() -> None:
     assert hits[0].embedding_model == "hashing-384"
 
 
+def test_enterprise_store_deduplicates_embedding_index_by_content_hash() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    canonical = projection.evidence_records[0]
+    duplicate = canonical.model_copy(
+        update={
+            "id": "zz-duplicate-evidence",
+            "raw_source_id": "duplicate-source",
+            "canonical_url": "https://mirror.example/pricing",
+            "metadata": {},
+        }
+    )
+
+    stored_duplicate = store.upsert_evidence(duplicate)
+    embeddings = store.list_evidence_embeddings(workspace_id=context.workspace_id)
+    hits = store.search_evidence(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        query="Cursor pricing plan",
+        limit=5,
+    )
+    reindexed = store.reindex_evidence_embeddings(workspace_id=context.workspace_id)
+
+    assert stored_duplicate.metadata["embedding_duplicate_of"] == canonical.id
+    assert stored_duplicate.metadata["embedding_indexed"] is False
+    assert len(store.list_evidence(project_id=context.project_id)) == 2
+    assert len(embeddings) == 1
+    assert embeddings[0].evidence_id == canonical.id
+    assert [hit.evidence.id for hit in hits] == [canonical.id]
+    assert reindexed.indexed_count == 1
+    assert reindexed.duplicate_count == 1
+    assert (
+        store.evidence_records["zz-duplicate-evidence"].metadata["embedding_duplicate_of"]
+        == canonical.id
+    )
+
+
 def test_enterprise_store_round_trips_artifacts_with_audit() -> None:
     store = EnterpriseMemoryStore()
     detail = _detail()

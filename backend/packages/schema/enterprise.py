@@ -452,6 +452,7 @@ class EvidenceReindexResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     indexed_count: int = Field(ge=0)
+    duplicate_count: int = Field(default=0, ge=0)
 
 
 class ClaimRecord(BaseModel):

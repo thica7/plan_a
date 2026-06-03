@@ -2650,6 +2650,11 @@ export interface components {
         EvidenceReindexResult: {
             /** Indexed Count */
             indexed_count: number;
+            /**
+             * Duplicate Count
+             * @default 0
+             */
+            duplicate_count: number;
         };
         /** EvidenceSearchHit */
         EvidenceSearchHit: {

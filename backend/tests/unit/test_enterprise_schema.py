@@ -180,11 +180,12 @@ def test_evidence_embedding_and_search_schema_are_typed() -> None:
         embedding_text="Cursor pricing",
     )
     hit = EvidenceSearchHit(evidence=evidence, score=0.5, embedding_model="hashing-384")
-    result = EvidenceReindexResult(indexed_count=1)
+    result = EvidenceReindexResult(indexed_count=1, duplicate_count=2)
 
     assert embedding.embedding_dimensions == 384
     assert hit.evidence.id == evidence.id
     assert result.indexed_count == 1
+    assert result.duplicate_count == 2
 
 
 def test_artifact_schema_links_storage_to_evidence() -> None:

@@ -805,8 +805,12 @@ class EnterprisePostgresStore:
                     "SELECT * FROM evidence_records WHERE id = %s",
                     (evidence.id,),
                 ).fetchone()
+                evidence = self._apply_embedding_dedupe(cur, evidence)
                 self._upsert_evidence(cur, evidence)
-                self._upsert_evidence_embedding(cur, evidence)
+                if evidence.metadata.get("embedding_duplicate_of"):
+                    self._delete_evidence_embedding(cur, evidence.id)
+                else:
+                    self._upsert_evidence_embedding(cur, evidence)
                 registry_record = source_registry_from_evidence(evidence)
                 self._upsert_source_registry(cur, registry_record)
                 self._append_audit_once(
@@ -884,13 +888,30 @@ class EnterprisePostgresStore:
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
             with conn.cursor() as cur:
                 rows = cur.execute(sql, tuple(params)).fetchall()
+                target_ids = [str(row["id"]) for row in rows]
+                if target_ids:
+                    cur.execute(
+                        "DELETE FROM evidence_embeddings WHERE evidence_id = ANY(%s)",
+                        (target_ids,),
+                    )
+                indexed_count = 0
+                duplicate_count = 0
                 for row in rows:
-                    self._upsert_evidence_embedding(
+                    evidence = self._apply_embedding_dedupe(
                         cur,
                         self._model_from_row(EvidenceRecord, row),
                     )
+                    self._upsert_evidence(cur, evidence)
+                    if evidence.metadata.get("embedding_duplicate_of"):
+                        duplicate_count += 1
+                        continue
+                    self._upsert_evidence_embedding(cur, evidence)
+                    indexed_count += 1
             conn.commit()
-        return EvidenceReindexResult(indexed_count=len(rows))
+        return EvidenceReindexResult(
+            indexed_count=indexed_count,
+            duplicate_count=duplicate_count,
+        )
 
     def search_evidence(
         self,
@@ -1506,6 +1527,9 @@ class EnterprisePostgresStore:
         )
 
     def _upsert_evidence_embedding(self, cur: Any, evidence: EvidenceRecord) -> None:
+        if evidence.metadata.get("embedding_duplicate_of"):
+            self._delete_evidence_embedding(cur, evidence.id)
+            return
         record = build_evidence_embedding_record(evidence)
         embedding = vector_literal(deterministic_embedding(record.embedding_text))
         cur.execute(
@@ -1539,6 +1563,66 @@ class EnterprisePostgresStore:
                 self._json(record.metadata),
             ),
         )
+
+    def _delete_evidence_embedding(self, cur: Any, evidence_id: str) -> None:
+        cur.execute(
+            "DELETE FROM evidence_embeddings WHERE evidence_id = %s",
+            (evidence_id,),
+        )
+
+    def _apply_embedding_dedupe(
+        self,
+        cur: Any,
+        evidence: EvidenceRecord,
+    ) -> EvidenceRecord:
+        duplicate_id = self._find_embedding_duplicate(cur, evidence)
+        metadata = dict(evidence.metadata)
+        if duplicate_id is None:
+            metadata.pop("embedding_duplicate_of", None)
+            metadata.pop("embedding_dedupe_key", None)
+            metadata["embedding_indexed"] = True
+            return evidence.model_copy(update={"metadata": metadata})
+        metadata["embedding_duplicate_of"] = duplicate_id
+        metadata["embedding_dedupe_key"] = _embedding_dedupe_key(evidence)
+        metadata["embedding_indexed"] = False
+        return evidence.model_copy(update={"metadata": metadata})
+
+    def _find_embedding_duplicate(
+        self,
+        cur: Any,
+        evidence: EvidenceRecord,
+    ) -> str | None:
+        if not evidence.content_hash:
+            return None
+        rows = cur.execute(
+            """
+            SELECT *
+            FROM evidence_records
+            WHERE workspace_id = %s
+              AND project_id = %s
+              AND competitor_id = %s
+              AND lower(dimension) = lower(%s)
+              AND lower(content_hash) = lower(%s)
+            ORDER BY captured_at ASC, id ASC
+            """,
+            (
+                evidence.workspace_id,
+                evidence.project_id,
+                evidence.competitor_id,
+                evidence.dimension,
+                evidence.content_hash,
+            ),
+        ).fetchall()
+        candidates = [self._model_from_row(EvidenceRecord, row) for row in rows]
+        if not candidates:
+            return None
+        canonical = sorted(
+            [*candidates, evidence],
+            key=lambda item: (item.captured_at, item.id),
+        )[0]
+        if canonical.id == evidence.id:
+            return None
+        return canonical.id
 
     def _upsert_source_registry(self, cur: Any, record: SourceRegistryRecord) -> None:
         cur.execute(
@@ -1958,6 +2042,19 @@ def _usage_period(
 ) -> tuple[datetime, datetime]:
     default_start, default_end = current_month_window()
     return period_start or default_start, period_end or default_end
+
+
+def _embedding_dedupe_key(evidence: EvidenceRecord) -> str:
+    if not evidence.content_hash:
+        return ""
+    parts = [
+        evidence.workspace_id,
+        evidence.project_id,
+        evidence.competitor_id.casefold().strip(),
+        evidence.dimension.casefold().strip(),
+        evidence.content_hash.casefold().strip(),
+    ]
+    return "|".join(parts)
 
 
 def _split_sql(script: str) -> list[str]:
