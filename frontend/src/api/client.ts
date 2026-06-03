@@ -3,6 +3,7 @@ import type {
   ArtifactCreateRequest,
   ArtifactCreateResult,
   ArtifactRecord,
+  AuditLogRecord,
   BusinessIntelPlan,
   BusinessQAEvaluation,
   ClaimValidationReport,
@@ -252,6 +253,11 @@ export function listRuns() {
 export function listEnterpriseProjects(workspaceId?: string) {
   const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
   return request<ProjectRecord[]>(`/enterprise/projects${params}`);
+}
+
+export function listEnterpriseAuditLogs(workspaceId?: string) {
+  const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
+  return request<AuditLogRecord[]>(`/enterprise/audit-logs${params}`);
 }
 
 export function listScenarioPacks() {

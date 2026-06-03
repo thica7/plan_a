@@ -246,6 +246,19 @@ export interface TraceObservabilityReport {
   generated_at: string;
 }
 
+export interface AuditLogRecord {
+  id: string;
+  workspace_id: string;
+  actor_type: "user" | "agent" | "workflow" | "system";
+  actor_id?: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export interface ComplianceFinding {
   id: string;
   severity: "info" | "warn" | "blocker";

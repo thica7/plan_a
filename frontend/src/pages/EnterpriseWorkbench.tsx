@@ -39,6 +39,7 @@ import {
   createSourceSnapshot,
   ingestProjectMemoryFeedback,
   listArtifacts,
+  listEnterpriseAuditLogs,
   listEnterpriseCompetitors,
   listEnterpriseNotifications,
   listEnterpriseProjects,
@@ -64,6 +65,7 @@ import type {
   BusinessQAEvaluation,
   BusinessQAFinding,
   ArtifactRecord,
+  AuditLogRecord,
   ClaimValidationReport,
   ClaimValidationResult,
   ClaimRecord,
@@ -138,6 +140,7 @@ export function EnterpriseWorkbench({
   const [memoryRecall, setMemoryRecall] = useState<MemoryRecallContext | null>(null);
   const [memoryFeedback, setMemoryFeedback] = useState<UserFeedbackRecord[]>([]);
   const [workspaceUsage, setWorkspaceUsage] = useState<WorkspaceUsageSummary | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
   const [releaseGate, setReleaseGate] = useState<ReportReleaseGate | null>(null);
@@ -212,6 +215,7 @@ export function EnterpriseWorkbench({
       setMemoryRecall(null);
       setMemoryFeedback([]);
       setWorkspaceUsage(null);
+      setAuditLogs([]);
       setSelectedVersionId(null);
       setEvalOpsBaselineRunId(null);
       return;
@@ -248,6 +252,7 @@ export function EnterpriseWorkbench({
       }),
       listProjectMemoryFeedback(selectedProjectId),
       getWorkspaceUsage(projectForLoad.workspace_id),
+      listEnterpriseAuditLogs(projectForLoad.workspace_id),
     ])
       .then(
         ([
@@ -274,6 +279,7 @@ export function EnterpriseWorkbench({
           memoryRecallValue,
           memoryFeedbackValue,
           workspaceUsageValue,
+          auditLogItems,
         ]) => {
           if (!active) return;
           setCompetitors(competitorItems);
@@ -300,6 +306,7 @@ export function EnterpriseWorkbench({
           setMemoryRecall(memoryRecallValue);
           setMemoryFeedback(memoryFeedbackValue);
           setWorkspaceUsage(workspaceUsageValue);
+          setAuditLogs(auditLogItems);
           setSelectedVersionId(versionItems[0]?.id ?? null);
           setEvalOpsBaselineRunId(null);
         },
@@ -331,6 +338,7 @@ export function EnterpriseWorkbench({
         setMemoryRecall(null);
         setMemoryFeedback([]);
         setWorkspaceUsage(null);
+        setAuditLogs([]);
         setSelectedVersionId(null);
         setDecisionReplay(null);
         setEvalOpsBaselineRunId(null);
@@ -956,6 +964,8 @@ export function EnterpriseWorkbench({
                 toolRegistry={toolRegistry}
               />
 
+              <AuditLogPanel logs={auditLogs} />
+
               <MemoryAgentPanel
                 feedback={memoryFeedback}
                 feedbackDraft={memoryFeedbackDraft}
@@ -1128,6 +1138,50 @@ function CompetitorLibrary({
         );
       })}
     </div>
+  );
+}
+
+function AuditLogPanel({ logs }: { logs: AuditLogRecord[] }) {
+  const recentLogs = logs.slice(0, 6);
+  const reportLogs = logs.filter(
+    (log) => log.resource_type === "report_version" || log.action.startsWith("report_version."),
+  );
+  const statusChanges = logs.filter((log) => log.action === "report_version.status_changed");
+  const actorCount = new Set(logs.map((log) => `${log.actor_type}:${log.actor_id ?? "unknown"}`)).size;
+
+  return (
+    <section className="panel readiness-panel pass">
+      <div className="panel-heading-row">
+        <h2>Audit log</h2>
+        <ListChecks size={17} aria-hidden />
+      </div>
+      <div className="metric-grid compact">
+        <Metric icon={<ListChecks size={17} aria-hidden />} label="Events" value={logs.length} />
+        <Metric icon={<FileText size={17} aria-hidden />} label="Reports" value={reportLogs.length} />
+        <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Status" value={statusChanges.length} />
+        <Metric icon={<Briefcase size={17} aria-hidden />} label="Actors" value={actorCount} />
+      </div>
+      {recentLogs.length > 0 ? (
+        <div className="recommendation-list">
+          {recentLogs.map((log) => (
+            <article className="recommendation-card low" key={log.id} title={log.id}>
+              <strong>{log.action}</strong>
+              <span>
+                {log.resource_type} / {formatDate(log.created_at)}
+              </span>
+              <p>{auditLogSummary(log)}</p>
+              <div className="project-meta-row">
+                <span>{log.actor_type}</span>
+                <span>{log.actor_id ?? "unknown actor"}</span>
+                <span>{log.resource_id}</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="muted-line">No audit events recorded for this workspace.</p>
+      )}
+    </section>
   );
 }
 
@@ -3271,6 +3325,29 @@ function payloadRecord(payload: Record<string, unknown>, key: string) {
   const value = payload[key];
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
+}
+
+function auditLogSummary(log: AuditLogRecord) {
+  const beforeStatus = auditMetadataString(log.before, "status");
+  const afterStatus = auditMetadataString(log.after, "status");
+  if (beforeStatus || afterStatus) {
+    return `${beforeStatus ?? "none"} -> ${afterStatus ?? "none"} / ${log.resource_id}`;
+  }
+
+  const afterKeys = Object.keys(log.after ?? {}).slice(0, 3);
+  if (afterKeys.length > 0) {
+    return `Changed ${afterKeys.join(", ")} on ${log.resource_id}.`;
+  }
+
+  return `${log.actor_type}${log.actor_id ? `:${log.actor_id}` : ""} touched ${log.resource_id}.`;
+}
+
+function auditMetadataString(
+  metadata: Record<string, unknown> | null | undefined,
+  key: string,
+) {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 function qualityEntryPriority(entry: QualityAgentMatrixEntry) {
