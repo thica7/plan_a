@@ -1117,6 +1117,12 @@ def _with_pydantic_ai_execution_metadata(
                     report.pydantic_ai_runtime_prompt_hash,
                 )
             ),
+            "pydantic_ai_input_schema_hash": _optional_str(
+                metadata.get("input_schema_hash", report.pydantic_ai_input_schema_hash)
+            ),
+            "pydantic_ai_output_schema_hash": _optional_str(
+                metadata.get("output_schema_hash", report.pydantic_ai_output_schema_hash)
+            ),
             "pydantic_ai_runtime_prompt_chars": _optional_int(
                 metadata.get(
                     "runtime_prompt_chars",
@@ -1144,6 +1150,8 @@ def _quality_agent_pydantic_ai_metadata(
         "pydantic_ai_runtime_result_type": report.pydantic_ai_runtime_result_type,
         "pydantic_ai_model_name": report.pydantic_ai_model_name,
         "pydantic_ai_runtime_prompt_hash": report.pydantic_ai_runtime_prompt_hash,
+        "pydantic_ai_input_schema_hash": report.pydantic_ai_input_schema_hash,
+        "pydantic_ai_output_schema_hash": report.pydantic_ai_output_schema_hash,
         "pydantic_ai_runtime_prompt_chars": report.pydantic_ai_runtime_prompt_chars,
         "typed_contract_enforced": report.typed_contract_enforced,
     }

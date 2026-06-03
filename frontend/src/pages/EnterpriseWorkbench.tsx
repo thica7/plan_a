@@ -2665,6 +2665,8 @@ function EvidenceGapPanel({
         runtimeAgentCreated={report.pydantic_ai_runtime_agent_created}
         runtimePromptChars={report.pydantic_ai_runtime_prompt_chars}
         runtimePromptHash={report.pydantic_ai_runtime_prompt_hash}
+        inputSchemaHash={report.pydantic_ai_input_schema_hash}
+        outputSchemaHash={report.pydantic_ai_output_schema_hash}
         typedContractEnforced={report.typed_contract_enforced}
       />
       {fillResult ? (
@@ -2882,6 +2884,8 @@ function RedTeamPanel({ report }: { report: RedTeamReport }) {
         runtimeAgentCreated={report.pydantic_ai_runtime_agent_created}
         runtimePromptChars={report.pydantic_ai_runtime_prompt_chars}
         runtimePromptHash={report.pydantic_ai_runtime_prompt_hash}
+        inputSchemaHash={report.pydantic_ai_input_schema_hash}
+        outputSchemaHash={report.pydantic_ai_output_schema_hash}
         typedContractEnforced={report.typed_contract_enforced}
       />
       {report.findings.length > 0 ? (
@@ -2903,6 +2907,8 @@ function PydanticAiExecutionPanel({
   fallback,
   modelBackedRequested,
   modelName,
+  inputSchemaHash,
+  outputSchemaHash,
   runtimeAgentCreated,
   runtimePromptChars,
   runtimePromptHash,
@@ -2913,6 +2919,8 @@ function PydanticAiExecutionPanel({
   fallback: boolean;
   modelBackedRequested: boolean;
   modelName?: string | null;
+  inputSchemaHash?: string | null;
+  outputSchemaHash?: string | null;
   runtimeAgentCreated: boolean;
   runtimePromptChars: number;
   runtimePromptHash?: string | null;
@@ -2947,6 +2955,14 @@ function PydanticAiExecutionPanel({
       <span>
         <strong>{runtimePromptHash ? runtimePromptHash.slice(0, 8) : "none"}</strong>
         <em>Prompt hash</em>
+      </span>
+      <span>
+        <strong>{inputSchemaHash ? inputSchemaHash.slice(0, 8) : "none"}</strong>
+        <em>Input schema</em>
+      </span>
+      <span>
+        <strong>{outputSchemaHash ? outputSchemaHash.slice(0, 8) : "none"}</strong>
+        <em>Output schema</em>
       </span>
       <span>
         <strong>{runtimePromptChars}</strong>

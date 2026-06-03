@@ -2702,6 +2702,10 @@ export interface components {
             pydantic_ai_model_name?: string | null;
             /** Pydantic Ai Runtime Prompt Hash */
             pydantic_ai_runtime_prompt_hash?: string | null;
+            /** Pydantic Ai Input Schema Hash */
+            pydantic_ai_input_schema_hash?: string | null;
+            /** Pydantic Ai Output Schema Hash */
+            pydantic_ai_output_schema_hash?: string | null;
             /**
              * Pydantic Ai Runtime Prompt Chars
              * @default 0
@@ -3819,6 +3823,10 @@ export interface components {
             pydantic_ai_model_name?: string | null;
             /** Pydantic Ai Runtime Prompt Hash */
             pydantic_ai_runtime_prompt_hash?: string | null;
+            /** Pydantic Ai Input Schema Hash */
+            pydantic_ai_input_schema_hash?: string | null;
+            /** Pydantic Ai Output Schema Hash */
+            pydantic_ai_output_schema_hash?: string | null;
             /**
              * Pydantic Ai Runtime Prompt Chars
              * @default 0

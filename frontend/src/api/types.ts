@@ -1144,6 +1144,8 @@ export interface EvidenceGapReport {
   pydantic_ai_runtime_result_type?: string | null;
   pydantic_ai_model_name?: string | null;
   pydantic_ai_runtime_prompt_hash?: string | null;
+  pydantic_ai_input_schema_hash?: string | null;
+  pydantic_ai_output_schema_hash?: string | null;
   pydantic_ai_runtime_prompt_chars: number;
   typed_contract_enforced: boolean;
   generated_at: string;
@@ -1222,6 +1224,8 @@ export interface RedTeamReport {
   pydantic_ai_runtime_result_type?: string | null;
   pydantic_ai_model_name?: string | null;
   pydantic_ai_runtime_prompt_hash?: string | null;
+  pydantic_ai_input_schema_hash?: string | null;
+  pydantic_ai_output_schema_hash?: string | null;
   pydantic_ai_runtime_prompt_chars: number;
   typed_contract_enforced: boolean;
   generated_at: string;
