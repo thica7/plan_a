@@ -5,7 +5,12 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 SurveyResponseType = Literal["likert", "multiple_choice", "free_text"]
-ResearchSourceType = Literal["survey_simulated", "interview_record", "manual_transcript"]
+ResearchSourceType = Literal[
+    "survey_simulated",
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+]
 
 
 class SurveyQuestion(BaseModel):

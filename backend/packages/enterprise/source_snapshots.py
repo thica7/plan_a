@@ -5,8 +5,10 @@ from urllib.parse import urlparse
 
 from packages.artifacts import LocalArtifactStorage
 from packages.enterprise.store import EnterpriseStore, source_registry_id
+from packages.identity import compute_evidence_id, normalize_dimension_key
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
+    EvidenceRecord,
     SourceRegistryRecord,
     SourceSnapshotCreateRequest,
     SourceSnapshotResult,
@@ -20,6 +22,7 @@ def capture_source_snapshot(
     artifact_storage: LocalArtifactStorage,
     actor_id: str | None,
 ) -> SourceSnapshotResult:
+    source_type = _snapshot_source_type(request)
     source = _source_from_snapshot(request)
     score, warnings = _snapshot_quality(request)
     artifact = artifact_storage.store(
@@ -38,7 +41,7 @@ def capture_source_snapshot(
             metadata={
                 **request.metadata,
                 "snapshot_kind": request.snapshot_kind,
-                "source_type": request.source_type,
+                "source_type": source_type,
                 "source_registry_id": source.id,
                 "source_domain": source.domain,
                 "snapshot_quality_score": score,
@@ -47,12 +50,20 @@ def capture_source_snapshot(
         ),
         actor_id=actor_id,
     )
-    stored_artifact = store.upsert_artifact(artifact)
     source = store.upsert_source_registry(source)
+    evidence = _research_evidence_from_snapshot(
+        request,
+        artifact=artifact,
+        source_registry=source,
+    )
+    if evidence is not None:
+        evidence = store.upsert_evidence(evidence)
+        artifact = artifact.model_copy(update={"evidence_id": evidence.id})
+    stored_artifact = store.upsert_artifact(artifact)
     return SourceSnapshotResult(
         artifact=stored_artifact,
         source=source,
-        evidence_id=request.evidence_id,
+        evidence_id=evidence.id if evidence is not None else request.evidence_id,
         snapshot_quality_score=score,
         warnings=warnings,
     )
@@ -64,11 +75,12 @@ def _source_from_snapshot(request: SourceSnapshotCreateRequest) -> SourceRegistr
     )
     now = datetime.utcnow()
     display_name = request.display_name or domain.replace("-", " ").title()
+    source_type = _snapshot_source_type(request)
     return SourceRegistryRecord(
-        id=source_registry_id(request.workspace_id, domain, request.source_type),
+        id=source_registry_id(request.workspace_id, domain, source_type),
         workspace_id=request.workspace_id,
         domain=domain,
-        source_type=request.source_type,
+        source_type=source_type,
         display_name=display_name,
         homepage_url=homepage_url,
         trust_level=request.trust_level,
@@ -106,11 +118,12 @@ def _snapshot_quality(request: SourceSnapshotCreateRequest) -> tuple[int, list[s
         score += 30
     else:
         warnings.append("Snapshot has no content payload or external pointer.")
-    if request.source_url or request.external_uri:
+    research_snapshot = request.snapshot_kind in {"interview", "survey", "manual"}
+    if request.source_url or request.external_uri or research_snapshot:
         score += 20
     else:
         warnings.append("Snapshot is missing a source URL.")
-    if request.evidence_id:
+    if request.evidence_id or research_snapshot:
         score += 15
     else:
         warnings.append("Snapshot is not linked to an evidence record.")
@@ -122,6 +135,98 @@ def _snapshot_quality(request: SourceSnapshotCreateRequest) -> tuple[int, list[s
         score += 5
     elif request.robots_status == "blocked":
         warnings.append("Snapshot source is blocked by robots policy.")
-    if request.snapshot_kind in {"interview", "survey", "manual"}:
+    if research_snapshot:
         score += 5
     return min(100, score), warnings
+
+
+def _research_evidence_from_snapshot(
+    request: SourceSnapshotCreateRequest,
+    *,
+    artifact: object,
+    source_registry: SourceRegistryRecord,
+) -> EvidenceRecord | None:
+    if request.evidence_id is not None:
+        return None
+    if request.snapshot_kind not in {"interview", "survey", "manual"}:
+        return None
+    content_hash = str(getattr(artifact, "content_hash", ""))
+    source_url = request.source_url
+    canonical_url = str(source_url) if source_url else f"artifact:{getattr(artifact, 'id', '')}"
+    competitor_id = _metadata_text(
+        request.metadata,
+        "competitor_id",
+        "competitor",
+        "competitor_name",
+    ) or "manual_research"
+    dimension = normalize_dimension_key(
+        _metadata_text(request.metadata, "dimension", "research_dimension")
+        or "user_research"
+    )
+    evidence_id = compute_evidence_id(canonical_url, content_hash, competitor_id, dimension)
+    source_type = _research_source_type(request)
+    snippet = _snapshot_snippet(request)
+    return EvidenceRecord(
+        id=evidence_id,
+        workspace_id=request.workspace_id,
+        project_id=request.project_id,
+        run_id=request.run_id,
+        raw_source_id=f"snapshot-{getattr(artifact, 'id', evidence_id)}",
+        competitor_id=competitor_id,
+        dimension=dimension,
+        source_type=source_type,
+        title=request.display_name or request.filename,
+        url=source_url,
+        canonical_url=canonical_url,
+        snippet=snippet,
+        content_hash=content_hash,
+        reliability_score=_research_reliability_score(request),
+        freshness_score=0.82,
+        quality_label="unreviewed",
+        metadata={
+            **request.metadata,
+            "manual_research_ingest": True,
+            "snapshot_kind": request.snapshot_kind,
+            "artifact_id": str(getattr(artifact, "id", "")),
+            "source_registry_id": source_registry.id,
+            "source_domain": source_registry.domain,
+        },
+    )
+
+
+def _research_source_type(request: SourceSnapshotCreateRequest) -> str:
+    if request.source_type and request.source_type != "webpage_verified":
+        return request.source_type
+    if request.snapshot_kind == "interview":
+        return "interview_record"
+    if request.snapshot_kind == "survey":
+        return "survey_response"
+    return "manual_transcript"
+
+
+def _snapshot_source_type(request: SourceSnapshotCreateRequest) -> str:
+    if request.snapshot_kind in {"interview", "survey", "manual"}:
+        return _research_source_type(request)
+    return request.source_type
+
+
+def _snapshot_snippet(request: SourceSnapshotCreateRequest) -> str:
+    summary = _metadata_text(request.metadata, "summary", "snippet", "quote")
+    text = request.content_text or summary or request.external_uri or request.filename
+    return " ".join(text.split())[:700]
+
+
+def _research_reliability_score(request: SourceSnapshotCreateRequest) -> float:
+    if request.trust_level in {"official", "verified"}:
+        return 0.82
+    if request.trust_level == "community":
+        return 0.68
+    return 0.6
+
+
+def _metadata_text(metadata: dict[str, object], *keys: str) -> str:
+    for key in keys:
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""

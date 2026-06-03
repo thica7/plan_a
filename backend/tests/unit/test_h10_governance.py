@@ -61,6 +61,53 @@ def test_source_snapshot_assets_external_s3_pointer_and_source_registry() -> Non
     assert any(item.id == result.source.id for item in store.list_source_registry())
 
 
+def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> None:
+    store, context = _projected_store()
+    competitor_id = context.competitor_id_map["Cursor"]
+    result = capture_source_snapshot(
+        SourceSnapshotCreateRequest(
+            workspace_id=context.workspace_id,
+            project_id=context.project_id,
+            run_id="run-1",
+            snapshot_kind="survey",
+            filename="enterprise-buyer-survey.md",
+            media_type="text/markdown",
+            content_text=(
+                "Enterprise buyer survey: Cursor adoption depends on onboarding, "
+                "security review, and workflow fit."
+            ),
+            display_name="Enterprise buyer survey",
+            trust_level="verified",
+            metadata={
+                "competitor_id": competitor_id,
+                "dimension": "persona",
+                "summary": "Enterprise buyers evaluate workflow fit and onboarding risk.",
+            },
+        ),
+        store=store,
+        artifact_storage=LocalArtifactStorage(tmp_path),
+        actor_id="analyst-1",
+    )
+
+    evidence = next(
+        item for item in store.list_evidence(project_id=context.project_id)
+        if item.id == result.evidence_id
+    )
+
+    assert result.evidence_id == evidence.id
+    assert result.artifact.evidence_id == evidence.id
+    assert result.source.source_type == "survey_response"
+    assert result.artifact.metadata["source_type"] == "survey_response"
+    assert evidence.source_type == "survey_response"
+    assert evidence.competitor_id == competitor_id
+    assert evidence.dimension == "persona"
+    assert evidence.metadata["manual_research_ingest"] is True
+    assert evidence.metadata["artifact_id"] == result.artifact.id
+    assert "workflow fit" in evidence.snippet
+    assert result.snapshot_quality_score >= 80
+    assert result.warnings == []
+
+
 def test_knowledge_graph_read_model_links_sources_claims_and_reports() -> None:
     store, context = _projected_store()
 

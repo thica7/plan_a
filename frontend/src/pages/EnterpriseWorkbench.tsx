@@ -1727,7 +1727,9 @@ function ResearchEvidencePanel({
       isPersonaClaim(claim.claim_type)
       && claim.evidence_ids.some((evidenceId) => researchEvidenceIds.has(evidenceId)),
   ).length;
-  const surveyCount = researchEvidence.filter((item) => item.source_type === "survey_simulated").length;
+  const surveyCount = researchEvidence.filter((item) =>
+    ["survey_simulated", "survey_response"].includes(item.source_type),
+  ).length;
   const interviewCount = researchEvidence.filter((item) => item.source_type === "interview_record").length;
   const manualCount = researchEvidence.filter((item) =>
     ["manual_transcript", "manual_note", "manual"].includes(item.source_type),
@@ -1788,7 +1790,14 @@ function ResearchEvidencePanel({
 }
 
 function isResearchEvidenceSource(sourceType: string) {
-  return ["survey_simulated", "interview_record", "manual_transcript", "manual_note", "manual"].includes(sourceType);
+  return [
+    "survey_simulated",
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+    "manual_note",
+    "manual",
+  ].includes(sourceType);
 }
 
 function isPersonaClaim(claimType: string) {

@@ -273,7 +273,14 @@ export function resolveSourceId(
 
 function sourceTypeLabel(sourceType: string) {
   if (sourceType === "webpage_verified") return "fetched";
-  if (sourceType === "survey_simulated" || sourceType === "interview_record") return "research";
+  if (
+    sourceType === "survey_simulated"
+    || sourceType === "survey_response"
+    || sourceType === "interview_record"
+    || sourceType === "manual_transcript"
+  ) {
+    return "research";
+  }
   if (sourceType === "web_search_result") return "search";
   return "llm";
 }

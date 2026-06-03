@@ -47,6 +47,7 @@ NO_URL_SOURCE_TYPES = {
     "memory",
     "synthetic",
     "survey",
+    "survey_response",
     "survey_simulated",
 }
 
