@@ -33,6 +33,7 @@ from packages.schema.enterprise import (
     RedTeamFinding,
     ReportVersionRecord,
 )
+from packages.skills.registry import SkillRegistry
 
 
 def test_layer_assessment_prefers_direct_for_focused_pricing_comparison() -> None:
@@ -90,6 +91,19 @@ def test_scenario_pack_catalog_and_qa_rules_are_loaded() -> None:
     assert all(packs_by_id[item].required_dimensions for item in packs_by_id)
     assert any(rule.id == "claim_has_evidence" for rule in rules)
     assert any(rule.id == "homepage_verified" for rule in rules)
+
+
+def test_scenario_pack_required_dimensions_have_registered_skills() -> None:
+    registered_dimensions = set(SkillRegistry.from_default_path().names())
+
+    missing = {
+        f"{pack.id}:{dimension}"
+        for pack in list_scenario_packs()
+        for dimension in pack.required_dimensions
+        if dimension not in registered_dimensions
+    }
+
+    assert not missing
 
 
 def test_l1_l2_l3_presets_build_complete_business_plans() -> None:

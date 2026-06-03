@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pytest
 
+from packages.business_intel.homepage import HomepageVerification
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
 from packages.memory import PreferenceMemoryStore
@@ -572,6 +573,61 @@ async def test_create_run_filters_phantom_competitors_with_homepage_gate() -> No
     assert detail.plan.competitors == ["Cursor", "Windsurf"]
     assert detail.plan.homepage_verified == {"Cursor": True, "Windsurf": True}
     assert "FAKE_PRODUCT_NOT_EXISTS" not in detail.plan.homepage_hints
+
+
+@pytest.mark.asyncio
+async def test_l3_market_dimension_survives_run_normalization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _verified_homepages(competitors: list[str]) -> dict[str, HomepageVerification]:
+        return {
+            competitor: HomepageVerification(
+                competitor=competitor,
+                homepage_url=f"https://{competitor.casefold()}.example.com",
+                verified=True,
+                reason="test_verified",
+            )
+            for competitor in competitors
+        }
+
+    monkeypatch.setattr(
+        "packages.orchestrator.service.verify_homepages",
+        _verified_homepages,
+    )
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant market landscape",
+            competitors=["Cursor", "Copilot", "Windsurf", "Tabnine"],
+            dimensions=["market", "persona"],
+            competitor_layer="L3",
+            scenario_id="l3_market_landscape",
+            execution_mode="demo",
+        )
+    )
+
+    assert detail.plan.competitor_layer == "L3"
+    assert detail.plan.scenario_id == "l3_market_landscape"
+    assert "market" in detail.plan.dimensions
+    assert any(
+        task.stage == "collector" and task.dimension == "market"
+        for task in detail.plan.task_decomposition
+    )
+    assert any(
+        task.stage == "analyst" and task.dimension == "market"
+        for task in detail.plan.task_decomposition
+    )
 
 
 @pytest.mark.asyncio
