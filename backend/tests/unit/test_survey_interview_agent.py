@@ -86,6 +86,24 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
         survey_source.id,
         interview_source.id,
     }
+    knowledge = record.detail.competitor_knowledge["Acme"]
+    assert knowledge.user_personas.summary_claims
+    assert knowledge.user_personas.summary_claims[0].source_ids == [
+        survey_source.id,
+        interview_source.id,
+    ]
+    assert "workflow fit" in knowledge.user_personas.summary_claims[0].claim
+    assert knowledge.user_personas.segments
+    assert knowledge.user_personas.segments[0].claims[0].source_ids == [
+        survey_source.id,
+        interview_source.id,
+    ]
+    assert set(knowledge.source_ids) == {survey_source.id, interview_source.id}
+    assert record.detail.competitor_kbs["Acme"].sources == [
+        interview_source.id,
+        survey_source.id,
+    ]
+    assert "workflow fit" in record.detail.competitor_kbs["Acme"].slices["persona"][0]
     span = next(span for span in record.detail.trace_spans if span.name == "survey_interview_agent")
     assert span.agent == "survey_interview"
     assert span.metadata["source_type"] == "survey_simulated"
