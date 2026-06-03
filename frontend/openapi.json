@@ -9580,6 +9580,19 @@
             "title": "Compliance Blocker Count",
             "default": 0
           },
+          "coverage_lift_rate": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": -1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Lift Rate"
+          },
           "manual_baseline_hours_per_report": {
             "type": "number",
             "minimum": 0.0,
@@ -9594,6 +9607,11 @@
             "type": "number",
             "minimum": 0.0,
             "title": "Automation Runtime Hours"
+          },
+          "manual_time_saved_hours": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Manual Time Saved Hours"
           },
           "task_time_saved_hours": {
             "type": "number",
@@ -9678,6 +9696,7 @@
           "manual_baseline_hours_per_report",
           "manual_baseline_hours",
           "automation_runtime_hours",
+          "manual_time_saved_hours",
           "task_time_saved_hours",
           "time_savings_rate",
           "cost_per_report_usd",

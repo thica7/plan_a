@@ -2641,12 +2641,16 @@ export interface components {
              * @default 0
              */
             compliance_blocker_count: number;
+            /** Coverage Lift Rate */
+            coverage_lift_rate?: number | null;
             /** Manual Baseline Hours Per Report */
             manual_baseline_hours_per_report: number;
             /** Manual Baseline Hours */
             manual_baseline_hours: number;
             /** Automation Runtime Hours */
             automation_runtime_hours: number;
+            /** Manual Time Saved Hours */
+            manual_time_saved_hours: number;
             /** Task Time Saved Hours */
             task_time_saved_hours: number;
             /** Time Savings Rate */

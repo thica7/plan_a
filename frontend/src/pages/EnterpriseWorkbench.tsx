@@ -1399,7 +1399,9 @@ function EvalOpsPanel({
   const catalogCohorts = (report.golden_catalog_cohorts ?? [])
     .filter((cohort) => cohort.case_count > 0)
     .slice(0, 6);
-  const coverageLiftRate = evalOpsMetricValue(report, "coverage_lift_rate");
+  const coverageLiftRate =
+    report.coverage_lift_rate ?? evalOpsMetricValue(report, "coverage_lift_rate");
+  const manualTimeSavedHours = report.manual_time_saved_hours ?? report.task_time_saved_hours;
   const citationValidityRate = evalOpsMetricValue(report, "citation_validity_rate");
   const claimRiskSectionRate = evalOpsMetricValue(report, "claim_risk_section_score");
   const scenarioChecklistRate = evalOpsMetricValue(report, "scenario_checklist_section_score");
@@ -1502,8 +1504,8 @@ function EvalOpsPanel({
         />
         <Metric
           icon={<CalendarClock size={17} aria-hidden />}
-          label="Hours saved"
-          value={report.task_time_saved_hours.toFixed(1)}
+          label="Manual saved"
+          value={manualTimeSavedHours.toFixed(1)}
         />
         <Metric
           icon={<Briefcase size={17} aria-hidden />}

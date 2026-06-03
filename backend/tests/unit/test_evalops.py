@@ -119,6 +119,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         metric.name == "coverage_lift_rate" and metric.status == "pass"
         for metric in report.metrics
     )
+    assert report.coverage_lift_rate is not None and report.coverage_lift_rate > 0
     assert any(case.case_id == "golden.schema_pass" for case in report.cases)
     assert any(
         metric.name == "report_structure_score" and metric.status == "pass"
@@ -157,6 +158,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.manual_baseline_hours_per_report == 6.0
     assert report.manual_baseline_hours == 6.0
     assert report.automation_runtime_hours > 0
+    assert report.manual_time_saved_hours == report.task_time_saved_hours
     assert report.task_time_saved_hours > 0
     assert report.time_savings_rate > 0.9
     assert report.regression_gate_status == "pass"
@@ -221,6 +223,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
         for metric in response.json()["metrics"]
     )
     assert response.json()["manual_baseline_hours_per_report"] == 6.0
+    assert response.json()["manual_time_saved_hours"] == response.json()["task_time_saved_hours"]
     assert response.json()["time_savings_rate"] > 0.9
     assert response.json()["regression_gate_status"] in {"pass", "warn", "fail"}
     assert response.json()["regression_gate_issues"] == []
