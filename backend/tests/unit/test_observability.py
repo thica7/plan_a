@@ -464,6 +464,64 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
     assert replay.event_type_counts["rag.retrieved"] >= 1
 
 
+def test_decision_replay_includes_manual_report_revision_version_event() -> None:
+    detail = RunDetail(
+        id="run-manual-revision",
+        topic="Decision replay manual revision",
+        status="completed",
+        execution_mode="demo",
+        created_at="2026-05-31T00:00:00Z",
+        updated_at="2026-05-31T00:01:00Z",
+        plan=AnalysisPlan(
+            topic="Decision replay manual revision",
+            competitors=["A"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[],
+        metrics=RunMetrics(),
+    )
+    version = ReportVersionRecord(
+        id="report-manual-v2",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-manual-revision",
+        parent_version_id="report-manual-v1",
+        version_number=2,
+        topic_normalized="decision-replay-manual-revision",
+        competitor_layer="L1",
+        competitor_set_hash="competitor-set",
+        report_md="# Report\n\nManual correction.",
+        claim_ids=["claim-1"],
+        evidence_ids=["evidence-1"],
+        quality_metadata={
+            "manual_revision": {
+                "edited_by": "analyst-1",
+                "note": "Clarified recommendation before approval.",
+                "source_report_version_id": "report-manual-v1",
+            }
+        },
+    )
+
+    replay = build_decision_replay(detail, [], report_versions=[version])
+    version_event = next(
+        event
+        for event in replay.events
+        if event.id == "run-manual-revision:report-version-ready:report-manual-v2"
+    )
+
+    assert version_event.event_type == "report.ready"
+    assert version_event.agent == "report_version"
+    assert version_event.evidence_ids == ["evidence-1"]
+    assert version_event.claim_ids == ["claim-1"]
+    assert version_event.payload["manual_revision"] is True
+    assert version_event.payload["edited_by"] == "analyst-1"
+    assert version_event.payload["manual_revision_note"] == (
+        "Clarified recommendation before approval."
+    )
+    assert version_event.payload["source_report_version_id"] == "report-manual-v1"
+    assert version_event.payload["parent_version_id"] == "report-manual-v1"
+
+
 def test_run_compliance_report_flags_policy_source_trace_and_pii() -> None:
     settings = Settings(
         demo_mode=True,

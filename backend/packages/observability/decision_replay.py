@@ -254,6 +254,7 @@ def _report_version_decisions(
     for version in report_versions:
         if version.run_id and version.run_id != detail.id:
             continue
+        decisions.append(_report_version_ready_event(detail, version))
         gap_fill = version.quality_metadata.get("rag_gap_fill")
         if not isinstance(gap_fill, dict):
             continue
@@ -304,6 +305,44 @@ def _report_version_decisions(
                 )
             )
     return decisions
+
+
+def _report_version_ready_event(
+    detail: RunDetail,
+    version: ReportVersionRecord,
+) -> DecisionReplayEvent:
+    manual_revision = version.quality_metadata.get("manual_revision")
+    manual_revision_payload = manual_revision if isinstance(manual_revision, dict) else {}
+    is_manual_revision = bool(manual_revision_payload)
+    message = (
+        f"Manual report revision v{version.version_number} captured for replay."
+        if is_manual_revision
+        else f"Report version v{version.version_number} captured for replay."
+    )
+    payload = {
+        "report_version_id": version.id,
+        "version_number": version.version_number,
+        "report_version_status": version.status,
+        "parent_version_id": version.parent_version_id,
+        "source": "report_version_record",
+        "manual_revision": is_manual_revision,
+        "edited_by": _optional_string(manual_revision_payload.get("edited_by")),
+        "manual_revision_note": _optional_string(manual_revision_payload.get("note")),
+        "source_report_version_id": _optional_string(
+            manual_revision_payload.get("source_report_version_id")
+        ),
+    }
+    return DecisionReplayEvent(
+        id=f"{detail.id}:report-version-ready:{version.id}",
+        run_id=detail.id,
+        event_type="report.ready",
+        agent="report_version",
+        message=message,
+        evidence_ids=list(version.evidence_ids),
+        claim_ids=list(version.claim_ids),
+        payload=_safe_payload(payload),
+        created_at=_normalize_datetime(version.created_at),
+    )
 
 
 def _knowledge_claim_count(detail: RunDetail) -> int:
@@ -440,7 +479,13 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "online_failures",
         "source_report_version_id",
         "parent_report_version_id",
+        "parent_version_id",
         "updated_report_version_id",
+        "version_number",
+        "report_version_status",
+        "manual_revision",
+        "manual_revision_note",
+        "edited_by",
         "gap_fill_chain_closed",
         "source",
     ):
