@@ -68,6 +68,9 @@ def build_enterprise_evalops_report(
     citation_rate = _average_float(
         [_metric_value(comparison, "claim_citation_rate") for comparison in comparisons]
     )
+    report_structure_rate = _average_float(
+        [_metric_value(comparison, "report_structure_score") for comparison in comparisons]
+    )
     real_collection_rate = _ratio(
         [comparison.real_collection_signal for comparison in comparisons],
     )
@@ -90,6 +93,7 @@ def build_enterprise_evalops_report(
         source_recall=source_recall,
         verified_rate=verified_rate,
         citation_rate=citation_rate,
+        report_structure_rate=report_structure_rate,
         real_collection_rate=real_collection_rate,
         real_llm_rate=real_llm_rate,
     )
@@ -100,6 +104,7 @@ def build_enterprise_evalops_report(
         _metric("source_recall", source_recall, 0.6, "ratio"),
         _metric("verified_source_rate", verified_rate, 0.6, "ratio"),
         _metric("claim_citation_rate", citation_rate, 0.6, "ratio"),
+        _metric("report_structure_score", report_structure_rate, 0.7, "ratio"),
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
         _metric("real_quality_chain_rate", real_quality_chain_rate, 0.5, "ratio"),
@@ -166,6 +171,7 @@ def _golden_cases(
     source_recall: float,
     verified_rate: float,
     citation_rate: float,
+    report_structure_rate: float,
     real_collection_rate: float,
     real_llm_rate: float,
 ) -> list[EvalOpsCaseResult]:
@@ -201,6 +207,14 @@ def _golden_cases(
             "Claim citation rate",
             round(citation_rate * 100),
             60,
+            target_run_id,
+            baseline_run_id,
+        ),
+        _case(
+            "golden.report_structure",
+            "Report structure completeness",
+            round(report_structure_rate * 100),
+            70,
             target_run_id,
             baseline_run_id,
         ),

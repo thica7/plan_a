@@ -67,10 +67,14 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.human_correction_rate == 0.25
     assert report.redo_iteration_count == 1
     assert report.redo_convergence_ratio == 0.25
-    assert report.golden_set_size == 6
+    assert report.golden_set_size == 7
     assert report.golden_set_pass_rate >= 0.8
     assert report.report_quality_score >= 72
     assert report.source_recall >= 0.6
+    assert any(
+        metric.name == "report_structure_score" and metric.status == "pass"
+        for metric in report.metrics
+    )
     assert report.manual_baseline_hours_per_report == 6.0
     assert report.manual_baseline_hours == 6.0
     assert report.automation_runtime_hours > 0
@@ -99,7 +103,11 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["evaluated_run_ids"] == ["real-run"]
     assert response.json()["real_run_count"] == 1
     assert response.json()["real_quality_chain_rate"] == 1.0
-    assert response.json()["golden_set_size"] == 6
+    assert response.json()["golden_set_size"] == 7
+    assert any(
+        metric["name"] == "report_structure_score" and metric["status"] == "pass"
+        for metric in response.json()["metrics"]
+    )
     assert response.json()["manual_baseline_hours_per_report"] == 6.0
     assert response.json()["time_savings_rate"] > 0.9
     assert response.json()["regression_gate_status"] in {"pass", "warn", "fail"}
