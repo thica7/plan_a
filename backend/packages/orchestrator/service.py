@@ -2738,6 +2738,7 @@ class RunService(
         source_refs = self._format_source_refs([source.id for source in detail.raw_sources[:4]])
         if not source_refs:
             source_refs = ""
+        memory_section = self._demo_memory_section(detail)
         return (
             f"# {detail.plan.topic}\n\n"
             "## Executive Summary\n"
@@ -2747,6 +2748,7 @@ class RunService(
             "## Source Quality & Coverage\n"
             "Demo evidence is projected into the enterprise EvidenceRecord model with source "
             f"IDs preserved for release-gate and report-view traceability.{source_refs}\n\n"
+            f"{memory_section}"
             "## Side-by-Side Decision Matrix\n"
             f"| Dimension | Competitors |\n| --- | --- |\n| {dimensions} | {competitors} {source_refs} |\n\n"
             "## Battlecard\n"
@@ -2764,6 +2766,24 @@ class RunService(
             "This demo run proves the contract: events, sources, reflections, QA findings, "
             "and report markdown all flow through structured DTOs."
         )
+
+    def _demo_memory_section(self, detail: RunDetail) -> str:
+        if not detail.plan.memory_prompt_context:
+            return ""
+        candidate_ids = ", ".join(detail.plan.memory_candidate_ids) or "none"
+        lines = [
+            "## Memory Context",
+            (
+                "Confirmed MemoryAgent preferences were used as writing and planning "
+                "guidance, not as factual evidence."
+            ),
+            f"- Candidate IDs: {candidate_ids}",
+            f"- Recall score: {detail.plan.memory_recall_score}/100",
+        ]
+        lines.extend(
+            f"- Preference: {item}" for item in detail.plan.memory_prompt_context[:6]
+        )
+        return "\n".join(lines) + "\n\n"
 
     def _resolve_execution_mode(self, requested: str) -> str:
         if requested == "demo":
