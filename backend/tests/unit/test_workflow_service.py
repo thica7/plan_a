@@ -70,6 +70,14 @@ def _request(idempotency_key: str | None = None, **overrides: object) -> RunCrea
     )
 
 
+def _memory_run_service(settings: Settings | None = None) -> RunService:
+    return RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=settings or _settings(),
+        enterprise_store=EnterpriseMemoryStore(),
+    )
+
+
 class FakeTemporalHandle:
     def __init__(self, workflow_id: str) -> None:
         self.id = workflow_id
@@ -359,16 +367,19 @@ def test_workflow_router_returns_accepted_start_response() -> None:
             self,
             request: RunCreateRequest,
         ) -> WorkflowStartResponse:
+            idempotency_key = request.idempotency_key or "workflow:test"
             return WorkflowStartResponse(
                 workflow_id="competitive-intel-test",
-                run_id="run-test",
-                idempotency_key=request.idempotency_key or "workflow:test",
+                run_id=run_id_for_idempotency_key(idempotency_key),
+                idempotency_key=idempotency_key,
                 task_queue="test-queue",
                 status="started",
             )
 
     app = create_app()
     app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    run_service = _memory_run_service()
+    app.dependency_overrides[get_run_service] = lambda: run_service
     client = TestClient(app)
 
     response = client.post(
@@ -383,14 +394,18 @@ def test_workflow_router_returns_accepted_start_response() -> None:
     )
 
     assert response.status_code == 202
+    run_id = run_id_for_idempotency_key("route-001")
     assert response.json() == {
         "workflow_id": "competitive-intel-test",
         "workflow_type": "CompetitiveIntelWorkflow",
-        "run_id": "run-test",
+        "run_id": run_id,
         "idempotency_key": "route-001",
         "task_queue": "test-queue",
         "status": "started",
     }
+    visible = client.get(f"/api/runs/{run_id}")
+    assert visible.status_code == 200
+    assert visible.json()["status"] == "queued"
 
 
 def test_workflow_router_exposes_workflow_state() -> None:
@@ -438,11 +453,7 @@ def test_runs_router_can_cut_over_to_temporal_backend() -> None:
         run_orchestration_backend="temporal"
     )
     app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
-    run_service = RunService(
-        skill_registry=SkillRegistry.from_default_path(),
-        settings=_settings(run_orchestration_backend="temporal"),
-        enterprise_store=EnterpriseMemoryStore(),
-    )
+    run_service = _memory_run_service(_settings(run_orchestration_backend="temporal"))
     app.dependency_overrides[get_run_service] = lambda: run_service
     client = TestClient(app)
 
@@ -491,11 +502,7 @@ def test_runs_router_generates_visible_new_run_keys_for_temporal_cutover() -> No
         run_orchestration_backend="temporal"
     )
     app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
-    run_service = RunService(
-        skill_registry=SkillRegistry.from_default_path(),
-        settings=_settings(run_orchestration_backend="temporal"),
-        enterprise_store=EnterpriseMemoryStore(),
-    )
+    run_service = _memory_run_service(_settings(run_orchestration_backend="temporal"))
     app.dependency_overrides[get_run_service] = lambda: run_service
     client = TestClient(app)
     payload = {
@@ -756,6 +763,8 @@ def test_workflow_router_returns_503_when_temporal_is_unavailable() -> None:
 
     app = create_app()
     app.dependency_overrides[get_temporal_workflow_service] = lambda: FailingWorkflowService()
+    run_service = _memory_run_service()
+    app.dependency_overrides[get_run_service] = lambda: run_service
     client = TestClient(app)
 
     response = client.post(
