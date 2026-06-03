@@ -712,6 +712,10 @@ async def test_run_service_writes_enterprise_projection_on_completion() -> None:
     assert claim_event.payload["claim_validation"]["supported_count"] == 1
     assert claim_event.payload["claim_status_counts"]["supported"] == 1
     assert consistency_event.payload["self_consistency_score"] >= 70
+    assert consistency_event.payload["sample_count"] == 3
+    assert consistency_event.payload["validation_sample_count"] == 3
+    assert consistency_event.payload["minority_sample_count"] == 0
+    assert consistency_event.payload["minority_validation_samples"] == []
     assert consistency_event.payload["consistency_votes"]["text_support"] >= 1
     assert consistency_event.payload["consistency_votes"]["supported_claims"] == 1
     assert record.events[-1].payload["enterprise_projection"]["evidence_count"] == 1

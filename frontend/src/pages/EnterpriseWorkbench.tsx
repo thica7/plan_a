@@ -3781,8 +3781,14 @@ function decisionPayloadSummary(event: DecisionReplayEvent) {
     if (releaseGate) parts.push(`gate ${String(releaseGate.status ?? "unknown")}`);
   } else if (event.event_type === "self_consistency.sampled") {
     const sampleCount = payloadNumber(payload, "sample_count");
+    const minoritySampleCount =
+      payloadNumber(payload, "minority_sample_count") ??
+      payloadListCount(payload, "minority_validation_samples");
     const score = payloadNumber(payload, "self_consistency_score", "consistency_score");
     if (sampleCount !== null) parts.push(`samples ${sampleCount}`);
+    if (minoritySampleCount !== null && minoritySampleCount > 0) {
+      parts.push(`minority ${minoritySampleCount}`);
+    }
     if (score !== null) parts.push(`consistency ${formatPercent(score)}`);
   } else if (event.event_type === "qa.blocked" || event.event_type === "redo.routed") {
     const severity = payloadString(payload, "severity");

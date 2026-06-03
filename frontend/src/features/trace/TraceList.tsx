@@ -250,7 +250,9 @@ function formatDecisionPayload(event: DecisionReplayEvent) {
   if (event.event_type === "self_consistency.sampled") {
     const score = numberPayload(event, "self_consistency_score");
     const votes = objectPayload(event, "consistency_votes");
+    const minoritySamples = arrayPayload(event, "minority_validation_samples");
     if (score !== null) parts.push(`score ${score}`);
+    if (minoritySamples.length > 0) parts.push(`${minoritySamples.length} minority samples`);
     if (votes) {
       const textSupport = numberValue(votes.text_support) ?? 0;
       const evidenceQuality = numberValue(votes.evidence_quality) ?? 0;

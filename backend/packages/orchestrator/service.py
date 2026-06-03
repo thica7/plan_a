@@ -1665,6 +1665,11 @@ class RunService(
                 claims=projection.claim_records,
                 evidence=projection.evidence_records,
             )
+            validation_samples = _claim_validation_sample_payload(validation)
+            minority_samples = [
+                sample for sample in validation_samples if sample.get("vote") == "fail"
+            ]
+            sample_count = len(validation_samples)
             await self.emit(
                 detail.id,
                 "claim.validated",
@@ -1698,10 +1703,11 @@ class RunService(
                     "claim_ids": [claim.id for claim in projection.claim_records],
                     "evidence_ids": [evidence.id for evidence in projection.evidence_records],
                     "self_consistency_score": validation.self_consistency_score,
-                    "validation_sample_count": sum(
-                        len(result.validation_samples) for result in validation.results
-                    ),
-                    "validation_samples": _claim_validation_sample_payload(validation),
+                    "sample_count": sample_count,
+                    "validation_sample_count": sample_count,
+                    "validation_samples": validation_samples,
+                    "minority_validation_samples": minority_samples,
+                    "minority_sample_count": len(minority_samples),
                     "sample_dimensions": [
                         "text_support",
                         "evidence_quality",
