@@ -50,6 +50,7 @@ QualityChainStepName = Literal[
     "real_llm",
     "report_quality",
     "rag_gap_fill",
+    "human_review",
     "decision_replay",
 ]
 DECISION_REPLAY_MESSAGE_HINTS = {
@@ -639,6 +640,12 @@ def _quality_chain_steps(
             "RAG Gap Fill section.",
         ),
         (
+            "human_review",
+            "Human review loop",
+            "HITL, QA review, scoped redo, or human correction signals are captured "
+            "when intervention is needed.",
+        ),
+        (
             "decision_replay",
             "Decision replay",
             "Trace, agent protocol, tool or collection, evidence, and outcome signals "
@@ -846,6 +853,9 @@ def _quality_chain_step_passed(
     if step == "rag_gap_fill":
         run = runs_by_id.get(comparison.target_run_id)
         return run is not None and _run_has_rag_gap_fill_context(run)
+    if step == "human_review":
+        run = runs_by_id.get(comparison.target_run_id)
+        return run is not None and _run_has_hitl_or_redo_loop(run)
     if step == "decision_replay":
         run = runs_by_id.get(comparison.target_run_id)
         return run is not None and _run_has_decision_replay_signal(run)

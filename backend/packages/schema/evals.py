@@ -40,6 +40,7 @@ class EvalOpsQualityChainStep(BaseModel):
         "real_llm",
         "report_quality",
         "rag_gap_fill",
+        "human_review",
         "decision_replay",
     ]
     label: str

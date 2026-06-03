@@ -2512,7 +2512,7 @@ export interface components {
              * Step
              * @enum {string}
              */
-            step: "real_collection" | "real_llm" | "report_quality" | "rag_gap_fill" | "decision_replay";
+            step: "real_collection" | "real_llm" | "report_quality" | "rag_gap_fill" | "human_review" | "decision_replay";
             /** Label */
             label: string;
             /** Total Count */

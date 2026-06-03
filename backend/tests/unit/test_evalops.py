@@ -92,6 +92,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         "real_llm",
         "report_quality",
         "rag_gap_fill",
+        "human_review",
         "decision_replay",
     }
     assert all(step.pass_rate == 1.0 for step in report.quality_chain_steps)
@@ -202,7 +203,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert "deterministic rubric" in response.json()["judge_fallback_reason"]
     assert response.json()["real_quality_chain_failed_run_ids"] == []
     assert response.json()["decision_replay_failed_run_ids"] == []
-    assert len(response.json()["quality_chain_steps"]) == 5
+    assert len(response.json()["quality_chain_steps"]) == 6
     assert response.json()["golden_set_size"] == 17
     assert response.json()["golden_catalog_size"] >= 50
     assert response.json()["compliance_pass_rate"] == 1.0
