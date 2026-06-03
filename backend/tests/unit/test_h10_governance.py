@@ -53,6 +53,10 @@ def test_source_snapshot_assets_external_s3_pointer_and_source_registry() -> Non
     assert result.artifact.evidence_id == evidence.id
     assert result.source.domain == "cursor.sh"
     assert result.snapshot_quality_score >= 80
+    assert result.artifact.metadata["snapshot_quality_score"] == result.snapshot_quality_score
+    assert result.artifact.metadata["snapshot_warnings"] == result.warnings
+    assert result.artifact.metadata["source_registry_id"] == result.source.id
+    assert result.artifact.metadata["source_domain"] == "cursor.sh"
     assert store.get_artifact(result.artifact.id) == result.artifact
     assert any(item.id == result.source.id for item in store.list_source_registry())
 
@@ -143,6 +147,7 @@ def test_h10_enterprise_routes_are_callable() -> None:
     assert graph_response.json()["node_count"] >= 5
     assert snapshot_response.status_code == 200
     assert snapshot_response.json()["artifact"]["storage_backend"] == "oss"
+    assert snapshot_response.json()["artifact"]["metadata"]["snapshot_quality_score"] >= 80
 
 
 def _projected_store() -> tuple[EnterpriseMemoryStore, object]:

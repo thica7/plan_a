@@ -20,6 +20,8 @@ def capture_source_snapshot(
     artifact_storage: LocalArtifactStorage,
     actor_id: str | None,
 ) -> SourceSnapshotResult:
+    source = _source_from_snapshot(request)
+    score, warnings = _snapshot_quality(request)
     artifact = artifact_storage.store(
         ArtifactCreateRequest(
             workspace_id=request.workspace_id,
@@ -37,13 +39,16 @@ def capture_source_snapshot(
                 **request.metadata,
                 "snapshot_kind": request.snapshot_kind,
                 "source_type": request.source_type,
+                "source_registry_id": source.id,
+                "source_domain": source.domain,
+                "snapshot_quality_score": score,
+                "snapshot_warnings": warnings,
             },
         ),
         actor_id=actor_id,
     )
     stored_artifact = store.upsert_artifact(artifact)
-    source = store.upsert_source_registry(_source_from_snapshot(request))
-    score, warnings = _snapshot_quality(request)
+    source = store.upsert_source_registry(source)
     return SourceSnapshotResult(
         artifact=stored_artifact,
         source=source,

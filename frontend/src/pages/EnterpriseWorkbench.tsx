@@ -1844,6 +1844,19 @@ function ArtifactStorePanel({ artifacts }: { artifacts: ArtifactRecord[] }) {
     ["web_snapshot", "pdf", "screenshot"].includes(artifact.artifact_type),
   ).length;
   const linkedCount = artifacts.filter((artifact) => artifact.evidence_id).length;
+  const snapshotQualityScores = artifacts
+    .map((artifact) => artifactMetadataNumber(artifact, "snapshot_quality_score"))
+    .filter((score): score is number => score !== null);
+  const averageSnapshotQuality = snapshotQualityScores.length
+    ? snapshotQualityScores.reduce((total, score) => total + score, 0) / snapshotQualityScores.length
+    : 0;
+  const snapshotWarningCount = artifacts.reduce(
+    (total, artifact) => total + artifactMetadataListCount(artifact, "snapshot_warnings"),
+    0,
+  );
+  const registryLinkedCount = artifacts.filter((artifact) =>
+    artifactMetadataString(artifact, "source_registry_id"),
+  ).length;
   const externalCount = artifacts.filter((artifact) =>
     ["external", "s3", "oss"].includes(artifact.storage_backend),
   ).length;
@@ -1851,30 +1864,51 @@ function ArtifactStorePanel({ artifacts }: { artifacts: ArtifactRecord[] }) {
   const recentArtifacts = [...artifacts]
     .sort((left, right) => right.created_at.localeCompare(left.created_at))
     .slice(0, 4);
+  const panelStatus = artifacts.length === 0 || snapshotWarningCount > 0 ? "warn" : "pass";
 
   return (
-    <section className="panel readiness-panel pass">
+    <section className={`panel readiness-panel ${panelStatus}`}>
       <div className="panel-heading-row">
         <h2>Artifact store</h2>
-        <Database size={17} aria-hidden />
+        {panelStatus === "pass" ? (
+          <Database size={17} aria-hidden />
+        ) : (
+          <AlertTriangle size={17} aria-hidden />
+        )}
       </div>
       <div className="metric-grid compact">
         <Metric icon={<FileText size={17} aria-hidden />} label="Artifacts" value={artifacts.length} />
         <Metric icon={<Search size={17} aria-hidden />} label="Snapshots" value={snapshotCount} />
         <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Linked" value={linkedCount} />
+        <Metric
+          icon={<Gauge size={17} aria-hidden />}
+          label="Snapshot Q"
+          value={snapshotQualityScores.length ? Math.round(averageSnapshotQuality) : "-"}
+        />
         <Metric icon={<Database size={17} aria-hidden />} label="External" value={externalCount} />
+        <Metric icon={<AlertTriangle size={17} aria-hidden />} label="Warnings" value={snapshotWarningCount} />
       </div>
       <div className="project-meta-row">
         <span>Total size {formatBytes(totalBytes)}</span>
         <span>Evidence link {formatPercent(artifacts.length ? linkedCount / artifacts.length : 0)}</span>
+        <span>Registry link {formatPercent(artifacts.length ? registryLinkedCount / artifacts.length : 0)}</span>
       </div>
       {recentArtifacts.length > 0 ? (
-        <div className="competitor-strip">
+        <div className="recommendation-list">
           {recentArtifacts.map((artifact) => (
-            <span key={artifact.id} title={artifact.uri}>
-              {artifact.filename}
-              <em>{artifact.artifact_type} / {artifact.storage_backend}</em>
-            </span>
+            <article className="recommendation-card medium" key={artifact.id}>
+              <strong>{artifact.filename}</strong>
+              <span>
+                {artifact.artifact_type} / {artifact.storage_backend} / Q{" "}
+                {artifactMetadataNumber(artifact, "snapshot_quality_score") ?? "-"}
+              </span>
+              <p>{artifact.uri}</p>
+              <div className="project-meta-row">
+                <span>{formatBytes(artifact.byte_size)}</span>
+                <span>{artifactMetadataString(artifact, "source_domain") ?? "manual-source"}</span>
+                <span>Warnings {artifactMetadataListCount(artifact, "snapshot_warnings")}</span>
+              </div>
+            </article>
           ))}
         </div>
       ) : (
@@ -2864,6 +2898,21 @@ function formatBytes(value: number) {
     return `${(value / 1_000).toFixed(1)} KB`;
   }
   return `${value} B`;
+}
+
+function artifactMetadataNumber(artifact: ArtifactRecord, key: string) {
+  const value = artifact.metadata[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function artifactMetadataString(artifact: ArtifactRecord, key: string) {
+  const value = artifact.metadata[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function artifactMetadataListCount(artifact: ArtifactRecord, key: string) {
+  const value = artifact.metadata[key];
+  return Array.isArray(value) ? value.length : 0;
 }
 
 function decisionReplayPriority(eventType: string) {
