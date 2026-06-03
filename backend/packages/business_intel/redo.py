@@ -50,11 +50,19 @@ def claim_validation_issues_to_redo_scopes(
     }
     for issue in issues:
         kind = "collector" if issue.issue_type in collector_issue_types else "analyst"
+        evidence_hint = (
+            f" Evidence ids: {', '.join(issue.evidence_ids)}."
+            if issue.evidence_ids
+            else " Evidence ids: none."
+        )
         scopes.append(
             RedoScope(
                 kind=kind,  # type: ignore[arg-type]
-                target_subagent="claim_validation",
-                rationale=issue.message,
+                target_subagent=f"claim_validation:{issue.claim_id}:{issue.issue_type}",
+                rationale=(
+                    f"Claim {issue.claim_id} failed {issue.issue_type}: "
+                    f"{issue.message}{evidence_hint}"
+                ),
             )
         )
     return dedupe_redo_scopes(scopes)

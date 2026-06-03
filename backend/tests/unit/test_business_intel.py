@@ -1010,6 +1010,15 @@ def test_quality_agent_findings_map_to_redo_scopes() -> None:
                 severity="warn",
                 issue_type="weak_text_support",
                 message="Evidence text does not strongly support the claim.",
+                evidence_ids=["evidence-2"],
+            ),
+            ClaimValidationIssue(
+                id="issue-3",
+                claim_id="claim-3",
+                severity="warn",
+                issue_type="low_self_consistency",
+                message="Claim failed the consistency threshold.",
+                evidence_ids=["evidence-3", "evidence-4"],
             ),
         ]
     )
@@ -1048,7 +1057,12 @@ def test_quality_agent_findings_map_to_redo_scopes() -> None:
         ]
     )
 
-    assert [scope.kind for scope in claim_scopes] == ["collector", "analyst"]
+    assert [scope.kind for scope in claim_scopes] == ["collector", "analyst", "analyst"]
+    assert claim_scopes[0].target_subagent == "claim_validation:claim-1:missing_evidence"
+    assert claim_scopes[1].target_subagent == "claim_validation:claim-2:weak_text_support"
+    assert claim_scopes[2].target_subagent == "claim_validation:claim-3:low_self_consistency"
+    assert "Claim claim-2 failed weak_text_support" in claim_scopes[1].rationale
+    assert "Evidence ids: evidence-3, evidence-4." in claim_scopes[2].rationale
     assert gap_scopes[0].kind == "collector"
     assert gap_scopes[0].target_competitor == "Cursor"
     assert gap_scopes[0].target_subagent == "security"
