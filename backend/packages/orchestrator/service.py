@@ -2346,7 +2346,7 @@ class RunService(
             {
                 "query": query,
                 "result_count": len(results),
-                "source_ids": [result.url for result in results[:5]],
+                "candidate_urls": [result.url for result in results[:5]],
                 "related_span_ids": [span_id],
                 "reason": "Search candidates provide online evidence candidates for collectors.",
             },

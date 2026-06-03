@@ -1182,7 +1182,16 @@ class CollectorAgentMixin:
                         "collector",
                         dimension,
                         f"ReAct collector returned {added} {dimension} evidence source(s).",
-                        {"react": web_payload, "context": context.metadata()},
+                        {
+                            "react": web_payload,
+                            "context": context.metadata(),
+                            **self._collector_source_trace_payload(
+                                detail,
+                                dimension,
+                                added,
+                                "collector_react_finish",
+                            ),
+                        },
                     )
                     return
             except Exception as exc:  # noqa: BLE001 - bounded ReAct falls back to deterministic collection.
@@ -1216,7 +1225,16 @@ class CollectorAgentMixin:
                         "collector",
                         dimension,
                         f"Perplexity web_search returned {added} {dimension} evidence source(s).",
-                        {"web_search": web_payload, "context": context.metadata()},
+                        {
+                            "web_search": web_payload,
+                            "context": context.metadata(),
+                            **self._collector_source_trace_payload(
+                                detail,
+                                dimension,
+                                added,
+                                "collector_web_search_finish",
+                            ),
+                        },
                     )
                     return
             except Exception as exc:  # noqa: BLE001 - web search is best effort; LLM fallback continues.
@@ -1315,19 +1333,30 @@ class CollectorAgentMixin:
                 "collector": payload,
                 "web_search": web_payload,
                 "context": context.metadata(),
-                "dimension": dimension,
-                "source_count": added,
-                "source_ids": [
-                    source.id for source in detail.raw_sources if source.dimension == dimension
-                ],
-                "sources": [
-                    source.model_dump(mode="json")
-                    for source in detail.raw_sources
-                    if source.dimension == dimension
-                ],
-                "retrieval_stage": "collector_finish",
+                **self._collector_source_trace_payload(
+                    detail,
+                    dimension,
+                    added,
+                    "collector_finish",
+                ),
             },
         )
+
+    def _collector_source_trace_payload(
+        self,
+        detail: RunDetail,
+        dimension: str,
+        added: int,
+        retrieval_stage: str,
+    ) -> dict[str, object]:
+        sources = [source for source in detail.raw_sources if source.dimension == dimension]
+        return {
+            "dimension": dimension,
+            "source_count": added,
+            "source_ids": [source.id for source in sources],
+            "sources": [source.model_dump(mode="json") for source in sources],
+            "retrieval_stage": retrieval_stage,
+        }
 
     async def _real_collector_dispatch_step(
         self,

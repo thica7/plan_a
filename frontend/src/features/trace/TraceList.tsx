@@ -263,8 +263,10 @@ function formatDecisionPayload(event: DecisionReplayEvent) {
   if (event.event_type === "rag.retrieved") {
     const query = stringPayload(event, "query");
     const resultCount = numberPayload(event, "result_count");
+    const candidateUrls = arrayPayload(event, "candidate_urls");
     if (query) parts.push(`query: ${query}`);
     if (resultCount !== null) parts.push(`${resultCount} results`);
+    if (candidateUrls.length > 0) parts.push(`${candidateUrls.length} candidate URLs`);
   }
   if (event.event_type === "memory.recalled") {
     const score = numberPayload(event, "score") ?? numberPayload(event, "recall_score");

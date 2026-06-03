@@ -69,7 +69,9 @@ def build_decision_replay(
             replay_events.append(mapped)
 
     replay_events.extend(_report_version_decisions(detail, report_versions or []))
-    replay_events.extend(_synthetic_decisions(detail, {event.event_type for event in replay_events}))
+    replay_events.extend(
+        _synthetic_decisions(detail, {event.event_type for event in replay_events})
+    )
     replay_events.sort(key=lambda item: (item.created_at, item.id))
     event_type_counts = _event_type_counts(replay_events)
     return DecisionReplayReport(
@@ -359,6 +361,7 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "evidence_ids",
         "claim_ids",
         "candidate_ids",
+        "candidate_urls",
         "feedback_id",
         "feedback_type",
         "candidate_count",
@@ -391,6 +394,7 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "remaining_gap_ids",
         "retrieval_records",
         "retrieval_record_count",
+        "retrieval_stage",
         "online_collected_evidence_ids",
         "online_failure_count",
         "online_failures",

@@ -2224,6 +2224,25 @@ async def test_collector_react_runner_searches_fetches_and_finishes(
     assert finish_span.metadata["tool_call_count"] == 3
     assert finish_span.metadata["message_count"] == 12
     assert "context_id" in finish_span.metadata
+    events = service.get_trace(detail.id) or []
+    search_rag = next(event for event in events if event.type == "rag.retrieved")
+    assert search_rag.payload["candidate_urls"] == ["https://example.com/pricing"]
+    assert "source_ids" not in search_rag.payload
+    replay = build_decision_replay(record.detail, events)
+    search_replay = next(
+        event
+        for event in replay.events
+        if event.event_type == "rag.retrieved" and event.source_event_id == search_rag.id
+    )
+    collector_replay = next(
+        event
+        for event in replay.events
+        if event.event_type == "rag.retrieved"
+        and event.evidence_ids == [record.detail.raw_sources[0].id]
+    )
+    assert search_replay.evidence_ids == []
+    assert search_replay.payload["candidate_urls"] == ["https://example.com/pricing"]
+    assert collector_replay.payload["retrieval_stage"] == "collector_react_finish"
 
 
 @pytest.mark.asyncio
