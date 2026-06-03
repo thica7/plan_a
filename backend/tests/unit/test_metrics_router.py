@@ -75,6 +75,11 @@ def test_metrics_exposes_run_and_temporal_operational_gauges() -> None:
     assert 'competiscope_langfuse_disabled{reason="not_configured"} 1' in body
     assert "competiscope_langfuse_mirror_errors_total 0" in body
     assert "competiscope_pydantic_ai_model_backed_enabled 0" in body
+    assert 'competiscope_model_route_status{status="selected"} 0' in body
+    assert 'competiscope_model_route_status{status="fallback"} 1' in body
+    assert 'competiscope_model_route_status{status="blocked"} 0' in body
+    assert 'competiscope_model_route_selected{provider_kind="demo"} 1' in body
+    assert "competiscope_model_route_blocked_reasons_total 0" in body
     assert "competiscope_compliance_redaction_enabled 1" in body
     assert "competiscope_compliance_redactions_total 0" in body
     assert "competiscope_compliance_require_trace_context 1" in body
@@ -129,3 +134,22 @@ def test_metrics_counts_persisted_langfuse_mirror_errors() -> None:
 
     assert response.status_code == 200
     assert "competiscope_langfuse_mirror_errors_total 1" in response.text
+
+
+def test_metrics_exposes_blocked_model_route_status() -> None:
+    app = create_app()
+    app.dependency_overrides[get_app_settings] = lambda: _settings(
+        ark_api_key="primary-key",
+        ark_model="primary-model",
+        compliance_redaction_enabled=False,
+    )
+    app.dependency_overrides[get_run_journal] = RunJournal.in_memory
+    app.dependency_overrides[get_metrics_enterprise_store] = lambda: None
+    client = TestClient(app)
+
+    response = client.get("/api/metrics")
+
+    assert response.status_code == 200
+    assert 'competiscope_model_route_status{status="blocked"} 1' in response.text
+    assert 'competiscope_model_route_selected{provider_kind="none"} 1' in response.text
+    assert "competiscope_model_route_blocked_reasons_total 1" in response.text

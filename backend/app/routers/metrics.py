@@ -11,6 +11,7 @@ from app.deps import get_app_settings, get_enterprise_store, get_run_journal
 from packages.agents.pydantic_ai_adapter import pydantic_ai_available
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore
+from packages.governance import build_model_route_decision
 from packages.memory import RunJournal
 from packages.observability import LangfuseAdapter, LangfuseConfig
 from packages.schema.enterprise import NotificationRecord
@@ -75,6 +76,10 @@ def metrics(
         1
         for span in trace_spans
         if getattr(span, "metadata", {}).get("langfuse_mirror_status") == "error"
+    )
+    model_route = build_model_route_decision(settings)
+    selected_provider_kind = (
+        model_route.selected.provider_kind if model_route.selected is not None else "none"
     )
     temporal_cutover = temporal_cutover_status(settings)
     lines = [
@@ -199,6 +204,44 @@ def metrics(
                 "competiscope_pydantic_ai_model_backed_enabled "
                 f"{1 if settings.pydantic_ai_model_backed_enabled else 0}"
             ),
+            "# HELP competiscope_model_route_status Active model router status.",
+            "# TYPE competiscope_model_route_status gauge",
+            (
+                'competiscope_model_route_status{status="selected"} '
+                f'{1 if model_route.status == "selected" else 0}'
+            ),
+            (
+                'competiscope_model_route_status{status="fallback"} '
+                f'{1 if model_route.status == "fallback" else 0}'
+            ),
+            (
+                'competiscope_model_route_status{status="blocked"} '
+                f'{1 if model_route.status == "blocked" else 0}'
+            ),
+            "# HELP competiscope_model_route_selected Active selected model provider kind.",
+            "# TYPE competiscope_model_route_selected gauge",
+            (
+                'competiscope_model_route_selected{provider_kind="primary"} '
+                f'{1 if selected_provider_kind == "primary" else 0}'
+            ),
+            (
+                'competiscope_model_route_selected{provider_kind="backup"} '
+                f'{1 if selected_provider_kind == "backup" else 0}'
+            ),
+            (
+                'competiscope_model_route_selected{provider_kind="demo"} '
+                f'{1 if selected_provider_kind == "demo" else 0}'
+            ),
+            (
+                'competiscope_model_route_selected{provider_kind="none"} '
+                f'{1 if selected_provider_kind == "none" else 0}'
+            ),
+            (
+                "# HELP competiscope_model_route_blocked_reasons_total Current "
+                "model route blocked reason count."
+            ),
+            "# TYPE competiscope_model_route_blocked_reasons_total gauge",
+            f"competiscope_model_route_blocked_reasons_total {len(model_route.blocked_reasons)}",
             "# HELP competiscope_compliance_redaction_enabled Trace text redaction status.",
             "# TYPE competiscope_compliance_redaction_enabled gauge",
             (
