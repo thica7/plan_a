@@ -171,6 +171,8 @@ class WriterAgentMixin:
                     f"- {cell.competitor} / {cell.dimension}: {cell.value}"
                     f"{self._format_source_refs(cell.source_ids)}"
                 )
+        lines.extend(self._fallback_layer_sections(detail, matrix_sources))
+        lines.extend(self._fallback_source_quality_section(detail))
         lines.extend(["", "## Knowledge Coverage"])
         for competitor in detail.plan.competitors:
             knowledge = detail.competitor_knowledge.get(competitor)
@@ -189,8 +191,130 @@ class WriterAgentMixin:
             ]
             for note in notes:
                 lines.append(f"- {note}{self._format_source_refs(matrix_sources)}")
+        lines.extend(self._fallback_next_collection_plan(detail))
+        lines.extend(self._fallback_evidence_appendix(detail))
         lines.extend(["", "## Writer Fallback Reason", f"- {reason}"])
         return "\n".join(lines)
+
+    def _fallback_layer_sections(self, detail: RunDetail, source_ids: list[str]) -> list[str]:
+        refs = self._format_source_refs(source_ids)
+        layer = detail.plan.competitor_layer
+        if layer == "L1":
+            return [
+                "",
+                "## Battlecard Fallback",
+                (
+                    "- Direct-use position: treat this as a near-term replacement decision "
+                    f"until stronger evidence changes the matrix.{refs}"
+                ),
+                (
+                    "- Objection handling: prioritize pricing, packaging, feature parity, "
+                    f"and switching triggers in sales or product response.{refs}"
+                ),
+                (
+                    "- Action bias: use the highest-confidence dimension winners as the "
+                    f"initial battlecard spine, then verify weak cells before publication.{refs}"
+                ),
+            ]
+        if layer == "L2":
+            return [
+                "",
+                "## Workflow & Enterprise Risk Fallback",
+                (
+                    "- Adjacent-workflow threat: read the matrix through workflow overlap, "
+                    f"integration leverage, and switching-cost exposure.{refs}"
+                ),
+                (
+                    "- Buying risk: separate proven enterprise controls from search-only or "
+                    f"low-confidence claims before procurement recommendations.{refs}"
+                ),
+                (
+                    "- Watchlist: monitor the dimensions where adjacent competitors could "
+                    f"absorb the target workflow with one integration or packaging change.{refs}"
+                ),
+            ]
+        if layer == "L3":
+            return [
+                "",
+                "## Market Landscape Fallback",
+                (
+                    "- Category view: avoid a single direct winner and group competitors by "
+                    f"segment, trend signal, and benchmark strength.{refs}"
+                ),
+                (
+                    "- Strategy view: treat recommendations as portfolio options while "
+                    f"evidence breadth remains below landscape-grade coverage.{refs}"
+                ),
+                (
+                    "- Uncertainty view: prioritize adding competitors and market-level "
+                    f"sources before making category-wide claims.{refs}"
+                ),
+            ]
+        return [
+            "",
+            "## Business Implications",
+            (
+                "- Use this fallback as an evidence-indexed interim readout until the writer "
+                f"can regenerate a fuller narrative.{refs}"
+            ),
+        ]
+
+    def _fallback_source_quality_section(self, detail: RunDetail) -> list[str]:
+        if not detail.raw_sources:
+            return [
+                "",
+                "## Source Quality & Coverage",
+                "- No raw sources are available, so all conclusions require collection before use.",
+            ]
+        by_type: dict[str, list[tuple[str, float]]] = {}
+        for source in detail.raw_sources:
+            by_type.setdefault(source.source_type, []).append((source.id, source.confidence))
+        lines = ["", "## Source Quality & Coverage"]
+        for source_type, values in sorted(by_type.items()):
+            source_ids = [source_id for source_id, _confidence in values]
+            avg_confidence = sum(confidence for _source_id, confidence in values) / len(values)
+            lines.append(
+                f"- {source_type}: {len(values)} source(s), avg confidence "
+                f"{avg_confidence:.2f}{self._format_source_refs(source_ids)}"
+            )
+        return lines
+
+    def _fallback_next_collection_plan(self, detail: RunDetail) -> list[str]:
+        lines = ["", "## Next Collection / Verification Plan"]
+        source_ids_by_dimension: dict[str, list[str]] = {}
+        for source in detail.raw_sources:
+            source_ids_by_dimension.setdefault(source.dimension, []).append(source.id)
+        planned = 0
+        for dimension in detail.plan.dimensions:
+            source_ids = source_ids_by_dimension.get(dimension, [])
+            if len(source_ids) >= max(1, min(2, len(detail.plan.competitors))):
+                continue
+            planned += 1
+            lines.append(
+                f"- Add stronger {dimension} evidence for under-covered competitors"
+                f"{self._format_source_refs(source_ids)}"
+            )
+        for issue in detail.qa_findings[:3]:
+            planned += 1
+            lines.append(f"- Resolve QA finding `{issue.rule_id}`: {issue.problem}")
+        if planned == 0:
+            lines.append("- Re-run collection only for stale, rejected, or low-confidence evidence.")
+        return lines
+
+    def _fallback_evidence_appendix(self, detail: RunDetail) -> list[str]:
+        lines = ["", "## Evidence Appendix"]
+        if not detail.raw_sources:
+            lines.append("- No evidence records are attached to this fallback report.")
+            return lines
+        for source in detail.raw_sources[:8]:
+            lines.append(
+                f"- {source.id}: {source.title} / {source.source_type} / confidence "
+                f"{source.confidence:.2f} [source:{source.id}]"
+            )
+        if len(detail.raw_sources) > 8:
+            omitted_count = len(detail.raw_sources) - 8
+            lines.append(f"- {omitted_count} additional source(s) omitted from fallback appendix.")
+        return lines
 
     def _writer_layer_label(self, detail: RunDetail) -> str:
         if detail.plan.competitor_layer == "L1":

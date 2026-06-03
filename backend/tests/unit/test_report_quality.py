@@ -1,9 +1,12 @@
 from datetime import datetime
 
+from packages.agents.writer.logic import WriterAgentMixin
 from packages.business_intel import compare_run_quality
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     AnalysisPlan,
+    ComparisonCell,
+    ComparisonMatrix,
     CompetitorKnowledge,
     KnowledgeClaim,
     PricingModel,
@@ -11,6 +14,10 @@ from packages.schema.models import (
     RunMetrics,
     TraceSpan,
 )
+
+
+class _WriterHarness(WriterAgentMixin):
+    pass
 
 
 def test_compare_run_quality_scores_real_run_against_baseline() -> None:
@@ -84,6 +91,58 @@ def test_compare_run_quality_flags_missing_real_chain_signals() -> None:
     assert comparison.report_quality_signal is False
     assert len(comparison.recommendations) == 3
     assert "real webpage" in comparison.recommendations[0]
+
+
+def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
+    writer = _WriterHarness()
+    expected_sections = {
+        "L1": ("## Battlecard Fallback", "Objection handling"),
+        "L2": ("## Workflow & Enterprise Risk Fallback", "switching-cost exposure"),
+        "L3": ("## Market Landscape Fallback", "Category view"),
+    }
+
+    for layer, (section, phrase) in expected_sections.items():
+        detail = _run_detail(
+            run_id=f"fallback-{layer}",
+            execution_mode="real",
+            source_count=3,
+            report_md="",
+            metrics=RunMetrics(),
+        )
+        detail.plan.competitor_layer = layer  # type: ignore[assignment]
+        detail.plan.dimensions = ["pricing", "feature"]
+        detail.plan.scenario_recommended_dimensions = ["pricing", "feature", "persona"]
+        detail.comparison_matrix = ComparisonMatrix(
+            competitors=detail.plan.competitors,
+            dimensions=detail.plan.dimensions,
+            cells=[
+                ComparisonCell(
+                    competitor="Cursor",
+                    dimension="pricing",
+                    value="Cursor has transparent pricing.",
+                    source_ids=["source-0"],
+                    confidence=0.9,
+                ),
+                ComparisonCell(
+                    competitor="Copilot",
+                    dimension="feature",
+                    value="Copilot has broad IDE integration.",
+                    source_ids=["source-1"],
+                    confidence=0.85,
+                ),
+            ],
+            winner_by_dimension={"pricing": "Cursor", "feature": "Copilot"},
+        )
+
+        report = writer._fallback_report_markdown(detail, "timeout")
+
+        assert section in report
+        assert phrase in report
+        assert "## Source Quality & Coverage" in report
+        assert "## Next Collection / Verification Plan" in report
+        assert "## Evidence Appendix" in report
+        assert "[source:source-0]" in report
+        assert "[source:source-1]" in report
 
 
 def _run_detail(
