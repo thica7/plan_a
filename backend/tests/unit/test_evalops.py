@@ -7,6 +7,7 @@ from app.main import create_app
 from packages.evals import build_enterprise_evalops_report
 from packages.schema.api_dto import RunDetail, RunSummary
 from packages.schema.models import (
+    AgentMessage,
     AnalysisPlan,
     CompetitorKnowledge,
     KnowledgeClaim,
@@ -16,6 +17,7 @@ from packages.schema.models import (
     RedoScope,
     RevisionRecord,
     RunMetrics,
+    ToolCallMessage,
     TraceSpan,
 )
 
@@ -73,6 +75,8 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.demo_run_count == 0
     assert report.real_run_ratio == 1.0
     assert report.real_quality_chain_rate == 1.0
+    assert report.decision_replay_rate == 1.0
+    assert report.decision_replay_failed_run_ids == []
     assert report.average_delta_score is not None and report.average_delta_score > 0
     assert report.regressed_run_count == 0
     assert report.judge_mode == "heuristic"
@@ -87,9 +91,10 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         "real_collection",
         "real_llm",
         "report_quality",
+        "decision_replay",
     }
     assert all(step.pass_rate == 1.0 for step in report.quality_chain_steps)
-    assert report.golden_set_size == 16
+    assert report.golden_set_size == 17
     assert report.golden_set_pass_rate >= 0.8
     assert report.golden_catalog_size >= 50
     assert report.golden_catalog_coverage_rate == 0.0
@@ -147,6 +152,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert any(case.case_id == "golden.user_research_evidence" for case in report.cases)
     assert any(case.case_id == "golden.rag_gap_fill_context" for case in report.cases)
     assert any(case.case_id == "golden.hitl_redo_loop" for case in report.cases)
+    assert any(case.case_id == "golden.decision_replay" for case in report.cases)
     assert any(
         metric.name == "compliance_pass_rate" and metric.status == "pass"
         for metric in report.metrics
@@ -188,13 +194,15 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["evaluated_run_ids"] == ["real-run"]
     assert response.json()["real_run_count"] == 1
     assert response.json()["real_quality_chain_rate"] == 1.0
+    assert response.json()["decision_replay_rate"] == 1.0
     assert response.json()["judge_mode"] == "llm"
     assert response.json()["judge_avg_score"] >= 72
     assert response.json()["llm_judge_avg_score"] is None
     assert "deterministic rubric" in response.json()["judge_fallback_reason"]
     assert response.json()["real_quality_chain_failed_run_ids"] == []
-    assert len(response.json()["quality_chain_steps"]) == 3
-    assert response.json()["golden_set_size"] == 16
+    assert response.json()["decision_replay_failed_run_ids"] == []
+    assert len(response.json()["quality_chain_steps"]) == 4
+    assert response.json()["golden_set_size"] == 17
     assert response.json()["golden_catalog_size"] >= 50
     assert response.json()["compliance_pass_rate"] == 1.0
     assert response.json()["compliance_fail_count"] == 0
@@ -378,6 +386,37 @@ def test_enterprise_evalops_explains_real_quality_chain_failures() -> None:
     )
 
 
+def test_enterprise_evalops_gates_missing_decision_replay_signals() -> None:
+    target = _run_detail(
+        run_id="missing-replay-run",
+        execution_mode="real",
+        source_count=4,
+        quality_score=1.0,
+        report_md=_structured_report_md(),
+        project_id="project-a",
+        include_decision_replay=False,
+    )
+
+    report = build_enterprise_evalops_report([target])
+    metrics = {metric.name: metric for metric in report.metrics}
+    cases = {case.case_id: case for case in report.cases}
+    steps = {step.step: step for step in report.quality_chain_steps}
+
+    assert report.real_quality_chain_rate == 1.0
+    assert report.decision_replay_rate == 0.0
+    assert report.decision_replay_failed_run_ids == ["missing-replay-run"]
+    assert steps["decision_replay"].pass_rate == 0.0
+    assert steps["decision_replay"].failed_run_ids == ["missing-replay-run"]
+    assert metrics["decision_replay_rate"].status == "fail"
+    assert cases["golden.decision_replay"].status == "fail"
+    assert report.regression_gate_status == "fail"
+    assert any(
+        issue.kind == "metric" and issue.id == "decision_replay_rate"
+        for issue in report.regression_gate_issues
+    )
+    assert any("decisions can be replayed" in item for item in report.recommendations)
+
+
 def test_enterprise_evalops_flags_missing_research_and_gap_fill_context() -> None:
     target = _run_detail(
         run_id="persona-gap-run",
@@ -513,6 +552,7 @@ def _run_detail(
     topic: str = "Cursor vs Copilot pricing",
     competitors: list[str] | None = None,
     competitor_layer: str = "L1",
+    include_decision_replay: bool = True,
 ) -> RunDetail:
     plan_competitors = competitors or ["Cursor", "Copilot"]
     sources = [
@@ -574,7 +614,50 @@ def _run_detail(
                 duration_ms=250,
             )
         ]
-        if execution_mode == "real"
+        if execution_mode == "real" and include_decision_replay
+        else [],
+        agent_messages=[
+            AgentMessage(
+                id="msg-plan-1",
+                run_id=run_id,
+                from_agent="planner",
+                to_agent="collector",
+                message_type="analysis_plan_ready",
+                payload_schema="AnalysisPlan",
+                payload={"dimensions": dimensions or ["pricing"]},
+                trace_span_ids=["span-llm-1"],
+                status="consumed",
+                consumed_by="collector",
+                consumed_at=datetime.utcnow(),
+            ),
+            AgentMessage(
+                id="msg-report-1",
+                run_id=run_id,
+                from_agent="writer",
+                to_agent="qa",
+                message_type="report_ready",
+                payload_schema="ReportDraft",
+                payload={"source_ids": [source.id for source in sources]},
+                trace_span_ids=["span-llm-1"],
+                status="queued",
+            ),
+        ]
+        if execution_mode == "real" and include_decision_replay
+        else [],
+        tool_call_messages=[
+            ToolCallMessage(
+                id="tool-search-1",
+                run_id=run_id,
+                agent="collector",
+                tool_name="web_search",
+                arguments={"query": topic},
+                result={"source_ids": [source.id for source in sources]},
+                status="ok",
+                trace_span_id="span-llm-1",
+                source_message_id="msg-plan-1",
+            )
+        ]
+        if execution_mode == "real" and include_decision_replay
         else [],
         revisions=revisions or [],
         qa_findings=qa_findings or [],

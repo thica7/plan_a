@@ -35,7 +35,7 @@ class EvalOpsCaseResult(BaseModel):
 class EvalOpsQualityChainStep(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    step: Literal["real_collection", "real_llm", "report_quality"]
+    step: Literal["real_collection", "real_llm", "report_quality", "decision_replay"]
     label: str
     total_count: int = Field(ge=0)
     passed_count: int = Field(ge=0)
@@ -75,6 +75,8 @@ class EvalOpsReport(BaseModel):
     real_run_ratio: float = Field(ge=0.0, le=1.0)
     real_quality_chain_rate: float = Field(ge=0.0, le=1.0)
     real_quality_chain_failed_run_ids: list[str] = Field(default_factory=list)
+    decision_replay_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    decision_replay_failed_run_ids: list[str] = Field(default_factory=list)
     quality_chain_steps: list[EvalOpsQualityChainStep] = Field(default_factory=list)
     average_delta_score: float | None = None
     regressed_run_count: int = Field(ge=0)

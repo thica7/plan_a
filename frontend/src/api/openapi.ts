@@ -2512,7 +2512,7 @@ export interface components {
              * Step
              * @enum {string}
              */
-            step: "real_collection" | "real_llm" | "report_quality";
+            step: "real_collection" | "real_llm" | "report_quality" | "decision_replay";
             /** Label */
             label: string;
             /** Total Count */
@@ -2569,6 +2569,10 @@ export interface components {
             real_quality_chain_rate: number;
             /** Real Quality Chain Failed Run Ids */
             real_quality_chain_failed_run_ids?: string[];
+            /** Decision Replay Rate */
+            decision_replay_rate?: number;
+            /** Decision Replay Failed Run Ids */
+            decision_replay_failed_run_ids?: string[];
             /** Quality Chain Steps */
             quality_chain_steps?: components["schemas"]["EvalOpsQualityChainStep"][];
             /** Average Delta Score */

@@ -9286,7 +9286,8 @@
             "enum": [
               "real_collection",
               "real_llm",
-              "report_quality"
+              "report_quality",
+              "decision_replay"
             ],
             "title": "Step"
           },
@@ -9432,6 +9433,20 @@
             },
             "type": "array",
             "title": "Real Quality Chain Failed Run Ids"
+          },
+          "decision_replay_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Decision Replay Rate",
+            "default": 0.0
+          },
+          "decision_replay_failed_run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Decision Replay Failed Run Ids"
           },
           "quality_chain_steps": {
             "items": {

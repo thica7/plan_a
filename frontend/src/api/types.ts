@@ -401,7 +401,7 @@ export interface EvalOpsCaseResult {
 }
 
 export interface EvalOpsQualityChainStep {
-  step: "real_collection" | "real_llm" | "report_quality";
+  step: "real_collection" | "real_llm" | "report_quality" | "decision_replay";
   label: string;
   total_count: number;
   passed_count: number;
@@ -435,6 +435,8 @@ export interface EvalOpsReport {
   real_run_ratio: number;
   real_quality_chain_rate: number;
   real_quality_chain_failed_run_ids: string[];
+  decision_replay_rate: number;
+  decision_replay_failed_run_ids: string[];
   quality_chain_steps: EvalOpsQualityChainStep[];
   average_delta_score?: number | null;
   regressed_run_count: number;

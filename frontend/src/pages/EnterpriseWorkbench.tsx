@@ -1829,6 +1829,11 @@ function EvalOpsPanel({
           value={formatPercent(report.real_quality_chain_rate)}
         />
         <Metric
+          icon={<ListChecks size={17} aria-hidden />}
+          label="Replay"
+          value={formatPercent(report.decision_replay_rate)}
+        />
+        <Metric
           icon={<CalendarClock size={17} aria-hidden />}
           label="Manual saved"
           value={manualTimeSavedHours.toFixed(1)}
@@ -1864,6 +1869,7 @@ function EvalOpsPanel({
         <span>Compliance fail {report.compliance_fail_count}</span>
         <span>Compliance blockers {report.compliance_blocker_count}</span>
         <span>Coverage lift {coverageLiftRate === null ? "n/a" : formatSignedPercent(coverageLiftRate)}</span>
+        <span>Replay {formatPercent(report.decision_replay_rate)}</span>
         <span>Regressed {report.regressed_run_count}</span>
         <span>HITL {formatPercent(report.hitl_enabled_run_rate)}</span>
         <span>Human fix {formatPercent(report.human_correction_rate)}</span>

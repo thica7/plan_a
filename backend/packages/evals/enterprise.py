@@ -7,6 +7,7 @@ from statistics import mean
 from typing import Any, Literal
 
 from packages.business_intel import compare_run_quality
+from packages.business_intel.report_quality import REAL_SOURCE_TYPES
 from packages.compliance import build_run_compliance_report
 from packages.schema.api_dto import RunDetail, RunQualityComparison
 from packages.schema.evals import (
@@ -43,6 +44,31 @@ USER_RESEARCH_SOURCE_TYPES = {
     "manual_transcript",
     "manual_note",
     "manual",
+}
+QualityChainStepName = Literal[
+    "real_collection",
+    "real_llm",
+    "report_quality",
+    "decision_replay",
+]
+DECISION_REPLAY_MESSAGE_HINTS = {
+    "analysis",
+    "claim",
+    "collector",
+    "decision",
+    "evidence",
+    "gap",
+    "memory",
+    "plan",
+    "qa",
+    "quality",
+    "redo",
+    "report",
+    "review",
+    "schema",
+    "source",
+    "survey",
+    "writer",
 }
 
 
@@ -91,7 +117,13 @@ def build_enterprise_evalops_report(
             and comparison.report_quality_signal
         )
     ]
-    quality_chain_steps = _quality_chain_steps(comparisons)
+    decision_replay_rate = _ratio(
+        [_run_has_decision_replay_signal(run) for run in recent_runs]
+    )
+    decision_replay_failed_run_ids = [
+        run.id for run in recent_runs if not _run_has_decision_replay_signal(run)
+    ]
+    quality_chain_steps = _quality_chain_steps(comparisons, recent_runs)
     user_research_evidence_rate = _user_research_evidence_rate(recent_runs)
     rag_gap_fill_context_rate = _rag_gap_fill_context_rate(recent_runs)
     hitl_redo_loop_rate = _hitl_redo_loop_rate(recent_runs)
@@ -213,6 +245,7 @@ def build_enterprise_evalops_report(
         user_research_evidence_rate=user_research_evidence_rate,
         rag_gap_fill_context_rate=rag_gap_fill_context_rate,
         hitl_redo_loop_rate=hitl_redo_loop_rate,
+        decision_replay_rate=decision_replay_rate,
     )
     golden_catalog = _golden_catalog_summary(recent_runs)
     golden_set_pass_rate = _ratio([case.status == "pass" for case in cases])
@@ -232,6 +265,7 @@ def build_enterprise_evalops_report(
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
         _metric("real_quality_chain_rate", real_quality_chain_rate, 0.5, "ratio"),
+        _metric("decision_replay_rate", decision_replay_rate, 0.8, "ratio"),
         _metric("compliance_pass_rate", compliance_pass_rate, 1.0, "ratio"),
         _metric(
             "compliance_fail_count",
@@ -283,6 +317,8 @@ def build_enterprise_evalops_report(
         real_run_ratio=round(real_run_ratio, 3),
         real_quality_chain_rate=round(real_quality_chain_rate, 3),
         real_quality_chain_failed_run_ids=real_quality_chain_failed_run_ids,
+        decision_replay_rate=round(decision_replay_rate, 3),
+        decision_replay_failed_run_ids=decision_replay_failed_run_ids,
         quality_chain_steps=quality_chain_steps,
         average_delta_score=average_delta_score,
         regressed_run_count=regressed_run_count,
@@ -341,6 +377,7 @@ def _golden_cases(
     user_research_evidence_rate: float,
     rag_gap_fill_context_rate: float,
     hitl_redo_loop_rate: float,
+    decision_replay_rate: float,
 ) -> list[EvalOpsCaseResult]:
     target_run_id = comparisons[0].target_run_id if comparisons else None
     baseline_run_id = comparisons[0].baseline_run_id if comparisons else None
@@ -473,6 +510,14 @@ def _golden_cases(
             target_run_id,
             baseline_run_id,
         ),
+        _case(
+            "golden.decision_replay",
+            "Decision replay coverage",
+            round(decision_replay_rate * 100),
+            80,
+            target_run_id,
+            baseline_run_id,
+        ),
     ]
 
 
@@ -574,10 +619,9 @@ def _normalize_catalog_text(value: str) -> str:
 
 def _quality_chain_steps(
     comparisons: list[RunQualityComparison],
+    runs: list[RunDetail],
 ) -> list[EvalOpsQualityChainStep]:
-    step_specs: list[
-        tuple[Literal["real_collection", "real_llm", "report_quality"], str, str]
-    ] = [
+    step_specs: list[tuple[QualityChainStepName, str, str]] = [
         (
             "real_collection",
             "Real collection",
@@ -593,14 +637,21 @@ def _quality_chain_steps(
             "Report quality",
             "The report is long enough, cited, structured, and review-ready.",
         ),
+        (
+            "decision_replay",
+            "Decision replay",
+            "Trace, agent protocol, tool or collection, evidence, and outcome signals "
+            "can replay decisions.",
+        ),
     ]
     total = len(comparisons)
+    runs_by_id = {run.id: run for run in runs}
     steps: list[EvalOpsQualityChainStep] = []
     for step, label, description in step_specs:
         failed_run_ids = [
             comparison.target_run_id
             for comparison in comparisons
-            if not _quality_chain_step_passed(comparison, step)
+            if not _quality_chain_step_passed(comparison, step, runs_by_id)
         ]
         passed_count = total - len(failed_run_ids)
         pass_rate = passed_count / total if total else 0.0
@@ -617,6 +668,90 @@ def _quality_chain_steps(
             )
         )
     return steps
+
+
+def _run_has_decision_replay_signal(run: RunDetail) -> bool:
+    checks = _decision_replay_signal_checks(run)
+    return all(checks.values())
+
+
+def _decision_replay_signal_checks(run: RunDetail) -> dict[str, bool]:
+    return {
+        "trace_context": _run_has_trace_context(run),
+        "agent_protocol": _run_has_agent_protocol(run),
+        "tool_or_collection": _run_has_tool_or_collection_signal(run),
+        "evidence_linkage": _run_has_evidence_linkage(run),
+        "outcome_or_intervention": _run_has_outcome_or_intervention_signal(run),
+    }
+
+
+def _run_has_trace_context(run: RunDetail) -> bool:
+    return any(
+        bool(span.trace_id or span.otel_span_id or span.traceparent)
+        for span in run.trace_spans
+    ) or any(message.trace_span_ids for message in run.agent_messages)
+
+
+def _run_has_agent_protocol(run: RunDetail) -> bool:
+    if any(_message_type_has_decision_hint(message.message_type) for message in run.agent_messages):
+        return True
+    named_trace_agents = {span.agent for span in run.trace_spans if span.agent}
+    return len(named_trace_agents) >= 2
+
+
+def _message_type_has_decision_hint(message_type: str) -> bool:
+    normalized = message_type.casefold().replace("-", "_")
+    return any(hint in normalized for hint in DECISION_REPLAY_MESSAGE_HINTS)
+
+
+def _run_has_tool_or_collection_signal(run: RunDetail) -> bool:
+    if run.tool_call_messages:
+        return True
+    if any(span.kind in {"search", "fetch", "tool"} for span in run.trace_spans):
+        return True
+    return any(
+        source.url is not None and source.source_type.casefold() in REAL_SOURCE_TYPES
+        for source in run.raw_sources
+    )
+
+
+def _run_has_evidence_linkage(run: RunDetail) -> bool:
+    if not run.raw_sources:
+        return False
+    source_ids = {source.id for source in run.raw_sources}
+    if any(f"[source:{source_id}" in run.report_md for source_id in source_ids):
+        return True
+    return _run_has_claim_source_linkage(run, source_ids)
+
+
+def _run_has_claim_source_linkage(run: RunDetail, source_ids: set[str]) -> bool:
+    for knowledge in run.competitor_knowledge.values():
+        claim_groups = [
+            knowledge.feature_tree.summary_claims,
+            knowledge.pricing_model.notes,
+            knowledge.user_personas.summary_claims,
+        ]
+        claim_groups.extend(node.claims for node in knowledge.feature_tree.nodes)
+        claim_groups.extend(tier.claims for tier in knowledge.pricing_model.tiers)
+        for claims in claim_groups:
+            if any(source_id in source_ids for claim in claims for source_id in claim.source_ids):
+                return True
+    return False
+
+
+def _run_has_outcome_or_intervention_signal(run: RunDetail) -> bool:
+    if run.qa_findings or run.revisions or run.hitl_enabled:
+        return True
+    if any(
+        _message_type_has_decision_hint(message.message_type)
+        and any(
+            hint in message.message_type.casefold()
+            for hint in ("qa", "redo", "report", "review")
+        )
+        for message in run.agent_messages
+    ):
+        return True
+    return run.status == "completed" and bool(run.report_md.strip())
 
 
 def _user_research_evidence_rate(runs: list[RunDetail]) -> float:
@@ -694,13 +829,20 @@ def _run_has_hitl_or_redo_loop(run: RunDetail) -> bool:
     )
 
 
-def _quality_chain_step_passed(comparison: RunQualityComparison, step: str) -> bool:
+def _quality_chain_step_passed(
+    comparison: RunQualityComparison,
+    step: QualityChainStepName,
+    runs_by_id: dict[str, RunDetail],
+) -> bool:
     if step == "real_collection":
         return comparison.real_collection_signal
     if step == "real_llm":
         return comparison.real_llm_signal
     if step == "report_quality":
         return comparison.report_quality_signal
+    if step == "decision_replay":
+        run = runs_by_id.get(comparison.target_run_id)
+        return run is not None and _run_has_decision_replay_signal(run)
     return False
 
 
@@ -906,6 +1048,11 @@ def _recommendations(
     if metric_names["real_quality_chain_rate"].status != "pass":
         recommendations.append(
             "Close the real run quality chain: collection, LLM trace, and cited report depth."
+        )
+    if metric_names["decision_replay_rate"].status != "pass":
+        recommendations.append(
+            "Capture trace context, agent protocol messages, tool or collection signals, "
+            "evidence links, and outcome events so decisions can be replayed."
         )
     if metric_names["compliance_pass_rate"].status != "pass":
         recommendations.append(
