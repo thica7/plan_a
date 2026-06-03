@@ -375,7 +375,7 @@ def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
         report = writer._fallback_report_markdown(detail, "timeout")
 
         assert section in report
-        assert "Fallback" not in report
+        assert "fallback" not in report.casefold()
         assert phrase in report
         assert "## Scenario QA Checklist" in report
         assert "Analyst question:" in report
@@ -409,7 +409,7 @@ def test_writer_hardens_thin_success_report_without_fallback_labels() -> None:
     )
 
     assert "## Battlecard" in report
-    assert "## Battlecard Fallback" not in report
+    assert "fallback" not in report.casefold()
     assert "## Source Quality & Coverage" in report
     assert "## Claim Validation & Evidence Risk" in report
     assert "## Next Collection / Verification Plan" in report

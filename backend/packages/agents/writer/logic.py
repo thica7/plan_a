@@ -288,8 +288,8 @@ class WriterAgentMixin:
                 ),
             ]
         implication = (
-            "Use this fallback as an evidence-indexed interim readout until the writer "
-            "can regenerate a fuller narrative."
+            "Use this evidence-indexed interim readout until the narrative writer "
+            "can regenerate a fuller version."
             if fallback
             else (
                 "Use this section as an evidence-indexed business readout with explicit "
@@ -371,7 +371,7 @@ class WriterAgentMixin:
     def _fallback_evidence_appendix(self, detail: RunDetail) -> list[str]:
         lines = ["", "## Evidence Appendix"]
         if not detail.raw_sources:
-            lines.append("- No evidence records are attached to this fallback report.")
+            lines.append("- No evidence records are attached to this report draft.")
             return lines
         for source in detail.raw_sources[:8]:
             lines.append(
@@ -380,7 +380,7 @@ class WriterAgentMixin:
             )
         if len(detail.raw_sources) > 8:
             omitted_count = len(detail.raw_sources) - 8
-            lines.append(f"- {omitted_count} additional source(s) omitted from fallback appendix.")
+            lines.append(f"- {omitted_count} additional source(s) omitted from this appendix.")
         return lines
 
     def _harden_report_markdown(self, detail: RunDetail, markdown: str) -> str:
