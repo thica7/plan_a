@@ -1184,6 +1184,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/report-versions/{version_id}/manual-revision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Manual Report Revision */
+        post: operations["create_manual_report_revision_api_enterprise_report_versions__version_id__manual_revision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/report-versions/{version_id}/release-gate": {
         parameters: {
             query?: never;
@@ -3601,6 +3618,16 @@ export interface components {
              * Format: date-time
              */
             generated_at?: string;
+        };
+        /** ManualReportRevisionRequest */
+        ManualReportRevisionRequest: {
+            /** Report Md */
+            report_md: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
         };
         /** QualityAgentMatrixEntry */
         QualityAgentMatrixEntry: {
@@ -8045,6 +8072,45 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportVersionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_manual_report_revision_api_enterprise_report_versions__version_id__manual_revision_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualReportRevisionRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

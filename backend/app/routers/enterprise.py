@@ -91,6 +91,7 @@ from packages.schema.enterprise import (
     EvidenceSeedIngestRequest,
     EvidenceSeedIngestResult,
     KnowledgeGraphReadModel,
+    ManualReportRevisionRequest,
     MemoryCandidate,
     MemoryFeedbackIngestResult,
     MemoryRecallContext,
@@ -1472,6 +1473,45 @@ def get_report_version(
     return version
 
 
+@router.post(
+    "/enterprise/report-versions/{version_id}/manual-revision",
+    response_model=ReportVersionRecord,
+)
+def create_manual_report_revision(
+    version_id: str,
+    request: ManualReportRevisionRequest,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> ReportVersionRecord:
+    source = _report_version_or_404(version_id, store, user, "report:write")
+    next_version = store.next_report_version_number(
+        project_id=source.project_id,
+        topic_normalized=source.topic_normalized,
+        competitor_layer=source.competitor_layer,
+        competitor_set_hash=source.competitor_set_hash,
+    )
+    metadata = dict(source.quality_metadata)
+    metadata["manual_revision"] = {
+        "source_report_version_id": source.id,
+        "edited_by": user.user_id,
+        "note": request.note,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    revision = source.model_copy(
+        update={
+            "id": _manual_report_revision_id(source, next_version, request.report_md),
+            "parent_version_id": source.id,
+            "version_number": next_version,
+            "status": "draft",
+            "report_md": request.report_md,
+            "quality_metadata": metadata,
+            "created_at": datetime.utcnow(),
+            "published_at": None,
+        }
+    )
+    return store.upsert_report_version(revision)
+
+
 @router.post("/enterprise/report-versions/{version_id}/export", response_model=ArtifactCreateResult)
 def export_report_version(
     version_id: str,
@@ -1642,6 +1682,17 @@ def _report_version_or_404(
         raise HTTPException(status_code=404, detail="Report version not found")
     _require_workspace_access(user, version.workspace_id, action)
     return version
+
+
+def _manual_report_revision_id(
+    source: ReportVersionRecord,
+    version_number: int,
+    report_md: str,
+) -> str:
+    digest = hashlib.sha256(
+        "|".join([source.id, str(version_number), report_md]).encode("utf-8")
+    ).hexdigest()[:16]
+    return f"report-version-manual-{digest}"
 
 
 def _normalize_report_export_format(value: str) -> str:

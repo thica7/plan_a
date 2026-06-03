@@ -23,6 +23,7 @@ import type {
   MemoryFeedbackIngestResult,
   MemoryRecallContext,
   MemoryStats,
+  ManualReportRevisionRequest,
   ModelRouteDecision,
   ModelPolicyReport,
   MonitorStartRequest,
@@ -521,6 +522,19 @@ export function getReportVersionDiff(versionId: string, baseVersionId?: string) 
 
 export function getReportReleaseGate(versionId: string) {
   return request<ReportReleaseGate>(`/enterprise/report-versions/${versionId}/release-gate`);
+}
+
+export function createManualReportRevision(
+  versionId: string,
+  payload: ManualReportRevisionRequest,
+) {
+  return request<ReportVersionRecord>(
+    `/enterprise/report-versions/${encodeURIComponent(versionId)}/manual-revision`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function publishReportVersion(versionId: string) {

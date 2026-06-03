@@ -1563,6 +1563,11 @@ export interface ReportVersionRecord {
   published_at?: string | null;
 }
 
+export interface ManualReportRevisionRequest {
+  report_md: string;
+  note?: string;
+}
+
 export interface ReportDiffLine {
   kind: "unchanged" | "added" | "removed";
   text: string;

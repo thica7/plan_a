@@ -57,6 +57,7 @@ import {
   startMonitorWorkflow,
   approveReportWorkflow,
   rejectReportWorkflow,
+  createManualReportRevision,
   startReportApprovalWorkflow,
   startScheduledScanWorkflow,
   updateEvidenceQuality,
@@ -179,6 +180,7 @@ export function EnterpriseWorkbench({
   const [isSubmittingReportApproval, setSubmittingReportApproval] = useState(false);
   const [isPublishingReport, setPublishingReport] = useState(false);
   const [isExportingReport, setExportingReport] = useState(false);
+  const [isSavingManualRevision, setSavingManualRevision] = useState(false);
   const [isSavingMemoryFeedback, setSavingMemoryFeedback] = useState(false);
   const [isSavingManualResearch, setSavingManualResearch] = useState(false);
   const [reviewingMemoryCandidateId, setReviewingMemoryCandidateId] = useState<string | null>(null);
@@ -679,6 +681,39 @@ export function EnterpriseWorkbench({
       setError(err instanceof Error ? err.message : "Unable to export report");
     } finally {
       setExportingReport(false);
+    }
+  }
+
+  async function handleCreateManualRevision(reportMd: string, note: string) {
+    if (!selectedProject || !selectedVersion) return;
+    const trimmedReport = reportMd.trim();
+    if (!trimmedReport) {
+      setError("Manual revision body cannot be empty.");
+      return;
+    }
+    setSavingManualRevision(true);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const updated = await createManualReportRevision(selectedVersion.id, {
+        report_md: trimmedReport,
+        note,
+      });
+      const [versionItems, diffValue, gateValue] = await Promise.all([
+        listProjectReportVersions(selectedProject.id),
+        getReportVersionDiff(updated.id),
+        getReportReleaseGate(updated.id),
+      ]);
+      setVersions(versionItems);
+      setSelectedVersionId(updated.id);
+      setDiff(diffValue);
+      setReleaseGate(gateValue);
+      await refreshWorkspaceGovernance(selectedProject.workspace_id);
+      setScanMessage(`Manual report revision v${updated.version_number} saved as draft.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save manual report revision");
+    } finally {
+      setSavingManualRevision(false);
     }
   }
 
@@ -1230,8 +1265,10 @@ export function EnterpriseWorkbench({
                     isApprovalSubmitting={isSubmittingReportApproval}
                     isExporting={isExportingReport}
                     isPublishing={isPublishingReport}
+                    isSavingManualRevision={isSavingManualRevision}
                     lastExport={lastReportExport}
                     onApproveReport={() => handleSignalReportApproval("approved")}
+                    onCreateManualRevision={handleCreateManualRevision}
                     onExportReport={handleExportReport}
                     onPublishReport={handlePublishReport}
                     onRejectReport={() => handleSignalReportApproval("rejected")}
@@ -3361,8 +3398,10 @@ function ReportHistory({
   isApprovalSubmitting,
   isExporting,
   isPublishing,
+  isSavingManualRevision,
   lastExport,
   onApproveReport,
+  onCreateManualRevision,
   onExportReport,
   onPublishReport,
   onRejectReport,
@@ -3379,8 +3418,10 @@ function ReportHistory({
   isApprovalSubmitting: boolean;
   isExporting: boolean;
   isPublishing: boolean;
+  isSavingManualRevision: boolean;
   lastExport: ArtifactRecord | null;
   onApproveReport: () => void;
+  onCreateManualRevision: (reportMd: string, note: string) => void;
   onExportReport: (format: "markdown" | "html" | "csv") => void;
   onPublishReport: () => void;
   onRejectReport: () => void;
@@ -3393,6 +3434,14 @@ function ReportHistory({
   setSelectedVersionId: (value: string) => void;
   versions: ReportVersionRecord[];
 }) {
+  const [manualReportMd, setManualReportMd] = useState("");
+  const [manualRevisionNote, setManualRevisionNote] = useState("");
+
+  useEffect(() => {
+    setManualReportMd(selectedVersion?.report_md ?? "");
+    setManualRevisionNote("");
+  }, [selectedVersion?.id, selectedVersion?.report_md]);
+
   if (versions.length === 0) {
     return <p className="muted-line">No report versions have been created yet.</p>;
   }
@@ -3438,6 +3487,16 @@ function ReportHistory({
         {releaseGate ? <ReleaseGatePanel gate={releaseGate} /> : null}
         {selectedVersion ? <ReportQualityMetadataPanel version={selectedVersion} /> : null}
         {selectedVersion ? (
+          <ManualReportRevisionPanel
+            isSaving={isSavingManualRevision}
+            note={manualRevisionNote}
+            onNoteChange={setManualRevisionNote}
+            onReportChange={setManualReportMd}
+            onSave={() => onCreateManualRevision(manualReportMd, manualRevisionNote)}
+            reportMd={manualReportMd}
+          />
+        ) : null}
+        {selectedVersion ? (
           <ReportView
             markdown={selectedVersion.report_md || "No report body."}
             sourceAliases={sourceAliases}
@@ -3461,6 +3520,50 @@ function ReportHistory({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function ManualReportRevisionPanel({
+  isSaving,
+  note,
+  onNoteChange,
+  onReportChange,
+  onSave,
+  reportMd,
+}: {
+  isSaving: boolean;
+  note: string;
+  onNoteChange: (value: string) => void;
+  onReportChange: (value: string) => void;
+  onSave: () => void;
+  reportMd: string;
+}) {
+  return (
+    <section className="manual-report-revision-panel">
+      <div className="panel-heading-row">
+        <div>
+          <h3>Manual revision</h3>
+          <span>Create a draft child version without overwriting this report.</span>
+        </div>
+        <FileText size={17} aria-hidden />
+      </div>
+      <textarea
+        aria-label="Manual report revision markdown"
+        value={reportMd}
+        onChange={(event) => onReportChange(event.target.value)}
+      />
+      <div className="manual-revision-actions">
+        <input
+          aria-label="Manual revision note"
+          placeholder="Revision note"
+          value={note}
+          onChange={(event) => onNoteChange(event.target.value)}
+        />
+        <button disabled={isSaving || !reportMd.trim()} type="button" onClick={onSave}>
+          {isSaving ? "Saving" : "Save draft"}
+        </button>
+      </div>
+    </section>
   );
 }
 

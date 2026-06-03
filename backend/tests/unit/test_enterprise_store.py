@@ -1106,6 +1106,13 @@ def test_enterprise_router_exposes_projection() -> None:
         "/api/enterprise/report-versions",
         json=projection.report_version.model_dump(mode="json"),
     )
+    manual_revision = client.post(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/manual-revision",
+        json={
+            "report_md": f"{projection.report_version.report_md}\n\nManual correction.",
+            "note": "Clarified recommendation before approval.",
+        },
+    )
     version = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}")
     diff = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}/diff")
 
@@ -1273,6 +1280,19 @@ def test_enterprise_router_exposes_projection() -> None:
     assert quality.json()["evidence"]["quality_label"] == "stale"
     assert report_upsert.status_code == 200
     assert report_upsert.json()["id"] == projection.report_version.id
+    assert manual_revision.status_code == 200
+    assert manual_revision.json()["parent_version_id"] == projection.report_version.id
+    assert manual_revision.json()["version_number"] == 2
+    assert manual_revision.json()["status"] == "draft"
+    assert "Manual correction." in manual_revision.json()["report_md"]
+    assert (
+        manual_revision.json()["quality_metadata"]["manual_revision"]["edited_by"]
+        == "system-user"
+    )
+    assert (
+        manual_revision.json()["quality_metadata"]["manual_revision"]["source_report_version_id"]
+        == projection.report_version.id
+    )
     assert version.status_code == 200
     assert version.json()["id"] == projection.report_version.id
     assert diff.status_code == 200

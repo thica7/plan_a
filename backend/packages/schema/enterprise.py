@@ -534,6 +534,13 @@ class ReportVersionRecord(BaseModel):
     published_at: datetime | None = None
 
 
+class ManualReportRevisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report_md: str = Field(min_length=1, max_length=100_000)
+    note: str = Field(default="", max_length=1000)
+
+
 class UserFeedbackCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

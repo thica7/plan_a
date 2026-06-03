@@ -3400,6 +3400,41 @@ select {
   font-size: 12px;
 }
 
+.manual-report-revision-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.manual-report-revision-panel h3,
+.manual-report-revision-panel span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.manual-report-revision-panel h3 {
+  margin: 0 0 3px;
+}
+
+.manual-report-revision-panel .panel-heading-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.manual-report-revision-panel textarea {
+  min-height: 180px;
+  resize: vertical;
+}
+
+.manual-revision-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .report-reader h1,
 .report-reader h2,
 .report-reader h3,
@@ -3495,6 +3530,10 @@ select {
   .enterprise-layout,
   .project-summary,
   .report-history-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-revision-actions {
     grid-template-columns: 1fr;
   }
 
