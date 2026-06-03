@@ -1431,6 +1431,15 @@ class RunService(
         message.consumed_by = consumer_agent
         message.consumed_at = datetime.utcnow()
         message.consumer_context_id = context.context_id if context is not None else None
+        if context is not None:
+            context.add_message(
+                "agent_message",
+                json.dumps(
+                    self._agent_message_context_payload(message),
+                    ensure_ascii=False,
+                    default=str,
+                ),
+            )
         input_text = json.dumps(message.model_dump(mode="json"), ensure_ascii=False, default=str)
         output_text = json.dumps(
             {
@@ -1467,6 +1476,31 @@ class RunService(
         record.detail.updated_at = datetime.utcnow()
         self._persist_run(record.detail.id)
         return message
+
+    def _agent_message_context_payload(self, message: AgentMessage) -> dict[str, Any]:
+        payload = message.payload
+        compact_payload: dict[str, Any] = {}
+        for key in (
+            "topic",
+            "competitor",
+            "dimension",
+            "source_ids",
+            "claim_ids",
+            "qa_feedback",
+            "redo_scope",
+            "branch_count",
+            "count",
+        ):
+            if key in payload:
+                compact_payload[key] = payload[key]
+        return {
+            "id": message.id,
+            "from": message.from_agent,
+            "to": message.to_agent,
+            "message_type": message.message_type,
+            "payload_schema": message.payload_schema,
+            "payload": compact_payload,
+        }
 
     def _consume_queued_agent_messages(
         self,
