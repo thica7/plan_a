@@ -258,6 +258,8 @@ def build_enterprise_evalops_report(
         _metric("scenario_checklist_section_score", scenario_checklist_section_rate, 1.0, "ratio"),
         _metric("memory_context_section_score", memory_context_section_rate, 1.0, "ratio"),
         _metric("user_research_section_score", user_research_section_rate, 1.0, "ratio"),
+        _metric("user_research_evidence_rate", user_research_evidence_rate, 1.0, "ratio"),
+        _metric("rag_gap_fill_context_rate", rag_gap_fill_context_rate, 1.0, "ratio"),
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
         _metric("real_quality_chain_rate", real_quality_chain_rate, 0.5, "ratio"),
@@ -1074,6 +1076,16 @@ def _recommendations(
         recommendations.append(
             "Add User Research Evidence to reports that rely on survey, interview, or "
             "manual-note signals."
+        )
+    if metric_names["user_research_evidence_rate"].status != "pass":
+        recommendations.append(
+            "Attach survey, interview, or manual-note evidence when persona, buyer, "
+            "review, or adoption dimensions are requested."
+        )
+    if metric_names["rag_gap_fill_context_rate"].status != "pass":
+        recommendations.append(
+            "Close collector evidence gaps with RAG gap-fill retrieval context before "
+            "reviewing the report."
         )
     if metric_names["real_collection_rate"].status != "pass":
         recommendations.append(
