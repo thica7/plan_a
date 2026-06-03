@@ -2688,6 +2688,24 @@ select {
   overflow-wrap: anywhere;
 }
 
+.gap-retrieval-list a {
+  color: var(--accent);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.gap-grounded-context {
+  background: #f8fafc;
+  border-left: 3px solid rgba(15, 139, 141, 0.35);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+}
+
 .red-team-panel {
   display: grid;
   gap: 12px;

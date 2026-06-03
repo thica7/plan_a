@@ -2272,13 +2272,23 @@ function EvidenceGapCard({ gap }: { gap: EvidenceGapItem }) {
             <div key={`${record.evidence_id}-${record.chunk_id}`}>
               <strong>{record.title}</strong>
               <span>
-                hybrid {record.score.toFixed(2)} / bm25 {record.bm25_score.toFixed(2)} / vector{" "}
-                {record.vector_score.toFixed(2)}
+                {record.retrieval_stage} / chunk {record.chunk_id || record.chunk_index} / hybrid{" "}
+                {record.score.toFixed(2)} / bm25 {record.bm25_score.toFixed(2)} / vector {record.vector_score.toFixed(2)}
               </span>
               <p>{record.snippet}</p>
+              {record.source_url ? (
+                <a href={record.source_url} rel="noreferrer" target="_blank">
+                  {record.source_url}
+                </a>
+              ) : null}
             </div>
           ))}
         </div>
+      ) : null}
+      {gap.retrieval_grounded_context ? (
+        <blockquote className="gap-grounded-context">
+          {gap.retrieval_grounded_context.slice(0, 520)}
+        </blockquote>
       ) : null}
     </article>
   );
