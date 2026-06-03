@@ -734,6 +734,10 @@ function EvalOpsPanel({ report }: { report: EvalOpsReport }) {
         <span>Demo {report.demo_run_count}</span>
         <span>Delta {formatScoreDelta(report.average_delta_score)}</span>
         <span>Regressed {report.regressed_run_count}</span>
+        <span>HITL {formatPercent(report.hitl_enabled_run_rate)}</span>
+        <span>Human fix {formatPercent(report.human_correction_rate)}</span>
+        <span>Redo {report.redo_iteration_count}</span>
+        <span>Convergence {formatPercent(report.redo_convergence_ratio)}</span>
         <span>${report.cost_per_report_usd.toFixed(4)} / report</span>
         <span>{report.golden_set_size} golden cases</span>
       </div>

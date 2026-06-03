@@ -44,6 +44,10 @@ class EvalOpsReport(BaseModel):
     real_quality_chain_rate: float = Field(ge=0.0, le=1.0)
     average_delta_score: float | None = None
     regressed_run_count: int = Field(ge=0)
+    hitl_enabled_run_rate: float = Field(ge=0.0, le=1.0)
+    human_correction_rate: float = Field(ge=0.0, le=1.0)
+    redo_iteration_count: int = Field(ge=0)
+    redo_convergence_ratio: float = Field(ge=0.0)
     golden_set_size: int = Field(ge=0)
     golden_set_pass_rate: float = Field(ge=0.0, le=1.0)
     report_quality_score: int = Field(ge=0, le=100)

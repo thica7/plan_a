@@ -12,6 +12,8 @@ from packages.schema.models import (
     KnowledgeClaim,
     PricingModel,
     RawSource,
+    RedoScope,
+    RevisionRecord,
     RunMetrics,
     TraceSpan,
 )
@@ -32,6 +34,24 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         quality_score=1.0,
         report_md="Decision-grade report with citations. " * 90,
         project_id="project-a",
+        human_override_rate=0.25,
+        revisions=[
+            RevisionRecord(
+                id="rev-1",
+                iteration=1,
+                stage="collector",
+                redo_scopes=[
+                    RedoScope(
+                        kind="collector",
+                        target_subagent="security",
+                        rationale="Security evidence gap needs refreshed collection.",
+                    )
+                ],
+                issue_count_before=4,
+                issue_count_after=1,
+                convergence_ratio=0.25,
+            )
+        ],
     )
 
     report = build_enterprise_evalops_report([target], baseline=baseline)
@@ -44,6 +64,9 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.real_quality_chain_rate == 1.0
     assert report.average_delta_score is not None and report.average_delta_score > 0
     assert report.regressed_run_count == 0
+    assert report.human_correction_rate == 0.25
+    assert report.redo_iteration_count == 1
+    assert report.redo_convergence_ratio == 0.25
     assert report.golden_set_size == 6
     assert report.golden_set_pass_rate >= 0.8
     assert report.report_quality_score >= 72
@@ -107,6 +130,8 @@ def _run_detail(
     quality_score: float,
     report_md: str,
     project_id: str = "project-a",
+    human_override_rate: float = 0.0,
+    revisions: list[RevisionRecord] | None = None,
 ) -> RunDetail:
     sources = [
         RawSource(
@@ -165,6 +190,7 @@ def _run_detail(
         ]
         if execution_mode == "real"
         else [],
+        revisions=revisions or [],
         metrics=RunMetrics(
             total_duration_ms=90_000,
             cost_estimate_usd=0.42,
@@ -172,5 +198,7 @@ def _run_detail(
             source_coverage_rate=quality_score,
             verified_source_rate=quality_score,
             claim_citation_rate=quality_score,
+            human_override_rate=human_override_rate,
+            revision_count=len(revisions or []),
         ),
     )

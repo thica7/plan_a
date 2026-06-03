@@ -2283,6 +2283,14 @@ export interface components {
             average_delta_score?: number | null;
             /** Regressed Run Count */
             regressed_run_count: number;
+            /** Hitl Enabled Run Rate */
+            hitl_enabled_run_rate: number;
+            /** Human Correction Rate */
+            human_correction_rate: number;
+            /** Redo Iteration Count */
+            redo_iteration_count: number;
+            /** Redo Convergence Ratio */
+            redo_convergence_ratio: number;
             /** Golden Set Size */
             golden_set_size: number;
             /** Golden Set Pass Rate */

@@ -47,6 +47,17 @@ def build_enterprise_evalops_report(
         for comparison in comparisons
         if comparison.delta_score is not None and comparison.delta_score < 0
     )
+    revisions = [revision for run in recent_runs for revision in run.revisions]
+    hitl_enabled_run_rate = _ratio([run.hitl_enabled for run in recent_runs])
+    human_correction_rate = _average_float(
+        [run.metrics.human_override_rate for run in recent_runs]
+    )
+    redo_iteration_count = len(revisions)
+    redo_convergence_ratio = (
+        _average_float([revision.convergence_ratio for revision in revisions])
+        if revisions
+        else 0.0
+    )
     report_quality_score = _average_int([comparison.target_score for comparison in comparisons])
     source_recall = _average_float(
         [_metric_value(comparison, "source_coverage_rate") for comparison in comparisons]
@@ -91,11 +102,28 @@ def build_enterprise_evalops_report(
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
         _metric("real_quality_chain_rate", real_quality_chain_rate, 0.5, "ratio"),
+        _metric(
+            "human_correction_rate",
+            human_correction_rate,
+            0.35,
+            "ratio",
+            lower_is_better=True,
+        ),
         _metric("task_time_saved_hours", task_time_saved_hours, len(recent_runs) * 3.0, "hours"),
         _metric("cost_per_report_usd", cost_per_report_usd, 5.0, "usd", lower_is_better=True),
     ]
     if average_delta_score is not None:
         metrics.append(_metric("average_delta_score", average_delta_score, 0.0, "score"))
+    if redo_iteration_count > 0:
+        metrics.append(
+            _metric(
+                "redo_convergence_ratio",
+                redo_convergence_ratio,
+                0.35,
+                "ratio",
+                lower_is_better=True,
+            )
+        )
     gate_status, gate_reason = _regression_gate(comparisons, metrics)
     return EvalOpsReport(
         run_count=len(recent_runs),
@@ -107,6 +135,10 @@ def build_enterprise_evalops_report(
         real_quality_chain_rate=round(real_quality_chain_rate, 3),
         average_delta_score=average_delta_score,
         regressed_run_count=regressed_run_count,
+        hitl_enabled_run_rate=round(hitl_enabled_run_rate, 3),
+        human_correction_rate=round(human_correction_rate, 3),
+        redo_iteration_count=redo_iteration_count,
+        redo_convergence_ratio=round(redo_convergence_ratio, 3),
         golden_set_size=len(cases),
         golden_set_pass_rate=round(golden_set_pass_rate, 3),
         report_quality_score=report_quality_score,
@@ -280,6 +312,13 @@ def _recommendations(
         and metric_names["average_delta_score"].status != "pass"
     ):
         recommendations.append("Compare regressed runs against the baseline and fix the weakest quality metric.")
+    if metric_names["human_correction_rate"].status != "pass":
+        recommendations.append("Review recurring human corrections and convert them into rules or memory.")
+    if (
+        "redo_convergence_ratio" in metric_names
+        and metric_names["redo_convergence_ratio"].status != "pass"
+    ):
+        recommendations.append("Tighten scoped redo routing so repeated revisions reduce QA issues faster.")
     if any(comparison.delta_score is not None and comparison.delta_score < 0 for comparison in comparisons):
         recommendations.append("Inspect regressions against the selected baseline before publishing.")
     return recommendations[:5]

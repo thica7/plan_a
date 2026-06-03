@@ -341,6 +341,10 @@ export interface EvalOpsReport {
   real_quality_chain_rate: number;
   average_delta_score?: number | null;
   regressed_run_count: number;
+  hitl_enabled_run_rate: number;
+  human_correction_rate: number;
+  redo_iteration_count: number;
+  redo_convergence_ratio: number;
   golden_set_size: number;
   golden_set_pass_rate: number;
   report_quality_score: number;

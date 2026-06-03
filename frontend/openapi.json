@@ -8483,6 +8483,28 @@
             "minimum": 0.0,
             "title": "Regressed Run Count"
           },
+          "hitl_enabled_run_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Hitl Enabled Run Rate"
+          },
+          "human_correction_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Human Correction Rate"
+          },
+          "redo_iteration_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Redo Iteration Count"
+          },
+          "redo_convergence_ratio": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Redo Convergence Ratio"
+          },
           "golden_set_size": {
             "type": "integer",
             "minimum": 0.0,
@@ -8565,6 +8587,10 @@
           "real_run_ratio",
           "real_quality_chain_rate",
           "regressed_run_count",
+          "hitl_enabled_run_rate",
+          "human_correction_rate",
+          "redo_iteration_count",
+          "redo_convergence_ratio",
           "golden_set_size",
           "golden_set_pass_rate",
           "report_quality_score",
