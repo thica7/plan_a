@@ -7,15 +7,20 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse
 
-from app.deps import get_app_settings, get_enterprise_store, get_run_journal
+from app.deps import (
+    get_app_settings,
+    get_enterprise_store,
+    get_preference_memory,
+    get_run_journal,
+)
 from packages.agents.pydantic_ai_adapter import pydantic_ai_available
 from packages.compliance import build_data_retention_report
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore
 from packages.governance import build_model_route_decision
-from packages.memory import RunJournal
+from packages.memory import PreferenceMemoryStore, RunJournal
 from packages.observability import LangfuseAdapter, LangfuseConfig
-from packages.schema.enterprise import NotificationRecord
+from packages.schema.enterprise import MemoryStats, NotificationRecord
 from packages.workflows.service import temporal_cutover_status
 
 router = APIRouter()
@@ -42,15 +47,35 @@ def get_metrics_enterprise_store(settings: SettingsDep) -> EnterpriseStore | Non
 EnterpriseStoreDep = Annotated[EnterpriseStore | None, Depends(get_metrics_enterprise_store)]
 
 
+def get_metrics_preference_memory() -> PreferenceMemoryStore | None:
+    try:
+        return get_preference_memory()
+    except RuntimeError:
+        return None
+
+
+PreferenceMemoryDep = Annotated[
+    PreferenceMemoryStore | None,
+    Depends(get_metrics_preference_memory),
+]
+
+
 @router.get("/metrics", response_class=PlainTextResponse)
 def metrics(
     settings: SettingsDep,
     journal: RunJournalDep,
     enterprise_store: EnterpriseStoreDep,
+    preference_memory: PreferenceMemoryDep,
 ) -> PlainTextResponse:
     runs = journal.load_runs()
     counts = Counter(run.status for run in runs)
     notifications = _load_notifications(enterprise_store)
+    memory_stats = _load_memory_stats(preference_memory)
+    memory_confirmed_ratio = (
+        memory_stats.confirmed_candidate_count / memory_stats.candidate_count
+        if memory_stats and memory_stats.candidate_count
+        else 0.0
+    )
     retention_reports = _load_retention_reports(enterprise_store, settings)
     retention_expired_count = sum(report.expired_count for report in retention_reports)
     retention_expiring_soon_count = sum(report.expiring_soon_count for report in retention_reports)
@@ -274,6 +299,25 @@ def metrics(
                 "competiscope_compliance_require_source_urls "
                 f"{1 if settings.compliance_require_source_urls else 0}"
             ),
+            "# HELP competiscope_memory_feedback_total MemoryAgent feedback records.",
+            "# TYPE competiscope_memory_feedback_total gauge",
+            f"competiscope_memory_feedback_total {_memory_metric(memory_stats, 'feedback_count')}",
+            "# HELP competiscope_memory_candidates_total MemoryAgent candidates by status.",
+            "# TYPE competiscope_memory_candidates_total gauge",
+            (
+                'competiscope_memory_candidates_total{status="all"} '
+                f"{_memory_metric(memory_stats, 'candidate_count')}"
+            ),
+            (
+                'competiscope_memory_candidates_total{status="confirmed"} '
+                f"{_memory_metric(memory_stats, 'confirmed_candidate_count')}"
+            ),
+            (
+                "# HELP competiscope_memory_candidate_confirmed_ratio Share of "
+                "MemoryAgent candidates approved for future run recall."
+            ),
+            "# TYPE competiscope_memory_candidate_confirmed_ratio gauge",
+            f"competiscope_memory_candidate_confirmed_ratio {memory_confirmed_ratio:.6f}",
             "# HELP competiscope_retention_status Current aggregate retention status.",
             "# TYPE competiscope_retention_status gauge",
             (
@@ -347,6 +391,20 @@ def _load_notifications(enterprise_store: EnterpriseStore | None) -> list[Notifi
         return enterprise_store.list_notifications(limit=10_000)
     except Exception:  # noqa: BLE001 - metrics should degrade instead of failing health scrape.
         return []
+
+
+def _load_memory_stats(preference_memory: PreferenceMemoryStore | None) -> MemoryStats | None:
+    if preference_memory is None:
+        return None
+    try:
+        return preference_memory.stats()
+    except Exception:  # noqa: BLE001 - metrics should degrade instead of failing health scrape.
+        return None
+
+
+def _memory_metric(stats: MemoryStats | None, field_name: str) -> int:
+    value = getattr(stats, field_name, 0) if stats is not None else 0
+    return int(value) if isinstance(value, int) else 0
 
 
 def _load_retention_reports(

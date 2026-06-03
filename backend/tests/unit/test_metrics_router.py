@@ -2,12 +2,12 @@ from fastapi.testclient import TestClient
 
 from app.deps import get_app_settings, get_run_journal
 from app.main import create_app
-from app.routers.metrics import get_metrics_enterprise_store
+from app.routers.metrics import get_metrics_enterprise_store, get_metrics_preference_memory
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
-from packages.memory import RunJournal
+from packages.memory import PreferenceMemoryStore, RunJournal
 from packages.schema.api_dto import RunDetail
-from packages.schema.enterprise import NotificationRecord
+from packages.schema.enterprise import NotificationRecord, UserFeedbackRecord
 from packages.schema.models import AnalysisPlan, RunMetrics, TraceSpan
 
 
@@ -46,6 +46,7 @@ def test_metrics_exposes_run_and_temporal_operational_gauges() -> None:
     app.dependency_overrides[get_app_settings] = lambda: _settings()
     app.dependency_overrides[get_run_journal] = RunJournal.in_memory
     app.dependency_overrides[get_metrics_enterprise_store] = lambda: enterprise_store
+    app.dependency_overrides[get_metrics_preference_memory] = PreferenceMemoryStore.in_memory
     client = TestClient(app)
 
     response = client.get("/api/metrics")
@@ -84,6 +85,10 @@ def test_metrics_exposes_run_and_temporal_operational_gauges() -> None:
     assert "competiscope_compliance_redactions_total 0" in body
     assert "competiscope_compliance_require_trace_context 1" in body
     assert "competiscope_compliance_require_source_urls 0" in body
+    assert "competiscope_memory_feedback_total 0" in body
+    assert 'competiscope_memory_candidates_total{status="all"} 0' in body
+    assert 'competiscope_memory_candidates_total{status="confirmed"} 0' in body
+    assert "competiscope_memory_candidate_confirmed_ratio 0.000000" in body
     assert (
         'competiscope_notifications_total{type="release_gate_blocked",status="queued"} 1'
         in body
@@ -128,6 +133,7 @@ def test_metrics_counts_persisted_langfuse_mirror_errors() -> None:
     app.dependency_overrides[get_app_settings] = lambda: _settings()
     app.dependency_overrides[get_run_journal] = lambda: journal
     app.dependency_overrides[get_metrics_enterprise_store] = lambda: None
+    app.dependency_overrides[get_metrics_preference_memory] = lambda: None
     client = TestClient(app)
 
     response = client.get("/api/metrics")
@@ -145,6 +151,7 @@ def test_metrics_exposes_blocked_model_route_status() -> None:
     )
     app.dependency_overrides[get_run_journal] = RunJournal.in_memory
     app.dependency_overrides[get_metrics_enterprise_store] = lambda: None
+    app.dependency_overrides[get_metrics_preference_memory] = lambda: None
     client = TestClient(app)
 
     response = client.get("/api/metrics")
@@ -153,3 +160,35 @@ def test_metrics_exposes_blocked_model_route_status() -> None:
     assert 'competiscope_model_route_status{status="blocked"} 1' in response.text
     assert 'competiscope_model_route_selected{provider_kind="none"} 1' in response.text
     assert "competiscope_model_route_blocked_reasons_total 1" in response.text
+
+
+def test_metrics_exposes_memory_agent_feedback_and_candidate_metrics() -> None:
+    memory = PreferenceMemoryStore.in_memory()
+    feedback = memory.add_feedback(
+        UserFeedbackRecord(
+            id="",
+            workspace_id="workspace-memory",
+            project_id="project-memory",
+            user_id="user-memory",
+            feedback_type="preference",
+            target_type="project",
+            target_id="project-memory",
+            message="Prefer official source evidence and battlecard table summaries.",
+        )
+    )
+    for candidate in memory.extract_candidates(feedback, auto_confirm=True):
+        memory.upsert_candidate(candidate)
+    app = create_app()
+    app.dependency_overrides[get_app_settings] = lambda: _settings()
+    app.dependency_overrides[get_run_journal] = RunJournal.in_memory
+    app.dependency_overrides[get_metrics_enterprise_store] = lambda: None
+    app.dependency_overrides[get_metrics_preference_memory] = lambda: memory
+    client = TestClient(app)
+
+    response = client.get("/api/metrics")
+
+    assert response.status_code == 200
+    assert "competiscope_memory_feedback_total 1" in response.text
+    assert 'competiscope_memory_candidates_total{status="all"} 2' in response.text
+    assert 'competiscope_memory_candidates_total{status="confirmed"} 2' in response.text
+    assert "competiscope_memory_candidate_confirmed_ratio 1.000000" in response.text
