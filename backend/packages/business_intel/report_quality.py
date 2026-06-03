@@ -8,9 +8,14 @@ from packages.schema.api_dto import RunDetail, RunQualityComparison, RunQualityM
 from packages.schema.models import RawSource
 
 REAL_SOURCE_TYPES = {
+    "official",
     "official_docs",
+    "official_pricing",
+    "official_site",
+    "official_api",
     "pricing_page",
     "review_site",
+    "trust_center",
     "news",
     "web_search_result",
     "webpage_verified",
@@ -208,7 +213,18 @@ def _verified_source_rate(sources: list[RawSource]) -> float:
     verified = [
         source
         for source in sources
-        if source.source_type in {"webpage_verified", "official_docs", "pricing_page", "review_site"}
+        if source.source_type
+        in {
+            "webpage_verified",
+            "official",
+            "official_docs",
+            "official_pricing",
+            "official_site",
+            "official_api",
+            "pricing_page",
+            "review_site",
+            "trust_center",
+        }
     ]
     return len(verified) / len(sources)
 

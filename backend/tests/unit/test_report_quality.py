@@ -178,6 +178,38 @@ def test_compare_run_quality_flags_missing_real_chain_signals() -> None:
     assert "real webpage" in comparison.recommendations[0]
 
 
+def test_compare_run_quality_counts_official_business_sources_as_real_verified() -> None:
+    detail = _run_detail(
+        run_id="official-sources",
+        execution_mode="real",
+        source_count=2,
+        report_md=_structured_report_md()
+        .replace("source-2", "source-0")
+        .replace("source-3", "source-1"),
+        metrics=RunMetrics(llm_calls=3, claim_citation_rate=1.0),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+        source_types=["official_pricing", "trust_center"],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["verified_source_rate"].target_value == 1.0
+    assert metrics["real_source_rate"].target_value == 1.0
+    assert comparison.real_collection_signal is True
+
+
 def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
     writer = _WriterHarness()
     expected_sections = {
@@ -303,13 +335,16 @@ def _run_detail(
     report_md: str,
     metrics: RunMetrics,
     trace_spans: list[TraceSpan] | None = None,
+    source_types: list[str] | None = None,
 ) -> RunDetail:
     sources = [
         RawSource(
             id=f"source-{index}",
             competitor="Cursor" if index % 2 == 0 else "Copilot",
             dimension="pricing",
-            source_type="webpage_verified",
+            source_type=(source_types or ["webpage_verified"])[
+                index % len(source_types or ["webpage_verified"])
+            ],
             title=f"Source {index}",
             url=f"https://example.com/source-{index}",
             snippet="Verified pricing evidence.",
