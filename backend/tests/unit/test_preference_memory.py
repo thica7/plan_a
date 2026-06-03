@@ -16,7 +16,8 @@ def test_preference_memory_redacts_feedback_and_recalls_confirmed_candidates() -
             message=(
                 "Email user@example.com. Prefer official pricing docs, concise battlecard "
                 "tables, explicit evidence gap risks, and QA release gate rules that must "
-                "block redo regressions."
+                "block redo regressions. Market fact: enterprise buyers compare category "
+                "benchmarks before adoption."
             ),
             tags=[],
         )
@@ -39,12 +40,17 @@ def test_preference_memory_redacts_feedback_and_recalls_confirmed_candidates() -
     assert feedback.redaction_counts["email"] == 1
     assert {candidate.kind for candidate in candidates} >= {
         "preferred_dimension",
+        "domain_fact",
         "source_preference",
         "writing_preference",
         "risk_preference",
         "failure_pattern",
         "qa_policy",
     }
+    assert any(
+        candidate.kind == "domain_fact" and "enterprise buyers" in candidate.statement
+        for candidate in candidates
+    )
     assert any(candidate.kind == "qa_policy" for candidate in recall.candidates)
     assert recall.candidates
     assert recall.candidates[0].status == "confirmed"

@@ -37,6 +37,7 @@ MemoryFeedbackType = Literal["correction", "preference", "approval", "rejection"
 MemoryTargetType = Literal["report", "claim", "evidence", "dimension", "competitor", "project"]
 MemoryCandidateKind = Literal[
     "preferred_dimension",
+    "domain_fact",
     "source_preference",
     "writing_preference",
     "risk_preference",

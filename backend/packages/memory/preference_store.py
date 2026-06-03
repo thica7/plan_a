@@ -33,6 +33,19 @@ _SOURCE_KEYWORDS = (
     "官方",
     "证据",
 )
+_DOMAIN_FACT_KEYWORDS = (
+    "fact",
+    "domain",
+    "market",
+    "category",
+    "segment",
+    "trend",
+    "competitor",
+    "customer",
+    "buyer",
+    "adoption",
+    "benchmark",
+)
 _WRITING_KEYWORDS = (
     "concise",
     "table",
@@ -179,6 +192,21 @@ class PreferenceMemoryStore:
                     tags=[dimension],
                     weight=0.72,
                     confidence=0.78,
+                    auto_confirm=auto_confirm,
+                )
+            )
+        if _has_any(feedback.message, _DOMAIN_FACT_KEYWORDS) or "domain_fact" in tags:
+            candidates.append(
+                self._candidate(
+                    feedback,
+                    kind="domain_fact",
+                    statement=(
+                        "Remember this domain fact for similar analysis: "
+                        f"{_memory_excerpt(feedback.message)}"
+                    ),
+                    tags=["domain_fact", *tags[:4]],
+                    weight=0.76,
+                    confidence=0.76,
                     auto_confirm=auto_confirm,
                 )
             )
@@ -563,6 +591,8 @@ def _infer_tags(text: str) -> list[str]:
             tags.append(tag)
     if _has_any(normalized, _SOURCE_KEYWORDS):
         tags.append("source")
+    if _has_any(normalized, _DOMAIN_FACT_KEYWORDS):
+        tags.append("domain_fact")
     if _has_any(normalized, _WRITING_KEYWORDS):
         tags.append("writing")
     if _has_any(normalized, _RISK_KEYWORDS):
@@ -573,6 +603,13 @@ def _infer_tags(text: str) -> list[str]:
 def _has_any(text: str, keywords: Iterable[str]) -> bool:
     normalized = text.casefold()
     return any(keyword.casefold() in normalized for keyword in keywords)
+
+
+def _memory_excerpt(text: str, limit: int = 220) -> str:
+    cleaned = " ".join(text.split())
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1].rstrip() + "..."
 
 
 def _unique_tokens(values: Iterable[str]) -> list[str]:
