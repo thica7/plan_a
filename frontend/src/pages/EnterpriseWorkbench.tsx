@@ -1326,6 +1326,14 @@ function GovernanceRuntimePanel({
     toolRegistry?.entries
       .filter((entry) => entry.status !== "enabled" || !entry.allowed_in_real_mode)
       .slice(0, 4) ?? [];
+  const sideEffectTools =
+    toolRegistry?.entries
+      .filter((entry) => entry.side_effects.some((effect) => effect !== "none"))
+      .slice(0, 4) ?? [];
+  const modelCandidates = modelRoute?.candidates ?? [];
+  const selectedProviderKind =
+    modelRoute?.selected?.provider_kind ?? modelRoute?.fallback?.provider_kind ?? null;
+  const kgRelations = summarizeKnowledgeGraphRelations(knowledgeGraph).slice(0, 5);
 
   return (
     <section className={`panel readiness-panel ${panelStatus}`}>
@@ -1377,6 +1385,28 @@ function GovernanceRuntimePanel({
           ))}
         </div>
       ) : null}
+      {modelCandidates.length > 0 ? (
+        <div className="recommendation-list">
+          {modelCandidates.map((candidate) => {
+            const isActive = candidate.provider_kind === selectedProviderKind;
+            return (
+              <article
+                className={`recommendation-card ${candidate.configured ? "medium" : "high"}`}
+                key={`${candidate.provider_kind}-${candidate.provider_name}-${candidate.model_name}`}
+              >
+                <strong>{candidate.provider_name}</strong>
+                <span>
+                  {isActive ? "active" : candidate.configured ? "ready" : "missing"} / {candidate.provider_kind}
+                </span>
+                <p>
+                  Q {candidate.quality_score} / Cost {candidate.cost_score} / Compliance{" "}
+                  {candidate.compliance_score}
+                </p>
+              </article>
+            );
+          })}
+        </div>
+      ) : null}
       {governedTools.length > 0 ? (
         <div className="competitor-strip">
           {governedTools.map((entry) => (
@@ -1389,6 +1419,32 @@ function GovernanceRuntimePanel({
       ) : (
         <p className="muted-line">Tool registry has no guarded or disabled tools.</p>
       )}
+      {sideEffectTools.length > 0 ? (
+        <div className="recommendation-list">
+          {sideEffectTools.map((entry) => (
+            <article className="recommendation-card medium" key={entry.name}>
+              <strong>{entry.name}</strong>
+              <span>
+                {entry.side_effects.filter((effect) => effect !== "none").join(", ")} / $
+                {entry.estimated_cost_usd.toFixed(2)}
+              </span>
+              <p>{entry.policy_tags.join(", ") || "no policy tags"}</p>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {kgRelations.length > 0 ? (
+        <div className="competitor-strip">
+          {kgRelations.map((relation) => (
+            <span key={relation.relation}>
+              {relation.relation}
+              <em>
+                {relation.count} edge(s) / {relation.evidenceLinkCount} evidence link(s)
+              </em>
+            </span>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -2411,6 +2467,29 @@ function formatRouteCandidate(candidate?: ModelRouteDecision["selected"]) {
     return "none";
   }
   return candidate.model_name ? `${candidate.provider_name} / ${candidate.model_name}` : candidate.provider_name;
+}
+
+function summarizeKnowledgeGraphRelations(knowledgeGraph: KnowledgeGraphReadModel | null) {
+  if (!knowledgeGraph) {
+    return [];
+  }
+  const relations = new Map<string, { relation: string; count: number; evidenceLinkCount: number }>();
+  for (const edge of knowledgeGraph.edges) {
+    const current = relations.get(edge.relation) ?? {
+      relation: edge.relation,
+      count: 0,
+      evidenceLinkCount: 0,
+    };
+    current.count += 1;
+    current.evidenceLinkCount += edge.evidence_ids.length;
+    relations.set(edge.relation, current);
+  }
+  return [...relations.values()].sort((left, right) => {
+    if (right.count !== left.count) {
+      return right.count - left.count;
+    }
+    return left.relation.localeCompare(right.relation);
+  });
 }
 
 function formatBytes(value: number) {
