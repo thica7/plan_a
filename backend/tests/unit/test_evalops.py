@@ -81,7 +81,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.human_correction_rate == 0.25
     assert report.redo_iteration_count == 1
     assert report.redo_convergence_ratio == 0.25
-    assert report.golden_set_size == 10
+    assert report.golden_set_size == 11
     assert report.golden_set_pass_rate >= 0.8
     assert report.report_quality_score >= 72
     assert report.source_recall >= 0.6
@@ -108,6 +108,11 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         for metric in report.metrics
     )
     assert any(case.case_id == "golden.claim_risk_section" for case in report.cases)
+    assert any(
+        metric.name == "scenario_checklist_section_score" and metric.status == "pass"
+        for metric in report.metrics
+    )
+    assert any(case.case_id == "golden.scenario_checklist" for case in report.cases)
     assert any(
         metric.name == "judge_avg_score" and metric.status == "pass"
         for metric in report.metrics
@@ -147,7 +152,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["judge_avg_score"] >= 72
     assert response.json()["llm_judge_avg_score"] is None
     assert "deterministic rubric" in response.json()["judge_fallback_reason"]
-    assert response.json()["golden_set_size"] == 10
+    assert response.json()["golden_set_size"] == 11
     assert any(
         metric["name"] == "schema_pass_rate" and metric["status"] == "pass"
         for metric in response.json()["metrics"]
@@ -162,6 +167,10 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     )
     assert any(
         metric["name"] == "claim_risk_section_score" and metric["status"] == "pass"
+        for metric in response.json()["metrics"]
+    )
+    assert any(
+        metric["name"] == "scenario_checklist_section_score" and metric["status"] == "pass"
         for metric in response.json()["metrics"]
     )
     assert response.json()["manual_baseline_hours_per_report"] == 6.0
@@ -238,6 +247,12 @@ sources, and the confidence profile is strong enough for a draft release gate re
 | --- | --- | --- |
 | Pricing | clear price [source:source-0] | bundled path [source:source-1] |
 | Feature | focused AI workflow [source:source-2] | broad IDE ecosystem [source:source-3] |
+
+## Scenario QA Checklist
+- Scenario: l1_pricing_pack; layer: L1; recommended dimensions: pricing, feature, persona.
+- Analyst question: Which plan gates drive perceived value?
+- Evidence requirement: Pricing rows require official pricing-page evidence.
+- QA rules: claim_has_evidence, source_reliability_min
 
 ## Battlecard
 Sales should lead with pricing clarity, workflow focus, and switching objections. The battlecard

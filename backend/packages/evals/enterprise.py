@@ -101,6 +101,12 @@ def build_enterprise_evalops_report(
     claim_risk_section_rate = _average_float(
         [_metric_value(comparison, "claim_risk_section_score") for comparison in comparisons]
     )
+    scenario_checklist_section_rate = _average_float(
+        [
+            _metric_value(comparison, "scenario_checklist_section_score")
+            for comparison in comparisons
+        ]
+    )
     real_collection_rate = _ratio(
         [comparison.real_collection_signal for comparison in comparisons],
     )
@@ -138,6 +144,7 @@ def build_enterprise_evalops_report(
         schema_pass_rate=schema_pass_rate,
         report_structure_rate=report_structure_rate,
         claim_risk_section_rate=claim_risk_section_rate,
+        scenario_checklist_section_rate=scenario_checklist_section_rate,
         real_collection_rate=real_collection_rate,
         real_llm_rate=real_llm_rate,
     )
@@ -152,6 +159,7 @@ def build_enterprise_evalops_report(
         _metric("schema_pass_rate", schema_pass_rate, 1.0, "ratio"),
         _metric("report_structure_score", report_structure_rate, 0.7, "ratio"),
         _metric("claim_risk_section_score", claim_risk_section_rate, 1.0, "ratio"),
+        _metric("scenario_checklist_section_score", scenario_checklist_section_rate, 1.0, "ratio"),
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
         _metric("real_quality_chain_rate", real_quality_chain_rate, 0.5, "ratio"),
@@ -229,6 +237,7 @@ def _golden_cases(
     schema_pass_rate: float,
     report_structure_rate: float,
     claim_risk_section_rate: float,
+    scenario_checklist_section_rate: float,
     real_collection_rate: float,
     real_llm_rate: float,
 ) -> list[EvalOpsCaseResult]:
@@ -295,6 +304,14 @@ def _golden_cases(
             "golden.claim_risk_section",
             "Claim validation risk section",
             round(claim_risk_section_rate * 100),
+            100,
+            target_run_id,
+            baseline_run_id,
+        ),
+        _case(
+            "golden.scenario_checklist",
+            "Scenario QA checklist section",
+            round(scenario_checklist_section_rate * 100),
             100,
             target_run_id,
             baseline_run_id,
@@ -435,6 +452,11 @@ def _recommendations(
     if metric_names["claim_risk_section_score"].status != "pass":
         recommendations.append(
             "Add Claim Validation & Evidence Risk to every report before review."
+        )
+    if metric_names["scenario_checklist_section_score"].status != "pass":
+        recommendations.append(
+            "Add Scenario QA Checklist to every report so layer, ScenarioPack, QA rules, "
+            "and evidence requirements are reviewable."
         )
     if metric_names["real_collection_rate"].status != "pass":
         recommendations.append(

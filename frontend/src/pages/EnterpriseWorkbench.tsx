@@ -1360,6 +1360,7 @@ function EvalOpsPanel({
   const coverageLiftRate = evalOpsMetricValue(report, "coverage_lift_rate");
   const citationValidityRate = evalOpsMetricValue(report, "citation_validity_rate");
   const claimRiskSectionRate = evalOpsMetricValue(report, "claim_risk_section_score");
+  const scenarioChecklistRate = evalOpsMetricValue(report, "scenario_checklist_section_score");
   const judgeScore = report.llm_judge_avg_score ?? report.judge_avg_score;
   const watchCases = [...report.cases]
     .sort((left, right) => {
@@ -1433,6 +1434,11 @@ function EvalOpsPanel({
           value={claimRiskSectionRate === null ? "n/a" : formatPercent(claimRiskSectionRate)}
         />
         <Metric
+          icon={<ListChecks size={17} aria-hidden />}
+          label="Scenario QA"
+          value={scenarioChecklistRate === null ? "n/a" : formatPercent(scenarioChecklistRate)}
+        />
+        <Metric
           icon={<CheckCircle2 size={17} aria-hidden />}
           label="Real chain"
           value={formatPercent(report.real_quality_chain_rate)}
@@ -1468,6 +1474,7 @@ function EvalOpsPanel({
         <span>Delta {formatScoreDelta(report.average_delta_score)}</span>
         <span>Citation validity {citationValidityRate === null ? "n/a" : formatPercent(citationValidityRate)}</span>
         <span>Claim risk {claimRiskSectionRate === null ? "n/a" : formatPercent(claimRiskSectionRate)}</span>
+        <span>Scenario QA {scenarioChecklistRate === null ? "n/a" : formatPercent(scenarioChecklistRate)}</span>
         <span>Coverage lift {coverageLiftRate === null ? "n/a" : formatSignedPercent(coverageLiftRate)}</span>
         <span>Regressed {report.regressed_run_count}</span>
         <span>HITL {formatPercent(report.hitl_enabled_run_rate)}</span>
