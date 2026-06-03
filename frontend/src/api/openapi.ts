@@ -2299,8 +2299,16 @@ export interface components {
             report_quality_score: number;
             /** Source Recall */
             source_recall: number;
+            /** Manual Baseline Hours Per Report */
+            manual_baseline_hours_per_report: number;
+            /** Manual Baseline Hours */
+            manual_baseline_hours: number;
+            /** Automation Runtime Hours */
+            automation_runtime_hours: number;
             /** Task Time Saved Hours */
             task_time_saved_hours: number;
+            /** Time Savings Rate */
+            time_savings_rate: number;
             /** Cost Per Report Usd */
             cost_per_report_usd: number;
             /**

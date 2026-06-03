@@ -349,7 +349,11 @@ export interface EvalOpsReport {
   golden_set_pass_rate: number;
   report_quality_score: number;
   source_recall: number;
+  manual_baseline_hours_per_report: number;
+  manual_baseline_hours: number;
+  automation_runtime_hours: number;
   task_time_saved_hours: number;
+  time_savings_rate: number;
   cost_per_report_usd: number;
   regression_gate_status: EvalOpsStatus;
   regression_gate_reason: string;

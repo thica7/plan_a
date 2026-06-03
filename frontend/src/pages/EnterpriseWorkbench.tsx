@@ -887,6 +887,21 @@ function EvalOpsPanel({ report }: { report: EvalOpsReport }) {
           label="Hours saved"
           value={report.task_time_saved_hours.toFixed(1)}
         />
+        <Metric
+          icon={<Briefcase size={17} aria-hidden />}
+          label="Manual base"
+          value={report.manual_baseline_hours.toFixed(1)}
+        />
+        <Metric
+          icon={<RefreshCw size={17} aria-hidden />}
+          label="System time"
+          value={report.automation_runtime_hours.toFixed(1)}
+        />
+        <Metric
+          icon={<Gauge size={17} aria-hidden />}
+          label="Saved"
+          value={formatPercent(report.time_savings_rate)}
+        />
       </div>
       <div className="project-meta-row">
         <span>{report.regression_gate_status}</span>
@@ -899,6 +914,7 @@ function EvalOpsPanel({ report }: { report: EvalOpsReport }) {
         <span>Human fix {formatPercent(report.human_correction_rate)}</span>
         <span>Redo {report.redo_iteration_count}</span>
         <span>Convergence {formatPercent(report.redo_convergence_ratio)}</span>
+        <span>Manual {report.manual_baseline_hours_per_report.toFixed(1)}h / report</span>
         <span>${report.cost_per_report_usd.toFixed(4)} / report</span>
         <span>{report.golden_set_size} golden cases</span>
       </div>

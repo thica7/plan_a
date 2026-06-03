@@ -78,6 +78,7 @@ def build_enterprise_evalops_report(
     )
     manual_hours = len(recent_runs) * MANUAL_BASELINE_HOURS_PER_REPORT
     task_time_saved_hours = max(0.0, manual_hours - total_duration_hours)
+    time_savings_rate = task_time_saved_hours / manual_hours if manual_hours else 0.0
     cost_per_report_usd = (
         round(sum(run.metrics.cost_estimate_usd for run in recent_runs) / len(recent_runs), 6)
         if recent_runs
@@ -109,6 +110,7 @@ def build_enterprise_evalops_report(
             "ratio",
             lower_is_better=True,
         ),
+        _metric("time_savings_rate", time_savings_rate, 0.5, "ratio"),
         _metric("task_time_saved_hours", task_time_saved_hours, len(recent_runs) * 3.0, "hours"),
         _metric("cost_per_report_usd", cost_per_report_usd, 5.0, "usd", lower_is_better=True),
     ]
@@ -143,7 +145,11 @@ def build_enterprise_evalops_report(
         golden_set_pass_rate=round(golden_set_pass_rate, 3),
         report_quality_score=report_quality_score,
         source_recall=round(source_recall, 3),
+        manual_baseline_hours_per_report=MANUAL_BASELINE_HOURS_PER_REPORT,
+        manual_baseline_hours=round(manual_hours, 2),
+        automation_runtime_hours=round(total_duration_hours, 2),
         task_time_saved_hours=round(task_time_saved_hours, 2),
+        time_savings_rate=round(time_savings_rate, 3),
         cost_per_report_usd=cost_per_report_usd,
         regression_gate_status=gate_status,
         regression_gate_reason=gate_reason,

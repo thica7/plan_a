@@ -52,7 +52,11 @@ class EvalOpsReport(BaseModel):
     golden_set_pass_rate: float = Field(ge=0.0, le=1.0)
     report_quality_score: int = Field(ge=0, le=100)
     source_recall: float = Field(ge=0.0, le=1.0)
+    manual_baseline_hours_per_report: float = Field(ge=0.0)
+    manual_baseline_hours: float = Field(ge=0.0)
+    automation_runtime_hours: float = Field(ge=0.0)
     task_time_saved_hours: float = Field(ge=0.0)
+    time_savings_rate: float = Field(ge=0.0, le=1.0)
     cost_per_report_usd: float = Field(ge=0.0)
     regression_gate_status: EvalOpsStatus
     regression_gate_reason: str
