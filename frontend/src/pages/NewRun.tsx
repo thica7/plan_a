@@ -19,6 +19,7 @@ import {
 
 const defaultWorkspaceId = "default-workspace";
 const defaultCompetitors = "Perplexity, Claude, Gemini";
+const dynamicScenarioId = "dynamic_adaptive";
 type LayerSelection = "auto" | Extract<CompetitorLayer, "L1" | "L2" | "L3">;
 
 export function NewRun() {
@@ -86,6 +87,7 @@ export function NewRun() {
     () => scenarioPacks.find((pack) => pack.id === scenarioId) ?? null,
     [scenarioId, scenarioPacks],
   );
+  const dynamicScenarioSelected = scenarioId.startsWith("dynamic");
   const lockedDimensions = useMemo(
     () => lockedDimensionsForScenario(selectedScenario),
     [selectedScenario],
@@ -201,6 +203,7 @@ export function NewRun() {
                   setSelectedLayer(layer);
                   if (
                     scenarioId
+                    && !dynamicScenarioSelected
                     && scenarioPacks.find((pack) => pack.id === scenarioId)?.competitor_layer !== layer
                   ) {
                     setScenarioId("");
@@ -216,11 +219,16 @@ export function NewRun() {
             <select
               value={scenarioId}
               onChange={(event) => {
+                if (event.target.value === dynamicScenarioId) {
+                  setScenarioId(dynamicScenarioId);
+                  return;
+                }
                 const next = scenarioPacks.find((pack) => pack.id === event.target.value) ?? null;
                 applyScenario(next);
               }}
             >
               <option value="">Auto scenario</option>
+              <option value={dynamicScenarioId}>Dynamic scenario</option>
               {scenarioPacks
                 .filter((pack) => selectedLayer === "auto" || pack.competitor_layer === selectedLayer)
                 .map((pack) => (
@@ -242,6 +250,18 @@ export function NewRun() {
               {selectedScenario.seed_competitors.length > 0 ? (
                 <small>{selectedScenario.seed_competitors.join(", ")}</small>
               ) : null}
+            </div>
+          ) : dynamicScenarioSelected ? (
+            <div className="scenario-preview">
+              <strong>Dynamic scenario</strong>
+              <span>
+                Generated from the topic, selected layer, competitors, and current dimensions.
+              </span>
+              <div>
+                {selected.map((dimension) => (
+                  <em key={dimension}>{dimension}</em>
+                ))}
+              </div>
             </div>
           ) : null}
         </fieldset>
