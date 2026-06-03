@@ -219,6 +219,14 @@ class RunService(
             requested_layer=request.competitor_layer,
             requested_scenario_id=request.scenario_id,
         )
+        if self._should_enforce_requested_scenario(
+            request.scenario_id,
+            business_plan.scenario_pack.id,
+        ):
+            valid_dimensions = self._merge_scenario_required_dimensions(
+                valid_dimensions,
+                business_plan.scenario_pack.required_dimensions,
+            )
         now = datetime.utcnow()
         run_id = _run_id_for_idempotency_key(request.idempotency_key) or str(uuid4())
         idempotency_key = request.idempotency_key or f"run:{run_id}"
@@ -3234,6 +3242,34 @@ class RunService(
         if pack is None:
             return []
         return self._normalize_competitor_names(pack.seed_competitors)
+
+    def _should_enforce_requested_scenario(
+        self,
+        requested_scenario_id: str | None,
+        resolved_scenario_id: str,
+    ) -> bool:
+        if not requested_scenario_id:
+            return False
+        return resolved_scenario_id == requested_scenario_id or requested_scenario_id.startswith(
+            "dynamic"
+        )
+
+    def _merge_scenario_required_dimensions(
+        self,
+        dimensions: list[str],
+        required_dimensions: list[str],
+    ) -> list[str]:
+        available = set(self._skill_registry.names())
+        merged: list[str] = []
+        seen: set[str] = set()
+        for dimension in [*required_dimensions, *dimensions]:
+            if dimension not in available or dimension in seen:
+                continue
+            seen.add(dimension)
+            merged.append(dimension)
+            if len(merged) >= 8:
+                break
+        return merged or dimensions
 
     def _apply_memory_dimension_preferences(
         self,

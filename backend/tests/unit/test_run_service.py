@@ -688,6 +688,59 @@ async def test_create_run_uses_scenario_seed_competitors_when_missing(
 
 
 @pytest.mark.asyncio
+async def test_create_run_merges_requested_scenario_required_dimensions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _verified_homepages(competitors: list[str]) -> dict[str, HomepageVerification]:
+        return {
+            competitor: HomepageVerification(
+                competitor=competitor,
+                homepage_url=f"https://{competitor.casefold()}.example.com",
+                verified=True,
+                reason="test_verified",
+            )
+            for competitor in competitors
+        }
+
+    monkeypatch.setattr(
+        "packages.orchestrator.service.verify_homepages",
+        _verified_homepages,
+    )
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant market landscape",
+            competitors=["Cursor", "Copilot", "Windsurf", "Tabnine"],
+            dimensions=["pricing"],
+            competitor_layer="L3",
+            scenario_id="l3_market_landscape",
+            execution_mode="demo",
+        )
+    )
+
+    assert detail.plan.dimensions == ["feature", "persona", "market", "pricing"]
+    assert detail.plan.scenario_recommended_dimensions[:4] == [
+        "pricing",
+        "feature",
+        "persona",
+        "market",
+    ]
+    task_dimensions = {task.dimension for task in detail.plan.task_decomposition}
+    assert {"feature", "persona", "market", "pricing"} <= task_dimensions
+
+
+@pytest.mark.asyncio
 async def test_trace_spans_redact_sensitive_text_before_storage() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
