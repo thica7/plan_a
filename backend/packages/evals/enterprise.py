@@ -536,9 +536,34 @@ def _run_matches_golden_case(run: RunDetail, row: dict[str, Any]) -> bool:
     }
     run_competitors = {_normalize_catalog_text(item) for item in run.plan.competitors}
     if not case_competitors:
-        return True
+        return _run_matches_golden_layer(run, row) and _run_matches_golden_dimensions(run, row)
     required_overlap = min(2, len(case_competitors))
-    return len(case_competitors & run_competitors) >= required_overlap
+    return (
+        len(case_competitors & run_competitors) >= required_overlap
+        and _run_matches_golden_layer(run, row)
+        and _run_matches_golden_dimensions(run, row)
+    )
+
+
+def _run_matches_golden_layer(run: RunDetail, row: dict[str, Any]) -> bool:
+    expected_layer = str(row.get("expected_layer", "")).strip().upper()
+    if not expected_layer:
+        return True
+    run_layer = run.plan.competitor_layer.strip().upper()
+    return run_layer == expected_layer
+
+
+def _run_matches_golden_dimensions(run: RunDetail, row: dict[str, Any]) -> bool:
+    raw_dimensions = row.get("expected_dimensions", [])
+    if not isinstance(raw_dimensions, list):
+        return True
+    expected_dimensions = {
+        _normalize_catalog_text(str(item)) for item in raw_dimensions if str(item).strip()
+    }
+    if not expected_dimensions:
+        return True
+    run_dimensions = {_normalize_catalog_text(item) for item in run.plan.dimensions}
+    return expected_dimensions <= run_dimensions
 
 
 def _normalize_catalog_text(value: str) -> str:

@@ -262,6 +262,8 @@ def test_enterprise_evalops_maps_runs_to_golden_catalog_cohorts() -> None:
         project_id="project-a",
         topic="AI coding assistant pricing comparison",
         competitors=["Cursor", "GitHub Copilot"],
+        competitor_layer="L1",
+        dimensions=["pricing"],
     )
 
     report = build_enterprise_evalops_report([target])
@@ -272,6 +274,40 @@ def test_enterprise_evalops_maps_runs_to_golden_catalog_cohorts() -> None:
     assert report.golden_catalog_coverage_rate > 0
     assert cohorts["core_l1"].matched_run_count == 1
     assert "L1" in cohorts["core_l1"].expected_layers
+
+
+def test_enterprise_evalops_golden_catalog_requires_layer_and_dimensions() -> None:
+    wrong_layer = _run_detail(
+        run_id="gold-001-wrong-layer",
+        execution_mode="real",
+        source_count=4,
+        quality_score=1.0,
+        report_md=_structured_report_md(),
+        project_id="project-a",
+        topic="AI coding assistant pricing comparison",
+        competitors=["Cursor", "GitHub Copilot"],
+        competitor_layer="L3",
+        dimensions=["pricing"],
+    )
+    missing_dimension = _run_detail(
+        run_id="gold-001-missing-dimension",
+        execution_mode="real",
+        source_count=4,
+        quality_score=1.0,
+        report_md=_structured_report_md(),
+        project_id="project-a",
+        topic="AI coding assistant pricing comparison",
+        competitors=["Cursor", "GitHub Copilot"],
+        competitor_layer="L1",
+        dimensions=["feature"],
+    )
+
+    report = build_enterprise_evalops_report([wrong_layer, missing_dimension])
+    cohorts = {cohort.cohort: cohort for cohort in report.golden_catalog_cohorts}
+
+    assert report.golden_catalog_covered_case_count == 0
+    assert report.golden_catalog_coverage_rate == 0.0
+    assert cohorts["core_l1"].matched_run_count == 0
 
 
 def test_enterprise_evalops_fails_regression_gate_on_compliance_blockers() -> None:
@@ -473,6 +509,7 @@ def _run_detail(
     qa_findings: list[QCIssue] | None = None,
     topic: str = "Cursor vs Copilot pricing",
     competitors: list[str] | None = None,
+    competitor_layer: str = "L1",
 ) -> RunDetail:
     plan_competitors = competitors or ["Cursor", "Copilot"]
     sources = [
@@ -502,6 +539,7 @@ def _run_detail(
             topic=topic,
             competitors=plan_competitors,
             dimensions=dimensions or ["pricing"],
+            competitor_layer=competitor_layer,  # type: ignore[arg-type]
         ),
         report_md=report_md,
         raw_sources=sources,
