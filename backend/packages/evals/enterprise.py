@@ -328,6 +328,8 @@ def build_enterprise_evalops_report(
         hitl_enabled_run_rate=round(hitl_enabled_run_rate, 3),
         human_correction_rate=round(human_correction_rate, 3),
         hitl_redo_loop_rate=round(hitl_redo_loop_rate, 3),
+        user_research_evidence_rate=round(user_research_evidence_rate, 3),
+        rag_gap_fill_context_rate=round(rag_gap_fill_context_rate, 3),
         redo_iteration_count=redo_iteration_count,
         redo_convergence_ratio=round(redo_convergence_ratio, 3),
         golden_set_size=len(cases),

@@ -1873,6 +1873,16 @@ function EvalOpsPanel({
           value={formatPercent(report.hitl_redo_loop_rate)}
         />
         <Metric
+          icon={<ListChecks size={17} aria-hidden />}
+          label="User research"
+          value={formatPercent(report.user_research_evidence_rate)}
+        />
+        <Metric
+          icon={<Search size={17} aria-hidden />}
+          label="RAG fill"
+          value={formatPercent(report.rag_gap_fill_context_rate)}
+        />
+        <Metric
           icon={<CalendarClock size={17} aria-hidden />}
           label="Manual saved"
           value={manualTimeSavedHours.toFixed(1)}
@@ -1912,6 +1922,8 @@ function EvalOpsPanel({
         <span>Regressed {report.regressed_run_count}</span>
         <span>HITL {formatPercent(report.hitl_enabled_run_rate)}</span>
         <span>HITL loop {formatPercent(report.hitl_redo_loop_rate)}</span>
+        <span>User research {formatPercent(report.user_research_evidence_rate)}</span>
+        <span>RAG fill {formatPercent(report.rag_gap_fill_context_rate)}</span>
         <span>Human fix {formatPercent(report.human_correction_rate)}</span>
         <span>Redo {report.redo_iteration_count}</span>
         <span>Convergence {formatPercent(report.redo_convergence_ratio)}</span>

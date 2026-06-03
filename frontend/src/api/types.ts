@@ -453,6 +453,8 @@ export interface EvalOpsReport {
   hitl_enabled_run_rate: number;
   human_correction_rate: number;
   hitl_redo_loop_rate: number;
+  user_research_evidence_rate: number;
+  rag_gap_fill_context_rate: number;
   redo_iteration_count: number;
   redo_convergence_ratio: number;
   golden_set_size: number;

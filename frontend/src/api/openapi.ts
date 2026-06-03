@@ -2609,6 +2609,16 @@ export interface components {
              * @default 1
              */
             hitl_redo_loop_rate: number;
+            /**
+             * User Research Evidence Rate
+             * @default 1
+             */
+            user_research_evidence_rate: number;
+            /**
+             * Rag Gap Fill Context Rate
+             * @default 1
+             */
+            rag_gap_fill_context_rate: number;
             /** Redo Iteration Count */
             redo_iteration_count: number;
             /** Redo Convergence Ratio */
