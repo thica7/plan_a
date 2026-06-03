@@ -6,14 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.deps import (
     get_app_settings,
-    get_enterprise_store,
     get_run_service,
     get_temporal_workflow_service,
 )
 from app.governance import ensure_model_policy_allows_execution_mode
 from packages.business_intel import compare_run_quality
 from packages.config import Settings
-from packages.enterprise import EnterpriseStore, WorkspaceQuotaExceededError
+from packages.enterprise import WorkspaceQuotaExceededError
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import (
     RunCreateRequest,
@@ -34,7 +33,6 @@ TemporalWorkflowServiceDep = Annotated[
     TemporalWorkflowService,
     Depends(get_temporal_workflow_service),
 ]
-EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
 
 
 @router.post(
@@ -47,12 +45,11 @@ async def create_run(
     response: Response,
     settings: SettingsDep,
     workflow_service: TemporalWorkflowServiceDep,
-    store: EnterpriseStoreDep,
     service: RunServiceDep,
 ) -> RunDetail | WorkflowStartResponse:
     request = _with_run_idempotency_key(request)
     ensure_model_policy_allows_execution_mode(request.execution_mode, settings)
-    _ensure_workspace_quota(store, request.workspace_id)
+    _ensure_workspace_quota(service, request.workspace_id)
     cutover = decide_temporal_cutover(settings, request)
     response.headers["X-Run-Orchestration-Route"] = cutover.route
     response.headers["X-Temporal-Traffic-Percent"] = str(cutover.target_percent)
@@ -82,7 +79,6 @@ async def create_run(
         response.status_code = status.HTTP_202_ACCEPTED
         return result
 
-    service = get_run_service()
     try:
         detail = await service.create_run(request)
     except WorkspaceQuotaExceededError as exc:
@@ -116,13 +112,14 @@ def _with_run_idempotency_key(request: RunCreateRequest) -> RunCreateRequest:
     return request.model_copy(update={"idempotency_key": f"ui-run:{uuid4().hex}"})
 
 
-def _ensure_workspace_quota(store: EnterpriseStore, workspace_id: str) -> None:
-    decision = store.check_workspace_quota(workspace_id)
-    if not decision.allowed:
+def _ensure_workspace_quota(service: RunService, workspace_id: str) -> None:
+    try:
+        service.ensure_workspace_quota_allows_run(workspace_id)
+    except WorkspaceQuotaExceededError as exc:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=decision.model_dump(mode="json"),
-        )
+            detail=exc.decision.model_dump(mode="json"),
+        ) from exc
 
 
 @router.get("/runs", response_model=list[RunSummary])

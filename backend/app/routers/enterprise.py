@@ -720,6 +720,18 @@ async def get_project_quality_matrix(
     evidence_gaps = await get_project_evidence_gaps(project_id, store, user, settings)
     red_team = await get_project_red_team(project_id, store, user, settings)
     project = _project_or_404(project_id, store, user, "memory:read")
+    report_versions = store.list_report_versions(project_id=project_id)
+    latest_release_gate = (
+        evaluate_report_release_gate(
+            project=project,
+            report_version=report_versions[0],
+            competitors=competitors,
+            evidence=evidence,
+            claims=claims,
+        )
+        if report_versions
+        else None
+    )
     memory_stats = memory.stats(workspace_id=project.workspace_id, project_id=project_id)
     memory_status = (
         "warn"
@@ -803,6 +815,50 @@ async def get_project_quality_matrix(
             claim_ids=_unique_ids(
                 claim_id for finding in red_team.findings for claim_id in finding.claim_ids
             ),
+        ),
+        (
+            QualityAgentMatrixEntry(
+                agent_name="ReleaseGate",
+                framework="enterprise-release-gate",
+                status=_matrix_status(
+                    latest_release_gate.blocker_count,
+                    latest_release_gate.warn_count,
+                ),
+                score=max(
+                    0,
+                    latest_release_gate.readiness.score
+                    - latest_release_gate.blocker_count * 20
+                    - latest_release_gate.warn_count * 5,
+                ),
+                blocker_count=latest_release_gate.blocker_count,
+                warn_count=latest_release_gate.warn_count,
+                finding_count=latest_release_gate.issue_count,
+                summary=(
+                    f"Latest report {latest_release_gate.report_version_id} "
+                    f"is {latest_release_gate.status}; "
+                    f"readiness {latest_release_gate.readiness.score}/100."
+                ),
+                evidence_ids=_unique_ids(
+                    evidence_id
+                    for issue in latest_release_gate.issues
+                    for evidence_id in issue.evidence_ids
+                ),
+                claim_ids=_unique_ids(
+                    claim_id
+                    for issue in latest_release_gate.issues
+                    for claim_id in issue.claim_ids
+                ),
+            )
+            if latest_release_gate is not None
+            else QualityAgentMatrixEntry(
+                agent_name="ReleaseGate",
+                framework="enterprise-release-gate",
+                status="warn",
+                score=50,
+                warn_count=1,
+                finding_count=1,
+                summary="No ReportVersion exists yet; release readiness cannot be evaluated.",
+            )
         ),
         QualityAgentMatrixEntry(
             agent_name="MemoryAgent",

@@ -289,6 +289,9 @@ class RunService(
         self._persist_run(detail.id)
         return detail
 
+    def ensure_workspace_quota_allows_run(self, workspace_id: str) -> None:
+        self._ensure_workspace_quota_allows_run(workspace_id)
+
     def list_runs(self) -> list[RunSummary]:
         self._refresh_runs_from_journal()
         return [

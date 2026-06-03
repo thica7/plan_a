@@ -941,6 +941,7 @@ def test_enterprise_router_exposes_projection() -> None:
         "ClaimValidator",
         "EvidenceGap",
         "RedTeam",
+        "ReleaseGate",
         "MemoryAgent",
     }
     claim_matrix = next(
@@ -953,6 +954,12 @@ def test_enterprise_router_exposes_projection() -> None:
     )
     assert memory_matrix["framework"] == "deterministic-preference-memory"
     assert memory_matrix["score"] >= 80
+    release_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "ReleaseGate"
+    )
+    assert release_matrix["framework"] == "enterprise-release-gate"
+    assert release_matrix["status"] == "pass"
+    assert projection.report_version.id in release_matrix["summary"]
     assert competitors.status_code == 200
     assert [item["name"] for item in competitors.json()] == ["Cursor"]
     assert source_registry.status_code == 200
