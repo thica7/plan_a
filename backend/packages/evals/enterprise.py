@@ -23,7 +23,7 @@ from packages.schema.evals import (
 
 MANUAL_BASELINE_HOURS_PER_REPORT = 6.0
 AUTOMATION_FLOOR_HOURS_PER_REPORT = 0.08
-EVAL_REPORT_STATUSES = {"completed"}
+EVAL_REPORT_STATUSES = {"completed", "completed_with_blockers"}
 GOLDEN_SET_PATH = Path(__file__).resolve().parents[3] / "data" / "golden_set.jsonl"
 USER_RESEARCH_DIMENSION_HINTS = {
     "persona",

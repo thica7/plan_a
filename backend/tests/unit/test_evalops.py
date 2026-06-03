@@ -386,6 +386,26 @@ def test_enterprise_evalops_explains_real_quality_chain_failures() -> None:
     )
 
 
+def test_enterprise_evalops_includes_completed_with_blockers_runs() -> None:
+    target = _run_detail(
+        run_id="blocked-run",
+        execution_mode="real",
+        source_count=1,
+        quality_score=0.2,
+        report_md="Blocked report draft.",
+        project_id="project-a",
+        status="completed_with_blockers",
+    )
+
+    report = build_enterprise_evalops_report([target])
+
+    assert report.run_count == 1
+    assert report.evaluated_run_ids == ["blocked-run"]
+    assert report.real_quality_chain_rate == 0.0
+    assert report.real_quality_chain_failed_run_ids == ["blocked-run"]
+    assert report.regression_gate_status == "fail"
+
+
 def test_enterprise_evalops_gates_missing_decision_replay_signals() -> None:
     target = _run_detail(
         run_id="missing-replay-run",
