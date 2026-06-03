@@ -463,7 +463,7 @@ export function EnterpriseWorkbench({
     return () => {
       active = false;
     };
-  }, [selectedVersion?.run_id]);
+  }, [selectedVersion?.run_id, selectedVersionId]);
 
   useEffect(() => {
     const runId = selectedVersion?.run_id;
@@ -815,25 +815,37 @@ export function EnterpriseWorkbench({
         evidenceItems,
         versionItems,
         qaEvaluationValue,
+        claimValidationValue,
         readinessScoreValue,
         competitorScoresValue,
         redTeamValue,
+        qualityMatrixValue,
+        evalOpsValue,
       ] = await Promise.all([
         listProjectEvidence(projectId),
         listProjectReportVersions(projectId),
         getProjectQAEvaluation(projectId),
+        getProjectClaimValidation(projectId),
         getProjectReadinessScore(projectId),
         getProjectCompetitorScores(projectId),
         getProjectRedTeam(projectId),
+        getProjectQualityMatrix(projectId),
+        getEnterpriseEvalOps({
+          projectId,
+          baselineRunId: evalOpsBaselineRunId ?? undefined,
+        }),
       ]);
       setGapFillResult(result);
       setEvidenceGaps(result.report);
       setEvidence(evidenceItems);
       setVersions(versionItems);
       setQaEvaluation(qaEvaluationValue);
+      setClaimValidation(claimValidationValue);
       setReadinessScore(readinessScoreValue);
       setCompetitorScores(competitorScoresValue);
       setRedTeam(redTeamValue);
+      setQualityMatrix(qualityMatrixValue);
+      setEvalOps(evalOpsValue);
       setSelectedVersionId(result.updated_report_version_id ?? versionItems[0]?.id ?? null);
       await refreshWorkspaceGovernance(selectedProject?.workspace_id);
       setScanMessage(`Gap fill linked ${result.added_evidence_count} candidate evidence item(s).`);
