@@ -2271,6 +2271,18 @@ export interface components {
             evaluated_run_ids?: string[];
             /** Baseline Run Id */
             baseline_run_id?: string | null;
+            /** Real Run Count */
+            real_run_count: number;
+            /** Demo Run Count */
+            demo_run_count: number;
+            /** Real Run Ratio */
+            real_run_ratio: number;
+            /** Real Quality Chain Rate */
+            real_quality_chain_rate: number;
+            /** Average Delta Score */
+            average_delta_score?: number | null;
+            /** Regressed Run Count */
+            regressed_run_count: number;
             /** Golden Set Size */
             golden_set_size: number;
             /** Golden Set Pass Rate */

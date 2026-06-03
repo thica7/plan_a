@@ -335,6 +335,12 @@ export interface EvalOpsReport {
   run_count: number;
   evaluated_run_ids: string[];
   baseline_run_id?: string | null;
+  real_run_count: number;
+  demo_run_count: number;
+  real_run_ratio: number;
+  real_quality_chain_rate: number;
+  average_delta_score?: number | null;
+  regressed_run_count: number;
   golden_set_size: number;
   golden_set_pass_rate: number;
   report_quality_score: number;

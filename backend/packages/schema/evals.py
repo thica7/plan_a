@@ -38,6 +38,12 @@ class EvalOpsReport(BaseModel):
     run_count: int = Field(ge=0)
     evaluated_run_ids: list[str] = Field(default_factory=list)
     baseline_run_id: str | None = None
+    real_run_count: int = Field(ge=0)
+    demo_run_count: int = Field(ge=0)
+    real_run_ratio: float = Field(ge=0.0, le=1.0)
+    real_quality_chain_rate: float = Field(ge=0.0, le=1.0)
+    average_delta_score: float | None = None
+    regressed_run_count: int = Field(ge=0)
     golden_set_size: int = Field(ge=0)
     golden_set_pass_rate: float = Field(ge=0.0, le=1.0)
     report_quality_score: int = Field(ge=0, le=100)

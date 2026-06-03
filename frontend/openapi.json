@@ -8445,6 +8445,44 @@
             ],
             "title": "Baseline Run Id"
           },
+          "real_run_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Real Run Count"
+          },
+          "demo_run_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Demo Run Count"
+          },
+          "real_run_ratio": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Real Run Ratio"
+          },
+          "real_quality_chain_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Real Quality Chain Rate"
+          },
+          "average_delta_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Delta Score"
+          },
+          "regressed_run_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Regressed Run Count"
+          },
           "golden_set_size": {
             "type": "integer",
             "minimum": 0.0,
@@ -8522,6 +8560,11 @@
         "type": "object",
         "required": [
           "run_count",
+          "real_run_count",
+          "demo_run_count",
+          "real_run_ratio",
+          "real_quality_chain_rate",
+          "regressed_run_count",
           "golden_set_size",
           "golden_set_pass_rate",
           "report_quality_score",

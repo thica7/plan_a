@@ -21,6 +21,32 @@ def build_enterprise_evalops_report(
         compare_run_quality(run, baseline=baseline if baseline is not None and baseline.id != run.id else None)
         for run in recent_runs
     ]
+    real_run_count = sum(1 for run in recent_runs if run.execution_mode == "real")
+    demo_run_count = len(recent_runs) - real_run_count
+    real_run_ratio = _ratio([run.execution_mode == "real" for run in recent_runs])
+    real_quality_chain_rate = _ratio(
+        [
+            comparison.real_collection_signal
+            and comparison.real_llm_signal
+            and comparison.report_quality_signal
+            for comparison in comparisons
+        ]
+    )
+    delta_scores = [
+        comparison.delta_score
+        for comparison in comparisons
+        if comparison.delta_score is not None
+    ]
+    average_delta_score = (
+        round(_average_float([float(score) for score in delta_scores]), 2)
+        if delta_scores
+        else None
+    )
+    regressed_run_count = sum(
+        1
+        for comparison in comparisons
+        if comparison.delta_score is not None and comparison.delta_score < 0
+    )
     report_quality_score = _average_int([comparison.target_score for comparison in comparisons])
     source_recall = _average_float(
         [_metric_value(comparison, "source_coverage_rate") for comparison in comparisons]
@@ -64,14 +90,23 @@ def build_enterprise_evalops_report(
         _metric("claim_citation_rate", citation_rate, 0.6, "ratio"),
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
+        _metric("real_quality_chain_rate", real_quality_chain_rate, 0.5, "ratio"),
         _metric("task_time_saved_hours", task_time_saved_hours, len(recent_runs) * 3.0, "hours"),
         _metric("cost_per_report_usd", cost_per_report_usd, 5.0, "usd", lower_is_better=True),
     ]
+    if average_delta_score is not None:
+        metrics.append(_metric("average_delta_score", average_delta_score, 0.0, "score"))
     gate_status, gate_reason = _regression_gate(comparisons, metrics)
     return EvalOpsReport(
         run_count=len(recent_runs),
         evaluated_run_ids=[run.id for run in recent_runs],
         baseline_run_id=baseline.id if baseline is not None else None,
+        real_run_count=real_run_count,
+        demo_run_count=demo_run_count,
+        real_run_ratio=round(real_run_ratio, 3),
+        real_quality_chain_rate=round(real_quality_chain_rate, 3),
+        average_delta_score=average_delta_score,
+        regressed_run_count=regressed_run_count,
         golden_set_size=len(cases),
         golden_set_pass_rate=round(golden_set_pass_rate, 3),
         report_quality_score=report_quality_score,
@@ -238,6 +273,13 @@ def _recommendations(
         recommendations.append("Increase claim citation rate before relying on the report in review.")
     if metric_names["real_collection_rate"].status != "pass":
         recommendations.append("Run more real collection paths so EvalOps is not dominated by demos.")
+    if metric_names["real_quality_chain_rate"].status != "pass":
+        recommendations.append("Close the real run quality chain: collection, LLM trace, and cited report depth.")
+    if (
+        "average_delta_score" in metric_names
+        and metric_names["average_delta_score"].status != "pass"
+    ):
+        recommendations.append("Compare regressed runs against the baseline and fix the weakest quality metric.")
     if any(comparison.delta_score is not None and comparison.delta_score < 0 for comparison in comparisons):
         recommendations.append("Inspect regressions against the selected baseline before publishing.")
     return recommendations[:5]

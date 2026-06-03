@@ -52,6 +52,7 @@ import type {
   EvidenceGapReport,
   EvidenceQualityLabel,
   EvidenceRecord,
+  EvalOpsMetric,
   EvalOpsReport,
   NotificationRecord,
   ProjectReadinessScore,
@@ -716,6 +717,11 @@ function EvalOpsPanel({ report }: { report: EvalOpsReport }) {
           value={formatPercent(report.source_recall)}
         />
         <Metric
+          icon={<CheckCircle2 size={17} aria-hidden />}
+          label="Real chain"
+          value={formatPercent(report.real_quality_chain_rate)}
+        />
+        <Metric
           icon={<CalendarClock size={17} aria-hidden />}
           label="Hours saved"
           value={report.task_time_saved_hours.toFixed(1)}
@@ -724,6 +730,10 @@ function EvalOpsPanel({ report }: { report: EvalOpsReport }) {
       <div className="project-meta-row">
         <span>{report.regression_gate_status}</span>
         <span>{report.run_count} run(s)</span>
+        <span>Real {report.real_run_count}</span>
+        <span>Demo {report.demo_run_count}</span>
+        <span>Delta {formatScoreDelta(report.average_delta_score)}</span>
+        <span>Regressed {report.regressed_run_count}</span>
         <span>${report.cost_per_report_usd.toFixed(4)} / report</span>
         <span>{report.golden_set_size} golden cases</span>
       </div>
@@ -734,7 +744,7 @@ function EvalOpsPanel({ report }: { report: EvalOpsReport }) {
             <ScoreBar
               key={metric.name}
               label={metric.name.replace(/_/g, " ")}
-              value={Math.max(0, Math.min(100, Math.round((metric.value / metric.target) * 100)))}
+              value={metricProgressPercent(metric)}
             />
           ))}
         </div>
@@ -1401,6 +1411,20 @@ function ReleaseGatePanel({ gate }: { gate: ReportReleaseGate }) {
 
 function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+function formatScoreDelta(value?: number | null) {
+  if (value === null || value === undefined) {
+    return "n/a";
+  }
+  return value > 0 ? `+${value}` : `${value}`;
+}
+
+function metricProgressPercent(metric: EvalOpsMetric) {
+  if (metric.target === 0) {
+    return metric.value >= metric.target ? 100 : 0;
+  }
+  return Math.max(0, Math.min(100, Math.round((metric.value / metric.target) * 100)));
 }
 
 function formatDate(value: string) {

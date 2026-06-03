@@ -38,6 +38,12 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
 
     assert report.run_count == 1
     assert report.baseline_run_id == "baseline-run"
+    assert report.real_run_count == 1
+    assert report.demo_run_count == 0
+    assert report.real_run_ratio == 1.0
+    assert report.real_quality_chain_rate == 1.0
+    assert report.average_delta_score is not None and report.average_delta_score > 0
+    assert report.regressed_run_count == 0
     assert report.golden_set_size == 6
     assert report.golden_set_pass_rate >= 0.8
     assert report.report_quality_score >= 72
@@ -64,6 +70,8 @@ def test_enterprise_evalops_router_exposes_report() -> None:
 
     assert response.status_code == 200
     assert response.json()["evaluated_run_ids"] == ["real-run"]
+    assert response.json()["real_run_count"] == 1
+    assert response.json()["real_quality_chain_rate"] == 1.0
     assert response.json()["golden_set_size"] == 6
     assert response.json()["regression_gate_status"] in {"pass", "warn", "fail"}
 
