@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.deps import get_run_service
 from packages.evals import build_enterprise_evalops_report
 from packages.orchestrator.service import RunService
-from packages.schema.evals import EvalOpsReport
+from packages.schema.evals import EvalJudgeMode, EvalOpsReport
 
 router = APIRouter()
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
@@ -17,6 +17,7 @@ async def get_enterprise_evalops_report(
     project_id: str | None = None,
     baseline_run_id: str | None = None,
     limit: int = Query(default=30, ge=1, le=200),
+    judge_mode: EvalJudgeMode = "heuristic",
 ) -> EvalOpsReport:
     runs = [
         detail
@@ -29,4 +30,9 @@ async def get_enterprise_evalops_report(
         baseline = service.get_run(baseline_run_id)
         if baseline is None:
             raise HTTPException(status_code=404, detail="Baseline run not found")
-    return build_enterprise_evalops_report(runs, baseline=baseline, limit=limit)
+    return build_enterprise_evalops_report(
+        runs,
+        baseline=baseline,
+        limit=limit,
+        judge_mode=judge_mode,
+    )

@@ -149,6 +149,7 @@ def main() -> None:
     parser.add_argument("--baseline-run-id", default=None)
     parser.add_argument("--project-id", default=None)
     parser.add_argument("--limit", type=int, default=30)
+    parser.add_argument("--judge-mode", choices=["heuristic", "llm"], default="heuristic")
     parser.add_argument("--output", default=None)
     args = parser.parse_args()
 
@@ -159,7 +160,12 @@ def main() -> None:
         if args.project_id is None or run.project_id == args.project_id
     ]
     baseline = journal.load_run(args.baseline_run_id) if args.baseline_run_id else None
-    report = build_enterprise_evalops_report(runs, baseline=baseline, limit=args.limit)
+    report = build_enterprise_evalops_report(
+        runs,
+        baseline=baseline,
+        limit=args.limit,
+        judge_mode=args.judge_mode,
+    )
     payload = json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2)
     if args.output:
         Path(args.output).write_text(payload + "\n", encoding="utf-8")

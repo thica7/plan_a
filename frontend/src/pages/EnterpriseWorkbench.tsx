@@ -1226,6 +1226,7 @@ function EvalOpsPanel({
   const watchMetrics = report.metrics.filter((metric) => metric.status !== "pass").slice(0, 4);
   const coverageLiftRate = evalOpsMetricValue(report, "coverage_lift_rate");
   const citationValidityRate = evalOpsMetricValue(report, "citation_validity_rate");
+  const judgeScore = report.llm_judge_avg_score ?? report.judge_avg_score;
   const watchCases = [...report.cases]
     .sort((left, right) => {
       const statusDelta = evalOpsStatusRank(right.status) - evalOpsStatusRank(left.status);
@@ -1278,6 +1279,11 @@ function EvalOpsPanel({
           value={formatPercent(report.golden_set_pass_rate)}
         />
         <Metric
+          icon={<Gauge size={17} aria-hidden />}
+          label="Judge"
+          value={judgeScore.toFixed(1)}
+        />
+        <Metric
           icon={<Search size={17} aria-hidden />}
           label="Recall"
           value={formatPercent(report.source_recall)}
@@ -1318,6 +1324,7 @@ function EvalOpsPanel({
         <span>{report.run_count} run(s)</span>
         <span>Real {report.real_run_count}</span>
         <span>Demo {report.demo_run_count}</span>
+        <span>Judge {report.judge_mode}</span>
         <span>Baseline {report.baseline_run_id ?? "none"}</span>
         <span>Delta {formatScoreDelta(report.average_delta_score)}</span>
         <span>Citation validity {citationValidityRate === null ? "n/a" : formatPercent(citationValidityRate)}</span>
@@ -1332,6 +1339,7 @@ function EvalOpsPanel({
         <span>{report.golden_set_size} golden cases</span>
       </div>
       <p>{report.regression_gate_reason}</p>
+      {report.judge_fallback_reason ? <p className="muted-line">{report.judge_fallback_reason}</p> : null}
       {watchMetrics.length > 0 ? (
         <div className="readiness-breakdown">
           {watchMetrics.map((metric) => (

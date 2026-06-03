@@ -182,10 +182,13 @@ export function getRunQualityComparison(runId: string, baselineRunId?: string) {
   return request<RunQualityComparison>(`/runs/${runId}/quality-comparison${params}`);
 }
 
-export function getEnterpriseEvalOps(options: { projectId?: string; baselineRunId?: string } = {}) {
+export function getEnterpriseEvalOps(
+  options: { projectId?: string; baselineRunId?: string; judgeMode?: "heuristic" | "llm" } = {},
+) {
   const params = new URLSearchParams();
   if (options.projectId) params.set("project_id", options.projectId);
   if (options.baselineRunId) params.set("baseline_run_id", options.baselineRunId);
+  if (options.judgeMode) params.set("judge_mode", options.judgeMode);
   const suffix = params.toString() ? `?${params.toString()}` : "";
   return request<EvalOpsReport>(`/evals/enterprise${suffix}`);
 }

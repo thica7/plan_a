@@ -2340,6 +2340,24 @@ export interface components {
             average_delta_score?: number | null;
             /** Regressed Run Count */
             regressed_run_count: number;
+            /**
+             * Judge Mode
+             * @default heuristic
+             * @enum {string}
+             */
+            judge_mode: "heuristic" | "llm";
+            /**
+             * Judge Avg Score
+             * @default 0
+             */
+            judge_avg_score: number;
+            /** Llm Judge Avg Score */
+            llm_judge_avg_score?: number | null;
+            /**
+             * Judge Fallback Reason
+             * @default
+             */
+            judge_fallback_reason: string;
             /** Hitl Enabled Run Rate */
             hitl_enabled_run_rate: number;
             /** Human Correction Rate */
@@ -8229,6 +8247,7 @@ export interface operations {
                 project_id?: string | null;
                 baseline_run_id?: string | null;
                 limit?: number;
+                judge_mode?: "heuristic" | "llm";
             };
             header?: never;
             path?: never;

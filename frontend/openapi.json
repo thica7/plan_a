@@ -6157,6 +6157,20 @@
               "default": 30,
               "title": "Limit"
             }
+          },
+          {
+            "name": "judge_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "heuristic",
+                "llm"
+              ],
+              "type": "string",
+              "default": "heuristic",
+              "title": "Judge Mode"
+            }
           }
         ],
         "responses": {
@@ -8753,6 +8767,40 @@
             "type": "integer",
             "minimum": 0.0,
             "title": "Regressed Run Count"
+          },
+          "judge_mode": {
+            "type": "string",
+            "enum": [
+              "heuristic",
+              "llm"
+            ],
+            "title": "Judge Mode",
+            "default": "heuristic"
+          },
+          "judge_avg_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Judge Avg Score",
+            "default": 0.0
+          },
+          "llm_judge_avg_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Judge Avg Score"
+          },
+          "judge_fallback_reason": {
+            "type": "string",
+            "title": "Judge Fallback Reason",
+            "default": ""
           },
           "hitl_enabled_run_rate": {
             "type": "number",

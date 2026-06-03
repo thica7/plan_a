@@ -325,6 +325,7 @@ export interface DecisionReplayReport {
 }
 
 export type EvalOpsStatus = "pass" | "warn" | "fail";
+export type EvalJudgeMode = "heuristic" | "llm";
 
 export interface EvalOpsMetric {
   name: string;
@@ -355,6 +356,10 @@ export interface EvalOpsReport {
   real_quality_chain_rate: number;
   average_delta_score?: number | null;
   regressed_run_count: number;
+  judge_mode: EvalJudgeMode;
+  judge_avg_score: number;
+  llm_judge_avg_score?: number | null;
+  judge_fallback_reason: string;
   hitl_enabled_run_rate: number;
   human_correction_rate: number;
   redo_iteration_count: number;

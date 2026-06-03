@@ -4,7 +4,13 @@ from statistics import mean
 
 from packages.business_intel import compare_run_quality
 from packages.schema.api_dto import RunDetail, RunQualityComparison
-from packages.schema.evals import EvalOpsCaseResult, EvalOpsMetric, EvalOpsReport, EvalOpsStatus
+from packages.schema.evals import (
+    EvalJudgeMode,
+    EvalOpsCaseResult,
+    EvalOpsMetric,
+    EvalOpsReport,
+    EvalOpsStatus,
+)
 
 MANUAL_BASELINE_HOURS_PER_REPORT = 6.0
 AUTOMATION_FLOOR_HOURS_PER_REPORT = 0.08
@@ -15,6 +21,7 @@ def build_enterprise_evalops_report(
     *,
     baseline: RunDetail | None = None,
     limit: int = 30,
+    judge_mode: EvalJudgeMode = "heuristic",
 ) -> EvalOpsReport:
     recent_runs = sorted(runs, key=lambda item: item.updated_at, reverse=True)[: max(1, limit)]
     comparisons = [
@@ -47,6 +54,15 @@ def build_enterprise_evalops_report(
         for comparison in comparisons
         if comparison.delta_score is not None and comparison.delta_score < 0
     )
+    judge_scores = [_heuristic_judge_score(comparison) for comparison in comparisons]
+    judge_avg_score = round(_average_float(judge_scores), 2)
+    llm_judge_avg_score = None
+    judge_fallback_reason = ""
+    if judge_mode == "llm":
+        judge_fallback_reason = (
+            "LLM judge provider is not configured for the in-product EvalOps report; "
+            "deterministic rubric score is used for the regression gate."
+        )
     revisions = [revision for run in recent_runs for revision in run.revisions]
     hitl_enabled_run_rate = _ratio([run.hitl_enabled for run in recent_runs])
     human_correction_rate = _average_float(
@@ -127,6 +143,7 @@ def build_enterprise_evalops_report(
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
         _metric("real_quality_chain_rate", real_quality_chain_rate, 0.5, "ratio"),
+        _metric("judge_avg_score", judge_avg_score, 72.0, "score"),
         _metric(
             "human_correction_rate",
             human_correction_rate,
@@ -163,6 +180,10 @@ def build_enterprise_evalops_report(
         real_quality_chain_rate=round(real_quality_chain_rate, 3),
         average_delta_score=average_delta_score,
         regressed_run_count=regressed_run_count,
+        judge_mode=judge_mode,
+        judge_avg_score=judge_avg_score,
+        llm_judge_avg_score=llm_judge_avg_score,
+        judge_fallback_reason=judge_fallback_reason,
         hitl_enabled_run_rate=round(hitl_enabled_run_rate, 3),
         human_correction_rate=round(human_correction_rate, 3),
         redo_iteration_count=redo_iteration_count,
@@ -296,6 +317,16 @@ def _case(
     )
 
 
+def _heuristic_judge_score(comparison: RunQualityComparison) -> float:
+    score = comparison.target_score * 0.45
+    score += 12.0 if comparison.real_collection_signal else 0.0
+    score += 12.0 if comparison.real_llm_signal else 0.0
+    score += 12.0 if comparison.report_quality_signal else 0.0
+    score += _metric_value(comparison, "citation_validity_rate") * 10.0
+    score += _metric_value(comparison, "schema_pass_rate") * 9.0
+    return max(0.0, min(100.0, score))
+
+
 def _metric(
     name: str,
     value: float,
@@ -370,6 +401,8 @@ def _recommendations(
         recommendations.append("Run more real collection paths so EvalOps is not dominated by demos.")
     if metric_names["real_quality_chain_rate"].status != "pass":
         recommendations.append("Close the real run quality chain: collection, LLM trace, and cited report depth.")
+    if metric_names["judge_avg_score"].status != "pass":
+        recommendations.append("Improve judge score by strengthening evidence support, citations, and structure.")
     if (
         "average_delta_score" in metric_names
         and metric_names["average_delta_score"].status != "pass"

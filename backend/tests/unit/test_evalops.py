@@ -64,6 +64,10 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.real_quality_chain_rate == 1.0
     assert report.average_delta_score is not None and report.average_delta_score > 0
     assert report.regressed_run_count == 0
+    assert report.judge_mode == "heuristic"
+    assert report.judge_avg_score >= 72
+    assert report.llm_judge_avg_score is None
+    assert report.judge_fallback_reason == ""
     assert report.human_correction_rate == 0.25
     assert report.redo_iteration_count == 1
     assert report.redo_convergence_ratio == 0.25
@@ -89,6 +93,10 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         metric.name == "report_structure_score" and metric.status == "pass"
         for metric in report.metrics
     )
+    assert any(
+        metric.name == "judge_avg_score" and metric.status == "pass"
+        for metric in report.metrics
+    )
     assert report.manual_baseline_hours_per_report == 6.0
     assert report.manual_baseline_hours == 6.0
     assert report.automation_runtime_hours > 0
@@ -111,12 +119,19 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     app.dependency_overrides[get_run_service] = lambda: service
     client = TestClient(app)
 
-    response = client.get("/api/evals/enterprise", params={"project_id": "project-a"})
+    response = client.get(
+        "/api/evals/enterprise",
+        params={"project_id": "project-a", "judge_mode": "llm"},
+    )
 
     assert response.status_code == 200
     assert response.json()["evaluated_run_ids"] == ["real-run"]
     assert response.json()["real_run_count"] == 1
     assert response.json()["real_quality_chain_rate"] == 1.0
+    assert response.json()["judge_mode"] == "llm"
+    assert response.json()["judge_avg_score"] >= 72
+    assert response.json()["llm_judge_avg_score"] is None
+    assert "deterministic rubric" in response.json()["judge_fallback_reason"]
     assert response.json()["golden_set_size"] == 9
     assert any(
         metric["name"] == "schema_pass_rate" and metric["status"] == "pass"

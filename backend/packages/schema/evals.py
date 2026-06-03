@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 EvalOpsStatus = Literal["pass", "warn", "fail"]
+EvalJudgeMode = Literal["heuristic", "llm"]
 
 
 class EvalOpsMetric(BaseModel):
@@ -44,6 +45,10 @@ class EvalOpsReport(BaseModel):
     real_quality_chain_rate: float = Field(ge=0.0, le=1.0)
     average_delta_score: float | None = None
     regressed_run_count: int = Field(ge=0)
+    judge_mode: EvalJudgeMode = "heuristic"
+    judge_avg_score: float = Field(default=0.0, ge=0.0, le=100.0)
+    llm_judge_avg_score: float | None = Field(default=None, ge=0.0, le=100.0)
+    judge_fallback_reason: str = ""
     hitl_enabled_run_rate: float = Field(ge=0.0, le=1.0)
     human_correction_rate: float = Field(ge=0.0, le=1.0)
     redo_iteration_count: int = Field(ge=0)
