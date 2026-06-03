@@ -2569,8 +2569,11 @@ export interface components {
             real_quality_chain_rate: number;
             /** Real Quality Chain Failed Run Ids */
             real_quality_chain_failed_run_ids?: string[];
-            /** Decision Replay Rate */
-            decision_replay_rate?: number;
+            /**
+             * Decision Replay Rate
+             * @default 0
+             */
+            decision_replay_rate: number;
             /** Decision Replay Failed Run Ids */
             decision_replay_failed_run_ids?: string[];
             /** Quality Chain Steps */
@@ -2751,6 +2754,10 @@ export interface components {
              * @default 0
              */
             online_failure_count: number;
+            /** Online Failures */
+            online_failures?: {
+                [key: string]: string;
+            }[];
             /**
              * Gap Fill Chain Closed
              * @default false
@@ -6483,7 +6490,11 @@ export interface operations {
     export_run_compliance_report_api_runs__run_id__compliance_export_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
