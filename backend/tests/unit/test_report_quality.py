@@ -80,6 +80,7 @@ def test_compare_run_quality_scores_real_run_against_baseline() -> None:
         "citation_validity_rate",
         "report_structure_score",
         "claim_risk_section_score",
+        "scenario_checklist_section_score",
     }
     assert next(
         metric for metric in comparison.metrics if metric.name == "citation_validity_rate"
@@ -178,9 +179,10 @@ def test_compare_run_quality_flags_missing_real_chain_signals() -> None:
     assert comparison.real_collection_signal is False
     assert comparison.real_llm_signal is False
     assert comparison.report_quality_signal is False
-    assert len(comparison.recommendations) == 4
+    assert len(comparison.recommendations) == 5
     assert "real webpage" in comparison.recommendations[0]
-    assert "Claim Validation & Evidence Risk" in comparison.recommendations[-1]
+    assert any("Claim Validation & Evidence Risk" in item for item in comparison.recommendations)
+    assert any("Scenario QA Checklist" in item for item in comparison.recommendations)
 
 
 def test_compare_run_quality_counts_official_business_sources_as_real_verified() -> None:
@@ -406,6 +408,12 @@ review before publication. [source:source-0] [source:source-1]
 | --- | --- | --- |
 | Pricing | transparent pricing [source:source-0] | bundled enterprise offer [source:source-1] |
 | Feature | focused agent workflow [source:source-2] | broad IDE integration [source:source-3] |
+
+## Scenario QA Checklist
+- Scenario: l1_pricing_pack; layer: L1; recommended dimensions: pricing, feature, persona.
+- Analyst question: Which plan gates drive perceived value?
+- Evidence requirement: Pricing rows require official pricing-page evidence.
+- QA rules: claim_has_evidence, source_reliability_min
 
 ## Battlecard
 Sales should use pricing transparency and switching objections as the first battlecard line.

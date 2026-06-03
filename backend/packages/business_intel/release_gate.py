@@ -266,8 +266,8 @@ def _report_structure_issues(report_version: ReportVersionRecord) -> list[Busine
             ),
             recommendation=(
                 "Regenerate or revise the report with executive summary, source quality, "
-                "decision matrix, layer-specific analysis, claim validation risk, next collection "
-                "plan, and evidence appendix."
+                "decision matrix, scenario QA checklist, layer-specific analysis, claim "
+                "validation risk, next collection plan, and evidence appendix."
             ),
         )
     ]
@@ -286,6 +286,10 @@ def _report_structure_score(report_version: ReportVersionRecord) -> tuple[float,
         (
             "Decision Matrix",
             _has_heading(report_version.report_md, ("matrix", "dimension winners", "side-by-side")),
+        ),
+        (
+            "Scenario QA Checklist",
+            _has_heading(report_version.report_md, ("scenario qa", "scenario checklist")),
         ),
         (
             "Claim Validation & Evidence Risk",

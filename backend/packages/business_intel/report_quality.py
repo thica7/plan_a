@@ -101,6 +101,9 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "report_length_score": min(len(detail.report_md) / 2500.0, 1.0),
         "report_structure_score": _report_structure_score(detail),
         "claim_risk_section_score": _claim_risk_section_score(detail.report_md),
+        "scenario_checklist_section_score": _scenario_checklist_section_score(
+            detail.report_md
+        ),
         "qa_blocker_count": float(
             len([finding for finding in detail.qa_findings if finding.severity == "blocker"])
         ),
@@ -116,6 +119,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "report_length_score": values["report_length_score"],
         "report_structure_score": values["report_structure_score"],
         "claim_risk_section_score": values["claim_risk_section_score"],
+        "scenario_checklist_section_score": values["scenario_checklist_section_score"],
         "qa_blocker_count": max(0.0, 1.0 - min(values["qa_blocker_count"] / 3.0, 1.0)),
     }
     score = round(
@@ -137,6 +141,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         and values["source_coverage_rate"] >= 0.5
         and values["report_structure_score"] >= 0.7
         and values["claim_risk_section_score"] >= 1.0
+        and values["scenario_checklist_section_score"] >= 1.0
     )
     return _QualitySnapshot(
         score=max(0, min(100, score)),
@@ -156,9 +161,10 @@ def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower
         ("citation_validity_rate", 0.10, "higher_is_better"),
         ("real_source_rate", 0.11, "higher_is_better"),
         ("llm_call_signal", 0.09, "higher_is_better"),
-        ("report_length_score", 0.06, "higher_is_better"),
-        ("report_structure_score", 0.09, "higher_is_better"),
+        ("report_length_score", 0.04, "higher_is_better"),
+        ("report_structure_score", 0.07, "higher_is_better"),
         ("claim_risk_section_score", 0.06, "higher_is_better"),
+        ("scenario_checklist_section_score", 0.04, "higher_is_better"),
         ("qa_blocker_count", 0.07, "lower_is_better"),
     ]
 
@@ -281,6 +287,7 @@ def _report_structure_score(detail: RunDetail) -> float:
         _has_heading(detail.report_md, ("executive summary", "executive overview")),
         _has_heading(detail.report_md, ("source quality", "source coverage")),
         _has_heading(detail.report_md, ("matrix", "dimension winners", "side-by-side")),
+        _scenario_checklist_section_score(detail.report_md) >= 1.0,
         _claim_risk_section_score(detail.report_md) >= 1.0,
         _has_heading(detail.report_md, ("next collection", "verification plan", "evidence gap")),
         _has_heading(detail.report_md, ("evidence appendix", "source appendix")),
@@ -310,6 +317,10 @@ def _has_heading(markdown: str, needles: tuple[str, ...]) -> bool:
 
 def _claim_risk_section_score(markdown: str) -> float:
     return 1.0 if _has_heading(markdown, ("claim validation", "evidence risk")) else 0.0
+
+
+def _scenario_checklist_section_score(markdown: str) -> float:
+    return 1.0 if _has_heading(markdown, ("scenario qa", "scenario checklist")) else 0.0
 
 
 def _verdict(
@@ -370,6 +381,11 @@ def _clean_recommendations(
         recommendations.append(
             "Add a Claim Validation & Evidence Risk section so reviewers can inspect weak claims, "
             "source risk, and follow-up collection tasks."
+        )
+    if target.values.get("scenario_checklist_section_score", 0.0) < 1.0:
+        recommendations.append(
+            "Add a Scenario QA Checklist section so the selected layer, ScenarioPack, QA rules, "
+            "and evidence requirements are visible in the report."
         )
     if (
         target.values.get("report_source_token_count", 0.0) > 0
