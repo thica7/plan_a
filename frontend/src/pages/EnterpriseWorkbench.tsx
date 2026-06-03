@@ -65,6 +65,7 @@ import type {
   ClaimRecord,
   CompetitorScoreReport,
   CompetitorRecord,
+  DecisionReplayEvent,
   DecisionReplayReport,
   EvidenceGapFillResult,
   EvidenceGapItem,
@@ -1208,7 +1209,12 @@ function DecisionReplayPanel({
 }) {
   if (!runId) return null;
 
-  const recentEvents = replay?.events.slice(-5).reverse() ?? [];
+  const timelineEvents = [...(replay?.events ?? [])]
+    .sort((left, right) => right.created_at.localeCompare(left.created_at))
+    .slice(0, 8);
+  const eventTypeCounts = replay
+    ? Object.entries(replay.event_type_counts).sort((left, right) => right[1] - left[1])
+    : [];
   const status = !replay
     ? "warn"
     : replay.blocker_count > 0
@@ -1239,14 +1245,36 @@ function DecisionReplayPanel({
             <span>Run {runId}</span>
             <span>Types {Object.keys(replay.event_type_counts).length}</span>
             <span>Status {replay.status}</span>
+            <span>Generated {formatDate(replay.generated_at)}</span>
           </div>
-          {recentEvents.length > 0 ? (
-            <div className="recommendation-list">
-              {recentEvents.map((event) => (
-                <article className={`recommendation-card ${decisionReplayPriority(event.event_type)}`} key={event.id}>
-                  <strong>{event.event_type.replace(/_/g, " ")}</strong>
-                  <span>{event.agent ?? "system"}</span>
+          {eventTypeCounts.length > 0 ? (
+            <div className="decision-event-types">
+              {eventTypeCounts.slice(0, 8).map(([eventType, count]) => (
+                <span key={eventType}>
+                  {formatDecisionEventType(eventType)}
+                  <em>{count}</em>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {timelineEvents.length > 0 ? (
+            <div className="decision-timeline">
+              {timelineEvents.map((event) => (
+                <article
+                  className={`decision-event-card ${decisionReplayPriority(event.event_type)}`}
+                  key={event.id}
+                >
+                  <div>
+                    <strong>{formatDecisionEventType(event.event_type)}</strong>
+                    <span>{event.agent ?? "system"} / {formatDate(event.created_at)}</span>
+                  </div>
                   <p>{event.message}</p>
+                  <div className="project-meta-row">
+                    <span>Evidence {event.evidence_ids.length}</span>
+                    <span>Claims {event.claim_ids.length}</span>
+                    <span>Spans {event.related_span_ids.length}</span>
+                  </div>
+                  <em>{decisionPayloadSummary(event)}</em>
                 </article>
               ))}
             </div>
@@ -2846,6 +2874,100 @@ function decisionReplayPriority(eventType: string) {
     return "medium";
   }
   return "low";
+}
+
+function formatDecisionEventType(eventType: string) {
+  return eventType.replace(/[._]/g, " ");
+}
+
+function decisionPayloadSummary(event: DecisionReplayEvent) {
+  const payload = event.payload;
+  const parts: string[] = [];
+
+  if (event.event_type === "rag.retrieved") {
+    const retrievalCount = payloadNumber(payload, "retrieval_record_count");
+    const closureRate = payloadNumber(payload, "gap_closure_rate");
+    parts.push(`retrieval ${retrievalCount ?? event.evidence_ids.length}`);
+    if (closureRate !== null) parts.push(`closure ${formatPercent(closureRate)}`);
+  } else if (event.event_type === "memory.recalled") {
+    const candidateCount = payloadListCount(payload, "candidate_ids", "memory_candidate_ids");
+    const explicitCandidateCount = payloadNumber(payload, "candidate_count");
+    const recallScore = payloadNumber(payload, "score", "recall_score");
+    parts.push(`candidates ${candidateCount ?? explicitCandidateCount ?? 0}`);
+    if (recallScore !== null) {
+      parts.push(`recall ${recallScore > 1 ? recallScore : formatPercent(recallScore)}`);
+    }
+  } else if (event.event_type === "claim.validated") {
+    const claimCount = payloadNumber(payload, "claim_count") ?? event.claim_ids.length;
+    const supportedCount = payloadNumber(payload, "supported_count");
+    const releaseGate = payloadRecord(payload, "release_gate");
+    parts.push(`claims ${claimCount}`);
+    if (supportedCount !== null) parts.push(`supported ${supportedCount}`);
+    if (releaseGate) parts.push(`gate ${String(releaseGate.status ?? "unknown")}`);
+  } else if (event.event_type === "self_consistency.sampled") {
+    const sampleCount = payloadNumber(payload, "sample_count");
+    const score = payloadNumber(payload, "self_consistency_score", "consistency_score");
+    if (sampleCount !== null) parts.push(`samples ${sampleCount}`);
+    if (score !== null) parts.push(`consistency ${formatPercent(score)}`);
+  } else if (event.event_type === "qa.blocked" || event.event_type === "redo.routed") {
+    const severity = payloadString(payload, "severity");
+    const redoScope = payloadString(payload, "redo_scope", "scope");
+    const target = payloadString(payload, "target_agent", "agent");
+    if (severity) parts.push(`severity ${severity}`);
+    if (redoScope) parts.push(`scope ${redoScope}`);
+    if (target) parts.push(`target ${target}`);
+  } else if (event.event_type === "benchmark.scored") {
+    const quality = payloadNumber(payload, "report_quality_score", "target_score");
+    const schema = payloadNumber(payload, "schema_pass_rate");
+    if (quality !== null) parts.push(`quality ${quality}`);
+    if (schema !== null) parts.push(`schema ${formatPercent(schema)}`);
+  } else if (event.event_type === "tool.called") {
+    const tool = payloadString(payload, "tool", "name");
+    const failures = payloadNumber(payload, "online_failure_count");
+    if (tool) parts.push(`tool ${tool}`);
+    if (failures !== null) parts.push(`failures ${failures}`);
+  } else if (event.event_type === "report.ready") {
+    const versionId = payloadString(payload, "updated_report_version_id", "report_version_id");
+    const releaseGate = payloadRecord(payload, "release_gate");
+    if (versionId) parts.push(`version ${versionId}`);
+    if (releaseGate) parts.push(`gate ${String(releaseGate.status ?? "unknown")}`);
+  }
+
+  if (parts.length === 0) {
+    const payloadKeys = Object.keys(payload).slice(0, 4);
+    return payloadKeys.length ? `payload ${payloadKeys.join(", ")}` : "No structured payload summary.";
+  }
+  return parts.join(" / ");
+}
+
+function payloadNumber(payload: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function payloadString(payload: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return null;
+}
+
+function payloadListCount(payload: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = payload[key];
+    if (Array.isArray(value)) return value.length;
+  }
+  return null;
+}
+
+function payloadRecord(payload: Record<string, unknown>, key: string) {
+  const value = payload[key];
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
 }
 
 function qualityEntryPriority(entry: QualityAgentMatrixEntry) {
