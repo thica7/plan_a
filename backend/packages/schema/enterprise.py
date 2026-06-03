@@ -1013,6 +1013,7 @@ class EvidenceGapReport(BaseModel):
     pydantic_ai_execution_mode: str = "deterministic_handler"
     pydantic_ai_model_backed_requested: bool = False
     pydantic_ai_model_backed_fallback: bool = False
+    pydantic_ai_fallback_reason: str = ""
     pydantic_ai_runtime_agent_created: bool = False
     pydantic_ai_runtime_result_type: str | None = None
     pydantic_ai_model_name: str | None = None
@@ -1103,6 +1104,7 @@ class RedTeamReport(BaseModel):
     pydantic_ai_execution_mode: str = "deterministic_handler"
     pydantic_ai_model_backed_requested: bool = False
     pydantic_ai_model_backed_fallback: bool = False
+    pydantic_ai_fallback_reason: str = ""
     pydantic_ai_runtime_agent_created: bool = False
     pydantic_ai_runtime_result_type: str | None = None
     pydantic_ai_model_name: str | None = None

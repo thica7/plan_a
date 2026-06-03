@@ -1196,6 +1196,12 @@ def _with_pydantic_ai_execution_metadata(
                     report.pydantic_ai_model_backed_fallback,
                 )
             ),
+            "pydantic_ai_fallback_reason": _optional_str(
+                metadata.get("pydantic_ai_model_backed_error")
+                or metadata.get("pydantic_ai_test_model_error")
+                or report.pydantic_ai_fallback_reason
+            )
+            or "",
             "pydantic_ai_runtime_agent_created": bool(
                 metadata.get(
                     "pydantic_ai_runtime_agent_created",
@@ -1246,6 +1252,7 @@ def _quality_agent_pydantic_ai_metadata(
         "pydantic_ai_execution_mode": report.pydantic_ai_execution_mode,
         "pydantic_ai_model_backed_requested": report.pydantic_ai_model_backed_requested,
         "pydantic_ai_model_backed_fallback": report.pydantic_ai_model_backed_fallback,
+        "pydantic_ai_fallback_reason": report.pydantic_ai_fallback_reason,
         "pydantic_ai_runtime_agent_created": report.pydantic_ai_runtime_agent_created,
         "pydantic_ai_runtime_result_type": report.pydantic_ai_runtime_result_type,
         "pydantic_ai_model_name": report.pydantic_ai_model_name,

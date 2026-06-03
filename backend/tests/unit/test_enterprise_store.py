@@ -7,7 +7,12 @@ from fastapi.testclient import TestClient
 
 from app.deps import get_artifact_storage, get_enterprise_store, get_preference_memory
 from app.main import create_app
-from app.routers.enterprise import _with_gap_fill_release_gate_delta
+from app.routers.enterprise import (
+    _quality_agent_pydantic_ai_metadata,
+    _with_gap_fill_release_gate_delta,
+    _with_pydantic_ai_execution_metadata,
+)
+from packages.agents.executor import AgentExecutionResult
 from packages.artifacts import LocalArtifactStorage
 from packages.config import Settings
 from packages.enterprise import (
@@ -193,6 +198,34 @@ def test_enterprise_store_round_trips_notifications_with_audit() -> None:
     assert store.list_notifications("workspace-a", status="sent") == [notification]
     assert store.list_notifications("workspace-b") == []
     assert any(log.action == "notification.upserted" for log in store.list_audit_logs())
+
+
+def test_pydantic_ai_metadata_preserves_model_backed_fallback_reason() -> None:
+    report = EvidenceGapReport(project_id="project-1", scenario_id="l1_pricing_pack")
+    result = AgentExecutionResult(
+        run_id="run-1",
+        agent_name="evidence_gap",
+        output_schema="EvidenceGapReport",
+        payload=report.model_dump(mode="json"),
+        metadata={
+            "execution_mode": "pydantic_ai_model_backed_fallback",
+            "pydantic_ai_model_backed_requested": True,
+            "pydantic_ai_model_backed_fallback": True,
+            "pydantic_ai_model_backed_error": "provider timeout",
+            "pydantic_ai_model_name": "openai:test-model",
+            "typed_contract_enforced": True,
+        },
+    )
+
+    updated = _with_pydantic_ai_execution_metadata(report, result)
+    matrix_metadata = _quality_agent_pydantic_ai_metadata(updated)
+
+    assert updated.pydantic_ai_execution_mode == "pydantic_ai_model_backed_fallback"
+    assert updated.pydantic_ai_model_backed_requested is True
+    assert updated.pydantic_ai_model_backed_fallback is True
+    assert updated.pydantic_ai_fallback_reason == "provider timeout"
+    assert updated.pydantic_ai_model_name == "openai:test-model"
+    assert matrix_metadata["pydantic_ai_fallback_reason"] == "provider timeout"
 
 
 def test_enterprise_store_tracks_workspace_usage_and_quota_decision() -> None:
