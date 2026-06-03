@@ -29,7 +29,10 @@ def build_enterprise_evalops_report(
         : max(1, limit)
     ]
     comparisons = [
-        compare_run_quality(run, baseline=baseline if baseline is not None and baseline.id != run.id else None)
+        compare_run_quality(
+            run,
+            baseline=baseline if baseline is not None and baseline.id != run.id else None,
+        )
         for run in recent_runs
     ]
     real_run_count = sum(1 for run in recent_runs if run.execution_mode == "real")
@@ -95,6 +98,9 @@ def build_enterprise_evalops_report(
     report_structure_rate = _average_float(
         [_metric_value(comparison, "report_structure_score") for comparison in comparisons]
     )
+    claim_risk_section_rate = _average_float(
+        [_metric_value(comparison, "claim_risk_section_score") for comparison in comparisons]
+    )
     real_collection_rate = _ratio(
         [comparison.real_collection_signal for comparison in comparisons],
     )
@@ -131,6 +137,7 @@ def build_enterprise_evalops_report(
         citation_validity_rate=citation_validity_rate,
         schema_pass_rate=schema_pass_rate,
         report_structure_rate=report_structure_rate,
+        claim_risk_section_rate=claim_risk_section_rate,
         real_collection_rate=real_collection_rate,
         real_llm_rate=real_llm_rate,
     )
@@ -144,6 +151,7 @@ def build_enterprise_evalops_report(
         _metric("citation_validity_rate", citation_validity_rate, 0.6, "ratio"),
         _metric("schema_pass_rate", schema_pass_rate, 1.0, "ratio"),
         _metric("report_structure_score", report_structure_rate, 0.7, "ratio"),
+        _metric("claim_risk_section_score", claim_risk_section_rate, 1.0, "ratio"),
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
         _metric("real_quality_chain_rate", real_quality_chain_rate, 0.5, "ratio"),
@@ -220,6 +228,7 @@ def _golden_cases(
     citation_validity_rate: float,
     schema_pass_rate: float,
     report_structure_rate: float,
+    claim_risk_section_rate: float,
     real_collection_rate: float,
     real_llm_rate: float,
 ) -> list[EvalOpsCaseResult]:
@@ -283,6 +292,14 @@ def _golden_cases(
             baseline_run_id,
         ),
         _case(
+            "golden.claim_risk_section",
+            "Claim validation risk section",
+            round(claim_risk_section_rate * 100),
+            100,
+            target_run_id,
+            baseline_run_id,
+        ),
+        _case(
             "golden.real_collection",
             "Real collection signal",
             round(real_collection_rate * 100),
@@ -309,7 +326,9 @@ def _case(
     target_run_id: str | None,
     baseline_run_id: str | None,
 ) -> EvalOpsCaseResult:
-    status: EvalOpsStatus = "pass" if score >= target else "warn" if score >= target * 0.75 else "fail"
+    status: EvalOpsStatus = (
+        "pass" if score >= target else "warn" if score >= target * 0.75 else "fail"
+    )
     return EvalOpsCaseResult(
         case_id=case_id,
         name=name,
@@ -340,7 +359,9 @@ def _metric(
     lower_is_better: bool = False,
 ) -> EvalOpsMetric:
     if lower_is_better:
-        status: EvalOpsStatus = "pass" if value <= target else "warn" if value <= target * 1.5 else "fail"
+        status: EvalOpsStatus = (
+            "pass" if value <= target else "warn" if value <= target * 1.5 else "fail"
+        )
     else:
         status = "pass" if value >= target else "warn" if value >= target * 0.75 else "fail"
     return EvalOpsMetric(
@@ -392,35 +413,66 @@ def _recommendations(
     recommendations: list[str] = []
     metric_names = {metric.name: metric for metric in metrics}
     if metric_names["golden_set_pass_rate"].status != "pass":
-        recommendations.append("Raise golden-set pass rate by fixing the failing quality cases first.")
+        recommendations.append(
+            "Raise golden-set pass rate by fixing the failing quality cases first."
+        )
     if metric_names["source_recall"].status != "pass":
-        recommendations.append("Improve source recall with more competitor-dimension evidence coverage.")
+        recommendations.append(
+            "Improve source recall with more competitor-dimension evidence coverage."
+        )
     if metric_names["claim_citation_rate"].status != "pass":
-        recommendations.append("Increase claim citation rate before relying on the report in review.")
+        recommendations.append(
+            "Increase claim citation rate before relying on the report in review."
+        )
     if metric_names["citation_validity_rate"].status != "pass":
-        recommendations.append("Repair unresolved report source tokens before publishing or reviewing the report.")
+        recommendations.append(
+            "Repair unresolved report source tokens before publishing or reviewing the report."
+        )
     if metric_names["schema_pass_rate"].status != "pass":
-        recommendations.append("Fix schema validation failures before comparing or publishing the report.")
+        recommendations.append(
+            "Fix schema validation failures before comparing or publishing the report."
+        )
+    if metric_names["claim_risk_section_score"].status != "pass":
+        recommendations.append(
+            "Add Claim Validation & Evidence Risk to every report before review."
+        )
     if metric_names["real_collection_rate"].status != "pass":
-        recommendations.append("Run more real collection paths so EvalOps is not dominated by demos.")
+        recommendations.append(
+            "Run more real collection paths so EvalOps is not dominated by demos."
+        )
     if metric_names["real_quality_chain_rate"].status != "pass":
-        recommendations.append("Close the real run quality chain: collection, LLM trace, and cited report depth.")
+        recommendations.append(
+            "Close the real run quality chain: collection, LLM trace, and cited report depth."
+        )
     if metric_names["judge_avg_score"].status != "pass":
-        recommendations.append("Improve judge score by strengthening evidence support, citations, and structure.")
+        recommendations.append(
+            "Improve judge score by strengthening evidence support, citations, and structure."
+        )
     if (
         "average_delta_score" in metric_names
         and metric_names["average_delta_score"].status != "pass"
     ):
-        recommendations.append("Compare regressed runs against the baseline and fix the weakest quality metric.")
+        recommendations.append(
+            "Compare regressed runs against the baseline and fix the weakest quality metric."
+        )
     if metric_names["human_correction_rate"].status != "pass":
-        recommendations.append("Review recurring human corrections and convert them into rules or memory.")
+        recommendations.append(
+            "Review recurring human corrections and convert them into rules or memory."
+        )
     if (
         "redo_convergence_ratio" in metric_names
         and metric_names["redo_convergence_ratio"].status != "pass"
     ):
-        recommendations.append("Tighten scoped redo routing so repeated revisions reduce QA issues faster.")
-    if any(comparison.delta_score is not None and comparison.delta_score < 0 for comparison in comparisons):
-        recommendations.append("Inspect regressions against the selected baseline before publishing.")
+        recommendations.append(
+            "Tighten scoped redo routing so repeated revisions reduce QA issues faster."
+        )
+    if any(
+        comparison.delta_score is not None and comparison.delta_score < 0
+        for comparison in comparisons
+    ):
+        recommendations.append(
+            "Inspect regressions against the selected baseline before publishing."
+        )
     return recommendations[:5]
 
 

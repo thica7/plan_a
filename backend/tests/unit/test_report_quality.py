@@ -79,6 +79,7 @@ def test_compare_run_quality_scores_real_run_against_baseline() -> None:
         "claim_citation_rate",
         "citation_validity_rate",
         "report_structure_score",
+        "claim_risk_section_score",
     }
     assert next(
         metric for metric in comparison.metrics if metric.name == "citation_validity_rate"
@@ -177,8 +178,9 @@ def test_compare_run_quality_flags_missing_real_chain_signals() -> None:
     assert comparison.real_collection_signal is False
     assert comparison.real_llm_signal is False
     assert comparison.report_quality_signal is False
-    assert len(comparison.recommendations) == 3
+    assert len(comparison.recommendations) == 4
     assert "real webpage" in comparison.recommendations[0]
+    assert "Claim Validation & Evidence Risk" in comparison.recommendations[-1]
 
 
 def test_compare_run_quality_counts_official_business_sources_as_real_verified() -> None:
@@ -400,6 +402,11 @@ Sales should use pricing transparency and switching objections as the first batt
 The battlecard should avoid absolute winner language until security, SSO, and procurement evidence
 are independently verified. Cursor is easier to explain on standalone pricing, while Copilot can
 defend through bundled distribution and existing Microsoft procurement paths.
+[source:source-0] [source:source-1]
+
+## Claim Validation & Evidence Risk
+No unresolved blocker claims were detected in the structured comparison, but enterprise security
+and procurement recommendations remain review-gated until additional official sources are linked.
 [source:source-0] [source:source-1]
 
 ## Next Collection / Verification Plan

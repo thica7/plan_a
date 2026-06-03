@@ -75,7 +75,9 @@ def test_scenario_pack_catalog_and_qa_rules_are_loaded() -> None:
 
     assert len(packs) >= 5
     assert len(rules) == 8
-    assert {"l1_direct_battlecard", "l2_adjacent_workflow", "l3_market_landscape"} <= set(packs_by_id)
+    assert {"l1_direct_battlecard", "l2_adjacent_workflow", "l3_market_landscape"} <= set(
+        packs_by_id
+    )
     assert packs_by_id["l1_direct_battlecard"].competitor_layer == "L1"
     assert packs_by_id["l2_adjacent_workflow"].competitor_layer == "L2"
     assert packs_by_id["l3_market_landscape"].competitor_layer == "L3"
@@ -1365,6 +1367,10 @@ coverage. {citation}
 ## Battlecard
 Use pricing transparency as the battlecard point, while keeping security and procurement claims
 out of scope until separately verified. {citation}
+
+## Claim Validation & Evidence Risk
+The scoped pricing claim is backed by accepted evidence. Broader security or procurement claims
+remain excluded until independent evidence is attached. {citation}
 
 ## Next Collection / Verification Plan
 Collect additional feature, security, and procurement evidence before making broader release

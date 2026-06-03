@@ -121,6 +121,10 @@ The report uses verified webpage evidence and keeps broader enterprise claims ou
 Use pricing transparency as the direct battlecard point, pending feature and procurement review.
 {citation}
 
+## Claim Validation & Evidence Risk
+The pricing claim is backed by accepted evidence. Wider enterprise claims remain gated until
+additional official sources are attached. {citation}
+
 ## Next Collection / Verification Plan
 Collect feature, security, and procurement sources before publishing broader recommendations.
 {citation}
