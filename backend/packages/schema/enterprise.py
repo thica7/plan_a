@@ -836,6 +836,7 @@ class QualityAgentMatrixEntry(BaseModel):
     summary: str = ""
     evidence_ids: list[str] = Field(default_factory=list)
     claim_ids: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class QualityAgentMatrix(BaseModel):

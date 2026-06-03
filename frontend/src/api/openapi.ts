@@ -3400,6 +3400,10 @@ export interface components {
             evidence_ids?: string[];
             /** Claim Ids */
             claim_ids?: string[];
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
         };
         /** RawSource */
         RawSource: {

@@ -967,6 +967,16 @@ def test_enterprise_router_exposes_projection() -> None:
     )
     assert memory_matrix["framework"] == "deterministic-preference-memory"
     assert memory_matrix["score"] >= 80
+    evidence_gap_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "EvidenceGap"
+    )
+    assert evidence_gap_matrix["metadata"]["pydantic_ai_execution_mode"] == "deterministic_handler"
+    assert evidence_gap_matrix["metadata"]["typed_contract_enforced"] is True
+    red_team_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "RedTeam"
+    )
+    assert red_team_matrix["metadata"]["pydantic_ai_execution_mode"] == "deterministic_handler"
+    assert red_team_matrix["metadata"]["typed_contract_enforced"] is True
     release_matrix = next(
         item for item in quality_matrix.json()["entries"] if item["agent_name"] == "ReleaseGate"
     )

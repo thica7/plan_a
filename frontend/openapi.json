@@ -11028,6 +11028,11 @@
             },
             "type": "array",
             "title": "Claim Ids"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
           }
         },
         "additionalProperties": false,

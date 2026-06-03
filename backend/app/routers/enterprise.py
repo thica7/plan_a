@@ -801,6 +801,7 @@ async def get_project_quality_matrix(
             claim_ids=_unique_ids(
                 claim_id for gap in evidence_gaps.gaps for claim_id in gap.claim_ids
             ),
+            metadata=_quality_agent_pydantic_ai_metadata(evidence_gaps),
         ),
         QualityAgentMatrixEntry(
             agent_name="RedTeam",
@@ -820,6 +821,7 @@ async def get_project_quality_matrix(
             claim_ids=_unique_ids(
                 claim_id for finding in red_team.findings for claim_id in finding.claim_ids
             ),
+            metadata=_quality_agent_pydantic_ai_metadata(red_team),
         ),
         (
             QualityAgentMatrixEntry(
@@ -947,6 +949,22 @@ def _with_pydantic_ai_execution_metadata(
             ),
         }
     )
+
+
+def _quality_agent_pydantic_ai_metadata(
+    report: EvidenceGapReport | RedTeamReport,
+) -> dict[str, object]:
+    return {
+        "framework": report.framework,
+        "pydantic_ai_available": report.pydantic_ai_available,
+        "pydantic_ai_execution_mode": report.pydantic_ai_execution_mode,
+        "pydantic_ai_model_backed_requested": report.pydantic_ai_model_backed_requested,
+        "pydantic_ai_model_backed_fallback": report.pydantic_ai_model_backed_fallback,
+        "pydantic_ai_runtime_agent_created": report.pydantic_ai_runtime_agent_created,
+        "pydantic_ai_runtime_result_type": report.pydantic_ai_runtime_result_type,
+        "pydantic_ai_model_name": report.pydantic_ai_model_name,
+        "typed_contract_enforced": report.typed_contract_enforced,
+    }
 
 
 def _optional_str(value: object) -> str | None:
