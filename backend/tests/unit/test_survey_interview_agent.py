@@ -37,15 +37,30 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
 
     await service._run_survey_interview_enrichment(record, ["persona"], ["Acme"])
 
-    [source] = record.detail.raw_sources
-    assert source.source_type == "survey_simulated"
-    assert source.competitor == "Acme"
-    assert source.dimension == "persona"
-    assert "target users" in source.snippet
-    assert "buyer personas" in source.snippet
-    assert source.confidence == 0.58
+    assert {source.source_type for source in record.detail.raw_sources} == {
+        "survey_simulated",
+        "interview_record",
+    }
+    survey_source = next(
+        source for source in record.detail.raw_sources if source.source_type == "survey_simulated"
+    )
+    interview_source = next(
+        source for source in record.detail.raw_sources if source.source_type == "interview_record"
+    )
+    assert survey_source.competitor == "Acme"
+    assert survey_source.dimension == "persona"
+    assert "target users" in survey_source.snippet
+    assert "buyer personas" in survey_source.snippet
+    assert survey_source.confidence == 0.58
+    assert interview_source.competitor == "Acme"
+    assert interview_source.dimension == "persona"
+    assert "pain points" in interview_source.snippet
+    assert interview_source.confidence == 0.62
     assert record.detail.agent_messages[-1].message_type == "survey_interview_evidence_collected"
-    assert record.detail.agent_messages[-1].payload["source_ids"] == [source.id]
+    assert set(record.detail.agent_messages[-1].payload["source_ids"]) == {
+        survey_source.id,
+        interview_source.id,
+    }
     span = next(span for span in record.detail.trace_spans if span.name == "survey_interview_agent")
     assert span.agent == "survey_interview"
     assert span.metadata["source_type"] == "survey_simulated"
@@ -75,14 +90,27 @@ def test_survey_evidence_projects_as_synthetic_enterprise_source() -> None:
                 competitor="Acme",
                 dimension="persona",
                 source_type="survey_simulated",
-                title="Acme persona survey/interview synthesis",
+                title="Acme persona survey synthesis",
                 snippet=(
                     "Simulated survey and interview research: target users, customers, "
                     "enterprise teams, and buyer personas evaluate persona by adoption risk."
                 ),
                 content_hash="surveyhash",
                 confidence=0.58,
-            )
+            ),
+            RawSource(
+                id="persona-interview-1",
+                competitor="Acme",
+                dimension="persona",
+                source_type="interview_record",
+                title="Acme persona interview synthesis",
+                snippet=(
+                    "Synthetic interview record: respondents discussed onboarding effort, "
+                    "switching cost, and workflow fit."
+                ),
+                content_hash="interviewhash",
+                confidence=0.62,
+            ),
         ],
     )
     context = store.start_run(detail)
@@ -95,11 +123,19 @@ def test_survey_evidence_projects_as_synthetic_enterprise_source() -> None:
     )
     store.save_projection(projection)
 
-    [evidence] = projection.evidence_records
-    [source_registry] = store.list_source_registry(workspace_id=context.workspace_id)
-    assert evidence.source_type == "survey_simulated"
+    assert {evidence.source_type for evidence in projection.evidence_records} == {
+        "survey_simulated",
+        "interview_record",
+    }
+    source_registry = store.list_source_registry(workspace_id=context.workspace_id)
     assert projection.report_version.quality_metadata["survey_source_ids"] == [
         "persona-survey-1"
     ]
-    assert source_registry.domain == "survey-simulated"
-    assert source_registry.trust_level == "synthetic"
+    assert projection.report_version.quality_metadata["interview_source_ids"] == [
+        "persona-interview-1"
+    ]
+    assert {source.domain for source in source_registry} == {
+        "interview-record",
+        "survey-simulated",
+    }
+    assert {source.trust_level for source in source_registry} == {"synthetic"}

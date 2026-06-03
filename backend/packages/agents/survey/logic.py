@@ -119,10 +119,12 @@ class SurveyInterviewAgentMixin:
                         "interview_count": len(bundle.interviews),
                     },
                 )
-                source = self._source_from_survey_bundle(detail, bundle, dimension, competitor)
-                if self._source_is_usable(source):
+                sources = self._sources_from_survey_bundle(detail, bundle, dimension, competitor)
+                usable_sources = [source for source in sources if self._source_is_usable(source)]
+                for source in usable_sources:
                     detail.raw_sources.append(source)
                     added_sources.append(source)
+                if usable_sources:
                     bundles.append(bundle)
 
         self._append_agent_message(
@@ -261,24 +263,49 @@ class SurveyInterviewAgentMixin:
             content_hash=content_hash,
         )
 
-    def _source_from_survey_bundle(
+    def _sources_from_survey_bundle(
         self,
         detail: RunDetail,
         bundle: SurveyEvidenceBundle,
         dimension: str,
         competitor: str,
-    ) -> RawSource:
-        return RawSource(
-            id=self._new_source_id(dimension),
-            competitor=competitor,
-            dimension=dimension,
-            source_type=bundle.source_type,
-            title=f"{competitor} {dimension} survey/interview synthesis",
-            snippet=bundle.evidence_summary,
-            content_hash=bundle.content_hash,
-            confidence=bundle.confidence,
-            extracted_at=detail.updated_at,
-        )
+    ) -> list[RawSource]:
+        sources = [
+            RawSource(
+                id=self._new_source_id(f"{dimension}-survey"),
+                competitor=competitor,
+                dimension=dimension,
+                source_type=bundle.source_type,
+                title=f"{competitor} {dimension} survey synthesis",
+                snippet=bundle.evidence_summary,
+                content_hash=bundle.content_hash,
+                confidence=bundle.confidence,
+                extracted_at=detail.updated_at,
+            )
+        ]
+        if bundle.interviews:
+            interview_summary = self._interview_evidence_summary(
+                detail,
+                dimension=dimension,
+                competitor=competitor,
+                interviews=bundle.interviews,
+            )
+            sources.append(
+                RawSource(
+                    id=self._new_source_id(f"{dimension}-interview"),
+                    competitor=competitor,
+                    dimension=dimension,
+                    source_type="interview_record",
+                    title=f"{competitor} {dimension} interview synthesis",
+                    snippet=interview_summary,
+                    content_hash=hashlib.sha256(
+                        interview_summary.encode("utf-8")
+                    ).hexdigest()[:16],
+                    confidence=max(bundle.confidence, 0.62),
+                    extracted_at=detail.updated_at,
+                )
+            )
+        return sources
 
     def _survey_evidence_summary(
         self,
@@ -295,6 +322,24 @@ class SurveyInterviewAgentMixin:
             f"target users, customers, enterprise teams, and buyer personas evaluate "
             f"{dimension} by workflow fit, adoption risk, onboarding effort, customer support, "
             f"use case coverage, and switching cost. {interview_summary} {quote}"
+        )
+
+    def _interview_evidence_summary(
+        self,
+        detail: RunDetail,
+        *,
+        dimension: str,
+        competitor: str,
+        interviews: list[InterviewSynthesis],
+    ) -> str:
+        pain_points = sorted({point for item in interviews for point in item.pain_points})
+        use_cases = sorted({use_case for item in interviews for use_case in item.use_cases})
+        summaries = " ".join(item.summary for item in interviews)
+        return (
+            f"Synthetic interview record for {competitor} in {detail.topic}: "
+            f"respondents discussed {dimension} pain points "
+            f"({', '.join(pain_points) or 'none'}) and use cases "
+            f"({', '.join(use_cases) or 'none'}). {summaries}"
         )
 
     def _research_question_id(self, dimension: str, suffix: str) -> str:
