@@ -650,6 +650,7 @@ class RunService(
                 "redo_kind": None,
                 "collect_qa_attempts": 0,
                 "analyst_qa_attempts": 0,
+                "final_qa_attempts": 0,
             },
         )
         if not completed:
@@ -672,6 +673,7 @@ class RunService(
                 "redo_kind": None,
                 "collect_qa_attempts": 0,
                 "analyst_qa_attempts": 0,
+                "final_qa_attempts": 0,
             },
         )
         if not completed:
@@ -1224,6 +1226,7 @@ class RunService(
                 "redo_kind": scope.kind,
                 "collect_qa_attempts": 0,
                 "analyst_qa_attempts": 0,
+                "final_qa_attempts": 0,
             },
         )
         if not completed:

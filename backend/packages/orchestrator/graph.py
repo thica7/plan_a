@@ -31,6 +31,8 @@ from packages.agents import (
 )
 from packages.orchestrator.state import GraphState
 
+_FINAL_QA_REDO_ROUTES = {"writer_only", "comparator", "analyst", "collector", "full"}
+
 
 def build_real_analysis_graph(service: Any, checkpointer: Any | None = None):
     graph = StateGraph(GraphState)
@@ -369,7 +371,7 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
     async def qa_hitl(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
         route_state = await service._real_qa_hitl_step(record)
-        return {"current_node": "qa_hitl", **route_state}
+        return await _final_qa_route_state(service, state, record, route_state)
 
     graph.add_node("planner", planner)
     graph.add_node("planner_hitl", planner_hitl)
@@ -535,7 +537,7 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
     async def qa_hitl(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
         route_state = await service._real_qa_hitl_step(record)
-        return {"current_node": "qa_hitl", **route_state}
+        return await _final_qa_route_state(service, state, record, route_state)
 
     graph.add_node("planner", planner)
     graph.add_node("planner_hitl", planner_hitl)
@@ -591,9 +593,47 @@ def _send_analysts(state: GraphState) -> list[Send]:
 
 def _route_final_qa(state: GraphState) -> str:
     route = state.get("redo_kind") or "end"
-    if route in {"writer_only", "comparator", "analyst", "collector", "full"}:
+    if route in _FINAL_QA_REDO_ROUTES:
         return route
     return "end"
+
+
+async def _final_qa_route_state(
+    service: Any,
+    state: GraphState,
+    record: Any,
+    route_state: dict[str, object],
+) -> GraphState:
+    attempts = int(state.get("final_qa_attempts", 0) or 0)
+    route = route_state.get("redo_kind") or "end"
+    if route in _FINAL_QA_REDO_ROUTES:
+        if attempts >= record.detail.max_iterations:
+            await service.emit(
+                record.detail.id,
+                "qa.blocked",
+                "qa",
+                "final",
+                f"Final QA redo limit reached ({record.detail.max_iterations}).",
+                {
+                    "max_iterations": record.detail.max_iterations,
+                    "final_qa_attempts": attempts,
+                    "blocked_redo_kind": route,
+                    "reason": "final_qa_attempt_limit",
+                },
+            )
+            return {
+                "current_node": "qa_hitl",
+                "redo_kind": "end",
+                "final_qa_attempts": attempts,
+                "final_qa_limit_reached": True,
+            }
+        attempts += 1
+    return {
+        "current_node": "qa_hitl",
+        "final_qa_attempts": attempts,
+        "final_qa_limit_reached": False,
+        **route_state,
+    }
 
 
 def _ordered_unique(values: list[str]) -> list[str]:
