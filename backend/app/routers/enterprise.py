@@ -1602,6 +1602,8 @@ def create_manual_report_revision(
     request: ManualReportRevisionRequest,
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
+    settings: SettingsDep,
+    memory: PreferenceMemoryDep,
 ) -> ReportVersionRecord:
     source = _report_version_or_404(version_id, store, user, "report:write")
     next_version = store.next_report_version_number(
@@ -1629,7 +1631,9 @@ def create_manual_report_revision(
             "published_at": None,
         }
     )
-    return store.upsert_report_version(revision)
+    updated = store.upsert_report_version(revision)
+    _capture_manual_report_revision_memory(source, updated, request, user, settings, memory)
+    return updated
 
 
 @router.post("/enterprise/report-versions/{version_id}/export", response_model=ArtifactCreateResult)
@@ -1799,6 +1803,58 @@ def _capture_evidence_quality_memory(
                 "quality_label": request.quality_label,
                 "raw_source_id": evidence.raw_source_id,
                 "source_type": evidence.source_type,
+            },
+        ),
+        policy=compliance_policy_from_settings(settings),
+    )
+    for candidate in memory.extract_candidates(feedback):
+        memory.upsert_candidate(candidate)
+
+
+def _capture_manual_report_revision_memory(
+    source: ReportVersionRecord,
+    revision: ReportVersionRecord,
+    request: ManualReportRevisionRequest,
+    user: EnterpriseUserContext,
+    settings: Settings,
+    memory: PreferenceMemoryStore,
+) -> None:
+    note = request.note.strip()
+    message_parts = [
+        f"Manual report correction created draft v{revision.version_number}.",
+        (
+            "Treat reviewer edits as writing and QA policy feedback: keep recommendations "
+            "source-backed, decision-ready, and explicit about evidence risk."
+        ),
+    ]
+    if note:
+        message_parts.append(note)
+    feedback = memory.add_feedback(
+        UserFeedbackRecord(
+            id="",
+            workspace_id=revision.workspace_id,
+            project_id=revision.project_id,
+            user_id=user.user_id,
+            feedback_type="correction",
+            target_type="report",
+            target_id=revision.id,
+            run_id=revision.run_id,
+            report_version_id=revision.id,
+            message=" ".join(message_parts),
+            tags=[
+                "manual_revision",
+                "report",
+                "correction",
+                "writing",
+                "quality_gate",
+                revision.competitor_layer,
+            ],
+            metadata={
+                "source": "manual_report_revision",
+                "source_report_version_id": source.id,
+                "updated_report_version_id": revision.id,
+                "version_number": revision.version_number,
+                "note": note,
             },
         ),
         policy=compliance_policy_from_settings(settings),

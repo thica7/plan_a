@@ -1450,6 +1450,27 @@ def test_enterprise_router_exposes_projection() -> None:
         manual_revision.json()["quality_metadata"]["manual_revision"]["source_report_version_id"]
         == projection.report_version.id
     )
+    manual_memory_feedback = memory.list_feedback(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        limit=20,
+    )
+    manual_memory_recall = memory.recall(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        query="manual report correction writing quality gate",
+        include_unconfirmed=True,
+    )
+    assert any(
+        item.target_id == manual_revision.json()["id"]
+        and item.report_version_id == manual_revision.json()["id"]
+        and item.metadata["source"] == "manual_report_revision"
+        for item in manual_memory_feedback
+    )
+    assert any(
+        candidate.metadata["target_id"] == manual_revision.json()["id"]
+        for candidate in manual_memory_recall.candidates
+    )
     assert version.status_code == 200
     assert version.json()["id"] == projection.report_version.id
     assert diff.status_code == 200
