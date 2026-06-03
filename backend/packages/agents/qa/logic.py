@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
-from packages.orchestrator.scoping import assign_redo_scope
+from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     CompetitorKnowledge,
@@ -20,6 +20,25 @@ if TYPE_CHECKING:
 
 
 class QualityAgentMixin:
+    def _initial_redo_scope(
+        self,
+        *,
+        detected_by: str,
+        target_agent: str,
+        field_path: str,
+        problem: str,
+        target_subagent: str | None = None,
+        target_competitor: str | None = None,
+    ) -> RedoScope:
+        return build_redo_scope(
+            detected_by=detected_by,
+            target_agent=target_agent,
+            target_subagent=target_subagent,
+            target_competitor=target_competitor,
+            field_path=field_path,
+            problem=problem,
+        )
+
     async def _real_phase_qa_step(
         self, record: RunRecord, phase: Literal["collect", "analyst"]
     ) -> None:
@@ -361,6 +380,11 @@ class QualityAgentMixin:
                 competitor for competitor in covered if competitor in detail.plan.competitors
             ] or [None]
             for competitor in targets:
+                field_path = f"raw_sources[{source.id}].source_type"
+                problem = (
+                    f"Source {source.id} for {dimension} is not fetched webpage evidence "
+                    "and should be recollected or verified."
+                )
                 issue = QCIssue(
                     id=(
                         f"unverified-{dimension}-"
@@ -372,12 +396,16 @@ class QualityAgentMixin:
                     target_agent="collector",
                     target_subagent=dimension,
                     target_competitor=competitor,
-                    field_path=f"raw_sources[{source.id}].source_type",
-                    problem=(
-                        f"Source {source.id} for {dimension} is not fetched webpage evidence "
-                        "and should be recollected or verified."
+                    field_path=field_path,
+                    problem=problem,
+                    redo_scope=self._initial_redo_scope(
+                        detected_by="coverage",
+                        target_agent="collector",
+                        target_subagent=dimension,
+                        target_competitor=competitor,
+                        field_path=field_path,
+                        problem=problem,
                     ),
-                    redo_scope=RedoScope(kind="full", rationale="placeholder"),
                     self_found=False,
                 )
                 issue.redo_scope = assign_redo_scope(issue)
@@ -413,6 +441,7 @@ class QualityAgentMixin:
                 if issue_id in seen:
                     continue
                 seen.add(issue_id)
+                field_path = f"raw_sources[{source.id}]"
                 issue = QCIssue(
                     id=issue_id,
                     severity="warn",
@@ -420,9 +449,16 @@ class QualityAgentMixin:
                     target_agent="collector",
                     target_subagent=source.dimension,
                     target_competitor=competitor,
-                    field_path=f"raw_sources[{source.id}]",
+                    field_path=field_path,
                     problem=problem,
-                    redo_scope=RedoScope(kind="full", rationale="placeholder"),
+                    redo_scope=self._initial_redo_scope(
+                        detected_by="coverage",
+                        target_agent="collector",
+                        target_subagent=source.dimension,
+                        target_competitor=competitor,
+                        field_path=field_path,
+                        problem=problem,
+                    ),
                     self_found=False,
                 )
                 issue.redo_scope = assign_redo_scope(issue)
@@ -564,6 +600,11 @@ class QualityAgentMixin:
                     continue
                 claims = self._structured_claims_for_dimension(knowledge, dimension)
                 if not claims:
+                    field_path = f"competitor_knowledge[{competitor}].{dimension}"
+                    problem = (
+                        f"{competitor} has sources for {dimension}, "
+                        "but no structured knowledge claims."
+                    )
                     issue = QCIssue(
                         id=f"schema-missing-{dimension}-{self._issue_id_fragment(competitor)}",
                         severity="blocker",
@@ -571,12 +612,16 @@ class QualityAgentMixin:
                         target_agent="analyst",
                         target_subagent=dimension,
                         target_competitor=competitor,
-                        field_path=f"competitor_knowledge[{competitor}].{dimension}",
-                        problem=(
-                            f"{competitor} has sources for {dimension}, "
-                            "but no structured knowledge claims."
+                        field_path=field_path,
+                        problem=problem,
+                        redo_scope=self._initial_redo_scope(
+                            detected_by="schema",
+                            target_agent="analyst",
+                            target_subagent=dimension,
+                            target_competitor=competitor,
+                            field_path=field_path,
+                            problem=problem,
                         ),
-                        redo_scope=RedoScope(kind="full", rationale="placeholder"),
                         self_found=False,
                     )
                     issue.redo_scope = assign_redo_scope(issue)
@@ -587,6 +632,11 @@ class QualityAgentMixin:
                     issues.append(shape_issue)
                 for index, claim in enumerate(claims):
                     if not claim.source_ids:
+                        field_path = (
+                            f"competitor_knowledge[{competitor}].{dimension}"
+                            f".claims[{index}].source_ids"
+                        )
+                        problem = f"{competitor} {dimension} claim is missing source_ids."
                         issue = QCIssue(
                             id=f"schema-claim-no-source-{dimension}-{self._issue_id_fragment(competitor)}-{index}",
                             severity="blocker",
@@ -594,12 +644,16 @@ class QualityAgentMixin:
                             target_agent="analyst",
                             target_subagent=dimension,
                             target_competitor=competitor,
-                            field_path=(
-                                f"competitor_knowledge[{competitor}].{dimension}"
-                                f".claims[{index}].source_ids"
+                            field_path=field_path,
+                            problem=problem,
+                            redo_scope=self._initial_redo_scope(
+                                detected_by="schema",
+                                target_agent="analyst",
+                                target_subagent=dimension,
+                                target_competitor=competitor,
+                                field_path=field_path,
+                                problem=problem,
                             ),
-                            problem=f"{competitor} {dimension} claim is missing source_ids.",
-                            redo_scope=RedoScope(kind="full", rationale="placeholder"),
                             self_found=False,
                         )
                         issue.redo_scope = assign_redo_scope(issue)
@@ -607,6 +661,14 @@ class QualityAgentMixin:
                     for source_id in claim.source_ids:
                         if source_id in known_source_ids:
                             continue
+                        field_path = (
+                            f"competitor_knowledge[{competitor}].{dimension}"
+                            f".claims[{index}].source_ids"
+                        )
+                        problem = (
+                            f"{competitor} {dimension} structured claim references "
+                            f"unknown source id {source_id}."
+                        )
                         issue = QCIssue(
                             id=(
                                 f"schema-claim-unknown-source-{dimension}-"
@@ -617,15 +679,16 @@ class QualityAgentMixin:
                             target_agent="analyst",
                             target_subagent=dimension,
                             target_competitor=competitor,
-                            field_path=(
-                                f"competitor_knowledge[{competitor}].{dimension}"
-                                f".claims[{index}].source_ids"
+                            field_path=field_path,
+                            problem=problem,
+                            redo_scope=self._initial_redo_scope(
+                                detected_by="schema",
+                                target_agent="analyst",
+                                target_subagent=dimension,
+                                target_competitor=competitor,
+                                field_path=field_path,
+                                problem=problem,
                             ),
-                            problem=(
-                                f"{competitor} {dimension} structured claim references "
-                                f"unknown source id {source_id}."
-                            ),
-                            redo_scope=RedoScope(kind="full", rationale="placeholder"),
                             self_found=False,
                         )
                         issue.redo_scope = assign_redo_scope(issue)
@@ -671,7 +734,14 @@ class QualityAgentMixin:
             target_competitor=competitor,
             field_path=field_path,
             problem=problem,
-            redo_scope=RedoScope(kind="full", rationale="placeholder"),
+            redo_scope=self._initial_redo_scope(
+                detected_by="schema",
+                target_agent="analyst",
+                target_subagent=dimension,
+                target_competitor=competitor,
+                field_path=field_path,
+                problem=problem,
+            ),
             self_found=False,
         )
         issue.redo_scope = assign_redo_scope(issue)
@@ -723,6 +793,11 @@ class QualityAgentMixin:
                 has_findings = bool(kb and kb.slices.get(dimension))
                 if not has_sources or has_findings:
                     continue
+                field_path = f"competitor_kbs[{competitor}].slices[{dimension}]"
+                problem = (
+                    f"{dimension.title()} analyst did not produce structured "
+                    f"findings for {competitor}."
+                )
                 issue = QCIssue(
                     id=f"empty-analyst-{dimension}-{self._issue_id_fragment(competitor)}",
                     severity="blocker",
@@ -730,12 +805,16 @@ class QualityAgentMixin:
                     target_agent="analyst",
                     target_subagent=dimension,
                     target_competitor=competitor,
-                    field_path=f"competitor_kbs[{competitor}].slices[{dimension}]",
-                    problem=(
-                        f"{dimension.title()} analyst did not produce structured "
-                        f"findings for {competitor}."
+                    field_path=field_path,
+                    problem=problem,
+                    redo_scope=self._initial_redo_scope(
+                        detected_by="schema",
+                        target_agent="analyst",
+                        target_subagent=dimension,
+                        target_competitor=competitor,
+                        field_path=field_path,
+                        problem=problem,
                     ),
-                    redo_scope=RedoScope(kind="full", rationale="placeholder"),
                     self_found=False,
                 )
                 issue.redo_scope = assign_redo_scope(issue)
@@ -753,6 +832,11 @@ class QualityAgentMixin:
                     for cited_id in self._extract_cited_source_ids(finding)
                     if cited_id not in known_source_ids
                 ):
+                    field_path = f"competitor_kbs[{competitor}].slices[{dimension}]"
+                    problem = (
+                        f"{dimension.title()} analyst cites unknown source id "
+                        f"{cited_id} for {competitor}."
+                    )
                     issue = QCIssue(
                         id=(
                             f"kb-unknown-source-{self._issue_id_fragment(competitor)}-"
@@ -763,12 +847,16 @@ class QualityAgentMixin:
                         target_agent="analyst",
                         target_subagent=dimension,
                         target_competitor=competitor,
-                        field_path=f"competitor_kbs[{competitor}].slices[{dimension}]",
-                        problem=(
-                            f"{dimension.title()} analyst cites unknown source id "
-                            f"{cited_id} for {competitor}."
+                        field_path=field_path,
+                        problem=problem,
+                        redo_scope=self._initial_redo_scope(
+                            detected_by="citation",
+                            target_agent="analyst",
+                            target_subagent=dimension,
+                            target_competitor=competitor,
+                            field_path=field_path,
+                            problem=problem,
                         ),
-                        redo_scope=RedoScope(kind="full", rationale="placeholder"),
                         self_found=False,
                     )
                     issue.redo_scope = assign_redo_scope(issue)
@@ -781,14 +869,20 @@ class QualityAgentMixin:
         phantom_ids = sorted(cited_id for cited_id in cited_ids if cited_id not in known_source_ids)
         issues: list[QCIssue] = []
         for cited_id in phantom_ids:
+            problem = f"Report cites unknown source id {cited_id}."
             issue = QCIssue(
                 id=f"phantom-citation-{self._issue_id_fragment(cited_id)}",
                 severity="blocker",
                 detected_by="citation",
                 target_agent="writer",
                 field_path="report_md",
-                problem=f"Report cites unknown source id {cited_id}.",
-                redo_scope=RedoScope(kind="full", rationale="placeholder"),
+                problem=problem,
+                redo_scope=self._initial_redo_scope(
+                    detected_by="citation",
+                    target_agent="writer",
+                    field_path="report_md",
+                    problem=problem,
+                ),
                 self_found=False,
             )
             issue.redo_scope = assign_redo_scope(issue)
@@ -805,7 +899,14 @@ class QualityAgentMixin:
                     target_agent="comparator",
                     field_path="comparison_matrix",
                     problem="Comparison matrix is missing even though structured KB data exists.",
-                    redo_scope=RedoScope(kind="full", rationale="placeholder"),
+                    redo_scope=self._initial_redo_scope(
+                        detected_by="consistency",
+                        target_agent="comparator",
+                        field_path="comparison_matrix",
+                        problem=(
+                            "Comparison matrix is missing even though structured KB data exists."
+                        ),
+                    ),
                     self_found=False,
                 )
                 issue.redo_scope = assign_redo_scope(issue)
@@ -931,7 +1032,12 @@ class QualityAgentMixin:
             target_agent="comparator",
             field_path=field_path,
             problem=problem,
-            redo_scope=RedoScope(kind="full", rationale="placeholder"),
+            redo_scope=self._initial_redo_scope(
+                detected_by="consistency",
+                target_agent="comparator",
+                field_path=field_path,
+                problem=problem,
+            ),
             self_found=False,
         )
         issue.redo_scope = assign_redo_scope(issue)

@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from packages.orchestrator.scoping import assign_redo_scope
+from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import QCIssue, RedoScope, ReflectionRecord
 
@@ -113,7 +113,16 @@ class ReflectorAgentMixin:
                     else None,
                     field_path=f"{field_path}[{index - 1}]",
                     problem=finding,
-                    redo_scope=RedoScope(kind="full", rationale="placeholder"),
+                    redo_scope=build_redo_scope(
+                        detected_by="reflector",
+                        target_agent=target_agent,
+                        target_subagent=dimension,
+                        target_competitor=competitor
+                        if target_agent in {"collector", "analyst"}
+                        else None,
+                        field_path=f"{field_path}[{index - 1}]",
+                        problem=finding,
+                    ),
                     self_found=True,
                 )
                 if target_agent in {"collector", "analyst"} and dimension is None:

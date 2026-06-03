@@ -707,6 +707,87 @@ def test_qa_surfaces_latest_reflector_findings() -> None:
     assert all(issue.severity == "warn" for issue in reflector_issues)
 
 
+def test_qa_issue_redo_scopes_are_not_placeholders() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="llm_public_knowledge",
+                title="A pricing",
+                url="https://example.com/pricing",
+                snippet="A pricing is summarized without fetched webpage evidence.",
+                content_hash="abc",
+                confidence=0.7,
+            )
+        ],
+        competitor_kbs={
+            "A": CompetitorKB(
+                competitor="A",
+                slices={"pricing": ["A pricing cites an unknown source [source:pricing-404]."]},
+                sources=["pricing-1"],
+                confidence=0.7,
+            )
+        },
+        report_md="A pricing cites a missing report source [source:pricing-999].",
+        comparison_matrix=ComparisonMatrix(
+            competitors=["A"],
+            dimensions=["pricing"],
+            cells=[
+                ComparisonCell(
+                    competitor="A",
+                    dimension="pricing",
+                    value="A pricing cites [source:pricing-404].",
+                    source_ids=["pricing-404"],
+                    confidence=0.4,
+                )
+            ],
+        ),
+        reflections=[
+            ReflectionRecord(
+                iteration=1,
+                coverage_gaps=["Pricing needs verified webpage evidence for A."],
+            )
+        ],
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert issues
+    assert all(issue.redo_scope.rationale != "placeholder" for issue in issues)
+    assert {
+        issue.redo_scope.kind
+        for issue in issues
+        if issue.id
+        in {
+            "unverified-pricing-a-pricing-1",
+            "kb-unknown-source-a-pricing-pricing-404",
+            "phantom-citation-pricing-999",
+            "matrix-unknown-source-pricing-404",
+            "reflector-coverage-1-pricing-needs-verified-webpage-evidence-for-a",
+        }
+    } == {"collector", "analyst", "writer_only", "comparator"}
+
+
 def test_qa_marks_empty_analyst_output_for_scoped_redo() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
