@@ -261,6 +261,7 @@ def build_enterprise_evalops_report(
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
         _metric("real_quality_chain_rate", real_quality_chain_rate, 0.5, "ratio"),
+        _metric("hitl_redo_loop_rate", hitl_redo_loop_rate, 1.0, "ratio"),
         _metric("decision_replay_rate", decision_replay_rate, 0.8, "ratio"),
         _metric("compliance_pass_rate", compliance_pass_rate, 1.0, "ratio"),
         _metric(
@@ -1080,6 +1081,11 @@ def _recommendations(
     if metric_names["real_quality_chain_rate"].status != "pass":
         recommendations.append(
             "Close the real run quality chain: collection, LLM trace, and cited report depth."
+        )
+    if metric_names["hitl_redo_loop_rate"].status != "pass":
+        recommendations.append(
+            "Capture HITL review, scoped redo, or human correction signals whenever "
+            "QA intervention is required."
         )
     if metric_names["decision_replay_rate"].status != "pass":
         recommendations.append(

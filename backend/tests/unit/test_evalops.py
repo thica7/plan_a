@@ -160,6 +160,10 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         for metric in report.metrics
     )
     assert any(
+        metric.name == "hitl_redo_loop_rate" and metric.status == "pass"
+        for metric in report.metrics
+    )
+    assert any(
         metric.name == "judge_avg_score" and metric.status == "pass"
         for metric in report.metrics
     )
@@ -472,12 +476,16 @@ def test_enterprise_evalops_flags_missing_research_and_gap_fill_context() -> Non
 
     report = build_enterprise_evalops_report([target])
     cases = {case.case_id: case for case in report.cases}
+    metrics = {metric.name: metric for metric in report.metrics}
     steps = {step.step: step for step in report.quality_chain_steps}
 
     assert report.real_quality_chain_rate == 0.0
     assert report.real_quality_chain_failed_run_ids == ["persona-gap-run"]
     assert steps["rag_gap_fill"].pass_rate == 0.0
     assert steps["rag_gap_fill"].failed_run_ids == ["persona-gap-run"]
+    assert steps["human_review"].pass_rate == 0.0
+    assert steps["human_review"].failed_run_ids == ["persona-gap-run"]
+    assert metrics["hitl_redo_loop_rate"].status == "fail"
     assert cases["golden.user_research_evidence"].status == "fail"
     assert cases["golden.rag_gap_fill_context"].status == "fail"
     assert cases["golden.hitl_redo_loop"].status == "fail"
@@ -489,6 +497,10 @@ def test_enterprise_evalops_flags_missing_research_and_gap_fill_context() -> Non
             "golden.rag_gap_fill_context",
             "golden.hitl_redo_loop",
         }
+    )
+    assert any(
+        issue.kind == "metric" and issue.id == "hitl_redo_loop_rate"
+        for issue in report.regression_gate_issues
     )
 
 
