@@ -20,7 +20,14 @@ from packages.observability import (
 )
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import AuditLogRecord, ReportVersionRecord
-from packages.schema.models import AnalysisPlan, RawSource, RunMetrics, TraceSpan
+from packages.schema.models import (
+    AnalysisPlan,
+    QCIssue,
+    RawSource,
+    RedoScope,
+    RunMetrics,
+    TraceSpan,
+)
 
 
 def test_trace_payload_sanitizes_nested_secrets() -> None:
@@ -356,6 +363,147 @@ def test_decision_replay_prefers_real_claim_validation_events() -> None:
     assert claim_events[0].payload["release_gate"] == {"status": "blocked", "issue_count": 2}
     assert claim_events[0].payload["validation_sample_count"] == 3
     assert claim_events[0].payload["validation_samples"][0]["checker"] == "text_support"
+
+
+def test_decision_replay_reconstructs_rag_event_from_persisted_sources() -> None:
+    detail = RunDetail(
+        id="run-synthetic-rag",
+        topic="Decision replay reconstructed RAG",
+        status="completed",
+        execution_mode="real",
+        created_at="2026-05-31T00:00:00Z",
+        updated_at="2026-05-31T00:01:00Z",
+        plan=AnalysisPlan(
+            topic="Decision replay reconstructed RAG",
+            competitors=["A"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="source-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://example.com/pricing",
+                snippet="A publishes pricing.",
+                content_hash="hash-1",
+                confidence=0.9,
+            )
+        ],
+        metrics=RunMetrics(source_coverage_rate=1.0, claim_citation_rate=1.0),
+    )
+    events = [
+        RunEvent(
+            id=1,
+            run_id="run-synthetic-rag",
+            type="node_started",
+            agent="planner",
+            message="Planner started",
+        ),
+        RunEvent(
+            id=2,
+            run_id="run-synthetic-rag",
+            type="node_completed",
+            agent="writer",
+            message="Writer completed",
+        ),
+        RunEvent(
+            id=3,
+            run_id="run-synthetic-rag",
+            type="run_completed",
+            agent="writer",
+            message="Run completed",
+        ),
+    ]
+
+    replay = build_decision_replay(detail, events)
+    rag_event = next(
+        event for event in replay.events if event.id == "run-synthetic-rag:rag-retrieved"
+    )
+
+    assert replay.replay_coverage_score == 100
+    assert rag_event.event_type == "rag.retrieved"
+    assert rag_event.evidence_ids == ["source-1"]
+    assert rag_event.payload["source"] == "run_detail_projection"
+    assert rag_event.payload["source_ids"] == ["source-1"]
+    assert rag_event.payload["dimensions"] == ["pricing"]
+    assert rag_event.payload["source_types"] == ["webpage_verified"]
+
+
+def test_decision_replay_coverage_requires_qa_blocker_replay_when_applicable() -> None:
+    issue = QCIssue(
+        id="missing-pricing",
+        severity="blocker",
+        detected_by="coverage",
+        target_agent="collector",
+        target_subagent="pricing",
+        field_path="raw_sources[pricing]",
+        problem="No verified pricing source was collected.",
+        redo_scope=RedoScope(
+            kind="collector",
+            target_subagent="pricing",
+            rationale="Collect verified pricing evidence.",
+        ),
+    )
+    detail = RunDetail(
+        id="run-qa-coverage",
+        topic="Decision replay QA coverage",
+        status="completed_with_blockers",
+        execution_mode="real",
+        created_at="2026-05-31T00:00:00Z",
+        updated_at="2026-05-31T00:01:00Z",
+        plan=AnalysisPlan(
+            topic="Decision replay QA coverage",
+            competitors=["A"],
+            dimensions=["pricing"],
+        ),
+        qa_findings=[issue],
+    )
+    base_events = [
+        RunEvent(
+            id=1,
+            run_id="run-qa-coverage",
+            type="node_started",
+            agent="planner",
+            message="Planner started",
+        ),
+        RunEvent(
+            id=2,
+            run_id="run-qa-coverage",
+            type="node_completed",
+            agent="qa",
+            message="QA completed",
+        ),
+        RunEvent(
+            id=3,
+            run_id="run-qa-coverage",
+            type="run_completed",
+            agent="writer",
+            message="Run completed",
+        ),
+    ]
+
+    incomplete = build_decision_replay(detail, base_events)
+    complete = build_decision_replay(
+        detail,
+        [
+            *base_events,
+            RunEvent(
+                id=4,
+                run_id="run-qa-coverage",
+                type="qa_issue",
+                agent="qa",
+                message="No verified pricing source was collected.",
+                payload={"issue": issue.model_dump(mode="json")},
+            ),
+        ],
+    )
+
+    assert incomplete.replay_coverage_score == 75
+    assert "qa.blocked" not in incomplete.event_type_counts
+    assert complete.replay_coverage_score == 100
+    assert complete.event_type_counts["qa.blocked"] == 1
 
 
 def test_decision_replay_maps_nested_blocker_qa_issue_to_blocked_event() -> None:

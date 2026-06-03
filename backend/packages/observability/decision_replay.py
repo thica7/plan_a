@@ -84,7 +84,7 @@ def build_decision_replay(
         event_count=len(replay_events),
         blocker_count=sum(1 for item in detail.qa_findings if item.severity == "blocker"),
         warn_count=sum(1 for item in detail.qa_findings if item.severity == "warn"),
-        replay_coverage_score=_coverage_score(event_type_counts),
+        replay_coverage_score=_coverage_score(event_type_counts, detail),
         event_type_counts=event_type_counts,
         events=replay_events,
     )
@@ -164,6 +164,29 @@ def _synthetic_decisions(
 ) -> list[DecisionReplayEvent]:
     created_at = _detail_updated_at(detail)
     decisions: list[DecisionReplayEvent] = []
+    if detail.raw_sources and "rag.retrieved" not in existing_event_types:
+        source_ids = [source.id for source in detail.raw_sources]
+        decisions.append(
+            DecisionReplayEvent(
+                id=f"{detail.id}:rag-retrieved",
+                run_id=detail.id,
+                event_type="rag.retrieved",
+                agent="collector",
+                message=(
+                    f"Replay reconstructed {len(source_ids)} collected source(s) from "
+                    "the persisted run detail."
+                ),
+                evidence_ids=source_ids,
+                payload={
+                    "source": "run_detail_projection",
+                    "source_count": len(source_ids),
+                    "source_ids": source_ids,
+                    "dimensions": sorted({source.dimension for source in detail.raw_sources}),
+                    "source_types": sorted({source.source_type for source in detail.raw_sources}),
+                },
+                created_at=created_at,
+            )
+        )
     if detail.raw_sources and "claim.validated" not in existing_event_types:
         claim_count = _knowledge_claim_count(detail)
         decisions.append(
@@ -798,18 +821,38 @@ def _event_type_counts(events: list[DecisionReplayEvent]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-def _coverage_score(counts: dict[str, int]) -> int:
-    required = {
+def _coverage_score(counts: dict[str, int], detail: RunDetail) -> int:
+    required = _coverage_requirements(detail)
+    covered = len([event_type for event_type in required if counts.get(event_type, 0) > 0])
+    return round(covered / len(required) * 100) if required else 100
+
+
+def _coverage_requirements(detail: RunDetail) -> set[DecisionEventType]:
+    required: set[DecisionEventType] = {
         "agent.started",
         "agent.finished",
-        "rag.retrieved",
-        "memory.recalled",
-        "self_consistency.sampled",
-        "claim.validated",
         "report.ready",
     }
-    covered = len([event_type for event_type in required if counts.get(event_type, 0) > 0])
-    return round(covered / len(required) * 100)
+    if detail.raw_sources:
+        required.update(
+            {
+                "rag.retrieved",
+                "self_consistency.sampled",
+                "claim.validated",
+            }
+        )
+    if detail.reflections or detail.plan.memory_candidate_ids or detail.plan.memory_prompt_context:
+        required.add("memory.recalled")
+    if detail.qa_findings:
+        if any(issue.severity == "blocker" for issue in detail.qa_findings):
+            required.add("qa.blocked")
+        if any(issue.severity != "blocker" for issue in detail.qa_findings):
+            required.add("redo.routed")
+    if detail.revisions:
+        required.add("redo.routed")
+    if detail.metrics.total_spans or detail.metrics.source_coverage_rate:
+        required.add("benchmark.scored")
+    return required
 
 
 def _detail_updated_at(detail: RunDetail) -> datetime:
