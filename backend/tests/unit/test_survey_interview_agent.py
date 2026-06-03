@@ -101,7 +101,10 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
 
 
 @pytest.mark.asyncio
-async def test_survey_interview_enrichment_reuses_attached_survey_response() -> None:
+@pytest.mark.parametrize("source_type", ["survey_response", "manual_note"])
+async def test_survey_interview_enrichment_reuses_attached_user_research(
+    source_type: str,
+) -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -128,7 +131,7 @@ async def test_survey_interview_enrichment_reuses_attached_survey_response() -> 
             id="persona-survey-response-1",
             competitor="Acme",
             dimension="persona",
-            source_type="survey_response",
+            source_type=source_type,
             title="Acme buyer survey",
             snippet="Enterprise buyer survey says onboarding effort shapes adoption.",
             content_hash="surveyresponsehash",
@@ -138,7 +141,7 @@ async def test_survey_interview_enrichment_reuses_attached_survey_response() -> 
 
     await service._run_survey_interview_enrichment(record, ["persona"], ["Acme"])
 
-    assert [source.source_type for source in record.detail.raw_sources] == ["survey_response"]
+    assert [source.source_type for source in record.detail.raw_sources] == [source_type]
     assert record.detail.agent_messages[-1].message_type == "survey_interview_evidence_collected"
     assert record.detail.agent_messages[-1].payload["source_ids"] == []
     assert record.detail.agent_messages[-1].payload["bundles"] == []

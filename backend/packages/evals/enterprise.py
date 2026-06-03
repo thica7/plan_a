@@ -35,6 +35,8 @@ USER_RESEARCH_SOURCE_TYPES = {
     "survey_response",
     "interview_record",
     "manual_transcript",
+    "manual_note",
+    "manual",
 }
 
 
