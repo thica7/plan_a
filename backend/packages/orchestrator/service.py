@@ -2548,12 +2548,14 @@ class RunService(
                 metadata["llm_provider"] = provider
             if model:
                 metadata["llm_model"] = model
+            metadata.update(self._llm_route_metadata())
             return metadata
         metadata = {"token_usage_source": "provider"}
         if provider:
             metadata["llm_provider"] = provider
         if model:
             metadata["llm_model"] = model
+        metadata.update(self._llm_route_metadata())
         prompt_tokens = getattr(usage, "prompt_tokens", None)
         completion_tokens = getattr(usage, "completion_tokens", None)
         total_tokens = getattr(usage, "total_tokens", None)
@@ -2563,6 +2565,23 @@ class RunService(
             metadata["completion_tokens"] = int(completion_tokens)
         if total_tokens is not None:
             metadata["total_tokens"] = int(total_tokens)
+        return metadata
+
+    def _llm_route_metadata(self) -> dict[str, str]:
+        route_decision = getattr(self._llm, "last_route_decision", None)
+        if not callable(route_decision):
+            return {}
+        route = route_decision()
+        if route is None:
+            return {}
+        metadata = {
+            "model_route_status": str(route.status),
+            "model_route_policy_version": str(route.routing_policy_version),
+        }
+        if route.selected is not None:
+            metadata["model_route_selected"] = route.selected.provider_kind
+        if route.fallback is not None:
+            metadata["model_route_fallback"] = route.fallback.provider_kind
         return metadata
 
     def _redact_trace_texts(

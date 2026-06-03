@@ -2,7 +2,7 @@ import httpx
 import pytest
 
 from packages.config import Settings
-from packages.llm import DoubaoClient, LLMUsage
+from packages.llm import DoubaoClient, LLMError, LLMUsage
 
 
 def _settings(**overrides: object) -> Settings:
@@ -89,6 +89,13 @@ async def test_complete_text_falls_back_to_backup_provider(monkeypatch) -> None:
     ]
     assert client.last_provider() == "backup"
     assert client.last_model() == "backup-model"
+    route = client.last_route_decision()
+    assert route is not None
+    assert route.status == "selected"
+    assert route.selected is not None
+    assert route.selected.provider_kind == "primary"
+    assert route.fallback is not None
+    assert route.fallback.provider_kind == "backup"
     assert client.consume_last_usage() == LLMUsage(
         prompt_tokens=3,
         completion_tokens=2,
@@ -136,3 +143,80 @@ async def test_complete_json_falls_back_when_primary_returns_invalid_json(monkey
     assert payload == {"ok": True}
     assert calls == 2
     assert client.last_provider() == "backup"
+
+
+@pytest.mark.asyncio
+async def test_complete_text_uses_backup_first_when_route_selects_backup(monkeypatch) -> None:
+    calls: list[tuple[str, str]] = []
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            self.timeout = timeout
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def post(
+            self,
+            url: str,
+            *,
+            json: dict[str, object],
+            headers: dict[str, str],
+        ) -> httpx.Response:
+            calls.append((url, str(json["model"])))
+            assert headers["Authorization"] == "Bearer backup-key"
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "backup only"}}]},
+            )
+
+    monkeypatch.setattr("packages.llm.doubao_client.httpx.AsyncClient", FakeAsyncClient)
+    client = DoubaoClient(
+        _settings(
+            ark_api_key=None,
+            ark_model=None,
+            backup_llm_api_key="backup-key",
+            backup_llm_base_url="https://openrouter.example/api/v1",
+            backup_llm_model="backup-model",
+        )
+    )
+
+    content = await client.complete_text(system="system", user="user")
+
+    assert content == "backup only"
+    assert calls == [("https://openrouter.example/api/v1/chat/completions", "backup-model")]
+    route = client.last_route_decision()
+    assert route is not None
+    assert route.status == "fallback"
+    assert route.selected is not None
+    assert route.selected.provider_kind == "backup"
+
+
+@pytest.mark.asyncio
+async def test_complete_text_blocks_when_model_router_policy_blocks(monkeypatch) -> None:
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            self.timeout = timeout
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def post(self, *_args, **_kwargs) -> httpx.Response:
+            raise AssertionError("Blocked model routes must not call the provider.")
+
+    monkeypatch.setattr("packages.llm.doubao_client.httpx.AsyncClient", FakeAsyncClient)
+    client = DoubaoClient(_settings(compliance_redaction_enabled=False))
+
+    with pytest.raises(LLMError, match="LLM model route blocked"):
+        await client.complete_text(system="system", user="user")
+
+    route = client.last_route_decision()
+    assert route is not None
+    assert route.status == "blocked"
+    assert "redaction" in " ".join(route.blocked_reasons)
