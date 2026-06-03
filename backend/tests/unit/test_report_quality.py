@@ -222,6 +222,11 @@ def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
         "L2": ("## Workflow & Enterprise Risk Fallback", "switching-cost exposure"),
         "L3": ("## Market Landscape Fallback", "Category view"),
     }
+    scenario_ids = {
+        "L1": "l1_pricing_pack",
+        "L2": "l2_adjacent_workflow",
+        "L3": "l3_market_landscape",
+    }
 
     for layer, (section, phrase) in expected_sections.items():
         detail = _run_detail(
@@ -232,8 +237,10 @@ def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
             metrics=RunMetrics(),
         )
         detail.plan.competitor_layer = layer  # type: ignore[assignment]
+        detail.plan.scenario_id = scenario_ids[layer]
         detail.plan.dimensions = ["pricing", "feature"]
         detail.plan.scenario_recommended_dimensions = ["pricing", "feature", "persona"]
+        detail.plan.qa_rule_ids = ["claim_has_evidence", "source_reliability_min"]
         detail.comparison_matrix = ComparisonMatrix(
             competitors=detail.plan.competitors,
             dimensions=detail.plan.dimensions,
@@ -260,6 +267,10 @@ def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
 
         assert section in report
         assert phrase in report
+        assert "## Scenario QA Checklist" in report
+        assert "Analyst question:" in report
+        assert "Evidence requirement:" in report
+        assert "claim_has_evidence" in report
         assert "## Source Quality & Coverage" in report
         assert "## Claim Validation & Evidence Risk" in report
         assert "## Next Collection / Verification Plan" in report

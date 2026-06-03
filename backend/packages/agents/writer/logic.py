@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from packages.business_intel.scenarios import get_scenario_pack
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import FeatureNode, KnowledgeClaim, RawSource
 
@@ -174,6 +175,7 @@ class WriterAgentMixin:
                 )
         lines.extend(self._fallback_layer_sections(detail, matrix_sources))
         lines.extend(self._fallback_source_quality_section(detail))
+        lines.extend(self._fallback_scenario_checklist_section(detail))
         lines.extend(["", "## Knowledge Coverage"])
         for competitor in detail.plan.competitors:
             knowledge = detail.competitor_knowledge.get(competitor)
@@ -293,6 +295,28 @@ class WriterAgentMixin:
             )
         return lines
 
+    def _fallback_scenario_checklist_section(self, detail: RunDetail) -> list[str]:
+        scenario_id = detail.plan.scenario_id or "auto"
+        pack = get_scenario_pack(scenario_id) if detail.plan.scenario_id else None
+        recommended = detail.plan.scenario_recommended_dimensions or detail.plan.dimensions
+        lines = [
+            "",
+            "## Scenario QA Checklist",
+            (
+                f"- Scenario: {scenario_id}; layer: {detail.plan.competitor_layer}; "
+                f"recommended dimensions: {', '.join(recommended) or 'none'}."
+            ),
+        ]
+        if pack is not None:
+            lines.append(f"- Scenario intent: {pack.description}")
+            for question in pack.analyst_questions[:3]:
+                lines.append(f"- Analyst question: {question}")
+            for requirement in pack.evidence_requirements[:3]:
+                lines.append(f"- Evidence requirement: {requirement}")
+        if detail.plan.qa_rule_ids:
+            lines.append(f"- QA rules: {', '.join(detail.plan.qa_rule_ids)}")
+        return lines
+
     def _fallback_next_collection_plan(self, detail: RunDetail) -> list[str]:
         lines = ["", "## Next Collection / Verification Plan"]
         source_ids_by_dimension: dict[str, list[str]] = {}
@@ -352,6 +376,7 @@ class WriterAgentMixin:
                 self._layer_section_heading(detail, fallback=False),
                 self._fallback_layer_sections(detail, source_ids, fallback=False),
             ),
+            ("Scenario QA Checklist", self._fallback_scenario_checklist_section(detail)),
             ("Claim Validation & Evidence Risk", self._fallback_claim_validation_section(detail)),
             ("Next Collection / Verification Plan", self._fallback_next_collection_plan(detail)),
             ("Evidence Appendix", self._fallback_evidence_appendix(detail)),
@@ -430,6 +455,10 @@ class WriterAgentMixin:
             ),
             "Side-by-Side Decision Matrix covering every competitor and dimension.",
             "Evidence-backed Deep Dives with no unsupported winner claims.",
+            (
+                "Scenario QA Checklist tying the selected ScenarioPack to analyst "
+                "questions, evidence requirements, and QA rules."
+            ),
         ]
         layer = detail.plan.competitor_layer
         if layer == "L1":
