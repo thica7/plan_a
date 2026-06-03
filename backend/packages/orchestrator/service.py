@@ -61,6 +61,7 @@ from packages.schema.enterprise import (
     ReportReleaseGate,
     UserFeedbackRecord,
 )
+from packages.schema.messages import validate_agent_message_payload
 from packages.schema.models import (
     AgentMessage,
     AnalysisPlan,
@@ -1400,6 +1401,8 @@ class RunService(
         source_message_ids: list[str] | None = None,
         trace_span_ids: list[str] | None = None,
     ) -> AgentMessage:
+        message_payload = payload or {}
+        validate_agent_message_payload(payload_schema, message_payload)
         message = AgentMessage(
             id=f"msg-{len(record.detail.agent_messages) + 1}",
             run_id=record.detail.id,
@@ -1407,7 +1410,7 @@ class RunService(
             to_agent=to_agent,
             message_type=message_type,
             payload_schema=payload_schema,
-            payload=payload or {},
+            payload=message_payload,
             source_message_ids=source_message_ids or [],
             trace_span_ids=trace_span_ids or [],
         )
@@ -1430,6 +1433,7 @@ class RunService(
     ) -> AgentMessage:
         if message.status == "consumed":
             return message
+        validate_agent_message_payload(message.payload_schema, message.payload)
         message.status = "consumed"
         message.consumed_by = consumer_agent
         message.consumed_at = datetime.utcnow()
