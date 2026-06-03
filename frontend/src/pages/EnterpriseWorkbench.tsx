@@ -3988,7 +3988,11 @@ function artifactMetadataListCount(artifact: ArtifactRecord, key: string) {
 }
 
 function decisionReplayPriority(eventType: string) {
-  if (eventType.includes("blocker") || eventType.includes("failed")) {
+  if (
+    eventType.includes("blocked") ||
+    eventType.includes("blocker") ||
+    eventType.includes("failed")
+  ) {
     return "high";
   }
   if (eventType.includes("warn") || eventType.includes("redo") || eventType.includes("hitl")) {
