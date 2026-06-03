@@ -291,9 +291,17 @@ export function formatDecisionPayload(event: DecisionReplayEvent) {
     const candidateCount =
       numberPayload(event, "candidate_count") ?? arrayPayload(event, "candidate_ids").length;
     const targetType = stringPayload(event, "target_type");
+    const candidateKinds = stringArrayPayload(event, "candidate_kinds");
+    const candidateStatuses = stringArrayPayload(event, "candidate_statuses");
+    const redactionCounts = objectPayload(event, "redaction_counts");
+    const messageExcerpt = stringPayload(event, "message_excerpt");
     if (feedbackId) parts.push(`feedback ${feedbackId}`);
     if (candidateCount > 0) parts.push(`${candidateCount} candidates`);
+    if (candidateKinds.length > 0) parts.push(`kinds ${candidateKinds.join(", ")}`);
+    if (candidateStatuses.length > 0) parts.push(`statuses ${candidateStatuses.join(", ")}`);
     if (targetType) parts.push(`target ${targetType}`);
+    if (redactionCounts) parts.push(`${Object.keys(redactionCounts).length} redaction types`);
+    if (messageExcerpt) parts.push(clipPayloadText(messageExcerpt));
   }
   if (event.event_type === "hitl.reviewed") {
     const decision = stringPayload(event, "decision");
@@ -366,6 +374,10 @@ function objectPayload(event: DecisionReplayEvent, key: string) {
 function arrayPayload(event: DecisionReplayEvent, key: string) {
   const value = event.payload[key];
   return Array.isArray(value) ? value : [];
+}
+
+function stringArrayPayload(event: DecisionReplayEvent, key: string) {
+  return arrayPayload(event, key).filter((item): item is string => typeof item === "string");
 }
 
 function numberValue(value: unknown) {

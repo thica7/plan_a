@@ -4484,10 +4484,18 @@ function decisionPayloadSummary(event: DecisionReplayEvent) {
   } else if (event.event_type === "memory.feedback_captured") {
     const feedbackId = payloadString(payload, "feedback_id");
     const candidateCount = payloadNumber(payload, "candidate_count") ?? payloadListCount(payload, "candidate_ids");
+    const candidateKinds = payloadStringList(payload, "candidate_kinds");
+    const candidateStatuses = payloadStringList(payload, "candidate_statuses");
     const targetType = payloadString(payload, "target_type");
+    const messageExcerpt = payloadString(payload, "message_excerpt");
+    const redactionCounts = payloadRecord(payload, "redaction_counts");
     if (feedbackId) parts.push(feedbackId);
     if (candidateCount !== null) parts.push(`candidates ${candidateCount}`);
+    if (candidateKinds.length > 0) parts.push(`kinds ${candidateKinds.join(", ")}`);
+    if (candidateStatuses.length > 0) parts.push(`statuses ${candidateStatuses.join(", ")}`);
     if (targetType) parts.push(`target ${targetType}`);
+    if (redactionCounts) parts.push(`redactions ${Object.keys(redactionCounts).length}`);
+    if (messageExcerpt) parts.push(messageExcerpt.length > 96 ? `${messageExcerpt.slice(0, 93)}...` : messageExcerpt);
   } else if (event.event_type === "hitl.reviewed") {
     const decision = payloadString(payload, "decision");
     const stage = payloadString(payload, "stage") ?? event.subagent;
@@ -4586,6 +4594,14 @@ function payloadListCount(payload: Record<string, unknown>, ...keys: string[]) {
     if (Array.isArray(value)) return value.length;
   }
   return null;
+}
+
+function payloadStringList(payload: Record<string, unknown>, key: string) {
+  const value = payload[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0,
+  );
 }
 
 function payloadRecord(payload: Record<string, unknown>, key: string) {

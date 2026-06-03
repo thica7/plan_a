@@ -64,4 +64,38 @@ describe("TraceList decision replay formatting", () => {
     expect(summary).toContain("1 rerank scores");
     expect(summary).toContain("1 linked gaps");
   });
+
+  it("summarizes memory feedback audit candidate kinds and redaction", () => {
+    const event: DecisionReplayEvent = {
+      id: "decision-memory-feedback",
+      run_id: "run-1",
+      event_type: "memory.feedback_captured",
+      agent: "memory",
+      subagent: null,
+      message: "Memory feedback captured.",
+      related_span_ids: [],
+      evidence_ids: [],
+      claim_ids: [],
+      payload: {
+        feedback_id: "feedback-1",
+        candidate_count: 2,
+        candidate_kinds: ["source_preference", "domain_fact"],
+        candidate_statuses: ["candidate"],
+        target_type: "report",
+        message_excerpt: "Prefer official sources and remember category benchmark context.",
+        redaction_counts: { email: 1 },
+      },
+      created_at: "2026-05-31T00:00:00Z",
+    };
+
+    const summary = formatDecisionPayload(event);
+
+    expect(summary).toContain("feedback feedback-1");
+    expect(summary).toContain("2 candidates");
+    expect(summary).toContain("kinds source_preference, domain_fact");
+    expect(summary).toContain("statuses candidate");
+    expect(summary).toContain("target report");
+    expect(summary).toContain("1 redaction types");
+    expect(summary).toContain("Prefer official sources");
+  });
 });
