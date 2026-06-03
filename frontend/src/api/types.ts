@@ -419,6 +419,94 @@ export interface ModelPolicyReport {
   generated_at: string;
 }
 
+export type MemoryFeedbackType = "correction" | "preference" | "approval" | "rejection" | "note";
+export type MemoryTargetType =
+  | "report"
+  | "claim"
+  | "evidence"
+  | "dimension"
+  | "competitor"
+  | "project";
+export type MemoryCandidateKind =
+  | "preferred_dimension"
+  | "source_preference"
+  | "writing_preference"
+  | "risk_preference"
+  | "correction";
+export type MemoryCandidateStatus = "candidate" | "confirmed" | "rejected" | "archived";
+
+export interface UserFeedbackCreateRequest {
+  feedback_type?: MemoryFeedbackType;
+  target_type?: MemoryTargetType;
+  target_id?: string;
+  run_id?: string | null;
+  report_version_id?: string | null;
+  message: string;
+  tags?: string[];
+  auto_confirm?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UserFeedbackRecord {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  user_id: string;
+  feedback_type: MemoryFeedbackType;
+  target_type: MemoryTargetType;
+  target_id: string;
+  run_id?: string | null;
+  report_version_id?: string | null;
+  message: string;
+  tags: string[];
+  redaction_counts: Record<string, number>;
+  created_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface MemoryCandidate {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  kind: MemoryCandidateKind;
+  status: MemoryCandidateStatus;
+  statement: string;
+  weight: number;
+  confidence: number;
+  source_feedback_ids: string[];
+  tags: string[];
+  match_score: number;
+  used_count: number;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface MemoryRecallContext {
+  workspace_id: string;
+  project_id: string;
+  query: string;
+  query_tags: string[];
+  candidates: MemoryCandidate[];
+  prompt_context: string[];
+  generated_at: string;
+}
+
+export interface MemoryFeedbackIngestResult {
+  feedback: UserFeedbackRecord;
+  candidates: MemoryCandidate[];
+  recall: MemoryRecallContext;
+}
+
+export interface MemoryStats {
+  workspace_id?: string | null;
+  project_id?: string | null;
+  feedback_count: number;
+  candidate_count: number;
+  confirmed_candidate_count: number;
+  generated_at: string;
+}
+
 export interface AgentMessage {
   id: string;
   run_id: string;

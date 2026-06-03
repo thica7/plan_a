@@ -16,6 +16,11 @@ import type {
   EvidenceGapReport,
   EvidenceRecord,
   KnowledgeGraphReadModel,
+  MemoryCandidate,
+  MemoryCandidateStatus,
+  MemoryFeedbackIngestResult,
+  MemoryRecallContext,
+  MemoryStats,
   ModelRouteDecision,
   ModelPolicyReport,
   MonitorStartRequest,
@@ -51,6 +56,8 @@ import type {
   ToolCallMessage,
   TraceObservabilityReport,
   TraceSpan,
+  UserFeedbackCreateRequest,
+  UserFeedbackRecord,
   WorkflowStartResponse,
   WorkflowStateResponse,
   RunComplianceReport,
@@ -362,6 +369,55 @@ export function getArtifact(artifactId: string) {
 export function getProjectKnowledgeGraph(projectId: string) {
   return request<KnowledgeGraphReadModel>(
     `/enterprise/projects/${encodeURIComponent(projectId)}/kg-read-model`,
+  );
+}
+
+export function ingestProjectMemoryFeedback(projectId: string, payload: UserFeedbackCreateRequest) {
+  return request<MemoryFeedbackIngestResult>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/memory/feedback`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function listProjectMemoryFeedback(projectId: string, limit = 20) {
+  return request<UserFeedbackRecord[]>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/memory/feedback?limit=${limit}`,
+  );
+}
+
+export function recallProjectMemory(
+  projectId: string,
+  options: { query?: string; limit?: number; includeUnconfirmed?: boolean } = {},
+) {
+  const search = new URLSearchParams();
+  if (options.query) search.set("query", options.query);
+  if (options.limit !== undefined) search.set("limit", String(options.limit));
+  if (options.includeUnconfirmed !== undefined) {
+    search.set("include_unconfirmed", String(options.includeUnconfirmed));
+  }
+  const query = search.toString();
+  return request<MemoryRecallContext>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/memory/recall${query ? `?${query}` : ""}`,
+  );
+}
+
+export function updateProjectMemoryCandidate(
+  projectId: string,
+  candidateId: string,
+  status: MemoryCandidateStatus,
+) {
+  return request<MemoryCandidate>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/memory/candidates/${encodeURIComponent(candidateId)}?status=${status}`,
+    { method: "PATCH" },
+  );
+}
+
+export function getProjectMemoryStats(projectId: string) {
+  return request<MemoryStats>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/memory/stats`,
   );
 }
 

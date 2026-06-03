@@ -23,6 +23,7 @@ import {
   getEnterpriseEvalOps,
   getModelPolicy,
   getModelRouteDecision,
+  getProjectMemoryStats,
   getProjectEvidenceGaps,
   getProjectBusinessPlan,
   getProjectCompetitorScores,
@@ -37,10 +38,12 @@ import {
   listEnterpriseCompetitors,
   listEnterpriseNotifications,
   listEnterpriseProjects,
+  listProjectMemoryFeedback,
   listProjectClaims,
   listProjectEvidence,
   listProjectReportVersions,
   listSourceRegistry,
+  recallProjectMemory,
   startMonitorWorkflow,
   startScheduledScanWorkflow,
   updateEvidenceQuality,
@@ -60,6 +63,8 @@ import type {
   EvalOpsMetric,
   EvalOpsReport,
   KnowledgeGraphReadModel,
+  MemoryRecallContext,
+  MemoryStats,
   ModelPolicyReport,
   ModelRouteDecision,
   NotificationRecord,
@@ -72,6 +77,7 @@ import type {
   ReportVersionRecord,
   SourceRegistryRecord,
   ToolRegistryReport,
+  UserFeedbackRecord,
   WorkspaceUsageSummary,
 } from "../api/types";
 
@@ -102,6 +108,9 @@ export function EnterpriseWorkbench({
   const [modelRoute, setModelRoute] = useState<ModelRouteDecision | null>(null);
   const [toolRegistry, setToolRegistry] = useState<ToolRegistryReport | null>(null);
   const [knowledgeGraph, setKnowledgeGraph] = useState<KnowledgeGraphReadModel | null>(null);
+  const [memoryStats, setMemoryStats] = useState<MemoryStats | null>(null);
+  const [memoryRecall, setMemoryRecall] = useState<MemoryRecallContext | null>(null);
+  const [memoryFeedback, setMemoryFeedback] = useState<UserFeedbackRecord[]>([]);
   const [workspaceUsage, setWorkspaceUsage] = useState<WorkspaceUsageSummary | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
@@ -161,6 +170,9 @@ export function EnterpriseWorkbench({
       setModelRoute(null);
       setToolRegistry(null);
       setKnowledgeGraph(null);
+      setMemoryStats(null);
+      setMemoryRecall(null);
+      setMemoryFeedback([]);
       setWorkspaceUsage(null);
       setSelectedVersionId(null);
       return;
@@ -186,6 +198,13 @@ export function EnterpriseWorkbench({
       getModelRouteDecision(),
       getToolRegistry(),
       getProjectKnowledgeGraph(selectedProjectId),
+      getProjectMemoryStats(selectedProjectId),
+      recallProjectMemory(selectedProjectId, {
+        query: projectForLoad.topic,
+        limit: 6,
+        includeUnconfirmed: true,
+      }),
+      listProjectMemoryFeedback(selectedProjectId),
       getWorkspaceUsage(projectForLoad.workspace_id),
     ])
       .then(
@@ -206,6 +225,9 @@ export function EnterpriseWorkbench({
           modelRouteValue,
           toolRegistryValue,
           knowledgeGraphValue,
+          memoryStatsValue,
+          memoryRecallValue,
+          memoryFeedbackValue,
           workspaceUsageValue,
         ]) => {
           if (!active) return;
@@ -226,6 +248,9 @@ export function EnterpriseWorkbench({
           setModelRoute(modelRouteValue);
           setToolRegistry(toolRegistryValue);
           setKnowledgeGraph(knowledgeGraphValue);
+          setMemoryStats(memoryStatsValue);
+          setMemoryRecall(memoryRecallValue);
+          setMemoryFeedback(memoryFeedbackValue);
           setWorkspaceUsage(workspaceUsageValue);
           setSelectedVersionId(versionItems[0]?.id ?? null);
         },
@@ -250,6 +275,9 @@ export function EnterpriseWorkbench({
         setModelRoute(null);
         setToolRegistry(null);
         setKnowledgeGraph(null);
+        setMemoryStats(null);
+        setMemoryRecall(null);
+        setMemoryFeedback([]);
         setWorkspaceUsage(null);
         setSelectedVersionId(null);
       })
@@ -588,6 +616,12 @@ export function EnterpriseWorkbench({
                 modelPolicy={modelPolicy}
                 modelRoute={modelRoute}
                 toolRegistry={toolRegistry}
+              />
+
+              <MemoryAgentPanel
+                feedback={memoryFeedback}
+                recall={memoryRecall}
+                stats={memoryStats}
               />
 
               {competitorScores ? <CompetitorScorePanel report={competitorScores} /> : null}
@@ -945,6 +979,86 @@ function GovernanceRuntimePanel({
       ) : (
         <p className="muted-line">Tool registry has no guarded or disabled tools.</p>
       )}
+    </section>
+  );
+}
+
+function MemoryAgentPanel({
+  feedback,
+  recall,
+  stats,
+}: {
+  feedback: UserFeedbackRecord[];
+  recall: MemoryRecallContext | null;
+  stats: MemoryStats | null;
+}) {
+  const candidates = recall?.candidates ?? [];
+  const confirmedCandidates = candidates.filter((candidate) => candidate.status === "confirmed");
+  const averageMatch = candidates.length
+    ? candidates.reduce((total, candidate) => total + candidate.match_score, 0) / candidates.length
+    : 0;
+  const panelStatus = (stats?.confirmed_candidate_count ?? 0) > 0 ? "pass" : "warn";
+
+  return (
+    <section className={`panel readiness-panel ${panelStatus}`}>
+      <div className="panel-heading-row">
+        <h2>MemoryAgent</h2>
+        {confirmedCandidates.length > 0 ? (
+          <CheckCircle2 size={17} aria-hidden />
+        ) : (
+          <AlertTriangle size={17} aria-hidden />
+        )}
+      </div>
+      <div className="metric-grid compact">
+        <Metric
+          icon={<Database size={17} aria-hidden />}
+          label="Feedback"
+          value={stats?.feedback_count ?? "-"}
+        />
+        <Metric
+          icon={<ListChecks size={17} aria-hidden />}
+          label="Candidates"
+          value={stats?.candidate_count ?? "-"}
+        />
+        <Metric
+          icon={<CheckCircle2 size={17} aria-hidden />}
+          label="Confirmed"
+          value={stats?.confirmed_candidate_count ?? "-"}
+        />
+        <Metric
+          icon={<Gauge size={17} aria-hidden />}
+          label="Recall"
+          value={formatPercent(averageMatch)}
+        />
+      </div>
+      <div className="project-meta-row">
+        <span>Prompt context {recall?.prompt_context.length ?? 0}</span>
+        <span>Visible candidates {candidates.length}</span>
+        <span>Latest feedback {feedback[0] ? formatDate(feedback[0].created_at) : "none"}</span>
+      </div>
+      {candidates.length > 0 ? (
+        <div className="competitor-strip">
+          {candidates.slice(0, 5).map((candidate) => (
+            <span key={candidate.id} title={candidate.statement}>
+              {candidate.kind.replace(/_/g, " ")}
+              <em>{candidate.status} / {formatPercent(candidate.match_score)}</em>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="muted-line">No recalled memory candidates yet.</p>
+      )}
+      {recall?.prompt_context.length ? (
+        <div className="recommendation-list">
+          {recall.prompt_context.slice(0, 2).map((item) => (
+            <article className="recommendation-card medium" key={item}>
+              <strong>Prompt memory</strong>
+              <span>context</span>
+              <p>{item}</p>
+            </article>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }
