@@ -56,9 +56,11 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
     async def execute(self, request: AgentExecutionRequest) -> AgentExecutionResult:
         start = time.perf_counter()
         agent_input = self.input_type.model_validate(request.payload)
+        runtime_prompt = _runtime_prompt(agent_input, self.output_type)
         output, execution_mode, runtime_result_type, runtime_metadata = await self._execute_typed(
             agent_input,
             request.context,
+            runtime_prompt,
         )
         metadata = {
             "framework": "pydantic-ai",
@@ -75,6 +77,8 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
             "pydantic_ai_model_name": _model_name_from_context(request.context, self._model),
             "system_prompt": self.system_prompt,
             "system_prompt_hash": self._system_prompt_hash,
+            "runtime_prompt_hash": _text_hash(runtime_prompt),
+            "runtime_prompt_chars": len(runtime_prompt),
             "input_schema": self.input_type.__name__,
             "output_schema": self.output_type.__name__,
             "input_schema_hash": self._input_schema_hash,
@@ -99,6 +103,7 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
         self,
         agent_input: InputT,
         context: dict[str, Any],
+        runtime_prompt: str,
     ) -> tuple[OutputT, str, str | None, dict[str, Any]]:
         mode = str(context.get("pydantic_ai_execution_mode") or "").strip().lower()
         if mode == "test_model":
@@ -112,9 +117,7 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
             )
             if runtime_agent is not None:
                 try:
-                    result = await runtime_agent.run(
-                        _runtime_prompt(agent_input, self.output_type)
-                    )
+                    result = await runtime_agent.run(runtime_prompt)
                     return (
                         _validate_runtime_output(result, self.output_type),
                         "pydantic_ai_test_model_backed",
@@ -139,9 +142,7 @@ class PydanticAIAgentExecutor(Generic[InputT, OutputT]):
                 )
                 if runtime_agent is not None:
                     try:
-                        result = await runtime_agent.run(
-                            _runtime_prompt(agent_input, self.output_type)
-                        )
+                        result = await runtime_agent.run(runtime_prompt)
                         return (
                             _validate_runtime_output(result, self.output_type),
                             "pydantic_ai_model_backed",

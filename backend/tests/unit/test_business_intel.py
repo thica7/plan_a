@@ -1109,6 +1109,8 @@ async def test_phase3_pydantic_ai_executors_return_structured_outputs() -> None:
     assert gap_result.metadata["typed_contract_enforced"] is True
     assert gap_result.metadata["input_schema_hash"]
     assert gap_result.metadata["output_schema_hash"]
+    assert gap_result.metadata["runtime_prompt_hash"]
+    assert gap_result.metadata["runtime_prompt_chars"] > 0
     assert gap_result.metadata["pydantic_ai_runtime_agent_created"] is True
     assert gap_result.metadata["pydantic_ai_runtime_agent_class"] == "Agent"
     assert gap_result.metadata["pydantic_ai_model_backed_capable"] is True
@@ -1162,6 +1164,8 @@ async def test_pydantic_ai_agent_can_execute_through_test_model_runtime() -> Non
     assert result.metadata["execution_mode"] == "pydantic_ai_test_model_backed"
     assert result.metadata["pydantic_ai_model_backed_requested"] is True
     assert result.metadata["pydantic_ai_runtime_result_type"] == "AgentRunResult"
+    assert result.metadata["runtime_prompt_hash"]
+    assert result.metadata["runtime_prompt_chars"] > 0
     assert result.payload["gap_count"] >= 1
 
 
@@ -1221,6 +1225,8 @@ async def test_pydantic_ai_model_backed_path_falls_back_with_typed_metadata(monk
     assert result.metadata["pydantic_ai_model_backed_error"] == "provider timeout"
     assert result.metadata["pydantic_ai_model_name"] == "openai:test-model"
     assert result.metadata["typed_contract_enforced"] is True
+    assert result.metadata["runtime_prompt_hash"]
+    assert result.metadata["runtime_prompt_chars"] > 0
     assert result.payload["gap_count"] >= 1
 
 
