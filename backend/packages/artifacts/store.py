@@ -5,6 +5,7 @@ import binascii
 import hashlib
 import re
 from pathlib import Path
+from typing import Literal, Protocol
 
 from packages.identity import compute_content_hash
 from packages.schema.enterprise import ArtifactCreateRequest, ArtifactRecord, ArtifactStorageBackend
@@ -12,6 +13,18 @@ from packages.schema.enterprise import ArtifactCreateRequest, ArtifactRecord, Ar
 
 class ArtifactStorageError(ValueError):
     pass
+
+
+ArtifactStorageBackendConfig = Literal["local", "external", "s3", "oss"]
+
+
+class ArtifactStorage(Protocol):
+    def store(
+        self,
+        request: ArtifactCreateRequest,
+        *,
+        actor_id: str | None = None,
+    ) -> ArtifactRecord: ...
 
 
 class LocalArtifactStorage:
@@ -25,7 +38,7 @@ class LocalArtifactStorage:
         actor_id: str | None = None,
     ) -> ArtifactRecord:
         if request.external_uri:
-            return self._external_record(request, actor_id=actor_id)
+            return external_artifact_record(request, actor_id=actor_id)
 
         payload = _payload_bytes(request)
         content_hash = compute_content_hash(payload)
@@ -64,39 +77,79 @@ class LocalArtifactStorage:
             metadata={**request.metadata, "storage_root": str(root_path)},
         )
 
-    def _external_record(
+
+class ExternalArtifactStorage:
+    def __init__(self, backend: Literal["external", "s3", "oss"]) -> None:
+        self.backend = backend
+
+    def store(
         self,
         request: ArtifactCreateRequest,
         *,
-        actor_id: str | None,
+        actor_id: str | None = None,
     ) -> ArtifactRecord:
-        content_hash = hashlib.sha256(request.external_uri.encode("utf-8")).hexdigest()
-        artifact_id = artifact_id_for(
-            workspace_id=request.workspace_id,
-            project_id=request.project_id,
-            evidence_id=request.evidence_id,
-            artifact_type=request.artifact_type,
-            filename=request.filename,
-            content_hash=content_hash,
-        )
-        storage_backend = _external_backend(request.external_uri)
-        return ArtifactRecord(
-            id=artifact_id,
-            workspace_id=request.workspace_id,
-            project_id=request.project_id,
-            evidence_id=request.evidence_id,
-            run_id=request.run_id,
-            artifact_type=request.artifact_type,
-            filename=_safe_filename(request.filename),
-            media_type=request.media_type,
-            storage_backend=storage_backend,
-            uri=request.external_uri,
-            byte_size=0,
-            content_hash=content_hash,
-            source_url=request.source_url,
-            created_by=actor_id,
-            metadata=request.metadata,
-        )
+        if not request.external_uri:
+            raise ArtifactStorageError(
+                "External artifact storage requires external_uri; direct payload upload is not "
+                "configured for this backend."
+            )
+        record = external_artifact_record(request, actor_id=actor_id)
+        if self.backend != "external" and record.storage_backend != self.backend:
+            raise ArtifactStorageError(
+                f"Artifact URI must use {self.backend}:// when ARTIFACT_STORAGE_BACKEND="
+                f"{self.backend}."
+            )
+        record.metadata = {**record.metadata, "configured_storage_backend": self.backend}
+        return record
+
+
+def build_artifact_storage(
+    backend: ArtifactStorageBackendConfig,
+    root: str | Path,
+) -> ArtifactStorage:
+    if backend == "local":
+        return LocalArtifactStorage(root)
+    return ExternalArtifactStorage(backend)
+
+
+def external_artifact_record(
+    request: ArtifactCreateRequest,
+    *,
+    actor_id: str | None,
+) -> ArtifactRecord:
+    if not request.external_uri:
+        raise ArtifactStorageError("external_uri is required for external artifact records.")
+    content_hash = hashlib.sha256(request.external_uri.encode("utf-8")).hexdigest()
+    artifact_id = artifact_id_for(
+        workspace_id=request.workspace_id,
+        project_id=request.project_id,
+        evidence_id=request.evidence_id,
+        artifact_type=request.artifact_type,
+        filename=request.filename,
+        content_hash=content_hash,
+    )
+    storage_backend = _external_backend(request.external_uri)
+    return ArtifactRecord(
+        id=artifact_id,
+        workspace_id=request.workspace_id,
+        project_id=request.project_id,
+        evidence_id=request.evidence_id,
+        run_id=request.run_id,
+        artifact_type=request.artifact_type,
+        filename=_safe_filename(request.filename),
+        media_type=request.media_type,
+        storage_backend=storage_backend,
+        uri=request.external_uri,
+        byte_size=0,
+        content_hash=content_hash,
+        source_url=request.source_url,
+        created_by=actor_id,
+        metadata={
+            **request.metadata,
+            "external_pointer": True,
+            "detected_storage_backend": storage_backend,
+        },
+    )
 
 
 def artifact_id_for(

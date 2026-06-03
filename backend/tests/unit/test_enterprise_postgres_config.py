@@ -53,6 +53,17 @@ def test_enterprise_store_settings_allow_postgres(monkeypatch) -> None:
     assert settings.enterprise_database_url == "postgresql://user:pass@localhost:5432/db"
 
 
+def test_artifact_storage_settings_allow_external_backends(monkeypatch) -> None:
+    monkeypatch.setenv("ARTIFACT_STORAGE_BACKEND", "s3")
+    monkeypatch.setenv("ARTIFACT_STORAGE_ROOT", "unused-for-pointer-backend")
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.artifact_storage_backend == "s3"
+    assert settings.artifact_storage_root == "unused-for-pointer-backend"
+
+
 def test_postgres_schema_contains_enterprise_core_tables() -> None:
     schema = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
 

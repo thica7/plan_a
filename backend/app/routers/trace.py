@@ -10,7 +10,7 @@ from app.deps import (
     get_run_service,
 )
 from app.events import RunEvent
-from packages.artifacts import ArtifactStorageError, LocalArtifactStorage
+from packages.artifacts import ArtifactStorage, ArtifactStorageError
 from packages.compliance import RunComplianceReport, build_run_compliance_report
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore
@@ -30,7 +30,7 @@ router = APIRouter()
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
-ArtifactStorageDep = Annotated[LocalArtifactStorage, Depends(get_artifact_storage)]
+ArtifactStorageDep = Annotated[ArtifactStorage, Depends(get_artifact_storage)]
 
 
 @router.get("/runs/{run_id}/trace", response_model=list[RunEvent])

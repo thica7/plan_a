@@ -104,7 +104,7 @@ class Settings:
     retention_physical_delete_enabled: bool = False
     pydantic_ai_model_backed_enabled: bool = False
     pydantic_ai_model_name: str | None = None
-    artifact_storage_backend: Literal["local"] = "local"
+    artifact_storage_backend: Literal["local", "external", "s3", "oss"] = "local"
     artifact_storage_root: str = "data/artifacts"
     auth_policy_engine: Literal["internal", "opa", "cerbos"] = "internal"
     auth_policy_url: str | None = None
@@ -244,8 +244,8 @@ def get_settings() -> Settings:
         ),
         pydantic_ai_model_name=os.getenv("PYDANTIC_AI_MODEL_NAME") or None,
         artifact_storage_backend=cast(
-            Literal["local"],
-            _env_choice("ARTIFACT_STORAGE_BACKEND", "local", {"local"}),
+            Literal["local", "external", "s3", "oss"],
+            _env_choice("ARTIFACT_STORAGE_BACKEND", "local", {"local", "external", "s3", "oss"}),
         ),
         artifact_storage_root=os.getenv("ARTIFACT_STORAGE_ROOT", "data/artifacts"),
         auth_policy_engine=cast(

@@ -18,7 +18,7 @@ from app.deps import (
     get_preference_memory,
 )
 from packages.agents import AgentExecutionRequest, AgentExecutionResult
-from packages.artifacts import ArtifactStorageError, LocalArtifactStorage
+from packages.artifacts import ArtifactStorage, ArtifactStorageError
 from packages.auth import (
     EnterpriseUserContext,
     PolicyDecision,
@@ -131,7 +131,7 @@ router = APIRouter()
 EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
 EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
-ArtifactStorageDep = Annotated[LocalArtifactStorage, Depends(get_artifact_storage)]
+ArtifactStorageDep = Annotated[ArtifactStorage, Depends(get_artifact_storage)]
 PreferenceMemoryDep = Annotated[PreferenceMemoryStore, Depends(get_preference_memory)]
 
 

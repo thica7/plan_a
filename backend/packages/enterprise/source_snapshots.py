@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from urllib.parse import urlparse
 
-from packages.artifacts import LocalArtifactStorage
+from packages.artifacts import ArtifactStorage
 from packages.enterprise.store import EnterpriseStore, source_registry_id
 from packages.identity import compute_evidence_id, normalize_dimension_key
 from packages.schema.enterprise import (
@@ -19,7 +19,7 @@ def capture_source_snapshot(
     request: SourceSnapshotCreateRequest,
     *,
     store: EnterpriseStore,
-    artifact_storage: LocalArtifactStorage,
+    artifact_storage: ArtifactStorage,
     actor_id: str | None,
 ) -> SourceSnapshotResult:
     source_type = _snapshot_source_type(request)

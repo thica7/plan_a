@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from packages.artifacts import ArtifactStorageError, LocalArtifactStorage
+from packages.artifacts import (
+    ArtifactStorageError,
+    ExternalArtifactStorage,
+    LocalArtifactStorage,
+    build_artifact_storage,
+)
 from packages.schema.enterprise import ArtifactCreateRequest
 
 
@@ -67,6 +72,56 @@ def test_local_artifact_storage_rejects_empty_payload() -> None:
         assert "required" in str(exc)
     else:
         raise AssertionError("Artifact storage accepted a request without content.")
+
+
+def test_external_artifact_storage_records_s3_pointer() -> None:
+    storage = ExternalArtifactStorage("s3")
+    request = ArtifactCreateRequest(
+        workspace_id="workspace-a",
+        project_id="project-a",
+        evidence_id="evidence-a",
+        artifact_type="web_snapshot",
+        filename="cursor-pricing.html",
+        external_uri="s3://ci-bucket/workspace-a/cursor-pricing.html",
+        source_url="https://cursor.sh/pricing",
+    )
+
+    artifact = storage.store(request, actor_id="collector")
+
+    assert artifact.storage_backend == "s3"
+    assert artifact.uri == "s3://ci-bucket/workspace-a/cursor-pricing.html"
+    assert artifact.byte_size == 0
+    assert artifact.metadata["external_pointer"] is True
+    assert artifact.metadata["configured_storage_backend"] == "s3"
+    assert artifact.metadata["detected_storage_backend"] == "s3"
+
+
+def test_external_artifact_storage_rejects_wrong_scheme() -> None:
+    storage = ExternalArtifactStorage("oss")
+    request = ArtifactCreateRequest(
+        workspace_id="workspace-a",
+        project_id="project-a",
+        filename="cursor-pricing.html",
+        external_uri="s3://ci-bucket/workspace-a/cursor-pricing.html",
+    )
+
+    with pytest.raises(ArtifactStorageError, match="oss://"):
+        storage.store(request)
+
+
+def test_build_artifact_storage_selects_pointer_backend() -> None:
+    storage = build_artifact_storage("external", _artifact_root("factory"))
+    request = ArtifactCreateRequest(
+        workspace_id="workspace-a",
+        project_id="project-a",
+        filename="external.txt",
+        external_uri="https://example.com/artifacts/external.txt",
+    )
+
+    artifact = storage.store(request)
+
+    assert artifact.storage_backend == "external"
+    assert artifact.metadata["configured_storage_backend"] == "external"
 
 
 def _artifact_root(name: str) -> Path:

@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import Depends, Header
 
-from packages.artifacts import LocalArtifactStorage
+from packages.artifacts import ArtifactStorage, build_artifact_storage
 from packages.auth import EnterpriseUserContext, normalize_role
 from packages.config import Settings, get_settings
 from packages.enterprise import EnterpriseMemoryStore, EnterprisePostgresStore, EnterpriseStore
@@ -70,11 +70,12 @@ def get_enterprise_store() -> EnterpriseStore:
 
 
 @lru_cache
-def get_artifact_storage() -> LocalArtifactStorage:
+def get_artifact_storage() -> ArtifactStorage:
     settings = get_app_settings()
-    if settings.artifact_storage_backend != "local":
-        raise RuntimeError(f"Unknown artifact storage backend: {settings.artifact_storage_backend}")
-    return LocalArtifactStorage(settings.artifact_storage_root)
+    return build_artifact_storage(
+        settings.artifact_storage_backend,
+        settings.artifact_storage_root,
+    )
 
 
 def get_enterprise_user_context(
