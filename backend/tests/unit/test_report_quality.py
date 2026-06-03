@@ -1,6 +1,10 @@
 from datetime import datetime
 
-from packages.agents.writer.logic import WriterAgentMixin
+from packages.agents.writer.logic import (
+    USER_RESEARCH_SOURCE_TYPES,
+    WriterAgentMixin,
+    writer_user_research_policy_text,
+)
 from packages.business_intel import compare_run_quality
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
@@ -24,6 +28,14 @@ class _WriterHarness(WriterAgentMixin):
         if source.covered_competitors:
             return competitor in source.covered_competitors
         return source.competitor == competitor
+
+
+def test_writer_user_research_policy_names_all_research_source_types() -> None:
+    policy = writer_user_research_policy_text()
+
+    assert "official factual proof" in policy
+    for source_type in USER_RESEARCH_SOURCE_TYPES:
+        assert source_type in policy
 
 
 def test_compare_run_quality_scores_real_run_against_baseline() -> None:

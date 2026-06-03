@@ -14,14 +14,22 @@ if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
 
 
-USER_RESEARCH_SOURCE_TYPES = {
+USER_RESEARCH_SOURCE_TYPE_ORDER = (
     "survey_simulated",
     "survey_response",
     "interview_record",
     "manual_transcript",
     "manual_note",
     "manual",
-}
+)
+USER_RESEARCH_SOURCE_TYPES = set(USER_RESEARCH_SOURCE_TYPE_ORDER)
+
+
+def writer_user_research_policy_text() -> str:
+    source_types = ", ".join(USER_RESEARCH_SOURCE_TYPE_ORDER)
+    return (
+        f"Treat {source_types} as user-research signals, not as official factual proof."
+    )
 
 
 class WriterAgentMixin:
@@ -65,6 +73,7 @@ class WriterAgentMixin:
         layer_context = self._writer_layer_context(detail)
         memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
         required_sections = self._writer_required_sections(detail)
+        user_research_policy = writer_user_research_policy_text()
         try:
             report_md = await self._trace_llm_text(
                 record,
@@ -83,8 +92,7 @@ class WriterAgentMixin:
                     "recommendation. If evidence is incomplete, say the conclusion is "
                     "tentative and list the exact evidence gap. Do not claim all sources are "
                     "verified when any source_type is web_search_result or llm_public_knowledge. "
-                    "Treat survey_simulated and interview_record as user-research signals, "
-                    "not as official factual proof. "
+                    f"{user_research_policy} "
                     "Honor confirmed memory preferences when they do not conflict with evidence, "
                     "schema requirements, or compliance policy. "
                     "Use the requested competitive layer to choose the report shape: L1 is a "
