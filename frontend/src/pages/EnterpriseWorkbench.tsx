@@ -18,6 +18,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import {
+  exportRunComplianceReport,
   exportReportVersion,
   fillProjectEvidenceGaps,
   getDecisionReplay,
@@ -185,6 +186,7 @@ export function EnterpriseWorkbench({
   const [isSubmittingReportApproval, setSubmittingReportApproval] = useState(false);
   const [isPublishingReport, setPublishingReport] = useState(false);
   const [isExportingReport, setExportingReport] = useState(false);
+  const [isExportingCompliance, setExportingCompliance] = useState(false);
   const [isSavingManualRevision, setSavingManualRevision] = useState(false);
   const [isSavingMemoryFeedback, setSavingMemoryFeedback] = useState(false);
   const [isSavingManualResearch, setSavingManualResearch] = useState(false);
@@ -195,6 +197,7 @@ export function EnterpriseWorkbench({
   const [memoryFeedbackDraft, setMemoryFeedbackDraft] = useState("");
   const [manualResearchDraft, setManualResearchDraft] = useState<ManualResearchDraft>(EMPTY_MANUAL_RESEARCH_DRAFT);
   const [lastReportExport, setLastReportExport] = useState<ArtifactRecord | null>(null);
+  const [lastComplianceExport, setLastComplianceExport] = useState<ArtifactRecord | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -256,6 +259,7 @@ export function EnterpriseWorkbench({
       setRunCompliance(null);
       setLoadingCompliance(false);
       setLastReportExport(null);
+      setLastComplianceExport(null);
       setEvalOpsBaselineRunId(null);
       return;
     }
@@ -715,6 +719,25 @@ export function EnterpriseWorkbench({
       setError(err instanceof Error ? err.message : "Unable to export report");
     } finally {
       setExportingReport(false);
+    }
+  }
+
+  async function handleExportComplianceReport() {
+    if (!selectedProject || !selectedVersion?.run_id) return;
+    setExportingCompliance(true);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const result = await exportRunComplianceReport(selectedVersion.run_id);
+      setLastComplianceExport(result.artifact);
+      const artifactItems = await listArtifacts({ projectId: selectedProject.id });
+      setArtifacts(artifactItems);
+      await refreshWorkspaceGovernance(selectedProject.workspace_id);
+      setScanMessage(`Compliance exported: ${result.artifact.filename}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to export compliance report");
+    } finally {
+      setExportingCompliance(false);
     }
   }
 
@@ -1203,7 +1226,10 @@ export function EnterpriseWorkbench({
               ) : null}
 
               <CompliancePanel
+                exportArtifact={lastComplianceExport}
+                isExporting={isExportingCompliance}
                 isLoading={isLoadingCompliance}
+                onExport={handleExportComplianceReport}
                 report={runCompliance}
                 runId={selectedVersion?.run_id}
               />
@@ -1464,11 +1490,17 @@ function AuditLogPanel({ logs }: { logs: AuditLogRecord[] }) {
 }
 
 function CompliancePanel({
+  exportArtifact,
+  isExporting,
   isLoading,
+  onExport,
   report,
   runId,
 }: {
+  exportArtifact: ArtifactRecord | null;
+  isExporting: boolean;
   isLoading: boolean;
+  onExport: () => void;
   report: RunComplianceReport | null;
   runId?: string | null;
 }) {
@@ -1518,11 +1550,22 @@ function CompliancePanel({
     <section className={`panel readiness-panel ${report.status === "pass" ? "pass" : "warn"}`}>
       <div className="panel-heading-row">
         <h2>Compliance</h2>
-        {report.status === "pass" ? (
-          <ShieldCheck size={17} aria-hidden />
-        ) : (
-          <AlertTriangle size={17} aria-hidden />
-        )}
+        <div className="panel-heading-actions">
+          {report.status === "pass" ? (
+            <ShieldCheck size={17} aria-hidden />
+          ) : (
+            <AlertTriangle size={17} aria-hidden />
+          )}
+          <button
+            className="icon-text-button"
+            disabled={isExporting}
+            onClick={onExport}
+            type="button"
+          >
+            <Download size={15} aria-hidden />
+            {isExporting ? "Exporting" : "Export"}
+          </button>
+        </div>
       </div>
       <div className="metric-grid compact">
         <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Status" value={report.status} />
@@ -1556,6 +1599,11 @@ function CompliancePanel({
       ) : (
         <p className="muted-line">No compliance findings.</p>
       )}
+      {exportArtifact ? (
+        <p className="muted-line">
+          {exportArtifact.filename} / {exportArtifact.storage_backend}
+        </p>
+      ) : null}
     </section>
   );
 }
