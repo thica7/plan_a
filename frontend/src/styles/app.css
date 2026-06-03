@@ -2908,6 +2908,10 @@ select {
   text-decoration: none;
 }
 
+.table-action-button {
+  width: 30px;
+}
+
 .quality-select {
   background: var(--surface);
   border: 1px solid var(--border);

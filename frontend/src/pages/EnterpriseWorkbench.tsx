@@ -36,6 +36,7 @@ import {
   getProjectRedTeam,
   getToolRegistry,
   getWorkspaceUsage,
+  createSourceSnapshot,
   ingestProjectMemoryFeedback,
   listArtifacts,
   listEnterpriseCompetitors,
@@ -85,6 +86,7 @@ import type {
   ReportReleaseGate,
   ReportVersionDiff,
   ReportVersionRecord,
+  SourceSnapshotCreateRequest,
   SourceRegistryRecord,
   ToolRegistryReport,
   UserFeedbackRecord,
@@ -137,6 +139,7 @@ export function EnterpriseWorkbench({
   const [isStartingMonitor, setStartingMonitor] = useState(false);
   const [isFillingGaps, setFillingGaps] = useState(false);
   const [isSavingMemoryFeedback, setSavingMemoryFeedback] = useState(false);
+  const [snapshottingEvidenceId, setSnapshottingEvidenceId] = useState<string | null>(null);
   const [memoryFeedbackDraft, setMemoryFeedbackDraft] = useState("");
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -385,6 +388,15 @@ export function EnterpriseWorkbench({
     () => buildReportSourceBundle(evidence, competitorById, selectedVersion),
     [competitorById, evidence, selectedVersion],
   );
+  const snapshottedEvidenceIds = useMemo(
+    () =>
+      new Set(
+        artifacts
+          .map((artifact) => artifact.evidence_id)
+          .filter((evidenceId): evidenceId is string => Boolean(evidenceId)),
+      ),
+    [artifacts],
+  );
   const filteredEvidence = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return evidence;
@@ -533,6 +545,32 @@ export function EnterpriseWorkbench({
       setError(err instanceof Error ? err.message : "Unable to save memory feedback");
     } finally {
       setSavingMemoryFeedback(false);
+    }
+  }
+
+  async function handleCreateEvidenceSnapshot(item: EvidenceRecord) {
+    if (!selectedProject) return;
+    setSnapshottingEvidenceId(item.id);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const competitorName = competitorById.get(item.competitor_id)?.name ?? item.competitor_id;
+      const result = await createSourceSnapshot(
+        buildEvidenceSnapshotRequest(selectedProject, item, competitorName),
+      );
+      const [artifactItems, sourceRegistryValue] = await Promise.all([
+        listArtifacts({ projectId: selectedProject.id }),
+        listSourceRegistry(selectedProject.workspace_id),
+      ]);
+      setArtifacts(artifactItems);
+      setSourceRegistry(sourceRegistryValue);
+      setScanMessage(
+        `Snapshot captured: ${result.artifact.filename} (${result.snapshot_quality_score}/100).`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to capture source snapshot");
+    } finally {
+      setSnapshottingEvidenceId(null);
     }
   }
 
@@ -799,11 +837,14 @@ export function EnterpriseWorkbench({
                 ) : null}
                 {activeTab === "evidence" ? (
                   <EvidenceTable
+                    capturedEvidenceIds={snapshottedEvidenceIds}
                     competitorById={competitorById}
                     evidence={filteredEvidence}
                     onQualityChange={handleQualityChange}
+                    onSnapshotEvidence={handleCreateEvidenceSnapshot}
                     query={query}
                     setQuery={setQuery}
+                    snapshottingEvidenceId={snapshottingEvidenceId}
                   />
                 ) : null}
                 {activeTab === "claims" ? (
@@ -1993,18 +2034,104 @@ function Metric({
   );
 }
 
+function buildEvidenceSnapshotRequest(
+  project: ProjectRecord,
+  evidence: EvidenceRecord,
+  competitorName: string,
+): SourceSnapshotCreateRequest {
+  const snapshotKind = inferSnapshotKind(evidence);
+  return {
+    workspace_id: project.workspace_id,
+    project_id: project.id,
+    evidence_id: evidence.id,
+    run_id: evidence.run_id ?? null,
+    snapshot_kind: snapshotKind,
+    artifact_type: snapshotKind === "webpage" ? "web_snapshot" : "raw_text",
+    filename: buildSnapshotFilename(evidence),
+    media_type: "text/plain; charset=utf-8",
+    content_text: [
+      `Title: ${evidence.title}`,
+      `Competitor: ${competitorName}`,
+      `Dimension: ${evidence.dimension}`,
+      evidence.url ? `URL: ${evidence.url}` : null,
+      `Source type: ${evidence.source_type}`,
+      `Reliability: ${formatPercent(evidence.reliability_score)}`,
+      `Captured at: ${evidence.captured_at}`,
+      "",
+      evidence.snippet || "No snippet captured.",
+    ]
+      .filter((line): line is string => line !== null)
+      .join("\n"),
+    source_url: evidence.url ?? null,
+    source_type: evidence.source_type || `${snapshotKind}_snapshot`,
+    display_name: evidence.title,
+    trust_level: inferSourceTrustLevel(evidence),
+    robots_status: evidence.url ? "allowed" : "unknown",
+    metadata: {
+      captured_from: "enterprise_workbench_evidence_table",
+      competitor_id: evidence.competitor_id,
+      competitor_name: competitorName,
+      raw_source_id: evidence.raw_source_id,
+      dimension: evidence.dimension,
+      content_hash: evidence.content_hash,
+      quality_label: evidence.quality_label,
+      reliability_score: evidence.reliability_score,
+      freshness_score: evidence.freshness_score,
+    },
+  };
+}
+
+function inferSnapshotKind(
+  evidence: EvidenceRecord,
+): NonNullable<SourceSnapshotCreateRequest["snapshot_kind"]> {
+  const sourceType = evidence.source_type.toLowerCase();
+  if (sourceType.includes("pdf")) return "pdf";
+  if (sourceType.includes("screenshot")) return "screenshot";
+  if (sourceType.includes("interview")) return "interview";
+  if (sourceType.includes("survey")) return "survey";
+  if (evidence.url) return "webpage";
+  return "manual";
+}
+
+function inferSourceTrustLevel(
+  evidence: EvidenceRecord,
+): NonNullable<SourceSnapshotCreateRequest["trust_level"]> {
+  const sourceType = evidence.source_type.toLowerCase();
+  if (sourceType.includes("official") || sourceType.includes("pricing")) return "official";
+  if (sourceType.includes("synthetic") || sourceType.includes("simulated")) return "synthetic";
+  if (!evidence.url) return "unknown";
+  return "verified";
+}
+
+function buildSnapshotFilename(evidence: EvidenceRecord) {
+  const safeTitle = evidence.title
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 72);
+  return `${safeTitle || "evidence"}-${evidence.id.slice(0, 8)}.txt`;
+}
+
 function EvidenceTable({
+  capturedEvidenceIds,
   competitorById,
   evidence,
   onQualityChange,
+  onSnapshotEvidence,
   query,
   setQuery,
+  snapshottingEvidenceId,
 }: {
+  capturedEvidenceIds: Set<string>;
   competitorById: Map<string, CompetitorRecord>;
   evidence: EvidenceRecord[];
   onQualityChange: (evidenceId: string, qualityLabel: EvidenceQualityLabel) => void;
+  onSnapshotEvidence: (item: EvidenceRecord) => void;
   query: string;
   setQuery: (value: string) => void;
+  snapshottingEvidenceId: string | null;
 }) {
   return (
     <div className="evidence-section">
@@ -2026,11 +2153,16 @@ function EvidenceTable({
               <th>Dimension</th>
               <th>Quality</th>
               <th>Reliability</th>
+              <th aria-label="Snapshot">
+                <FileText size={14} aria-hidden />
+              </th>
             </tr>
           </thead>
           <tbody>
             {evidence.map((item) => {
               const competitor = competitorById.get(item.competitor_id)?.name ?? item.competitor_id;
+              const isCaptured = capturedEvidenceIds.has(item.id);
+              const isSnapshotting = snapshottingEvidenceId === item.id;
               return (
                 <tr id={`evidence-${item.id}`} key={item.id}>
                   <td>
@@ -2061,6 +2193,24 @@ function EvidenceTable({
                     </select>
                   </td>
                   <td>{formatPercent(item.reliability_score)}</td>
+                  <td>
+                    <button
+                      aria-label={`Capture source snapshot for ${item.title}`}
+                      className="icon-button table-action-button"
+                      disabled={isCaptured || isSnapshotting}
+                      onClick={() => onSnapshotEvidence(item)}
+                      title={isCaptured ? "Snapshot captured" : "Capture source snapshot"}
+                      type="button"
+                    >
+                      {isSnapshotting ? (
+                        <RefreshCw size={14} aria-hidden />
+                      ) : isCaptured ? (
+                        <CheckCircle2 size={14} aria-hidden />
+                      ) : (
+                        <FileText size={14} aria-hidden />
+                      )}
+                    </button>
+                  </td>
                 </tr>
               );
             })}
