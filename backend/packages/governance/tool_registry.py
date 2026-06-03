@@ -82,6 +82,39 @@ def build_tool_registry_report(settings: object) -> ToolRegistryReport:
             reason="Read-only tenant-scoped retrieval.",
         ),
         ToolRegistryEntry(
+            name="online_gap_fill",
+            category="retrieval",
+            description=(
+                "Searches and fetches missing evidence for open EvidenceGap records, then "
+                "stores accepted evidence back into the tenant-scoped Evidence Center."
+            ),
+            input_schema="EvidenceGapReport",
+            output_schema="EvidenceGapFillResult",
+            estimated_cost_usd=0.02,
+            side_effects=["network_read", "database_write"],
+            policy_tags=[
+                "requires_robots",
+                "requires_redaction",
+                "requires_trace",
+                "tenant_scoped",
+                "cost_metered",
+            ],
+            status=(
+                "enabled"
+                if has_search and redaction_enabled and trace_required
+                else "guarded"
+            ),
+            allowed_in_real_mode=has_search and redaction_enabled and trace_required,
+            reason=(
+                "Search credentials, redaction, robots checks, and trace context are configured."
+                if has_search and redaction_enabled and trace_required
+                else (
+                    "Requires search credentials, redaction, robots checks, and trace "
+                    "context before online evidence gap fill can run in real mode."
+                )
+            ),
+        ),
+        ToolRegistryEntry(
             name="memory_recall",
             category="retrieval",
             description="Retrieves confirmed MemoryAgent preferences for planner and QA context.",

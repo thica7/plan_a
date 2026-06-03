@@ -164,11 +164,15 @@ def test_tool_registry_and_model_router_explain_enterprise_policy() -> None:
 
     assert tools.total_count >= 9
     assert {
+        "online_gap_fill",
         "source_snapshot",
         "memory_recall",
         "claim_validator",
         "self_consistency_sampler",
     } <= tool_names
+    online_gap_fill = next(item for item in tools.entries if item.name == "online_gap_fill")
+    assert online_gap_fill.allowed_in_real_mode is False
+    assert {"requires_robots", "cost_metered"} <= set(online_gap_fill.policy_tags)
     assert tools.side_effect_tool_count >= 3
     assert route.status == "fallback"
     assert route.selected is not None
