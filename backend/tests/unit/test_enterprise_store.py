@@ -516,6 +516,15 @@ async def test_run_service_writes_enterprise_projection_on_completion() -> None:
         "self_consistency.sampled",
         "benchmark.scored",
     }
+    claim_event = next(event for event in record.events if event.type == "claim.validated")
+    consistency_event = next(
+        event for event in record.events if event.type == "self_consistency.sampled"
+    )
+    assert claim_event.payload["claim_validation"]["supported_count"] == 1
+    assert claim_event.payload["claim_status_counts"]["supported"] == 1
+    assert consistency_event.payload["self_consistency_score"] >= 70
+    assert consistency_event.payload["consistency_votes"]["text_support"] >= 1
+    assert consistency_event.payload["consistency_votes"]["supported_claims"] == 1
     assert record.events[-1].payload["enterprise_projection"]["evidence_count"] == 1
     assert record.events[-1].payload["enterprise_projection"]["release_gate"]["allowed"] is True
     assert not [

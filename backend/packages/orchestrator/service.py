@@ -20,7 +20,11 @@ from packages.agents.qa.logic import QualityAgentMixin
 from packages.agents.reflector.logic import ReflectorAgentMixin
 from packages.agents.survey.logic import SurveyInterviewAgentMixin
 from packages.agents.writer.logic import WriterAgentMixin
-from packages.business_intel import build_business_intel_plan, evaluate_report_release_gate
+from packages.business_intel import (
+    build_business_intel_plan,
+    evaluate_report_release_gate,
+    validate_project_claims,
+)
 from packages.business_intel.homepage import verify_homepages
 from packages.compliance import compliance_policy_from_settings, redact_text
 from packages.config import Settings
@@ -51,6 +55,7 @@ from packages.orchestrator.graph import (
 )
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail, RunSummary
 from packages.schema.enterprise import (
+    ClaimValidationReport,
     EnterpriseRunProjection,
     NotificationRecord,
     ReportReleaseGate,
@@ -73,6 +78,18 @@ from packages.skills.registry import SkillRegistry
 from packages.tools import WebSearchRequest, fetch_page, robots_check, web_search
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+
+
+def _aggregate_consistency_votes(validation: ClaimValidationReport) -> dict[str, int]:
+    totals = {"text_support": 0, "evidence_quality": 0, "triangulation": 0}
+    for result in validation.results:
+        for key in totals:
+            totals[key] += result.consistency_votes.get(key, 0)
+    totals["supported_claims"] = validation.supported_count
+    totals["weak_claims"] = validation.weak_count
+    totals["unsupported_claims"] = validation.unsupported_count
+    totals["blocked_claims"] = validation.blocked_count
+    return totals
 
 
 @dataclass
@@ -1569,6 +1586,11 @@ class RunService(
     ) -> None:
         detail = record.detail
         if projection is not None:
+            validation = validate_project_claims(
+                project_id=projection.project_id,
+                claims=projection.claim_records,
+                evidence=projection.evidence_records,
+            )
             await self.emit(
                 detail.id,
                 "claim.validated",
@@ -1581,11 +1603,17 @@ class RunService(
                 {
                     "claim_ids": [claim.id for claim in projection.claim_records],
                     "evidence_ids": [evidence.id for evidence in projection.evidence_records],
+                    "claim_validation": validation.model_dump(mode="json"),
+                    "claim_status_counts": {
+                        "supported": validation.supported_count,
+                        "weak": validation.weak_count,
+                        "unsupported": validation.unsupported_count,
+                        "blocked": validation.blocked_count,
+                    },
                     "report_version_id": projection.report_version.id,
                     "release_gate": gate.model_dump(mode="json") if gate is not None else None,
                 },
             )
-            consistency_score = 100 if gate is None else max(0, 100 - gate.issue_count * 8)
             await self.emit(
                 detail.id,
                 "self_consistency.sampled",
@@ -1595,16 +1623,15 @@ class RunService(
                 {
                     "claim_ids": [claim.id for claim in projection.claim_records],
                     "evidence_ids": [evidence.id for evidence in projection.evidence_records],
-                    "self_consistency_score": consistency_score,
+                    "self_consistency_score": validation.self_consistency_score,
                     "sample_dimensions": [
                         "text_support",
                         "evidence_quality",
                         "triangulation",
                     ],
-                    "consistency_votes": {
-                        "release_gate_pass": 1 if gate is not None and gate.allowed else 0,
-                        "release_gate_review": 1 if gate is not None and not gate.allowed else 0,
-                    },
+                    "consistency_votes": _aggregate_consistency_votes(validation),
+                    "low_consistency_count": validation.low_consistency_count,
+                    "claim_validation_issue_count": validation.issue_count,
                     "reason": "Derived from claim validator and release-gate evidence checks.",
                 },
             )
