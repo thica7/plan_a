@@ -74,8 +74,53 @@ def test_compare_run_quality_scores_real_run_against_baseline() -> None:
         "real_source_rate",
         "llm_call_signal",
         "claim_citation_rate",
+        "citation_validity_rate",
         "report_structure_score",
     }
+    assert next(
+        metric for metric in comparison.metrics if metric.name == "citation_validity_rate"
+    ).target_value == 1.0
+
+
+def test_compare_run_quality_flags_unresolved_report_source_tokens() -> None:
+    detail = _run_detail(
+        run_id="invalid-citations",
+        execution_mode="real",
+        source_count=4,
+        report_md=_structured_report_md()
+        .replace("source-0", "missing-0")
+        .replace("source-1", "missing-1")
+        .replace("source-2", "missing-2")
+        .replace("source-3", "missing-3"),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+
+    comparison = compare_run_quality(detail)
+    metric = next(
+        item for item in comparison.metrics if item.name == "citation_validity_rate"
+    )
+
+    assert metric.target_value == 0.0
+    assert comparison.report_quality_signal is False
+    assert comparison.verdict == "warn"
+    assert any("source tokens" in item for item in comparison.recommendations)
 
 
 def test_compare_run_quality_flags_long_unstructured_report() -> None:

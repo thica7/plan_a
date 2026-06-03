@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from statistics import mean
 
 from packages.business_intel import compare_run_quality
@@ -70,7 +69,7 @@ def build_enterprise_evalops_report(
         [_metric_value(comparison, "claim_citation_rate") for comparison in comparisons]
     )
     citation_validity_rate = _average_float(
-        [_citation_validity_rate(run) for run in recent_runs]
+        [_metric_value(comparison, "citation_validity_rate") for comparison in comparisons]
     )
     schema_pass_rate = _average_float([run.metrics.schema_pass_rate for run in recent_runs])
     report_structure_rate = _average_float(
@@ -393,15 +392,6 @@ def _metric_value(comparison: RunQualityComparison, name: str) -> float:
         if metric.name == name:
             return metric.target_value
     return 0.0
-
-
-def _citation_validity_rate(run: RunDetail) -> float:
-    tokens = re.findall(r"\[source:([A-Za-z0-9_.:#-]+)\]", run.report_md)
-    if not tokens:
-        return 0.0
-    source_ids = {source.id for source in run.raw_sources}
-    resolved = sum(1 for token in tokens if token.split("#", 1)[0] in source_ids)
-    return resolved / len(tokens)
 
 
 def _average_int(values: list[int]) -> int:

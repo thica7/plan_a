@@ -89,6 +89,8 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
             detail.metrics.claim_citation_rate,
             _claim_citation_rate(detail),
         ),
+        "citation_validity_rate": _citation_validity_rate(detail),
+        "report_source_token_count": float(_report_source_token_count(detail.report_md)),
         "real_source_rate": _real_source_rate(detail.raw_sources),
         "llm_call_signal": min(float(detail.metrics.llm_calls) / 3.0, 1.0),
         "report_length_score": min(len(detail.report_md) / 2500.0, 1.0),
@@ -102,6 +104,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "source_coverage_rate": values["source_coverage_rate"],
         "verified_source_rate": values["verified_source_rate"],
         "claim_citation_rate": values["claim_citation_rate"],
+        "citation_validity_rate": values["citation_validity_rate"],
         "real_source_rate": values["real_source_rate"],
         "llm_call_signal": values["llm_call_signal"],
         "report_length_score": values["report_length_score"],
@@ -123,6 +126,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
     report_quality_signal = (
         len(detail.report_md) >= 1200
         and values["claim_citation_rate"] >= 0.6
+        and values["citation_validity_rate"] >= 0.6
         and values["source_coverage_rate"] >= 0.5
         and values["report_structure_score"] >= 0.7
     )
@@ -137,13 +141,14 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
 
 def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower_is_better"]]]:
     return [
-        ("evidence_count", 0.11, "higher_is_better"),
-        ("source_coverage_rate", 0.13, "higher_is_better"),
-        ("verified_source_rate", 0.13, "higher_is_better"),
-        ("claim_citation_rate", 0.14, "higher_is_better"),
-        ("real_source_rate", 0.14, "higher_is_better"),
+        ("evidence_count", 0.10, "higher_is_better"),
+        ("source_coverage_rate", 0.12, "higher_is_better"),
+        ("verified_source_rate", 0.12, "higher_is_better"),
+        ("claim_citation_rate", 0.10, "higher_is_better"),
+        ("citation_validity_rate", 0.10, "higher_is_better"),
+        ("real_source_rate", 0.12, "higher_is_better"),
         ("llm_call_signal", 0.1, "higher_is_better"),
-        ("report_length_score", 0.08, "higher_is_better"),
+        ("report_length_score", 0.07, "higher_is_better"),
         ("report_structure_score", 0.1, "higher_is_better"),
         ("qa_blocker_count", 0.07, "lower_is_better"),
     ]
@@ -226,6 +231,19 @@ def _claim_citation_rate(detail: RunDetail) -> float:
     return len(cited) / len(claims)
 
 
+def _citation_validity_rate(detail: RunDetail) -> float:
+    tokens = re.findall(r"\[source:([A-Za-z0-9_.:#-]+)\]", detail.report_md)
+    if not tokens:
+        return 0.0
+    source_ids = {source.id for source in detail.raw_sources}
+    resolved = sum(1 for token in tokens if token.split("#", 1)[0] in source_ids)
+    return resolved / len(tokens)
+
+
+def _report_source_token_count(report_md: str) -> int:
+    return len(re.findall(r"\[source:([A-Za-z0-9_.:#-]+)\]", report_md))
+
+
 def _real_source_rate(sources: list[RawSource]) -> float:
     if not sources:
         return 0.0
@@ -279,6 +297,8 @@ def _verdict(
         return "fail"
     if target.values.get("report_structure_score", 1.0) < 0.7:
         return "warn"
+    if not target.report_quality_signal:
+        return "warn"
     if score < 72 or (delta_score is not None and delta_score < 0):
         return "warn"
     return "pass"
@@ -319,6 +339,13 @@ def _clean_recommendations(
         recommendations.append(
             "Increase report depth, citation coverage, and competitor coverage so conclusions are "
             "supported by an evidence chain."
+        )
+    if (
+        target.values.get("report_source_token_count", 0.0) > 0
+        and target.values.get("citation_validity_rate", 1.0) < 0.6
+    ):
+        recommendations.append(
+            "Repair unresolved report source tokens so citations can jump to collected evidence."
         )
     if baseline is not None and target.score < baseline.score:
         recommendations.append(
