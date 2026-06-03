@@ -59,6 +59,7 @@ import type {
   BusinessQAFinding,
   ArtifactRecord,
   ClaimValidationReport,
+  ClaimValidationResult,
   ClaimRecord,
   CompetitorScoreReport,
   CompetitorRecord,
@@ -1160,12 +1161,22 @@ function ClaimValidationPanel({ report }: { report: ClaimValidationReport }) {
         </div>
       ) : null}
       {weakResults.length > 0 ? (
-        <div className="competitor-strip">
+        <div className="recommendation-list">
           {weakResults.map((result) => (
-            <span key={result.claim_id} title={result.claim_id}>
-              {result.status}
-              <em>support {result.support_score} / self {result.self_consistency_score}</em>
-            </span>
+            <article
+              className={`recommendation-card ${claimValidationResultPriority(result)}`}
+              key={result.claim_id}
+              title={result.claim_id}
+            >
+              <strong>{result.status}</strong>
+              <span>
+                support {result.support_score} / self {result.self_consistency_score}
+              </span>
+              <p>
+                text {result.text_support_score}, evidence {result.evidence_quality_score},
+                triangulation {result.triangulation_score}. {formatConsistencyVotes(result)}
+              </p>
+            </article>
           ))}
         </div>
       ) : (
@@ -1173,6 +1184,22 @@ function ClaimValidationPanel({ report }: { report: ClaimValidationReport }) {
       )}
     </section>
   );
+}
+
+function formatConsistencyVotes(result: ClaimValidationResult) {
+  const text = result.consistency_votes.text_support ?? 0;
+  const evidence = result.consistency_votes.evidence_quality ?? 0;
+  const triangulation = result.consistency_votes.triangulation ?? 0;
+  const usableEvidenceCount = result.usable_evidence_ids.length;
+  const issueCount = result.issue_ids.length;
+  return `Votes ${text}/${evidence}/${triangulation}; evidence ${usableEvidenceCount}; issues ${issueCount}.`;
+}
+
+function claimValidationResultPriority(result: ClaimValidationResult) {
+  if (result.status === "blocked" || result.status === "unsupported") {
+    return "high";
+  }
+  return "medium";
 }
 
 function SourceRegistryPanel({ sources }: { sources: SourceRegistryRecord[] }) {

@@ -224,11 +224,18 @@ function formatSpanMeta(span: TraceSpan) {
 function formatDecisionPayload(event: DecisionReplayEvent) {
   const parts: string[] = [];
   if (event.event_type === "claim.validated") {
-    const claimCount = numberPayload(event, "claim_count");
-    const sourceCount = numberPayload(event, "source_count");
+    const claimCount = numberPayload(event, "claim_count") ?? arrayPayload(event, "claim_ids").length;
+    const sourceCount = numberPayload(event, "source_count") ?? arrayPayload(event, "evidence_ids").length;
+    const statusCounts = objectPayload(event, "claim_status_counts");
     const releaseGate = objectPayload(event, "release_gate");
-    if (claimCount !== null) parts.push(`${claimCount} validated claims`);
-    if (sourceCount !== null) parts.push(`${sourceCount} scoped sources`);
+    if (claimCount > 0) parts.push(`${claimCount} validated claims`);
+    if (sourceCount > 0) parts.push(`${sourceCount} scoped sources`);
+    if (statusCounts) {
+      const supported = numberValue(statusCounts.supported) ?? 0;
+      const weak = numberValue(statusCounts.weak) ?? 0;
+      const blocked = numberValue(statusCounts.blocked) ?? 0;
+      parts.push(`supported ${supported} / weak ${weak} / blocked ${blocked}`);
+    }
     if (releaseGate) {
       const status = stringValue(releaseGate.status);
       const issues = numberValue(releaseGate.issue_count);
@@ -241,8 +248,12 @@ function formatDecisionPayload(event: DecisionReplayEvent) {
     const votes = objectPayload(event, "consistency_votes");
     if (score !== null) parts.push(`score ${score}`);
     if (votes) {
-      const passedVotes = Object.values(votes).filter((value) => value === 1).length;
-      parts.push(`${passedVotes}/${Object.keys(votes).length} checks passed`);
+      const textSupport = numberValue(votes.text_support) ?? 0;
+      const evidenceQuality = numberValue(votes.evidence_quality) ?? 0;
+      const triangulation = numberValue(votes.triangulation) ?? 0;
+      parts.push(
+        `votes text ${textSupport} / quality ${evidenceQuality} / triangulation ${triangulation}`,
+      );
     }
   }
   if (event.event_type === "rag.retrieved") {
