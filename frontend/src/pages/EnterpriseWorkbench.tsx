@@ -1283,6 +1283,11 @@ function EvalOpsPanel({
           value={formatPercent(report.source_recall)}
         />
         <Metric
+          icon={<ShieldCheck size={17} aria-hidden />}
+          label="Citation valid"
+          value={citationValidityRate === null ? "n/a" : formatPercent(citationValidityRate)}
+        />
+        <Metric
           icon={<CheckCircle2 size={17} aria-hidden />}
           label="Real chain"
           value={formatPercent(report.real_quality_chain_rate)}
