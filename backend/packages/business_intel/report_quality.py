@@ -158,6 +158,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
     real_collection_signal = (
         detail.execution_mode == "real"
         and values["real_source_rate"] >= 0.5
+        and values["verified_source_rate"] >= 0.25
         and values["evidence_count"] >= 2
     )
     real_llm_signal = detail.execution_mode == "real" and (
@@ -240,6 +241,8 @@ def _signal_checks(detail: RunDetail, snapshot: _QualitySnapshot) -> list[RunQua
         collection_blockers.append("execution_mode")
     if snapshot.values["real_source_rate"] < 0.5:
         collection_blockers.append("real_source_rate")
+    if snapshot.values["verified_source_rate"] < 0.25:
+        collection_blockers.append("verified_source_rate")
     if snapshot.values["evidence_count"] < 2:
         collection_blockers.append("evidence_count")
 
@@ -274,8 +277,11 @@ def _signal_checks(detail: RunDetail, snapshot: _QualitySnapshot) -> list[RunQua
             passed=snapshot.real_collection_signal,
             reason=_signal_reason(
                 snapshot.real_collection_signal,
-                "Run has real-mode external evidence coverage.",
-                "Needs real execution, at least two evidence items, and >=50% real source rate.",
+                "Run has real-mode external evidence coverage with verified sources.",
+                (
+                    "Needs real execution, at least two evidence items, >=50% real source "
+                    "rate, and at least one verified or official source."
+                ),
             ),
             blocking_metric_names=collection_blockers,
         ),
