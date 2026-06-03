@@ -341,6 +341,7 @@ class QualityAgentMixin:
     def _build_collect_qa_issues(self, detail: RunDetail) -> list[QCIssue]:
         issues: list[QCIssue] = []
         missing_dimensions = self._missing_dimensions(detail)
+        strict_source_qa = self._memory_enforces_strict_source_qa(detail.plan)
         unverified_sources = [
             source
             for source in detail.raw_sources
@@ -385,13 +386,17 @@ class QualityAgentMixin:
                     f"Source {source.id} for {dimension} is not fetched webpage evidence "
                     "and should be recollected or verified."
                 )
+                if strict_source_qa:
+                    problem += (
+                        " MemoryAgent QA policy escalates unverified evidence to a blocker."
+                    )
                 issue = QCIssue(
                     id=(
                         f"unverified-{dimension}-"
                         f"{self._issue_id_fragment(competitor or source.competitor)}-"
                         f"{self._issue_id_fragment(source.id)}"
                     ),
-                    severity="warn",
+                    severity="blocker" if strict_source_qa else "warn",
                     detected_by="coverage",
                     target_agent="collector",
                     target_subagent=dimension,
@@ -418,6 +423,7 @@ class QualityAgentMixin:
     def _build_source_quality_issues(self, detail: RunDetail) -> list[QCIssue]:
         issues: list[QCIssue] = []
         seen: set[str] = set()
+        strict_source_qa = self._memory_enforces_strict_source_qa(detail.plan)
         for source in detail.raw_sources:
             if source.dimension not in detail.plan.dimensions:
                 continue
@@ -444,7 +450,7 @@ class QualityAgentMixin:
                 field_path = f"raw_sources[{source.id}]"
                 issue = QCIssue(
                     id=issue_id,
-                    severity="warn",
+                    severity="blocker" if strict_source_qa else "warn",
                     detected_by="coverage",
                     target_agent="collector",
                     target_subagent=source.dimension,

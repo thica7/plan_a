@@ -1457,7 +1457,8 @@ class CollectorAgentMixin:
             "results": [],
             **task_metadata,
         }
-        if self._should_collect_official_first(dimension):
+        memory_official_first = self._memory_prefers_official_sources(detail.plan)
+        if self._should_collect_official_first(dimension) or memory_official_first:
             try:
                 sources = await self._collect_official_sources(
                     record,
@@ -1467,8 +1468,10 @@ class CollectorAgentMixin:
                     context,
                 )
                 collect_payload["official_added"] = len(sources)
+                collect_payload["memory_official_first"] = memory_official_first
             except Exception as exc:  # noqa: BLE001 - official-first should degrade to search.
                 collect_payload["official_error"] = str(exc)
+                collect_payload["memory_official_first"] = memory_official_first
         if not sources and self._settings.collector_react_enabled and self._search.is_enabled:
             try:
                 sources = await self._run_collector_competitor_react(

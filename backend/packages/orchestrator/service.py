@@ -3241,6 +3241,31 @@ class RunService(
                 merged.append(tag)
         return merged
 
+    def _memory_prefers_official_sources(self, plan: AnalysisPlan) -> bool:
+        text = self._memory_policy_text(plan)
+        return bool(
+            text
+            and "source" in text
+            and any(token in text for token in ("official", "verified", "fetched"))
+        )
+
+    def _memory_enforces_strict_source_qa(self, plan: AnalysisPlan) -> bool:
+        text = self._memory_policy_text(plan)
+        return bool(
+            text
+            and (
+                "qa policy" in text
+                or "quality gate" in text
+                or "failure pattern" in text
+                or "release-gate" in text
+                or "explicit evidence" in text
+                or "unsupported recommendation" in text
+            )
+        )
+
+    def _memory_policy_text(self, plan: AnalysisPlan) -> str:
+        return " ".join(plan.memory_prompt_context).casefold()
+
     def _capture_hitl_memory_feedback(
         self,
         record: RunRecord,

@@ -11,7 +11,7 @@ from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
-from packages.schema.enterprise import ModelRouteCandidate, ModelRouteDecision
+from packages.schema.enterprise import ModelRouteCandidate, ModelRouteDecision, UserFeedbackRecord
 from packages.schema.models import (
     AnalysisPlan,
     ComparisonCell,
@@ -377,6 +377,105 @@ async def test_planner_complexity_refreshes_task_decomposition_budget() -> None:
     assert service._collector_task_max_turns(record.detail.plan, "feature", "Cursor") == 1
     assert service._analyst_task_max_turns(record.detail.plan, "feature", "Cursor") == 1
     assert plan_payload["task_decomposition"][0]["max_turns"] == 1
+
+
+@pytest.mark.asyncio
+async def test_memory_policy_drives_collector_and_strict_source_qa() -> None:
+    memory = PreferenceMemoryStore.in_memory()
+    feedback = memory.add_feedback(
+        UserFeedbackRecord(
+            id="",
+            workspace_id="default-workspace",
+            project_id="project-memory-policy",
+            user_id="analyst-1",
+            feedback_type="preference",
+            target_type="project",
+            target_id="project-memory-policy",
+            message=(
+                "Prefer official verified sources before search-only leads. "
+                "Apply QA policy and treat repeated blockers as a failure pattern; "
+                "enforce explicit evidence before publish."
+            ),
+        )
+    )
+    for candidate in memory.extract_candidates(feedback, auto_confirm=True):
+        memory.upsert_candidate(candidate)
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+        preference_memory=memory,
+    )
+    official_calls: list[tuple[str, str]] = []
+
+    async def fake_official_sources(  # noqa: ANN001
+        record,
+        detail,
+        dimension,
+        competitor,
+        context,
+    ) -> list[RawSource]:
+        official_calls.append((dimension, competitor))
+        return [
+            RawSource(
+                id="source-feature-official",
+                competitor=competitor,
+                dimension=dimension,
+                source_type="webpage_verified",
+                title="Cursor official feature docs",
+                url="https://cursor.com/features",
+                snippet="Cursor documents feature evidence.",
+                content_hash="hash-feature-official",
+                confidence=0.93,
+            )
+        ]
+
+    service._collect_official_sources = fake_official_sources  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant feature review",
+            competitors=["Cursor"],
+            dimensions=["feature"],
+            execution_mode="real",
+            project_id="project-memory-policy",
+        )
+    )
+    record = service._runs[detail.id]
+
+    await service._real_collector_branch_step(record, "feature", "Cursor")
+    collector_done = next(
+        event
+        for event in service.get_trace(detail.id) or []
+        if event.type == "node_completed" and event.agent == "collector"
+    )
+    record.detail.raw_sources = [
+        RawSource(
+            id="source-feature-search",
+            competitor="Cursor",
+            dimension="feature",
+            source_type="web_search_result",
+            title="Cursor feature search lead",
+            url="https://example.com/cursor-feature",
+            snippet="Search-only feature evidence.",
+            content_hash="hash-feature-search",
+            confidence=0.62,
+        )
+    ]
+    issues = service._build_collect_qa_issues(record.detail)
+
+    assert service._memory_prefers_official_sources(record.detail.plan) is True
+    assert service._memory_enforces_strict_source_qa(record.detail.plan) is True
+    assert official_calls == [("feature", "Cursor")]
+    assert collector_done.payload["collect"]["memory_official_first"] is True
+    assert collector_done.payload["source_ids"] == ["source-feature-official"]
+    assert issues[0].severity == "blocker"
+    assert "MemoryAgent QA policy" in issues[0].problem
 
 
 @pytest.mark.asyncio
