@@ -601,7 +601,7 @@ export function EnterpriseWorkbench({
         target_type: "project",
         target_id: selectedProjectId,
         message: memoryFeedbackDraft.trim(),
-        auto_confirm: true,
+        auto_confirm: false,
         tags: ["workbench"],
       });
       const [statsValue, recallValue] = await Promise.all([
@@ -616,6 +616,11 @@ export function EnterpriseWorkbench({
       setMemoryRecall(recallValue);
       setMemoryStats(statsValue);
       setMemoryFeedbackDraft("");
+      setScanMessage(
+        result.candidates.length > 0
+          ? `Memory feedback saved with ${result.candidates.length} candidate(s) pending review.`
+          : "Memory feedback saved.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save memory feedback");
     } finally {
