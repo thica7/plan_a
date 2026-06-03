@@ -7,10 +7,12 @@ from app.deps import (
     get_app_settings,
     get_artifact_storage,
     get_enterprise_store,
+    get_enterprise_user_context,
     get_run_service,
 )
 from app.events import RunEvent
 from packages.artifacts import ArtifactStorage, ArtifactStorageError
+from packages.auth import EnterpriseUserContext, can_access_workspace
 from packages.compliance import RunComplianceReport, build_run_compliance_report
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore
@@ -31,6 +33,7 @@ RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
 ArtifactStorageDep = Annotated[ArtifactStorage, Depends(get_artifact_storage)]
+EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
 
 
 @router.get("/runs/{run_id}/trace", response_model=list[RunEvent])
@@ -96,6 +99,7 @@ async def export_run_compliance_report(
     settings: SettingsDep,
     store: EnterpriseStoreDep,
     artifact_storage: ArtifactStorageDep,
+    user: EnterpriseUserDep,
 ) -> ArtifactCreateResult:
     detail = service.get_run(run_id)
     if detail is None:
@@ -106,6 +110,7 @@ async def export_run_compliance_report(
             status_code=409,
             detail="Run is not linked to an enterprise project for artifact export.",
         )
+    _require_workspace_access(user, detail.workspace_id, "artifact:write")
     report = build_run_compliance_report(detail, settings=settings)
     request = ArtifactCreateRequest(
         workspace_id=detail.workspace_id,
@@ -124,7 +129,7 @@ async def export_run_compliance_report(
         },
     )
     try:
-        artifact = artifact_storage.store(request, actor_id="compliance")
+        artifact = artifact_storage.store(request, actor_id=user.user_id)
     except ArtifactStorageError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ArtifactCreateResult(artifact=store.upsert_artifact(artifact))
@@ -156,6 +161,15 @@ async def get_decision_replay(
         audit_logs=store.list_audit_logs(workspace_id=detail.workspace_id),
         report_versions=report_versions,
     )
+
+
+def _require_workspace_access(
+    user: EnterpriseUserContext,
+    workspace_id: str,
+    action: str,
+) -> None:
+    if not can_access_workspace(user, workspace_id, action):
+        raise HTTPException(status_code=403, detail="Insufficient workspace permission")
 
 
 @router.get("/runs/{run_id}/trace/agent-messages", response_model=list[AgentMessage])

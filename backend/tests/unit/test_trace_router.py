@@ -41,7 +41,22 @@ def test_run_compliance_export_creates_report_artifact(tmp_path) -> None:
     app.dependency_overrides[get_app_settings] = lambda: _settings()
     client = TestClient(app)
 
-    response = client.post(f"/api/runs/{detail.id}/compliance/export")
+    response = client.post(
+        f"/api/runs/{detail.id}/compliance/export",
+        headers={
+            "X-User-Id": "analyst-export",
+            "X-User-Role": "analyst",
+            "X-Workspace-Id": detail.workspace_id,
+        },
+    )
+    denied = client.post(
+        f"/api/runs/{detail.id}/compliance/export",
+        headers={
+            "X-User-Id": "viewer-export",
+            "X-User-Role": "viewer",
+            "X-Workspace-Id": detail.workspace_id,
+        },
+    )
 
     assert response.status_code == 200
     artifact = response.json()["artifact"]
@@ -51,7 +66,9 @@ def test_run_compliance_export_creates_report_artifact(tmp_path) -> None:
     assert artifact["media_type"] == "application/json"
     assert artifact["metadata"]["export_kind"] == "run_compliance_report"
     assert artifact["metadata"]["run_id"] == detail.id
+    assert artifact["created_by"] == "analyst-export"
     assert store.get_artifact(artifact["id"]) is not None
+    assert denied.status_code == 403
 
 
 class _FakeRunService:
