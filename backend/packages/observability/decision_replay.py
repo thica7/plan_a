@@ -124,7 +124,7 @@ def _map_run_event(detail: RunDetail, event: RunEvent) -> DecisionReplayEvent | 
             payload=_safe_payload(event.payload),
         )
     if event.type == "qa_issue":
-        severity = str(event.payload.get("severity") or "")
+        severity = _qa_issue_severity(event.payload)
         event_type: DecisionEventType = "qa.blocked" if severity == "blocker" else "redo.routed"
         return _event(
             detail.id,
@@ -133,7 +133,7 @@ def _map_run_event(detail: RunDetail, event: RunEvent) -> DecisionReplayEvent | 
             event.message,
             claim_ids=_payload_ids(event.payload, "claim_ids", "claim_id"),
             evidence_ids=_payload_ids(event.payload, "evidence_ids", "source_ids"),
-            payload=_safe_payload(event.payload),
+            payload=_qa_issue_payload(event.payload),
         )
     if event.type in {"report_updated", "run_completed"}:
         event_type: DecisionEventType = "report.ready"
@@ -631,6 +631,15 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "resource_id",
         "status",
         "severity",
+        "issue_id",
+        "problem",
+        "phase",
+        "field_path",
+        "detected_by",
+        "target_agent",
+        "target_subagent",
+        "target_competitor",
+        "self_found",
         "agent",
         "subagent",
         "node",
@@ -730,6 +739,38 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         if key in payload:
             allowed[key] = payload[key]
     return allowed
+
+
+def _qa_issue_severity(payload: dict[str, Any]) -> str:
+    severity = payload.get("severity")
+    if isinstance(severity, str):
+        return severity
+    issue = payload.get("issue")
+    if isinstance(issue, dict) and isinstance(issue.get("severity"), str):
+        return issue["severity"]
+    return ""
+
+
+def _qa_issue_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    issue = payload.get("issue")
+    if not isinstance(issue, dict):
+        return _safe_payload(payload)
+
+    normalized = dict(payload)
+    normalized.setdefault("issue_id", _optional_string(issue.get("id")))
+    normalized.setdefault("severity", _optional_string(issue.get("severity")))
+    normalized.setdefault("problem", _optional_string(issue.get("problem")))
+    normalized.setdefault("field_path", _optional_string(issue.get("field_path")))
+    normalized.setdefault("detected_by", _optional_string(issue.get("detected_by")))
+    normalized.setdefault("target_agent", _optional_string(issue.get("target_agent")))
+    normalized.setdefault("target_subagent", _optional_string(issue.get("target_subagent")))
+    normalized.setdefault("target_competitor", _optional_string(issue.get("target_competitor")))
+    if "self_found" in issue:
+        normalized.setdefault("self_found", issue.get("self_found"))
+    redo_scope = issue.get("redo_scope")
+    if isinstance(redo_scope, dict):
+        normalized.setdefault("redo_scope", redo_scope)
+    return _safe_payload(normalized)
 
 
 _SPECIAL_EVENT_TYPES: set[DecisionEventType] = {

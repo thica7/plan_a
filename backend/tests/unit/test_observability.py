@@ -358,6 +358,60 @@ def test_decision_replay_prefers_real_claim_validation_events() -> None:
     assert claim_events[0].payload["validation_samples"][0]["checker"] == "text_support"
 
 
+def test_decision_replay_maps_nested_blocker_qa_issue_to_blocked_event() -> None:
+    detail = RunDetail(
+        id="run-qa-blocker",
+        topic="Decision replay QA blocker",
+        status="completed_with_blockers",
+        execution_mode="demo",
+        created_at="2026-05-31T00:00:00Z",
+        updated_at="2026-05-31T00:01:00Z",
+        plan=AnalysisPlan(
+            topic="Decision replay QA blocker",
+            competitors=["A"],
+            dimensions=["pricing"],
+        ),
+    )
+    events = [
+        RunEvent(
+            id=1,
+            run_id="run-qa-blocker",
+            type="qa_issue",
+            agent="qa",
+            subagent="pricing",
+            message="No evidence sources were collected for pricing.",
+            payload={
+                "phase": "collect",
+                "issue": {
+                    "id": "missing-pricing",
+                    "severity": "blocker",
+                    "detected_by": "coverage",
+                    "target_agent": "collector",
+                    "target_subagent": "pricing",
+                    "field_path": "raw_sources[pricing]",
+                    "problem": "No evidence sources were collected for pricing.",
+                    "redo_scope": {
+                        "kind": "collector",
+                        "target_subagent": "pricing",
+                        "rationale": "No sources collected for pricing.",
+                    },
+                    "self_found": False,
+                },
+            },
+        )
+    ]
+
+    replay = build_decision_replay(detail, events)
+
+    qa_event = next(event for event in replay.events if event.event_type == "qa.blocked")
+    assert qa_event.payload["issue_id"] == "missing-pricing"
+    assert qa_event.payload["severity"] == "blocker"
+    assert qa_event.payload["phase"] == "collect"
+    assert qa_event.payload["target_agent"] == "collector"
+    assert qa_event.payload["redo_scope"]["kind"] == "collector"
+    assert "No evidence sources" in qa_event.payload["problem"]
+
+
 def test_decision_replay_includes_report_version_gap_fill_events() -> None:
     detail = RunDetail(
         id="run-gap-fill",
