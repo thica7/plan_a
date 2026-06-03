@@ -90,6 +90,17 @@ def test_compliance_redactor_obeys_policy() -> None:
     assert result.counts == {"api_key": 1}
 
 
+def test_compliance_redactor_covers_groq_and_xai_provider_keys() -> None:
+    result = redact_text(
+        "Groq gsk_abcdef1234567890abcdef123456 and xAI xai-abcdef1234567890abcdef123456."
+    )
+
+    assert "gsk_abcdef" not in result.text
+    assert "xai-abcdef" not in result.text
+    assert result.text.count("[redacted:api_key]") == 2
+    assert result.counts["api_key"] == 2
+
+
 def test_otel_export_and_observability_report_require_trace_context() -> None:
     trace_id = trace_id_for_run("run-1")
     otel_span_id = otel_span_id_for_span("run-1", "span-1")

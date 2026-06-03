@@ -37,6 +37,8 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
             r"sk-ant-api03-[A-Za-z0-9_-]{16,}|"
             r"sk-[A-Za-z0-9_-]{16,}|"
             r"pplx-[A-Za-z0-9_-]{16,}|"
+            r"gsk_[A-Za-z0-9_-]{16,}|"
+            r"xai-[A-Za-z0-9_-]{16,}|"
             r"AIza[0-9A-Za-z_-]{20,}|"
             r"AKIA[0-9A-Z]{16}|"
             r"(?:ak|rk|pk|xoxb|ghp|github_pat|hf|glpat)_[A-Za-z0-9_-]{16,}"
