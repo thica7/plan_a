@@ -82,6 +82,30 @@ def test_health_reports_foundation_checks(monkeypatch) -> None:
     assert temporal_server["status"] == "ok"
 
 
+def test_runtime_reports_hitl_and_pydantic_ai_readiness() -> None:
+    client = _client(
+        _settings(
+            hitl_enabled=True,
+            pydantic_ai_model_backed_enabled=True,
+            pydantic_ai_model_name="openai:gpt-4o-mini",
+        )
+    )
+
+    response = client.get("/api/runtime")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["hitl_enabled"] is True
+    assert body["hitl_demo_ready"] is True
+    assert body["hitl_review_checkpoints"] == ["planner_hitl", "qa_hitl"]
+    assert "enabled" in body["hitl_ready_reason"]
+    assert body["pydantic_ai_model_backed_enabled"] is True
+    assert body["pydantic_ai_model_name"] == "openai:gpt-4o-mini"
+    assert isinstance(body["pydantic_ai_available"], bool)
+    assert body["pydantic_ai_model_backed_ready"] is body["pydantic_ai_available"]
+    assert "Pydantic-AI" in body["pydantic_ai_model_backed_reason"]
+
+
 def test_health_marks_incomplete_temporal_cutover_as_error() -> None:
     client = _client(_settings(run_orchestration_backend="langgraph"))
 

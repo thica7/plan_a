@@ -249,6 +249,16 @@ export function NewRun() {
                   ? "Automatic scoped redo is enabled."
                   : "Automatic scoped redo is disabled by backend config."}
               </p>
+              <p className={runtime.hitl_demo_ready ? "runtime-ok" : "runtime-warn"}>
+                {runtime.hitl_demo_ready
+                  ? `HITL pauses are enabled at ${runtime.hitl_review_checkpoints.join(", ")}.`
+                  : runtime.hitl_ready_reason}
+              </p>
+              <p className={runtime.pydantic_ai_model_backed_ready ? "runtime-ok" : "runtime-warn"}>
+                {runtime.pydantic_ai_model_backed_ready
+                  ? `Pydantic-AI model-backed agents use ${runtime.pydantic_ai_model_name}.`
+                  : runtime.pydantic_ai_model_backed_reason}
+              </p>
               <p className={runtime.temporal_cutover_ready ? "runtime-ok" : "runtime-warn"}>
                 {runtime.temporal_cutover_ready
                   ? `Run entry is 100% routed through Temporal on ${runtime.temporal_task_queue}.`

@@ -264,6 +264,9 @@ class RuntimeConfig(BaseModel):
     auto_redo_warn_enabled: bool
     hitl_enabled: bool
     hitl_timeout_seconds: float
+    hitl_demo_ready: bool
+    hitl_ready_reason: str
+    hitl_review_checkpoints: list[str]
     temporal_address: str
     temporal_namespace: str
     temporal_task_queue: str
@@ -280,6 +283,9 @@ class RuntimeConfig(BaseModel):
     compliance_require_trace_context: bool
     pydantic_ai_model_backed_enabled: bool
     pydantic_ai_model_name: str | None = None
+    pydantic_ai_available: bool
+    pydantic_ai_model_backed_ready: bool
+    pydantic_ai_model_backed_reason: str
     artifact_storage_backend: str
     artifact_storage_root: str
     auth_policy_engine: str

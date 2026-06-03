@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.deps import get_app_settings
+from packages.agents.pydantic_ai_adapter import pydantic_ai_available
 from packages.config import Settings
 from packages.schema.api_dto import RuntimeConfig
 from packages.workflows.service import temporal_cutover_status
@@ -14,6 +15,12 @@ SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 @router.get("/runtime", response_model=RuntimeConfig)
 def get_runtime(settings: SettingsDep) -> RuntimeConfig:
     cutover = temporal_cutover_status(settings)
+    pydantic_available = pydantic_ai_available()
+    pydantic_ready = (
+        pydantic_available
+        and settings.pydantic_ai_model_backed_enabled
+        and bool(settings.pydantic_ai_model_name)
+    )
     return RuntimeConfig(
         default_execution_mode=settings.default_execution_mode,
         run_orchestration_backend=settings.run_orchestration_backend,
@@ -32,6 +39,13 @@ def get_runtime(settings: SettingsDep) -> RuntimeConfig:
         auto_redo_warn_enabled=settings.auto_redo_warn_enabled,
         hitl_enabled=settings.hitl_enabled,
         hitl_timeout_seconds=settings.hitl_timeout_seconds,
+        hitl_demo_ready=settings.hitl_enabled,
+        hitl_ready_reason=(
+            "Planner and QA HITL checkpoints are enabled."
+            if settings.hitl_enabled
+            else "Set HITL_ENABLED=true to pause at planner and QA review checkpoints."
+        ),
+        hitl_review_checkpoints=["planner_hitl", "qa_hitl"],
         temporal_address=settings.temporal_address,
         temporal_namespace=settings.temporal_namespace,
         temporal_task_queue=settings.temporal_task_queue,
@@ -48,8 +62,30 @@ def get_runtime(settings: SettingsDep) -> RuntimeConfig:
         compliance_require_trace_context=settings.compliance_require_trace_context,
         pydantic_ai_model_backed_enabled=settings.pydantic_ai_model_backed_enabled,
         pydantic_ai_model_name=settings.pydantic_ai_model_name,
+        pydantic_ai_available=pydantic_available,
+        pydantic_ai_model_backed_ready=pydantic_ready,
+        pydantic_ai_model_backed_reason=_pydantic_ai_ready_reason(
+            available=pydantic_available,
+            enabled=settings.pydantic_ai_model_backed_enabled,
+            model_name=settings.pydantic_ai_model_name,
+        ),
         artifact_storage_backend=settings.artifact_storage_backend,
         artifact_storage_root=settings.artifact_storage_root,
         auth_policy_engine=settings.auth_policy_engine,
         auth_policy_external_configured=bool(settings.auth_policy_url),
     )
+
+
+def _pydantic_ai_ready_reason(
+    *,
+    available: bool,
+    enabled: bool,
+    model_name: str | None,
+) -> str:
+    if not available:
+        return "Pydantic-AI package is not importable in the backend runtime."
+    if not enabled:
+        return "Set PYDANTIC_AI_MODEL_BACKED_ENABLED=true to use model-backed quality agents."
+    if not model_name:
+        return "Set PYDANTIC_AI_MODEL_NAME to choose the model-backed agent runtime."
+    return f"Pydantic-AI model-backed agents are ready with {model_name}."
