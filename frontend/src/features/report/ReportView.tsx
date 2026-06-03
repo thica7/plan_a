@@ -214,7 +214,7 @@ interface SourceTokenGroup {
 
 const SOURCE_TOKEN_RE = /\[source:([A-Za-z0-9_.:#-]+)\]/g;
 
-function collectSourceTokenGroups(
+export function collectSourceTokenGroups(
   markdown: string,
   sourceMap: Map<string, RawSource>,
   sourceAliases: Record<string, string>,
@@ -239,7 +239,7 @@ function collectSourceTokenGroups(
   return Array.from(groups.values());
 }
 
-function linkSourceTokens(
+export function linkSourceTokens(
   markdown: string,
   sourceMap: Map<string, RawSource>,
   sourceAliases: Record<string, string>,
@@ -253,7 +253,7 @@ function linkSourceTokens(
   });
 }
 
-function extractSourceTokens(markdown: string) {
+export function extractSourceTokens(markdown: string) {
   return Array.from(markdown.matchAll(SOURCE_TOKEN_RE), (match) => match[1]);
 }
 
@@ -261,7 +261,7 @@ function normalizeSourceToken(token: string) {
   return token.split("#", 1)[0];
 }
 
-function resolveSourceId(
+export function resolveSourceId(
   token: string,
   sourceMap: Map<string, RawSource>,
   sourceAliases: Record<string, string>,
