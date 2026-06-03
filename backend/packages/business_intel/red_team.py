@@ -9,6 +9,7 @@ from packages.agents.pydantic_ai_adapter import (
     PydanticAIAgentExecutor,
     pydantic_ai_available,
 )
+from packages.business_intel.dimensions import effective_analysis_dimensions
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS
 from packages.schema.enterprise import (
     BusinessIntelPlan,
@@ -190,10 +191,7 @@ def _evidence_findings(agent_input: RedTeamInput) -> list[RedTeamFinding]:
 
 
 def _coverage_bias_findings(agent_input: RedTeamInput) -> list[RedTeamFinding]:
-    dimensions = (
-        agent_input.plan.scenario_pack.required_dimensions
-        or agent_input.plan.requested_dimensions
-    )
+    dimensions = effective_analysis_dimensions(agent_input.plan)
     evidence_counts = Counter(
         (item.competitor_id, item.dimension)
         for item in agent_input.evidence

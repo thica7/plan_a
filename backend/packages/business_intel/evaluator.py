@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
+from packages.business_intel.dimensions import effective_analysis_dimensions
 from packages.schema.enterprise import (
     BusinessIntelPlan,
     BusinessQAEvaluation,
@@ -213,7 +214,7 @@ def _landscape_findings(
 def _dimensions_for_rule(rule: BusinessQARule, plan: BusinessIntelPlan) -> list[str]:
     if rule.required_dimensions:
         return rule.required_dimensions
-    return plan.scenario_pack.required_dimensions or plan.requested_dimensions
+    return effective_analysis_dimensions(plan)
 
 
 def _same_dimension(left: str, right: str) -> bool:

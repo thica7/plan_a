@@ -149,6 +149,75 @@ def test_dynamic_scenario_pack_and_homepage_gate_are_deterministic() -> None:
     assert phantom.reason == "phantom_name"
 
 
+def test_dynamic_schema_dimensions_drive_quality_risk_and_scoring() -> None:
+    plan = build_business_intel_plan(
+        topic="Cursor vs Copilot enterprise battlecard",
+        competitors=["Cursor"],
+        dimensions=["pricing", "enterprise_sso"],
+        requested_layer="L1",
+        requested_scenario_id="l1_direct_battlecard",
+    )
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-pricing",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-pricing",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims: list[ClaimRecord] = []
+
+    evaluation = evaluate_business_qa(
+        project_id="project-1",
+        plan=plan,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+    red_team = analyze_red_team(
+        project_id="project-1",
+        plan=plan,
+        qa_evaluation=evaluation,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+        report_versions=[_report_version(evidence_ids=["evidence-pricing"])],
+    )
+    score_report = score_competitors(
+        project_id="project-1",
+        plan=plan,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert "enterprise_sso" in plan.requested_dimensions
+    assert any(
+        finding.rule_id == "coverage_min_verified"
+        and finding.dimension == "enterprise_sso"
+        for finding in evaluation.findings
+    )
+    assert any(
+        finding.finding_type == "competitive_bias"
+        and "enterprise_sso" in (finding.dimension or "")
+        for finding in red_team.findings
+    )
+    assert any(
+        score.dimension == "enterprise_sso"
+        for score in score_report.scores[0].dimension_scores
+    )
+
+
 def test_business_qa_evaluator_passes_verified_pricing_pack() -> None:
     plan = build_business_intel_plan(
         topic="Cursor vs Copilot pricing comparison",

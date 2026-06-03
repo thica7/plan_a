@@ -4,6 +4,7 @@ import hashlib
 from statistics import mean
 from typing import Literal
 
+from packages.business_intel.dimensions import effective_analysis_dimensions
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS
 from packages.schema.enterprise import (
     BusinessIntelPlan,
@@ -69,7 +70,7 @@ def score_competitors(
     evidence: list[EvidenceRecord],
     claims: list[ClaimRecord],
 ) -> CompetitorScoreReport:
-    dimensions = plan.scenario_pack.required_dimensions or plan.requested_dimensions
+    dimensions = effective_analysis_dimensions(plan)
     scores = [
         _score_competitor(
             competitor=competitor,
@@ -173,7 +174,7 @@ def _coverage_score(
     competitors: list[CompetitorRecord],
     evidence: list[EvidenceRecord],
 ) -> int:
-    dimensions = plan.scenario_pack.required_dimensions or plan.requested_dimensions
+    dimensions = effective_analysis_dimensions(plan)
     if not competitors or not dimensions:
         return 0
     expected = len(competitors) * len(dimensions)

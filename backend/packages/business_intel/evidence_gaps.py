@@ -8,6 +8,7 @@ from packages.agents.pydantic_ai_adapter import (
     PydanticAIAgentExecutor,
     pydantic_ai_available,
 )
+from packages.business_intel.dimensions import effective_analysis_dimensions
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS
 from packages.schema.enterprise import (
     BusinessIntelPlan,
@@ -93,9 +94,7 @@ def _coverage_gaps(
     competitors: list[CompetitorRecord],
     evidence: list[EvidenceRecord],
 ) -> list[EvidenceGapItem]:
-    dimensions = _unique_dimensions(
-        [*plan.scenario_pack.required_dimensions, *plan.requested_dimensions]
-    )
+    dimensions = effective_analysis_dimensions(plan)
     gaps: list[EvidenceGapItem] = []
     for competitor in competitors:
         for dimension in dimensions:
@@ -358,18 +357,6 @@ def _schema_evolution_suggestions(
             )
         )
     return suggestions
-
-
-def _unique_dimensions(dimensions: list[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for dimension in dimensions:
-        key = _dimension_key(dimension)
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        result.append(dimension)
-    return result
 
 
 def _draft_skill_spec(dimension_key: str) -> SkillSpec:
