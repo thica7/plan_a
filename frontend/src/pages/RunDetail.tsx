@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, Loader2, RotateCcw } from "lucide-react";
 import {
+  exportRunComplianceReport,
   getDecisionReplay,
   getRun,
   getRunComplianceReport,
@@ -24,6 +25,7 @@ import { TraceList } from "../features/trace/TraceList";
 import { TracePlayback } from "../features/trace/TracePlayback";
 import { useRunStore } from "../stores/run";
 import type {
+  ArtifactRecord,
   DecisionReplayReport,
   ReflectionRecord,
   RunComplianceReport,
@@ -39,6 +41,8 @@ export function RunDetail() {
   const [qualityComparison, setQualityComparison] = useState<RunQualityComparison | null>(null);
   const [decisionReplay, setDecisionReplay] = useState<DecisionReplayReport | null>(null);
   const [complianceReport, setComplianceReport] = useState<RunComplianceReport | null>(null);
+  const [complianceExport, setComplianceExport] = useState<ArtifactRecord | null>(null);
+  const [isExportingCompliance, setExportingCompliance] = useState(false);
   const redoLimitReached = detail ? detail.revisions.length >= detail.max_iterations : false;
   const latestInterrupt = useMemo(
     () => [...events].reverse().find((event) => event.type === "interrupt"),
@@ -55,6 +59,7 @@ export function RunDetail() {
     setQualityComparison(null);
     setDecisionReplay(null);
     setComplianceReport(null);
+    setComplianceExport(null);
 
     const load = (attempt: number) => {
       getRun(runId)
@@ -196,6 +201,20 @@ export function RunDetail() {
     }
   }
 
+  async function handleExportCompliance() {
+    if (!runId) return;
+    setExportingCompliance(true);
+    setError(null);
+    try {
+      const result = await exportRunComplianceReport(runId);
+      setComplianceExport(result.artifact);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to export compliance report");
+    } finally {
+      setExportingCompliance(false);
+    }
+  }
+
   return (
     <section className="run-detail">
       <header className="page-header">
@@ -273,7 +292,12 @@ export function RunDetail() {
         <RevisionDiff revisions={detail.revisions} />
         <CostPanel metrics={detail.metrics} spans={detail.trace_spans} />
         <RunQualityPanel comparison={qualityComparison} />
-        <CompliancePanel report={complianceReport} />
+        <CompliancePanel
+          exportArtifact={complianceExport}
+          isExporting={isExportingCompliance}
+          onExport={handleExportCompliance}
+          report={complianceReport}
+        />
         <aside className="qa-panel">
           <div className="panel-heading-row">
             <h2>QA findings</h2>
@@ -337,7 +361,17 @@ export function RunDetail() {
   );
 }
 
-function CompliancePanel({ report }: { report: RunComplianceReport | null }) {
+function CompliancePanel({
+  exportArtifact,
+  isExporting,
+  onExport,
+  report,
+}: {
+  exportArtifact: ArtifactRecord | null;
+  isExporting: boolean;
+  onExport: () => void;
+  report: RunComplianceReport | null;
+}) {
   if (!report) {
     return (
       <aside className="qa-panel run-quality-panel">
@@ -355,11 +389,15 @@ function CompliancePanel({ report }: { report: RunComplianceReport | null }) {
     <aside className={`qa-panel run-quality-panel ${report.status}`}>
       <div className="panel-heading-row">
         <h2>Compliance</h2>
-        {report.status === "pass" ? (
-          <CheckCircle2 size={16} aria-hidden />
-        ) : (
-          <AlertTriangle size={16} aria-hidden />
-        )}
+        <button
+          className="icon-text-button"
+          disabled={isExporting}
+          onClick={onExport}
+          type="button"
+        >
+          <Download size={15} aria-hidden />
+          {isExporting ? "Exporting" : "Export"}
+        </button>
       </div>
       <div className="metric-grid compact">
         <MetricValue label="Status" value={report.status} />
@@ -408,6 +446,11 @@ function CompliancePanel({ report }: { report: RunComplianceReport | null }) {
       ) : (
         <p className="muted-text">No compliance findings.</p>
       )}
+      {exportArtifact ? (
+        <p className="muted-text">
+          {exportArtifact.filename} / {exportArtifact.uri}
+        </p>
+      ) : null}
     </aside>
   );
 }

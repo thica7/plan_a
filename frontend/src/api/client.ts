@@ -221,6 +221,12 @@ export function getRunComplianceReport(runId: string) {
   return request<RunComplianceReport>(`/runs/${runId}/compliance`);
 }
 
+export function exportRunComplianceReport(runId: string) {
+  return request<ArtifactCreateResult>(`/runs/${runId}/compliance/export`, {
+    method: "POST",
+  });
+}
+
 export function getAgentMessages(runId: string) {
   return request<AgentMessage[]>(`/runs/${runId}/trace/agent-messages`);
 }
