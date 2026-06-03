@@ -58,7 +58,12 @@ from packages.schema.enterprise import (
     WorkspaceRecord,
     WorkspaceUsageSummary,
 )
-from packages.schema.evals import EvalOpsCaseResult, EvalOpsMetric, EvalOpsReport
+from packages.schema.evals import (
+    EvalOpsCaseResult,
+    EvalOpsMetric,
+    EvalOpsQualityChainStep,
+    EvalOpsReport,
+)
 from packages.schema.models import (
     AgentMessage,
     AnalysisPlan,
@@ -123,6 +128,7 @@ __all__ = [
     "EvidenceSearchHit",
     "EvalOpsCaseResult",
     "EvalOpsMetric",
+    "EvalOpsQualityChainStep",
     "EvalOpsReport",
     "FeatureNode",
     "FeatureTree",

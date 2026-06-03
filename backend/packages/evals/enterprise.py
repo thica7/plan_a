@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from statistics import mean
+from typing import Literal
 
 from packages.business_intel import compare_run_quality
 from packages.schema.api_dto import RunDetail, RunQualityComparison
@@ -8,6 +9,7 @@ from packages.schema.evals import (
     EvalJudgeMode,
     EvalOpsCaseResult,
     EvalOpsMetric,
+    EvalOpsQualityChainStep,
     EvalOpsReport,
     EvalOpsStatus,
 )
@@ -46,6 +48,16 @@ def build_enterprise_evalops_report(
             for comparison in comparisons
         ]
     )
+    real_quality_chain_failed_run_ids = [
+        comparison.target_run_id
+        for comparison in comparisons
+        if not (
+            comparison.real_collection_signal
+            and comparison.real_llm_signal
+            and comparison.report_quality_signal
+        )
+    ]
+    quality_chain_steps = _quality_chain_steps(comparisons)
     delta_scores = [
         comparison.delta_score
         for comparison in comparisons
@@ -147,6 +159,7 @@ def build_enterprise_evalops_report(
         scenario_checklist_section_rate=scenario_checklist_section_rate,
         real_collection_rate=real_collection_rate,
         real_llm_rate=real_llm_rate,
+        real_quality_chain_rate=real_quality_chain_rate,
     )
     golden_set_pass_rate = _ratio([case.status == "pass" for case in cases])
     metrics = [
@@ -198,6 +211,8 @@ def build_enterprise_evalops_report(
         demo_run_count=demo_run_count,
         real_run_ratio=round(real_run_ratio, 3),
         real_quality_chain_rate=round(real_quality_chain_rate, 3),
+        real_quality_chain_failed_run_ids=real_quality_chain_failed_run_ids,
+        quality_chain_steps=quality_chain_steps,
         average_delta_score=average_delta_score,
         regressed_run_count=regressed_run_count,
         judge_mode=judge_mode,
@@ -240,6 +255,7 @@ def _golden_cases(
     scenario_checklist_section_rate: float,
     real_collection_rate: float,
     real_llm_rate: float,
+    real_quality_chain_rate: float,
 ) -> list[EvalOpsCaseResult]:
     target_run_id = comparisons[0].target_run_id if comparisons else None
     baseline_run_id = comparisons[0].baseline_run_id if comparisons else None
@@ -332,7 +348,72 @@ def _golden_cases(
             target_run_id,
             baseline_run_id,
         ),
+        _case(
+            "golden.real_quality_chain",
+            "Real quality chain",
+            round(real_quality_chain_rate * 100),
+            50,
+            target_run_id,
+            baseline_run_id,
+        ),
     ]
+
+
+def _quality_chain_steps(
+    comparisons: list[RunQualityComparison],
+) -> list[EvalOpsQualityChainStep]:
+    step_specs: list[
+        tuple[Literal["real_collection", "real_llm", "report_quality"], str, str]
+    ] = [
+        (
+            "real_collection",
+            "Real collection",
+            "External evidence collection is distinguishable from demo fixtures.",
+        ),
+        (
+            "real_llm",
+            "Real LLM trace",
+            "LLM calls or trace spans show model-backed execution.",
+        ),
+        (
+            "report_quality",
+            "Report quality",
+            "The report is long enough, cited, structured, and review-ready.",
+        ),
+    ]
+    total = len(comparisons)
+    steps: list[EvalOpsQualityChainStep] = []
+    for step, label, description in step_specs:
+        failed_run_ids = [
+            comparison.target_run_id
+            for comparison in comparisons
+            if not _quality_chain_step_passed(comparison, step)
+        ]
+        passed_count = total - len(failed_run_ids)
+        pass_rate = passed_count / total if total else 0.0
+        steps.append(
+            EvalOpsQualityChainStep(
+                step=step,
+                label=label,
+                total_count=total,
+                passed_count=passed_count,
+                failed_count=len(failed_run_ids),
+                pass_rate=round(pass_rate, 3),
+                failed_run_ids=failed_run_ids,
+                summary=f"{passed_count}/{total} run(s) passed. {description}",
+            )
+        )
+    return steps
+
+
+def _quality_chain_step_passed(comparison: RunQualityComparison, step: str) -> bool:
+    if step == "real_collection":
+        return comparison.real_collection_signal
+    if step == "real_llm":
+        return comparison.real_llm_signal
+    if step == "report_quality":
+        return comparison.report_quality_signal
+    return False
 
 
 def _case(

@@ -1525,6 +1525,29 @@ function EvalOpsPanel({
       </div>
       <p>{report.regression_gate_reason}</p>
       {report.judge_fallback_reason ? <p className="muted-line">{report.judge_fallback_reason}</p> : null}
+      {report.quality_chain_steps.length > 0 ? (
+        <div className="recommendation-list">
+          {report.quality_chain_steps.map((step) => (
+            <article
+              className={`recommendation-card ${step.failed_count > 0 ? "high" : "low"}`}
+              key={step.step}
+            >
+              <strong>{step.label}</strong>
+              <span>
+                {formatPercent(step.pass_rate)} · {step.passed_count}/{step.total_count} passed
+              </span>
+              <p>{step.summary}</p>
+              {step.failed_run_ids.length > 0 ? (
+                <div className="project-meta-row">
+                  {step.failed_run_ids.slice(0, 4).map((runId) => (
+                    <span key={runId}>Fail {runId}</span>
+                  ))}
+                </div>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
       {watchMetrics.length > 0 ? (
         <div className="readiness-breakdown">
           {watchMetrics.map((metric) => (

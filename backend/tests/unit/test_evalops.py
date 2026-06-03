@@ -81,7 +81,14 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.human_correction_rate == 0.25
     assert report.redo_iteration_count == 1
     assert report.redo_convergence_ratio == 0.25
-    assert report.golden_set_size == 11
+    assert report.real_quality_chain_failed_run_ids == []
+    assert {step.step for step in report.quality_chain_steps} == {
+        "real_collection",
+        "real_llm",
+        "report_quality",
+    }
+    assert all(step.pass_rate == 1.0 for step in report.quality_chain_steps)
+    assert report.golden_set_size == 12
     assert report.golden_set_pass_rate >= 0.8
     assert report.report_quality_score >= 72
     assert report.source_recall >= 0.6
@@ -152,7 +159,9 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["judge_avg_score"] >= 72
     assert response.json()["llm_judge_avg_score"] is None
     assert "deterministic rubric" in response.json()["judge_fallback_reason"]
-    assert response.json()["golden_set_size"] == 11
+    assert response.json()["real_quality_chain_failed_run_ids"] == []
+    assert len(response.json()["quality_chain_steps"]) == 3
+    assert response.json()["golden_set_size"] == 12
     assert any(
         metric["name"] == "schema_pass_rate" and metric["status"] == "pass"
         for metric in response.json()["metrics"]
@@ -202,6 +211,31 @@ def test_enterprise_evalops_measures_citation_validity_separately_from_density()
     assert metrics["citation_validity_rate"].status == "fail"
     assert cases["golden.citation_validity"].status == "fail"
     assert any("unresolved report source tokens" in item for item in report.recommendations)
+
+
+def test_enterprise_evalops_explains_real_quality_chain_failures() -> None:
+    target = _run_detail(
+        run_id="weak-real-run",
+        execution_mode="real",
+        source_count=1,
+        quality_score=0.2,
+        report_md="Short real run draft.",
+        project_id="project-a",
+    )
+
+    report = build_enterprise_evalops_report([target])
+    steps = {step.step: step for step in report.quality_chain_steps}
+    cases = {case.case_id: case for case in report.cases}
+
+    assert report.real_quality_chain_rate == 0.0
+    assert report.real_quality_chain_failed_run_ids == ["weak-real-run"]
+    assert steps["real_collection"].pass_rate == 0.0
+    assert steps["real_collection"].failed_run_ids == ["weak-real-run"]
+    assert steps["real_llm"].pass_rate == 1.0
+    assert steps["real_llm"].failed_run_ids == []
+    assert steps["report_quality"].pass_rate == 0.0
+    assert steps["report_quality"].failed_run_ids == ["weak-real-run"]
+    assert cases["golden.real_quality_chain"].status == "fail"
 
 
 class _FakeRunService:

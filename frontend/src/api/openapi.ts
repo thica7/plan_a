@@ -2337,6 +2337,31 @@ export interface components {
              */
             summary: string;
         };
+        /** EvalOpsQualityChainStep */
+        EvalOpsQualityChainStep: {
+            /**
+             * Step
+             * @enum {string}
+             */
+            step: "real_collection" | "real_llm" | "report_quality";
+            /** Label */
+            label: string;
+            /** Total Count */
+            total_count: number;
+            /** Passed Count */
+            passed_count: number;
+            /** Failed Count */
+            failed_count: number;
+            /** Pass Rate */
+            pass_rate: number;
+            /** Failed Run Ids */
+            failed_run_ids?: string[];
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+        };
         /** EvalOpsReport */
         EvalOpsReport: {
             /** Run Count */
@@ -2353,6 +2378,10 @@ export interface components {
             real_run_ratio: number;
             /** Real Quality Chain Rate */
             real_quality_chain_rate: number;
+            /** Real Quality Chain Failed Run Ids */
+            real_quality_chain_failed_run_ids?: string[];
+            /** Quality Chain Steps */
+            quality_chain_steps?: components["schemas"]["EvalOpsQualityChainStep"][];
             /** Average Delta Score */
             average_delta_score?: number | null;
             /** Regressed Run Count */

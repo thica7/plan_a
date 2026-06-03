@@ -5,7 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 EvalOpsStatus = Literal["pass", "warn", "fail"]
 EvalJudgeMode = Literal["heuristic", "llm"]
 
@@ -33,6 +32,19 @@ class EvalOpsCaseResult(BaseModel):
     summary: str = ""
 
 
+class EvalOpsQualityChainStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step: Literal["real_collection", "real_llm", "report_quality"]
+    label: str
+    total_count: int = Field(ge=0)
+    passed_count: int = Field(ge=0)
+    failed_count: int = Field(ge=0)
+    pass_rate: float = Field(ge=0.0, le=1.0)
+    failed_run_ids: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
 class EvalOpsReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -43,6 +55,8 @@ class EvalOpsReport(BaseModel):
     demo_run_count: int = Field(ge=0)
     real_run_ratio: float = Field(ge=0.0, le=1.0)
     real_quality_chain_rate: float = Field(ge=0.0, le=1.0)
+    real_quality_chain_failed_run_ids: list[str] = Field(default_factory=list)
+    quality_chain_steps: list[EvalOpsQualityChainStep] = Field(default_factory=list)
     average_delta_score: float | None = None
     regressed_run_count: int = Field(ge=0)
     judge_mode: EvalJudgeMode = "heuristic"
