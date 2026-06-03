@@ -1953,6 +1953,10 @@ select {
   text-decoration: none;
 }
 
+.finding-target-links {
+  margin-top: 0;
+}
+
 .tool-message-list h3 {
   font-size: 13px;
   margin: 4px 0 0;
@@ -3214,6 +3218,11 @@ select {
   gap: 4px;
   margin: 0;
   padding-left: 18px;
+}
+
+.release-gate-panel li {
+  display: grid;
+  gap: 5px;
 }
 
 .report-reader h1,

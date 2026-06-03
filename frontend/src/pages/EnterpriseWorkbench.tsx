@@ -2515,7 +2515,28 @@ function QAFindingItem({ finding }: { finding: BusinessQAFinding }) {
       </div>
       <p>{finding.message}</p>
       {finding.recommendation ? <em>{finding.recommendation}</em> : null}
+      <FindingTargetLinks finding={finding} />
     </article>
+  );
+}
+
+function FindingTargetLinks({ finding }: { finding: BusinessQAFinding }) {
+  const evidenceTargets = finding.evidence_ids.slice(0, 4);
+  const claimTargets = finding.claim_ids.slice(0, 4);
+  if (evidenceTargets.length === 0 && claimTargets.length === 0) return null;
+  return (
+    <div className="source-id-links finding-target-links">
+      {evidenceTargets.map((evidenceId) => (
+        <a href={`#evidence-${evidenceId}`} key={`evidence-${evidenceId}`}>
+          evidence {evidenceId.slice(0, 10)}
+        </a>
+      ))}
+      {claimTargets.map((claimId) => (
+        <a href={`#claim-${claimId}`} key={`claim-${claimId}`}>
+          claim {claimId.slice(0, 10)}
+        </a>
+      ))}
+    </div>
   );
 }
 
@@ -2742,7 +2763,7 @@ function ClaimList({
       {claims.map((claim) => {
         const competitor = competitorById.get(claim.competitor_id)?.name ?? claim.competitor_id;
         return (
-          <article key={claim.id}>
+          <article id={`claim-${claim.id}`} key={claim.id}>
             <div>
               <strong>{claim.claim_text}</strong>
               <span>
@@ -2963,7 +2984,10 @@ function ReleaseGatePanel({ gate }: { gate: ReportReleaseGate }) {
       {gate.issues.length ? (
         <ul>
           {gate.issues.slice(0, 3).map((issue) => (
-            <li key={issue.id}>{issue.message}</li>
+            <li key={issue.id}>
+              <span>{issue.message}</span>
+              <FindingTargetLinks finding={issue} />
+            </li>
           ))}
         </ul>
       ) : null}
