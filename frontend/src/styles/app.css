@@ -3323,6 +3323,36 @@ select {
   gap: 8px;
 }
 
+.source-review-list {
+  display: grid;
+  gap: 8px;
+}
+
+.source-review-row {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 10px;
+}
+
+.source-review-row span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.source-review-row em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
 .release-gate-panel {
   background: var(--surface-2);
   border: 1px solid var(--border);

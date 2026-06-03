@@ -62,6 +62,7 @@ import {
   startScheduledScanWorkflow,
   updateEvidenceQuality,
   updateProjectMemoryCandidate,
+  upsertSourceRegistry,
 } from "../api/client";
 import { ReportView } from "../features/report/ReportView";
 import type {
@@ -185,6 +186,7 @@ export function EnterpriseWorkbench({
   const [isSavingManualResearch, setSavingManualResearch] = useState(false);
   const [reviewingMemoryCandidateId, setReviewingMemoryCandidateId] = useState<string | null>(null);
   const [reviewingSchemaSuggestionId, setReviewingSchemaSuggestionId] = useState<string | null>(null);
+  const [reviewingSourceId, setReviewingSourceId] = useState<string | null>(null);
   const [snapshottingEvidenceId, setSnapshottingEvidenceId] = useState<string | null>(null);
   const [memoryFeedbackDraft, setMemoryFeedbackDraft] = useState("");
   const [manualResearchDraft, setManualResearchDraft] = useState<ManualResearchDraft>(EMPTY_MANUAL_RESEARCH_DRAFT);
@@ -892,6 +894,44 @@ export function EnterpriseWorkbench({
     }
   }
 
+  async function handleReviewSourcePolicy(
+    source: SourceRegistryRecord,
+    status: "approved" | "rejected",
+  ) {
+    if (!selectedProject) return;
+    setReviewingSourceId(source.id);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const updated = await upsertSourceRegistry({
+        ...source,
+        policy_review_status: status,
+        policy_review_reason:
+          status === "approved"
+            ? "Approved in Enterprise Workbench source review."
+            : "Rejected in Enterprise Workbench source review.",
+      });
+      const [sourceRegistryValue, qualityMatrixValue, auditLogItems, releaseGateValue] =
+        await Promise.all([
+          listSourceRegistry(selectedProject.workspace_id),
+          getProjectQualityMatrix(selectedProject.id),
+          listEnterpriseAuditLogs(selectedProject.workspace_id),
+          selectedVersionId ? getReportReleaseGate(selectedVersionId) : Promise.resolve(null),
+        ]);
+      setSourceRegistry(sourceRegistryValue);
+      setQualityMatrix(qualityMatrixValue);
+      setAuditLogs(auditLogItems);
+      if (releaseGateValue) setReleaseGate(releaseGateValue);
+      setScanMessage(
+        `Source ${updated.display_name || updated.domain} review ${updated.policy_review_status}.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update source review");
+    } finally {
+      setReviewingSourceId(null);
+    }
+  }
+
   async function handleSubmitManualResearch() {
     if (!selectedProject || !manualResearchDraft.content.trim()) return;
     const competitorId = manualResearchDraft.competitorId || competitors[0]?.id || "";
@@ -1136,7 +1176,11 @@ export function EnterpriseWorkbench({
 
               {claimValidation ? <ClaimValidationPanel report={claimValidation} /> : null}
 
-              <SourceRegistryPanel sources={sourceRegistry} />
+              <SourceRegistryPanel
+                sources={sourceRegistry}
+                reviewingSourceId={reviewingSourceId}
+                onReviewSource={handleReviewSourcePolicy}
+              />
 
               <ResearchEvidencePanel
                 claims={claims}
@@ -1916,7 +1960,15 @@ function claimValidationResultPriority(result: ClaimValidationResult) {
   return "medium";
 }
 
-function SourceRegistryPanel({ sources }: { sources: SourceRegistryRecord[] }) {
+function SourceRegistryPanel({
+  sources,
+  reviewingSourceId,
+  onReviewSource,
+}: {
+  sources: SourceRegistryRecord[];
+  reviewingSourceId: string | null;
+  onReviewSource: (source: SourceRegistryRecord, status: "approved" | "rejected") => void;
+}) {
   const activeSources = sources.filter((source) => source.is_active);
   const allowedSources = sources.filter((source) => source.robots_status === "allowed");
   const blockedSources = sources.filter((source) => source.robots_status === "blocked");
@@ -1950,6 +2002,36 @@ function SourceRegistryPanel({ sources }: { sources: SourceRegistryRecord[] }) {
         <span>Trusted {formatPercent(sources.length ? trustedSources.length / sources.length : 0)}</span>
         <span>Robots known {formatPercent(sources.length ? (allowedSources.length + blockedSources.length) / sources.length : 0)}</span>
       </div>
+      {pendingReviewSources.length > 0 ? (
+        <div className="source-review-list">
+          {pendingReviewSources.slice(0, 4).map((source) => (
+            <div key={source.id} className="source-review-row">
+              <span title={source.policy_review_reason || source.homepage_url || source.domain}>
+                {source.display_name || source.domain}
+                <em>{source.trust_level} / {source.robots_status}</em>
+              </span>
+              <div className="approval-action-row">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={reviewingSourceId === source.id}
+                  onClick={() => onReviewSource(source, "approved")}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={reviewingSourceId === source.id}
+                  onClick={() => onReviewSource(source, "rejected")}
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {recentSources.length > 0 ? (
         <div className="competitor-strip">
           {recentSources.map((source) => (

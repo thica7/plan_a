@@ -382,6 +382,13 @@ export function listSourceRegistry(workspaceId?: string) {
   return request<SourceRegistryRecord[]>(`/enterprise/source-registry${params}`);
 }
 
+export function upsertSourceRegistry(record: SourceRegistryRecord) {
+  return request<SourceRegistryRecord>("/enterprise/source-registry", {
+    method: "POST",
+    body: JSON.stringify(record),
+  });
+}
+
 export function getArtifact(artifactId: string) {
   return request<ArtifactRecord>(`/enterprise/artifacts/${encodeURIComponent(artifactId)}`);
 }
