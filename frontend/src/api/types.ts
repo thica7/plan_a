@@ -365,6 +365,14 @@ export interface EvalOpsRegressionGateIssue {
   summary: string;
 }
 
+export interface EvalOpsGoldenCohortSummary {
+  cohort: string;
+  case_count: number;
+  matched_run_count: number;
+  coverage_rate: number;
+  expected_layers: string[];
+}
+
 export interface EvalOpsReport {
   run_count: number;
   evaluated_run_ids: string[];
@@ -387,6 +395,10 @@ export interface EvalOpsReport {
   redo_convergence_ratio: number;
   golden_set_size: number;
   golden_set_pass_rate: number;
+  golden_catalog_size: number;
+  golden_catalog_covered_case_count: number;
+  golden_catalog_coverage_rate: number;
+  golden_catalog_cohorts: EvalOpsGoldenCohortSummary[];
   report_quality_score: number;
   source_recall: number;
   compliance_pass_rate: number;

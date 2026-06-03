@@ -60,6 +60,7 @@ from packages.schema.enterprise import (
 )
 from packages.schema.evals import (
     EvalOpsCaseResult,
+    EvalOpsGoldenCohortSummary,
     EvalOpsMetric,
     EvalOpsQualityChainStep,
     EvalOpsRegressionGateIssue,
@@ -128,6 +129,7 @@ __all__ = [
     "EvidenceReindexResult",
     "EvidenceSearchHit",
     "EvalOpsCaseResult",
+    "EvalOpsGoldenCohortSummary",
     "EvalOpsMetric",
     "EvalOpsQualityChainStep",
     "EvalOpsRegressionGateIssue",

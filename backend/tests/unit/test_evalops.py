@@ -91,6 +91,16 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert all(step.pass_rate == 1.0 for step in report.quality_chain_steps)
     assert report.golden_set_size == 16
     assert report.golden_set_pass_rate >= 0.8
+    assert report.golden_catalog_size >= 50
+    assert report.golden_catalog_coverage_rate == 0.0
+    assert {cohort.cohort for cohort in report.golden_catalog_cohorts} >= {
+        "core_l1",
+        "core_l2",
+        "core_l3",
+        "observability",
+        "pydantic_ai",
+        "temporal_cutover",
+    }
     assert report.report_quality_score >= 72
     assert report.source_recall >= 0.6
     assert report.compliance_pass_rate == 1.0
@@ -175,6 +185,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["real_quality_chain_failed_run_ids"] == []
     assert len(response.json()["quality_chain_steps"]) == 3
     assert response.json()["golden_set_size"] == 16
+    assert response.json()["golden_catalog_size"] >= 50
     assert response.json()["compliance_pass_rate"] == 1.0
     assert response.json()["compliance_fail_count"] == 0
     assert any(
@@ -231,6 +242,28 @@ def test_enterprise_evalops_measures_citation_validity_separately_from_density()
     assert metrics["citation_validity_rate"].status == "fail"
     assert cases["golden.citation_validity"].status == "fail"
     assert any("unresolved report source tokens" in item for item in report.recommendations)
+
+
+def test_enterprise_evalops_maps_runs_to_golden_catalog_cohorts() -> None:
+    target = _run_detail(
+        run_id="gold-001-run",
+        execution_mode="real",
+        source_count=4,
+        quality_score=1.0,
+        report_md=_structured_report_md(),
+        project_id="project-a",
+        topic="AI coding assistant pricing comparison",
+        competitors=["Cursor", "GitHub Copilot"],
+    )
+
+    report = build_enterprise_evalops_report([target])
+    cohorts = {cohort.cohort: cohort for cohort in report.golden_catalog_cohorts}
+
+    assert report.golden_catalog_size >= 50
+    assert report.golden_catalog_covered_case_count == 1
+    assert report.golden_catalog_coverage_rate > 0
+    assert cohorts["core_l1"].matched_run_count == 1
+    assert "L1" in cohorts["core_l1"].expected_layers
 
 
 def test_enterprise_evalops_fails_regression_gate_on_compliance_blockers() -> None:
@@ -430,11 +463,14 @@ def _run_detail(
     revisions: list[RevisionRecord] | None = None,
     dimensions: list[str] | None = None,
     qa_findings: list[QCIssue] | None = None,
+    topic: str = "Cursor vs Copilot pricing",
+    competitors: list[str] | None = None,
 ) -> RunDetail:
+    plan_competitors = competitors or ["Cursor", "Copilot"]
     sources = [
         RawSource(
             id=f"source-{index}",
-            competitor="Cursor" if index % 2 == 0 else "Copilot",
+            competitor=plan_competitors[index % len(plan_competitors)],
             dimension="pricing",
             source_type="webpage_verified",
             title=f"Source {index}",
@@ -449,14 +485,14 @@ def _run_detail(
         id=run_id,
         workspace_id="workspace-1",
         project_id=project_id,
-        topic="Cursor vs Copilot pricing",
+        topic=topic,
         status=status,
         execution_mode=execution_mode,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
         plan=AnalysisPlan(
-            topic="Cursor vs Copilot pricing",
-            competitors=["Cursor", "Copilot"],
+            topic=topic,
+            competitors=plan_competitors,
             dimensions=dimensions or ["pricing"],
         ),
         report_md=report_md,

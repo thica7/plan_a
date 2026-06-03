@@ -54,6 +54,16 @@ class EvalOpsRegressionGateIssue(BaseModel):
     summary: str = ""
 
 
+class EvalOpsGoldenCohortSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cohort: str
+    case_count: int = Field(ge=0)
+    matched_run_count: int = Field(ge=0)
+    coverage_rate: float = Field(ge=0.0, le=1.0)
+    expected_layers: list[str] = Field(default_factory=list)
+
+
 class EvalOpsReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -78,6 +88,10 @@ class EvalOpsReport(BaseModel):
     redo_convergence_ratio: float = Field(ge=0.0)
     golden_set_size: int = Field(ge=0)
     golden_set_pass_rate: float = Field(ge=0.0, le=1.0)
+    golden_catalog_size: int = Field(default=0, ge=0)
+    golden_catalog_covered_case_count: int = Field(default=0, ge=0)
+    golden_catalog_coverage_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    golden_catalog_cohorts: list[EvalOpsGoldenCohortSummary] = Field(default_factory=list)
     report_quality_score: int = Field(ge=0, le=100)
     source_recall: float = Field(ge=0.0, le=1.0)
     compliance_pass_rate: float = Field(default=0.0, ge=0.0, le=1.0)

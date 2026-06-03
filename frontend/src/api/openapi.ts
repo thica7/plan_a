@@ -2382,6 +2382,19 @@ export interface components {
              */
             summary: string;
         };
+        /** EvalOpsGoldenCohortSummary */
+        EvalOpsGoldenCohortSummary: {
+            /** Cohort */
+            cohort: string;
+            /** Case Count */
+            case_count: number;
+            /** Matched Run Count */
+            matched_run_count: number;
+            /** Coverage Rate */
+            coverage_rate: number;
+            /** Expected Layers */
+            expected_layers?: string[];
+        };
         /** EvalOpsReport */
         EvalOpsReport: {
             /** Run Count */
@@ -2436,6 +2449,14 @@ export interface components {
             golden_set_size: number;
             /** Golden Set Pass Rate */
             golden_set_pass_rate: number;
+            /** Golden Catalog Size */
+            golden_catalog_size: number;
+            /** Golden Catalog Covered Case Count */
+            golden_catalog_covered_case_count: number;
+            /** Golden Catalog Coverage Rate */
+            golden_catalog_coverage_rate: number;
+            /** Golden Catalog Cohorts */
+            golden_catalog_cohorts?: components["schemas"]["EvalOpsGoldenCohortSummary"][];
             /** Report Quality Score */
             report_quality_score: number;
             /** Source Recall */

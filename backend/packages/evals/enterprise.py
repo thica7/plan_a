@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
+from collections import defaultdict
+from pathlib import Path
 from statistics import mean
-from typing import Literal
+from typing import Any, Literal
 
 from packages.business_intel import compare_run_quality
 from packages.compliance import build_run_compliance_report
@@ -9,6 +12,7 @@ from packages.schema.api_dto import RunDetail, RunQualityComparison
 from packages.schema.evals import (
     EvalJudgeMode,
     EvalOpsCaseResult,
+    EvalOpsGoldenCohortSummary,
     EvalOpsMetric,
     EvalOpsQualityChainStep,
     EvalOpsRegressionGateIssue,
@@ -19,6 +23,7 @@ from packages.schema.evals import (
 MANUAL_BASELINE_HOURS_PER_REPORT = 6.0
 AUTOMATION_FLOOR_HOURS_PER_REPORT = 0.08
 EVAL_REPORT_STATUSES = {"completed"}
+GOLDEN_SET_PATH = Path(__file__).resolve().parents[3] / "data" / "golden_set.jsonl"
 USER_RESEARCH_DIMENSION_HINTS = {
     "persona",
     "user",
@@ -197,6 +202,7 @@ def build_enterprise_evalops_report(
         rag_gap_fill_context_rate=rag_gap_fill_context_rate,
         hitl_redo_loop_rate=hitl_redo_loop_rate,
     )
+    golden_catalog = _golden_catalog_summary(recent_runs)
     golden_set_pass_rate = _ratio([case.status == "pass" for case in cases])
     metrics = [
         _metric("golden_set_pass_rate", golden_set_pass_rate, 0.8, "ratio"),
@@ -276,6 +282,10 @@ def build_enterprise_evalops_report(
         redo_convergence_ratio=round(redo_convergence_ratio, 3),
         golden_set_size=len(cases),
         golden_set_pass_rate=round(golden_set_pass_rate, 3),
+        golden_catalog_size=golden_catalog["size"],
+        golden_catalog_covered_case_count=golden_catalog["covered_case_count"],
+        golden_catalog_coverage_rate=golden_catalog["coverage_rate"],
+        golden_catalog_cohorts=golden_catalog["cohorts"],
         report_quality_score=report_quality_score,
         source_recall=round(source_recall, 3),
         compliance_pass_rate=round(compliance_pass_rate, 3),
@@ -448,6 +458,77 @@ def _golden_cases(
             baseline_run_id,
         ),
     ]
+
+
+def _golden_catalog_summary(runs: list[RunDetail]) -> dict[str, Any]:
+    rows = _load_golden_catalog()
+    matched_case_ids = {
+        str(row.get("id"))
+        for row in rows
+        if any(_run_matches_golden_case(run, row) for run in runs)
+    }
+    cohort_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        cohort_rows[str(row.get("cohort", "unknown"))].append(row)
+    cohorts = [
+        EvalOpsGoldenCohortSummary(
+            cohort=cohort,
+            case_count=len(items),
+            matched_run_count=sum(1 for item in items if str(item.get("id")) in matched_case_ids),
+            coverage_rate=round(
+                sum(1 for item in items if str(item.get("id")) in matched_case_ids) / len(items),
+                3,
+            )
+            if items
+            else 0.0,
+            expected_layers=sorted(
+                {str(item.get("expected_layer", "unknown")) for item in items}
+            ),
+        )
+        for cohort, items in sorted(cohort_rows.items())
+    ]
+    covered_case_count = len(matched_case_ids)
+    return {
+        "size": len(rows),
+        "covered_case_count": covered_case_count,
+        "coverage_rate": round(covered_case_count / len(rows), 3) if rows else 0.0,
+        "cohorts": cohorts,
+    }
+
+
+def _load_golden_catalog() -> list[dict[str, Any]]:
+    if not GOLDEN_SET_PATH.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in GOLDEN_SET_PATH.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
+def _run_matches_golden_case(run: RunDetail, row: dict[str, Any]) -> bool:
+    run_topic = _normalize_catalog_text(run.topic)
+    case_topic = _normalize_catalog_text(str(row.get("topic", "")))
+    if not run_topic or not case_topic:
+        return False
+    topic_matches = run_topic == case_topic or case_topic in run_topic or run_topic in case_topic
+    if not topic_matches:
+        return False
+    case_competitors = {
+        _normalize_catalog_text(str(item)) for item in row.get("competitors", [])
+    }
+    run_competitors = {_normalize_catalog_text(item) for item in run.plan.competitors}
+    if not case_competitors:
+        return True
+    required_overlap = min(2, len(case_competitors))
+    return len(case_competitors & run_competitors) >= required_overlap
+
+
+def _normalize_catalog_text(value: str) -> str:
+    return " ".join(value.casefold().replace("-", " ").replace("_", " ").split())
 
 
 def _quality_chain_steps(
