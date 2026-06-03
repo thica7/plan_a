@@ -10,7 +10,10 @@ from packages.schema.models import (
     CompetitorKnowledge,
     KnowledgeClaim,
     PricingModel,
+    QCIssue,
     RawSource,
+    RedoScope,
+    ReflectionRecord,
     RunMetrics,
     TraceSpan,
 )
@@ -256,6 +259,7 @@ def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
         assert section in report
         assert phrase in report
         assert "## Source Quality & Coverage" in report
+        assert "## Claim Validation & Evidence Risk" in report
         assert "## Next Collection / Verification Plan" in report
         assert "## Evidence Appendix" in report
         assert "[source:source-0]" in report
@@ -282,9 +286,60 @@ def test_writer_hardens_thin_success_report_without_fallback_labels() -> None:
     assert "## Battlecard" in report
     assert "## Battlecard Fallback" not in report
     assert "## Source Quality & Coverage" in report
+    assert "## Claim Validation & Evidence Risk" in report
     assert "## Next Collection / Verification Plan" in report
     assert "## Evidence Appendix" in report
     assert "Cursor has a clearer pricing position than Copilot. [source:source-0]" in report
+
+
+def test_writer_hardens_report_with_claim_validation_risk_section() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="claim-risk-section",
+        execution_mode="real",
+        source_count=1,
+        report_md="",
+        metrics=RunMetrics(),
+        source_types=["web_search_result"],
+    )
+    detail.raw_sources[0].confidence = 0.52
+    detail.competitor_knowledge["Cursor"].pricing_model.notes = [
+        KnowledgeClaim(
+            claim="Cursor is the recommended enterprise-ready security choice.",
+            source_ids=["source-0"],
+            confidence=0.52,
+        )
+    ]
+    detail.qa_findings.append(
+        QCIssue(
+            id="qa-weak-security",
+            severity="warn",
+            detected_by="coverage",
+            target_agent="writer",
+            field_path="report.security",
+            problem="Security recommendation is based on search-only evidence.",
+            redo_scope=RedoScope(kind="writer_only", rationale="tighten security caveat"),
+        )
+    )
+    detail.reflections.append(
+        ReflectionRecord(
+            iteration=1,
+            coverage_gaps=["Missing official trust-center evidence for Copilot."],
+        )
+    )
+
+    report = writer._harden_report_markdown(
+        detail,
+        "# Cursor vs Copilot\n\nCursor is recommended for enterprise security.",
+    )
+
+    assert "## Claim Validation & Evidence Risk" in report
+    assert "confidence 0.52" in report
+    assert "weak source mix" in report
+    assert "needs triangulation" in report
+    assert "QA warn `qa-weak-security`" in report
+    assert "Missing official trust-center evidence" in report
+    assert "[source:source-0]" in report
 
 
 def test_writer_repairs_dimension_named_source_tokens() -> None:

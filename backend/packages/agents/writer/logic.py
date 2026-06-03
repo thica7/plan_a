@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from packages.schema.api_dto import RunDetail
+from packages.schema.models import FeatureNode, KnowledgeClaim, RawSource
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
@@ -191,6 +192,7 @@ class WriterAgentMixin:
             ]
             for note in notes:
                 lines.append(f"- {note}{self._format_source_refs(matrix_sources)}")
+        lines.extend(self._fallback_claim_validation_section(detail))
         lines.extend(self._fallback_next_collection_plan(detail))
         lines.extend(self._fallback_evidence_appendix(detail))
         lines.extend(["", "## Writer Fallback Reason", f"- {reason}"])
@@ -308,7 +310,7 @@ class WriterAgentMixin:
             )
         for issue in detail.qa_findings[:3]:
             planned += 1
-            lines.append(f"- Resolve QA finding `{issue.rule_id}`: {issue.problem}")
+            lines.append(f"- Resolve QA finding `{issue.id}`: {issue.problem}")
         if planned == 0:
             lines.append(
                 "- Re-run collection only for stale, rejected, or low-confidence evidence."
@@ -350,6 +352,7 @@ class WriterAgentMixin:
                 self._layer_section_heading(detail, fallback=False),
                 self._fallback_layer_sections(detail, source_ids, fallback=False),
             ),
+            ("Claim Validation & Evidence Risk", self._fallback_claim_validation_section(detail)),
             ("Next Collection / Verification Plan", self._fallback_next_collection_plan(detail)),
             ("Evidence Appendix", self._fallback_evidence_appendix(detail)),
         ]
@@ -451,6 +454,10 @@ class WriterAgentMixin:
             specific = ["Business implications and next validation tasks."]
         ending = [
             "Risks, Unknowns, and Evidence Gaps, including unresolved QA findings.",
+            (
+                "Claim Validation & Evidence Risk, listing weak claims, low-confidence "
+                "sources, and any single-source high-risk conclusions."
+            ),
             "Next Collection / Verification Plan.",
             "Evidence Appendix listing important source IDs with type and confidence.",
         ]
@@ -485,6 +492,126 @@ class WriterAgentMixin:
         if not unique:
             return ""
         return " " + " ".join(f"[source:{source_id}]" for source_id in unique)
+
+    def _fallback_claim_validation_section(self, detail: RunDetail) -> list[str]:
+        lines = ["", "## Claim Validation & Evidence Risk"]
+        source_by_id = {source.id: source for source in detail.raw_sources}
+        claims = self._knowledge_claims(detail)
+        issue_counts = {
+            "blocker": sum(1 for issue in detail.qa_findings if issue.severity == "blocker"),
+            "warn": sum(1 for issue in detail.qa_findings if issue.severity == "warn"),
+            "info": sum(1 for issue in detail.qa_findings if issue.severity == "info"),
+        }
+        lines.append(
+            "- QA status: "
+            f"{issue_counts['blocker']} blocker(s), {issue_counts['warn']} warning(s), "
+            f"{issue_counts['info']} info finding(s) across {len(claims)} structured claim(s)."
+            f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+        )
+
+        weak_claims = [
+            claim
+            for claim in claims
+            if claim.confidence < 0.65
+            or self._claim_has_weak_sources(claim.source_ids, source_by_id)
+            or self._claim_needs_triangulation(claim.claim, claim.source_ids)
+        ]
+        if weak_claims:
+            for claim in weak_claims[:5]:
+                labels = []
+                if claim.confidence < 0.65:
+                    labels.append(f"confidence {claim.confidence:.2f}")
+                if self._claim_has_weak_sources(claim.source_ids, source_by_id):
+                    labels.append("weak source mix")
+                if self._claim_needs_triangulation(claim.claim, claim.source_ids):
+                    labels.append("needs triangulation")
+                lines.append(
+                    f"- Review claim ({', '.join(labels)}): {self._trim_sentence(claim.claim)}"
+                    f"{self._format_source_refs(claim.source_ids)}"
+                )
+        else:
+            lines.append(
+                "- No low-confidence or single-source high-risk structured claims were detected."
+                f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+            )
+
+        for issue in detail.qa_findings[:4]:
+            lines.append(
+                f"- QA {issue.severity} `{issue.id}`: "
+                f"{self._trim_sentence(issue.problem)}"
+            )
+
+        reflection_gaps = self._reflection_gap_notes(detail)
+        for note in reflection_gaps[:4]:
+            lines.append(
+                f"- Evidence gap: {self._trim_sentence(note)}"
+                f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+            )
+        return lines
+
+    def _knowledge_claims(self, detail: RunDetail) -> list[KnowledgeClaim]:
+        claims = []
+        for knowledge in detail.competitor_knowledge.values():
+            for node in knowledge.feature_tree.nodes:
+                claims.extend(node.claims)
+                claims.extend(self._feature_child_claims(node))
+            claims.extend(knowledge.feature_tree.summary_claims)
+            for tier in knowledge.pricing_model.tiers:
+                claims.extend(tier.claims)
+            claims.extend(knowledge.pricing_model.notes)
+            for segment in knowledge.user_personas.segments:
+                claims.extend(segment.claims)
+            claims.extend(knowledge.user_personas.summary_claims)
+        return claims
+
+    def _feature_child_claims(self, node: FeatureNode) -> list[KnowledgeClaim]:
+        claims = []
+        for child in node.children:
+            claims.extend(child.claims)
+            claims.extend(self._feature_child_claims(child))
+        return claims
+
+    def _claim_has_weak_sources(
+        self, source_ids: list[str], source_by_id: dict[str, RawSource]
+    ) -> bool:
+        if not source_ids:
+            return True
+        sources = [source_by_id[source_id] for source_id in source_ids if source_id in source_by_id]
+        if not sources:
+            return True
+        weak_types = {"web_search_result", "llm_public_knowledge"}
+        return all(
+            source.source_type in weak_types or source.confidence < 0.75
+            for source in sources
+        )
+
+    def _claim_needs_triangulation(self, claim: str, source_ids: list[str]) -> bool:
+        if len(set(source_ids)) >= 2:
+            return False
+        return bool(
+            re.search(
+                r"\b(best|better|leader|recommended|safest|cheapest|fastest|"
+                r"enterprise-ready|soc\s*2|sso|saml|security|compliance)\b",
+                claim,
+                flags=re.IGNORECASE,
+            )
+        )
+
+    def _reflection_gap_notes(self, detail: RunDetail) -> list[str]:
+        if not detail.reflections:
+            return []
+        latest = detail.reflections[-1]
+        return [
+            *latest.coverage_gaps,
+            *latest.confidence_outliers,
+            *latest.cross_competitor_gaps,
+        ]
+
+    def _trim_sentence(self, value: str, limit: int = 220) -> str:
+        text = " ".join(value.split())
+        if len(text) <= limit:
+            return text
+        return f"{text[: limit - 1].rstrip()}..."
 
     def _extract_cited_source_ids(self, report_md: str) -> set[str]:
         patterns = [
