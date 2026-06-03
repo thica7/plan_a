@@ -165,7 +165,9 @@ def _finalize_gap_fill(
     online_collected_evidence_ids: list[str] | None = None,
     online_failures: list[dict[str, str]] | None = None,
 ) -> EvidenceGapFillResult:
-    updated_gaps, filled_gap_ids, candidate_ids = _filled_gaps(decorated.gaps)
+    updated_gaps, filled_gap_ids, candidate_ids, gap_evidence_links = _filled_gaps(
+        decorated.gaps
+    )
     updated_report = decorated.model_copy(update={"gaps": updated_gaps})
     remaining_gap_ids = [gap.id for gap in updated_gaps if not gap.evidence_ids]
     before_gap_count = len(updated_gaps)
@@ -176,6 +178,7 @@ def _finalize_gap_fill(
         updated_report,
         candidate_ids=candidate_ids,
         filled_gap_ids=filled_gap_ids,
+        gap_evidence_links=gap_evidence_links,
         remaining_gap_ids=remaining_gap_ids,
         before_gap_count=before_gap_count,
         after_gap_count=after_gap_count,
@@ -190,6 +193,7 @@ def _finalize_gap_fill(
             report=updated_report,
             candidate_ids=candidate_ids,
             filled_gap_ids=filled_gap_ids,
+            gap_evidence_links=gap_evidence_links,
             remaining_gap_ids=remaining_gap_ids,
             online_collected_evidence_ids=online_collected_ids,
             online_failures=online_failure_items,
@@ -216,6 +220,7 @@ def _finalize_gap_fill(
         gap_fill_chain_closed=gap_fill_chain_closed,
         candidate_evidence_ids=candidate_ids,
         filled_gap_ids=filled_gap_ids,
+        gap_evidence_links=gap_evidence_links,
         remaining_gap_ids=remaining_gap_ids,
         decision_events=decision_events,
         report=updated_report,
@@ -311,10 +316,11 @@ def _source_type_matches(required: str, actual: str) -> bool:
 
 def _filled_gaps(
     gaps: list[EvidenceGapItem],
-) -> tuple[list[EvidenceGapItem], list[str], list[str]]:
+) -> tuple[list[EvidenceGapItem], list[str], list[str], dict[str, list[str]]]:
     updated_gaps: list[EvidenceGapItem] = []
     filled_gap_ids: list[str] = []
     all_candidate_ids: list[str] = []
+    gap_evidence_links: dict[str, list[str]] = {}
     for gap in gaps:
         candidate_ids = _unique_ids(
             [record.evidence_id for record in gap.retrieval_records]
@@ -324,6 +330,7 @@ def _filled_gaps(
         if new_candidate_ids:
             filled_gap_ids.append(gap.id)
             all_candidate_ids.extend(new_candidate_ids)
+            gap_evidence_links[gap.id] = new_candidate_ids
         updated_gaps.append(
             gap.model_copy(
                 update={
@@ -331,7 +338,12 @@ def _filled_gaps(
                 }
             )
         )
-    return updated_gaps, _unique_ids(filled_gap_ids), _unique_ids(all_candidate_ids)
+    return (
+        updated_gaps,
+        _unique_ids(filled_gap_ids),
+        _unique_ids(all_candidate_ids),
+        gap_evidence_links,
+    )
 
 
 def _write_gap_fill_report_version(
@@ -341,6 +353,7 @@ def _write_gap_fill_report_version(
     report: EvidenceGapReport,
     candidate_ids: list[str],
     filled_gap_ids: list[str],
+    gap_evidence_links: dict[str, list[str]],
     remaining_gap_ids: list[str],
     online_collected_evidence_ids: list[str],
     online_failures: list[dict[str, str]],
@@ -357,6 +370,7 @@ def _write_gap_fill_report_version(
             else 0.0
         ),
         "filled_gap_ids": filled_gap_ids,
+        "gap_evidence_links": gap_evidence_links,
         "remaining_gap_ids": remaining_gap_ids,
         "candidate_evidence_ids": candidate_ids,
         "gap_fill_chain_closed": bool(filled_gap_ids and candidate_ids),
@@ -395,6 +409,7 @@ def _gap_fill_decision_events(
     *,
     candidate_ids: list[str],
     filled_gap_ids: list[str],
+    gap_evidence_links: dict[str, list[str]],
     remaining_gap_ids: list[str],
     before_gap_count: int,
     after_gap_count: int,
@@ -436,6 +451,7 @@ def _gap_fill_decision_events(
                 "after_gap_count": after_gap_count,
                 "gap_closure_rate": closure_rate,
                 "filled_gap_ids": filled_gap_ids,
+                "gap_evidence_links": gap_evidence_links,
                 "remaining_gap_ids": remaining_gap_ids,
                 "candidate_ids": candidate_ids,
                 "retrieval_queries": [
@@ -485,6 +501,7 @@ def _gap_fill_decision_events(
                     ),
                     "gap_fill_chain_closed": bool(filled_gap_ids and candidate_ids),
                     "candidate_ids": candidate_ids,
+                    "gap_evidence_links": gap_evidence_links,
                 },
             )
         )

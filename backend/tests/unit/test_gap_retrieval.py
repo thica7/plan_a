@@ -250,6 +250,7 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
     assert result.gap_closure_rate == 1.0
     assert result.gap_fill_chain_closed is True
     assert result.candidate_evidence_ids == ["evidence-trust-1"]
+    assert result.gap_evidence_links == {"gap-security": ["evidence-trust-1"]}
     assert [event.event_type for event in result.decision_events] == [
         "rag.retrieved",
         "report.ready",
@@ -260,6 +261,7 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
     assert rag_payload["retrieval_queries"] == [
         "Cursor SOC 2 SSO audit logs trust center Cursor security webpage_verified"
     ]
+    assert rag_payload["gap_evidence_links"] == {"gap-security": ["evidence-trust-1"]}
     assert len(rag_payload["retrieval_contexts"]) == 1
     assert rag_payload["retrieval_contexts"][0]["gap_id"] == "gap-security"
     assert rag_payload["retrieval_contexts"][0]["query"] == rag_payload["retrieval_queries"][0]
@@ -278,8 +280,14 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
         "filled_gap_ids"
     ] == ["gap-security"]
     assert result.updated_report_version.quality_metadata["rag_gap_fill"][
+        "gap_evidence_links"
+    ] == {"gap-security": ["evidence-trust-1"]}
+    assert result.updated_report_version.quality_metadata["rag_gap_fill"][
         "decision_events"
     ][0]["event_type"] == "rag.retrieved"
+    assert result.updated_report_version.quality_metadata["rag_gap_fill"][
+        "decision_events"
+    ][1]["payload"]["gap_evidence_links"] == {"gap-security": ["evidence-trust-1"]}
     assert "## RAG Gap Fill" in result.updated_report_version.report_md
     assert "[source:evidence-trust-1]" in result.updated_report_version.report_md
     assert store.get_report_version(result.updated_report_version.id) is not None
@@ -377,6 +385,7 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version() -> 
     assert result.gap_closure_rate == 1.0
     assert result.gap_fill_chain_closed is True
     assert result.candidate_evidence_ids == [evidence.id]
+    assert result.gap_evidence_links == {"gap-online-security": [evidence.id]}
     assert result.updated_report_version is not None
     metadata = result.updated_report_version.quality_metadata["rag_gap_fill"]
     assert metadata["before_gap_count"] == 1
@@ -384,6 +393,7 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version() -> 
     assert metadata["gap_closure_rate"] == 1.0
     assert metadata["gap_fill_chain_closed"] is True
     assert metadata["online_collected_evidence_ids"] == [evidence.id]
+    assert metadata["gap_evidence_links"] == {"gap-online-security": [evidence.id]}
     assert metadata["online_failures"] == []
     assert [event["event_type"] for event in metadata["decision_events"]] == [
         "rag.retrieved",
@@ -392,6 +402,7 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version() -> 
     ]
     rag_payload = metadata["decision_events"][0]["payload"]
     assert rag_payload["retrieval_contexts"][0]["gap_id"] == "gap-online-security"
+    assert rag_payload["gap_evidence_links"] == {"gap-online-security": [evidence.id]}
     assert rag_payload["chunk_ids"][0].startswith("chunk-")
     assert set(rag_payload["rerank_scores"]) == set(rag_payload["chunk_ids"])
     assert result.updated_report_version.evidence_ids == [evidence.id]

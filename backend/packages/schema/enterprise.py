@@ -1054,6 +1054,7 @@ class EvidenceGapFillResult(BaseModel):
     gap_fill_chain_closed: bool = False
     candidate_evidence_ids: list[str] = Field(default_factory=list)
     filled_gap_ids: list[str] = Field(default_factory=list)
+    gap_evidence_links: dict[str, list[str]] = Field(default_factory=dict)
     remaining_gap_ids: list[str] = Field(default_factory=list)
     decision_events: list[EvidenceGapFillDecisionEvent] = Field(default_factory=list)
     report: EvidenceGapReport
