@@ -1349,6 +1349,19 @@ def publish_report_version(
     user: EnterpriseUserDep,
 ) -> ReportVersionRecord:
     version = _report_version_or_404(version_id, store, user, "report:write")
+    if version.status not in {"approved", "published"}:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "status": "blocked",
+                "reason": "report_approval_required",
+                "message": (
+                    "Report version must be approved before it can be published."
+                ),
+                "report_version_id": version.id,
+                "current_status": version.status,
+            },
+        )
     _enforce_report_release_gate(version, store, user)
     updated = version.model_copy(update={"status": "published", "published_at": datetime.utcnow()})
     return store.upsert_report_version(updated)

@@ -1032,6 +1032,15 @@ def test_enterprise_router_exposes_projection() -> None:
     release_gate = client.get(
         f"/api/enterprise/report-versions/{projection.report_version.id}/release-gate"
     )
+    draft_publish = client.post(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/publish"
+    )
+    approval_upsert = client.post(
+        "/api/enterprise/report-versions",
+        json=projection.report_version.model_copy(update={"status": "approved"}).model_dump(
+            mode="json"
+        ),
+    )
     publish = client.post(
         f"/api/enterprise/report-versions/{projection.report_version.id}/publish"
     )
@@ -1162,6 +1171,10 @@ def test_enterprise_router_exposes_projection() -> None:
     assert artifact.json()["uri"] == "https://storage.example.test/cursor-pricing.html"
     assert release_gate.status_code == 200
     assert release_gate.json()["allowed"] is True
+    assert draft_publish.status_code == 409
+    assert draft_publish.json()["detail"]["reason"] == "report_approval_required"
+    assert approval_upsert.status_code == 200
+    assert approval_upsert.json()["status"] == "approved"
     assert publish.status_code == 200
     assert publish.json()["status"] == "published"
     assert quality.status_code == 200
