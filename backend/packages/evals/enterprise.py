@@ -325,6 +325,7 @@ def build_enterprise_evalops_report(
         judge_fallback_reason=judge_fallback_reason,
         hitl_enabled_run_rate=round(hitl_enabled_run_rate, 3),
         human_correction_rate=round(human_correction_rate, 3),
+        hitl_redo_loop_rate=round(hitl_redo_loop_rate, 3),
         redo_iteration_count=redo_iteration_count,
         redo_convergence_ratio=round(redo_convergence_ratio, 3),
         golden_set_size=len(cases),

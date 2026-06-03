@@ -452,6 +452,7 @@ export interface EvalOpsReport {
   judge_fallback_reason: string;
   hitl_enabled_run_rate: number;
   human_correction_rate: number;
+  hitl_redo_loop_rate: number;
   redo_iteration_count: number;
   redo_convergence_ratio: number;
   golden_set_size: number;

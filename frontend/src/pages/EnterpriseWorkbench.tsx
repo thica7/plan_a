@@ -1868,6 +1868,11 @@ function EvalOpsPanel({
           value={formatPercent(report.decision_replay_rate)}
         />
         <Metric
+          icon={<RefreshCw size={17} aria-hidden />}
+          label="HITL loop"
+          value={formatPercent(report.hitl_redo_loop_rate)}
+        />
+        <Metric
           icon={<CalendarClock size={17} aria-hidden />}
           label="Manual saved"
           value={manualTimeSavedHours.toFixed(1)}
@@ -1906,6 +1911,7 @@ function EvalOpsPanel({
         <span>Replay {formatPercent(report.decision_replay_rate)}</span>
         <span>Regressed {report.regressed_run_count}</span>
         <span>HITL {formatPercent(report.hitl_enabled_run_rate)}</span>
+        <span>HITL loop {formatPercent(report.hitl_redo_loop_rate)}</span>
         <span>Human fix {formatPercent(report.human_correction_rate)}</span>
         <span>Redo {report.redo_iteration_count}</span>
         <span>Convergence {formatPercent(report.redo_convergence_ratio)}</span>

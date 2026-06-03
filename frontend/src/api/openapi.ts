@@ -2604,6 +2604,11 @@ export interface components {
             hitl_enabled_run_rate: number;
             /** Human Correction Rate */
             human_correction_rate: number;
+            /**
+             * Hitl Redo Loop Rate
+             * @default 1
+             */
+            hitl_redo_loop_rate: number;
             /** Redo Iteration Count */
             redo_iteration_count: number;
             /** Redo Convergence Ratio */

@@ -84,6 +84,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.llm_judge_avg_score is None
     assert report.judge_fallback_reason == ""
     assert report.human_correction_rate == 0.25
+    assert report.hitl_redo_loop_rate == 1.0
     assert report.redo_iteration_count == 1
     assert report.redo_convergence_ratio == 0.25
     assert report.real_quality_chain_failed_run_ids == []
@@ -201,6 +202,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["real_run_count"] == 1
     assert response.json()["real_quality_chain_rate"] == 1.0
     assert response.json()["decision_replay_rate"] == 1.0
+    assert response.json()["hitl_redo_loop_rate"] == 1.0
     assert response.json()["judge_mode"] == "llm"
     assert response.json()["judge_avg_score"] >= 72
     assert response.json()["llm_judge_avg_score"] is None
@@ -485,6 +487,7 @@ def test_enterprise_evalops_flags_missing_research_and_gap_fill_context() -> Non
     assert steps["rag_gap_fill"].failed_run_ids == ["persona-gap-run"]
     assert steps["human_review"].pass_rate == 0.0
     assert steps["human_review"].failed_run_ids == ["persona-gap-run"]
+    assert report.hitl_redo_loop_rate == 0.0
     assert metrics["hitl_redo_loop_rate"].status == "fail"
     assert cases["golden.user_research_evidence"].status == "fail"
     assert cases["golden.rag_gap_fill_context"].status == "fail"
