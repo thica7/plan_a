@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from statistics import mean
 
 from packages.business_intel import compare_run_quality
@@ -68,7 +69,9 @@ def build_enterprise_evalops_report(
     citation_rate = _average_float(
         [_metric_value(comparison, "claim_citation_rate") for comparison in comparisons]
     )
-    citation_validity_rate = citation_rate
+    citation_validity_rate = _average_float(
+        [_citation_validity_rate(run) for run in recent_runs]
+    )
     schema_pass_rate = _average_float([run.metrics.schema_pass_rate for run in recent_runs])
     report_structure_rate = _average_float(
         [_metric_value(comparison, "report_structure_score") for comparison in comparisons]
@@ -106,6 +109,7 @@ def build_enterprise_evalops_report(
         source_recall=source_recall,
         verified_rate=verified_rate,
         citation_rate=citation_rate,
+        citation_validity_rate=citation_validity_rate,
         schema_pass_rate=schema_pass_rate,
         report_structure_rate=report_structure_rate,
         real_collection_rate=real_collection_rate,
@@ -189,6 +193,7 @@ def _golden_cases(
     source_recall: float,
     verified_rate: float,
     citation_rate: float,
+    citation_validity_rate: float,
     schema_pass_rate: float,
     report_structure_rate: float,
     real_collection_rate: float,
@@ -225,6 +230,14 @@ def _golden_cases(
             "golden.claim_citations",
             "Claim citation rate",
             round(citation_rate * 100),
+            60,
+            target_run_id,
+            baseline_run_id,
+        ),
+        _case(
+            "golden.citation_validity",
+            "Citation source validity",
+            round(citation_validity_rate * 100),
             60,
             target_run_id,
             baseline_run_id,
@@ -350,6 +363,8 @@ def _recommendations(
         recommendations.append("Improve source recall with more competitor-dimension evidence coverage.")
     if metric_names["claim_citation_rate"].status != "pass":
         recommendations.append("Increase claim citation rate before relying on the report in review.")
+    if metric_names["citation_validity_rate"].status != "pass":
+        recommendations.append("Repair unresolved report source tokens before publishing or reviewing the report.")
     if metric_names["schema_pass_rate"].status != "pass":
         recommendations.append("Fix schema validation failures before comparing or publishing the report.")
     if metric_names["real_collection_rate"].status != "pass":
@@ -378,6 +393,15 @@ def _metric_value(comparison: RunQualityComparison, name: str) -> float:
         if metric.name == name:
             return metric.target_value
     return 0.0
+
+
+def _citation_validity_rate(run: RunDetail) -> float:
+    tokens = re.findall(r"\[source:([A-Za-z0-9_.:#-]+)\]", run.report_md)
+    if not tokens:
+        return 0.0
+    source_ids = {source.id for source in run.raw_sources}
+    resolved = sum(1 for token in tokens if token.split("#", 1)[0] in source_ids)
+    return resolved / len(tokens)
 
 
 def _average_int(values: list[int]) -> int:

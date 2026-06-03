@@ -67,7 +67,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
     assert report.human_correction_rate == 0.25
     assert report.redo_iteration_count == 1
     assert report.redo_convergence_ratio == 0.25
-    assert report.golden_set_size == 8
+    assert report.golden_set_size == 9
     assert report.golden_set_pass_rate >= 0.8
     assert report.report_quality_score >= 72
     assert report.source_recall >= 0.6
@@ -79,6 +79,7 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         metric.name == "citation_validity_rate" and metric.status == "pass"
         for metric in report.metrics
     )
+    assert any(case.case_id == "golden.citation_validity" for case in report.cases)
     assert any(
         metric.name == "coverage_lift_rate" and metric.status == "pass"
         for metric in report.metrics
@@ -116,7 +117,7 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["evaluated_run_ids"] == ["real-run"]
     assert response.json()["real_run_count"] == 1
     assert response.json()["real_quality_chain_rate"] == 1.0
-    assert response.json()["golden_set_size"] == 8
+    assert response.json()["golden_set_size"] == 9
     assert any(
         metric["name"] == "schema_pass_rate" and metric["status"] == "pass"
         for metric in response.json()["metrics"]
@@ -132,6 +133,32 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["manual_baseline_hours_per_report"] == 6.0
     assert response.json()["time_savings_rate"] > 0.9
     assert response.json()["regression_gate_status"] in {"pass", "warn", "fail"}
+
+
+def test_enterprise_evalops_measures_citation_validity_separately_from_density() -> None:
+    target = _run_detail(
+        run_id="real-run",
+        execution_mode="real",
+        source_count=4,
+        quality_score=1.0,
+        report_md=_structured_report_md()
+        .replace("source-0", "missing-0")
+        .replace("source-1", "missing-1")
+        .replace("source-2", "missing-2")
+        .replace("source-3", "missing-3"),
+        project_id="project-a",
+    )
+
+    report = build_enterprise_evalops_report([target])
+    metrics = {metric.name: metric for metric in report.metrics}
+    cases = {case.case_id: case for case in report.cases}
+
+    assert metrics["claim_citation_rate"].value == 1.0
+    assert metrics["claim_citation_rate"].status == "pass"
+    assert metrics["citation_validity_rate"].value == 0.0
+    assert metrics["citation_validity_rate"].status == "fail"
+    assert cases["golden.citation_validity"].status == "fail"
+    assert any("unresolved report source tokens" in item for item in report.recommendations)
 
 
 class _FakeRunService:
