@@ -1467,6 +1467,46 @@ def test_enterprise_router_blocks_report_approval_status_when_gate_fails() -> No
     assert response.json()["detail"]["allowed"] is False
 
 
+def test_enterprise_router_requires_reviewer_for_source_policy_review() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    app.dependency_overrides[get_artifact_storage] = lambda: LocalArtifactStorage(
+        Path("backend/.test-artifacts/router")
+    )
+    client = TestClient(app)
+    source = store.list_source_registry(workspace_id=context.workspace_id)[0].model_copy(
+        update={
+            "policy_review_status": "approved",
+            "policy_review_reason": "Reviewed by source policy owner.",
+        }
+    )
+
+    analyst_response = client.post(
+        "/api/enterprise/source-registry",
+        json=source.model_dump(mode="json"),
+        headers={"X-User-Role": "analyst"},
+    )
+    reviewer_response = client.post(
+        "/api/enterprise/source-registry",
+        json=source.model_dump(mode="json"),
+        headers={"X-User-Role": "reviewer"},
+    )
+
+    assert analyst_response.status_code == 403
+    assert reviewer_response.status_code == 200
+    assert reviewer_response.json()["policy_review_status"] == "approved"
+
+
 def test_enterprise_router_blocks_direct_publish_status_without_approval() -> None:
     store = EnterpriseMemoryStore()
     detail = _detail()

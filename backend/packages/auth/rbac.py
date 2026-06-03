@@ -32,6 +32,7 @@ _ACTION_MIN_ROLE: dict[str, EnterpriseRole] = {
     "evidence:review": "reviewer",
     "source:read": "viewer",
     "source:write": "analyst",
+    "source:review": "reviewer",
     "artifact:read": "viewer",
     "artifact:write": "analyst",
     "report:read": "viewer",
@@ -47,6 +48,9 @@ _ACTION_MIN_ROLE: dict[str, EnterpriseRole] = {
     "notification:read": "viewer",
     "notification:write": "analyst",
     "audit:read": "admin",
+}
+_ACTION_ALLOWED_ROLES: dict[str, set[EnterpriseRole]] = {
+    "source:review": {"reviewer", "admin", "owner"},
 }
 
 
@@ -104,6 +108,9 @@ def normalize_role(value: str | None) -> EnterpriseRole:
 
 
 def can_perform(role: EnterpriseRole, action: str) -> bool:
+    allowed_roles = _ACTION_ALLOWED_ROLES.get(action)
+    if allowed_roles is not None:
+        return role in allowed_roles
     required = _ACTION_MIN_ROLE.get(action, "owner")
     return _ROLE_RANK[role] >= _ROLE_RANK[required]
 
@@ -158,6 +165,17 @@ def evaluate_access_policy(
         )
 
     if not can_perform(user.role, action):
+        allowed_roles = _ACTION_ALLOWED_ROLES.get(action)
+        required_message = (
+            f"Action requires one of: {', '.join(sorted(allowed_roles))}."
+            if allowed_roles
+            else f"Action requires role {required_role} or higher."
+        )
+        reason = (
+            f"Role {user.role} is not allowed for {action}."
+            if allowed_roles
+            else f"Role {user.role} is below required role {required_role}."
+        )
         return _decision(
             allowed=False,
             engine="internal-opa-compatible",
@@ -171,12 +189,14 @@ def evaluate_access_policy(
             required_role=required_role,
             matched_rules=[
                 PolicyRuleMatch(
-                    rule_id="deny_role_below_minimum",
+                    rule_id="deny_role_not_allowed"
+                    if allowed_roles
+                    else "deny_role_below_minimum",
                     effect="deny",
-                    message=f"Action requires role {required_role} or higher.",
+                    message=required_message,
                 )
             ],
-            reason=f"Role {user.role} is below required role {required_role}.",
+            reason=reason,
         )
 
     return _decision(
