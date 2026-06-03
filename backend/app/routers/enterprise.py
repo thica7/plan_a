@@ -37,8 +37,18 @@ from packages.business_intel import (
 )
 from packages.config import Settings
 from packages.compliance import compliance_policy_from_settings
-from packages.enterprise import EnterpriseStore, build_report_version_diff
-from packages.governance import ModelPolicyReport, build_model_policy_report
+from packages.enterprise import (
+    EnterpriseStore,
+    build_project_knowledge_graph_read_model,
+    build_report_version_diff,
+    capture_source_snapshot,
+)
+from packages.governance import (
+    ModelPolicyReport,
+    build_model_policy_report,
+    build_model_route_decision,
+    build_tool_registry_report,
+)
 from packages.memory import PreferenceMemoryStore
 from packages.rag import (
     decorate_evidence_gap_report_with_retrieval,
@@ -66,10 +76,12 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     EvidenceReindexResult,
     EvidenceSearchHit,
+    KnowledgeGraphReadModel,
     MemoryCandidate,
     MemoryFeedbackIngestResult,
     MemoryRecallContext,
     MemoryStats,
+    ModelRouteDecision,
     NotificationRecord,
     ProjectReadinessScore,
     ProjectRecord,
@@ -81,7 +93,10 @@ from packages.schema.enterprise import (
     ReportVersionDiff,
     ReportVersionRecord,
     ScenarioPack,
+    SourceSnapshotCreateRequest,
+    SourceSnapshotResult,
     SourceRegistryRecord,
+    ToolRegistryReport,
     UserFeedbackCreateRequest,
     UserFeedbackRecord,
     WorkspaceMemberRecord,
@@ -244,6 +259,26 @@ def get_model_policy(settings: SettingsDep) -> ModelPolicyReport:
     return build_model_policy_report(settings)
 
 
+@router.get("/enterprise/model-route", response_model=ModelRouteDecision)
+def get_model_route_decision(
+    settings: SettingsDep,
+    user: EnterpriseUserDep,
+) -> ModelRouteDecision:
+    if user.workspace_id is not None:
+        _require_workspace_access(user, user.workspace_id, "model:read")
+    return build_model_route_decision(settings)
+
+
+@router.get("/enterprise/tool-registry", response_model=ToolRegistryReport)
+def get_tool_registry(
+    settings: SettingsDep,
+    user: EnterpriseUserDep,
+) -> ToolRegistryReport:
+    if user.workspace_id is not None:
+        _require_workspace_access(user, user.workspace_id, "tool:read")
+    return build_tool_registry_report(settings)
+
+
 @router.get("/enterprise/qa-rules", response_model=list[BusinessQARule])
 def get_qa_rules(
     layer: str | None = None,
@@ -278,6 +313,19 @@ def get_project(
     user: EnterpriseUserDep,
 ) -> ProjectRecord:
     return _project_or_404(project_id, store, user, "project:read")
+
+
+@router.get(
+    "/enterprise/projects/{project_id}/kg-read-model",
+    response_model=KnowledgeGraphReadModel,
+)
+def get_project_knowledge_graph_read_model(
+    project_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> KnowledgeGraphReadModel:
+    _project_or_404(project_id, store, user, "kg:read")
+    return build_project_knowledge_graph_read_model(store=store, project_id=project_id)
 
 
 @router.get("/enterprise/projects/{project_id}/business-plan", response_model=BusinessIntelPlan)
@@ -932,6 +980,35 @@ def create_artifact(
     except ArtifactStorageError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ArtifactCreateResult(artifact=store.upsert_artifact(artifact))
+
+
+@router.post("/enterprise/source-snapshots", response_model=SourceSnapshotResult)
+def create_source_snapshot(
+    request: SourceSnapshotCreateRequest,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    artifact_storage: ArtifactStorageDep,
+) -> SourceSnapshotResult:
+    _require_workspace_access(user, request.workspace_id, "artifact:write")
+    project = _project_or_404(request.project_id, store, user, "source:write")
+    if project.workspace_id != request.workspace_id:
+        raise HTTPException(status_code=400, detail="Snapshot workspace does not match project")
+    if request.evidence_id is not None:
+        evidence = _evidence_or_404(request.evidence_id, store)
+        if (
+            evidence.workspace_id != request.workspace_id
+            or evidence.project_id != request.project_id
+        ):
+            raise HTTPException(status_code=400, detail="Snapshot evidence scope mismatch")
+    try:
+        return capture_source_snapshot(
+            request,
+            store=store,
+            artifact_storage=artifact_storage,
+            actor_id=user.user_id,
+        )
+    except ArtifactStorageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/enterprise/artifacts/{artifact_id}", response_model=ArtifactRecord)

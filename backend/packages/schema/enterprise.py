@@ -13,7 +13,7 @@ EnterpriseRole = Literal["owner", "admin", "analyst", "reviewer", "viewer"]
 SourceRobotsStatus = Literal["unknown", "allowed", "blocked", "error"]
 SourceTrustLevel = Literal["official", "verified", "community", "synthetic", "unknown"]
 ArtifactType = Literal["web_snapshot", "pdf", "screenshot", "raw_text", "report_export", "other"]
-ArtifactStorageBackend = Literal["local", "external"]
+ArtifactStorageBackend = Literal["local", "external", "s3", "oss"]
 NotificationChannel = Literal["in_app", "email", "webhook", "feishu"]
 NotificationSeverity = Literal["info", "success", "warning", "critical"]
 NotificationStatus = Literal["queued", "sent", "failed", "read"]
@@ -40,6 +40,36 @@ MemoryCandidateKind = Literal[
     "correction",
 ]
 MemoryCandidateStatus = Literal["candidate", "confirmed", "rejected", "archived"]
+SourceSnapshotKind = Literal["webpage", "pdf", "screenshot", "interview", "survey", "manual"]
+ToolRegistryCategory = Literal[
+    "collection",
+    "retrieval",
+    "analysis",
+    "governance",
+    "storage",
+    "workflow",
+]
+ToolSideEffect = Literal["none", "network_read", "network_write", "file_write", "database_write"]
+ToolPolicyTag = Literal[
+    "requires_robots",
+    "requires_redaction",
+    "requires_trace",
+    "tenant_scoped",
+    "cost_metered",
+    "human_review_recommended",
+]
+ToolRegistryStatus = Literal["enabled", "guarded", "disabled"]
+ModelProviderKind = Literal["primary", "backup", "demo"]
+ModelRouteStatus = Literal["selected", "fallback", "blocked"]
+KnowledgeGraphNodeType = Literal[
+    "project",
+    "competitor",
+    "dimension",
+    "claim",
+    "evidence",
+    "source",
+    "report",
+]
 
 
 class WorkspaceRecord(BaseModel):
@@ -295,6 +325,126 @@ class ArtifactCreateResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     artifact: ArtifactRecord
+
+
+class SourceSnapshotCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str
+    project_id: str
+    evidence_id: str | None = None
+    run_id: str | None = None
+    snapshot_kind: SourceSnapshotKind = "webpage"
+    artifact_type: ArtifactType = "web_snapshot"
+    filename: str = Field(min_length=1, max_length=180)
+    media_type: str = Field(default="text/plain", min_length=1, max_length=120)
+    content_text: str | None = None
+    content_base64: str | None = None
+    external_uri: str | None = None
+    source_url: HttpUrl | None = None
+    source_type: str = "webpage_verified"
+    display_name: str = ""
+    trust_level: SourceTrustLevel = "verified"
+    robots_status: SourceRobotsStatus = "unknown"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SourceSnapshotResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact: ArtifactRecord
+    source: SourceRegistryRecord
+    evidence_id: str | None = None
+    snapshot_quality_score: int = Field(ge=0, le=100)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ToolRegistryEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    category: ToolRegistryCategory
+    description: str
+    input_schema: str
+    output_schema: str
+    estimated_cost_usd: float = Field(default=0.0, ge=0.0)
+    side_effects: list[ToolSideEffect] = Field(default_factory=list)
+    policy_tags: list[ToolPolicyTag] = Field(default_factory=list)
+    status: ToolRegistryStatus = "enabled"
+    allowed_in_real_mode: bool = True
+    reason: str = ""
+
+
+class ToolRegistryReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    policy_version: str = "2026-06-h10-tool-registry"
+    entries: list[ToolRegistryEntry]
+    total_count: int = Field(ge=0)
+    guarded_count: int = Field(ge=0)
+    disabled_count: int = Field(ge=0)
+    side_effect_tool_count: int = Field(ge=0)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ModelRouteCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_kind: ModelProviderKind
+    provider_name: str
+    model_name: str
+    configured: bool
+    quality_score: int = Field(ge=0, le=100)
+    cost_score: int = Field(ge=0, le=100)
+    compliance_score: int = Field(ge=0, le=100)
+    supports_tool_calling: bool = True
+    supports_json_schema: bool = True
+    reason: str = ""
+
+
+class ModelRouteDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: ModelRouteStatus
+    selected: ModelRouteCandidate | None = None
+    fallback: ModelRouteCandidate | None = None
+    candidates: list[ModelRouteCandidate]
+    blocked_reasons: list[str] = Field(default_factory=list)
+    routing_policy_version: str = "2026-06-h10-model-router"
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class KnowledgeGraphNode(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    node_type: KnowledgeGraphNodeType
+    label: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class KnowledgeGraphEdge(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    source_id: str
+    target_id: str
+    relation: str
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    evidence_ids: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class KnowledgeGraphReadModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str
+    project_id: str
+    node_count: int = Field(ge=0)
+    edge_count: int = Field(ge=0)
+    nodes: list[KnowledgeGraphNode]
+    edges: list[KnowledgeGraphEdge]
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class EvidenceReindexResult(BaseModel):

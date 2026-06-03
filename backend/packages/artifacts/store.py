@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from packages.identity import compute_content_hash
-from packages.schema.enterprise import ArtifactCreateRequest, ArtifactRecord
+from packages.schema.enterprise import ArtifactCreateRequest, ArtifactRecord, ArtifactStorageBackend
 
 
 class ArtifactStorageError(ValueError):
@@ -79,6 +79,7 @@ class LocalArtifactStorage:
             filename=request.filename,
             content_hash=content_hash,
         )
+        storage_backend = _external_backend(request.external_uri)
         return ArtifactRecord(
             id=artifact_id,
             workspace_id=request.workspace_id,
@@ -88,7 +89,7 @@ class LocalArtifactStorage:
             artifact_type=request.artifact_type,
             filename=_safe_filename(request.filename),
             media_type=request.media_type,
-            storage_backend="external",
+            storage_backend=storage_backend,
             uri=request.external_uri,
             byte_size=0,
             content_hash=content_hash,
@@ -141,3 +142,12 @@ def _safe_filename(value: str) -> str:
 
 def _safe_segment(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip(".-") or "workspace"
+
+
+def _external_backend(uri: str | None) -> ArtifactStorageBackend:
+    value = (uri or "").strip().lower()
+    if value.startswith("s3://"):
+        return "s3"
+    if value.startswith("oss://"):
+        return "oss"
+    return "external"

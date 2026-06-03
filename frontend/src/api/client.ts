@@ -15,6 +15,8 @@ import type {
   EvidenceGapFillResult,
   EvidenceGapReport,
   EvidenceRecord,
+  KnowledgeGraphReadModel,
+  ModelRouteDecision,
   ModelPolicyReport,
   MonitorStartRequest,
   MonitorStartResponse,
@@ -42,6 +44,9 @@ import type {
   ScheduledScanStartResponse,
   ScenarioPack,
   SkillSpec,
+  SourceSnapshotCreateRequest,
+  SourceSnapshotResult,
+  ToolRegistryReport,
   ToolCallMessage,
   TraceObservabilityReport,
   TraceSpan,
@@ -256,6 +261,14 @@ export function getModelPolicy() {
   return request<ModelPolicyReport>("/enterprise/model-policy");
 }
 
+export function getModelRouteDecision() {
+  return request<ModelRouteDecision>("/enterprise/model-route");
+}
+
+export function getToolRegistry() {
+  return request<ToolRegistryReport>("/enterprise/tool-registry");
+}
+
 export function getWorkspaceUsage(workspaceId: string) {
   return request<WorkspaceUsageSummary>(
     `/enterprise/workspaces/${encodeURIComponent(workspaceId)}/usage`,
@@ -329,8 +342,21 @@ export function createArtifact(payload: ArtifactCreateRequest) {
   });
 }
 
+export function createSourceSnapshot(payload: SourceSnapshotCreateRequest) {
+  return request<SourceSnapshotResult>("/enterprise/source-snapshots", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getArtifact(artifactId: string) {
   return request<ArtifactRecord>(`/enterprise/artifacts/${encodeURIComponent(artifactId)}`);
+}
+
+export function getProjectKnowledgeGraph(projectId: string) {
+  return request<KnowledgeGraphReadModel>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/kg-read-model`,
+  );
 }
 
 export function getProjectBusinessPlan(projectId: string) {

@@ -1073,7 +1073,7 @@ export interface ArtifactRecord {
   artifact_type: ArtifactType;
   filename: string;
   media_type: string;
-  storage_backend: "local" | "external";
+  storage_backend: "local" | "external" | "s3" | "oss";
   uri: string;
   byte_size: number;
   content_hash: string;
@@ -1100,6 +1100,133 @@ export interface ArtifactCreateRequest {
 
 export interface ArtifactCreateResult {
   artifact: ArtifactRecord;
+}
+
+export interface SourceRegistryRecord {
+  id: string;
+  workspace_id: string;
+  domain: string;
+  source_type: string;
+  display_name: string;
+  homepage_url?: string | null;
+  trust_level: "official" | "verified" | "community" | "synthetic" | "unknown";
+  robots_status: "unknown" | "allowed" | "blocked" | "error";
+  is_active: boolean;
+  first_seen_run_id?: string | null;
+  last_seen_run_id?: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  seen_count: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface SourceSnapshotCreateRequest {
+  workspace_id: string;
+  project_id: string;
+  evidence_id?: string | null;
+  run_id?: string | null;
+  snapshot_kind?: "webpage" | "pdf" | "screenshot" | "interview" | "survey" | "manual";
+  artifact_type?: ArtifactType;
+  filename: string;
+  media_type?: string;
+  content_text?: string | null;
+  content_base64?: string | null;
+  external_uri?: string | null;
+  source_url?: string | null;
+  source_type?: string;
+  display_name?: string;
+  trust_level?: "official" | "verified" | "community" | "synthetic" | "unknown";
+  robots_status?: "unknown" | "allowed" | "blocked" | "error";
+  metadata?: Record<string, unknown>;
+}
+
+export interface SourceSnapshotResult {
+  artifact: ArtifactRecord;
+  source: SourceRegistryRecord;
+  evidence_id?: string | null;
+  snapshot_quality_score: number;
+  warnings: string[];
+}
+
+export interface ToolRegistryEntry {
+  name: string;
+  category: "collection" | "retrieval" | "analysis" | "governance" | "storage" | "workflow";
+  description: string;
+  input_schema: string;
+  output_schema: string;
+  estimated_cost_usd: number;
+  side_effects: ("none" | "network_read" | "network_write" | "file_write" | "database_write")[];
+  policy_tags: (
+    | "requires_robots"
+    | "requires_redaction"
+    | "requires_trace"
+    | "tenant_scoped"
+    | "cost_metered"
+    | "human_review_recommended"
+  )[];
+  status: "enabled" | "guarded" | "disabled";
+  allowed_in_real_mode: boolean;
+  reason: string;
+}
+
+export interface ToolRegistryReport {
+  policy_version: string;
+  entries: ToolRegistryEntry[];
+  total_count: number;
+  guarded_count: number;
+  disabled_count: number;
+  side_effect_tool_count: number;
+  generated_at: string;
+}
+
+export interface ModelRouteCandidate {
+  provider_kind: "primary" | "backup" | "demo";
+  provider_name: string;
+  model_name: string;
+  configured: boolean;
+  quality_score: number;
+  cost_score: number;
+  compliance_score: number;
+  supports_tool_calling: boolean;
+  supports_json_schema: boolean;
+  reason: string;
+}
+
+export interface ModelRouteDecision {
+  status: "selected" | "fallback" | "blocked";
+  selected?: ModelRouteCandidate | null;
+  fallback?: ModelRouteCandidate | null;
+  candidates: ModelRouteCandidate[];
+  blocked_reasons: string[];
+  routing_policy_version: string;
+  generated_at: string;
+}
+
+export interface KnowledgeGraphNode {
+  id: string;
+  node_type: "project" | "competitor" | "dimension" | "claim" | "evidence" | "source" | "report";
+  label: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface KnowledgeGraphEdge {
+  id: string;
+  source_id: string;
+  target_id: string;
+  relation: string;
+  confidence: number;
+  evidence_ids: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface KnowledgeGraphReadModel {
+  workspace_id: string;
+  project_id: string;
+  node_count: number;
+  edge_count: number;
+  nodes: KnowledgeGraphNode[];
+  edges: KnowledgeGraphEdge[];
+  generated_at: string;
 }
 
 export interface ClaimRecord {

@@ -568,6 +568,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/model-route": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Model Route Decision */
+        get: operations["get_model_route_decision_api_enterprise_model_route_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/tool-registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Tool Registry */
+        get: operations["get_tool_registry_api_enterprise_tool_registry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/qa-rules": {
         parameters: {
             query?: never;
@@ -612,6 +646,23 @@ export interface paths {
         };
         /** Get Project */
         get: operations["get_project_api_enterprise_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/projects/{project_id}/kg-read-model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project Knowledge Graph Read Model */
+        get: operations["get_project_knowledge_graph_read_model_api_enterprise_projects__project_id__kg_read_model_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -939,6 +990,23 @@ export interface paths {
         put?: never;
         /** Create Artifact */
         post: operations["create_artifact_api_enterprise_artifacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/source-snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Source Snapshot */
+        post: operations["create_source_snapshot_api_enterprise_source_snapshots_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1449,7 +1517,7 @@ export interface components {
              * @default local
              * @enum {string}
              */
-            storage_backend: "local" | "external";
+            storage_backend: "local" | "external" | "s3" | "oss";
             /** Uri */
             uri: string;
             /** Byte Size */
@@ -2553,6 +2621,64 @@ export interface components {
              */
             confidence: number;
         };
+        /** KnowledgeGraphEdge */
+        KnowledgeGraphEdge: {
+            /** Id */
+            id: string;
+            /** Source Id */
+            source_id: string;
+            /** Target Id */
+            target_id: string;
+            /** Relation */
+            relation: string;
+            /**
+             * Confidence
+             * @default 1
+             */
+            confidence: number;
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** KnowledgeGraphNode */
+        KnowledgeGraphNode: {
+            /** Id */
+            id: string;
+            /**
+             * Node Type
+             * @enum {string}
+             */
+            node_type: "project" | "competitor" | "dimension" | "claim" | "evidence" | "source" | "report";
+            /** Label */
+            label: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** KnowledgeGraphReadModel */
+        KnowledgeGraphReadModel: {
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Node Count */
+            node_count: number;
+            /** Edge Count */
+            edge_count: number;
+            /** Nodes */
+            nodes: components["schemas"]["KnowledgeGraphNode"][];
+            /** Edges */
+            edges: components["schemas"]["KnowledgeGraphEdge"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+        };
         /** LlmSmokeRequest */
         LlmSmokeRequest: {
             /**
@@ -2735,6 +2861,65 @@ export interface components {
             blocking_finding_ids?: string[];
             /** Findings */
             findings?: components["schemas"]["ModelPolicyFinding"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+        };
+        /** ModelRouteCandidate */
+        ModelRouteCandidate: {
+            /**
+             * Provider Kind
+             * @enum {string}
+             */
+            provider_kind: "primary" | "backup" | "demo";
+            /** Provider Name */
+            provider_name: string;
+            /** Model Name */
+            model_name: string;
+            /** Configured */
+            configured: boolean;
+            /** Quality Score */
+            quality_score: number;
+            /** Cost Score */
+            cost_score: number;
+            /** Compliance Score */
+            compliance_score: number;
+            /**
+             * Supports Tool Calling
+             * @default true
+             */
+            supports_tool_calling: boolean;
+            /**
+             * Supports Json Schema
+             * @default true
+             */
+            supports_json_schema: boolean;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
+        /** ModelRouteDecision */
+        ModelRouteDecision: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "selected" | "fallback" | "blocked";
+            selected?: components["schemas"]["ModelRouteCandidate"] | null;
+            fallback?: components["schemas"]["ModelRouteCandidate"] | null;
+            /** Candidates */
+            candidates: components["schemas"]["ModelRouteCandidate"][];
+            /** Blocked Reasons */
+            blocked_reasons?: string[];
+            /**
+             * Routing Policy Version
+             * @default 2026-06-h10-model-router
+             */
+            routing_policy_version: string;
             /**
              * Generated At
              * Format: date-time
@@ -4254,6 +4439,81 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** SourceSnapshotCreateRequest */
+        SourceSnapshotCreateRequest: {
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Snapshot Kind
+             * @default webpage
+             * @enum {string}
+             */
+            snapshot_kind: "webpage" | "pdf" | "screenshot" | "interview" | "survey" | "manual";
+            /**
+             * Artifact Type
+             * @default web_snapshot
+             * @enum {string}
+             */
+            artifact_type: "web_snapshot" | "pdf" | "screenshot" | "raw_text" | "report_export" | "other";
+            /** Filename */
+            filename: string;
+            /**
+             * Media Type
+             * @default text/plain
+             */
+            media_type: string;
+            /** Content Text */
+            content_text?: string | null;
+            /** Content Base64 */
+            content_base64?: string | null;
+            /** External Uri */
+            external_uri?: string | null;
+            /** Source Url */
+            source_url?: string | null;
+            /**
+             * Source Type
+             * @default webpage_verified
+             */
+            source_type: string;
+            /**
+             * Display Name
+             * @default
+             */
+            display_name: string;
+            /**
+             * Trust Level
+             * @default verified
+             * @enum {string}
+             */
+            trust_level: "official" | "verified" | "community" | "synthetic" | "unknown";
+            /**
+             * Robots Status
+             * @default unknown
+             * @enum {string}
+             */
+            robots_status: "unknown" | "allowed" | "blocked" | "error";
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** SourceSnapshotResult */
+        SourceSnapshotResult: {
+            artifact: components["schemas"]["ArtifactRecord"];
+            source: components["schemas"]["SourceRegistryRecord"];
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Snapshot Quality Score */
+            snapshot_quality_score: number;
+            /** Warnings */
+            warnings?: string[];
+        };
         /** ToolCallMessage */
         ToolCallMessage: {
             /** Id */
@@ -4288,6 +4548,70 @@ export interface components {
              * Format: date-time
              */
             created_at?: string;
+        };
+        /** ToolRegistryEntry */
+        ToolRegistryEntry: {
+            /** Name */
+            name: string;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "collection" | "retrieval" | "analysis" | "governance" | "storage" | "workflow";
+            /** Description */
+            description: string;
+            /** Input Schema */
+            input_schema: string;
+            /** Output Schema */
+            output_schema: string;
+            /**
+             * Estimated Cost Usd
+             * @default 0
+             */
+            estimated_cost_usd: number;
+            /** Side Effects */
+            side_effects?: ("none" | "network_read" | "network_write" | "file_write" | "database_write")[];
+            /** Policy Tags */
+            policy_tags?: ("requires_robots" | "requires_redaction" | "requires_trace" | "tenant_scoped" | "cost_metered" | "human_review_recommended")[];
+            /**
+             * Status
+             * @default enabled
+             * @enum {string}
+             */
+            status: "enabled" | "guarded" | "disabled";
+            /**
+             * Allowed In Real Mode
+             * @default true
+             */
+            allowed_in_real_mode: boolean;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
+        /** ToolRegistryReport */
+        ToolRegistryReport: {
+            /**
+             * Policy Version
+             * @default 2026-06-h10-tool-registry
+             */
+            policy_version: string;
+            /** Entries */
+            entries: components["schemas"]["ToolRegistryEntry"][];
+            /** Total Count */
+            total_count: number;
+            /** Guarded Count */
+            guarded_count: number;
+            /** Disabled Count */
+            disabled_count: number;
+            /** Side Effect Tool Count */
+            side_effect_tool_count: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
         };
         /** TraceObservabilityIssue */
         TraceObservabilityIssue: {
@@ -5901,6 +6225,72 @@ export interface operations {
             };
         };
     };
+    get_model_route_decision_api_enterprise_model_route_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelRouteDecision"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tool_registry_api_enterprise_tool_registry_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolRegistryReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_qa_rules_api_enterprise_qa_rules_get: {
         parameters: {
             query?: {
@@ -6026,6 +6416,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_knowledge_graph_read_model_api_enterprise_projects__project_id__kg_read_model_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeGraphReadModel"];
                 };
             };
             /** @description Validation Error */
@@ -6785,6 +7210,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArtifactCreateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_source_snapshot_api_enterprise_source_snapshots_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceSnapshotCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSnapshotResult"];
                 };
             };
             /** @description Validation Error */

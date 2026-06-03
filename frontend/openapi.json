@@ -1899,6 +1899,168 @@
         }
       }
     },
+    "/api/enterprise/model-route": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Model Route Decision",
+        "operationId": "get_model_route_decision_api_enterprise_model_route_get",
+        "parameters": [
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelRouteDecision"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enterprise/tool-registry": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Tool Registry",
+        "operationId": "get_tool_registry_api_enterprise_tool_registry_get",
+        "parameters": [
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolRegistryReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enterprise/qa-rules": {
       "get": {
         "tags": [
@@ -2215,6 +2377,96 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProjectRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enterprise/projects/{project_id}/kg-read-model": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Project Knowledge Graph Read Model",
+        "operationId": "get_project_knowledge_graph_read_model_api_enterprise_projects__project_id__kg_read_model_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeGraphReadModel"
                 }
               }
             }
@@ -4328,6 +4580,97 @@
         }
       }
     },
+    "/api/enterprise/source-snapshots": {
+      "post": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Create Source Snapshot",
+        "operationId": "create_source_snapshot_api_enterprise_source_snapshots_post",
+        "parameters": [
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceSnapshotCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSnapshotResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enterprise/artifacts/{artifact_id}": {
       "get": {
         "tags": [
@@ -6361,7 +6704,9 @@
             "type": "string",
             "enum": [
               "local",
-              "external"
+              "external",
+              "s3",
+              "oss"
             ],
             "title": "Storage Backend",
             "default": "local"
@@ -8940,6 +9285,144 @@
         ],
         "title": "KnowledgeClaim"
       },
+      "KnowledgeGraphEdge": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "target_id": {
+            "type": "string",
+            "title": "Target Id"
+          },
+          "relation": {
+            "type": "string",
+            "title": "Relation"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 1.0
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "source_id",
+          "target_id",
+          "relation"
+        ],
+        "title": "KnowledgeGraphEdge"
+      },
+      "KnowledgeGraphNode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "node_type": {
+            "type": "string",
+            "enum": [
+              "project",
+              "competitor",
+              "dimension",
+              "claim",
+              "evidence",
+              "source",
+              "report"
+            ],
+            "title": "Node Type"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "node_type",
+          "label"
+        ],
+        "title": "KnowledgeGraphNode"
+      },
+      "KnowledgeGraphReadModel": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "node_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Node Count"
+          },
+          "edge_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Edge Count"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeGraphNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeGraphEdge"
+            },
+            "type": "array",
+            "title": "Edges"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "project_id",
+          "node_count",
+          "edge_count",
+          "nodes",
+          "edges"
+        ],
+        "title": "KnowledgeGraphReadModel"
+      },
       "LlmSmokeRequest": {
         "properties": {
           "prompt": {
@@ -9333,6 +9816,140 @@
           "warn_count"
         ],
         "title": "ModelPolicyReport"
+      },
+      "ModelRouteCandidate": {
+        "properties": {
+          "provider_kind": {
+            "type": "string",
+            "enum": [
+              "primary",
+              "backup",
+              "demo"
+            ],
+            "title": "Provider Kind"
+          },
+          "provider_name": {
+            "type": "string",
+            "title": "Provider Name"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "quality_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Quality Score"
+          },
+          "cost_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Cost Score"
+          },
+          "compliance_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Compliance Score"
+          },
+          "supports_tool_calling": {
+            "type": "boolean",
+            "title": "Supports Tool Calling",
+            "default": true
+          },
+          "supports_json_schema": {
+            "type": "boolean",
+            "title": "Supports Json Schema",
+            "default": true
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider_kind",
+          "provider_name",
+          "model_name",
+          "configured",
+          "quality_score",
+          "cost_score",
+          "compliance_score"
+        ],
+        "title": "ModelRouteCandidate"
+      },
+      "ModelRouteDecision": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "selected",
+              "fallback",
+              "blocked"
+            ],
+            "title": "Status"
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelRouteCandidate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fallback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelRouteCandidate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ModelRouteCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "blocked_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocked Reasons"
+          },
+          "routing_policy_version": {
+            "type": "string",
+            "title": "Routing Policy Version",
+            "default": "2026-06-h10-model-router"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "candidates"
+        ],
+        "title": "ModelRouteDecision"
       },
       "MonitorStartRequest": {
         "properties": {
@@ -12800,6 +13417,214 @@
         ],
         "title": "SourceRegistryRecord"
       },
+      "SourceSnapshotCreateRequest": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "snapshot_kind": {
+            "type": "string",
+            "enum": [
+              "webpage",
+              "pdf",
+              "screenshot",
+              "interview",
+              "survey",
+              "manual"
+            ],
+            "title": "Snapshot Kind",
+            "default": "webpage"
+          },
+          "artifact_type": {
+            "type": "string",
+            "enum": [
+              "web_snapshot",
+              "pdf",
+              "screenshot",
+              "raw_text",
+              "report_export",
+              "other"
+            ],
+            "title": "Artifact Type",
+            "default": "web_snapshot"
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Filename"
+          },
+          "media_type": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Media Type",
+            "default": "text/plain"
+          },
+          "content_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Text"
+          },
+          "content_base64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Base64"
+          },
+          "external_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Uri"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "default": "webpage_verified"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name",
+            "default": ""
+          },
+          "trust_level": {
+            "type": "string",
+            "enum": [
+              "official",
+              "verified",
+              "community",
+              "synthetic",
+              "unknown"
+            ],
+            "title": "Trust Level",
+            "default": "verified"
+          },
+          "robots_status": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "allowed",
+              "blocked",
+              "error"
+            ],
+            "title": "Robots Status",
+            "default": "unknown"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "project_id",
+          "filename"
+        ],
+        "title": "SourceSnapshotCreateRequest"
+      },
+      "SourceSnapshotResult": {
+        "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/ArtifactRecord"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceRegistryRecord"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "snapshot_quality_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Snapshot Quality Score"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "artifact",
+          "source",
+          "snapshot_quality_score"
+        ],
+        "title": "SourceSnapshotResult"
+      },
       "ToolCallMessage": {
         "properties": {
           "id": {
@@ -12885,6 +13710,154 @@
           "status"
         ],
         "title": "ToolCallMessage"
+      },
+      "ToolRegistryEntry": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "collection",
+              "retrieval",
+              "analysis",
+              "governance",
+              "storage",
+              "workflow"
+            ],
+            "title": "Category"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "input_schema": {
+            "type": "string",
+            "title": "Input Schema"
+          },
+          "output_schema": {
+            "type": "string",
+            "title": "Output Schema"
+          },
+          "estimated_cost_usd": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Estimated Cost Usd",
+            "default": 0.0
+          },
+          "side_effects": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "none",
+                "network_read",
+                "network_write",
+                "file_write",
+                "database_write"
+              ]
+            },
+            "type": "array",
+            "title": "Side Effects"
+          },
+          "policy_tags": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "requires_robots",
+                "requires_redaction",
+                "requires_trace",
+                "tenant_scoped",
+                "cost_metered",
+                "human_review_recommended"
+              ]
+            },
+            "type": "array",
+            "title": "Policy Tags"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "enabled",
+              "guarded",
+              "disabled"
+            ],
+            "title": "Status",
+            "default": "enabled"
+          },
+          "allowed_in_real_mode": {
+            "type": "boolean",
+            "title": "Allowed In Real Mode",
+            "default": true
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "category",
+          "description",
+          "input_schema",
+          "output_schema"
+        ],
+        "title": "ToolRegistryEntry"
+      },
+      "ToolRegistryReport": {
+        "properties": {
+          "policy_version": {
+            "type": "string",
+            "title": "Policy Version",
+            "default": "2026-06-h10-tool-registry"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ToolRegistryEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "total_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Count"
+          },
+          "guarded_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Guarded Count"
+          },
+          "disabled_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Disabled Count"
+          },
+          "side_effect_tool_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Side Effect Tool Count"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "entries",
+          "total_count",
+          "guarded_count",
+          "disabled_count",
+          "side_effect_tool_count"
+        ],
+        "title": "ToolRegistryReport"
       },
       "TraceObservabilityIssue": {
         "properties": {

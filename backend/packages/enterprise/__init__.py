@@ -3,9 +3,11 @@ from packages.enterprise.embedding_index import (
     EMBEDDING_MODEL,
     deterministic_embedding,
 )
+from packages.enterprise.knowledge_graph import build_project_knowledge_graph_read_model
 from packages.enterprise.postgres import EnterprisePostgresStore
 from packages.enterprise.projection import build_enterprise_projection
 from packages.enterprise.report_diff import build_report_version_diff
+from packages.enterprise.source_snapshots import capture_source_snapshot
 from packages.enterprise.store import (
     EnterpriseMemoryStore,
     EnterpriseRunContext,
@@ -23,7 +25,9 @@ __all__ = [
     "EMBEDDING_MODEL",
     "WorkspaceQuotaExceededError",
     "build_enterprise_projection",
+    "build_project_knowledge_graph_read_model",
     "build_report_version_diff",
+    "capture_source_snapshot",
     "deterministic_embedding",
     "source_registry_from_evidence",
 ]

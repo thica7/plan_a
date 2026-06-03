@@ -16,6 +16,9 @@ def test_rbac_role_permissions_are_ordered() -> None:
     assert can_perform("analyst", "memory:write")
     assert can_perform("reviewer", "evidence:review")
     assert can_perform("reviewer", "memory:review")
+    assert can_perform("viewer", "tool:read")
+    assert can_perform("viewer", "model:read")
+    assert can_perform("viewer", "kg:read")
     assert not can_perform("viewer", "project:write")
     assert not can_perform("reviewer", "evidence:write")
 
