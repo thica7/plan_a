@@ -23,6 +23,7 @@ import {
   getEnterpriseEvalOps,
   getModelPolicy,
   getModelRouteDecision,
+  getProjectClaimValidation,
   getProjectMemoryStats,
   getProjectEvidenceGaps,
   getProjectBusinessPlan,
@@ -53,6 +54,7 @@ import type {
   BusinessIntelPlan,
   BusinessQAEvaluation,
   BusinessQAFinding,
+  ClaimValidationReport,
   ClaimRecord,
   CompetitorScoreReport,
   CompetitorRecord,
@@ -100,6 +102,7 @@ export function EnterpriseWorkbench({
   const [versions, setVersions] = useState<ReportVersionRecord[]>([]);
   const [businessPlan, setBusinessPlan] = useState<BusinessIntelPlan | null>(null);
   const [qaEvaluation, setQaEvaluation] = useState<BusinessQAEvaluation | null>(null);
+  const [claimValidation, setClaimValidation] = useState<ClaimValidationReport | null>(null);
   const [readinessScore, setReadinessScore] = useState<ProjectReadinessScore | null>(null);
   const [competitorScores, setCompetitorScores] = useState<CompetitorScoreReport | null>(null);
   const [evidenceGaps, setEvidenceGaps] = useState<EvidenceGapReport | null>(null);
@@ -163,6 +166,7 @@ export function EnterpriseWorkbench({
       setVersions([]);
       setBusinessPlan(null);
       setQaEvaluation(null);
+      setClaimValidation(null);
       setReadinessScore(null);
       setCompetitorScores(null);
       setEvidenceGaps(null);
@@ -193,6 +197,7 @@ export function EnterpriseWorkbench({
       listProjectReportVersions(selectedProjectId),
       getProjectBusinessPlan(selectedProjectId),
       getProjectQAEvaluation(selectedProjectId),
+      getProjectClaimValidation(selectedProjectId),
       getProjectReadinessScore(selectedProjectId),
       getProjectCompetitorScores(selectedProjectId),
       getProjectEvidenceGaps(selectedProjectId),
@@ -221,6 +226,7 @@ export function EnterpriseWorkbench({
           versionItems,
           businessPlanValue,
           qaEvaluationValue,
+          claimValidationValue,
           readinessScoreValue,
           competitorScoresValue,
           evidenceGapsValue,
@@ -244,6 +250,7 @@ export function EnterpriseWorkbench({
           setVersions(versionItems);
           setBusinessPlan(businessPlanValue);
           setQaEvaluation(qaEvaluationValue);
+          setClaimValidation(claimValidationValue);
           setReadinessScore(readinessScoreValue);
           setCompetitorScores(competitorScoresValue);
           setEvidenceGaps(evidenceGapsValue);
@@ -272,6 +279,7 @@ export function EnterpriseWorkbench({
         setVersions([]);
         setBusinessPlan(null);
         setQaEvaluation(null);
+        setClaimValidation(null);
         setReadinessScore(null);
         setCompetitorScores(null);
         setEvidenceGaps(null);
@@ -620,6 +628,8 @@ export function EnterpriseWorkbench({
 
               {qualityMatrix ? <QualityAgentMatrixPanel matrix={qualityMatrix} /> : null}
 
+              {claimValidation ? <ClaimValidationPanel report={claimValidation} /> : null}
+
               <SourceRegistryPanel sources={sourceRegistry} />
 
               <GovernanceRuntimePanel
@@ -898,6 +908,62 @@ function QualityAgentMatrixPanel({ matrix }: { matrix: QualityAgentMatrix }) {
           </article>
         ))}
       </div>
+    </section>
+  );
+}
+
+function ClaimValidationPanel({ report }: { report: ClaimValidationReport }) {
+  const panelStatus = report.blocker_count > 0 ? "blocker" : report.warn_count > 0 ? "warn" : "pass";
+  const watchIssues = report.issues.slice(0, 4);
+  const weakResults = report.results
+    .filter((result) => result.status !== "supported")
+    .slice(0, 4);
+
+  return (
+    <section className={`panel readiness-panel ${panelStatus}`}>
+      <div className="panel-heading-row">
+        <h2>Claim validation</h2>
+        {panelStatus === "pass" ? (
+          <CheckCircle2 size={17} aria-hidden />
+        ) : (
+          <AlertTriangle size={17} aria-hidden />
+        )}
+      </div>
+      <div className="metric-grid compact">
+        <Metric icon={<Gauge size={17} aria-hidden />} label="Consistency" value={report.self_consistency_score} />
+        <Metric icon={<CheckCircle2 size={17} aria-hidden />} label="Supported" value={report.supported_count} />
+        <Metric icon={<AlertTriangle size={17} aria-hidden />} label="Weak" value={report.weak_count} />
+        <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Blocked" value={report.blocked_count} />
+      </div>
+      <div className="project-meta-row">
+        <span>Total claims {report.total_claims}</span>
+        <span>Unsupported {report.unsupported_count}</span>
+        <span>Low consistency {report.low_consistency_count}</span>
+        <span>Issues {report.issue_count}</span>
+      </div>
+      {watchIssues.length > 0 ? (
+        <div className="recommendation-list">
+          {watchIssues.map((issue) => (
+            <article className={`recommendation-card ${issue.severity === "blocker" ? "high" : "medium"}`} key={issue.id}>
+              <strong>{issue.issue_type.replace(/_/g, " ")}</strong>
+              <span>{issue.severity} / {issue.claim_id}</span>
+              <p>{issue.message}</p>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {weakResults.length > 0 ? (
+        <div className="competitor-strip">
+          {weakResults.map((result) => (
+            <span key={result.claim_id} title={result.claim_id}>
+              {result.status}
+              <em>support {result.support_score} / self {result.self_consistency_score}</em>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="muted-line">All validated claims are currently supported.</p>
+      )}
     </section>
   );
 }

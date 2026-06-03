@@ -5,6 +5,7 @@ import type {
   ArtifactRecord,
   BusinessIntelPlan,
   BusinessQAEvaluation,
+  ClaimValidationReport,
   CompetitorScoreReport,
   CompetitorKnowledge,
   ClaimRecord,
@@ -428,6 +429,12 @@ export function getProjectBusinessPlan(projectId: string) {
 
 export function getProjectQAEvaluation(projectId: string) {
   return request<BusinessQAEvaluation>(`/enterprise/projects/${projectId}/qa-evaluation`);
+}
+
+export function getProjectClaimValidation(projectId: string) {
+  return request<ClaimValidationReport>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/claim-validation`,
+  );
 }
 
 export function getProjectReadinessScore(projectId: string) {

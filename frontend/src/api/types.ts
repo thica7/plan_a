@@ -632,6 +632,54 @@ export interface RunQualityComparison {
   generated_at: string;
 }
 
+export type ClaimValidationStatus = "supported" | "weak" | "unsupported" | "blocked";
+
+export interface ClaimValidationIssue {
+  id: string;
+  claim_id: string;
+  severity: "warn" | "blocker";
+  issue_type:
+    | "missing_evidence"
+    | "stale_or_rejected_evidence"
+    | "weak_text_support"
+    | "low_evidence_quality"
+    | "single_source_support"
+    | "low_self_consistency"
+    | "low_confidence";
+  message: string;
+  evidence_ids: string[];
+}
+
+export interface ClaimValidationResult {
+  claim_id: string;
+  status: ClaimValidationStatus;
+  support_score: number;
+  text_support_score: number;
+  evidence_quality_score: number;
+  triangulation_score: number;
+  self_consistency_score: number;
+  consistency_votes: Record<string, number>;
+  usable_evidence_ids: string[];
+  issue_ids: string[];
+}
+
+export interface ClaimValidationReport {
+  project_id: string;
+  total_claims: number;
+  supported_count: number;
+  weak_count: number;
+  unsupported_count: number;
+  blocked_count: number;
+  issue_count: number;
+  blocker_count: number;
+  warn_count: number;
+  self_consistency_score: number;
+  low_consistency_count: number;
+  results: ClaimValidationResult[];
+  issues: ClaimValidationIssue[];
+  generated_at: string;
+}
+
 export interface WorkflowStartResponse {
   workflow_id: string;
   workflow_type: "CompetitiveIntelWorkflow";
