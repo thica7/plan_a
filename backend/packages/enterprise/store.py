@@ -31,12 +31,14 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     EvidenceReindexResult,
     EvidenceSearchHit,
+    MemoryCandidate,
     NotificationRecord,
     ProjectCompetitorLink,
     ProjectRecord,
     ReportVersionRecord,
     SchemaEvolutionReviewRecord,
     SourceRegistryRecord,
+    UserFeedbackRecord,
     UserRecord,
     WorkspaceMemberRecord,
     WorkspaceQuotaDecision,
@@ -223,6 +225,14 @@ class EnterpriseStore(Protocol):
     ) -> ReportVersionRecord | None: ...
 
     def list_audit_logs(self, workspace_id: str | None = None) -> list[AuditLogRecord]: ...
+
+    def record_memory_feedback_audit(
+        self,
+        feedback: UserFeedbackRecord,
+        candidates: list[MemoryCandidate],
+        *,
+        actor_id: str | None = None,
+    ) -> None: ...
 
     def audit_schema_evolution_review(
         self,
@@ -1030,6 +1040,23 @@ class EnterpriseMemoryStore:
                 records = [item for item in records if item.workspace_id == workspace_id]
             return sorted(records, key=lambda item: item.created_at, reverse=True)
 
+    def record_memory_feedback_audit(
+        self,
+        feedback: UserFeedbackRecord,
+        candidates: list[MemoryCandidate],
+        *,
+        actor_id: str | None = None,
+    ) -> None:
+        with self._lock:
+            self._append_audit(
+                workspace_id=feedback.workspace_id,
+                actor_id=actor_id or feedback.user_id or DEFAULT_USER_ID,
+                action="memory.feedback_captured",
+                resource_type="memory_feedback",
+                resource_id=feedback.id,
+                after=_memory_feedback_audit_after(feedback, candidates),
+            )
+
     def get_run_projection(self, run_id: str) -> EnterpriseRunProjection | None:
         with self._lock:
             versions = [item for item in self.report_versions.values() if item.run_id == run_id]
@@ -1253,6 +1280,28 @@ class EnterpriseMemoryStore:
 
 def _short_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def _memory_feedback_audit_after(
+    feedback: UserFeedbackRecord,
+    candidates: list[MemoryCandidate],
+) -> dict[str, object]:
+    return {
+        "feedback_id": feedback.id,
+        "feedback_type": feedback.feedback_type,
+        "project_id": feedback.project_id,
+        "run_id": feedback.run_id,
+        "report_version_id": feedback.report_version_id,
+        "target_type": feedback.target_type,
+        "target_id": feedback.target_id,
+        "candidate_ids": [candidate.id for candidate in candidates],
+        "candidate_count": len(candidates),
+        "candidate_kinds": sorted({candidate.kind for candidate in candidates}),
+        "candidate_statuses": sorted({candidate.status for candidate in candidates}),
+        "tags": feedback.tags,
+        "redaction_counts": feedback.redaction_counts,
+        "message_excerpt": feedback.message[:240],
+    }
 
 
 def _normalize_key(value: str) -> str:

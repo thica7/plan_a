@@ -17,6 +17,7 @@ from packages.enterprise.store import (
     DEFAULT_USER_ID,
     DEFAULT_WORKSPACE_ID,
     EnterpriseRunContext,
+    _memory_feedback_audit_after,
     _normalize_key,
     _short_hash,
     _title_from_id,
@@ -40,11 +41,13 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     EvidenceReindexResult,
     EvidenceSearchHit,
+    MemoryCandidate,
     NotificationRecord,
     ProjectRecord,
     ReportVersionRecord,
     SchemaEvolutionReviewRecord,
     SourceRegistryRecord,
+    UserFeedbackRecord,
     WorkspaceMemberRecord,
     WorkspaceQuotaDecision,
     WorkspaceQuotaUpdateRequest,
@@ -1264,6 +1267,26 @@ class EnterprisePostgresStore:
             (),
             AuditLogRecord,
         )
+
+    def record_memory_feedback_audit(
+        self,
+        feedback: UserFeedbackRecord,
+        candidates: list[MemoryCandidate],
+        *,
+        actor_id: str | None = None,
+    ) -> None:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._append_audit(
+                    cur,
+                    workspace_id=feedback.workspace_id,
+                    actor_id=actor_id or feedback.user_id or DEFAULT_USER_ID,
+                    action="memory.feedback_captured",
+                    resource_type="memory_feedback",
+                    resource_id=feedback.id,
+                    after=_memory_feedback_audit_after(feedback, candidates),
+                )
+            conn.commit()
 
     def _list_models(
         self,

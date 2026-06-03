@@ -900,10 +900,13 @@ export function EnterpriseWorkbench({
     setSavingMemoryFeedback(true);
     setError(null);
     try {
+      const feedbackVersion = selectedVersion;
       const result = await ingestProjectMemoryFeedback(selectedProjectId, {
         feedback_type: "preference",
-        target_type: "project",
-        target_id: selectedProjectId,
+        target_type: feedbackVersion ? "report" : "project",
+        target_id: feedbackVersion?.id ?? selectedProjectId,
+        run_id: feedbackVersion?.run_id ?? null,
+        report_version_id: feedbackVersion?.id ?? null,
         message: memoryFeedbackDraft.trim(),
         auto_confirm: false,
         tags: ["workbench"],

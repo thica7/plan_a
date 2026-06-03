@@ -444,6 +444,7 @@ def ingest_project_memory_feedback(
             auto_confirm=request.auto_confirm,
         )
     ]
+    store.record_memory_feedback_audit(record, candidates, actor_id=user.user_id)
     recall = memory.recall(
         workspace_id=project.workspace_id,
         project_id=project_id,

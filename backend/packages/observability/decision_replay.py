@@ -486,6 +486,41 @@ def _audit_log_decision(
             },
         )
 
+    if log.action == "memory.feedback_captured" and _audit_memory_feedback_matches_run(
+        detail,
+        log,
+        version_ids=version_ids,
+    ):
+        candidate_count = _audit_after_value(log, "candidate_count") or 0
+        feedback_id = _audit_after_string(log, "feedback_id") or log.resource_id
+        return _audit_event(
+            detail,
+            log,
+            "memory.feedback_captured",
+            agent="memory",
+            message=(
+                f"Memory feedback {feedback_id} captured "
+                f"{candidate_count} candidate(s) for future recall."
+            ),
+            payload={
+                "feedback_id": feedback_id,
+                "feedback_type": _audit_after_string(log, "feedback_type"),
+                "candidate_ids": _string_list(_audit_after_value(log, "candidate_ids")),
+                "candidate_count": candidate_count,
+                "candidate_kinds": _string_list(_audit_after_value(log, "candidate_kinds")),
+                "candidate_statuses": _string_list(
+                    _audit_after_value(log, "candidate_statuses")
+                ),
+                "target_type": _audit_after_string(log, "target_type"),
+                "target_id": _audit_after_string(log, "target_id"),
+                "run_id": _audit_after_string(log, "run_id"),
+                "report_version_id": _audit_after_string(log, "report_version_id"),
+                "project_id": _audit_after_string(log, "project_id"),
+                "message_excerpt": _audit_after_string(log, "message_excerpt"),
+                "redaction_counts": _audit_after_value(log, "redaction_counts"),
+            },
+        )
+
     if log.action == "schema_evolution.reviewed" and log.resource_id == detail.project_id:
         decision = _audit_after_string(log, "decision") or "reviewed"
         return _audit_event(
@@ -619,6 +654,18 @@ def _audit_evidence_matches_run(
     return raw_source_id is not None and raw_source_id in raw_source_ids
 
 
+def _audit_memory_feedback_matches_run(
+    detail: RunDetail,
+    log: AuditLogRecord,
+    *,
+    version_ids: set[str],
+) -> bool:
+    if _audit_after_string(log, "run_id") == detail.id:
+        return True
+    report_version_id = _audit_after_string(log, "report_version_id")
+    return report_version_id is not None and report_version_id in version_ids
+
+
 def _audit_metadata(log: AuditLogRecord) -> dict[str, Any]:
     after = log.after if isinstance(log.after, dict) else {}
     metadata = after.get("metadata")
@@ -686,6 +733,8 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "claim_ids",
         "candidate_ids",
         "candidate_urls",
+        "candidate_kinds",
+        "candidate_statuses",
         "feedback_id",
         "feedback_type",
         "candidate_count",
@@ -745,6 +794,8 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "artifact_type",
         "export_kind",
         "storage_backend",
+        "message_excerpt",
+        "redaction_counts",
         "policy_review_status",
         "previous_policy_review_status",
         "policy_review_reason",

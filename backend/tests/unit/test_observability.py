@@ -833,6 +833,31 @@ def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
             },
             created_at="2026-05-31T00:04:00Z",
         ),
+        AuditLogRecord(
+            id="audit-memory-feedback",
+            workspace_id="workspace-1",
+            actor_type="system",
+            actor_id="analyst-1",
+            action="memory.feedback_captured",
+            resource_type="memory_feedback",
+            resource_id="feedback-1",
+            after={
+                "feedback_id": "feedback-1",
+                "feedback_type": "preference",
+                "project_id": "project-1",
+                "run_id": "run-audit",
+                "report_version_id": "report-audit-v1",
+                "target_type": "report",
+                "target_id": "report-audit-v1",
+                "candidate_ids": ["memory-candidate-1"],
+                "candidate_count": 1,
+                "candidate_kinds": ["source_preference"],
+                "candidate_statuses": ["candidate"],
+                "message_excerpt": "Prefer official sources.",
+                "redaction_counts": {"email": 1},
+            },
+            created_at="2026-05-31T00:05:00Z",
+        ),
     ]
 
     replay = build_decision_replay(
@@ -849,6 +874,7 @@ def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
         "run-audit:audit:audit-source-review",
         "run-audit:audit:audit-report-approval",
         "run-audit:audit:audit-compliance-export",
+        "run-audit:audit:audit-memory-feedback",
     }
     assert audit_events["run-audit:audit:audit-source-review"].event_type == "hitl.reviewed"
     assert audit_events["run-audit:audit:audit-source-review"].payload[
@@ -861,6 +887,12 @@ def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
     assert audit_events["run-audit:audit:audit-compliance-export"].payload[
         "export_kind"
     ] == "run_compliance_report"
+    memory_event = audit_events["run-audit:audit:audit-memory-feedback"]
+    assert memory_event.event_type == "memory.feedback_captured"
+    assert memory_event.payload["feedback_id"] == "feedback-1"
+    assert memory_event.payload["candidate_ids"] == ["memory-candidate-1"]
+    assert memory_event.payload["candidate_kinds"] == ["source_preference"]
+    assert memory_event.payload["redaction_counts"] == {"email": 1}
     assert replay.event_type_counts["hitl.reviewed"] >= 2
 
 

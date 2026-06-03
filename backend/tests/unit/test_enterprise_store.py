@@ -1116,6 +1116,8 @@ def test_enterprise_router_exposes_projection() -> None:
             "feedback_type": "preference",
             "target_type": "report",
             "target_id": projection.report_version.id,
+            "run_id": detail.id,
+            "report_version_id": projection.report_version.id,
             "message": (
                 "Prefer official pricing sources, concise battlecard tables, and explicit "
                 "evidence gap risks."
@@ -1137,6 +1139,9 @@ def test_enterprise_router_exposes_projection() -> None:
         f"/api/enterprise/projects/{context.project_id}/memory/feedback"
     )
     memory_stats = client.get(f"/api/enterprise/projects/{context.project_id}/memory/stats")
+    audit_logs = client.get(
+        f"/api/enterprise/audit-logs?workspace_id={context.workspace_id}"
+    )
     readiness = client.get(f"/api/enterprise/projects/{context.project_id}/readiness-score")
     gaps = client.get(f"/api/enterprise/projects/{context.project_id}/evidence-gaps")
     red_team = client.get(f"/api/enterprise/projects/{context.project_id}/red-team")
@@ -1283,6 +1288,15 @@ def test_enterprise_router_exposes_projection() -> None:
     assert memory_feedback.json()[0]["target_id"] == projection.report_version.id
     assert memory_stats.status_code == 200
     assert memory_stats.json()["confirmed_candidate_count"] >= 1
+    assert audit_logs.status_code == 200
+    assert any(
+        log["action"] == "memory.feedback_captured"
+        and log["resource_id"] == memory_ingest.json()["feedback"]["id"]
+        and log["after"]["run_id"] == detail.id
+        and log["after"]["report_version_id"] == projection.report_version.id
+        and log["after"]["candidate_count"] == len(memory_ingest.json()["candidates"])
+        for log in audit_logs.json()
+    )
     assert readiness.status_code == 200
     assert readiness.json()["risk_level"] in {"ready", "watch", "at_risk", "blocked"}
     assert gaps.status_code == 200
