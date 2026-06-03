@@ -121,6 +121,7 @@ export function EnterpriseWorkbench({
   const [redTeam, setRedTeam] = useState<RedTeamReport | null>(null);
   const [qualityMatrix, setQualityMatrix] = useState<QualityAgentMatrix | null>(null);
   const [evalOps, setEvalOps] = useState<EvalOpsReport | null>(null);
+  const [evalOpsBaselineRunId, setEvalOpsBaselineRunId] = useState<string | null>(null);
   const [sourceRegistry, setSourceRegistry] = useState<SourceRegistryRecord[]>([]);
   const [modelPolicy, setModelPolicy] = useState<ModelPolicyReport | null>(null);
   const [modelRoute, setModelRoute] = useState<ModelRouteDecision | null>(null);
@@ -141,6 +142,7 @@ export function EnterpriseWorkbench({
   const [isStartingScan, setStartingScan] = useState(false);
   const [isStartingMonitor, setStartingMonitor] = useState(false);
   const [isFillingGaps, setFillingGaps] = useState(false);
+  const [isLoadingEvalOps, setLoadingEvalOps] = useState(false);
   const [isSavingMemoryFeedback, setSavingMemoryFeedback] = useState(false);
   const [reviewingSchemaSuggestionId, setReviewingSchemaSuggestionId] = useState<string | null>(null);
   const [snapshottingEvidenceId, setSnapshottingEvidenceId] = useState<string | null>(null);
@@ -201,6 +203,7 @@ export function EnterpriseWorkbench({
       setMemoryFeedback([]);
       setWorkspaceUsage(null);
       setSelectedVersionId(null);
+      setEvalOpsBaselineRunId(null);
       return;
     }
 
@@ -288,6 +291,7 @@ export function EnterpriseWorkbench({
           setMemoryFeedback(memoryFeedbackValue);
           setWorkspaceUsage(workspaceUsageValue);
           setSelectedVersionId(versionItems[0]?.id ?? null);
+          setEvalOpsBaselineRunId(null);
         },
       )
       .catch((err: Error) => {
@@ -319,6 +323,7 @@ export function EnterpriseWorkbench({
         setWorkspaceUsage(null);
         setSelectedVersionId(null);
         setDecisionReplay(null);
+        setEvalOpsBaselineRunId(null);
       })
       .finally(() => {
         if (active) setLoadingProject(false);
@@ -421,6 +426,29 @@ export function EnterpriseWorkbench({
     evidence.length > 0
       ? evidence.reduce((total, item) => total + item.reliability_score, 0) / evidence.length
       : 0;
+
+  async function handleEvalOpsBaselineChange(nextRunId: string | null) {
+    if (!selectedProjectId) return;
+    const projectId = selectedProjectId;
+    setEvalOpsBaselineRunId(nextRunId);
+    setLoadingEvalOps(true);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const report = await getEnterpriseEvalOps({
+        projectId,
+        baselineRunId: nextRunId ?? undefined,
+      });
+      setEvalOps(report);
+      setScanMessage(
+        nextRunId ? `EvalOps baseline set to ${nextRunId}.` : "EvalOps baseline cleared.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to refresh EvalOps baseline.");
+    } finally {
+      setLoadingEvalOps(false);
+    }
+  }
 
   function handleStartScheduledScan() {
     if (!selectedProject) return;
@@ -778,7 +806,15 @@ export function EnterpriseWorkbench({
 
               {readinessScore ? <ReadinessScorePanel readinessScore={readinessScore} /> : null}
 
-              {evalOps ? <EvalOpsPanel report={evalOps} /> : null}
+              {evalOps ? (
+                <EvalOpsPanel
+                  baselineRunId={evalOpsBaselineRunId}
+                  isLoading={isLoadingEvalOps}
+                  onBaselineRunChange={handleEvalOpsBaselineChange}
+                  report={evalOps}
+                  versions={versions}
+                />
+              ) : null}
 
               <DecisionReplayPanel replay={decisionReplay} runId={selectedVersion?.run_id} />
 
@@ -968,17 +1004,53 @@ function CompetitorLibrary({
   );
 }
 
-function EvalOpsPanel({ report }: { report: EvalOpsReport }) {
+function EvalOpsPanel({
+  baselineRunId,
+  isLoading,
+  onBaselineRunChange,
+  report,
+  versions,
+}: {
+  baselineRunId: string | null;
+  isLoading: boolean;
+  onBaselineRunChange: (runId: string | null) => void;
+  report: EvalOpsReport;
+  versions: ReportVersionRecord[];
+}) {
   const watchMetrics = report.metrics.filter((metric) => metric.status !== "pass").slice(0, 4);
+  const baselineOptions = versions
+    .filter((version): version is ReportVersionRecord & { run_id: string } => Boolean(version.run_id))
+    .map((version) => ({
+      label: `v${version.version_number} · ${formatDate(version.created_at)}`,
+      runId: version.run_id,
+      versionId: version.id,
+    }));
   return (
     <section className={`panel readiness-panel ${report.regression_gate_status}`}>
       <div className="panel-heading-row">
         <h2>EvalOps</h2>
-        {report.regression_gate_status === "pass" ? (
-          <CheckCircle2 size={17} aria-hidden />
-        ) : (
-          <AlertTriangle size={17} aria-hidden />
-        )}
+        <div className="panel-heading-actions">
+          <label className="compact-select">
+            <span>Baseline</span>
+            <select
+              disabled={isLoading || baselineOptions.length === 0}
+              value={baselineRunId ?? ""}
+              onChange={(event) => onBaselineRunChange(event.target.value || null)}
+            >
+              <option value="">No baseline</option>
+              {baselineOptions.map((option) => (
+                <option key={option.versionId} value={option.runId}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {report.regression_gate_status === "pass" ? (
+            <CheckCircle2 size={17} aria-hidden />
+          ) : (
+            <AlertTriangle size={17} aria-hidden />
+          )}
+        </div>
       </div>
       <div className="metric-grid compact">
         <Metric
@@ -1027,6 +1099,7 @@ function EvalOpsPanel({ report }: { report: EvalOpsReport }) {
         <span>{report.run_count} run(s)</span>
         <span>Real {report.real_run_count}</span>
         <span>Demo {report.demo_run_count}</span>
+        <span>Baseline {report.baseline_run_id ?? "none"}</span>
         <span>Delta {formatScoreDelta(report.average_delta_score)}</span>
         <span>Regressed {report.regressed_run_count}</span>
         <span>HITL {formatPercent(report.hitl_enabled_run_rate)}</span>

@@ -391,6 +391,36 @@ select {
   margin: 0;
 }
 
+.panel-heading-actions {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.compact-select {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.compact-select span {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.compact-select select {
+  font-size: 12px;
+  max-width: 220px;
+  min-height: 32px;
+  min-width: 0;
+  padding: 6px 8px;
+}
+
 .icon-text-button {
   align-items: center;
   background: var(--surface-2);
