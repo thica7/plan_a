@@ -1058,6 +1058,8 @@ function EvalOpsPanel({
   versions: ReportVersionRecord[];
 }) {
   const watchMetrics = report.metrics.filter((metric) => metric.status !== "pass").slice(0, 4);
+  const coverageLiftRate = evalOpsMetricValue(report, "coverage_lift_rate");
+  const citationValidityRate = evalOpsMetricValue(report, "citation_validity_rate");
   const watchCases = [...report.cases]
     .sort((left, right) => {
       const statusDelta = evalOpsStatusRank(right.status) - evalOpsStatusRank(left.status);
@@ -1147,6 +1149,8 @@ function EvalOpsPanel({
         <span>Demo {report.demo_run_count}</span>
         <span>Baseline {report.baseline_run_id ?? "none"}</span>
         <span>Delta {formatScoreDelta(report.average_delta_score)}</span>
+        <span>Citation validity {citationValidityRate === null ? "n/a" : formatPercent(citationValidityRate)}</span>
+        <span>Coverage lift {coverageLiftRate === null ? "n/a" : formatSignedPercent(coverageLiftRate)}</span>
         <span>Regressed {report.regressed_run_count}</span>
         <span>HITL {formatPercent(report.hitl_enabled_run_rate)}</span>
         <span>Human fix {formatPercent(report.human_correction_rate)}</span>
@@ -2827,11 +2831,23 @@ function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`;
 }
 
+function formatSignedPercent(value: number) {
+  const formatted = formatPercent(Math.abs(value));
+  if (value > 0) return `+${formatted}`;
+  if (value < 0) return `-${formatted}`;
+  return formatted;
+}
+
 function formatScoreDelta(value?: number | null) {
   if (value === null || value === undefined) {
     return "n/a";
   }
   return value > 0 ? `+${value}` : `${value}`;
+}
+
+function evalOpsMetricValue(report: EvalOpsReport, name: string) {
+  const metric = report.metrics.find((item) => item.name === name);
+  return metric ? metric.value : null;
 }
 
 function evalOpsStatusRank(status: EvalOpsReport["regression_gate_status"]) {

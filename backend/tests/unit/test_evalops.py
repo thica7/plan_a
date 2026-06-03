@@ -75,6 +75,14 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         metric.name == "schema_pass_rate" and metric.status == "pass"
         for metric in report.metrics
     )
+    assert any(
+        metric.name == "citation_validity_rate" and metric.status == "pass"
+        for metric in report.metrics
+    )
+    assert any(
+        metric.name == "coverage_lift_rate" and metric.status == "pass"
+        for metric in report.metrics
+    )
     assert any(case.case_id == "golden.schema_pass" for case in report.cases)
     assert any(
         metric.name == "report_structure_score" and metric.status == "pass"
@@ -111,6 +119,10 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["golden_set_size"] == 8
     assert any(
         metric["name"] == "schema_pass_rate" and metric["status"] == "pass"
+        for metric in response.json()["metrics"]
+    )
+    assert any(
+        metric["name"] == "citation_validity_rate" and metric["status"] == "pass"
         for metric in response.json()["metrics"]
     )
     assert any(

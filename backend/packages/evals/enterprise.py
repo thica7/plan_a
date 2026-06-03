@@ -68,6 +68,7 @@ def build_enterprise_evalops_report(
     citation_rate = _average_float(
         [_metric_value(comparison, "claim_citation_rate") for comparison in comparisons]
     )
+    citation_validity_rate = citation_rate
     schema_pass_rate = _average_float([run.metrics.schema_pass_rate for run in recent_runs])
     report_structure_rate = _average_float(
         [_metric_value(comparison, "report_structure_score") for comparison in comparisons]
@@ -88,6 +89,17 @@ def build_enterprise_evalops_report(
         if recent_runs
         else 0.0
     )
+    coverage_lift_values = [
+        metric.delta
+        for comparison in comparisons
+        for metric in comparison.metrics
+        if metric.name == "source_coverage_rate" and metric.delta is not None
+    ]
+    coverage_lift_rate = (
+        round(_average_float([float(value) for value in coverage_lift_values]), 4)
+        if coverage_lift_values
+        else None
+    )
     cases = _golden_cases(
         comparisons,
         report_quality_score=report_quality_score,
@@ -106,6 +118,7 @@ def build_enterprise_evalops_report(
         _metric("source_recall", source_recall, 0.6, "ratio"),
         _metric("verified_source_rate", verified_rate, 0.6, "ratio"),
         _metric("claim_citation_rate", citation_rate, 0.6, "ratio"),
+        _metric("citation_validity_rate", citation_validity_rate, 0.6, "ratio"),
         _metric("schema_pass_rate", schema_pass_rate, 1.0, "ratio"),
         _metric("report_structure_score", report_structure_rate, 0.7, "ratio"),
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
@@ -124,6 +137,8 @@ def build_enterprise_evalops_report(
     ]
     if average_delta_score is not None:
         metrics.append(_metric("average_delta_score", average_delta_score, 0.0, "score"))
+    if coverage_lift_rate is not None:
+        metrics.append(_metric("coverage_lift_rate", coverage_lift_rate, 0.0, "ratio"))
     if redo_iteration_count > 0:
         metrics.append(
             _metric(
