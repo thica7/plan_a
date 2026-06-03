@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from packages.agents import SubagentContext
+from packages.compliance import compliance_policy_from_settings, redact_text
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import RawSource
 from packages.schema.survey import (
@@ -96,6 +97,7 @@ class SurveyInterviewAgentMixin:
                     agent="survey_interview",
                     subagent=self._analyst_branch_id(dimension, competitor),
                 )
+                sources = self._sources_from_survey_bundle(detail, bundle, dimension, competitor)
                 self._trace_local_tool(
                     record,
                     agent="survey_interview",
@@ -117,9 +119,10 @@ class SurveyInterviewAgentMixin:
                         "question_count": len(bundle.questions),
                         "response_count": len(bundle.responses),
                         "interview_count": len(bundle.interviews),
+                        "redaction_count": sum(bundle.redaction_counts.values()),
+                        **self._research_redaction_metadata(bundle.redaction_counts),
                     },
                 )
-                sources = self._sources_from_survey_bundle(detail, bundle, dimension, competitor)
                 usable_sources = [source for source in sources if self._source_is_usable(source)]
                 for source in usable_sources:
                     detail.raw_sources.append(source)
@@ -175,6 +178,10 @@ class SurveyInterviewAgentMixin:
         competitor: str,
         qa_feedback: list[dict[str, object]],
     ) -> SurveyEvidenceBundle:
+        redaction_counts: dict[str, int] = {}
+        redacted_topic = self._redact_research_text(detail.topic, redaction_counts)
+        redacted_competitor = self._redact_research_text(competitor, redaction_counts)
+        redacted_dimension = self._redact_research_text(dimension, redaction_counts)
         interviews = survey_simulator(
             topic=detail.topic,
             competitor=competitor,
@@ -185,9 +192,12 @@ class SurveyInterviewAgentMixin:
             SurveyQuestion(
                 id=self._research_question_id(dimension, "fit"),
                 dimension=dimension,
-                prompt=(
-                    f"How well does {competitor} fit the respondent's {dimension} needs "
-                    f"for {detail.topic}?"
+                prompt=self._redact_research_text(
+                    (
+                        f"How well does {redacted_competitor} fit the respondent's "
+                        f"{redacted_dimension} needs for {redacted_topic}?"
+                    ),
+                    redaction_counts,
                 ),
                 response_type="likert",
                 options=["1", "2", "3", "4", "5"],
@@ -195,9 +205,12 @@ class SurveyInterviewAgentMixin:
             SurveyQuestion(
                 id=self._research_question_id(dimension, "switching"),
                 dimension=dimension,
-                prompt=(
-                    f"What switching risk, adoption blocker, or user pain point matters "
-                    f"most for {competitor}?"
+                prompt=self._redact_research_text(
+                    (
+                        f"What switching risk, adoption blocker, or user pain point matters "
+                        f"most for {redacted_competitor}?"
+                    ),
+                    redaction_counts,
                 ),
                 response_type="free_text",
             ),
@@ -205,38 +218,44 @@ class SurveyInterviewAgentMixin:
         responses = [
             SurveyResponse(
                 respondent_id=f"{self._issue_id_fragment(competitor)}-proxy-1",
-                competitor=competitor,
-                dimension=dimension,
+                competitor=redacted_competitor,
+                dimension=redacted_dimension,
                 role="target user proxy",
                 answers={
                     questions[0].id: "4",
-                    questions[1].id: (
-                        "Users and enterprise buyers weigh workflow fit, onboarding effort, "
-                        "customer support, and switching cost before adoption."
+                    questions[1].id: self._redact_research_text(
+                        (
+                            "Users and enterprise buyers weigh workflow fit, onboarding effort, "
+                            "customer support, and switching cost before adoption."
+                        ),
+                        redaction_counts,
                     ),
                 },
-                quote=(
-                    f"{competitor} is evaluated through user workflow fit, customer adoption "
-                    "risk, and switching cost."
+                quote=self._redact_research_text(
+                    (
+                        f"{competitor} is evaluated through user workflow fit, customer adoption "
+                        "risk, and switching cost."
+                    ),
+                    redaction_counts,
                 ),
                 source_type="survey_simulated",
             )
         ]
         synthesized_interviews = [
             InterviewSynthesis(
-                respondent=item.respondent,
-                role=item.role,
-                competitor=competitor,
-                dimension=dimension,
-                summary=item.summary,
+                respondent=self._redact_research_text(item.respondent, redaction_counts),
+                role=self._redact_research_text(item.role, redaction_counts),
+                competitor=redacted_competitor,
+                dimension=redacted_dimension,
+                summary=self._redact_research_text(item.summary, redaction_counts),
                 pain_points=[
                     "workflow fit uncertainty",
                     "onboarding effort",
                     "switching cost",
                 ],
                 use_cases=[
-                    f"{detail.topic} evaluation",
-                    f"{dimension} buying criteria review",
+                    f"{redacted_topic} evaluation",
+                    f"{redacted_dimension} buying criteria review",
                 ],
                 content_hash=item.content_hash,
             )
@@ -249,11 +268,12 @@ class SurveyInterviewAgentMixin:
             synthesized_interviews,
             responses,
         )
+        evidence_summary = self._redact_research_text(evidence_summary, redaction_counts)
         content_hash = hashlib.sha256(evidence_summary.encode("utf-8")).hexdigest()[:16]
         return SurveyEvidenceBundle(
-            topic=detail.topic,
-            competitor=competitor,
-            dimension=dimension,
+            topic=redacted_topic,
+            competitor=redacted_competitor,
+            dimension=redacted_dimension,
             questions=questions,
             responses=responses,
             interviews=synthesized_interviews,
@@ -261,6 +281,7 @@ class SurveyInterviewAgentMixin:
             source_type="survey_simulated",
             confidence=0.58,
             content_hash=content_hash,
+            redaction_counts=redaction_counts,
         )
 
     def _sources_from_survey_bundle(
@@ -270,13 +291,17 @@ class SurveyInterviewAgentMixin:
         dimension: str,
         competitor: str,
     ) -> list[RawSource]:
+        redaction_counts = dict(bundle.redaction_counts)
+        redacted_competitor = self._redact_research_text(competitor, redaction_counts)
+        redacted_dimension = self._redact_research_text(dimension, redaction_counts)
+        bundle.redaction_counts = redaction_counts
         sources = [
             RawSource(
                 id=self._new_source_id(f"{dimension}-survey"),
-                competitor=competitor,
-                dimension=dimension,
+                competitor=redacted_competitor,
+                dimension=redacted_dimension,
                 source_type=bundle.source_type,
-                title=f"{competitor} {dimension} survey synthesis",
+                title=f"{redacted_competitor} {redacted_dimension} survey synthesis",
                 snippet=bundle.evidence_summary,
                 content_hash=bundle.content_hash,
                 confidence=bundle.confidence,
@@ -290,13 +315,15 @@ class SurveyInterviewAgentMixin:
                 competitor=competitor,
                 interviews=bundle.interviews,
             )
+            interview_summary = self._redact_research_text(interview_summary, redaction_counts)
+            bundle.redaction_counts = redaction_counts
             sources.append(
                 RawSource(
                     id=self._new_source_id(f"{dimension}-interview"),
-                    competitor=competitor,
-                    dimension=dimension,
+                    competitor=redacted_competitor,
+                    dimension=redacted_dimension,
                     source_type="interview_record",
-                    title=f"{competitor} {dimension} interview synthesis",
+                    title=f"{redacted_competitor} {redacted_dimension} interview synthesis",
                     snippet=interview_summary,
                     content_hash=hashlib.sha256(
                         interview_summary.encode("utf-8")
@@ -341,6 +368,22 @@ class SurveyInterviewAgentMixin:
             f"({', '.join(pain_points) or 'none'}) and use cases "
             f"({', '.join(use_cases) or 'none'}). {summaries}"
         )
+
+    def _redact_research_text(self, text: str, counts: dict[str, int]) -> str:
+        policy = compliance_policy_from_settings(getattr(self, "_settings", object()))
+        result = redact_text(text, policy=policy)
+        for key, count in result.counts.items():
+            counts[key] = counts.get(key, 0) + count
+        return result.text
+
+    def _research_redaction_metadata(
+        self,
+        counts: dict[str, int],
+    ) -> dict[str, int | bool]:
+        return {
+            "research_redacted": bool(counts),
+            **{f"research_redaction_{key}_count": value for key, value in counts.items()},
+        }
 
     def _research_question_id(self, dimension: str, suffix: str) -> str:
         return f"{self._issue_id_fragment(dimension)}-{suffix}"

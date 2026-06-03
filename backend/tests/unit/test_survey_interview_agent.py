@@ -7,7 +7,7 @@ from packages.enterprise import EnterpriseMemoryStore, build_enterprise_projecti
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
-from packages.schema.models import AnalysisPlan, RawSource
+from packages.schema.models import AnalysisPlan, QCIssue, RawSource, RedoScope
 from packages.skills.registry import SkillRegistry
 
 
@@ -34,6 +34,27 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
         )
     )
     record = service._runs[detail.id]
+    record.detail.qa_findings.append(
+        QCIssue(
+            id="qc-survey-redaction",
+            severity="warn",
+            detected_by="coverage",
+            target_agent="collector",
+            target_subagent="persona",
+            target_competitor="Acme",
+            field_path="raw_sources.persona",
+            problem=(
+                "Interview coordinator jane.buyer@example.com shared "
+                "OPENROUTER_TEST_KEY_REDACTED as a private note."
+            ),
+            redo_scope=RedoScope(
+                kind="collector",
+                target_subagent="persona",
+                target_competitor="Acme",
+                rationale="Collect user research evidence.",
+            ),
+        )
+    )
 
     await service._run_survey_interview_enrichment(record, ["persona"], ["Acme"])
 
@@ -56,6 +77,10 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
     assert interview_source.dimension == "persona"
     assert "pain points" in interview_source.snippet
     assert interview_source.confidence == 0.62
+    assert "jane.buyer@example.com" not in survey_source.snippet
+    assert "OPENROUTER_TEST_KEY_REDACTED" not in survey_source.snippet
+    assert "jane.buyer@example.com" not in interview_source.snippet
+    assert "OPENROUTER_TEST_KEY_REDACTED" not in interview_source.snippet
     assert record.detail.agent_messages[-1].message_type == "survey_interview_evidence_collected"
     assert set(record.detail.agent_messages[-1].payload["source_ids"]) == {
         survey_source.id,
@@ -66,6 +91,13 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
     assert span.metadata["source_type"] == "survey_simulated"
     assert span.metadata["question_count"] == 2
     assert span.metadata["interview_count"] == 1
+    assert span.metadata["redaction_count"] >= 2
+    assert span.metadata["research_redacted"] is True
+    assert span.metadata["research_redaction_email_count"] >= 1
+    assert "jane.buyer@example.com" not in span.full_output
+    assert "OPENROUTER_TEST_KEY_REDACTED" not in span.full_output
+    assert "[redacted:email]" in span.full_output
+    assert "[redacted:api_key]" in span.full_output
 
 
 def test_survey_evidence_projects_as_synthetic_enterprise_source() -> None:

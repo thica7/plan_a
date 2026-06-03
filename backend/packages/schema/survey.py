@@ -61,3 +61,4 @@ class SurveyEvidenceBundle(BaseModel):
     source_type: ResearchSourceType = "survey_simulated"
     confidence: float = Field(default=0.56, ge=0.0, le=1.0)
     content_hash: str
+    redaction_counts: dict[str, int] = Field(default_factory=dict)
