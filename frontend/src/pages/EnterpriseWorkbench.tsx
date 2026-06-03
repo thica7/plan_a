@@ -1866,6 +1866,18 @@ function EvidenceGapPanel({
           </span>
         </div>
       ) : null}
+      {fillResult?.decision_events.length ? (
+        <div className="recommendation-list">
+          {fillResult.decision_events.slice(0, 3).map((event) => (
+            <article className="recommendation-card medium" key={`${event.event_type}-${event.created_at}`}>
+              <strong>{event.event_type.replace(".", " ")}</strong>
+              <span>{event.evidence_ids.length} evidence</span>
+              <p>{event.message}</p>
+              <em>{gapFillEventSummary(event.payload)}</em>
+            </article>
+          ))}
+        </div>
+      ) : null}
       {report.schema_suggestions.length > 0 ? (
         <div className="recommendation-list">
           {report.schema_suggestions.slice(0, 3).map((suggestion) => (
@@ -1891,6 +1903,23 @@ function EvidenceGapPanel({
       )}
     </section>
   );
+}
+
+function gapFillEventSummary(payload: Record<string, unknown>) {
+  const closure = typeof payload.gap_closure_rate === "number" ? formatPercent(payload.gap_closure_rate) : null;
+  const retrievalCount = typeof payload.retrieval_record_count === "number" ? payload.retrieval_record_count : null;
+  const failureCount = typeof payload.online_failure_count === "number" ? payload.online_failure_count : null;
+  const versionId = typeof payload.updated_report_version_id === "string" ? payload.updated_report_version_id : null;
+  if (closure || retrievalCount !== null) {
+    return `closure ${closure ?? "n/a"} / retrieval records ${retrievalCount ?? 0}`;
+  }
+  if (failureCount !== null) {
+    return `online failures ${failureCount}`;
+  }
+  if (versionId) {
+    return `draft ${versionId}`;
+  }
+  return "decision event captured";
 }
 
 function EvidenceGapCard({ gap }: { gap: EvidenceGapItem }) {

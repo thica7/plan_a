@@ -18,6 +18,7 @@ from packages.rag.gap_retrieval import (
 )
 from packages.search import SearchResult
 from packages.schema.enterprise import (
+    EvidenceGapFillDecisionEvent,
     EvidenceGapFillResult,
     EvidenceGapItem,
     EvidenceGapReport,
@@ -160,6 +161,17 @@ def _finalize_gap_fill(
     after_gap_count = len(remaining_gap_ids)
     online_collected_ids = online_collected_evidence_ids or []
     online_failure_items = online_failures or []
+    decision_events = _gap_fill_decision_events(
+        updated_report,
+        candidate_ids=candidate_ids,
+        filled_gap_ids=filled_gap_ids,
+        remaining_gap_ids=remaining_gap_ids,
+        before_gap_count=before_gap_count,
+        after_gap_count=after_gap_count,
+        online_collected_evidence_ids=online_collected_ids,
+        online_failures=online_failure_items,
+        source_report_version=source_report_version,
+    )
     updated_version = (
         _write_gap_fill_report_version(
             source=source_report_version,
@@ -170,6 +182,7 @@ def _finalize_gap_fill(
             remaining_gap_ids=remaining_gap_ids,
             online_collected_evidence_ids=online_collected_ids,
             online_failures=online_failure_items,
+            decision_events=decision_events,
         )
         if source_report_version is not None
         else None
@@ -193,6 +206,7 @@ def _finalize_gap_fill(
         candidate_evidence_ids=candidate_ids,
         filled_gap_ids=filled_gap_ids,
         remaining_gap_ids=remaining_gap_ids,
+        decision_events=decision_events,
         report=updated_report,
         updated_report_version=updated_version,
     )
@@ -310,6 +324,7 @@ def _write_gap_fill_report_version(
     remaining_gap_ids: list[str],
     online_collected_evidence_ids: list[str],
     online_failures: list[dict[str, str]],
+    decision_events: list[EvidenceGapFillDecisionEvent],
 ) -> ReportVersionRecord:
     metadata = dict(source.quality_metadata)
     metadata["rag_gap_fill"] = {
@@ -332,6 +347,7 @@ def _write_gap_fill_report_version(
             for gap in report.gaps
             for record in gap.retrieval_records
         ],
+        "decision_events": [event.model_dump(mode="json") for event in decision_events],
         "generated_at": datetime.utcnow().isoformat(),
     }
     version = source.model_copy(
@@ -352,6 +368,87 @@ def _write_gap_fill_report_version(
         }
     )
     return store.upsert_report_version(version)
+
+
+def _gap_fill_decision_events(
+    report: EvidenceGapReport,
+    *,
+    candidate_ids: list[str],
+    filled_gap_ids: list[str],
+    remaining_gap_ids: list[str],
+    before_gap_count: int,
+    after_gap_count: int,
+    online_collected_evidence_ids: list[str],
+    online_failures: list[dict[str, str]],
+    source_report_version: ReportVersionRecord | None,
+) -> list[EvidenceGapFillDecisionEvent]:
+    gap_ids = [gap.id for gap in report.gaps]
+    retrieval_records = [
+        record.model_dump(mode="json") for gap in report.gaps for record in gap.retrieval_records
+    ]
+    closure_rate = round(len(filled_gap_ids) / before_gap_count, 3) if before_gap_count else 0.0
+    events = [
+        EvidenceGapFillDecisionEvent(
+            event_type="rag.retrieved",
+            message=(
+                f"Retrieved {len(candidate_ids)} candidate evidence item(s) for "
+                f"{len(filled_gap_ids)}/{before_gap_count} evidence gap(s)."
+            ),
+            gap_ids=gap_ids,
+            evidence_ids=candidate_ids,
+            payload={
+                "gap_count": len(gap_ids),
+                "before_gap_count": before_gap_count,
+                "after_gap_count": after_gap_count,
+                "gap_closure_rate": closure_rate,
+                "filled_gap_ids": filled_gap_ids,
+                "remaining_gap_ids": remaining_gap_ids,
+                "candidate_ids": candidate_ids,
+                "retrieval_records": retrieval_records,
+                "retrieval_record_count": len(retrieval_records),
+            },
+        )
+    ]
+    if online_collected_evidence_ids or online_failures:
+        events.append(
+            EvidenceGapFillDecisionEvent(
+                event_type="tool.called",
+                message=(
+                    "Online gap fill fetched "
+                    f"{len(online_collected_evidence_ids)} evidence item(s) with "
+                    f"{len(online_failures)} failure(s)."
+                ),
+                gap_ids=gap_ids,
+                evidence_ids=online_collected_evidence_ids,
+                payload={
+                    "tool": "online_gap_fill",
+                    "online_collected_evidence_ids": online_collected_evidence_ids,
+                    "online_failure_count": len(online_failures),
+                    "online_failures": online_failures,
+                },
+            )
+        )
+    if source_report_version is not None:
+        events.append(
+            EvidenceGapFillDecisionEvent(
+                event_type="report.ready",
+                message="Created a draft ReportVersion with RAG gap fill evidence links.",
+                gap_ids=filled_gap_ids,
+                evidence_ids=candidate_ids,
+                payload={
+                    "source_report_version_id": source_report_version.id,
+                    "parent_report_version_id": source_report_version.id,
+                    "updated_report_version_id": _gap_fill_report_version_id(
+                        source_report_version,
+                        filled_gap_ids,
+                        candidate_ids,
+                    ),
+                    "gap_fill_chain_closed": bool(filled_gap_ids and candidate_ids),
+                    "candidate_ids": candidate_ids,
+                },
+            )
+        )
+    return events
 
 
 def _append_gap_fill_section(

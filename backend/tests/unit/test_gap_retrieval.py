@@ -250,13 +250,27 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
     assert result.gap_closure_rate == 1.0
     assert result.gap_fill_chain_closed is True
     assert result.candidate_evidence_ids == ["evidence-trust-1"]
+    assert [event.event_type for event in result.decision_events] == [
+        "rag.retrieved",
+        "report.ready",
+    ]
+    assert result.decision_events[0].payload["gap_closure_rate"] == 1.0
+    assert result.decision_events[0].payload["retrieval_record_count"] == 1
+    assert result.decision_events[1].payload["source_report_version_id"] == "report-v1"
     assert result.updated_report_version is not None
+    assert (
+        result.decision_events[1].payload["updated_report_version_id"]
+        == result.updated_report_version.id
+    )
     assert result.updated_report_version.parent_version_id == "report-v1"
     assert result.updated_report_version.version_number == 2
     assert result.updated_report_version.evidence_ids == ["evidence-trust-1"]
     assert result.updated_report_version.quality_metadata["rag_gap_fill"][
         "filled_gap_ids"
     ] == ["gap-security"]
+    assert result.updated_report_version.quality_metadata["rag_gap_fill"][
+        "decision_events"
+    ][0]["event_type"] == "rag.retrieved"
     assert "## RAG Gap Fill" in result.updated_report_version.report_md
     assert store.get_report_version(result.updated_report_version.id) is not None
 
@@ -343,6 +357,13 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version() -> 
     assert result.added_evidence_count == 1
     assert result.online_collected_evidence_count == 1
     assert result.online_failure_count == 0
+    assert [event.event_type for event in result.decision_events] == [
+        "rag.retrieved",
+        "tool.called",
+        "report.ready",
+    ]
+    assert result.decision_events[1].payload["tool"] == "online_gap_fill"
+    assert result.decision_events[1].payload["online_collected_evidence_ids"] == [evidence.id]
     assert result.gap_closure_rate == 1.0
     assert result.gap_fill_chain_closed is True
     assert result.candidate_evidence_ids == [evidence.id]
@@ -354,4 +375,9 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version() -> 
     assert metadata["gap_fill_chain_closed"] is True
     assert metadata["online_collected_evidence_ids"] == [evidence.id]
     assert metadata["online_failures"] == []
+    assert [event["event_type"] for event in metadata["decision_events"]] == [
+        "rag.retrieved",
+        "tool.called",
+        "report.ready",
+    ]
     assert result.updated_report_version.evidence_ids == [evidence.id]

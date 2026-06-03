@@ -918,6 +918,18 @@ class EvidenceGapReport(BaseModel):
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class EvidenceGapFillDecisionEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_type: Literal["rag.retrieved", "tool.called", "report.ready"]
+    agent: str = "rag_gap_fill"
+    message: str
+    gap_ids: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class EvidenceGapFillResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -937,6 +949,7 @@ class EvidenceGapFillResult(BaseModel):
     candidate_evidence_ids: list[str] = Field(default_factory=list)
     filled_gap_ids: list[str] = Field(default_factory=list)
     remaining_gap_ids: list[str] = Field(default_factory=list)
+    decision_events: list[EvidenceGapFillDecisionEvent] = Field(default_factory=list)
     report: EvidenceGapReport
     updated_report_version: ReportVersionRecord | None = None
     source_release_gate: ReportReleaseGate | None = None

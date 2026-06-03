@@ -1065,6 +1065,16 @@ export interface EvidenceGapReport {
   generated_at: string;
 }
 
+export interface EvidenceGapFillDecisionEvent {
+  event_type: "rag.retrieved" | "tool.called" | "report.ready";
+  agent: string;
+  message: string;
+  gap_ids: string[];
+  evidence_ids: string[];
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface EvidenceGapFillResult {
   project_id: string;
   workspace_id: string;
@@ -1082,6 +1092,7 @@ export interface EvidenceGapFillResult {
   candidate_evidence_ids: string[];
   filled_gap_ids: string[];
   remaining_gap_ids: string[];
+  decision_events: EvidenceGapFillDecisionEvent[];
   report: EvidenceGapReport;
   updated_report_version?: ReportVersionRecord | null;
   source_release_gate?: ReportReleaseGate | null;
