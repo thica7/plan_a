@@ -3134,6 +3134,45 @@ select {
   min-width: 0;
 }
 
+.report-approval-panel {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.report-approval-panel.in_review {
+  border-color: rgba(180, 83, 9, 0.38);
+}
+
+.report-approval-panel.approved,
+.report-approval-panel.published {
+  border-color: rgba(15, 139, 141, 0.32);
+}
+
+.report-approval-panel strong,
+.report-approval-panel span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.report-approval-panel span {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.approval-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .release-gate-panel {
   background: var(--surface-2);
   border: 1px solid var(--border);

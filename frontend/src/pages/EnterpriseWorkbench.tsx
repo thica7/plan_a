@@ -50,6 +50,9 @@ import {
   recallProjectMemory,
   reviewProjectSchemaSuggestion,
   startMonitorWorkflow,
+  approveReportWorkflow,
+  rejectReportWorkflow,
+  startReportApprovalWorkflow,
   startScheduledScanWorkflow,
   updateEvidenceQuality,
   updateProjectMemoryCandidate,
@@ -146,6 +149,7 @@ export function EnterpriseWorkbench({
   const [isStartingMonitor, setStartingMonitor] = useState(false);
   const [isFillingGaps, setFillingGaps] = useState(false);
   const [isLoadingEvalOps, setLoadingEvalOps] = useState(false);
+  const [isSubmittingReportApproval, setSubmittingReportApproval] = useState(false);
   const [isSavingMemoryFeedback, setSavingMemoryFeedback] = useState(false);
   const [reviewingMemoryCandidateId, setReviewingMemoryCandidateId] = useState<string | null>(null);
   const [reviewingSchemaSuggestionId, setReviewingSchemaSuggestionId] = useState<string | null>(null);
@@ -512,6 +516,59 @@ export function EnterpriseWorkbench({
         setError(err.message);
       })
       .finally(() => setStartingMonitor(false));
+  }
+
+  async function handleStartReportApproval() {
+    if (!selectedProject || !selectedVersion) return;
+    setSubmittingReportApproval(true);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const response = await startReportApprovalWorkflow({
+        report_version_id: selectedVersion.id,
+        requested_by: "workbench-user",
+        approver_ids: ["workbench-approver"],
+        timeout_seconds: 86400,
+      });
+      const versionItems = await listProjectReportVersions(selectedProject.id);
+      setVersions(versionItems);
+      setScanMessage(`Report approval ${response.status}: ${response.workflow_id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to start report approval");
+    } finally {
+      setSubmittingReportApproval(false);
+    }
+  }
+
+  async function handleSignalReportApproval(decision: "approved" | "rejected") {
+    if (!selectedProject || !selectedVersion) return;
+    setSubmittingReportApproval(true);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const payload = {
+        approver_id: "workbench-approver",
+        note:
+          decision === "approved"
+            ? "Approved from Enterprise Workbench."
+            : "Rejected from Enterprise Workbench.",
+      };
+      const response =
+        decision === "approved"
+          ? await approveReportWorkflow(selectedVersion.id, payload)
+          : await rejectReportWorkflow(selectedVersion.id, payload);
+      const [versionItems, gateValue] = await Promise.all([
+        listProjectReportVersions(selectedProject.id),
+        getReportReleaseGate(selectedVersion.id),
+      ]);
+      setVersions(versionItems);
+      setReleaseGate(gateValue);
+      setScanMessage(`Report approval ${response.decision}: ${response.workflow_id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update report approval");
+    } finally {
+      setSubmittingReportApproval(false);
+    }
   }
 
   async function handleFillEvidenceGaps() {
@@ -980,6 +1037,10 @@ export function EnterpriseWorkbench({
                 {activeTab === "reports" ? (
                   <ReportHistory
                     diff={diff}
+                    isApprovalSubmitting={isSubmittingReportApproval}
+                    onApproveReport={() => handleSignalReportApproval("approved")}
+                    onRejectReport={() => handleSignalReportApproval("rejected")}
+                    onStartApproval={handleStartReportApproval}
                     releaseGate={releaseGate}
                     sourceAliases={reportSources.aliases}
                     sources={reportSources.sources}
@@ -2748,6 +2809,10 @@ function buildReportSourceBundle(
 
 function ReportHistory({
   diff,
+  isApprovalSubmitting,
+  onApproveReport,
+  onRejectReport,
+  onStartApproval,
   releaseGate,
   sourceAliases,
   sources,
@@ -2757,6 +2822,10 @@ function ReportHistory({
   versions,
 }: {
   diff: ReportVersionDiff | null;
+  isApprovalSubmitting: boolean;
+  onApproveReport: () => void;
+  onRejectReport: () => void;
+  onStartApproval: () => void;
   releaseGate: ReportReleaseGate | null;
   sourceAliases: Record<string, string>;
   sources: RawSource[];
@@ -2789,6 +2858,15 @@ function ReportHistory({
           <h2>{selectedVersion ? `Report v${selectedVersion.version_number}` : "Report"}</h2>
           <GitCompare size={17} aria-hidden />
         </div>
+        {selectedVersion ? (
+          <ReportApprovalPanel
+            isSubmitting={isApprovalSubmitting}
+            onApprove={onApproveReport}
+            onReject={onRejectReport}
+            onStart={onStartApproval}
+            version={selectedVersion}
+          />
+        ) : null}
         {releaseGate ? <ReleaseGatePanel gate={releaseGate} /> : null}
         {selectedVersion ? (
           <ReportView
@@ -2814,6 +2892,62 @@ function ReportHistory({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function ReportApprovalPanel({
+  isSubmitting,
+  onApprove,
+  onReject,
+  onStart,
+  version,
+}: {
+  isSubmitting: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+  onStart: () => void;
+  version: ReportVersionRecord;
+}) {
+  const canStart = !["in_review", "approved", "published", "archived"].includes(version.status);
+  const canSignal = version.status === "in_review";
+  return (
+    <section className={`report-approval-panel ${version.status}`}>
+      <div>
+        <strong>Report approval</strong>
+        <span>
+          {version.status} / run {version.run_id}
+        </span>
+      </div>
+      <div className="approval-action-row">
+        <button
+          className="icon-text-button"
+          disabled={isSubmitting || !canStart}
+          type="button"
+          onClick={onStart}
+        >
+          <ShieldCheck size={15} aria-hidden />
+          {isSubmitting && canStart ? "Starting" : "Start review"}
+        </button>
+        <button
+          className="icon-text-button"
+          disabled={isSubmitting || !canSignal}
+          type="button"
+          onClick={onApprove}
+        >
+          <CheckCircle2 size={15} aria-hidden />
+          Approve
+        </button>
+        <button
+          className="icon-text-button"
+          disabled={isSubmitting || !canSignal}
+          type="button"
+          onClick={onReject}
+        >
+          <AlertTriangle size={15} aria-hidden />
+          Reject
+        </button>
+      </div>
+    </section>
   );
 }
 
