@@ -36,6 +36,7 @@ import {
   getReportReleaseGate,
   getReportVersionDiff,
   getProjectRedTeam,
+  getRunComplianceReport,
   getToolRegistry,
   getWorkspaceQuotaDecision,
   getWorkspaceUsage,
@@ -103,6 +104,7 @@ import type {
   ReportReleaseGate,
   ReportVersionDiff,
   ReportVersionRecord,
+  RunComplianceReport,
   SchemaEvolutionSuggestion,
   SourceSnapshotCreateRequest,
   SourceRegistryRecord,
@@ -170,6 +172,7 @@ export function EnterpriseWorkbench({
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
   const [releaseGate, setReleaseGate] = useState<ReportReleaseGate | null>(null);
   const [decisionReplay, setDecisionReplay] = useState<DecisionReplayReport | null>(null);
+  const [runCompliance, setRunCompliance] = useState<RunComplianceReport | null>(null);
   const [activeTab, setActiveTab] = useState<EnterpriseTab>(initialTab);
   const [query, setQuery] = useState("");
   const [isLoadingProjects, setLoadingProjects] = useState(true);
@@ -178,6 +181,7 @@ export function EnterpriseWorkbench({
   const [isStartingMonitor, setStartingMonitor] = useState(false);
   const [isFillingGaps, setFillingGaps] = useState(false);
   const [isLoadingEvalOps, setLoadingEvalOps] = useState(false);
+  const [isLoadingCompliance, setLoadingCompliance] = useState(false);
   const [isSubmittingReportApproval, setSubmittingReportApproval] = useState(false);
   const [isPublishingReport, setPublishingReport] = useState(false);
   const [isExportingReport, setExportingReport] = useState(false);
@@ -249,6 +253,8 @@ export function EnterpriseWorkbench({
       setWorkspaceQuotaDecision(null);
       setAuditLogs([]);
       setSelectedVersionId(null);
+      setRunCompliance(null);
+      setLoadingCompliance(false);
       setLastReportExport(null);
       setEvalOpsBaselineRunId(null);
       return;
@@ -446,6 +452,32 @@ export function EnterpriseWorkbench({
       active = false;
     };
   }, [selectedVersion?.run_id]);
+
+  useEffect(() => {
+    const runId = selectedVersion?.run_id;
+    if (!runId) {
+      setRunCompliance(null);
+      setLoadingCompliance(false);
+      return;
+    }
+
+    let active = true;
+    setLoadingCompliance(true);
+    getRunComplianceReport(runId)
+      .then((report) => {
+        if (active) setRunCompliance(report);
+      })
+      .catch(() => {
+        if (active) setRunCompliance(null);
+      })
+      .finally(() => {
+        if (active) setLoadingCompliance(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedVersion?.run_id]);
+
   const competitorById = useMemo(
     () => new Map(competitors.map((competitor) => [competitor.id, competitor])),
     [competitors],
@@ -1170,6 +1202,12 @@ export function EnterpriseWorkbench({
                 />
               ) : null}
 
+              <CompliancePanel
+                isLoading={isLoadingCompliance}
+                report={runCompliance}
+                runId={selectedVersion?.run_id}
+              />
+
               <DecisionReplayPanel replay={decisionReplay} runId={selectedVersion?.run_id} />
 
               {qualityMatrix ? <QualityAgentMatrixPanel matrix={qualityMatrix} /> : null}
@@ -1423,6 +1461,109 @@ function AuditLogPanel({ logs }: { logs: AuditLogRecord[] }) {
       )}
     </section>
   );
+}
+
+function CompliancePanel({
+  isLoading,
+  report,
+  runId,
+}: {
+  isLoading: boolean;
+  report: RunComplianceReport | null;
+  runId?: string | null;
+}) {
+  if (!runId) {
+    return (
+      <section className="panel readiness-panel warn">
+        <div className="panel-heading-row">
+          <h2>Compliance</h2>
+          <AlertTriangle size={17} aria-hidden />
+        </div>
+        <p className="muted-line">No run is linked to the selected report version.</p>
+      </section>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <section className="panel readiness-panel warn">
+        <div className="panel-heading-row">
+          <h2>Compliance</h2>
+          <RefreshCw size={17} aria-hidden />
+        </div>
+        <p className="muted-line">Loading compliance report for {runId}.</p>
+      </section>
+    );
+  }
+
+  if (!report) {
+    return (
+      <section className="panel readiness-panel warn">
+        <div className="panel-heading-row">
+          <h2>Compliance</h2>
+          <AlertTriangle size={17} aria-hidden />
+        </div>
+        <p className="muted-line">Compliance report is unavailable for {runId}.</p>
+      </section>
+    );
+  }
+
+  const categoryCounts = report.findings.reduce<Record<string, number>>((counts, finding) => {
+    counts[finding.category] = (counts[finding.category] ?? 0) + 1;
+    return counts;
+  }, {});
+  const topFindings = report.findings.slice(0, 4);
+
+  return (
+    <section className={`panel readiness-panel ${report.status === "pass" ? "pass" : "warn"}`}>
+      <div className="panel-heading-row">
+        <h2>Compliance</h2>
+        {report.status === "pass" ? (
+          <ShieldCheck size={17} aria-hidden />
+        ) : (
+          <AlertTriangle size={17} aria-hidden />
+        )}
+      </div>
+      <div className="metric-grid compact">
+        <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Status" value={report.status} />
+        <Metric icon={<ListChecks size={17} aria-hidden />} label="Findings" value={report.finding_count} />
+        <Metric icon={<AlertTriangle size={17} aria-hidden />} label="Blockers" value={report.blocker_count} />
+        <Metric icon={<Search size={17} aria-hidden />} label="Sources" value={report.source_count} />
+        <Metric icon={<Gauge size={17} aria-hidden />} label="Trace" value={report.trace_span_count} />
+        <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Redactions" value={report.redaction_count} />
+      </div>
+      <div className="project-meta-row">
+        <span>Run {report.run_id}</span>
+        <span>Warn {report.warn_count}</span>
+        <span>PII {categoryCounts.pii ?? 0}</span>
+        <span>Source {categoryCounts.source ?? 0}</span>
+        <span>Robots {categoryCounts.robots ?? 0}</span>
+        <span>Trace {categoryCounts.trace ?? 0}</span>
+      </div>
+      {topFindings.length > 0 ? (
+        <div className="recommendation-list">
+          {topFindings.map((finding) => (
+            <article
+              className={`recommendation-card ${complianceFindingPriority(finding.severity)}`}
+              key={finding.id}
+            >
+              <strong>{finding.severity} / {finding.category}</strong>
+              <span>{finding.target_type}: {finding.target_id}</span>
+              <p>{finding.message}</p>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="muted-line">No compliance findings.</p>
+      )}
+    </section>
+  );
+}
+
+function complianceFindingPriority(severity: string) {
+  if (severity === "blocker") return "high";
+  if (severity === "warn") return "medium";
+  return "low";
 }
 
 function EvalOpsPanel({
