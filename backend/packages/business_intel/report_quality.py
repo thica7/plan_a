@@ -482,22 +482,6 @@ def _verdict(
     return "pass"
 
 
-def _recommendations(
-    target: _QualitySnapshot,
-    baseline: _QualitySnapshot | None,
-) -> list[str]:
-    recommendations: list[str] = []
-    if not target.real_collection_signal:
-        recommendations.append("补足真实网页/搜索采集证据，避免报告只依赖 demo fixture 或弱来源。")
-    if not target.real_llm_signal:
-        recommendations.append("补足真实 LLM 调用 trace，确保 real mode 不是确定性降级输出。")
-    if not target.report_quality_signal:
-        recommendations.append("提升报告长度、引用覆盖和竞品覆盖，确保结论可被证据链支撑。")
-    if baseline is not None and target.score < baseline.score:
-        recommendations.append("与基线 run 相比质量下降，优先检查采集覆盖、引用率和 QA blocker。")
-    return recommendations
-
-
 def _clean_recommendations(
     target: _QualitySnapshot,
     baseline: _QualitySnapshot | None,
