@@ -484,6 +484,36 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
             )
         )
 
+    rag_gap_fill = report_version.quality_metadata.get("rag_gap_fill")
+    if isinstance(rag_gap_fill, dict):
+        chain_closed = rag_gap_fill.get("gap_fill_chain_closed")
+        after_gap_count = rag_gap_fill.get("after_gap_count")
+        unfilled_gap_ids = _string_list(rag_gap_fill.get("unfilled_gap_ids"))
+        gap_evidence_links = rag_gap_fill.get("gap_evidence_links")
+        has_links = isinstance(gap_evidence_links, dict) and any(gap_evidence_links.values())
+        unresolved_count = (
+            int(after_gap_count)
+            if isinstance(after_gap_count, int)
+            else len(unfilled_gap_ids)
+        )
+        if chain_closed is False or unresolved_count > 0 or not has_links:
+            unfilled_summary = ", ".join(unfilled_gap_ids[:5]) or "n/a"
+            issues.append(
+                _gate_issue(
+                    "rag_gap_fill_chain_unclosed",
+                    "RAG gap-fill chain",
+                    (
+                        "Report release requires the RAG evidence-gap fill chain to close; "
+                        f"chain_closed={bool(chain_closed)}, remaining_gap_count="
+                        f"{unresolved_count}, unfilled_gap_ids={unfilled_summary}."
+                    ),
+                    recommendation=(
+                        "Run online gap fill again, attach verified evidence for each remaining "
+                        "gap, or keep the report in draft with the gap explicitly unresolved."
+                    ),
+                )
+            )
+
     findings = report_version.quality_metadata.get("run_qa_findings", [])
     if not isinstance(findings, list) or not findings:
         return issues
@@ -576,6 +606,12 @@ def _normalize_source_token(token: str) -> str:
     """Resolve chunk-level RAG citations back to their EvidenceRecord id."""
 
     return token.split("#", 1)[0]
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip()]
 
 
 def _mapping_value(value: object, key: str) -> object:

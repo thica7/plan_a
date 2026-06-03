@@ -849,6 +849,117 @@ def test_report_release_gate_blocks_failed_schema_metadata() -> None:
     assert "run_schema_validation_failed" in {issue.rule_id for issue in gate.issues}
 
 
+def test_report_release_gate_blocks_unclosed_rag_gap_fill_chain() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        quality_metadata={
+            "rag_gap_fill": {
+                "before_gap_count": 2,
+                "after_gap_count": 1,
+                "gap_fill_chain_closed": False,
+                "unfilled_gap_ids": ["gap-security"],
+                "gap_evidence_links": {},
+            }
+        }
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert gate.allowed is False
+    issues = {issue.rule_id: issue for issue in gate.issues}
+    assert "rag_gap_fill_chain_unclosed" in issues
+    assert "gap-security" in issues["rag_gap_fill_chain_unclosed"].message
+
+
+def test_report_release_gate_allows_closed_rag_gap_fill_chain() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        quality_metadata={
+            "rag_gap_fill": {
+                "before_gap_count": 1,
+                "after_gap_count": 0,
+                "gap_fill_chain_closed": True,
+                "filled_gap_ids": ["gap-pricing"],
+                "gap_evidence_links": {"gap-pricing": ["evidence-1"]},
+            }
+        }
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert "rag_gap_fill_chain_unclosed" not in {issue.rule_id for issue in gate.issues}
+
+
 def test_report_release_gate_blocks_strong_conclusion_from_search_only_source() -> None:
     competitor = _competitor()
     evidence = [
