@@ -546,6 +546,7 @@ export type MemoryTargetType =
   | "project";
 export type MemoryCandidateKind =
   | "preferred_dimension"
+  | "domain_fact"
   | "source_preference"
   | "writing_preference"
   | "risk_preference"

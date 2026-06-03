@@ -11129,6 +11129,7 @@
             "type": "string",
             "enum": [
               "preferred_dimension",
+              "domain_fact",
               "source_preference",
               "writing_preference",
               "risk_preference",

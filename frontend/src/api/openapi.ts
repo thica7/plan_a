@@ -3292,7 +3292,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "preferred_dimension" | "source_preference" | "writing_preference" | "risk_preference" | "failure_pattern" | "qa_policy" | "correction";
+            kind: "preferred_dimension" | "domain_fact" | "source_preference" | "writing_preference" | "risk_preference" | "failure_pattern" | "qa_policy" | "correction";
             /**
              * Status
              * @default candidate
