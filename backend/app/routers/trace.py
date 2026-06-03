@@ -150,7 +150,12 @@ async def get_decision_replay(
         if project_id
         else []
     )
-    return build_decision_replay(detail, events, report_versions=report_versions)
+    return build_decision_replay(
+        detail,
+        events,
+        audit_logs=store.list_audit_logs(workspace_id=detail.workspace_id),
+        report_versions=report_versions,
+    )
 
 
 @router.get("/runs/{run_id}/trace/agent-messages", response_model=list[AgentMessage])

@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.events import RunEvent
 from packages.schema.api_dto import RunDetail
-from packages.schema.enterprise import ReportVersionRecord
+from packages.schema.enterprise import AuditLogRecord, ReportVersionRecord
 
 DecisionEventType = Literal[
     "agent.started",
@@ -61,15 +61,18 @@ def build_decision_replay(
     detail: RunDetail,
     events: list[RunEvent],
     *,
+    audit_logs: list[AuditLogRecord] | None = None,
     report_versions: list[ReportVersionRecord] | None = None,
 ) -> DecisionReplayReport:
+    report_versions = report_versions or []
     replay_events: list[DecisionReplayEvent] = []
     for event in events:
         mapped = _map_run_event(detail, event)
         if mapped is not None:
             replay_events.append(mapped)
 
-    replay_events.extend(_report_version_decisions(detail, report_versions or []))
+    replay_events.extend(_report_version_decisions(detail, report_versions))
+    replay_events.extend(_audit_log_decisions(detail, report_versions, audit_logs or []))
     replay_events.extend(
         _synthetic_decisions(detail, {event.event_type for event in replay_events})
     )
@@ -345,6 +348,175 @@ def _report_version_ready_event(
     )
 
 
+def _audit_log_decisions(
+    detail: RunDetail,
+    report_versions: list[ReportVersionRecord],
+    audit_logs: list[AuditLogRecord],
+) -> list[DecisionReplayEvent]:
+    version_ids = {
+        version.id
+        for version in report_versions
+        if not version.run_id or version.run_id == detail.id
+    }
+    raw_source_ids = {source.id for source in detail.raw_sources}
+    decisions: list[DecisionReplayEvent] = []
+    for log in audit_logs:
+        mapped = _audit_log_decision(
+            detail,
+            log,
+            version_ids=version_ids,
+            raw_source_ids=raw_source_ids,
+        )
+        if mapped is not None:
+            decisions.append(mapped)
+    return decisions
+
+
+def _audit_log_decision(
+    detail: RunDetail,
+    log: AuditLogRecord,
+    *,
+    version_ids: set[str],
+    raw_source_ids: set[str],
+) -> DecisionReplayEvent | None:
+    if log.action == "report_version.status_changed" and log.resource_id in version_ids:
+        status = _audit_after_string(log, "status") or "updated"
+        event_type: DecisionEventType = "report.ready" if status == "published" else "hitl.reviewed"
+        return _audit_event(
+            detail,
+            log,
+            event_type,
+            agent="report_approval",
+            message=f"Report version {log.resource_id} status changed to {status}.",
+            payload={
+                "decision": status,
+                "report_version_id": log.resource_id,
+                "report_version_status": status,
+                "version_number": _audit_after_value(log, "version_number"),
+            },
+        )
+
+    if log.action == "artifact.upserted" and _audit_run_id(log) == detail.id:
+        metadata = _audit_metadata(log)
+        export_kind = _optional_string(metadata.get("export_kind"))
+        artifact_type = _audit_after_string(log, "artifact_type") or "artifact"
+        label = export_kind or artifact_type
+        return _audit_event(
+            detail,
+            log,
+            "report.ready",
+            agent="artifact_store",
+            message=f"Artifact {log.resource_id} captured for {label}.",
+            payload={
+                "artifact_type": artifact_type,
+                "export_kind": export_kind,
+                "storage_backend": _audit_after_string(log, "storage_backend"),
+                "run_id": detail.id,
+            },
+        )
+
+    if log.action == "source_registry.upserted" and _audit_source_matches_run(
+        detail,
+        log,
+    ):
+        status = _audit_after_string(log, "policy_review_status") or "not_required"
+        previous_status = _audit_before_string(log, "policy_review_status")
+        if status == "not_required" and previous_status in {None, "not_required"}:
+            return None
+        domain = _audit_after_string(log, "domain") or log.resource_id
+        source_type = _audit_after_string(log, "source_type") or "unknown"
+        return _audit_event(
+            detail,
+            log,
+            "hitl.reviewed",
+            agent="source_registry",
+            message=f"Source policy review for {domain} is {status}.",
+            payload={
+                "decision": status,
+                "policy_review_status": status,
+                "previous_policy_review_status": previous_status,
+                "policy_review_reason": _audit_after_string(log, "policy_review_reason"),
+                "source_domain": domain,
+                "source_type": source_type,
+                "run_id": detail.id,
+            },
+        )
+
+    if log.action == "evidence.quality_updated" and _audit_evidence_matches_run(
+        detail,
+        log,
+        raw_source_ids=raw_source_ids,
+    ):
+        quality_label = _audit_after_string(log, "quality_label") or "updated"
+        return _audit_event(
+            detail,
+            log,
+            "hitl.reviewed",
+            agent="evidence_center",
+            message=f"Evidence {log.resource_id} quality marked {quality_label}.",
+            evidence_ids=[log.resource_id],
+            payload={
+                "decision": quality_label,
+                "quality_label": quality_label,
+                "previous_quality_label": _audit_before_string(log, "quality_label"),
+                "note": _audit_after_string(log, "quality_note"),
+            },
+        )
+
+    if log.action == "schema_evolution.reviewed" and log.resource_id == detail.project_id:
+        decision = _audit_after_string(log, "decision") or "reviewed"
+        return _audit_event(
+            detail,
+            log,
+            "hitl.reviewed",
+            agent="schema_governance",
+            message=f"Schema evolution suggestion {log.resource_id} was {decision}.",
+            payload={
+                "decision": decision,
+                "project_id": detail.project_id,
+                "target_id": _audit_after_string(log, "suggestion_id"),
+                "target_type": "schema_suggestion",
+                "note": _audit_after_string(log, "note"),
+            },
+        )
+
+    return None
+
+
+def _audit_event(
+    detail: RunDetail,
+    log: AuditLogRecord,
+    event_type: DecisionEventType,
+    *,
+    agent: str,
+    message: str,
+    evidence_ids: list[str] | None = None,
+    claim_ids: list[str] | None = None,
+    payload: dict[str, Any] | None = None,
+) -> DecisionReplayEvent:
+    payload = {
+        **(payload or {}),
+        "audit_log_id": log.id,
+        "audit_action": log.action,
+        "actor_id": log.actor_id,
+        "actor_type": log.actor_type,
+        "resource_type": log.resource_type,
+        "resource_id": log.resource_id,
+        "source": "enterprise_audit_log",
+    }
+    return DecisionReplayEvent(
+        id=f"{detail.id}:audit:{log.id}",
+        run_id=detail.id,
+        event_type=event_type,
+        agent=agent,
+        message=message,
+        evidence_ids=evidence_ids or [],
+        claim_ids=claim_ids or [],
+        payload=_safe_payload(payload),
+        created_at=_normalize_datetime(log.created_at),
+    )
+
+
 def _knowledge_claim_count(detail: RunDetail) -> int:
     count = 0
     for knowledge in detail.competitor_knowledge.values():
@@ -400,9 +572,63 @@ def _payload_ids(payload: dict[str, Any], *keys: str) -> list[str]:
     return ids
 
 
+def _audit_run_id(log: AuditLogRecord) -> str | None:
+    return _audit_after_string(log, "run_id") or _audit_metadata_string(log, "run_id")
+
+
+def _audit_source_matches_run(detail: RunDetail, log: AuditLogRecord) -> bool:
+    return detail.id in {
+        _audit_after_string(log, "first_seen_run_id"),
+        _audit_after_string(log, "last_seen_run_id"),
+        _audit_run_id(log),
+    }
+
+
+def _audit_evidence_matches_run(
+    detail: RunDetail,
+    log: AuditLogRecord,
+    *,
+    raw_source_ids: set[str],
+) -> bool:
+    if _audit_run_id(log) == detail.id:
+        return True
+    raw_source_id = _audit_after_string(log, "raw_source_id")
+    return raw_source_id is not None and raw_source_id in raw_source_ids
+
+
+def _audit_metadata(log: AuditLogRecord) -> dict[str, Any]:
+    after = log.after if isinstance(log.after, dict) else {}
+    metadata = after.get("metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _audit_metadata_string(log: AuditLogRecord, key: str) -> str | None:
+    return _optional_string(_audit_metadata(log).get(key))
+
+
+def _audit_after_string(log: AuditLogRecord, key: str) -> str | None:
+    return _optional_string(_audit_after_value(log, key))
+
+
+def _audit_before_string(log: AuditLogRecord, key: str) -> str | None:
+    before = log.before if isinstance(log.before, dict) else {}
+    return _optional_string(before.get(key))
+
+
+def _audit_after_value(log: AuditLogRecord, key: str) -> Any:
+    after = log.after if isinstance(log.after, dict) else {}
+    return after.get(key)
+
+
 def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
     allowed: dict[str, Any] = {}
     for key in (
+        "audit_log_id",
+        "audit_action",
+        "actor_id",
+        "actor_type",
+        "resource_type",
+        "resource_id",
         "status",
         "severity",
         "agent",
@@ -483,6 +709,18 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "updated_report_version_id",
         "version_number",
         "report_version_status",
+        "artifact_type",
+        "export_kind",
+        "storage_backend",
+        "policy_review_status",
+        "previous_policy_review_status",
+        "policy_review_reason",
+        "source_domain",
+        "source_type",
+        "quality_label",
+        "previous_quality_label",
+        "project_id",
+        "run_id",
         "manual_revision",
         "manual_revision_note",
         "edited_by",

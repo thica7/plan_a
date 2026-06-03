@@ -19,7 +19,7 @@ from packages.observability import (
     traceparent_for_span,
 )
 from packages.schema.api_dto import RunDetail
-from packages.schema.enterprise import ReportVersionRecord
+from packages.schema.enterprise import AuditLogRecord, ReportVersionRecord
 from packages.schema.models import AnalysisPlan, RawSource, RunMetrics, TraceSpan
 
 
@@ -531,6 +531,127 @@ def test_decision_replay_includes_manual_report_revision_version_event() -> None
     )
     assert version_event.payload["source_report_version_id"] == "report-manual-v1"
     assert version_event.payload["parent_version_id"] == "report-manual-v1"
+
+
+def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
+    detail = RunDetail(
+        id="run-audit",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        topic="Decision replay audit",
+        status="completed",
+        execution_mode="demo",
+        created_at="2026-05-31T00:00:00Z",
+        updated_at="2026-05-31T00:01:00Z",
+        plan=AnalysisPlan(
+            topic="Decision replay audit",
+            competitors=["A"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="source-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://example.com/pricing",
+                snippet="A publishes pricing.",
+                content_hash="hash-1",
+                confidence=0.9,
+            )
+        ],
+        metrics=RunMetrics(),
+    )
+    version = ReportVersionRecord(
+        id="report-audit-v1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-audit",
+        version_number=1,
+        topic_normalized="decision-replay-audit",
+        competitor_layer="L1",
+        competitor_set_hash="competitor-set",
+        report_md="# Report",
+        claim_ids=["claim-1"],
+        evidence_ids=["evidence-1"],
+    )
+    audit_logs = [
+        AuditLogRecord(
+            id="audit-source-review",
+            workspace_id="workspace-1",
+            actor_type="system",
+            actor_id="reviewer-1",
+            action="source_registry.upserted",
+            resource_type="source_registry",
+            resource_id="source-registry-1",
+            before={"policy_review_status": "pending"},
+            after={
+                "domain": "example.com",
+                "source_type": "webpage_verified",
+                "policy_review_status": "approved",
+                "policy_review_reason": "Reviewer approved source use.",
+                "last_seen_run_id": "run-audit",
+            },
+            created_at="2026-05-31T00:02:00Z",
+        ),
+        AuditLogRecord(
+            id="audit-report-approval",
+            workspace_id="workspace-1",
+            actor_type="system",
+            actor_id="approver-1",
+            action="report_version.status_changed",
+            resource_type="report_version",
+            resource_id="report-audit-v1",
+            before={"status": "in_review"},
+            after={"status": "approved", "project_id": "project-1", "version_number": 1},
+            created_at="2026-05-31T00:03:00Z",
+        ),
+        AuditLogRecord(
+            id="audit-compliance-export",
+            workspace_id="workspace-1",
+            actor_type="system",
+            actor_id="compliance",
+            action="artifact.upserted",
+            resource_type="artifact",
+            resource_id="artifact-compliance",
+            after={
+                "run_id": "run-audit",
+                "artifact_type": "report_export",
+                "storage_backend": "local",
+                "metadata": {"export_kind": "run_compliance_report"},
+            },
+            created_at="2026-05-31T00:04:00Z",
+        ),
+    ]
+
+    replay = build_decision_replay(
+        detail,
+        [],
+        audit_logs=audit_logs,
+        report_versions=[version],
+    )
+    audit_events = {
+        event.id: event for event in replay.events if event.id.startswith("run-audit:audit:")
+    }
+
+    assert set(audit_events) == {
+        "run-audit:audit:audit-source-review",
+        "run-audit:audit:audit-report-approval",
+        "run-audit:audit:audit-compliance-export",
+    }
+    assert audit_events["run-audit:audit:audit-source-review"].event_type == "hitl.reviewed"
+    assert audit_events["run-audit:audit:audit-source-review"].payload[
+        "policy_review_status"
+    ] == "approved"
+    assert audit_events["run-audit:audit:audit-report-approval"].payload[
+        "report_version_status"
+    ] == "approved"
+    assert audit_events["run-audit:audit:audit-compliance-export"].event_type == "report.ready"
+    assert audit_events["run-audit:audit:audit-compliance-export"].payload[
+        "export_kind"
+    ] == "run_compliance_report"
+    assert replay.event_type_counts["hitl.reviewed"] >= 2
 
 
 def test_run_compliance_report_flags_policy_source_trace_and_pii() -> None:

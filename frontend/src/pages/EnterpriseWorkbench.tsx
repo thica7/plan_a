@@ -4466,6 +4466,17 @@ function decisionPayloadSummary(event: DecisionReplayEvent) {
     }
   }
 
+  if (parts.length === 0 && payloadString(payload, "source") === "enterprise_audit_log") {
+    const action = payloadString(payload, "audit_action");
+    const actor = payloadString(payload, "actor_id");
+    const decision = payloadString(payload, "decision", "policy_review_status", "quality_label");
+    const resource = payloadString(payload, "resource_type");
+    if (action) parts.push(`audit ${action}`);
+    if (actor) parts.push(`actor ${actor}`);
+    if (decision) parts.push(`decision ${decision}`);
+    if (resource) parts.push(`resource ${resource}`);
+  }
+
   if (parts.length === 0) {
     const payloadKeys = Object.keys(payload).slice(0, 4);
     return payloadKeys.length ? `payload ${payloadKeys.join(", ")}` : "No structured payload summary.";
