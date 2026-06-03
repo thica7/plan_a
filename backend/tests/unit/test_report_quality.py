@@ -464,6 +464,47 @@ def test_writer_hardens_report_with_claim_validation_risk_section() -> None:
     assert "[source:source-0]" in report
 
 
+def test_writer_hardens_report_with_rag_gap_fill_context() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="rag-gap-fill-section",
+        execution_mode="real",
+        source_count=2,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.plan.competitors = ["Cursor", "Copilot"]
+    detail.qa_findings.append(
+        QCIssue(
+            id="gap-security-evidence",
+            severity="warn",
+            detected_by="coverage",
+            target_agent="collector",
+            target_subagent="security",
+            target_competitor="Cursor",
+            field_path="raw_sources[security][Cursor]",
+            problem="Missing official trust-center evidence for security claims.",
+            redo_scope=RedoScope(
+                kind="collector",
+                target_subagent="security",
+                target_competitor="Cursor",
+                rationale="Collect official security evidence.",
+            ),
+        )
+    )
+
+    report = writer._harden_report_markdown(
+        detail,
+        "# Cursor vs Copilot\n\nSecurity evidence needs follow-up.",
+    )
+
+    assert "## RAG Gap Fill" in report
+    assert "gap-security-evidence" in report
+    assert "Suggested retrieval query: Cursor security Missing official trust-center" in report
+    assert "Run the Evidence Gap Fill action" in report
+    assert "[source:source-0]" in report
+
+
 def test_writer_hardens_report_with_memory_and_user_research_sections() -> None:
     writer = _WriterHarness()
     detail = _run_detail(

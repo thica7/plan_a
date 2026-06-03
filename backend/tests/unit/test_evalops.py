@@ -463,6 +463,45 @@ def test_enterprise_evalops_flags_missing_research_and_gap_fill_context() -> Non
     )
 
 
+def test_enterprise_evalops_accepts_reported_rag_gap_fill_context() -> None:
+    target = _run_detail(
+        run_id="reported-gap-fill-run",
+        execution_mode="real",
+        source_count=4,
+        quality_score=1.0,
+        report_md=(
+            f"{_structured_report_md()}\n\n"
+            "## RAG Gap Fill\n\n"
+            "- Gap `missing-security`: retrieve official security evidence for Cursor. "
+            "[source:source-0]\n"
+        ),
+        project_id="project-a",
+        qa_findings=[
+            QCIssue(
+                id="missing-security",
+                severity="warn",
+                detected_by="coverage",
+                target_agent="collector",
+                target_subagent="security",
+                target_competitor="Cursor",
+                field_path="raw_sources[security][Cursor]",
+                problem="Missing official security evidence.",
+                redo_scope=RedoScope(
+                    kind="collector",
+                    target_subagent="security",
+                    target_competitor="Cursor",
+                    rationale="Collect official security evidence.",
+                ),
+            )
+        ],
+    )
+
+    report = build_enterprise_evalops_report([target])
+    cases = {case.case_id: case for case in report.cases}
+
+    assert cases["golden.rag_gap_fill_context"].status == "pass"
+
+
 class _FakeRunService:
     def __init__(self, runs: list[RunDetail]) -> None:
         self._runs = {run.id: run for run in runs}

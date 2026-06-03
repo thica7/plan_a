@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.schema.api_dto import RunDetail
-from packages.schema.models import FeatureNode, KnowledgeClaim, RawSource
+from packages.schema.models import FeatureNode, KnowledgeClaim, QCIssue, RawSource
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
@@ -396,6 +396,7 @@ class WriterAgentMixin:
             ),
             ("Memory Context", self._fallback_memory_context_section(detail)),
             ("User Research Evidence", self._fallback_user_research_section(detail)),
+            ("RAG Gap Fill", self._fallback_rag_gap_fill_section(detail)),
             ("Scenario QA Checklist", self._fallback_scenario_checklist_section(detail)),
             ("Claim Validation & Evidence Risk", self._fallback_claim_validation_section(detail)),
             ("Next Collection / Verification Plan", self._fallback_next_collection_plan(detail)),
@@ -592,6 +593,50 @@ class WriterAgentMixin:
                 f" [source:{source.id}]"
             )
         return lines
+
+    def _fallback_rag_gap_fill_section(self, detail: RunDetail) -> list[str]:
+        collector_gaps = [
+            issue
+            for issue in detail.qa_findings
+            if issue.target_agent == "collector" and issue.severity in {"warn", "blocker"}
+        ]
+        if not collector_gaps:
+            return []
+        lines = [
+            "",
+            "## RAG Gap Fill",
+            (
+                "Collector evidence gaps should be closed through retrieval before this "
+                "report is published or used as a final decision artifact."
+            ),
+        ]
+        for issue in collector_gaps[:5]:
+            scope = issue.redo_scope
+            target = scope.target_subagent or issue.target_subagent or issue.field_path
+            competitor = scope.target_competitor or issue.target_competitor or "all competitors"
+            query = self._gap_fill_query(detail, issue)
+            sources = self._format_source_refs(self._matrix_source_ids(detail))
+            lines.append(
+                f"- Gap `{issue.id}`: {issue.problem} Target={target}; "
+                f"competitor={competitor}; redo={scope.kind}. "
+                f"Suggested retrieval query: {query}.{sources}"
+            )
+        lines.append(
+            "- Run the Evidence Gap Fill action to retrieve, rerank, and attach verified "
+            "evidence. The resulting draft version should link filled gap IDs and "
+            "retrieval contexts."
+        )
+        return lines
+
+    def _gap_fill_query(self, detail: RunDetail, issue: QCIssue) -> str:
+        dimension = issue.target_subagent or "evidence"
+        competitor = (
+            issue.target_competitor
+            or ", ".join(detail.plan.competitors[:3])
+            or detail.topic
+        )
+        query = f"{competitor} {dimension} {issue.problem}".strip()
+        return " ".join(query.split())[:180]
 
     def _fallback_claim_validation_section(self, detail: RunDetail) -> list[str]:
         lines = ["", "## Claim Validation & Evidence Risk"]
