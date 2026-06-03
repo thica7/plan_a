@@ -11,6 +11,7 @@ from app.deps import (
     get_artifact_storage,
     get_enterprise_store,
     get_enterprise_user_context,
+    get_preference_memory,
 )
 from packages.agents import AgentExecutionRequest
 from packages.artifacts import ArtifactStorageError, LocalArtifactStorage
@@ -35,8 +36,10 @@ from packages.business_intel import (
     validate_project_claims,
 )
 from packages.config import Settings
+from packages.compliance import compliance_policy_from_settings
 from packages.enterprise import EnterpriseStore, build_report_version_diff
 from packages.governance import ModelPolicyReport, build_model_policy_report
+from packages.memory import PreferenceMemoryStore
 from packages.rag import (
     decorate_evidence_gap_report_with_retrieval,
     fill_evidence_gaps,
@@ -63,6 +66,10 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     EvidenceReindexResult,
     EvidenceSearchHit,
+    MemoryCandidate,
+    MemoryFeedbackIngestResult,
+    MemoryRecallContext,
+    MemoryStats,
     NotificationRecord,
     ProjectReadinessScore,
     ProjectRecord,
@@ -75,6 +82,8 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
     ScenarioPack,
     SourceRegistryRecord,
+    UserFeedbackCreateRequest,
+    UserFeedbackRecord,
     WorkspaceMemberRecord,
     WorkspaceQuotaDecision,
     WorkspaceQuotaUpdateRequest,
@@ -94,6 +103,7 @@ EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
 EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 ArtifactStorageDep = Annotated[LocalArtifactStorage, Depends(get_artifact_storage)]
+PreferenceMemoryDep = Annotated[PreferenceMemoryStore, Depends(get_preference_memory)]
 
 
 @router.get("/enterprise/workspaces", response_model=list[WorkspaceRecord])
@@ -312,6 +322,138 @@ def get_project_claim_validation(
     )
 
 
+@router.post(
+    "/enterprise/projects/{project_id}/memory/feedback",
+    response_model=MemoryFeedbackIngestResult,
+)
+def ingest_project_memory_feedback(
+    project_id: str,
+    request: UserFeedbackCreateRequest,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    settings: SettingsDep,
+    memory: PreferenceMemoryDep,
+) -> MemoryFeedbackIngestResult:
+    project = _project_or_404(project_id, store, user, "memory:write")
+    record = memory.add_feedback(
+        UserFeedbackRecord(
+            id="",
+            workspace_id=project.workspace_id,
+            project_id=project_id,
+            user_id=user.user_id,
+            feedback_type=request.feedback_type,
+            target_type=request.target_type,
+            target_id=request.target_id,
+            run_id=request.run_id,
+            report_version_id=request.report_version_id,
+            message=request.message,
+            tags=request.tags,
+            metadata=request.metadata,
+        ),
+        policy=compliance_policy_from_settings(settings),
+    )
+    candidates = [
+        memory.upsert_candidate(candidate)
+        for candidate in memory.extract_candidates(
+            record,
+            auto_confirm=request.auto_confirm,
+        )
+    ]
+    recall = memory.recall(
+        workspace_id=project.workspace_id,
+        project_id=project_id,
+        query=request.message,
+        include_unconfirmed=True,
+    )
+    return MemoryFeedbackIngestResult(
+        feedback=record,
+        candidates=candidates,
+        recall=recall,
+    )
+
+
+@router.get(
+    "/enterprise/projects/{project_id}/memory/feedback",
+    response_model=list[UserFeedbackRecord],
+)
+def list_project_memory_feedback(
+    project_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    memory: PreferenceMemoryDep,
+    limit: int = 100,
+) -> list[UserFeedbackRecord]:
+    project = _project_or_404(project_id, store, user, "memory:read")
+    return memory.list_feedback(
+        workspace_id=project.workspace_id,
+        project_id=project_id,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/enterprise/projects/{project_id}/memory/recall",
+    response_model=MemoryRecallContext,
+)
+def recall_project_memory(
+    project_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    memory: PreferenceMemoryDep,
+    query: str = "",
+    limit: int = 6,
+    include_unconfirmed: bool = False,
+) -> MemoryRecallContext:
+    project = _project_or_404(project_id, store, user, "memory:read")
+    return memory.recall(
+        workspace_id=project.workspace_id,
+        project_id=project_id,
+        query=query,
+        limit=limit,
+        include_unconfirmed=include_unconfirmed,
+    )
+
+
+@router.patch(
+    "/enterprise/projects/{project_id}/memory/candidates/{candidate_id}",
+    response_model=MemoryCandidate,
+)
+def update_project_memory_candidate(
+    project_id: str,
+    candidate_id: str,
+    status: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    memory: PreferenceMemoryDep,
+) -> MemoryCandidate:
+    project = _project_or_404(project_id, store, user, "memory:review")
+    candidate = memory.get_candidate(candidate_id)
+    if candidate is None or candidate.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Memory candidate not found")
+    if candidate.workspace_id != project.workspace_id:
+        raise HTTPException(status_code=403, detail="Insufficient workspace permission")
+    if status not in {"candidate", "confirmed", "rejected", "archived"}:
+        raise HTTPException(status_code=400, detail="Invalid memory candidate status")
+    updated = memory.update_candidate_status(candidate_id, status)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Memory candidate not found")
+    return updated
+
+
+@router.get(
+    "/enterprise/projects/{project_id}/memory/stats",
+    response_model=MemoryStats,
+)
+def get_project_memory_stats(
+    project_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    memory: PreferenceMemoryDep,
+) -> MemoryStats:
+    project = _project_or_404(project_id, store, user, "memory:read")
+    return memory.stats(workspace_id=project.workspace_id, project_id=project_id)
+
+
 @router.get(
     "/enterprise/projects/{project_id}/readiness-score",
     response_model=ProjectReadinessScore,
@@ -509,6 +651,7 @@ async def get_project_quality_matrix(
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
     settings: SettingsDep,
+    memory: PreferenceMemoryDep,
 ) -> QualityAgentMatrix:
     plan = _business_plan_for_project(project_id, store, user)
     competitors = store.list_competitors(project_id=project_id)
@@ -528,6 +671,13 @@ async def get_project_quality_matrix(
     )
     evidence_gaps = await get_project_evidence_gaps(project_id, store, user, settings)
     red_team = await get_project_red_team(project_id, store, user, settings)
+    project = _project_or_404(project_id, store, user, "memory:read")
+    memory_stats = memory.stats(workspace_id=project.workspace_id, project_id=project_id)
+    memory_status = (
+        "warn"
+        if memory_stats.candidate_count > 0 and memory_stats.confirmed_candidate_count == 0
+        else "pass"
+    )
 
     entries = [
         QualityAgentMatrixEntry(
@@ -604,6 +754,24 @@ async def get_project_quality_matrix(
             ),
             claim_ids=_unique_ids(
                 claim_id for finding in red_team.findings for claim_id in finding.claim_ids
+            ),
+        ),
+        QualityAgentMatrixEntry(
+            agent_name="MemoryAgent",
+            framework="deterministic-preference-memory",
+            status=memory_status,
+            score=(
+                80
+                if memory_stats.candidate_count == 0
+                else min(100, 82 + memory_stats.confirmed_candidate_count * 6)
+            ),
+            blocker_count=0,
+            warn_count=1 if memory_status == "warn" else 0,
+            finding_count=memory_stats.candidate_count,
+            summary=(
+                f"{memory_stats.feedback_count} feedback records, "
+                f"{memory_stats.confirmed_candidate_count}/"
+                f"{memory_stats.candidate_count} confirmed memory candidates."
             ),
         ),
     ]

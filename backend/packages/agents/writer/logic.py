@@ -51,6 +51,7 @@ class WriterAgentMixin:
             ensure_ascii=False,
         )
         layer_context = self._writer_layer_context(detail)
+        memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
         required_sections = self._writer_required_sections(detail)
         try:
             report_md = await self._trace_llm_text(
@@ -72,6 +73,8 @@ class WriterAgentMixin:
                     "verified when any source_type is web_search_result or llm_public_knowledge. "
                     "Treat survey_simulated and interview_record as user-research signals, "
                     "not as official factual proof. "
+                    "Honor confirmed memory preferences when they do not conflict with evidence, "
+                    "schema requirements, or compliance policy. "
                     "Use the requested competitive layer to choose the report shape: L1 is a "
                     "direct battlecard, L2 is adjacent workflow and enterprise-risk analysis, "
                     "and L3 is market landscape and category strategy."
@@ -85,6 +88,7 @@ class WriterAgentMixin:
                     "Scenario Recommended Dimensions: "
                     f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
                     f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
+                    f"Confirmed Memory Preferences:\n{memory_context}\n"
                     f"Layer Report Context: {layer_context}\n"
                     f"Competitor KB JSON: {competitor_kb_json}\n"
                     f"Competitor Knowledge Schema JSON: {competitor_knowledge_json}\n"

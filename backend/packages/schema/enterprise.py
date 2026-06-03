@@ -30,6 +30,16 @@ QuotaEnforcementMode = Literal["monitor", "block"]
 WorkspaceUsageStatus = Literal["ok", "warn", "exceeded"]
 ClaimValidationStatus = Literal["supported", "weak", "unsupported", "blocked"]
 QualityAgentStatus = Literal["pass", "warn", "blocker"]
+MemoryFeedbackType = Literal["correction", "preference", "approval", "rejection", "note"]
+MemoryTargetType = Literal["report", "claim", "evidence", "dimension", "competitor", "project"]
+MemoryCandidateKind = Literal[
+    "preferred_dimension",
+    "source_preference",
+    "writing_preference",
+    "risk_preference",
+    "correction",
+]
+MemoryCandidateStatus = Literal["candidate", "confirmed", "rejected", "archived"]
 
 
 class WorkspaceRecord(BaseModel):
@@ -329,6 +339,90 @@ class ReportVersionRecord(BaseModel):
     quality_metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     published_at: datetime | None = None
+
+
+class UserFeedbackCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    feedback_type: MemoryFeedbackType = "note"
+    target_type: MemoryTargetType = "project"
+    target_id: str = Field(default="", max_length=200)
+    run_id: str | None = None
+    report_version_id: str | None = None
+    message: str = Field(min_length=1, max_length=4000)
+    tags: list[str] = Field(default_factory=list)
+    auto_confirm: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class UserFeedbackRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    workspace_id: str
+    project_id: str
+    user_id: str
+    feedback_type: MemoryFeedbackType = "note"
+    target_type: MemoryTargetType = "project"
+    target_id: str = ""
+    run_id: str | None = None
+    report_version_id: str | None = None
+    message: str
+    tags: list[str] = Field(default_factory=list)
+    redaction_counts: dict[str, int] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MemoryCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    workspace_id: str
+    project_id: str
+    kind: MemoryCandidateKind
+    status: MemoryCandidateStatus = "candidate"
+    statement: str
+    weight: float = Field(default=0.5, ge=0.0, le=1.0)
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    source_feedback_ids: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    match_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    used_count: int = Field(default=0, ge=0)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MemoryRecallContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str
+    project_id: str
+    query: str = ""
+    query_tags: list[str] = Field(default_factory=list)
+    candidates: list[MemoryCandidate] = Field(default_factory=list)
+    prompt_context: list[str] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MemoryFeedbackIngestResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    feedback: UserFeedbackRecord
+    candidates: list[MemoryCandidate] = Field(default_factory=list)
+    recall: MemoryRecallContext
+
+
+class MemoryStats(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str | None = None
+    project_id: str | None = None
+    feedback_count: int = Field(default=0, ge=0)
+    candidate_count: int = Field(default=0, ge=0)
+    confirmed_candidate_count: int = Field(default=0, ge=0)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class ReportDiffLine(BaseModel):

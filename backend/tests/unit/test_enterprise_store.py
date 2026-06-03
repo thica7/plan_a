@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.deps import get_artifact_storage, get_enterprise_store
+from app.deps import get_artifact_storage, get_enterprise_store, get_preference_memory
 from app.main import create_app
 from packages.artifacts import LocalArtifactStorage
 from packages.config import Settings
@@ -15,11 +15,13 @@ from packages.enterprise import (
     build_enterprise_projection,
     build_report_version_diff,
 )
+from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
     ArtifactRecord,
     NotificationRecord,
+    UserFeedbackRecord,
     WorkspaceMemberRecord,
     WorkspaceQuotaUpdateRequest,
 )
@@ -618,6 +620,48 @@ async def test_run_service_attaches_business_intel_plan_to_project() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_service_applies_confirmed_memory_to_plan() -> None:
+    store = EnterpriseMemoryStore()
+    memory = PreferenceMemoryStore.in_memory()
+    feedback = memory.add_feedback(
+        UserFeedbackRecord(
+            id="",
+            workspace_id="default-workspace",
+            project_id="project-memory",
+            user_id="analyst-1",
+            feedback_type="preference",
+            target_type="project",
+            target_id="project-memory",
+            message="Prefer persona evidence and concise battlecard tables in this project.",
+            tags=[],
+        )
+    )
+    for candidate in memory.extract_candidates(feedback, auto_confirm=True):
+        memory.upsert_candidate(candidate)
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+        preference_memory=memory,
+    )
+
+    created = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+            project_id="project-memory",
+        )
+    )
+
+    assert "persona" in created.plan.dimensions
+    assert created.plan.memory_candidate_ids
+    assert created.plan.memory_recall_score >= 70
+    assert any("battlecard" in item for item in created.plan.memory_prompt_context)
+
+
+@pytest.mark.asyncio
 async def test_run_service_blocks_when_workspace_quota_is_exhausted() -> None:
     store = EnterpriseMemoryStore()
     store.update_workspace_quota(
@@ -686,6 +730,7 @@ def test_enterprise_router_exposes_projection() -> None:
     artifact_root = Path("backend/.test-artifacts/router")
     shutil.rmtree(artifact_root, ignore_errors=True)
     store = EnterpriseMemoryStore()
+    memory = PreferenceMemoryStore.in_memory()
     detail = _detail()
     context = store.start_run(detail)
     projection = build_enterprise_projection(
@@ -698,6 +743,7 @@ def test_enterprise_router_exposes_projection() -> None:
     app = create_app()
     app.dependency_overrides[get_enterprise_store] = lambda: store
     app.dependency_overrides[get_artifact_storage] = lambda: LocalArtifactStorage(artifact_root)
+    app.dependency_overrides[get_preference_memory] = lambda: memory
     client = TestClient(app)
 
     response = client.get(f"/api/enterprise/runs/{detail.id}/projection")
@@ -741,6 +787,33 @@ def test_enterprise_router_exposes_projection() -> None:
     claim_validation = client.get(
         f"/api/enterprise/projects/{context.project_id}/claim-validation"
     )
+    memory_ingest = client.post(
+        f"/api/enterprise/projects/{context.project_id}/memory/feedback",
+        json={
+            "feedback_type": "preference",
+            "target_type": "report",
+            "target_id": projection.report_version.id,
+            "message": (
+                "Prefer official pricing sources, concise battlecard tables, and explicit "
+                "evidence gap risks."
+            ),
+            "tags": [],
+        },
+    )
+    candidate_id = memory_ingest.json()["candidates"][0]["id"]
+    memory_confirm = client.patch(
+        f"/api/enterprise/projects/{context.project_id}/memory/candidates/{candidate_id}",
+        params={"status": "confirmed"},
+        headers={"X-User-Role": "reviewer"},
+    )
+    memory_recall = client.get(
+        f"/api/enterprise/projects/{context.project_id}/memory/recall",
+        params={"query": "pricing source risk"},
+    )
+    memory_feedback = client.get(
+        f"/api/enterprise/projects/{context.project_id}/memory/feedback"
+    )
+    memory_stats = client.get(f"/api/enterprise/projects/{context.project_id}/memory/stats")
     readiness = client.get(f"/api/enterprise/projects/{context.project_id}/readiness-score")
     gaps = client.get(f"/api/enterprise/projects/{context.project_id}/evidence-gaps")
     quality_matrix = client.get(f"/api/enterprise/projects/{context.project_id}/quality-matrix")
@@ -842,6 +915,17 @@ def test_enterprise_router_exposes_projection() -> None:
     assert claim_validation.json()["supported_count"] == 1
     assert claim_validation.json()["self_consistency_score"] >= 70
     assert claim_validation.json()["results"][0]["self_consistency_score"] >= 70
+    assert memory_ingest.status_code == 200
+    assert memory_ingest.json()["feedback"]["id"].startswith("feedback-")
+    assert memory_ingest.json()["candidates"]
+    assert memory_confirm.status_code == 200
+    assert memory_confirm.json()["status"] == "confirmed"
+    assert memory_recall.status_code == 200
+    assert memory_recall.json()["candidates"][0]["id"] == candidate_id
+    assert memory_feedback.status_code == 200
+    assert memory_feedback.json()[0]["target_id"] == projection.report_version.id
+    assert memory_stats.status_code == 200
+    assert memory_stats.json()["confirmed_candidate_count"] >= 1
     assert readiness.status_code == 200
     assert readiness.json()["risk_level"] in {"ready", "watch", "at_risk", "blocked"}
     assert gaps.status_code == 200
@@ -852,12 +936,18 @@ def test_enterprise_router_exposes_projection() -> None:
         "ClaimValidator",
         "EvidenceGap",
         "RedTeam",
+        "MemoryAgent",
     }
     claim_matrix = next(
         item for item in quality_matrix.json()["entries"] if item["agent_name"] == "ClaimValidator"
     )
     assert claim_matrix["framework"] == "deterministic-self-consistency"
     assert "self-consistency" in claim_matrix["summary"]
+    memory_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "MemoryAgent"
+    )
+    assert memory_matrix["framework"] == "deterministic-preference-memory"
+    assert memory_matrix["score"] >= 80
     assert competitors.status_code == 200
     assert [item["name"] for item in competitors.json()] == ["Cursor"]
     assert source_registry.status_code == 200

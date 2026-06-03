@@ -1,3 +1,4 @@
+import sqlite3
 from functools import lru_cache
 from typing import Annotated
 
@@ -8,7 +9,7 @@ from packages.auth import EnterpriseUserContext, normalize_role
 from packages.config import Settings, get_settings
 from packages.enterprise import EnterpriseMemoryStore, EnterprisePostgresStore, EnterpriseStore
 from packages.enterprise.store import DEFAULT_USER_ID
-from packages.memory import KBCache, RunJournal
+from packages.memory import KBCache, PreferenceMemoryStore, RunJournal
 from packages.observability import TraceStore
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
@@ -34,6 +35,14 @@ def get_run_journal() -> RunJournal:
 @lru_cache
 def get_kb_cache() -> KBCache:
     return KBCache.from_default_path()
+
+
+@lru_cache
+def get_preference_memory() -> PreferenceMemoryStore:
+    try:
+        return PreferenceMemoryStore.from_default_path()
+    except (OSError, sqlite3.Error):
+        return PreferenceMemoryStore.in_memory()
 
 
 @lru_cache
@@ -91,6 +100,7 @@ def get_run_service() -> RunService:
         settings=get_app_settings(),
         journal=get_run_journal(),
         kb_cache=get_kb_cache(),
+        preference_memory=get_preference_memory(),
         trace_store=get_trace_store(),
         graph_checkpointer=get_graph_checkpointer(),
         enterprise_store=get_enterprise_store(),

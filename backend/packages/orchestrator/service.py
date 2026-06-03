@@ -32,7 +32,7 @@ from packages.enterprise import (
 from packages.governance import build_model_policy_report, model_policy_block_message
 from packages.identity import compute_competitor_set_hash, compute_topic_normalized
 from packages.llm import DoubaoClient
-from packages.memory import KBCache, RunJournal
+from packages.memory import KBCache, PreferenceMemoryStore, RunJournal
 from packages.observability import (
     LangfuseAdapter,
     LangfuseConfig,
@@ -116,6 +116,7 @@ class RunService(
         settings: Settings,
         journal: RunJournal | None = None,
         kb_cache: KBCache | None = None,
+        preference_memory: PreferenceMemoryStore | None = None,
         trace_store: TraceStore | None = None,
         graph_checkpointer: GraphCheckpointer | None = None,
         enterprise_store: EnterpriseStore | None = None,
@@ -126,6 +127,7 @@ class RunService(
         self._search = PerplexitySearchClient(settings)
         self._journal = journal
         self._kb_cache = kb_cache
+        self._preference_memory = preference_memory
         self._trace_store = trace_store
         self._langfuse = LangfuseAdapter(
             LangfuseConfig(
@@ -159,6 +161,20 @@ class RunService(
             request.dimensions,
             require_core_schema=not competitors,
         )
+        memory_context = None
+        if self._preference_memory is not None and request.project_id:
+            memory_context = self._preference_memory.recall(
+                workspace_id=request.workspace_id,
+                project_id=request.project_id,
+                query=f"{request.topic} {' '.join(valid_dimensions)}",
+                limit=6,
+                mark_used=True,
+            )
+            valid_dimensions = self._apply_memory_dimension_preferences(
+                valid_dimensions,
+                memory_context.prompt_context,
+                [tag for item in memory_context.candidates for tag in item.tags],
+            )
         homepage_verifications = verify_homepages(competitors)
         business_plan = build_business_intel_plan(
             topic=request.topic,
@@ -184,6 +200,20 @@ class RunService(
             scenario_id=business_plan.scenario_pack.id,
             scenario_recommended_dimensions=business_plan.recommended_dimensions,
             qa_rule_ids=[rule.id for rule in business_plan.qa_rules],
+            memory_candidate_ids=[
+                candidate.id for candidate in memory_context.candidates
+            ]
+            if memory_context is not None
+            else [],
+            memory_prompt_context=memory_context.prompt_context
+            if memory_context is not None
+            else [],
+            memory_recall_score=round(
+                max((candidate.match_score for candidate in memory_context.candidates), default=0)
+                * 100
+            )
+            if memory_context is not None
+            else 0,
             homepage_hints={
                 name: str(homepage_verifications[name].homepage_url)
                 for name in competitors
@@ -229,7 +259,14 @@ class RunService(
             "planner",
             None,
             "Run accepted and plan drafted.",
-            {"plan": plan.model_dump(mode="json")},
+            {
+                "plan": plan.model_dump(mode="json"),
+                "memory_recall": {
+                    "candidate_ids": plan.memory_candidate_ids,
+                    "score": plan.memory_recall_score,
+                    "prompt_context": plan.memory_prompt_context,
+                },
+            },
         )
         return detail
 
@@ -2606,6 +2643,23 @@ class RunService(
                 if dimension in available and dimension not in normalized:
                     normalized.append(dimension)
         return normalized
+
+    def _apply_memory_dimension_preferences(
+        self,
+        dimensions: list[str],
+        prompt_context: list[str],
+        candidate_tags: list[str],
+    ) -> list[str]:
+        if not prompt_context and not candidate_tags:
+            return dimensions
+        available = set(self._skill_registry.names())
+        seen = set(dimensions)
+        merged = list(dimensions)
+        for tag in candidate_tags:
+            if tag in available and tag not in seen:
+                seen.add(tag)
+                merged.append(tag)
+        return merged
 
     def _plan_requires_core_schema(self, detail: RunDetail) -> bool:
         available_core = [

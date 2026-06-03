@@ -296,6 +296,11 @@ def _build_quality_metadata(detail: RunDetail) -> dict[str, object]:
     ]
     return {
         "run_id": detail.id,
+        "memory_used": {
+            "candidate_ids": detail.plan.memory_candidate_ids,
+            "prompt_context": detail.plan.memory_prompt_context,
+            "recall_score": detail.plan.memory_recall_score,
+        },
         "memory_observations": _build_memory_observations(
             detail,
             low_confidence_source_ids=low_confidence_source_ids,

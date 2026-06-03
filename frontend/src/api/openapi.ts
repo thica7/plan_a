@@ -671,6 +671,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/projects/{project_id}/memory/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Project Memory Feedback */
+        get: operations["list_project_memory_feedback_api_enterprise_projects__project_id__memory_feedback_get"];
+        put?: never;
+        /** Ingest Project Memory Feedback */
+        post: operations["ingest_project_memory_feedback_api_enterprise_projects__project_id__memory_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/projects/{project_id}/memory/recall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recall Project Memory */
+        get: operations["recall_project_memory_api_enterprise_projects__project_id__memory_recall_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/projects/{project_id}/memory/candidates/{candidate_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Project Memory Candidate */
+        patch: operations["update_project_memory_candidate_api_enterprise_projects__project_id__memory_candidates__candidate_id__patch"];
+        trace?: never;
+    };
+    "/api/enterprise/projects/{project_id}/memory/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project Memory Stats */
+        get: operations["get_project_memory_stats_api_enterprise_projects__project_id__memory_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/projects/{project_id}/readiness-score": {
         parameters: {
             query?: never;
@@ -1270,6 +1339,15 @@ export interface components {
             scenario_recommended_dimensions?: string[];
             /** Qa Rule Ids */
             qa_rule_ids?: string[];
+            /** Memory Candidate Ids */
+            memory_candidate_ids?: string[];
+            /** Memory Prompt Context */
+            memory_prompt_context?: string[];
+            /**
+             * Memory Recall Score
+             * @default 0
+             */
+            memory_recall_score: number;
             /** Homepage Hints */
             homepage_hints?: {
                 [key: string]: string;
@@ -2370,6 +2448,123 @@ export interface components {
              * @default Reply with exactly: ok
              */
             prompt: string;
+        };
+        /** MemoryCandidate */
+        MemoryCandidate: {
+            /** Id */
+            id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "preferred_dimension" | "source_preference" | "writing_preference" | "risk_preference" | "correction";
+            /**
+             * Status
+             * @default candidate
+             * @enum {string}
+             */
+            status: "candidate" | "confirmed" | "rejected" | "archived";
+            /** Statement */
+            statement: string;
+            /**
+             * Weight
+             * @default 0.5
+             */
+            weight: number;
+            /**
+             * Confidence
+             * @default 0.5
+             */
+            confidence: number;
+            /** Source Feedback Ids */
+            source_feedback_ids?: string[];
+            /** Tags */
+            tags?: string[];
+            /**
+             * Match Score
+             * @default 0
+             */
+            match_score: number;
+            /**
+             * Used Count
+             * @default 0
+             */
+            used_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at?: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** MemoryFeedbackIngestResult */
+        MemoryFeedbackIngestResult: {
+            feedback: components["schemas"]["UserFeedbackRecord"];
+            /** Candidates */
+            candidates?: components["schemas"]["MemoryCandidate"][];
+            recall: components["schemas"]["MemoryRecallContext"];
+        };
+        /** MemoryRecallContext */
+        MemoryRecallContext: {
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /**
+             * Query
+             * @default
+             */
+            query: string;
+            /** Query Tags */
+            query_tags?: string[];
+            /** Candidates */
+            candidates?: components["schemas"]["MemoryCandidate"][];
+            /** Prompt Context */
+            prompt_context?: string[];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+        };
+        /** MemoryStats */
+        MemoryStats: {
+            /** Workspace Id */
+            workspace_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Feedback Count
+             * @default 0
+             */
+            feedback_count: number;
+            /**
+             * Candidate Count
+             * @default 0
+             */
+            candidate_count: number;
+            /**
+             * Confirmed Candidate Count
+             * @default 0
+             */
+            confirmed_candidate_count: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
         };
         /** ModelPolicyFinding */
         ModelPolicyFinding: {
@@ -4125,6 +4320,92 @@ export interface components {
              */
             created_at?: string;
         };
+        /** UserFeedbackCreateRequest */
+        UserFeedbackCreateRequest: {
+            /**
+             * Feedback Type
+             * @default note
+             * @enum {string}
+             */
+            feedback_type: "correction" | "preference" | "approval" | "rejection" | "note";
+            /**
+             * Target Type
+             * @default project
+             * @enum {string}
+             */
+            target_type: "report" | "claim" | "evidence" | "dimension" | "competitor" | "project";
+            /**
+             * Target Id
+             * @default
+             */
+            target_id: string;
+            /** Run Id */
+            run_id?: string | null;
+            /** Report Version Id */
+            report_version_id?: string | null;
+            /** Message */
+            message: string;
+            /** Tags */
+            tags?: string[];
+            /**
+             * Auto Confirm
+             * @default false
+             */
+            auto_confirm: boolean;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** UserFeedbackRecord */
+        UserFeedbackRecord: {
+            /** Id */
+            id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /** User Id */
+            user_id: string;
+            /**
+             * Feedback Type
+             * @default note
+             * @enum {string}
+             */
+            feedback_type: "correction" | "preference" | "approval" | "rejection" | "note";
+            /**
+             * Target Type
+             * @default project
+             * @enum {string}
+             */
+            target_type: "report" | "claim" | "evidence" | "dimension" | "competitor" | "project";
+            /**
+             * Target Id
+             * @default
+             */
+            target_id: string;
+            /** Run Id */
+            run_id?: string | null;
+            /** Report Version Id */
+            report_version_id?: string | null;
+            /** Message */
+            message: string;
+            /** Tags */
+            tags?: string[];
+            /** Redaction Counts */
+            redaction_counts?: {
+                [key: string]: number;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
         /** UserPersonaModel */
         UserPersonaModel: {
             /** Segments */
@@ -5738,6 +6019,194 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClaimValidationReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_project_memory_feedback_api_enterprise_projects__project_id__memory_feedback_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserFeedbackRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_project_memory_feedback_api_enterprise_projects__project_id__memory_feedback_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserFeedbackCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryFeedbackIngestResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recall_project_memory_api_enterprise_projects__project_id__memory_recall_get: {
+        parameters: {
+            query?: {
+                query?: string;
+                limit?: number;
+                include_unconfirmed?: boolean;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryRecallContext"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_project_memory_candidate_api_enterprise_projects__project_id__memory_candidates__candidate_id__patch: {
+        parameters: {
+            query: {
+                status: string;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryCandidate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_memory_stats_api_enterprise_projects__project_id__memory_stats_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryStats"];
                 };
             };
             /** @description Validation Error */

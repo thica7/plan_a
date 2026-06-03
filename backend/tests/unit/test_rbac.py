@@ -13,7 +13,9 @@ from packages.governance import build_model_policy_report
 def test_rbac_role_permissions_are_ordered() -> None:
     assert can_perform("owner", "audit:read")
     assert can_perform("analyst", "project:write")
+    assert can_perform("analyst", "memory:write")
     assert can_perform("reviewer", "evidence:review")
+    assert can_perform("reviewer", "memory:review")
     assert not can_perform("viewer", "project:write")
     assert not can_perform("reviewer", "evidence:write")
 
@@ -49,6 +51,7 @@ def test_policy_decision_explains_denies_and_allows() -> None:
     assert allow.allowed is True
     assert allow.engine == "internal-opa-compatible"
     assert list_policy_actions()["audit:read"] == "admin"
+    assert list_policy_actions()["memory:read"] == "viewer"
 
 
 def test_external_opa_policy_allows_from_pdp_response(monkeypatch) -> None:

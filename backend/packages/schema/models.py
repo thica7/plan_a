@@ -52,6 +52,9 @@ class AnalysisPlan(BaseModel):
     scenario_id: str | None = None
     scenario_recommended_dimensions: list[str] = Field(default_factory=list)
     qa_rule_ids: list[str] = Field(default_factory=list)
+    memory_candidate_ids: list[str] = Field(default_factory=list)
+    memory_prompt_context: list[str] = Field(default_factory=list)
+    memory_recall_score: int = Field(default=0, ge=0, le=100)
     homepage_hints: dict[str, str] = Field(default_factory=dict)
     homepage_verified: dict[str, bool] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
