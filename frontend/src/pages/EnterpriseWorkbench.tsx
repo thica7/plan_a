@@ -37,6 +37,7 @@ import {
   getReportVersionDiff,
   getProjectRedTeam,
   getToolRegistry,
+  getWorkspaceQuotaDecision,
   getWorkspaceUsage,
   createSourceSnapshot,
   ingestProjectMemoryFeedback,
@@ -104,6 +105,7 @@ import type {
   SourceRegistryRecord,
   ToolRegistryReport,
   UserFeedbackRecord,
+  WorkspaceQuotaDecision,
   WorkspaceUsageSummary,
 } from "../api/types";
 
@@ -159,6 +161,7 @@ export function EnterpriseWorkbench({
   const [memoryRecall, setMemoryRecall] = useState<MemoryRecallContext | null>(null);
   const [memoryFeedback, setMemoryFeedback] = useState<UserFeedbackRecord[]>([]);
   const [workspaceUsage, setWorkspaceUsage] = useState<WorkspaceUsageSummary | null>(null);
+  const [workspaceQuotaDecision, setWorkspaceQuotaDecision] = useState<WorkspaceQuotaDecision | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
@@ -238,6 +241,7 @@ export function EnterpriseWorkbench({
       setMemoryRecall(null);
       setMemoryFeedback([]);
       setWorkspaceUsage(null);
+      setWorkspaceQuotaDecision(null);
       setAuditLogs([]);
       setSelectedVersionId(null);
       setLastReportExport(null);
@@ -276,6 +280,7 @@ export function EnterpriseWorkbench({
       }),
       listProjectMemoryFeedback(selectedProjectId),
       getWorkspaceUsage(projectForLoad.workspace_id),
+      getWorkspaceQuotaDecision(projectForLoad.workspace_id),
       listEnterpriseAuditLogs(projectForLoad.workspace_id),
     ])
       .then(
@@ -303,6 +308,7 @@ export function EnterpriseWorkbench({
           memoryRecallValue,
           memoryFeedbackValue,
           workspaceUsageValue,
+          workspaceQuotaDecisionValue,
           auditLogItems,
         ]) => {
           if (!active) return;
@@ -330,6 +336,7 @@ export function EnterpriseWorkbench({
           setMemoryRecall(memoryRecallValue);
           setMemoryFeedback(memoryFeedbackValue);
           setWorkspaceUsage(workspaceUsageValue);
+          setWorkspaceQuotaDecision(workspaceQuotaDecisionValue);
           setAuditLogs(auditLogItems);
           setSelectedVersionId(versionItems[0]?.id ?? null);
           setEvalOpsBaselineRunId(null);
@@ -362,6 +369,7 @@ export function EnterpriseWorkbench({
         setMemoryRecall(null);
         setMemoryFeedback([]);
         setWorkspaceUsage(null);
+        setWorkspaceQuotaDecision(null);
         setAuditLogs([]);
         setSelectedVersionId(null);
         setDecisionReplay(null);
@@ -471,13 +479,19 @@ export function EnterpriseWorkbench({
       ? evidence.reduce((total, item) => total + item.reliability_score, 0) / evidence.length
       : 0;
 
-  async function refreshAuditLogsForWorkspace(workspaceId: string | null | undefined) {
+  async function refreshWorkspaceGovernance(workspaceId: string | null | undefined) {
     if (!workspaceId) return;
     try {
-      const items = await listEnterpriseAuditLogs(workspaceId);
-      setAuditLogs(items);
+      const [usageValue, decisionValue, auditLogItems] = await Promise.all([
+        getWorkspaceUsage(workspaceId),
+        getWorkspaceQuotaDecision(workspaceId),
+        listEnterpriseAuditLogs(workspaceId),
+      ]);
+      setWorkspaceUsage(usageValue);
+      setWorkspaceQuotaDecision(decisionValue);
+      setAuditLogs(auditLogItems);
     } catch (err) {
-      console.warn("Unable to refresh audit logs", err);
+      console.warn("Unable to refresh workspace governance", err);
     }
   }
 
@@ -530,7 +544,7 @@ export function EnterpriseWorkbench({
       })
       .then((notificationItems) => {
         setNotifications(notificationItems);
-        return refreshAuditLogsForWorkspace(selectedProject.workspace_id);
+        return refreshWorkspaceGovernance(selectedProject.workspace_id);
       })
       .catch((err: Error) => {
         setError(err.message);
@@ -562,7 +576,7 @@ export function EnterpriseWorkbench({
       })
       .then((notificationItems) => {
         setNotifications(notificationItems);
-        return refreshAuditLogsForWorkspace(selectedProject.workspace_id);
+        return refreshWorkspaceGovernance(selectedProject.workspace_id);
       })
       .catch((err: Error) => {
         setError(err.message);
@@ -584,7 +598,7 @@ export function EnterpriseWorkbench({
       });
       const versionItems = await listProjectReportVersions(selectedProject.id);
       setVersions(versionItems);
-      await refreshAuditLogsForWorkspace(selectedProject.workspace_id);
+      await refreshWorkspaceGovernance(selectedProject.workspace_id);
       setScanMessage(`Report approval ${response.status}: ${response.workflow_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to start report approval");
@@ -616,7 +630,7 @@ export function EnterpriseWorkbench({
       ]);
       setVersions(versionItems);
       setReleaseGate(gateValue);
-      await refreshAuditLogsForWorkspace(selectedProject.workspace_id);
+      await refreshWorkspaceGovernance(selectedProject.workspace_id);
       setScanMessage(`Report approval ${response.decision}: ${response.workflow_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update report approval");
@@ -639,7 +653,7 @@ export function EnterpriseWorkbench({
       setVersions(versionItems);
       setSelectedVersionId(updated.id);
       setReleaseGate(gateValue);
-      await refreshAuditLogsForWorkspace(selectedProject.workspace_id);
+      await refreshWorkspaceGovernance(selectedProject.workspace_id);
       setScanMessage(`Report v${updated.version_number} published.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to publish report");
@@ -658,7 +672,7 @@ export function EnterpriseWorkbench({
       setLastReportExport(result.artifact);
       const artifactItems = await listArtifacts({ projectId: selectedProject.id });
       setArtifacts(artifactItems);
-      await refreshAuditLogsForWorkspace(selectedProject.workspace_id);
+      await refreshWorkspaceGovernance(selectedProject.workspace_id);
       setScanMessage(`Report v${selectedVersion.version_number} exported as ${format}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to export report");
@@ -699,7 +713,7 @@ export function EnterpriseWorkbench({
       setCompetitorScores(competitorScoresValue);
       setRedTeam(redTeamValue);
       setSelectedVersionId(result.updated_report_version_id ?? versionItems[0]?.id ?? null);
-      await refreshAuditLogsForWorkspace(selectedProject?.workspace_id);
+      await refreshWorkspaceGovernance(selectedProject?.workspace_id);
       setScanMessage(`Gap fill linked ${result.added_evidence_count} candidate evidence item(s).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to fill evidence gaps");
@@ -734,7 +748,7 @@ export function EnterpriseWorkbench({
       setProjects(projectItems.map((item) => (item.id === result.project.id ? result.project : item)));
       setEvidenceGaps(gapsValue);
       setBusinessPlan(planValue);
-      await refreshAuditLogsForWorkspace(result.project.workspace_id);
+      await refreshWorkspaceGovernance(result.project.workspace_id);
       setScanMessage(
         `${decision === "accepted" ? "Accepted" : "Rejected"} schema dimension ${suggestion.normalized_dimension}.`,
       );
@@ -772,7 +786,7 @@ export function EnterpriseWorkbench({
       setMemoryRecall(recallValue);
       setMemoryStats(statsValue);
       setMemoryFeedbackDraft("");
-      await refreshAuditLogsForWorkspace(project.workspace_id);
+      await refreshWorkspaceGovernance(project.workspace_id);
       setScanMessage(
         result.candidates.length > 0
           ? `Memory feedback saved with ${result.candidates.length} candidate(s) pending review.`
@@ -806,7 +820,7 @@ export function EnterpriseWorkbench({
       ]);
       setMemoryStats(statsValue);
       setMemoryRecall(recallValue);
-      await refreshAuditLogsForWorkspace(selectedProject?.workspace_id);
+      await refreshWorkspaceGovernance(selectedProject?.workspace_id);
       setScanMessage(`Memory ${updated.kind.replace(/_/g, " ")} marked ${updated.status}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update memory candidate");
@@ -831,7 +845,7 @@ export function EnterpriseWorkbench({
       ]);
       setArtifacts(artifactItems);
       setSourceRegistry(sourceRegistryValue);
-      await refreshAuditLogsForWorkspace(selectedProject.workspace_id);
+      await refreshWorkspaceGovernance(selectedProject.workspace_id);
       setScanMessage(
         `Snapshot captured: ${result.artifact.filename} (${result.snapshot_quality_score}/100).`,
       );
@@ -897,7 +911,7 @@ export function EnterpriseWorkbench({
         kind: manualResearchDraft.kind,
         dimension: manualResearchDraft.dimension || "persona",
       });
-      await refreshAuditLogsForWorkspace(selectedProject.workspace_id);
+      await refreshWorkspaceGovernance(selectedProject.workspace_id);
       setScanMessage(
         `Research evidence imported: ${result.artifact.filename} (${result.snapshot_quality_score}/100).`,
       );
@@ -932,7 +946,7 @@ export function EnterpriseWorkbench({
             setRedTeam(redTeamValue);
           });
         }
-        void refreshAuditLogsForWorkspace(selectedProject?.workspace_id);
+        void refreshWorkspaceGovernance(selectedProject?.workspace_id);
       })
       .catch((err: Error) => {
         setError(err.message);
@@ -1007,6 +1021,7 @@ export function EnterpriseWorkbench({
             </button>
             {scanMessage ? <p className="muted-line">{scanMessage}</p> : null}
             {workspaceUsage ? <WorkspaceUsagePanel usage={workspaceUsage} /> : null}
+            {workspaceQuotaDecision ? <WorkspaceQuotaDecisionPanel decision={workspaceQuotaDecision} /> : null}
             <div className="notification-list">
               {notifications.slice(0, 5).map((notification) => (
                 <article className={`notification-item ${notification.severity}`} key={notification.id}>
@@ -2475,6 +2490,31 @@ function WorkspaceUsagePanel({ usage }: { usage: WorkspaceUsageSummary }) {
           <meter max={1} min={0} value={Math.min(row.ratio, 1)} />
         </label>
       ))}
+    </div>
+  );
+}
+
+function WorkspaceQuotaDecisionPanel({ decision }: { decision: WorkspaceQuotaDecision }) {
+  const statusClass = decision.allowed ? decision.status : "blocked";
+  const Icon = decision.allowed ? ShieldCheck : AlertTriangle;
+  return (
+    <div className={`workspace-quota-panel ${statusClass}`}>
+      <div>
+        <Icon size={14} aria-hidden />
+        <strong>Quota decision</strong>
+        <span>{decision.allowed ? "allowed" : "blocked"}</span>
+      </div>
+      <dl>
+        <div>
+          <dt>Mode</dt>
+          <dd>{decision.enforcement}</dd>
+        </div>
+        <div>
+          <dt>Status</dt>
+          <dd>{decision.status}</dd>
+        </div>
+      </dl>
+      <p>{decision.reason}</p>
     </div>
   );
 }

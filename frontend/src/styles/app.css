@@ -2066,6 +2066,71 @@ select {
   width: 100%;
 }
 
+.workspace-quota-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.workspace-quota-panel.warn {
+  border-color: rgba(179, 86, 35, 0.34);
+}
+
+.workspace-quota-panel.exceeded,
+.workspace-quota-panel.blocked {
+  border-color: rgba(178, 58, 72, 0.42);
+}
+
+.workspace-quota-panel > div,
+.workspace-quota-panel dl {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.workspace-quota-panel dl {
+  margin: 0;
+}
+
+.workspace-quota-panel dl > div {
+  display: grid;
+  gap: 2px;
+}
+
+.workspace-quota-panel strong,
+.workspace-quota-panel span,
+.workspace-quota-panel p,
+.workspace-quota-panel dt,
+.workspace-quota-panel dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace-quota-panel span,
+.workspace-quota-panel dt,
+.workspace-quota-panel p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workspace-quota-panel p,
+.workspace-quota-panel dd {
+  margin: 0;
+}
+
+.workspace-quota-panel dt {
+  font-weight: 600;
+}
+
+.workspace-quota-panel dd {
+  font-size: 13px;
+}
+
 .notification-item {
   background: var(--surface-2);
   border: 1px solid var(--border);
