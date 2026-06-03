@@ -741,6 +741,60 @@ async def test_create_run_merges_requested_scenario_required_dimensions(
 
 
 @pytest.mark.asyncio
+async def test_create_run_generates_dynamic_scenario_from_product_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _verified_homepages(competitors: list[str]) -> dict[str, HomepageVerification]:
+        return {
+            competitor: HomepageVerification(
+                competitor=competitor,
+                homepage_url=f"https://{competitor.casefold()}.example.com",
+                verified=True,
+                reason="test_verified",
+            )
+            for competitor in competitors
+        }
+
+    monkeypatch.setattr(
+        "packages.orchestrator.service.verify_homepages",
+        _verified_homepages,
+    )
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Enterprise AI search workflow",
+            competitors=["Glean", "Coveo", "Elastic"],
+            dimensions=["security"],
+            competitor_layer="L2",
+            scenario_id="dynamic_adaptive",
+            execution_mode="demo",
+        )
+    )
+
+    assert detail.plan.scenario_id.startswith("dynamic_l2_enterprise_ai_search_workflow")
+    assert detail.plan.competitor_layer == "L2"
+    assert detail.plan.dimensions == ["security"]
+    assert detail.plan.scenario_recommended_dimensions[:4] == [
+        "security",
+        "pricing",
+        "feature",
+        "persona",
+    ]
+    assert any(task.dimension == "security" for task in detail.plan.task_decomposition)
+
+
+@pytest.mark.asyncio
 async def test_trace_spans_redact_sensitive_text_before_storage() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
