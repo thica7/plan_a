@@ -1430,6 +1430,7 @@ function ClaimValidationPanel({ report }: { report: ClaimValidationReport }) {
               <strong>{issue.issue_type.replace(/_/g, " ")}</strong>
               <span>{issue.severity} / {issue.claim_id}</span>
               <p>{issue.message}</p>
+              <ClaimValidationTargetLinks claimId={issue.claim_id} evidenceIds={issue.evidence_ids} />
             </article>
           ))}
         </div>
@@ -1450,6 +1451,7 @@ function ClaimValidationPanel({ report }: { report: ClaimValidationReport }) {
                 text {result.text_support_score}, evidence {result.evidence_quality_score},
                 triangulation {result.triangulation_score}. {formatConsistencyVotes(result)}
               </p>
+              <ClaimValidationTargetLinks claimId={result.claim_id} evidenceIds={result.usable_evidence_ids} />
             </article>
           ))}
         </div>
@@ -1457,6 +1459,25 @@ function ClaimValidationPanel({ report }: { report: ClaimValidationReport }) {
         <p className="muted-line">All validated claims are currently supported.</p>
       )}
     </section>
+  );
+}
+
+function ClaimValidationTargetLinks({
+  claimId,
+  evidenceIds,
+}: {
+  claimId: string;
+  evidenceIds: string[];
+}) {
+  return (
+    <div className="source-id-links finding-target-links">
+      <a href={`#claim-${claimId}`}>claim {claimId.slice(0, 10)}</a>
+      {evidenceIds.slice(0, 4).map((evidenceId) => (
+        <a href={`#evidence-${evidenceId}`} key={evidenceId}>
+          evidence {evidenceId.slice(0, 10)}
+        </a>
+      ))}
+    </div>
   );
 }
 
