@@ -101,7 +101,10 @@ def validate_project_claims(
                 claim.id,
                 "warn",
                 "low_evidence_quality",
-                "Usable evidence is present, but source quality is too weak for confident reporting.",
+                (
+                    "Usable evidence is present, but source quality is too weak for "
+                    "confident reporting."
+                ),
                 [item.id for item in usable],
             )
             issues.append(issue)
@@ -111,7 +114,10 @@ def validate_project_claims(
                 claim.id,
                 "warn",
                 "single_source_support",
-                "High-risk or comparative claim should be supported by multiple independent sources.",
+                (
+                    "High-risk or comparative claim should be supported by multiple "
+                    "independent sources."
+                ),
                 [item.id for item in usable],
             )
             issues.append(issue)
@@ -133,7 +139,10 @@ def validate_project_claims(
                 claim.id,
                 "warn",
                 "low_self_consistency",
-                "Claim failed the multi-check consistency threshold across text, source quality, and triangulation.",
+                (
+                    "Claim failed the multi-check consistency threshold across text, "
+                    "source quality, and triangulation."
+                ),
                 [item.id for item in usable],
             )
             issues.append(issue)
@@ -163,6 +172,12 @@ def validate_project_claims(
                 triangulation_score=triangulation_score,
                 self_consistency_score=support_score,
                 consistency_votes=consistency_votes,
+                validation_samples=_consistency_samples(
+                    text_support_score=text_support_score,
+                    evidence_quality_score=evidence_quality_score,
+                    triangulation_score=triangulation_score,
+                    usable_evidence_ids=[item.id for item in usable],
+                ),
                 usable_evidence_ids=[item.id for item in usable],
                 issue_ids=claim_issue_ids,
             )
@@ -282,6 +297,61 @@ def _consistency_votes(
         "text_support": 1 if text_support_score >= 70 else 0,
         "evidence_quality": 1 if evidence_quality_score >= 75 else 0,
         "triangulation": 1 if triangulation_score >= 70 else 0,
+    }
+
+
+def _consistency_samples(
+    *,
+    text_support_score: int,
+    evidence_quality_score: int,
+    triangulation_score: int,
+    usable_evidence_ids: list[str],
+) -> list[dict[str, object]]:
+    return [
+        _consistency_sample(
+            checker="text_support",
+            score=text_support_score,
+            threshold=70,
+            evidence_ids=usable_evidence_ids,
+            pass_rationale="Evidence text overlaps with the claim strongly enough.",
+            fail_rationale="Evidence text does not lexically support the claim strongly enough.",
+        ),
+        _consistency_sample(
+            checker="evidence_quality",
+            score=evidence_quality_score,
+            threshold=75,
+            evidence_ids=usable_evidence_ids,
+            pass_rationale="Usable evidence quality meets the enterprise review threshold.",
+            fail_rationale="Usable evidence quality is below the enterprise review threshold.",
+        ),
+        _consistency_sample(
+            checker="triangulation",
+            score=triangulation_score,
+            threshold=70,
+            evidence_ids=usable_evidence_ids,
+            pass_rationale="The claim has enough independent source triangulation for review.",
+            fail_rationale="The claim lacks enough independent source triangulation.",
+        ),
+    ]
+
+
+def _consistency_sample(
+    *,
+    checker: str,
+    score: int,
+    threshold: int,
+    evidence_ids: list[str],
+    pass_rationale: str,
+    fail_rationale: str,
+) -> dict[str, object]:
+    passed = score >= threshold
+    return {
+        "checker": checker,
+        "vote": "pass" if passed else "fail",
+        "score": score,
+        "threshold": threshold,
+        "rationale": pass_rationale if passed else fail_rationale,
+        "evidence_ids": evidence_ids,
     }
 
 

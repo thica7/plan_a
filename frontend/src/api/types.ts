@@ -651,6 +651,7 @@ export interface RunQualityComparison {
 }
 
 export type ClaimValidationStatus = "supported" | "weak" | "unsupported" | "blocked";
+export type ClaimValidationSampleChecker = "text_support" | "evidence_quality" | "triangulation";
 
 export interface ClaimValidationIssue {
   id: string;
@@ -668,6 +669,15 @@ export interface ClaimValidationIssue {
   evidence_ids: string[];
 }
 
+export interface ClaimValidationSample {
+  checker: ClaimValidationSampleChecker;
+  vote: "pass" | "fail";
+  score: number;
+  threshold: number;
+  rationale: string;
+  evidence_ids: string[];
+}
+
 export interface ClaimValidationResult {
   claim_id: string;
   status: ClaimValidationStatus;
@@ -677,6 +687,7 @@ export interface ClaimValidationResult {
   triangulation_score: number;
   self_consistency_score: number;
   consistency_votes: Record<string, number>;
+  validation_samples: ClaimValidationSample[];
   usable_evidence_ids: string[];
   issue_ids: string[];
 }

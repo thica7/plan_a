@@ -36,8 +36,8 @@ from packages.business_intel import (
     score_project_readiness,
     validate_project_claims,
 )
-from packages.config import Settings
 from packages.compliance import compliance_policy_from_settings
+from packages.config import Settings
 from packages.enterprise import (
     EnterpriseStore,
     build_project_knowledge_graph_read_model,
@@ -57,7 +57,6 @@ from packages.rag import (
     fill_evidence_gaps_online,
     ingest_evidence_seed_corpus,
 )
-from packages.search import PerplexitySearchClient
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
     ArtifactCreateResult,
@@ -100,10 +99,9 @@ from packages.schema.enterprise import (
     SchemaEvolutionReviewRecord,
     SchemaEvolutionReviewRequest,
     SchemaEvolutionReviewResult,
-    SchemaEvolutionSuggestion,
+    SourceRegistryRecord,
     SourceSnapshotCreateRequest,
     SourceSnapshotResult,
-    SourceRegistryRecord,
     ToolRegistryReport,
     UserFeedbackCreateRequest,
     UserFeedbackRecord,
@@ -113,6 +111,7 @@ from packages.schema.enterprise import (
     WorkspaceRecord,
     WorkspaceUsageSummary,
 )
+from packages.search import PerplexitySearchClient
 from packages.tools import (
     FetchPageResult,
     WebSearchRequest,
@@ -839,6 +838,32 @@ async def get_project_quality_matrix(
                 for evidence_id in result.usable_evidence_ids
             ),
             claim_ids=[item.claim_id for item in claim_validation.results],
+            metadata={
+                "sample_checkers": [
+                    "text_support",
+                    "evidence_quality",
+                    "triangulation",
+                ],
+                "validation_sample_count": sum(
+                    len(result.validation_samples) for result in claim_validation.results
+                ),
+                "low_consistency_claim_ids": [
+                    result.claim_id
+                    for result in claim_validation.results
+                    if result.self_consistency_score < 55
+                ],
+                "sample_votes": [
+                    {
+                        "claim_id": result.claim_id,
+                        "checker": sample.checker,
+                        "vote": sample.vote,
+                        "score": sample.score,
+                        "threshold": sample.threshold,
+                    }
+                    for result in claim_validation.results
+                    for sample in result.validation_samples
+                ][:12],
+            },
         ),
         QualityAgentMatrixEntry(
             agent_name="EvidenceGap",

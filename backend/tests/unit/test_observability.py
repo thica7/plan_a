@@ -278,6 +278,16 @@ def test_decision_replay_prefers_real_claim_validation_events() -> None:
                 "claim_count": 1,
                 "source_count": 1,
                 "release_gate": {"status": "blocked", "issue_count": 2},
+                "validation_sample_count": 3,
+                "validation_samples": [
+                    {
+                        "claim_id": "claim-1",
+                        "checker": "text_support",
+                        "vote": "pass",
+                        "score": 88,
+                        "threshold": 70,
+                    }
+                ],
             },
         )
     ]
@@ -290,6 +300,8 @@ def test_decision_replay_prefers_real_claim_validation_events() -> None:
     assert claim_events[0].evidence_ids == ["source-1"]
     assert claim_events[0].payload["claim_count"] == 1
     assert claim_events[0].payload["release_gate"] == {"status": "blocked", "issue_count": 2}
+    assert claim_events[0].payload["validation_sample_count"] == 3
+    assert claim_events[0].payload["validation_samples"][0]["checker"] == "text_support"
 
 
 def test_decision_replay_includes_report_version_gap_fill_events() -> None:

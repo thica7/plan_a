@@ -1576,6 +1576,9 @@ function ClaimValidationPanel({ report }: { report: ClaimValidationReport }) {
                 text {result.text_support_score}, evidence {result.evidence_quality_score},
                 triangulation {result.triangulation_score}. {formatConsistencyVotes(result)}
               </p>
+              {result.validation_samples.length > 0 ? (
+                <p className="muted-line">{formatValidationSamples(result)}</p>
+              ) : null}
               <ClaimValidationTargetLinks claimId={result.claim_id} evidenceIds={result.usable_evidence_ids} />
             </article>
           ))}
@@ -1604,6 +1607,16 @@ function formatConsistencyVotes(result: ClaimValidationResult) {
   const usableEvidenceCount = result.usable_evidence_ids.length;
   const issueCount = result.issue_ids.length;
   return `Votes ${text}/${evidence}/${triangulation}; evidence ${usableEvidenceCount}; issues ${issueCount}.`;
+}
+
+function formatValidationSamples(result: ClaimValidationResult) {
+  return result.validation_samples
+    .slice(0, 3)
+    .map((sample) => {
+      const label = sample.checker.replace(/_/g, " ");
+      return `${label} ${sample.vote} ${sample.score}/${sample.threshold}`;
+    })
+    .join("; ");
 }
 
 function claimValidationResultPriority(result: ClaimValidationResult) {

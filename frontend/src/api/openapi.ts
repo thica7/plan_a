@@ -1918,10 +1918,33 @@ export interface components {
             consistency_votes?: {
                 [key: string]: number;
             };
+            /** Validation Samples */
+            validation_samples?: components["schemas"]["ClaimValidationSample"][];
             /** Usable Evidence Ids */
             usable_evidence_ids?: string[];
             /** Issue Ids */
             issue_ids?: string[];
+        };
+        /** ClaimValidationSample */
+        ClaimValidationSample: {
+            /**
+             * Checker
+             * @enum {string}
+             */
+            checker: "text_support" | "evidence_quality" | "triangulation";
+            /**
+             * Vote
+             * @enum {string}
+             */
+            vote: "pass" | "fail";
+            /** Score */
+            score: number;
+            /** Threshold */
+            threshold: number;
+            /** Rationale */
+            rationale: string;
+            /** Evidence Ids */
+            evidence_ids?: string[];
         };
         /** ComparisonCell */
         ComparisonCell: {

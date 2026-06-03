@@ -1131,6 +1131,13 @@ def test_enterprise_router_exposes_projection() -> None:
     assert claim_validation.json()["supported_count"] == 1
     assert claim_validation.json()["self_consistency_score"] >= 70
     assert claim_validation.json()["results"][0]["self_consistency_score"] >= 70
+    assert [
+        sample["checker"] for sample in claim_validation.json()["results"][0]["validation_samples"]
+    ] == [
+        "text_support",
+        "evidence_quality",
+        "triangulation",
+    ]
     assert memory_ingest.status_code == 200
     assert memory_ingest.json()["feedback"]["id"].startswith("feedback-")
     assert memory_ingest.json()["candidates"]
@@ -1173,6 +1180,12 @@ def test_enterprise_router_exposes_projection() -> None:
     )
     assert claim_matrix["framework"] == "deterministic-self-consistency"
     assert "self-consistency" in claim_matrix["summary"]
+    assert claim_matrix["metadata"]["validation_sample_count"] == 3
+    assert claim_matrix["metadata"]["sample_checkers"] == [
+        "text_support",
+        "evidence_quality",
+        "triangulation",
+    ]
     memory_matrix = next(
         item for item in quality_matrix.json()["entries"] if item["agent_name"] == "MemoryAgent"
     )

@@ -30,6 +30,7 @@ NotificationType = Literal[
 QuotaEnforcementMode = Literal["monitor", "block"]
 WorkspaceUsageStatus = Literal["ok", "warn", "exceeded"]
 ClaimValidationStatus = Literal["supported", "weak", "unsupported", "blocked"]
+ClaimValidationSampleChecker = Literal["text_support", "evidence_quality", "triangulation"]
 QualityAgentStatus = Literal["pass", "warn", "blocker"]
 MemoryFeedbackType = Literal["correction", "preference", "approval", "rejection", "note"]
 MemoryTargetType = Literal["report", "claim", "evidence", "dimension", "competitor", "project"]
@@ -831,6 +832,17 @@ class ClaimValidationIssue(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
 
 
+class ClaimValidationSample(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    checker: ClaimValidationSampleChecker
+    vote: Literal["pass", "fail"]
+    score: int = Field(ge=0, le=100)
+    threshold: int = Field(ge=0, le=100)
+    rationale: str
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
 class ClaimValidationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -842,6 +854,7 @@ class ClaimValidationResult(BaseModel):
     triangulation_score: int = Field(default=0, ge=0, le=100)
     self_consistency_score: int = Field(default=0, ge=0, le=100)
     consistency_votes: dict[str, int] = Field(default_factory=dict)
+    validation_samples: list[ClaimValidationSample] = Field(default_factory=list)
     usable_evidence_ids: list[str] = Field(default_factory=list)
     issue_ids: list[str] = Field(default_factory=list)
 

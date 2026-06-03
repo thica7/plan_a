@@ -93,6 +93,19 @@ def _aggregate_consistency_votes(validation: ClaimValidationReport) -> dict[str,
     return totals
 
 
+def _claim_validation_sample_payload(validation: ClaimValidationReport) -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    for result in validation.results:
+        for sample in result.validation_samples:
+            samples.append(
+                {
+                    "claim_id": result.claim_id,
+                    **sample.model_dump(mode="json"),
+                }
+            )
+    return samples
+
+
 @dataclass
 class PendingGraphRedo:
     iteration: int
@@ -1649,6 +1662,10 @@ class RunService(
                     "claim_ids": [claim.id for claim in projection.claim_records],
                     "evidence_ids": [evidence.id for evidence in projection.evidence_records],
                     "self_consistency_score": validation.self_consistency_score,
+                    "validation_sample_count": sum(
+                        len(result.validation_samples) for result in validation.results
+                    ),
+                    "validation_samples": _claim_validation_sample_payload(validation),
                     "sample_dimensions": [
                         "text_support",
                         "evidence_quality",
@@ -2784,7 +2801,9 @@ class RunService(
             f"IDs preserved for release-gate and report-view traceability.{source_refs}\n\n"
             f"{memory_section}"
             "## Side-by-Side Decision Matrix\n"
-            f"| Dimension | Competitors |\n| --- | --- |\n| {dimensions} | {competitors} {source_refs} |\n\n"
+            "| Dimension | Competitors |\n"
+            "| --- | --- |\n"
+            f"| {dimensions} | {competitors} {source_refs} |\n\n"
             "## Battlecard\n"
             "Use this demo report as a direct battlecard scaffold: verify pricing, feature, "
             f"and persona claims before using it as a publishable recommendation.{source_refs}\n\n"

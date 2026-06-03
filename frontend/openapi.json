@@ -7710,6 +7710,13 @@
             "type": "object",
             "title": "Consistency Votes"
           },
+          "validation_samples": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimValidationSample"
+            },
+            "type": "array",
+            "title": "Validation Samples"
+          },
           "usable_evidence_ids": {
             "items": {
               "type": "string"
@@ -7733,6 +7740,60 @@
           "support_score"
         ],
         "title": "ClaimValidationResult"
+      },
+      "ClaimValidationSample": {
+        "properties": {
+          "checker": {
+            "type": "string",
+            "enum": [
+              "text_support",
+              "evidence_quality",
+              "triangulation"
+            ],
+            "title": "Checker"
+          },
+          "vote": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail"
+            ],
+            "title": "Vote"
+          },
+          "score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "threshold": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Threshold"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "checker",
+          "vote",
+          "score",
+          "threshold",
+          "rationale"
+        ],
+        "title": "ClaimValidationSample"
       },
       "ComparisonCell": {
         "properties": {

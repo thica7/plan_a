@@ -510,8 +510,16 @@ def test_claim_validator_cross_checks_evidence_support() -> None:
         "evidence_quality": 1,
         "triangulation": 1,
     }
+    assert [sample.checker for sample in supported.validation_samples] == [
+        "text_support",
+        "evidence_quality",
+        "triangulation",
+    ]
+    assert all(sample.vote == "pass" for sample in supported.validation_samples)
+    assert supported.validation_samples[0].evidence_ids == ["evidence-1"]
     assert weak.self_consistency_score < supported.self_consistency_score
     assert weak.triangulation_score == 70
+    assert any(sample.vote == "fail" for sample in weak.validation_samples)
     assert report.self_consistency_score >= 70
     assert report.blocker_count == 1
     assert report.warn_count >= 1
