@@ -7,7 +7,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-
 DEFAULT_EXCLUDES = (
     ".git/",
     ".venv/",
@@ -34,8 +33,10 @@ SECRET_PATTERNS = (
     ("openai_like_key", re.compile(r"\bsk-(?:or-v1-|proj-|ant-api03-)?[A-Za-z0-9_-]{32,}\b")),
     ("aws_access_key", re.compile(r"\bA(?:KIA|SIA)[A-Z0-9]{16}\b")),
     ("github_token", re.compile(r"\bgh[opusr]_[A-Za-z0-9_]{36,}\b")),
+    ("gitlab_token", re.compile(r"\bglpat-[A-Za-z0-9_-]{20,}\b")),
     ("google_api_key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b")),
     ("huggingface_token", re.compile(r"\bhf_[A-Za-z0-9]{32,}\b")),
+    ("perplexity_key", re.compile(r"\bpplx-[A-Za-z0-9_-]{20,}\b")),
 )
 
 PLACEHOLDER_MARKERS = (
@@ -98,9 +99,19 @@ def default_scan_paths(root: Path) -> list[Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Scan tracked project files for accidental provider secrets.")
-    parser.add_argument("paths", nargs="*", help="Optional files or directories to scan instead of tracked files.")
-    parser.add_argument("--root", default=".", help="Repository root. Defaults to the current directory.")
+    parser = argparse.ArgumentParser(
+        description="Scan tracked project files for accidental provider secrets."
+    )
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        help="Optional files or directories to scan instead of tracked files.",
+    )
+    parser.add_argument(
+        "--root",
+        default=".",
+        help="Repository root. Defaults to the current directory.",
+    )
     args = parser.parse_args(argv)
 
     root = Path(args.root).resolve()
@@ -132,7 +143,10 @@ def _expand_cli_paths(values: list[str], *, root: Path) -> list[Path]:
 
 def _is_excluded(path: Path, *, root: Path) -> bool:
     relative = _relative_path(path, root=root).replace("\\", "/")
-    return any(relative == item.rstrip("/") or relative.startswith(item) for item in DEFAULT_EXCLUDES)
+    return any(
+        relative == item.rstrip("/") or relative.startswith(item)
+        for item in DEFAULT_EXCLUDES
+    )
 
 
 def _relative_path(path: Path, *, root: Path) -> str:
