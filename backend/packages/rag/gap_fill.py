@@ -221,6 +221,7 @@ def _finalize_gap_fill(
         added_evidence_count=len(candidate_ids),
         online_collected_evidence_count=len(online_collected_ids),
         online_failure_count=len(online_failure_items),
+        online_failures=online_failure_items,
         gap_fill_chain_closed=gap_fill_chain_closed,
         candidate_evidence_ids=candidate_ids,
         filled_gap_ids=filled_gap_ids,

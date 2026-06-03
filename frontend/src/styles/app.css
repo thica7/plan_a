@@ -2680,6 +2680,38 @@ select {
   font-style: normal;
 }
 
+.gap-fill-failure-list {
+  display: grid;
+  gap: 8px;
+}
+
+.gap-fill-failure-card {
+  background: #fff7ed;
+  border: 1px solid rgba(180, 83, 9, 0.24);
+  border-radius: 8px;
+  color: #7c2d12;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+}
+
+.gap-fill-failure-card strong,
+.gap-fill-failure-card span,
+.gap-fill-failure-card p {
+  overflow-wrap: anywhere;
+}
+
+.gap-fill-failure-card span {
+  color: #9a3412;
+  font-size: 12px;
+}
+
+.gap-fill-failure-card p {
+  color: #7c2d12;
+  font-size: 12px;
+  margin: 0;
+}
+
 .agent-runtime-row {
   display: grid;
   gap: 8px;

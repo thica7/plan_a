@@ -3186,6 +3186,23 @@ function EvidenceGapPanel({
           </span>
         </div>
       ) : null}
+      {fillResult?.online_failures.length ? (
+        <div className="gap-fill-failure-list">
+          {fillResult.online_failures.slice(0, 3).map((failure, index) => (
+            <article
+              className="gap-fill-failure-card"
+              key={`${failure.gap_id ?? "gap"}-${failure.stage ?? "stage"}-${index}`}
+            >
+              <strong>
+                {failure.stage ? failure.stage.replace(/_/g, " ") : "online failure"}
+                {failure.gap_id ? ` / ${failure.gap_id}` : ""}
+              </strong>
+              {failure.url ? <span>{failure.url}</span> : null}
+              {failure.error ? <p>{failure.error}</p> : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
       {fillResult?.decision_events.length ? (
         <div className="recommendation-list">
           {fillResult.decision_events.slice(0, 3).map((event) => (

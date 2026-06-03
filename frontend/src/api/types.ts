@@ -1245,6 +1245,13 @@ export interface EvidenceGapFillDecisionEvent {
   created_at: string;
 }
 
+export interface EvidenceGapOnlineFailure {
+  gap_id?: string;
+  stage?: string;
+  url?: string;
+  error?: string;
+}
+
 export interface EvidenceGapFillResult {
   project_id: string;
   workspace_id: string;
@@ -1258,6 +1265,7 @@ export interface EvidenceGapFillResult {
   added_evidence_count: number;
   online_collected_evidence_count: number;
   online_failure_count: number;
+  online_failures: EvidenceGapOnlineFailure[];
   gap_fill_chain_closed: boolean;
   candidate_evidence_ids: string[];
   filled_gap_ids: string[];

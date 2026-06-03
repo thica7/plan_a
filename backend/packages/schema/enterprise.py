@@ -1069,6 +1069,7 @@ class EvidenceGapFillResult(BaseModel):
     added_evidence_count: int = Field(ge=0)
     online_collected_evidence_count: int = Field(default=0, ge=0)
     online_failure_count: int = Field(default=0, ge=0)
+    online_failures: list[dict[str, str]] = Field(default_factory=list)
     gap_fill_chain_closed: bool = False
     candidate_evidence_ids: list[str] = Field(default_factory=list)
     filled_gap_ids: list[str] = Field(default_factory=list)

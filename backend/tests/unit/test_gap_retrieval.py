@@ -561,6 +561,14 @@ async def test_online_gap_fill_does_not_store_robots_blocked_search_fallback() -
     assert result.added_evidence_count == 0
     assert result.online_collected_evidence_count == 0
     assert result.online_failure_count == 1
+    assert result.online_failures == [
+        {
+            "gap_id": "gap-robots-onboarding",
+            "stage": "robots",
+            "url": "https://cursor.example/onboarding",
+            "error": "Blocked by robots.txt at https://cursor.example/robots.txt",
+        }
+    ]
     assert result.gap_fill_chain_closed is False
     assert result.decision_events[1].event_type == "tool.called"
     assert result.decision_events[1].payload["online_failures"][0]["stage"] == "robots"
