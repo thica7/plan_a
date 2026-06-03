@@ -1,5 +1,6 @@
 import asyncio
 import time
+from datetime import datetime
 
 import pytest
 
@@ -27,6 +28,29 @@ from packages.tools.fetch_page import FetchPageResult
 
 def _test_graph_checkpointer() -> GraphCheckpointer:
     return GraphCheckpointer.in_memory()
+
+
+def _now() -> datetime:
+    return datetime.utcnow()
+
+
+def _collector_issue(issue_id: str, subagent: str, competitor: str) -> QCIssue:
+    return QCIssue(
+        id=issue_id,
+        severity="warn",
+        detected_by="coverage",
+        target_agent="collector",
+        target_subagent=subagent,
+        target_competitor=competitor,
+        field_path=f"raw_sources[{issue_id}]",
+        problem=f"{competitor} needs verified {subagent} evidence.",
+        redo_scope=RedoScope(
+            kind="collector",
+            target_subagent=subagent,
+            target_competitor=competitor,
+            rationale=f"Collect verified {subagent} evidence for {competitor}.",
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -1090,6 +1114,51 @@ def test_convergence_ratio_tracks_remaining_issue_share() -> None:
 
     assert service._convergence_ratio(4, 1) == 0.25
     assert service._convergence_ratio(0, 1) == 1.0
+
+
+def test_redo_issue_selection_batches_largest_competitor_gap_cluster() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-redo-cluster",
+        topic="Clustered redo",
+        status="completed",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="Clustered redo",
+            competitors=["A", "B", "C", "D", "E"],
+            dimensions=["pricing", "feature", "integrations"],
+        ),
+        qa_findings=[
+            _collector_issue("unverified-feature-a", "feature", "A"),
+            _collector_issue("unverified-integrations-e", "integrations", "E"),
+            _collector_issue("unverified-pricing-a", "pricing", "A"),
+            _collector_issue("unverified-pricing-b", "pricing", "B"),
+            _collector_issue("unverified-pricing-c", "pricing", "C"),
+            _collector_issue("unverified-pricing-d", "pricing", "D"),
+            _collector_issue("unverified-pricing-e", "pricing", "E"),
+        ],
+    )
+
+    selected = service._select_redo_issues(detail)
+
+    assert [issue.redo_scope.target_subagent for issue in selected] == [
+        "pricing",
+        "pricing",
+        "pricing",
+    ]
+    assert {issue.redo_scope.target_competitor for issue in selected} == {"A", "B", "C"}
 
 
 @pytest.mark.asyncio

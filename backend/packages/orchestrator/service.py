@@ -2025,6 +2025,10 @@ class RunService(
         return sorted(detail.qa_findings, key=rank)[0]
 
     def _select_redo_issues(self, detail: RunDetail) -> list[QCIssue]:
+        clustered = self._select_largest_batchable_redo_cluster(detail)
+        if clustered:
+            return clustered
+
         primary = self._select_redo_issue(detail)
         primary_scope = primary.redo_scope
         if primary_scope.kind not in {"collector", "analyst"} or not primary_scope.target_subagent:
@@ -2058,6 +2062,64 @@ class RunService(
             selected.append(candidate)
             selected_ids.add(candidate.id)
             selected_competitors.update(candidate_competitors)
+            if len(selected) >= 3:
+                break
+        return selected
+
+    def _select_largest_batchable_redo_cluster(self, detail: RunDetail) -> list[QCIssue]:
+        if not detail.qa_findings:
+            return []
+        severity_rank = {"blocker": 0, "warn": 1, "info": 2}
+        best_severity = min(severity_rank.get(issue.severity, 3) for issue in detail.qa_findings)
+        groups: dict[tuple[str, str], list[QCIssue]] = {}
+        for issue in detail.qa_findings:
+            if severity_rank.get(issue.severity, 3) != best_severity:
+                continue
+            scope = issue.redo_scope
+            if scope.kind not in {"collector", "analyst"} or not scope.target_subagent:
+                continue
+            competitors = [scope.target_competitor, *scope.target_competitors]
+            if not any(competitor for competitor in competitors):
+                continue
+            groups.setdefault((scope.kind, scope.target_subagent), []).append(issue)
+
+        candidates: list[tuple[int, str, str, list[QCIssue]]] = []
+        for (kind, subagent), issues in groups.items():
+            competitor_count = len(
+                {
+                    competitor
+                    for issue in issues
+                    for competitor in [
+                        issue.redo_scope.target_competitor,
+                        *issue.redo_scope.target_competitors,
+                    ]
+                    if competitor
+                }
+            )
+            if competitor_count >= 2:
+                candidates.append((competitor_count, kind, subagent, issues))
+        if not candidates:
+            return []
+
+        _, _, _, selected_group = sorted(
+            candidates,
+            key=lambda item: (-item[0], item[1], item[2]),
+        )[0]
+        selected: list[QCIssue] = []
+        selected_competitors: set[str] = set()
+        for issue in sorted(selected_group, key=lambda item: item.id):
+            competitors = [
+                competitor
+                for competitor in [
+                    issue.redo_scope.target_competitor,
+                    *issue.redo_scope.target_competitors,
+                ]
+                if competitor
+            ]
+            if any(competitor in selected_competitors for competitor in competitors):
+                continue
+            selected.append(issue)
+            selected_competitors.update(competitors)
             if len(selected) >= 3:
                 break
         return selected
