@@ -78,9 +78,9 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
     assert "pain points" in interview_source.snippet
     assert interview_source.confidence == 0.62
     assert "jane.buyer@example.com" not in survey_source.snippet
-    assert "OPENROUTER_TEST_KEY_REDACTED" not in survey_source.snippet
+    assert "sk-or-v1-redacted" not in survey_source.snippet
     assert "jane.buyer@example.com" not in interview_source.snippet
-    assert "OPENROUTER_TEST_KEY_REDACTED" not in interview_source.snippet
+    assert "sk-or-v1-redacted" not in interview_source.snippet
     assert record.detail.agent_messages[-1].message_type == "survey_interview_evidence_collected"
     assert set(record.detail.agent_messages[-1].payload["source_ids"]) == {
         survey_source.id,
@@ -113,7 +113,7 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
     assert span.metadata["research_redacted"] is True
     assert span.metadata["research_redaction_email_count"] >= 1
     assert "jane.buyer@example.com" not in span.full_output
-    assert "OPENROUTER_TEST_KEY_REDACTED" not in span.full_output
+    assert "sk-or-v1-redacted" not in span.full_output
     assert "[redacted:email]" in span.full_output
     assert "[redacted:api_key]" in span.full_output
 

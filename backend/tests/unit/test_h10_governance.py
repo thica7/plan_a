@@ -115,7 +115,7 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
     assert evidence.metadata["artifact_id"] == result.artifact.id
     assert "workflow fit" in evidence.snippet
     assert "buyer@example.com" not in evidence.snippet
-    assert "sk-or-v1-c87b" not in evidence.snippet
+    assert "sk-or-v1-redacted" not in evidence.snippet
     assert "[redacted:email]" in evidence.snippet
     assert "[redacted:api_key]" in evidence.snippet
     assert result.artifact.metadata["redaction_applied"] is True
@@ -128,7 +128,7 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
     )
     artifact_text = artifact_path.read_text(encoding="utf-8")
     assert "buyer@example.com" not in artifact_text
-    assert "sk-or-v1-c87b" not in artifact_text
+    assert "sk-or-v1-redacted" not in artifact_text
     assert "[redacted:email]" in artifact_text
     assert "[redacted:api_key]" in artifact_text
     assert result.snapshot_quality_score >= 80

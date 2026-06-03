@@ -22,13 +22,6 @@ DEFAULT_EXCLUDES = (
     "backend/.test-artifacts/",
 )
 
-FIXTURE_PATH_PARTS = (
-    "/tests/",
-    "\\tests\\",
-    "/test_",
-    "\\test_",
-)
-
 SECRET_PATTERNS = (
     ("openai_like_key", re.compile(r"\bsk-(?:or-v1-|proj-|ant-api03-)?[A-Za-z0-9_-]{32,}\b")),
     ("aws_access_key", re.compile(r"\bA(?:KIA|SIA)[A-Z0-9]{16}\b")),
@@ -40,11 +33,14 @@ SECRET_PATTERNS = (
 )
 
 PLACEHOLDER_MARKERS = (
+    "dummy",
     "your_key",
     "your-api-key",
     "example",
+    "fixture",
     "placeholder",
     "redacted",
+    "test",
     "abcdef",
     "123456",
 )
@@ -157,11 +153,11 @@ def _relative_path(path: Path, *, root: Path) -> str:
 
 
 def _looks_like_fixture(path: str, token: str) -> bool:
-    normalized_path = path.replace("\\", "/")
-    if any(part in path or part in normalized_path for part in FIXTURE_PATH_PARTS):
-        return True
     lowered = token.casefold()
-    return any(marker in lowered for marker in PLACEHOLDER_MARKERS)
+    has_placeholder_marker = any(marker in lowered for marker in PLACEHOLDER_MARKERS)
+    if has_placeholder_marker:
+        return True
+    return False
 
 
 def _redacted_preview(token: str) -> str:

@@ -5,7 +5,8 @@ import sys
 from pathlib import Path
 
 FAKE_GITLAB_TOKEN = "glpat-" + "gitlabtoken" * 3
-FAKE_OPENROUTER_KEY = "sk-or-v1-" + "test" * 16
+FAKE_OPENROUTER_KEY = "sk-or-v1-" + "livekey" * 8
+FIXTURE_OPENROUTER_KEY = "sk-or-v1-" + "redacted_fixture_1234567890" * 2
 FAKE_PERPLEXITY_KEY = "pplx-" + "perplexity" * 3
 
 
@@ -53,10 +54,26 @@ def test_secret_scan_ignores_placeholders_and_test_fixtures(tmp_path: Path) -> N
     fixture = tmp_path / "backend" / "tests" / "unit" / "test_fixture.py"
     fixture.parent.mkdir(parents=True)
     fixture.write_text(
-        f'key = "{FAKE_OPENROUTER_KEY}"\n',
+        f'key = "{FIXTURE_OPENROUTER_KEY}"\n',
         encoding="utf-8",
     )
 
     findings = module.scan_paths([placeholder, fixture], root=tmp_path)
 
     assert findings == []
+
+
+def test_secret_scan_flags_unmarked_provider_keys_in_tests(tmp_path: Path) -> None:
+    module = _load_scan_module()
+    fixture = tmp_path / "backend" / "tests" / "unit" / "test_leaked_key.py"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        f'key = "{FAKE_OPENROUTER_KEY}"\n',
+        encoding="utf-8",
+    )
+
+    findings = module.scan_paths([fixture], root=tmp_path)
+
+    assert [(item.path.replace("\\", "/"), item.pattern_name) for item in findings] == [
+        ("backend/tests/unit/test_leaked_key.py", "openai_like_key")
+    ]
