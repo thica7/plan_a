@@ -117,3 +117,67 @@ def test_enterprise_eval_regression_gate_reports_failed_checks() -> None:
         "compliance_fail_count",
         "failed_count",
     }
+
+
+def test_enterprise_eval_renders_markdown_quality_card() -> None:
+    module = _load_eval_module()
+    markdown = module.render_evalops_markdown(
+        {
+            "generated_at": "2026-06-04T00:00:00Z",
+            "run_count": 1,
+            "evaluated_run_ids": ["run-quality-1"],
+            "baseline_run_id": None,
+            "regression_gate_status": "fail",
+            "regression_gate_reason": "Regression gate failed on decision_replay_rate.",
+            "metrics": [
+                {
+                    "name": "decision_replay_rate",
+                    "value": 0.5,
+                    "target": 0.8,
+                    "status": "fail",
+                },
+                {
+                    "name": "golden_set_pass_rate",
+                    "value": 0.9,
+                    "target": 0.8,
+                    "status": "pass",
+                },
+            ],
+            "quality_chain_steps": [
+                {
+                    "step": "decision_replay",
+                    "label": "Decision replay",
+                    "pass_rate": 0.5,
+                    "failed_run_ids": ["run-quality-1"],
+                    "summary": "Replay coverage is incomplete.",
+                }
+            ],
+            "regression_gate_issues": [
+                {
+                    "kind": "metric",
+                    "id": "decision_replay_rate",
+                    "status": "fail",
+                    "summary": "decision_replay_rate 0.500; target >= 0.800.",
+                }
+            ],
+            "cases": [
+                {
+                    "case_id": "golden.decision_replay",
+                    "score": 50,
+                    "status": "fail",
+                    "summary": "50/100 against target 80.",
+                }
+            ],
+            "recommendations": ["Capture replayable decision events."],
+        }
+    )
+
+    assert "# Enterprise EvalOps Quality Card" in markdown
+    assert "| decision_replay_rate | 0.500 | 0.800 | fail |" in markdown
+    assert (
+        "| Decision replay | 50.0% | run-quality-1 | Replay coverage is incomplete. |"
+        in markdown
+    )
+    assert "| metric | decision_replay_rate | fail |" in markdown
+    assert "| golden.decision_replay | 50 | fail |" in markdown
+    assert "- Capture replayable decision events." in markdown

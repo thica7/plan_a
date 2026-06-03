@@ -15,7 +15,7 @@ Use this checklist before packaging a deliverable, opening a demo machine, or cr
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests`
 - `pnpm.cmd --dir frontend build`
 - `conda run -n bd-competiscope-v2 python backend\scripts\phase4_readiness_report.py --require-server`
-- `conda run -n bd-competiscope-v2 python backend\scripts\eval_enterprise.py --limit 50 --judge-mode heuristic`
+- `conda run -n bd-competiscope-v2 python backend\scripts\eval_enterprise.py --limit 50 --judge-mode heuristic --format markdown --output docs\reports\demo_case_quality_report.md`
 
 ## Runtime Baseline
 

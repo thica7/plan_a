@@ -150,6 +150,7 @@ def main() -> None:
     parser.add_argument("--project-id", default=None)
     parser.add_argument("--limit", type=int, default=30)
     parser.add_argument("--judge-mode", choices=["heuristic", "llm"], default="heuristic")
+    parser.add_argument("--format", choices=["json", "markdown"], default="json")
     parser.add_argument("--output", default=None)
     args = parser.parse_args()
 
@@ -166,11 +167,168 @@ def main() -> None:
         limit=args.limit,
         judge_mode=args.judge_mode,
     )
-    payload = json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2)
+    report_payload = report.model_dump(mode="json")
+    payload = (
+        render_evalops_markdown(report_payload)
+        if args.format == "markdown"
+        else json.dumps(report_payload, ensure_ascii=False, indent=2) + "\n"
+    )
     if args.output:
-        Path(args.output).write_text(payload + "\n", encoding="utf-8")
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(payload, encoding="utf-8")
         return
-    print(payload)
+    print(payload, end="")
+
+
+def render_evalops_markdown(report: dict[str, Any]) -> str:
+    metrics = {str(item.get("name")): item for item in _list_of_dicts(report.get("metrics"))}
+    lines = [
+        "# Enterprise EvalOps Quality Card",
+        "",
+        f"- Generated at: {report.get('generated_at', 'unknown')}",
+        f"- Run count: {report.get('run_count', 0)}",
+        f"- Evaluated runs: {', '.join(_string_list(report.get('evaluated_run_ids'))) or 'none'}",
+        f"- Baseline run: {report.get('baseline_run_id') or 'none'}",
+        f"- Regression gate: {str(report.get('regression_gate_status', 'unknown')).upper()}",
+        f"- Gate reason: {report.get('regression_gate_reason', '')}",
+        "",
+        "## Executive Metrics",
+        "",
+        "| Metric | Value | Target | Status |",
+        "|---|---:|---:|---:|",
+    ]
+    for metric_name in [
+        "golden_set_pass_rate",
+        "report_quality_score",
+        "source_recall",
+        "citation_validity_rate",
+        "decision_replay_rate",
+        "compliance_pass_rate",
+        "real_quality_chain_rate",
+        "time_savings_rate",
+        "human_correction_rate",
+        "redo_convergence_ratio",
+    ]:
+        metric = metrics.get(metric_name)
+        if not metric:
+            continue
+        lines.append(
+            "| {name} | {value} | {target} | {status} |".format(
+                name=metric_name,
+                value=_format_markdown_value(metric.get("value")),
+                target=_format_markdown_value(metric.get("target")),
+                status=metric.get("status", ""),
+            )
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Quality Chain",
+            "",
+            "| Step | Pass Rate | Failed Runs | Summary |",
+            "|---|---:|---:|---|",
+        ]
+    )
+    for step in _list_of_dicts(report.get("quality_chain_steps")):
+        failed_ids = _string_list(step.get("failed_run_ids"))
+        lines.append(
+            "| {label} | {rate} | {failed} | {summary} |".format(
+                label=step.get("label") or step.get("step") or "unknown",
+                rate=_format_percent(step.get("pass_rate")),
+                failed=", ".join(failed_ids) if failed_ids else "none",
+                summary=_escape_markdown_table(str(step.get("summary", ""))),
+            )
+        )
+
+    issues = _list_of_dicts(report.get("regression_gate_issues"))
+    if issues:
+        lines.extend(
+            [
+                "",
+                "## Gate Issues",
+                "",
+                "| Kind | ID | Status | Summary |",
+                "|---|---|---:|---|",
+            ]
+        )
+        for issue in issues:
+            lines.append(
+                "| {kind} | {id} | {status} | {summary} |".format(
+                    kind=issue.get("kind", ""),
+                    id=issue.get("id", ""),
+                    status=issue.get("status", ""),
+                    summary=_escape_markdown_table(str(issue.get("summary", ""))),
+                )
+            )
+
+    lines.extend(
+        [
+            "",
+            "## Golden Cases",
+            "",
+            "| Case | Score | Status | Summary |",
+            "|---|---:|---:|---|",
+        ]
+    )
+    for case in _list_of_dicts(report.get("cases"))[:20]:
+        lines.append(
+            "| {case_id} | {score} | {status} | {summary} |".format(
+                case_id=case.get("case_id", ""),
+                score=case.get("score", ""),
+                status=case.get("status", ""),
+                summary=_escape_markdown_table(str(case.get("summary", ""))),
+            )
+        )
+
+    recommendations = _string_list(report.get("recommendations"))
+    if recommendations:
+        lines.extend(["", "## Recommendations", ""])
+        lines.extend(f"- {item}" for item in recommendations)
+
+    lines.extend(
+        [
+            "",
+            "## Method",
+            "",
+            (
+                "This quality card is rendered from the same EvalOps payload consumed by "
+                "the Enterprise Workbench. It is intended for repeatable demo-case and "
+                "release-gate evidence, not as a hand-written assessment."
+            ),
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _list_of_dicts(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item is not None]
+
+
+def _format_markdown_value(value: object) -> str:
+    if isinstance(value, float):
+        return f"{value:.3f}"
+    return str(value if value is not None else "")
+
+
+def _format_percent(value: object) -> str:
+    if isinstance(value, int | float):
+        return f"{float(value):.1%}"
+    return str(value if value is not None else "")
+
+
+def _escape_markdown_table(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")
 
 
 if __name__ == "__main__":
