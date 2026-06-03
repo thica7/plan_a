@@ -1,10 +1,13 @@
 from packages.compliance import CompliancePolicy, redact_text
 
 
+FAKE_OPENROUTER_KEY = "sk-or-v1-" + "test" * 12
+
+
 def test_redacts_common_provider_key_families() -> None:
     text = "\n".join(
         [
-            "BACKUP_LLM_API_KEY=OPENROUTER_TEST_KEY_REDACTED",
+            f"BACKUP_LLM_API_KEY={FAKE_OPENROUTER_KEY}",
             "OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz1234567890",
             "ANTHROPIC_API_KEY=sk-ant-api03-abcdefghijklmnopqrstuvwxyz123456",
             "PPLX_API_KEY=pplx-abcdefghijklmnopqrstuvwxyz123456",
@@ -25,7 +28,7 @@ def test_redacts_common_provider_key_families() -> None:
 
 def test_redaction_policy_can_disable_key_redaction_only() -> None:
     result = redact_text(
-        "key=OPENROUTER_TEST_KEY_REDACTED user=ops@example.com",
+        f"key={FAKE_OPENROUTER_KEY} user=ops@example.com",
         policy=CompliancePolicy(redact_api_keys=False),
     )
 

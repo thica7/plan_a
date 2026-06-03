@@ -5,6 +5,9 @@ import sys
 from pathlib import Path
 
 
+FAKE_OPENROUTER_KEY = "sk-or-v1-" + "test" * 16
+
+
 def _load_scan_module():
     path = Path(__file__).parents[2] / "scripts" / "scan_secrets.py"
     spec = importlib.util.spec_from_file_location("scan_secrets", path)
@@ -19,7 +22,7 @@ def test_secret_scan_flags_provider_key_shapes(tmp_path: Path) -> None:
     module = _load_scan_module()
     target = tmp_path / "app.py"
     target.write_text(
-        'BACKUP_LLM_API_KEY = "OPENROUTER_TEST_KEY_REDACTED"\n',
+        f'BACKUP_LLM_API_KEY = "{FAKE_OPENROUTER_KEY}"\n',
         encoding="utf-8",
     )
 
@@ -37,7 +40,7 @@ def test_secret_scan_ignores_placeholders_and_test_fixtures(tmp_path: Path) -> N
     fixture = tmp_path / "backend" / "tests" / "unit" / "test_fixture.py"
     fixture.parent.mkdir(parents=True)
     fixture.write_text(
-        'key = "OPENROUTER_TEST_KEY_REDACTED"\n',
+        f'key = "{FAKE_OPENROUTER_KEY}"\n',
         encoding="utf-8",
     )
 
