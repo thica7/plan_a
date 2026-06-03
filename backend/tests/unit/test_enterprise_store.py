@@ -393,6 +393,11 @@ def test_enterprise_store_deduplicates_embedding_index_by_content_hash() -> None
 
     assert stored_duplicate.metadata["embedding_duplicate_of"] == canonical.id
     assert stored_duplicate.metadata["embedding_indexed"] is False
+    canonical_after_duplicate = store.evidence_records[canonical.id]
+    assert canonical_after_duplicate.metadata["embedding_duplicate_ids"] == [
+        "zz-duplicate-evidence"
+    ]
+    assert canonical_after_duplicate.metadata["embedding_duplicate_count"] == 1
     assert len(store.list_evidence(project_id=context.project_id)) == 2
     assert len(embeddings) == 1
     assert embeddings[0].evidence_id == canonical.id
@@ -403,6 +408,7 @@ def test_enterprise_store_deduplicates_embedding_index_by_content_hash() -> None
         store.evidence_records["zz-duplicate-evidence"].metadata["embedding_duplicate_of"]
         == canonical.id
     )
+    assert store.evidence_records[canonical.id].metadata["embedding_duplicate_count"] == 1
 
 
 def test_schema_suggestion_review_persists_metadata_and_updates_plan_dimensions() -> None:

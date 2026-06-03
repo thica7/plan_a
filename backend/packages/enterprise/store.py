@@ -1063,6 +1063,7 @@ class EnterpriseMemoryStore:
         metadata["embedding_duplicate_of"] = duplicate.id
         metadata["embedding_dedupe_key"] = _embedding_dedupe_key(evidence)
         metadata["embedding_indexed"] = False
+        self._record_embedding_duplicate_locked(duplicate.id, evidence.id)
         return evidence.model_copy(update={"metadata": metadata}), duplicate.id
 
     def _find_embedding_duplicate_locked(self, evidence: EvidenceRecord) -> EvidenceRecord | None:
@@ -1083,6 +1084,26 @@ class EnterpriseMemoryStore:
         if canonical.id == evidence.id:
             return None
         return canonical
+
+    def _record_embedding_duplicate_locked(
+        self,
+        canonical_id: str,
+        duplicate_id: str,
+    ) -> None:
+        if canonical_id == duplicate_id:
+            return
+        canonical = self.evidence_records.get(canonical_id)
+        if canonical is None:
+            return
+        metadata = dict(canonical.metadata)
+        existing = metadata.get("embedding_duplicate_ids", [])
+        duplicate_ids = [
+            item for item in existing if isinstance(item, str) and item != duplicate_id
+        ]
+        duplicate_ids.append(duplicate_id)
+        metadata["embedding_duplicate_ids"] = sorted(duplicate_ids)
+        metadata["embedding_duplicate_count"] = len(duplicate_ids)
+        self.evidence_records[canonical_id] = canonical.model_copy(update={"metadata": metadata})
 
     def _upsert_source_registry_locked(
         self,
