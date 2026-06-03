@@ -206,6 +206,17 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
             message="Consistency sampled",
             payload={
                 "self_consistency_score": 88,
+                "sample_count": 3,
+                "minority_sample_count": 1,
+                "minority_validation_samples": [
+                    {
+                        "claim_id": "claim-1",
+                        "checker": "triangulation",
+                        "vote": "fail",
+                        "score": 45,
+                        "threshold": 70,
+                    }
+                ],
                 "claim_ids": ["claim-1"],
                 "evidence_ids": ["source-1"],
             },
@@ -240,6 +251,12 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
     )
     assert feedback_event.payload["feedback_id"] == "feedback-1"
     assert feedback_event.payload["candidate_count"] == 1
+    consistency_event = next(
+        event for event in replay.events if event.event_type == "self_consistency.sampled"
+    )
+    assert consistency_event.payload["sample_count"] == 3
+    assert consistency_event.payload["minority_sample_count"] == 1
+    assert consistency_event.payload["minority_validation_samples"][0]["checker"] == "triangulation"
     assert any(event.evidence_ids == ["source-1"] for event in replay.events)
 
 
