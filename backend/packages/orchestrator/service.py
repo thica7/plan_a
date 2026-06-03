@@ -1999,6 +1999,9 @@ class RunService(
             competitors=self._enterprise_store.list_competitors(project_id=project.id),
             evidence=self._enterprise_store.list_evidence(project_id=project.id),
             claims=self._enterprise_store.list_claims(project_id=project.id),
+            source_registry=self._enterprise_store.list_source_registry(
+                workspace_id=project.workspace_id
+            ),
         )
 
     def _release_gate_payload(self, projection: EnterpriseRunProjection) -> dict[str, Any]:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from urllib.parse import urlparse
 
 from packages.business_intel.claim_validator import validate_project_claims
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS, evaluate_business_qa
@@ -16,6 +17,7 @@ from packages.schema.enterprise import (
     ProjectRecord,
     ReportReleaseGate,
     ReportVersionRecord,
+    SourceRegistryRecord,
 )
 
 MIN_VERIFIED_EVIDENCE_RATE = 0.8
@@ -40,10 +42,12 @@ def evaluate_report_release_gate(
     competitors: list[CompetitorRecord],
     evidence: list[EvidenceRecord],
     claims: list[ClaimRecord],
+    source_registry: list[SourceRegistryRecord] | None = None,
 ) -> ReportReleaseGate:
     """Strict enterprise gate for approving or publishing a report version."""
 
     scoped_evidence = _scope_evidence(report_version, evidence)
+    scoped_evidence = _apply_source_registry_policy(scoped_evidence, source_registry or [])
     scoped_claims = _scope_claims(report_version, claims)
     dimensions = sorted({item.dimension for item in scoped_evidence}) or [
         "pricing",
@@ -110,6 +114,46 @@ def _scope_evidence(
 ) -> list[EvidenceRecord]:
     allowed_ids = set(report_version.evidence_ids)
     return [item for item in evidence if item.id in allowed_ids]
+
+
+def _apply_source_registry_policy(
+    evidence: list[EvidenceRecord],
+    source_registry: list[SourceRegistryRecord],
+) -> list[EvidenceRecord]:
+    if not source_registry:
+        return evidence
+    by_id = {item.id: item for item in source_registry}
+    by_key = {
+        (item.workspace_id, item.domain.casefold(), item.source_type.casefold()): item
+        for item in source_registry
+    }
+    result: list[EvidenceRecord] = []
+    for item in evidence:
+        registry = by_id.get(str(item.metadata.get("source_registry_id") or ""))
+        if registry is None:
+            registry = by_key.get(_source_registry_key(item))
+        if registry is None:
+            result.append(item)
+            continue
+        metadata = dict(item.metadata)
+        if registry.policy_review_status != "not_required":
+            metadata["policy_review_status"] = registry.policy_review_status
+        if registry.policy_review_reason:
+            metadata["policy_review_reason"] = registry.policy_review_reason
+        if registry.robots_status != "unknown":
+            metadata["robots_status"] = registry.robots_status
+        metadata["source_registry_id"] = registry.id
+        result.append(item.model_copy(update={"metadata": metadata}))
+    return result
+
+
+def _source_registry_key(evidence: EvidenceRecord) -> tuple[str, str, str]:
+    url_value = evidence.canonical_url or (str(evidence.url) if evidence.url else "")
+    host = urlparse(url_value).hostname or ""
+    domain = host.casefold()
+    if domain.startswith("www."):
+        domain = domain[4:]
+    return (evidence.workspace_id, domain, evidence.source_type.casefold())
 
 
 def _scope_claims(
@@ -187,6 +231,38 @@ def _report_integrity_issues(
 def _source_quality_issues(evidence: list[EvidenceRecord]) -> list[BusinessQAFinding]:
     if not evidence:
         return []
+    issues: list[BusinessQAFinding] = []
+    policy_review_evidence = [
+        item
+        for item in evidence
+        if _source_policy_review_status(item) in {"pending", "rejected"}
+        or _source_robots_status(item) in {"blocked", "error"}
+    ]
+    if policy_review_evidence:
+        statuses = sorted(
+            {
+                (
+                    f"{item.id}:policy={_source_policy_review_status(item)},"
+                    f"robots={_source_robots_status(item)}"
+                )
+                for item in policy_review_evidence
+            }
+        )
+        issues.append(
+            _gate_issue(
+                "source_policy_review_required",
+                "Source policy review required",
+                (
+                    "Report evidence includes source(s) that are pending or rejected by "
+                    f"robots/source policy review: {'; '.join(statuses)}."
+                ),
+                evidence_ids=[item.id for item in policy_review_evidence],
+                recommendation=(
+                    "Resolve the Source Registry review queue or replace these evidence records "
+                    "before approval."
+                ),
+            )
+        )
     verified = [
         item
         for item in evidence
@@ -196,8 +272,8 @@ def _source_quality_issues(evidence: list[EvidenceRecord]) -> list[BusinessQAFin
     ]
     verified_rate = len(verified) / len(evidence)
     if verified_rate >= MIN_VERIFIED_EVIDENCE_RATE:
-        return []
-    return [
+        return issues
+    issues.append(
         _gate_issue(
             "verified_evidence_rate",
             "Verified evidence rate",
@@ -210,7 +286,29 @@ def _source_quality_issues(evidence: list[EvidenceRecord]) -> list[BusinessQAFin
                 "Replace weak sources with verified webpages or mark bad evidence stale/rejected."
             ),
         )
-    ]
+    )
+    return issues
+
+
+def _source_policy_review_status(evidence: EvidenceRecord) -> str:
+    status = str(
+        evidence.metadata.get("policy_review_status")
+        or evidence.metadata.get("source_policy_review_status")
+        or "not_required"
+    ).casefold()
+    if status in {"not_required", "pending", "approved", "rejected"}:
+        return status
+    return "not_required"
+
+
+def _source_robots_status(evidence: EvidenceRecord) -> str:
+    status = str(evidence.metadata.get("robots_status") or "unknown").casefold()
+    if status in {"allowed", "blocked", "error"}:
+        return status
+    source_type = evidence.source_type.casefold()
+    if "robots" in source_type and "blocked" in source_type:
+        return "blocked"
+    return "unknown"
 
 
 def _claim_evidence_quality_issues(

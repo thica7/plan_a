@@ -822,6 +822,7 @@ async def get_project_quality_matrix(
             competitors=competitors,
             evidence=evidence,
             claims=claims,
+            source_registry=store.list_source_registry(workspace_id=project.workspace_id),
         )
         if report_versions
         else None
@@ -1879,6 +1880,7 @@ def _report_release_gate_for_version(
         competitors=store.list_competitors(project_id=project.id),
         evidence=store.list_evidence(project_id=project.id),
         claims=store.list_claims(project_id=project.id),
+        source_registry=store.list_source_registry(workspace_id=project.workspace_id),
     )
 
 
@@ -2040,6 +2042,7 @@ def _release_gate_for_report_version_id(
         competitors=store.list_competitors(project_id=project.id),
         evidence=store.list_evidence(project_id=project.id),
         claims=store.list_claims(project_id=project.id),
+        source_registry=store.list_source_registry(workspace_id=project.workspace_id),
     )
 
 

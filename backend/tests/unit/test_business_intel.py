@@ -32,6 +32,7 @@ from packages.schema.enterprise import (
     ProjectRecord,
     RedTeamFinding,
     ReportVersionRecord,
+    SourceRegistryRecord,
 )
 from packages.skills.registry import SkillRegistry
 
@@ -440,6 +441,125 @@ def test_report_release_gate_requires_clean_qa_and_verified_evidence() -> None:
         "business_qa_clean_required",
         "verified_evidence_rate",
     }
+
+
+def test_report_release_gate_blocks_pending_source_policy_review() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+            metadata={
+                "policy_review_status": "pending",
+                "policy_review_reason": "Source Registry review queue requires approval.",
+            },
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = ReportVersionRecord(
+        id="report-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        version_number=1,
+        topic_normalized="cursor-pricing",
+        competitor_layer="L1",
+        competitor_set_hash="hash",
+        report_md=_structured_release_report(),
+        claim_ids=["claim-1"],
+        evidence_ids=["evidence-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert gate.allowed is False
+    assert "source_policy_review_required" in {issue.rule_id for issue in gate.issues}
+
+
+def test_report_release_gate_uses_source_registry_review_status() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    source_registry = [
+        SourceRegistryRecord(
+            id="source-1",
+            workspace_id="workspace-1",
+            domain="cursor.sh",
+            source_type="webpage_verified",
+            display_name="Cursor",
+            homepage_url="https://cursor.sh",
+            trust_level="verified",
+            robots_status="allowed",
+            policy_review_status="pending",
+            policy_review_reason="Legal review required before publication.",
+        )
+    ]
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=_report_version(evidence_ids=["evidence-1"]),
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+        source_registry=source_registry,
+    )
+
+    assert gate.allowed is False
+    assert "source_policy_review_required" in {issue.rule_id for issue in gate.issues}
 
 
 def test_report_release_gate_blocks_rejected_report_status() -> None:

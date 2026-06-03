@@ -614,6 +614,7 @@ class ReportApprovalActivities:
             competitors=self._store.list_competitors(project_id=project.id),
             evidence=self._store.list_evidence(project_id=project.id),
             claims=self._store.list_claims(project_id=project.id),
+            source_registry=self._store.list_source_registry(workspace_id=project.workspace_id),
         )
 
 

@@ -323,8 +323,6 @@ CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_domain
     ON source_registry(workspace_id, domain);
 CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_trust
     ON source_registry(workspace_id, trust_level);
-CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_review
-    ON source_registry(workspace_id, policy_review_status);
 CREATE INDEX IF NOT EXISTS idx_evidence_embeddings_workspace
     ON evidence_embeddings(workspace_id, project_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_embeddings_vector
@@ -413,6 +411,8 @@ ALTER TABLE source_registry
     ADD CONSTRAINT source_registry_policy_review_status_check CHECK (
         policy_review_status IN ('not_required', 'pending', 'approved', 'rejected')
     );
+CREATE INDEX IF NOT EXISTS idx_source_registry_workspace_review
+    ON source_registry(workspace_id, policy_review_status);
 UPDATE evidence_records
 SET canonical_url = COALESCE(NULLIF(canonical_url, ''), url, '')
 WHERE canonical_url = '';

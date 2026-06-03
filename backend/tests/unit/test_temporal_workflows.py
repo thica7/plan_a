@@ -654,8 +654,24 @@ The report uses verified webpage evidence and keeps broader enterprise claims ou
 Use pricing transparency as the direct battlecard point, pending feature and procurement review.
 {citation}
 
+## Scenario QA Checklist
+- L1 direct comparison is limited to pricing transparency and does not overstate security,
+  procurement, or deployment readiness. {citation}
+- Current claim scope is narrow enough for approval because the attached source directly
+  supports the pricing statement and avoids unsupported winner language. {citation}
+
+## Claim Validation & Evidence Risk
+The pricing claim is supported by accepted verified webpage evidence, but the report keeps
+enterprise security, SSO, audit log, and procurement claims out of scope until those dimensions
+have their own official evidence records. Remaining evidence risk is operational: reviewers
+should keep this version as a pricing-only battlecard and request scoped redo before adding
+broader recommendations. {citation}
+
 ## Next Collection / Verification Plan
-Collect feature, security, and procurement sources before publishing broader recommendations.
+Collect feature, security, trust center, and procurement sources before publishing broader
+recommendations. The next collection pass should verify official documentation, pricing pages,
+security pages, and enterprise support pages separately so each future claim has traceable
+evidence and can survive release gate review.
 {citation}
 
 ## Evidence Appendix
