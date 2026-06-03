@@ -95,6 +95,13 @@ class Settings:
     compliance_blocked_domains: tuple[str, ...] = ()
     compliance_require_source_urls: bool = False
     compliance_require_trace_context: bool = True
+    retention_project_days: int = 1095
+    retention_evidence_days: int = 730
+    retention_artifact_days: int = 730
+    retention_report_version_days: int = 1095
+    retention_audit_log_days: int = 2555
+    retention_expiring_soon_days: int = 30
+    retention_physical_delete_enabled: bool = False
     pydantic_ai_model_backed_enabled: bool = False
     pydantic_ai_model_name: str | None = None
     artifact_storage_backend: Literal["local"] = "local"
@@ -191,6 +198,46 @@ def get_settings() -> Settings:
         compliance_blocked_domains=_env_csv("COMPLIANCE_BLOCKED_DOMAINS"),
         compliance_require_source_urls=_env_bool("COMPLIANCE_REQUIRE_SOURCE_URLS", False),
         compliance_require_trace_context=_env_bool("COMPLIANCE_REQUIRE_TRACE_CONTEXT", True),
+        retention_project_days=_env_int(
+            "RETENTION_PROJECT_DAYS",
+            1095,
+            minimum=1,
+            maximum=36500,
+        ),
+        retention_evidence_days=_env_int(
+            "RETENTION_EVIDENCE_DAYS",
+            730,
+            minimum=1,
+            maximum=36500,
+        ),
+        retention_artifact_days=_env_int(
+            "RETENTION_ARTIFACT_DAYS",
+            730,
+            minimum=1,
+            maximum=36500,
+        ),
+        retention_report_version_days=_env_int(
+            "RETENTION_REPORT_VERSION_DAYS",
+            1095,
+            minimum=1,
+            maximum=36500,
+        ),
+        retention_audit_log_days=_env_int(
+            "RETENTION_AUDIT_LOG_DAYS",
+            2555,
+            minimum=1,
+            maximum=36500,
+        ),
+        retention_expiring_soon_days=_env_int(
+            "RETENTION_EXPIRING_SOON_DAYS",
+            30,
+            minimum=1,
+            maximum=3650,
+        ),
+        retention_physical_delete_enabled=_env_bool(
+            "RETENTION_PHYSICAL_DELETE_ENABLED",
+            False,
+        ),
         pydantic_ai_model_backed_enabled=_env_bool(
             "PYDANTIC_AI_MODEL_BACKED_ENABLED",
             False,

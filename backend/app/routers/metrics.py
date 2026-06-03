@@ -9,6 +9,7 @@ from fastapi.responses import PlainTextResponse
 
 from app.deps import get_app_settings, get_enterprise_store, get_run_journal
 from packages.agents.pydantic_ai_adapter import pydantic_ai_available
+from packages.compliance import build_data_retention_report
 from packages.config import Settings
 from packages.enterprise import EnterpriseStore
 from packages.governance import build_model_route_decision
@@ -50,6 +51,10 @@ def metrics(
     runs = journal.load_runs()
     counts = Counter(run.status for run in runs)
     notifications = _load_notifications(enterprise_store)
+    retention_reports = _load_retention_reports(enterprise_store, settings)
+    retention_expired_count = sum(report.expired_count for report in retention_reports)
+    retention_expiring_soon_count = sum(report.expiring_soon_count for report in retention_reports)
+    retention_status = _retention_status(retention_reports)
     notification_counts = Counter(
         (item.notification_type, item.status) for item in notifications
     )
@@ -269,6 +274,38 @@ def metrics(
                 "competiscope_compliance_require_source_urls "
                 f"{1 if settings.compliance_require_source_urls else 0}"
             ),
+            "# HELP competiscope_retention_status Current aggregate retention status.",
+            "# TYPE competiscope_retention_status gauge",
+            (
+                'competiscope_retention_status{status="pass"} '
+                f'{1 if retention_status == "pass" else 0}'
+            ),
+            (
+                'competiscope_retention_status{status="warn"} '
+                f'{1 if retention_status == "warn" else 0}'
+            ),
+            (
+                'competiscope_retention_status{status="fail"} '
+                f'{1 if retention_status == "fail" else 0}'
+            ),
+            (
+                "# HELP competiscope_retention_expired_records_total Records beyond "
+                "configured retention windows."
+            ),
+            "# TYPE competiscope_retention_expired_records_total gauge",
+            f"competiscope_retention_expired_records_total {retention_expired_count}",
+            (
+                "# HELP competiscope_retention_expiring_soon_records_total Records "
+                "approaching configured retention windows."
+            ),
+            "# TYPE competiscope_retention_expiring_soon_records_total gauge",
+            f"competiscope_retention_expiring_soon_records_total {retention_expiring_soon_count}",
+            "# HELP competiscope_retention_physical_delete_enabled Retention delete mode.",
+            "# TYPE competiscope_retention_physical_delete_enabled gauge",
+            (
+                "competiscope_retention_physical_delete_enabled "
+                f"{1 if settings.retention_physical_delete_enabled else 0}"
+            ),
             "# HELP competiscope_notifications_total Enterprise notifications by type and status.",
             "# TYPE competiscope_notifications_total gauge",
         ]
@@ -310,6 +347,34 @@ def _load_notifications(enterprise_store: EnterpriseStore | None) -> list[Notifi
         return enterprise_store.list_notifications(limit=10_000)
     except Exception:  # noqa: BLE001 - metrics should degrade instead of failing health scrape.
         return []
+
+
+def _load_retention_reports(
+    enterprise_store: EnterpriseStore | None,
+    settings: Settings,
+) -> list[object]:
+    if enterprise_store is None:
+        return []
+    try:
+        return [
+            build_data_retention_report(
+                store=enterprise_store,
+                workspace_id=workspace.id,
+                settings=settings,
+            )
+            for workspace in enterprise_store.list_workspaces()
+        ]
+    except Exception:  # noqa: BLE001 - metrics should degrade instead of failing health scrape.
+        return []
+
+
+def _retention_status(reports: list[object]) -> str:
+    statuses = {str(getattr(report, "status", "pass")) for report in reports}
+    if "fail" in statuses:
+        return "fail"
+    if "warn" in statuses:
+        return "warn"
+    return "pass"
 
 
 def _enterprise_store_configured(settings: Settings) -> int:

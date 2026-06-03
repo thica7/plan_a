@@ -39,7 +39,11 @@ from packages.business_intel import (
     score_project_readiness,
     validate_project_claims,
 )
-from packages.compliance import compliance_policy_from_settings
+from packages.compliance import (
+    DataRetentionReport,
+    build_data_retention_report,
+    compliance_policy_from_settings,
+)
 from packages.config import Settings
 from packages.enterprise import (
     EnterpriseStore,
@@ -187,6 +191,24 @@ def get_workspace_quota_decision(
 ) -> WorkspaceQuotaDecision:
     _require_workspace_access(user, workspace_id, "workspace:read")
     return store.check_workspace_quota(workspace_id)
+
+
+@router.get(
+    "/enterprise/workspaces/{workspace_id}/retention",
+    response_model=DataRetentionReport,
+)
+def get_workspace_retention_report(
+    workspace_id: str,
+    settings: SettingsDep,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> DataRetentionReport:
+    _require_workspace_access(user, workspace_id, "audit:read")
+    return build_data_retention_report(
+        store=store,
+        workspace_id=workspace_id,
+        settings=settings,
+    )
 
 
 @router.patch("/enterprise/workspaces/{workspace_id}/quota", response_model=WorkspaceRecord)
