@@ -1514,7 +1514,7 @@ def upsert_source_registry(
 ) -> SourceRegistryRecord:
     action = "source:review" if record.policy_review_status != "not_required" else "source:write"
     _require_workspace_access(user, record.workspace_id, action)
-    return store.upsert_source_registry(record)
+    return store.upsert_source_registry(record, actor_id=user.user_id)
 
 
 @router.patch(

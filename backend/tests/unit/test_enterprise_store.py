@@ -1499,12 +1499,18 @@ def test_enterprise_router_requires_reviewer_for_source_policy_review() -> None:
     reviewer_response = client.post(
         "/api/enterprise/source-registry",
         json=source.model_dump(mode="json"),
-        headers={"X-User-Role": "reviewer"},
+        headers={"X-User-Id": "source-reviewer-1", "X-User-Role": "reviewer"},
     )
 
     assert analyst_response.status_code == 403
     assert reviewer_response.status_code == 200
     assert reviewer_response.json()["policy_review_status"] == "approved"
+    assert any(
+        log.action == "source_registry.upserted"
+        and log.actor_id == "source-reviewer-1"
+        and log.resource_id == source.id
+        for log in store.list_audit_logs()
+    )
 
 
 def test_enterprise_router_blocks_direct_publish_status_without_approval() -> None:

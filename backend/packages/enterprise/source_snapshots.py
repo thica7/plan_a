@@ -54,7 +54,7 @@ def capture_source_snapshot(
         ),
         actor_id=actor_id,
     )
-    source = store.upsert_source_registry(source)
+    source = store.upsert_source_registry(source, actor_id=actor_id)
     evidence = _research_evidence_from_snapshot(
         request,
         artifact=artifact,

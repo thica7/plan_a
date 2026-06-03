@@ -1065,6 +1065,8 @@ class EnterprisePostgresStore:
     def upsert_source_registry(
         self,
         record: SourceRegistryRecord,
+        *,
+        actor_id: str | None = None,
     ) -> SourceRegistryRecord:
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
             with conn.cursor() as cur:
@@ -1082,7 +1084,7 @@ class EnterprisePostgresStore:
                 self._append_audit(
                     cur,
                     workspace_id=updated.workspace_id,
-                    actor_id=DEFAULT_USER_ID,
+                    actor_id=actor_id or DEFAULT_USER_ID,
                     action="source_registry.upserted",
                     resource_type="source_registry",
                     resource_id=updated.id,

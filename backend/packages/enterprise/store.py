@@ -196,6 +196,8 @@ class EnterpriseStore(Protocol):
     def upsert_source_registry(
         self,
         record: SourceRegistryRecord,
+        *,
+        actor_id: str | None = None,
     ) -> SourceRegistryRecord: ...
 
     def update_evidence_quality(
@@ -913,12 +915,14 @@ class EnterpriseMemoryStore:
     def upsert_source_registry(
         self,
         record: SourceRegistryRecord,
+        *,
+        actor_id: str | None = None,
     ) -> SourceRegistryRecord:
         with self._lock:
             self._ensure_workspace(record.workspace_id)
             return self._upsert_source_registry_locked(
                 record,
-                actor_id=DEFAULT_USER_ID,
+                actor_id=actor_id or DEFAULT_USER_ID,
                 audit_once=False,
             )
 
