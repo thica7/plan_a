@@ -1177,6 +1177,10 @@ def test_enterprise_router_exposes_projection() -> None:
     assert red_team.json()["pydantic_ai_runtime_prompt_hash"]
     assert red_team.json()["pydantic_ai_runtime_prompt_chars"] > 0
     assert quality_matrix.status_code == 200
+    assert all(
+        isinstance(item["suggested_redos"], list)
+        for item in quality_matrix.json()["entries"]
+    )
     assert {item["agent_name"] for item in quality_matrix.json()["entries"]} >= {
         "BusinessQA",
         "ClaimValidator",

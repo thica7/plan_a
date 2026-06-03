@@ -3639,6 +3639,8 @@ export interface components {
             evidence_ids?: string[];
             /** Claim Ids */
             claim_ids?: string[];
+            /** Suggested Redos */
+            suggested_redos?: components["schemas"]["RedoScope"][];
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;

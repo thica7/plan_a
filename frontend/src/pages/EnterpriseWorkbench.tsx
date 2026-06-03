@@ -94,6 +94,7 @@ import type {
   ProjectRecord,
   QualityAgentMatrix,
   QualityAgentMatrixEntry,
+  RedoScope,
   RawSource,
   RedTeamFinding,
   RedTeamReport,
@@ -1654,11 +1655,27 @@ function QualityAgentMatrixPanel({ matrix }: { matrix: QualityAgentMatrix }) {
             <span>{entry.status} / {entry.framework}</span>
             <QualityPeerReviewLine entry={entry} />
             <p>{entry.summary}</p>
+            <QualitySuggestedRedoList redos={entry.suggested_redos} />
             <TargetAnchorLinks evidenceIds={entry.evidence_ids} claimIds={entry.claim_ids} />
           </article>
         ))}
       </div>
     </section>
+  );
+}
+
+function QualitySuggestedRedoList({ redos }: { redos: RedoScope[] }) {
+  if (redos.length === 0) return null;
+  return (
+    <div className="quality-redo-list">
+      {redos.slice(0, 3).map((redo, index) => (
+        <span key={`${redo.kind}-${redo.target_subagent ?? "all"}-${index}`}>
+          Redo {redo.kind}
+          {redo.target_competitor ? ` / ${redo.target_competitor}` : ""}
+          {redo.target_subagent ? ` / ${redo.target_subagent}` : ""}
+        </span>
+      ))}
+    </div>
   );
 }
 

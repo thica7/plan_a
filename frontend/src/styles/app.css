@@ -2450,6 +2450,23 @@ select {
   font-size: 12px;
 }
 
+.quality-redo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quality-redo-list span {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  display: inline-flex;
+  font-size: 11px;
+  line-height: 1.25;
+  padding: 4px 7px;
+}
+
 .decision-event-types,
 .decision-timeline {
   display: grid;

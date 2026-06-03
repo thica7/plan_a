@@ -31,10 +31,14 @@ from packages.business_intel import (
     build_business_intel_plan,
     build_evidence_gap_agent,
     build_red_team_agent,
+    business_findings_to_redo_scopes,
+    claim_validation_issues_to_redo_scopes,
     evaluate_business_qa,
     evaluate_report_release_gate,
+    evidence_gaps_to_redo_scopes,
     list_business_qa_rules,
     list_scenario_packs,
+    red_team_findings_to_redo_scopes,
     score_competitors,
     score_project_readiness,
     validate_project_claims,
@@ -846,6 +850,9 @@ async def get_project_quality_matrix(
             claim_ids=_unique_ids(
                 claim_id for finding in qa_evaluation.findings for claim_id in finding.claim_ids
             ),
+            suggested_redos=business_findings_to_redo_scopes(
+                qa_evaluation.findings
+            )[:3],
         ),
         QualityAgentMatrixEntry(
             agent_name="ClaimValidator",
@@ -892,6 +899,9 @@ async def get_project_quality_matrix(
                     for sample in result.validation_samples
                 ][:12],
             },
+            suggested_redos=claim_validation_issues_to_redo_scopes(
+                claim_validation.issues
+            )[:3],
         ),
         QualityAgentMatrixEntry(
             agent_name="EvidenceGap",
@@ -911,6 +921,7 @@ async def get_project_quality_matrix(
             claim_ids=_unique_ids(
                 claim_id for gap in evidence_gaps.gaps for claim_id in gap.claim_ids
             ),
+            suggested_redos=evidence_gaps_to_redo_scopes(evidence_gaps.gaps)[:3],
             metadata=_quality_agent_pydantic_ai_metadata(evidence_gaps),
         ),
         QualityAgentMatrixEntry(
@@ -931,6 +942,7 @@ async def get_project_quality_matrix(
             claim_ids=_unique_ids(
                 claim_id for finding in red_team.findings for claim_id in finding.claim_ids
             ),
+            suggested_redos=red_team_findings_to_redo_scopes(red_team.findings)[:3],
             metadata=_quality_agent_pydantic_ai_metadata(red_team),
         ),
         (
@@ -965,6 +977,9 @@ async def get_project_quality_matrix(
                     for issue in latest_release_gate.issues
                     for claim_id in issue.claim_ids
                 ),
+                suggested_redos=business_findings_to_redo_scopes(
+                    latest_release_gate.issues
+                )[:3],
             )
             if latest_release_gate is not None
             else QualityAgentMatrixEntry(

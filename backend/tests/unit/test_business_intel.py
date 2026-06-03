@@ -7,11 +7,14 @@ from packages.business_intel import (
     build_evidence_gap_agent,
     build_red_team_agent,
     business_findings_to_redo_scopes,
+    claim_validation_issues_to_redo_scopes,
     evaluate_business_qa,
     evaluate_report_release_gate,
+    evidence_gaps_to_redo_scopes,
     generate_dynamic_scenario_pack,
     list_business_qa_rules,
     list_scenario_packs,
+    red_team_findings_to_redo_scopes,
     score_competitors,
     score_project_readiness,
     validate_project_claims,
@@ -22,9 +25,12 @@ from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
     ClaimRecord,
+    ClaimValidationIssue,
     CompetitorRecord,
+    EvidenceGapItem,
     EvidenceRecord,
     ProjectRecord,
+    RedTeamFinding,
     ReportVersionRecord,
 )
 
@@ -986,6 +992,67 @@ def test_business_qa_rules_cover_five_redo_scope_routes() -> None:
         "analyst",
         "full",
     }
+
+
+def test_quality_agent_findings_map_to_redo_scopes() -> None:
+    claim_scopes = claim_validation_issues_to_redo_scopes(
+        [
+            ClaimValidationIssue(
+                id="issue-1",
+                claim_id="claim-1",
+                severity="blocker",
+                issue_type="missing_evidence",
+                message="Claim lacks usable evidence.",
+            ),
+            ClaimValidationIssue(
+                id="issue-2",
+                claim_id="claim-2",
+                severity="warn",
+                issue_type="weak_text_support",
+                message="Evidence text does not strongly support the claim.",
+            ),
+        ]
+    )
+    gap_scopes = evidence_gaps_to_redo_scopes(
+        [
+            EvidenceGapItem(
+                id="gap-1",
+                severity="high",
+                gap_type="missing_verified_source",
+                competitor_name="Cursor",
+                dimension="security",
+                message="Need official security evidence.",
+                recommended_query="Cursor security official docs",
+            )
+        ]
+    )
+    red_team_scopes = red_team_findings_to_redo_scopes(
+        [
+            RedTeamFinding(
+                id="red-1",
+                severity="high",
+                finding_type="report_risk",
+                dimension="summary",
+                message="Report overstates the conclusion.",
+                recommendation="Rewrite the conclusion with evidence caveats.",
+            ),
+            RedTeamFinding(
+                id="red-2",
+                severity="high",
+                finding_type="weak_evidence",
+                competitor_name="Cursor",
+                dimension="pricing",
+                message="Pricing claim needs stronger evidence.",
+                recommendation="Collect current pricing evidence.",
+            ),
+        ]
+    )
+
+    assert [scope.kind for scope in claim_scopes] == ["collector", "analyst"]
+    assert gap_scopes[0].kind == "collector"
+    assert gap_scopes[0].target_competitor == "Cursor"
+    assert gap_scopes[0].target_subagent == "security"
+    assert {scope.kind for scope in red_team_scopes} == {"writer_only", "collector"}
 
 
 def test_phase3_red_team_and_evidence_gap_agents_hit_exit_criteria() -> None:

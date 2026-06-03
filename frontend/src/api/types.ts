@@ -1217,6 +1217,7 @@ export interface QualityAgentMatrixEntry {
   summary: string;
   evidence_ids: string[];
   claim_ids: string[];
+  suggested_redos: RedoScope[];
   metadata: Record<string, unknown>;
 }
 
