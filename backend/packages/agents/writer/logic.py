@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from packages.business_intel.scenarios import get_scenario_pack
+from packages.rag.grounded_prompt import build_run_grounding_prompt
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import FeatureNode, KnowledgeClaim, QCIssue, RawSource
 
@@ -73,6 +74,7 @@ class WriterAgentMixin:
         layer_context = self._writer_layer_context(detail)
         memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
         required_sections = self._writer_required_sections(detail)
+        grounding_prompt = self._writer_grounding_prompt(detail)
         user_research_policy = writer_user_research_policy_text()
         try:
             report_md = await self._trace_llm_text(
@@ -92,6 +94,7 @@ class WriterAgentMixin:
                     "recommendation. If evidence is incomplete, say the conclusion is "
                     "tentative and list the exact evidence gap. Do not claim all sources are "
                     "verified when any source_type is web_search_result or llm_public_knowledge. "
+                    "Follow the Grounded Evidence Contract exactly. "
                     f"{user_research_policy} "
                     "Honor confirmed memory guidance when it does not conflict with evidence, "
                     "schema requirements, or compliance policy. "
@@ -110,6 +113,7 @@ class WriterAgentMixin:
                     f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
                     f"Confirmed Memory Preferences:\n{memory_context}\n"
                     f"Layer Report Context: {layer_context}\n"
+                    f"{grounding_prompt}\n"
                     f"Competitor KB JSON: {competitor_kb_json}\n"
                     f"Competitor Knowledge Schema JSON: {competitor_knowledge_json}\n"
                     f"Comparison Matrix JSON: {comparison_matrix_json}\n"
@@ -519,6 +523,12 @@ class WriterAgentMixin:
         return "\n".join(
             f"{index}. {section}"
             for index, section in enumerate([*common, *specific, *ending], start=1)
+        )
+
+    def _writer_grounding_prompt(self, detail: RunDetail) -> str:
+        return build_run_grounding_prompt(
+            sources=detail.raw_sources,
+            qa_findings=detail.qa_findings,
         )
 
     def _matrix_source_ids(self, detail: RunDetail) -> list[str]:

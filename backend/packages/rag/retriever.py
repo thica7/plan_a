@@ -5,6 +5,7 @@ from typing import Protocol
 from packages.enterprise.embedding_index import cosine_similarity, deterministic_embedding
 from packages.rag.bm25 import BM25Index
 from packages.rag.chunker import chunk_corpus
+from packages.rag.grounded_prompt import format_retrieval_records_for_prompt
 from packages.rag.reranker import RetrievalCandidate, rerank_candidates
 from packages.schema.enterprise import EvidenceRecord, EvidenceSearchHit
 from packages.schema.rag import GapRetrievalContext, RetrievalRecord
@@ -97,14 +98,7 @@ def retrieve_grounded_context(
 
 
 def grounded_context(records: list[RetrievalRecord]) -> str:
-    lines = []
-    for record in records:
-        lines.append(
-            f"[source:{record.evidence_id}#chunk:{record.chunk_index}] {record.title} "
-            f"({record.source_type}, hybrid={record.score}, bm25={record.bm25_score}, "
-            f"vector={record.vector_score}): {record.snippet}"
-        )
-    return "\n".join(lines)
+    return format_retrieval_records_for_prompt(records)
 
 
 def _candidate_evidence(

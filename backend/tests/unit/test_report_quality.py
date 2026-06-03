@@ -6,6 +6,7 @@ from packages.agents.writer.logic import (
     writer_user_research_policy_text,
 )
 from packages.business_intel import compare_run_quality
+from packages.rag.grounded_prompt import format_retrieval_records_for_prompt
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     AnalysisPlan,
@@ -21,6 +22,7 @@ from packages.schema.models import (
     RunMetrics,
     TraceSpan,
 )
+from packages.schema.rag import RetrievalRecord
 
 
 class _WriterHarness(WriterAgentMixin):
@@ -507,6 +509,73 @@ def test_writer_hardens_report_with_rag_gap_fill_context() -> None:
     assert "Suggested retrieval query: Cursor security Missing official trust-center" in report
     assert "Run the Evidence Gap Fill action" in report
     assert "[source:source-0]" in report
+
+
+def test_writer_grounding_prompt_lists_allowed_sources_and_gap_queries() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="writer-grounding-contract",
+        execution_mode="real",
+        source_count=3,
+        report_md="",
+        metrics=RunMetrics(),
+        source_types=["webpage_verified", "survey_simulated", "web_search_result"],
+    )
+    detail.raw_sources[2].confidence = 0.61
+    detail.qa_findings.append(
+        QCIssue(
+            id="gap-security-evidence",
+            severity="blocker",
+            detected_by="coverage",
+            target_agent="collector",
+            target_subagent="security",
+            target_competitor="Cursor",
+            field_path="raw_sources[security][Cursor]",
+            problem="Missing official security evidence.",
+            redo_scope=RedoScope(
+                kind="collector",
+                target_subagent="security",
+                target_competitor="Cursor",
+                rationale="Collect official security evidence.",
+            ),
+        )
+    )
+
+    prompt = writer._writer_grounding_prompt(detail)
+
+    assert "Grounded evidence contract" in prompt
+    assert "[source:source-0]" in prompt
+    assert "directional_user_research" in prompt
+    assert "lead_not_proof" in prompt
+    assert "low_confidence" in prompt
+    assert "gap=gap-security-evidence" in prompt
+    assert "suggested_query=Cursor security Missing official security evidence." in prompt
+
+
+def test_retrieval_prompt_preserves_chunk_level_source_tokens() -> None:
+    prompt = format_retrieval_records_for_prompt(
+        [
+            RetrievalRecord(
+                evidence_id="evidence-security-1",
+                chunk_id="chunk-1",
+                chunk_index=2,
+                score=0.82,
+                vector_score=0.7,
+                bm25_score=3.5,
+                rerank_score=0.82,
+                title="Cursor trust center",
+                source_type="webpage_verified",
+                dimension="security",
+                snippet="Cursor documents SOC 2 and SSO controls for enterprise buyers.",
+                source_url="https://example.com/trust",
+            )
+        ]
+    )
+
+    assert "[source:evidence-security-1#chunk:2]" in prompt
+    assert "dimension=security" in prompt
+    assert "hybrid=0.82" in prompt
+    assert "rerank=0.82" in prompt
 
 
 def test_writer_hardens_report_with_memory_and_user_research_sections() -> None:
