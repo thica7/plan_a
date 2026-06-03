@@ -382,6 +382,9 @@ export interface EvalOpsReport {
   golden_set_pass_rate: number;
   report_quality_score: number;
   source_recall: number;
+  compliance_pass_rate: number;
+  compliance_fail_count: number;
+  compliance_blocker_count: number;
   manual_baseline_hours_per_report: number;
   manual_baseline_hours: number;
   automation_runtime_hours: number;

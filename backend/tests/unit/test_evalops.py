@@ -88,10 +88,13 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         "report_quality",
     }
     assert all(step.pass_rate == 1.0 for step in report.quality_chain_steps)
-    assert report.golden_set_size == 12
+    assert report.golden_set_size == 13
     assert report.golden_set_pass_rate >= 0.8
     assert report.report_quality_score >= 72
     assert report.source_recall >= 0.6
+    assert report.compliance_pass_rate == 1.0
+    assert report.compliance_fail_count == 0
+    assert report.compliance_blocker_count == 0
     assert any(
         metric.name == "schema_pass_rate" and metric.status == "pass"
         for metric in report.metrics
@@ -120,6 +123,11 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         for metric in report.metrics
     )
     assert any(case.case_id == "golden.scenario_checklist" for case in report.cases)
+    assert any(case.case_id == "golden.compliance" for case in report.cases)
+    assert any(
+        metric.name == "compliance_pass_rate" and metric.status == "pass"
+        for metric in report.metrics
+    )
     assert any(
         metric.name == "judge_avg_score" and metric.status == "pass"
         for metric in report.metrics
@@ -161,7 +169,9 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert "deterministic rubric" in response.json()["judge_fallback_reason"]
     assert response.json()["real_quality_chain_failed_run_ids"] == []
     assert len(response.json()["quality_chain_steps"]) == 3
-    assert response.json()["golden_set_size"] == 12
+    assert response.json()["golden_set_size"] == 13
+    assert response.json()["compliance_pass_rate"] == 1.0
+    assert response.json()["compliance_fail_count"] == 0
     assert any(
         metric["name"] == "schema_pass_rate" and metric["status"] == "pass"
         for metric in response.json()["metrics"]
@@ -180,6 +190,10 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     )
     assert any(
         metric["name"] == "scenario_checklist_section_score" and metric["status"] == "pass"
+        for metric in response.json()["metrics"]
+    )
+    assert any(
+        metric["name"] == "compliance_pass_rate" and metric["status"] == "pass"
         for metric in response.json()["metrics"]
     )
     assert response.json()["manual_baseline_hours_per_report"] == 6.0
@@ -211,6 +225,30 @@ def test_enterprise_evalops_measures_citation_validity_separately_from_density()
     assert metrics["citation_validity_rate"].status == "fail"
     assert cases["golden.citation_validity"].status == "fail"
     assert any("unresolved report source tokens" in item for item in report.recommendations)
+
+
+def test_enterprise_evalops_fails_regression_gate_on_compliance_blockers() -> None:
+    target = _run_detail(
+        run_id="real-run-with-pii",
+        execution_mode="real",
+        source_count=4,
+        quality_score=1.0,
+        report_md=f"{_structured_report_md()}\n\nContact buyer@example.com for procurement.",
+        project_id="project-a",
+    )
+
+    report = build_enterprise_evalops_report([target])
+    metrics = {metric.name: metric for metric in report.metrics}
+    cases = {case.case_id: case for case in report.cases}
+
+    assert report.compliance_pass_rate == 0.0
+    assert report.compliance_fail_count == 1
+    assert report.compliance_blocker_count >= 1
+    assert metrics["compliance_pass_rate"].status == "fail"
+    assert metrics["compliance_fail_count"].status == "fail"
+    assert cases["golden.compliance"].status == "fail"
+    assert report.regression_gate_status == "fail"
+    assert any("compliance blockers" in item for item in report.recommendations)
 
 
 def test_enterprise_evalops_explains_real_quality_chain_failures() -> None:
@@ -370,6 +408,9 @@ def _run_detail(
         trace_spans=[
             TraceSpan(
                 id="span-llm-1",
+                trace_id="trace-llm-1",
+                otel_span_id="span-llm-1",
+                traceparent="00-00000000000000000000000000000001-0000000000000001-01",
                 kind="llm",
                 agent="writer",
                 name="writer",

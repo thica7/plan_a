@@ -1467,6 +1467,11 @@ function EvalOpsPanel({
           value={citationValidityRate === null ? "n/a" : formatPercent(citationValidityRate)}
         />
         <Metric
+          icon={<ShieldCheck size={17} aria-hidden />}
+          label="Compliance"
+          value={formatPercent(report.compliance_pass_rate)}
+        />
+        <Metric
           icon={<ListChecks size={17} aria-hidden />}
           label="Claim risk"
           value={claimRiskSectionRate === null ? "n/a" : formatPercent(claimRiskSectionRate)}
@@ -1513,6 +1518,9 @@ function EvalOpsPanel({
         <span>Citation validity {citationValidityRate === null ? "n/a" : formatPercent(citationValidityRate)}</span>
         <span>Claim risk {claimRiskSectionRate === null ? "n/a" : formatPercent(claimRiskSectionRate)}</span>
         <span>Scenario QA {scenarioChecklistRate === null ? "n/a" : formatPercent(scenarioChecklistRate)}</span>
+        <span>Compliance {formatPercent(report.compliance_pass_rate)}</span>
+        <span>Compliance fail {report.compliance_fail_count}</span>
+        <span>Compliance blockers {report.compliance_blocker_count}</span>
         <span>Coverage lift {coverageLiftRate === null ? "n/a" : formatSignedPercent(coverageLiftRate)}</span>
         <span>Regressed {report.regressed_run_count}</span>
         <span>HITL {formatPercent(report.hitl_enabled_run_rate)}</span>

@@ -4,6 +4,7 @@ from statistics import mean
 from typing import Literal
 
 from packages.business_intel import compare_run_quality
+from packages.compliance import build_run_compliance_report
 from packages.schema.api_dto import RunDetail, RunQualityComparison
 from packages.schema.evals import (
     EvalJudgeMode,
@@ -25,6 +26,7 @@ def build_enterprise_evalops_report(
     baseline: RunDetail | None = None,
     limit: int = 30,
     judge_mode: EvalJudgeMode = "heuristic",
+    settings: object | None = None,
 ) -> EvalOpsReport:
     evaluable_runs = [run for run in runs if run.status in EVAL_REPORT_STATUSES]
     recent_runs = sorted(evaluable_runs, key=lambda item: item.updated_at, reverse=True)[
@@ -37,6 +39,12 @@ def build_enterprise_evalops_report(
         )
         for run in recent_runs
     ]
+    compliance_reports = [
+        build_run_compliance_report(run, settings=settings or object()) for run in recent_runs
+    ]
+    compliance_pass_rate = _ratio([report.status == "pass" for report in compliance_reports])
+    compliance_fail_count = sum(1 for report in compliance_reports if report.status == "fail")
+    compliance_blocker_count = sum(report.blocker_count for report in compliance_reports)
     real_run_count = sum(1 for run in recent_runs if run.execution_mode == "real")
     demo_run_count = len(recent_runs) - real_run_count
     real_run_ratio = _ratio([run.execution_mode == "real" for run in recent_runs])
@@ -160,6 +168,7 @@ def build_enterprise_evalops_report(
         real_collection_rate=real_collection_rate,
         real_llm_rate=real_llm_rate,
         real_quality_chain_rate=real_quality_chain_rate,
+        compliance_pass_rate=compliance_pass_rate,
     )
     golden_set_pass_rate = _ratio([case.status == "pass" for case in cases])
     metrics = [
@@ -176,6 +185,21 @@ def build_enterprise_evalops_report(
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
         _metric("real_quality_chain_rate", real_quality_chain_rate, 0.5, "ratio"),
+        _metric("compliance_pass_rate", compliance_pass_rate, 1.0, "ratio"),
+        _metric(
+            "compliance_fail_count",
+            float(compliance_fail_count),
+            0.0,
+            "count",
+            lower_is_better=True,
+        ),
+        _metric(
+            "compliance_blocker_count",
+            float(compliance_blocker_count),
+            0.0,
+            "count",
+            lower_is_better=True,
+        ),
         _metric("judge_avg_score", judge_avg_score, 72.0, "score"),
         _metric(
             "human_correction_rate",
@@ -227,6 +251,9 @@ def build_enterprise_evalops_report(
         golden_set_pass_rate=round(golden_set_pass_rate, 3),
         report_quality_score=report_quality_score,
         source_recall=round(source_recall, 3),
+        compliance_pass_rate=round(compliance_pass_rate, 3),
+        compliance_fail_count=compliance_fail_count,
+        compliance_blocker_count=compliance_blocker_count,
         manual_baseline_hours_per_report=MANUAL_BASELINE_HOURS_PER_REPORT,
         manual_baseline_hours=round(manual_hours, 2),
         automation_runtime_hours=round(total_duration_hours, 2),
@@ -256,6 +283,7 @@ def _golden_cases(
     real_collection_rate: float,
     real_llm_rate: float,
     real_quality_chain_rate: float,
+    compliance_pass_rate: float,
 ) -> list[EvalOpsCaseResult]:
     target_run_id = comparisons[0].target_run_id if comparisons else None
     baseline_run_id = comparisons[0].baseline_run_id if comparisons else None
@@ -353,6 +381,14 @@ def _golden_cases(
             "Real quality chain",
             round(real_quality_chain_rate * 100),
             50,
+            target_run_id,
+            baseline_run_id,
+        ),
+        _case(
+            "golden.compliance",
+            "Compliance gate",
+            round(compliance_pass_rate * 100),
+            100,
             target_run_id,
             baseline_run_id,
         ),
@@ -546,6 +582,10 @@ def _recommendations(
     if metric_names["real_quality_chain_rate"].status != "pass":
         recommendations.append(
             "Close the real run quality chain: collection, LLM trace, and cited report depth."
+        )
+    if metric_names["compliance_pass_rate"].status != "pass":
+        recommendations.append(
+            "Fix compliance blockers before treating EvalOps as release-ready."
         )
     if metric_names["judge_avg_score"].status != "pass":
         recommendations.append(

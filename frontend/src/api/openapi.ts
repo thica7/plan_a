@@ -2420,6 +2420,12 @@ export interface components {
             report_quality_score: number;
             /** Source Recall */
             source_recall: number;
+            /** Compliance Pass Rate */
+            compliance_pass_rate: number;
+            /** Compliance Fail Count */
+            compliance_fail_count: number;
+            /** Compliance Blocker Count */
+            compliance_blocker_count: number;
             /** Manual Baseline Hours Per Report */
             manual_baseline_hours_per_report: number;
             /** Manual Baseline Hours */
