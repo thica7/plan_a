@@ -100,14 +100,14 @@ class WriterAgentMixin:
                     "Prefer complete analysis over brevity, but stay under 12,000 characters."
                 ),
             )
-            detail.report_md = self._ensure_report_claim_citations(detail, report_md)
+            detail.report_md = self._harden_report_markdown(detail, report_md)
         except Exception as exc:  # noqa: BLE001 - writer fallback keeps long runs demo-safe.
             writer_error = str(exc)
             if previous_report.strip():
                 detail.report_md = previous_report
                 writer_mode = "preserved previous report after writer error"
             else:
-                detail.report_md = self._ensure_report_claim_citations(
+                detail.report_md = self._harden_report_markdown(
                     detail,
                     self._fallback_report_markdown(detail, writer_error),
                 )
@@ -196,13 +196,19 @@ class WriterAgentMixin:
         lines.extend(["", "## Writer Fallback Reason", f"- {reason}"])
         return "\n".join(lines)
 
-    def _fallback_layer_sections(self, detail: RunDetail, source_ids: list[str]) -> list[str]:
+    def _fallback_layer_sections(
+        self,
+        detail: RunDetail,
+        source_ids: list[str],
+        *,
+        fallback: bool = True,
+    ) -> list[str]:
         refs = self._format_source_refs(source_ids)
         layer = detail.plan.competitor_layer
         if layer == "L1":
             return [
                 "",
-                "## Battlecard Fallback",
+                f"## {self._layer_section_heading(detail, fallback=fallback)}",
                 (
                     "- Direct-use position: treat this as a near-term replacement decision "
                     f"until stronger evidence changes the matrix.{refs}"
@@ -219,7 +225,7 @@ class WriterAgentMixin:
         if layer == "L2":
             return [
                 "",
-                "## Workflow & Enterprise Risk Fallback",
+                f"## {self._layer_section_heading(detail, fallback=fallback)}",
                 (
                     "- Adjacent-workflow threat: read the matrix through workflow overlap, "
                     f"integration leverage, and switching-cost exposure.{refs}"
@@ -236,7 +242,7 @@ class WriterAgentMixin:
         if layer == "L3":
             return [
                 "",
-                "## Market Landscape Fallback",
+                f"## {self._layer_section_heading(detail, fallback=fallback)}",
                 (
                     "- Category view: avoid a single direct winner and group competitors by "
                     f"segment, trend signal, and benchmark strength.{refs}"
@@ -250,13 +256,16 @@ class WriterAgentMixin:
                     f"sources before making category-wide claims.{refs}"
                 ),
             ]
+        implication = (
+            "Use this fallback as an evidence-indexed interim readout until the writer "
+            "can regenerate a fuller narrative."
+            if fallback
+            else "Use this section as an evidence-indexed business readout with explicit uncertainty."
+        )
         return [
             "",
-            "## Business Implications",
-            (
-                "- Use this fallback as an evidence-indexed interim readout until the writer "
-                f"can regenerate a fuller narrative.{refs}"
-            ),
+            f"## {self._layer_section_heading(detail, fallback=fallback)}",
+            f"- {implication}{refs}",
         ]
 
     def _fallback_source_quality_section(self, detail: RunDetail) -> list[str]:
@@ -315,6 +324,56 @@ class WriterAgentMixin:
             omitted_count = len(detail.raw_sources) - 8
             lines.append(f"- {omitted_count} additional source(s) omitted from fallback appendix.")
         return lines
+
+    def _harden_report_markdown(self, detail: RunDetail, markdown: str) -> str:
+        return self._ensure_report_claim_citations(
+            detail,
+            self._ensure_report_required_sections(detail, markdown),
+        )
+
+    def _ensure_report_required_sections(self, detail: RunDetail, markdown: str) -> str:
+        hardened = markdown.strip()
+        if not hardened:
+            hardened = self._fallback_report_markdown(detail, "empty writer output")
+        source_ids = self._matrix_source_ids(detail)
+        section_groups = [
+            ("Source Quality & Coverage", self._fallback_source_quality_section(detail)),
+            (
+                self._layer_section_heading(detail, fallback=False),
+                self._fallback_layer_sections(detail, source_ids, fallback=False),
+            ),
+            ("Next Collection / Verification Plan", self._fallback_next_collection_plan(detail)),
+            ("Evidence Appendix", self._fallback_evidence_appendix(detail)),
+        ]
+        for heading, lines in section_groups:
+            if not self._report_has_heading(hardened, heading):
+                hardened = f"{hardened}\n\n{self._section_body(lines)}"
+        return hardened
+
+    def _layer_section_heading(self, detail: RunDetail, *, fallback: bool = True) -> str:
+        if detail.plan.competitor_layer == "L1":
+            return "Battlecard Fallback" if fallback else "Battlecard"
+        if detail.plan.competitor_layer == "L2":
+            return (
+                "Workflow & Enterprise Risk Fallback"
+                if fallback
+                else "Workflow & Enterprise Risk"
+            )
+        if detail.plan.competitor_layer == "L3":
+            return "Market Landscape Fallback" if fallback else "Market Landscape"
+        return "Business Implications"
+
+    def _report_has_heading(self, markdown: str, heading: str) -> bool:
+        return bool(
+            re.search(
+                rf"^#+\s+{re.escape(heading)}\s*$",
+                markdown,
+                flags=re.IGNORECASE | re.MULTILINE,
+            )
+        )
+
+    def _section_body(self, lines: list[str]) -> str:
+        return "\n".join(lines).strip()
 
     def _writer_layer_label(self, detail: RunDetail) -> str:
         if detail.plan.competitor_layer == "L1":

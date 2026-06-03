@@ -17,7 +17,10 @@ from packages.schema.models import (
 
 
 class _WriterHarness(WriterAgentMixin):
-    pass
+    def _source_matches_competitor(self, source: RawSource, competitor: str) -> bool:
+        if source.covered_competitors:
+            return competitor in source.covered_competitors
+        return source.competitor == competitor
 
 
 def test_compare_run_quality_scores_real_run_against_baseline() -> None:
@@ -143,6 +146,31 @@ def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
         assert "## Evidence Appendix" in report
         assert "[source:source-0]" in report
         assert "[source:source-1]" in report
+
+
+def test_writer_hardens_thin_success_report_without_fallback_labels() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="thin-success",
+        execution_mode="real",
+        source_count=2,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.plan.competitor_layer = "L1"
+    detail.plan.dimensions = ["pricing", "feature"]
+
+    report = writer._harden_report_markdown(
+        detail,
+        "# Cursor vs Copilot\n\nCursor has a clearer pricing position than Copilot.",
+    )
+
+    assert "## Battlecard" in report
+    assert "## Battlecard Fallback" not in report
+    assert "## Source Quality & Coverage" in report
+    assert "## Next Collection / Verification Plan" in report
+    assert "## Evidence Appendix" in report
+    assert "Cursor has a clearer pricing position than Copilot. [source:source-0]" in report
 
 
 def _run_detail(
