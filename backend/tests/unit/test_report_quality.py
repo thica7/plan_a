@@ -327,9 +327,9 @@ def test_compare_run_quality_flags_missing_memory_and_user_research_sections() -
 def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
     writer = _WriterHarness()
     expected_sections = {
-        "L1": ("## Battlecard Fallback", "Objection handling"),
-        "L2": ("## Workflow & Enterprise Risk Fallback", "switching-cost exposure"),
-        "L3": ("## Market Landscape Fallback", "Category view"),
+        "L1": ("## Battlecard", "Objection handling"),
+        "L2": ("## Workflow & Enterprise Risk", "switching-cost exposure"),
+        "L3": ("## Market Landscape", "Category view"),
     }
     scenario_ids = {
         "L1": "l1_pricing_pack",
@@ -375,6 +375,7 @@ def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
         report = writer._fallback_report_markdown(detail, "timeout")
 
         assert section in report
+        assert "Fallback" not in report
         assert phrase in report
         assert "## Scenario QA Checklist" in report
         assert "Analyst question:" in report
@@ -384,6 +385,8 @@ def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
         assert "## Claim Validation & Evidence Risk" in report
         assert "## Next Collection / Verification Plan" in report
         assert "## Evidence Appendix" in report
+        assert "## Generation Notes" in report
+        assert "Internal reason: timeout" in report
         assert "[source:source-0]" in report
         assert "[source:source-1]" in report
 

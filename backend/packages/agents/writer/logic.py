@@ -170,9 +170,8 @@ class WriterAgentMixin:
         ]
         matrix_sources = self._matrix_source_ids(detail)
         lines.append(
-            "The report writer hit a transient generation error, so this fallback "
-            "report summarizes "
-            "the latest structured knowledge and comparison matrix."
+            "This evidence-indexed report summarizes the latest structured knowledge "
+            "and comparison matrix while preserving explicit uncertainty."
             + self._format_source_refs(matrix_sources)
         )
         if detail.comparison_matrix is not None:
@@ -191,7 +190,7 @@ class WriterAgentMixin:
                     f"- {cell.competitor} / {cell.dimension}: {cell.value}"
                     f"{self._format_source_refs(cell.source_ids)}"
                 )
-        lines.extend(self._fallback_layer_sections(detail, matrix_sources))
+        lines.extend(self._fallback_layer_sections(detail, matrix_sources, fallback=False))
         lines.extend(self._fallback_source_quality_section(detail))
         lines.extend(self._fallback_scenario_checklist_section(detail))
         lines.extend(["", "## Knowledge Coverage"])
@@ -215,7 +214,17 @@ class WriterAgentMixin:
         lines.extend(self._fallback_claim_validation_section(detail))
         lines.extend(self._fallback_next_collection_plan(detail))
         lines.extend(self._fallback_evidence_appendix(detail))
-        lines.extend(["", "## Writer Fallback Reason", f"- {reason}"])
+        lines.extend(
+            [
+                "",
+                "## Generation Notes",
+                (
+                    "- The deterministic writer generated this report from structured "
+                    "evidence because the narrative writer could not complete."
+                ),
+                f"- Internal reason: {reason}",
+            ]
+        )
         return "\n".join(lines)
 
     def _fallback_layer_sections(
@@ -409,15 +418,11 @@ class WriterAgentMixin:
 
     def _layer_section_heading(self, detail: RunDetail, *, fallback: bool = True) -> str:
         if detail.plan.competitor_layer == "L1":
-            return "Battlecard Fallback" if fallback else "Battlecard"
+            return "Battlecard"
         if detail.plan.competitor_layer == "L2":
-            return (
-                "Workflow & Enterprise Risk Fallback"
-                if fallback
-                else "Workflow & Enterprise Risk"
-            )
+            return "Workflow & Enterprise Risk"
         if detail.plan.competitor_layer == "L3":
-            return "Market Landscape Fallback" if fallback else "Market Landscape"
+            return "Market Landscape"
         return "Business Implications"
 
     def _report_has_heading(self, markdown: str, heading: str) -> bool:
