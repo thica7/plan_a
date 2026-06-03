@@ -2922,6 +2922,58 @@ select {
   justify-self: start;
 }
 
+.manual-research-form {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.manual-research-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+}
+
+.manual-research-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.manual-research-form label span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.manual-research-form input,
+.manual-research-form select,
+.manual-research-form textarea {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 9px 10px;
+  width: 100%;
+}
+
+.manual-research-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.manual-research-form input:focus,
+.manual-research-form select:focus,
+.manual-research-form textarea:focus {
+  border-color: #6f8fbf;
+  box-shadow: 0 0 0 3px rgba(111, 143, 191, 0.16);
+  outline: none;
+}
+
+.manual-research-form .icon-text-button {
+  justify-self: start;
+}
+
 .competitor-library-grid {
   display: grid;
   gap: 12px;

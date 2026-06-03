@@ -108,6 +108,23 @@ import type {
 } from "../api/types";
 
 type EnterpriseTab = "competitors" | "evidence" | "claims" | "reports";
+type ManualResearchKind = "survey" | "interview" | "manual";
+
+interface ManualResearchDraft {
+  kind: ManualResearchKind;
+  competitorId: string;
+  dimension: string;
+  title: string;
+  content: string;
+}
+
+const EMPTY_MANUAL_RESEARCH_DRAFT: ManualResearchDraft = {
+  kind: "interview",
+  competitorId: "",
+  dimension: "persona",
+  title: "",
+  content: "",
+};
 
 export function EnterpriseWorkbench({
   initialTab = "evidence",
@@ -159,10 +176,12 @@ export function EnterpriseWorkbench({
   const [isPublishingReport, setPublishingReport] = useState(false);
   const [isExportingReport, setExportingReport] = useState(false);
   const [isSavingMemoryFeedback, setSavingMemoryFeedback] = useState(false);
+  const [isSavingManualResearch, setSavingManualResearch] = useState(false);
   const [reviewingMemoryCandidateId, setReviewingMemoryCandidateId] = useState<string | null>(null);
   const [reviewingSchemaSuggestionId, setReviewingSchemaSuggestionId] = useState<string | null>(null);
   const [snapshottingEvidenceId, setSnapshottingEvidenceId] = useState<string | null>(null);
   const [memoryFeedbackDraft, setMemoryFeedbackDraft] = useState("");
+  const [manualResearchDraft, setManualResearchDraft] = useState<ManualResearchDraft>(EMPTY_MANUAL_RESEARCH_DRAFT);
   const [lastReportExport, setLastReportExport] = useState<ArtifactRecord | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -823,6 +842,72 @@ export function EnterpriseWorkbench({
     }
   }
 
+  async function handleSubmitManualResearch() {
+    if (!selectedProject || !manualResearchDraft.content.trim()) return;
+    const competitorId = manualResearchDraft.competitorId || competitors[0]?.id || "";
+    if (!competitorId) {
+      setError("Select a competitor before importing research evidence.");
+      return;
+    }
+    setSavingManualResearch(true);
+    setScanMessage(null);
+    setError(null);
+    try {
+      const result = await createSourceSnapshot(
+        buildManualResearchSnapshotRequest(
+          selectedProject,
+          manualResearchDraft,
+          competitorId,
+          competitorById.get(competitorId)?.name ?? competitorId,
+        ),
+      );
+      const [
+        evidenceItems,
+        artifactItems,
+        sourceRegistryValue,
+        knowledgeGraphValue,
+        claimValidationValue,
+        qaEvaluationValue,
+        readinessScoreValue,
+        evidenceGapsValue,
+        qualityMatrixValue,
+      ] = await Promise.all([
+        listProjectEvidence(selectedProject.id),
+        listArtifacts({ projectId: selectedProject.id }),
+        listSourceRegistry(selectedProject.workspace_id),
+        getProjectKnowledgeGraph(selectedProject.id),
+        getProjectClaimValidation(selectedProject.id),
+        getProjectQAEvaluation(selectedProject.id),
+        getProjectReadinessScore(selectedProject.id),
+        getProjectEvidenceGaps(selectedProject.id),
+        getProjectQualityMatrix(selectedProject.id),
+      ]);
+      setEvidence(evidenceItems);
+      setArtifacts(artifactItems);
+      setSourceRegistry(sourceRegistryValue);
+      setKnowledgeGraph(knowledgeGraphValue);
+      setClaimValidation(claimValidationValue);
+      setQaEvaluation(qaEvaluationValue);
+      setReadinessScore(readinessScoreValue);
+      setEvidenceGaps(evidenceGapsValue);
+      setQualityMatrix(qualityMatrixValue);
+      setManualResearchDraft({
+        ...EMPTY_MANUAL_RESEARCH_DRAFT,
+        competitorId,
+        kind: manualResearchDraft.kind,
+        dimension: manualResearchDraft.dimension || "persona",
+      });
+      await refreshAuditLogsForWorkspace(selectedProject.workspace_id);
+      setScanMessage(
+        `Research evidence imported: ${result.artifact.filename} (${result.snapshot_quality_score}/100).`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to import research evidence");
+    } finally {
+      setSavingManualResearch(false);
+    }
+  }
+
   function handleQualityChange(evidenceId: string, qualityLabel: EvidenceQualityLabel) {
     setEvidence((items) =>
       items.map((item) =>
@@ -1005,7 +1090,11 @@ export function EnterpriseWorkbench({
               <ResearchEvidencePanel
                 claims={claims}
                 competitors={competitors}
+                draft={manualResearchDraft}
                 evidence={evidence}
+                isSubmitting={isSavingManualResearch}
+                onDraftChange={setManualResearchDraft}
+                onSubmit={handleSubmitManualResearch}
               />
 
               <GovernanceRuntimePanel
@@ -1713,11 +1802,19 @@ function SourceRegistryPanel({ sources }: { sources: SourceRegistryRecord[] }) {
 function ResearchEvidencePanel({
   claims,
   competitors,
+  draft,
   evidence,
+  isSubmitting,
+  onDraftChange,
+  onSubmit,
 }: {
   claims: ClaimRecord[];
   competitors: CompetitorRecord[];
+  draft: ManualResearchDraft;
   evidence: EvidenceRecord[];
+  isSubmitting: boolean;
+  onDraftChange: (draft: ManualResearchDraft) => void;
+  onSubmit: () => void;
 }) {
   const researchEvidence = evidence.filter((item) => isResearchEvidenceSource(item.source_type));
   const researchEvidenceIds = new Set(researchEvidence.map((item) => item.id));
@@ -1772,6 +1869,76 @@ function ResearchEvidencePanel({
         <span>Manual {manualCount}</span>
         <span>Covered competitors {coveredCompetitorIds.size}/{competitors.length}</span>
       </div>
+      <form
+        className="manual-research-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+      >
+        <div className="manual-research-grid">
+          <label>
+            <span>Type</span>
+            <select
+              aria-label="Research evidence type"
+              value={draft.kind}
+              onChange={(event) =>
+                onDraftChange({ ...draft, kind: event.target.value as ManualResearchKind })
+              }
+            >
+              <option value="interview">Interview</option>
+              <option value="survey">Survey</option>
+              <option value="manual">Manual note</option>
+            </select>
+          </label>
+          <label>
+            <span>Competitor</span>
+            <select
+              aria-label="Research competitor"
+              value={draft.competitorId || competitors[0]?.id || ""}
+              onChange={(event) => onDraftChange({ ...draft, competitorId: event.target.value })}
+            >
+              {competitors.map((competitor) => (
+                <option key={competitor.id} value={competitor.id}>
+                  {competitor.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Dimension</span>
+            <input
+              aria-label="Research dimension"
+              value={draft.dimension}
+              onChange={(event) => onDraftChange({ ...draft, dimension: event.target.value })}
+              placeholder="persona"
+            />
+          </label>
+          <label>
+            <span>Title</span>
+            <input
+              aria-label="Research title"
+              value={draft.title}
+              onChange={(event) => onDraftChange({ ...draft, title: event.target.value })}
+              placeholder="Buyer interview notes"
+            />
+          </label>
+        </div>
+        <textarea
+          aria-label="Research transcript or survey response"
+          value={draft.content}
+          onChange={(event) => onDraftChange({ ...draft, content: event.target.value })}
+          placeholder="Paste interview transcript, survey response summary, or manually redacted research note"
+        />
+        <button
+          className="icon-text-button"
+          disabled={isSubmitting || competitors.length === 0 || !draft.content.trim()}
+          type="submit"
+        >
+          <FileText size={16} aria-hidden />
+          {isSubmitting ? "Importing" : "Import research"}
+        </button>
+      </form>
       {recentEvidence.length > 0 ? (
         <div className="recommendation-list">
           {recentEvidence.map((item) => (
@@ -2825,6 +2992,58 @@ function buildEvidenceSnapshotRequest(
       freshness_score: evidence.freshness_score,
     },
   };
+}
+
+function buildManualResearchSnapshotRequest(
+  project: ProjectRecord,
+  draft: ManualResearchDraft,
+  competitorId: string,
+  competitorName: string,
+): SourceSnapshotCreateRequest {
+  const dimension = draft.dimension.trim() || "persona";
+  const sourceType = manualResearchSourceType(draft.kind);
+  const title = draft.title.trim() || `${competitorName} ${dimension} ${draft.kind}`;
+  const filename = `${safeFilename(title)}.md`;
+  return {
+    workspace_id: project.workspace_id,
+    project_id: project.id,
+    run_id: null,
+    snapshot_kind: draft.kind,
+    artifact_type: "raw_text",
+    filename,
+    media_type: "text/markdown; charset=utf-8",
+    content_text: [
+      `Title: ${title}`,
+      `Competitor: ${competitorName}`,
+      `Dimension: ${dimension}`,
+      `Source type: ${sourceType}`,
+      "",
+      draft.content.trim(),
+    ].join("\n"),
+    source_url: null,
+    source_type: sourceType,
+    display_name: title,
+    trust_level: "verified",
+    robots_status: "unknown",
+    metadata: {
+      captured_from: "enterprise_workbench_manual_research_form",
+      competitor_id: competitorId,
+      competitor_name: competitorName,
+      dimension,
+      summary: draft.content.trim().slice(0, 500),
+    },
+  };
+}
+
+function manualResearchSourceType(kind: ManualResearchKind) {
+  if (kind === "survey") return "survey_response";
+  if (kind === "interview") return "interview_record";
+  return "manual_transcript";
+}
+
+function safeFilename(value: string) {
+  return value.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120)
+    || "manual-research";
 }
 
 function inferSnapshotKind(
