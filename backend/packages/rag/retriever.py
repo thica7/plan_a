@@ -82,10 +82,14 @@ def retrieve_grounded_context(
             )
         )
     records = rerank_candidates(candidates, limit=limit)
+    unique_evidence_count = len({candidate.evidence.id for candidate in candidates})
     return GapRetrievalContext(
         gap_id=gap_id,
         query=queries[0],
         rewritten_queries=queries,
+        candidate_chunk_count=len(candidates),
+        unique_evidence_candidate_count=unique_evidence_count,
+        dedupe_drop_count=max(0, len(candidates) - unique_evidence_count),
         candidate_ids=[record.evidence_id for record in records],
         records=records,
         grounded_context=grounded_context(records),

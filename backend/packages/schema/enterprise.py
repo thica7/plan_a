@@ -869,6 +869,9 @@ class EvidenceGapItem(BaseModel):
     message: str
     recommended_query: str = ""
     retrieval_query: str = ""
+    retrieval_candidate_chunk_count: int = Field(default=0, ge=0)
+    retrieval_unique_evidence_count: int = Field(default=0, ge=0)
+    retrieval_dedupe_drop_count: int = Field(default=0, ge=0)
     retrieval_candidate_ids: list[str] = Field(default_factory=list)
     retrieval_records: list[RetrievalRecord] = Field(default_factory=list)
     retrieval_grounded_context: str = ""

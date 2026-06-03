@@ -1020,6 +1020,9 @@ export interface EvidenceGapItem {
   message: string;
   recommended_query: string;
   retrieval_query: string;
+  retrieval_candidate_chunk_count: number;
+  retrieval_unique_evidence_count: number;
+  retrieval_dedupe_drop_count: number;
   retrieval_candidate_ids: string[];
   retrieval_records: RetrievalRecord[];
   retrieval_grounded_context: string;

@@ -8887,6 +8887,24 @@
             "title": "Retrieval Query",
             "default": ""
           },
+          "retrieval_candidate_chunk_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Retrieval Candidate Chunk Count",
+            "default": 0
+          },
+          "retrieval_unique_evidence_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Retrieval Unique Evidence Count",
+            "default": 0
+          },
+          "retrieval_dedupe_drop_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Retrieval Dedupe Drop Count",
+            "default": 0
+          },
           "retrieval_candidate_ids": {
             "items": {
               "type": "string"

@@ -40,6 +40,9 @@ class GapRetrievalContext(BaseModel):
     gap_id: str
     query: str
     rewritten_queries: list[str] = Field(default_factory=list)
+    candidate_chunk_count: int = Field(default=0, ge=0)
+    unique_evidence_candidate_count: int = Field(default=0, ge=0)
+    dedupe_drop_count: int = Field(default=0, ge=0)
     candidate_ids: list[str] = Field(default_factory=list)
     records: list[RetrievalRecord] = Field(default_factory=list)
     grounded_context: str = ""

@@ -49,6 +49,9 @@ def decorate_evidence_gap_report_with_retrieval(
                 gap.model_copy(
                     update={
                         "retrieval_query": contexts[gap.id].query,
+                        "retrieval_candidate_chunk_count": contexts[gap.id].candidate_chunk_count,
+                        "retrieval_unique_evidence_count": contexts[gap.id].unique_evidence_candidate_count,
+                        "retrieval_dedupe_drop_count": contexts[gap.id].dedupe_drop_count,
                         "retrieval_candidate_ids": contexts[gap.id].candidate_ids,
                         "retrieval_records": contexts[gap.id].records,
                         "retrieval_grounded_context": contexts[gap.id].grounded_context,

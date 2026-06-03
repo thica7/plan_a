@@ -2446,6 +2446,21 @@ export interface components {
              * @default
              */
             retrieval_query: string;
+            /**
+             * Retrieval Candidate Chunk Count
+             * @default 0
+             */
+            retrieval_candidate_chunk_count: number;
+            /**
+             * Retrieval Unique Evidence Count
+             * @default 0
+             */
+            retrieval_unique_evidence_count: number;
+            /**
+             * Retrieval Dedupe Drop Count
+             * @default 0
+             */
+            retrieval_dedupe_drop_count: number;
             /** Retrieval Candidate Ids */
             retrieval_candidate_ids?: string[];
             /** Retrieval Records */

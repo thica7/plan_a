@@ -1787,6 +1787,12 @@ function EvidenceGapCard({ gap }: { gap: EvidenceGapItem }) {
       {gap.retrieval_candidate_ids.length > 0 ? (
         <small>{gap.retrieval_candidate_ids.length} retrieval candidate(s)</small>
       ) : null}
+      {gap.retrieval_candidate_chunk_count > 0 ? (
+        <small>
+          {gap.retrieval_candidate_chunk_count} chunks / {gap.retrieval_unique_evidence_count} unique evidence /{" "}
+          {gap.retrieval_dedupe_drop_count} deduped
+        </small>
+      ) : null}
       {gap.retrieval_records.length > 0 ? (
         <div className="gap-retrieval-list">
           {gap.retrieval_records.slice(0, 2).map((record) => (

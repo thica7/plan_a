@@ -73,6 +73,8 @@ def test_gap_retrieval_decorates_report_with_candidate_evidence() -> None:
         "Cursor security trust center official Cursor security webpage_verified"
     )
     assert decorated_gap.retrieval_candidate_ids == ["evidence-security-1"]
+    assert decorated_gap.retrieval_candidate_chunk_count >= 1
+    assert decorated_gap.retrieval_unique_evidence_count == 1
     assert decorated_gap.retrieval_records[0].evidence_id == "evidence-security-1"
     assert "[source:evidence-security-1#chunk:" in decorated_gap.retrieval_grounded_context
     assert context.candidate_ids == ["evidence-security-1"]
@@ -176,6 +178,9 @@ def test_gap_retrieval_uses_chunk_level_reranking_and_dedupes_evidence() -> None
     )
     assert context.candidate_ids == ["evidence-enterprise-1"]
     assert len(context.records) == 1
+    assert context.candidate_chunk_count > context.unique_evidence_candidate_count
+    assert context.unique_evidence_candidate_count == 1
+    assert context.dedupe_drop_count > 0
     assert context.records[0].chunk_index >= 0
     assert "audit logs" in context.records[0].snippet.casefold()
 
