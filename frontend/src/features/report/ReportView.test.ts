@@ -5,6 +5,7 @@ import {
   extractSourceTokens,
   linkSourceTokens,
   resolveSourceId,
+  sourceTypeLabel,
 } from "./ReportView";
 
 const source: RawSource = {
@@ -66,5 +67,11 @@ describe("ReportView source token parsing", () => {
     ]);
     expect(resolveSourceId("evidence-001#quote", sourceMap, {})).toBe("evidence-001");
     expect(resolveSourceId("S1", sourceMap, { S1: "evidence-001" })).toBe("evidence-001");
+  });
+
+  it("labels manual research source types as research evidence", () => {
+    expect(sourceTypeLabel("manual_note")).toBe("research");
+    expect(sourceTypeLabel("manual")).toBe("research");
+    expect(sourceTypeLabel("manual_transcript")).toBe("research");
   });
 });

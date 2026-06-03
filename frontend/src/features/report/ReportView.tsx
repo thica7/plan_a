@@ -271,13 +271,15 @@ export function resolveSourceId(
   return sourceAliases[sourceId] ?? sourceId;
 }
 
-function sourceTypeLabel(sourceType: string) {
+export function sourceTypeLabel(sourceType: string) {
   if (sourceType === "webpage_verified") return "fetched";
   if (
     sourceType === "survey_simulated"
     || sourceType === "survey_response"
     || sourceType === "interview_record"
     || sourceType === "manual_transcript"
+    || sourceType === "manual_note"
+    || sourceType === "manual"
   ) {
     return "research";
   }
