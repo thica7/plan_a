@@ -681,6 +681,12 @@ export function EnterpriseWorkbench({
 
               <SourceRegistryPanel sources={sourceRegistry} />
 
+              <ResearchEvidencePanel
+                claims={claims}
+                competitors={competitors}
+                evidence={evidence}
+              />
+
               <GovernanceRuntimePanel
                 knowledgeGraph={knowledgeGraph}
                 modelPolicy={modelPolicy}
@@ -1086,6 +1092,92 @@ function SourceRegistryPanel({ sources }: { sources: SourceRegistryRecord[] }) {
       )}
     </section>
   );
+}
+
+function ResearchEvidencePanel({
+  claims,
+  competitors,
+  evidence,
+}: {
+  claims: ClaimRecord[];
+  competitors: CompetitorRecord[];
+  evidence: EvidenceRecord[];
+}) {
+  const researchEvidence = evidence.filter((item) => isResearchEvidenceSource(item.source_type));
+  const researchEvidenceIds = new Set(researchEvidence.map((item) => item.id));
+  const coveredCompetitorIds = new Set(researchEvidence.map((item) => item.competitor_id));
+  const personaClaimCount = claims.filter(
+    (claim) =>
+      isPersonaClaim(claim.claim_type)
+      && claim.evidence_ids.some((evidenceId) => researchEvidenceIds.has(evidenceId)),
+  ).length;
+  const surveyCount = researchEvidence.filter((item) => item.source_type === "survey_simulated").length;
+  const interviewCount = researchEvidence.filter((item) => item.source_type === "interview_record").length;
+  const manualCount = researchEvidence.filter((item) =>
+    ["manual_transcript", "manual_note", "manual"].includes(item.source_type),
+  ).length;
+  const coverageRate = competitors.length > 0 ? coveredCompetitorIds.size / competitors.length : 0;
+  const averageResearchReliability =
+    researchEvidence.length > 0
+      ? researchEvidence.reduce((total, item) => total + item.reliability_score, 0) / researchEvidence.length
+      : 0;
+  const status = researchEvidence.length === 0
+    ? "warn"
+    : coverageRate >= 0.5 && personaClaimCount > 0
+      ? "pass"
+      : "warn";
+  const recentEvidence = researchEvidence.slice(0, 4);
+
+  return (
+    <section className={`panel readiness-panel ${status}`}>
+      <div className="panel-heading-row">
+        <h2>Survey / Interview</h2>
+        {status === "pass" ? (
+          <CheckCircle2 size={17} aria-hidden />
+        ) : (
+          <AlertTriangle size={17} aria-hidden />
+        )}
+      </div>
+      <div className="metric-grid compact">
+        <Metric icon={<ListChecks size={17} aria-hidden />} label="Research" value={researchEvidence.length} />
+        <Metric icon={<Search size={17} aria-hidden />} label="Coverage" value={formatPercent(coverageRate)} />
+        <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Persona claims" value={personaClaimCount} />
+        <Metric
+          icon={<Gauge size={17} aria-hidden />}
+          label="Reliability"
+          value={formatPercent(averageResearchReliability)}
+        />
+      </div>
+      <div className="project-meta-row">
+        <span>Survey {surveyCount}</span>
+        <span>Interview {interviewCount}</span>
+        <span>Manual {manualCount}</span>
+        <span>Covered competitors {coveredCompetitorIds.size}/{competitors.length}</span>
+      </div>
+      {recentEvidence.length > 0 ? (
+        <div className="recommendation-list">
+          {recentEvidence.map((item) => (
+            <article className="recommendation-card medium" key={item.id}>
+              <strong>{item.source_type.replace(/_/g, " ")}</strong>
+              <span>{formatPercent(item.reliability_score)}</span>
+              <p>{item.title}</p>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="muted-line">No survey, interview, or manual transcript evidence has been attached yet.</p>
+      )}
+    </section>
+  );
+}
+
+function isResearchEvidenceSource(sourceType: string) {
+  return ["survey_simulated", "interview_record", "manual_transcript", "manual_note", "manual"].includes(sourceType);
+}
+
+function isPersonaClaim(claimType: string) {
+  const normalized = claimType.toLowerCase();
+  return normalized.includes("persona") || normalized.includes("user") || normalized.includes("buyer");
 }
 
 function GovernanceRuntimePanel({
