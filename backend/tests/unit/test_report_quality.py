@@ -86,6 +86,8 @@ def test_compare_run_quality_scores_real_run_against_baseline() -> None:
         "report_structure_score",
         "claim_risk_section_score",
         "scenario_checklist_section_score",
+        "memory_context_section_score",
+        "user_research_section_score",
     }
     assert next(
         metric for metric in comparison.metrics if metric.name == "citation_validity_rate"
@@ -228,6 +230,53 @@ def test_compare_run_quality_counts_official_business_sources_as_real_verified()
     assert metrics["verified_source_rate"].target_value == 1.0
     assert metrics["real_source_rate"].target_value == 1.0
     assert comparison.real_collection_signal is True
+
+
+def test_compare_run_quality_flags_missing_memory_and_user_research_sections() -> None:
+    detail = _run_detail(
+        run_id="missing-memory-research",
+        execution_mode="real",
+        source_count=4,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+        source_types=["survey_simulated", "interview_record", "webpage_verified"],
+    )
+    detail.plan.dimensions = ["pricing", "persona"]
+    detail.plan.memory_candidate_ids = ["memory-1"]
+    detail.plan.memory_prompt_context = ["Prefer buyer-objection framing."]
+    detail.plan.memory_recall_score = 82
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["memory_context_section_score"].target_value == 0.0
+    assert metrics["user_research_section_score"].target_value == 0.0
+    assert comparison.report_quality_signal is False
+    assert "memory_context_section_score" in {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+    assert any("Memory Context" in item for item in comparison.recommendations)
+    assert any("User Research Evidence" in item for item in comparison.recommendations)
 
 
 def test_writer_fallback_keeps_layer_specific_report_floor() -> None:

@@ -133,6 +133,14 @@ def test_enterprise_evalops_report_scores_golden_set_and_regression_gate() -> No
         metric.name == "scenario_checklist_section_score" and metric.status == "pass"
         for metric in report.metrics
     )
+    assert any(
+        metric.name == "memory_context_section_score" and metric.status == "pass"
+        for metric in report.metrics
+    )
+    assert any(
+        metric.name == "user_research_section_score" and metric.status == "pass"
+        for metric in report.metrics
+    )
     assert any(case.case_id == "golden.scenario_checklist" for case in report.cases)
     assert any(case.case_id == "golden.compliance" for case in report.cases)
     assert any(case.case_id == "golden.user_research_evidence" for case in report.cases)

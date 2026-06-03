@@ -156,6 +156,18 @@ def build_enterprise_evalops_report(
             for comparison in comparisons
         ]
     )
+    memory_context_section_rate = _average_float(
+        [
+            _metric_value(comparison, "memory_context_section_score")
+            for comparison in comparisons
+        ]
+    )
+    user_research_section_rate = _average_float(
+        [
+            _metric_value(comparison, "user_research_section_score")
+            for comparison in comparisons
+        ]
+    )
     real_collection_rate = _ratio(
         [comparison.real_collection_signal for comparison in comparisons],
     )
@@ -215,6 +227,8 @@ def build_enterprise_evalops_report(
         _metric("report_structure_score", report_structure_rate, 0.7, "ratio"),
         _metric("claim_risk_section_score", claim_risk_section_rate, 1.0, "ratio"),
         _metric("scenario_checklist_section_score", scenario_checklist_section_rate, 1.0, "ratio"),
+        _metric("memory_context_section_score", memory_context_section_rate, 1.0, "ratio"),
+        _metric("user_research_section_score", user_research_section_rate, 1.0, "ratio"),
         _metric("real_collection_rate", real_collection_rate, 0.5, "ratio"),
         _metric("real_llm_rate", real_llm_rate, 0.5, "ratio"),
         _metric("real_quality_chain_rate", real_quality_chain_rate, 0.5, "ratio"),
@@ -848,6 +862,15 @@ def _recommendations(
         recommendations.append(
             "Add Scenario QA Checklist to every report so layer, ScenarioPack, QA rules, "
             "and evidence requirements are reviewable."
+        )
+    if metric_names["memory_context_section_score"].status != "pass":
+        recommendations.append(
+            "Add Memory Context to reports that use confirmed MemoryAgent guidance."
+        )
+    if metric_names["user_research_section_score"].status != "pass":
+        recommendations.append(
+            "Add User Research Evidence to reports that rely on survey, interview, or "
+            "manual-note signals."
         )
     if metric_names["real_collection_rate"].status != "pass":
         recommendations.append(

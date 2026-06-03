@@ -25,6 +25,26 @@ REAL_SOURCE_TYPES = {
     "web_search_result",
     "webpage_verified",
 }
+USER_RESEARCH_SOURCE_TYPES = {
+    "survey_simulated",
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+    "manual_note",
+    "manual",
+}
+USER_RESEARCH_DIMENSION_HINTS = {
+    "persona",
+    "user",
+    "customer",
+    "buyer",
+    "review",
+    "feedback",
+    "adoption",
+    "switching",
+    "use_case",
+    "use case",
+}
 
 
 @dataclass(frozen=True)
@@ -110,6 +130,8 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "scenario_checklist_section_score": _scenario_checklist_section_score(
             detail.report_md
         ),
+        "memory_context_section_score": _memory_context_section_score(detail),
+        "user_research_section_score": _user_research_section_score(detail),
         "qa_blocker_count": float(
             len([finding for finding in detail.qa_findings if finding.severity == "blocker"])
         ),
@@ -126,6 +148,8 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "report_structure_score": values["report_structure_score"],
         "claim_risk_section_score": values["claim_risk_section_score"],
         "scenario_checklist_section_score": values["scenario_checklist_section_score"],
+        "memory_context_section_score": values["memory_context_section_score"],
+        "user_research_section_score": values["user_research_section_score"],
         "qa_blocker_count": max(0.0, 1.0 - min(values["qa_blocker_count"] / 3.0, 1.0)),
     }
     score = round(
@@ -148,6 +172,8 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         and values["report_structure_score"] >= 0.7
         and values["claim_risk_section_score"] >= 1.0
         and values["scenario_checklist_section_score"] >= 1.0
+        and values["memory_context_section_score"] >= 1.0
+        and values["user_research_section_score"] >= 1.0
     )
     return _QualitySnapshot(
         score=max(0, min(100, score)),
@@ -160,17 +186,19 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
 
 def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower_is_better"]]]:
     return [
-        ("evidence_count", 0.10, "higher_is_better"),
-        ("source_coverage_rate", 0.11, "higher_is_better"),
-        ("verified_source_rate", 0.11, "higher_is_better"),
-        ("claim_citation_rate", 0.10, "higher_is_better"),
-        ("citation_validity_rate", 0.10, "higher_is_better"),
-        ("real_source_rate", 0.11, "higher_is_better"),
+        ("evidence_count", 0.09, "higher_is_better"),
+        ("source_coverage_rate", 0.10, "higher_is_better"),
+        ("verified_source_rate", 0.10, "higher_is_better"),
+        ("claim_citation_rate", 0.09, "higher_is_better"),
+        ("citation_validity_rate", 0.09, "higher_is_better"),
+        ("real_source_rate", 0.10, "higher_is_better"),
         ("llm_call_signal", 0.09, "higher_is_better"),
         ("report_length_score", 0.04, "higher_is_better"),
         ("report_structure_score", 0.07, "higher_is_better"),
         ("claim_risk_section_score", 0.06, "higher_is_better"),
         ("scenario_checklist_section_score", 0.04, "higher_is_better"),
+        ("memory_context_section_score", 0.03, "higher_is_better"),
+        ("user_research_section_score", 0.03, "higher_is_better"),
         ("qa_blocker_count", 0.07, "lower_is_better"),
     ]
 
@@ -233,6 +261,8 @@ def _signal_checks(detail: RunDetail, snapshot: _QualitySnapshot) -> list[RunQua
         ("report_structure_score", 0.7),
         ("claim_risk_section_score", 1.0),
         ("scenario_checklist_section_score", 1.0),
+        ("memory_context_section_score", 1.0),
+        ("user_research_section_score", 1.0),
     ]:
         if snapshot.values[name] < minimum:
             report_blockers.append(name)
@@ -370,6 +400,8 @@ def _report_structure_score(detail: RunDetail) -> float:
         _claim_risk_section_score(detail.report_md) >= 1.0,
         _has_heading(detail.report_md, ("next collection", "verification plan", "evidence gap")),
         _has_heading(detail.report_md, ("evidence appendix", "source appendix")),
+        _memory_context_section_score(detail) >= 1.0,
+        _user_research_section_score(detail) >= 1.0,
         _has_layer_heading(detail),
     ]
     return sum(1 for item in checks if item) / len(checks)
@@ -400,6 +432,30 @@ def _claim_risk_section_score(markdown: str) -> float:
 
 def _scenario_checklist_section_score(markdown: str) -> float:
     return 1.0 if _has_heading(markdown, ("scenario qa", "scenario checklist")) else 0.0
+
+
+def _memory_context_section_score(detail: RunDetail) -> float:
+    if not detail.plan.memory_prompt_context and not detail.plan.memory_candidate_ids:
+        return 1.0
+    return 1.0 if _has_heading(detail.report_md, ("memory context", "memoryagent")) else 0.0
+
+
+def _user_research_section_score(detail: RunDetail) -> float:
+    if not _needs_user_research_section(detail):
+        return 1.0
+    return 1.0 if _has_heading(detail.report_md, ("user research", "buyer research")) else 0.0
+
+
+def _needs_user_research_section(detail: RunDetail) -> bool:
+    if any(source.source_type in USER_RESEARCH_SOURCE_TYPES for source in detail.raw_sources):
+        return True
+    return any(
+        any(
+            hint in dimension.casefold().replace("-", "_")
+            for hint in USER_RESEARCH_DIMENSION_HINTS
+        )
+        for dimension in detail.plan.dimensions
+    )
 
 
 def _verdict(
@@ -465,6 +521,16 @@ def _clean_recommendations(
         recommendations.append(
             "Add a Scenario QA Checklist section so the selected layer, ScenarioPack, QA rules, "
             "and evidence requirements are visible in the report."
+        )
+    if target.values.get("memory_context_section_score", 1.0) < 1.0:
+        recommendations.append(
+            "Add a Memory Context section so confirmed MemoryAgent preferences are visible as "
+            "guidance, not mistaken for factual evidence."
+        )
+    if target.values.get("user_research_section_score", 1.0) < 1.0:
+        recommendations.append(
+            "Add a User Research Evidence section so survey, interview, or manual-note signals "
+            "are separated from official factual proof."
         )
     if (
         target.values.get("report_source_token_count", 0.0) > 0
