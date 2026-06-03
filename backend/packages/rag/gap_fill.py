@@ -464,11 +464,17 @@ def _append_gap_fill_section(
     for gap in gaps:
         if gap.id not in filled_gap_ids:
             continue
-        added = ", ".join(gap.evidence_ids)
+        added = _format_gap_fill_source_tokens(gap.evidence_ids)
         lines.append(f"- {gap.id}: linked evidence candidates {added}.")
         if gap.retrieval_grounded_context:
             lines.append(f"  - Grounded context: {gap.retrieval_grounded_context[:600]}")
     return "\n".join(lines).strip() + "\n"
+
+
+def _format_gap_fill_source_tokens(evidence_ids: list[str]) -> str:
+    if not evidence_ids:
+        return "none"
+    return ", ".join(f"[source:{evidence_id}]" for evidence_id in evidence_ids)
 
 
 def _gap_fill_report_version_id(

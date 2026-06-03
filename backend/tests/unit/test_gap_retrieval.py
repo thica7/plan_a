@@ -272,6 +272,7 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
         "decision_events"
     ][0]["event_type"] == "rag.retrieved"
     assert "## RAG Gap Fill" in result.updated_report_version.report_md
+    assert "[source:evidence-trust-1]" in result.updated_report_version.report_md
     assert store.get_report_version(result.updated_report_version.id) is not None
 
 
@@ -381,3 +382,4 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version() -> 
         "report.ready",
     ]
     assert result.updated_report_version.evidence_ids == [evidence.id]
+    assert f"[source:{evidence.id}]" in result.updated_report_version.report_md
