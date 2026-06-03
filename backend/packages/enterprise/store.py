@@ -18,7 +18,7 @@ from packages.enterprise.usage import (
     build_workspace_usage_summary,
     current_month_window,
 )
-from packages.identity import compute_competitor_set_hash, compute_topic_normalized
+from packages.identity import compute_competitor_set_hash, compute_topic_normalized, normalize_url
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     ArtifactRecord,
@@ -1092,22 +1092,28 @@ class EnterpriseMemoryStore:
         if duplicate is None:
             metadata.pop("embedding_duplicate_of", None)
             metadata.pop("embedding_dedupe_key", None)
+            metadata.pop("embedding_dedupe_strategy", None)
             metadata["embedding_indexed"] = True
             return evidence.model_copy(update={"metadata": metadata}), None
-        metadata["embedding_duplicate_of"] = duplicate.id
-        metadata["embedding_dedupe_key"] = _embedding_dedupe_key(evidence)
+        canonical, dedupe_key = duplicate
+        metadata["embedding_duplicate_of"] = canonical.id
+        metadata["embedding_dedupe_key"] = dedupe_key
+        metadata["embedding_dedupe_strategy"] = _embedding_dedupe_strategy(dedupe_key)
         metadata["embedding_indexed"] = False
-        self._record_embedding_duplicate_locked(duplicate.id, evidence.id)
-        return evidence.model_copy(update={"metadata": metadata}), duplicate.id
+        self._record_embedding_duplicate_locked(canonical.id, evidence.id)
+        return evidence.model_copy(update={"metadata": metadata}), canonical.id
 
-    def _find_embedding_duplicate_locked(self, evidence: EvidenceRecord) -> EvidenceRecord | None:
-        key = _embedding_dedupe_key(evidence)
-        if not key:
+    def _find_embedding_duplicate_locked(
+        self,
+        evidence: EvidenceRecord,
+    ) -> tuple[EvidenceRecord, str] | None:
+        keys = _embedding_dedupe_keys(evidence)
+        if not keys:
             return None
         candidates = [
             item
             for item in self.evidence_records.values()
-            if _embedding_dedupe_key(item) == key
+            if set(_embedding_dedupe_keys(item)) & set(keys)
         ]
         if not candidates:
             return None
@@ -1117,7 +1123,10 @@ class EnterpriseMemoryStore:
         )[0]
         if canonical.id == evidence.id:
             return None
-        return canonical
+        matching_keys = sorted(set(_embedding_dedupe_keys(canonical)) & set(keys))
+        if not matching_keys:
+            return None
+        return canonical, matching_keys[0]
 
     def _record_embedding_duplicate_locked(
         self,
@@ -1298,6 +1307,38 @@ def _embedding_dedupe_key(evidence: EvidenceRecord) -> str:
         evidence.content_hash.casefold().strip(),
     ]
     return "|".join(parts)
+
+
+def _embedding_dedupe_keys(evidence: EvidenceRecord) -> list[str]:
+    keys = []
+    content_key = _embedding_dedupe_key(evidence)
+    if content_key:
+        keys.append(f"content_hash|{content_key}")
+    url = _evidence_dedupe_url(evidence)
+    if url:
+        keys.append(
+            "|".join(
+                [
+                    "canonical_url",
+                    evidence.workspace_id,
+                    evidence.project_id,
+                    evidence.competitor_id.casefold().strip(),
+                    evidence.dimension.casefold().strip(),
+                    url,
+                ]
+            )
+        )
+    return keys
+
+
+def _evidence_dedupe_url(evidence: EvidenceRecord) -> str:
+    return normalize_url(evidence.canonical_url or str(evidence.url or ""))
+
+
+def _embedding_dedupe_strategy(dedupe_key: str) -> str:
+    if dedupe_key.startswith("canonical_url|"):
+        return "canonical_url"
+    return "content_hash"
 
 
 def source_registry_id(workspace_id: str, domain: str, source_type: str) -> str:

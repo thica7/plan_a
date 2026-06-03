@@ -27,7 +27,7 @@ from packages.enterprise.usage import (
     build_workspace_usage_summary,
     current_month_window,
 )
-from packages.identity import compute_competitor_set_hash, compute_topic_normalized
+from packages.identity import compute_competitor_set_hash, compute_topic_normalized, normalize_url
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     ArtifactRecord,
@@ -1629,15 +1629,18 @@ class EnterprisePostgresStore:
         cur: Any,
         evidence: EvidenceRecord,
     ) -> EvidenceRecord:
-        duplicate_id = self._find_embedding_duplicate(cur, evidence)
+        duplicate = self._find_embedding_duplicate(cur, evidence)
         metadata = dict(evidence.metadata)
-        if duplicate_id is None:
+        if duplicate is None:
             metadata.pop("embedding_duplicate_of", None)
             metadata.pop("embedding_dedupe_key", None)
+            metadata.pop("embedding_dedupe_strategy", None)
             metadata["embedding_indexed"] = True
             return evidence.model_copy(update={"metadata": metadata})
+        duplicate_id, dedupe_key = duplicate
         metadata["embedding_duplicate_of"] = duplicate_id
-        metadata["embedding_dedupe_key"] = _embedding_dedupe_key(evidence)
+        metadata["embedding_dedupe_key"] = dedupe_key
+        metadata["embedding_dedupe_strategy"] = _embedding_dedupe_strategy(dedupe_key)
         metadata["embedding_indexed"] = False
         return evidence.model_copy(update={"metadata": metadata})
 
@@ -1645,9 +1648,12 @@ class EnterprisePostgresStore:
         self,
         cur: Any,
         evidence: EvidenceRecord,
-    ) -> str | None:
-        if not evidence.content_hash:
+    ) -> tuple[str, str] | None:
+        keys = _embedding_dedupe_keys(evidence)
+        if not keys:
             return None
+        content_hash = evidence.content_hash.casefold().strip()
+        canonical_url = _evidence_dedupe_url(evidence)
         rows = cur.execute(
             """
             SELECT *
@@ -1656,7 +1662,13 @@ class EnterprisePostgresStore:
               AND project_id = %s
               AND competitor_id = %s
               AND lower(dimension) = lower(%s)
-              AND lower(content_hash) = lower(%s)
+              AND (
+                lower(content_hash) = lower(%s)
+                OR (
+                    %s <> ''
+                    AND COALESCE(NULLIF(lower(canonical_url), ''), lower(url), '') = lower(%s)
+                )
+              )
             ORDER BY captured_at ASC, id ASC
             """,
             (
@@ -1664,7 +1676,9 @@ class EnterprisePostgresStore:
                 evidence.project_id,
                 evidence.competitor_id,
                 evidence.dimension,
-                evidence.content_hash,
+                content_hash,
+                canonical_url,
+                canonical_url,
             ),
         ).fetchall()
         candidates = [self._model_from_row(EvidenceRecord, row) for row in rows]
@@ -1676,7 +1690,10 @@ class EnterprisePostgresStore:
         )[0]
         if canonical.id == evidence.id:
             return None
-        return canonical.id
+        matching_keys = sorted(set(_embedding_dedupe_keys(canonical)) & set(keys))
+        if not matching_keys:
+            return None
+        return canonical.id, matching_keys[0]
 
     def _upsert_source_registry(self, cur: Any, record: SourceRegistryRecord) -> None:
         cur.execute(
@@ -2109,6 +2126,38 @@ def _embedding_dedupe_key(evidence: EvidenceRecord) -> str:
         evidence.content_hash.casefold().strip(),
     ]
     return "|".join(parts)
+
+
+def _embedding_dedupe_keys(evidence: EvidenceRecord) -> list[str]:
+    keys = []
+    content_key = _embedding_dedupe_key(evidence)
+    if content_key:
+        keys.append(f"content_hash|{content_key}")
+    url = _evidence_dedupe_url(evidence)
+    if url:
+        keys.append(
+            "|".join(
+                [
+                    "canonical_url",
+                    evidence.workspace_id,
+                    evidence.project_id,
+                    evidence.competitor_id.casefold().strip(),
+                    evidence.dimension.casefold().strip(),
+                    url,
+                ]
+            )
+        )
+    return keys
+
+
+def _evidence_dedupe_url(evidence: EvidenceRecord) -> str:
+    return normalize_url(evidence.canonical_url or str(evidence.url or ""))
+
+
+def _embedding_dedupe_strategy(dedupe_key: str) -> str:
+    if dedupe_key.startswith("canonical_url|"):
+        return "canonical_url"
+    return "content_hash"
 
 
 def _split_sql(script: str) -> list[str]:

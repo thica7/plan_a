@@ -415,6 +415,60 @@ def test_enterprise_store_deduplicates_embedding_index_by_content_hash() -> None
     assert store.evidence_records[canonical.id].metadata["embedding_duplicate_count"] == 1
 
 
+def test_enterprise_store_deduplicates_embedding_index_by_canonical_url() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    canonical = projection.evidence_records[0].model_copy(
+        update={
+            "canonical_url": "https://cursor.sh/pricing",
+            "content_hash": "canonical-hash",
+            "metadata": {},
+        }
+    )
+    store.upsert_evidence(canonical)
+    duplicate = canonical.model_copy(
+        update={
+            "id": "zz-url-duplicate-evidence",
+            "raw_source_id": "url-duplicate-source",
+            "content_hash": "changed-content-hash",
+            "metadata": {},
+        }
+    )
+
+    stored_duplicate = store.upsert_evidence(duplicate)
+    reindexed = store.reindex_evidence_embeddings(workspace_id=context.workspace_id)
+    embeddings = store.list_evidence_embeddings(workspace_id=context.workspace_id)
+    hits = store.search_evidence(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        query="Cursor pricing plan",
+        limit=5,
+    )
+
+    assert stored_duplicate.metadata["embedding_duplicate_of"] == canonical.id
+    assert stored_duplicate.metadata["embedding_dedupe_strategy"] == "canonical_url"
+    assert stored_duplicate.metadata["embedding_indexed"] is False
+    assert len(embeddings) == 1
+    assert embeddings[0].evidence_id == canonical.id
+    assert [hit.evidence.id for hit in hits] == [canonical.id]
+    assert reindexed.indexed_count == 1
+    assert reindexed.duplicate_count == 1
+    assert (
+        store.evidence_records["zz-url-duplicate-evidence"].metadata[
+            "embedding_dedupe_strategy"
+        ]
+        == "canonical_url"
+    )
+
+
 def test_schema_suggestion_review_persists_metadata_and_updates_plan_dimensions() -> None:
     store = EnterpriseMemoryStore()
     detail = _detail()
