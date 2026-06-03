@@ -4292,7 +4292,11 @@ function ReleaseGatePanel({ gate }: { gate: ReportReleaseGate }) {
         <ul>
           {gate.issues.slice(0, 3).map((issue) => (
             <li key={issue.id}>
+              <strong title={issue.rule_id}>
+                {issue.severity} / {issue.rule_name}
+              </strong>
               <span>{issue.message}</span>
+              {issue.recommendation ? <em>{issue.recommendation}</em> : null}
               <FindingTargetLinks finding={issue} />
             </li>
           ))}

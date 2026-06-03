@@ -3414,6 +3414,17 @@ select {
   gap: 5px;
 }
 
+.release-gate-panel li strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.release-gate-panel li em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
 .report-quality-metadata-panel {
   background: var(--surface-2);
   border: 1px solid var(--border);
