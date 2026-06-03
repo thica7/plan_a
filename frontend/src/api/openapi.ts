@@ -4465,6 +4465,8 @@ export interface components {
              * @default false
              */
             report_quality_signal: boolean;
+            /** Signal Checks */
+            signal_checks?: components["schemas"]["RunQualitySignalCheck"][];
             /** Metrics */
             metrics?: components["schemas"]["RunQualityMetric"][];
             /** Recommendations */
@@ -4501,6 +4503,22 @@ export interface components {
              * @enum {string}
              */
             status: "improved" | "regressed" | "unchanged" | "baseline_missing";
+        };
+        /** RunQualitySignalCheck */
+        RunQualitySignalCheck: {
+            /**
+             * Signal
+             * @enum {string}
+             */
+            signal: "real_collection" | "real_llm" | "report_quality";
+            /** Label */
+            label: string;
+            /** Passed */
+            passed: boolean;
+            /** Reason */
+            reason: string;
+            /** Blocking Metric Names */
+            blocking_metric_names?: string[];
         };
         /** RunSummary */
         RunSummary: {

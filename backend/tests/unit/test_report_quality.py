@@ -73,6 +73,11 @@ def test_compare_run_quality_scores_real_run_against_baseline() -> None:
     assert comparison.real_collection_signal is True
     assert comparison.real_llm_signal is True
     assert comparison.report_quality_signal is True
+    assert {check.signal: check.passed for check in comparison.signal_checks} == {
+        "real_collection": True,
+        "real_llm": True,
+        "report_quality": True,
+    }
     assert {metric.name for metric in comparison.metrics} >= {
         "real_source_rate",
         "llm_call_signal",
@@ -179,6 +184,14 @@ def test_compare_run_quality_flags_missing_real_chain_signals() -> None:
     assert comparison.real_collection_signal is False
     assert comparison.real_llm_signal is False
     assert comparison.report_quality_signal is False
+    signal_checks = {check.signal: check for check in comparison.signal_checks}
+    assert signal_checks["real_collection"].blocking_metric_names == [
+        "real_source_rate",
+        "evidence_count",
+    ]
+    assert signal_checks["real_llm"].blocking_metric_names == ["llm_call_signal"]
+    assert "report_length_score" in signal_checks["report_quality"].blocking_metric_names
+    assert "report_structure_score" in signal_checks["report_quality"].blocking_metric_names
     assert len(comparison.recommendations) == 5
     assert "real webpage" in comparison.recommendations[0]
     assert any("Claim Validation & Evidence Risk" in item for item in comparison.recommendations)

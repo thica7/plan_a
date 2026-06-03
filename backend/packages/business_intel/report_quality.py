@@ -4,7 +4,12 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from packages.schema.api_dto import RunDetail, RunQualityComparison, RunQualityMetric
+from packages.schema.api_dto import (
+    RunDetail,
+    RunQualityComparison,
+    RunQualityMetric,
+    RunQualitySignalCheck,
+)
 from packages.schema.models import RawSource
 
 REAL_SOURCE_TYPES = {
@@ -66,6 +71,7 @@ def compare_run_quality(
         real_collection_signal=target_snapshot.real_collection_signal,
         real_llm_signal=target_snapshot.real_llm_signal,
         report_quality_signal=target_snapshot.report_quality_signal,
+        signal_checks=_signal_checks(target, target_snapshot),
         metrics=metrics,
         recommendations=_clean_recommendations(target_snapshot, baseline_snapshot),
     )
@@ -198,6 +204,79 @@ def _metric(
         direction=direction,
         status=status,
     )
+
+
+def _signal_checks(detail: RunDetail, snapshot: _QualitySnapshot) -> list[RunQualitySignalCheck]:
+    collection_blockers: list[str] = []
+    if detail.execution_mode != "real":
+        collection_blockers.append("execution_mode")
+    if snapshot.values["real_source_rate"] < 0.5:
+        collection_blockers.append("real_source_rate")
+    if snapshot.values["evidence_count"] < 2:
+        collection_blockers.append("evidence_count")
+
+    llm_blockers: list[str] = []
+    if detail.execution_mode != "real":
+        llm_blockers.append("execution_mode")
+    if snapshot.values["llm_call_signal"] <= 0 and not any(
+        span.kind == "llm" and (span.provider or span.model) for span in detail.trace_spans
+    ):
+        llm_blockers.append("llm_call_signal")
+
+    report_blockers: list[str] = []
+    if len(detail.report_md) < 1200:
+        report_blockers.append("report_length_score")
+    for name, minimum in [
+        ("claim_citation_rate", 0.6),
+        ("citation_validity_rate", 0.6),
+        ("source_coverage_rate", 0.5),
+        ("report_structure_score", 0.7),
+        ("claim_risk_section_score", 1.0),
+        ("scenario_checklist_section_score", 1.0),
+    ]:
+        if snapshot.values[name] < minimum:
+            report_blockers.append(name)
+
+    return [
+        RunQualitySignalCheck(
+            signal="real_collection",
+            label="Real collection",
+            passed=snapshot.real_collection_signal,
+            reason=_signal_reason(
+                snapshot.real_collection_signal,
+                "Run has real-mode external evidence coverage.",
+                "Needs real execution, at least two evidence items, and >=50% real source rate.",
+            ),
+            blocking_metric_names=collection_blockers,
+        ),
+        RunQualitySignalCheck(
+            signal="real_llm",
+            label="Real LLM",
+            passed=snapshot.real_llm_signal,
+            reason=_signal_reason(
+                snapshot.real_llm_signal,
+                "Run has model-backed LLM call or trace evidence.",
+                "Needs real execution plus llm_calls or an LLM trace span with provider/model.",
+            ),
+            blocking_metric_names=llm_blockers,
+        ),
+        RunQualitySignalCheck(
+            signal="report_quality",
+            label="Report quality",
+            passed=snapshot.report_quality_signal,
+            reason=_signal_reason(
+                snapshot.report_quality_signal,
+                "Report meets citation, coverage, structure, and review-readiness thresholds.",
+                "Needs a longer cited report with structure, source coverage, claim risk, and "
+                "scenario QA sections.",
+            ),
+            blocking_metric_names=report_blockers,
+        ),
+    ]
+
+
+def _signal_reason(passed: bool, passed_reason: str, failed_reason: str) -> str:
+    return passed_reason if passed else failed_reason
 
 
 def _ratio_or_compute(metric_value: float, computed_value: float) -> float:

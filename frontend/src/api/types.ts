@@ -652,6 +652,14 @@ export interface RunQualityMetric {
   status: "improved" | "regressed" | "unchanged" | "baseline_missing";
 }
 
+export interface RunQualitySignalCheck {
+  signal: "real_collection" | "real_llm" | "report_quality";
+  label: string;
+  passed: boolean;
+  reason: string;
+  blocking_metric_names: string[];
+}
+
 export interface RunQualityComparison {
   target_run_id: string;
   baseline_run_id?: string | null;
@@ -664,6 +672,7 @@ export interface RunQualityComparison {
   real_collection_signal: boolean;
   real_llm_signal: boolean;
   report_quality_signal: boolean;
+  signal_checks: RunQualitySignalCheck[];
   metrics: RunQualityMetric[];
   recommendations: string[];
   generated_at: string;

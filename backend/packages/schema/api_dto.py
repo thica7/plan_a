@@ -227,6 +227,16 @@ class RunQualityMetric(BaseModel):
     status: Literal["improved", "regressed", "unchanged", "baseline_missing"]
 
 
+class RunQualitySignalCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    signal: Literal["real_collection", "real_llm", "report_quality"]
+    label: str
+    passed: bool
+    reason: str
+    blocking_metric_names: list[str] = Field(default_factory=list)
+
+
 class RunQualityComparison(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -241,6 +251,7 @@ class RunQualityComparison(BaseModel):
     real_collection_signal: bool = False
     real_llm_signal: bool = False
     report_quality_signal: bool = False
+    signal_checks: list[RunQualitySignalCheck] = Field(default_factory=list)
     metrics: list[RunQualityMetric] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=datetime.utcnow)

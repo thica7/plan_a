@@ -473,6 +473,17 @@ function RunQualityPanel({ comparison }: { comparison: RunQualityComparison | nu
     ["Real LLM", comparison.real_llm_signal],
     ["Report quality", comparison.report_quality_signal],
   ] as const;
+  const signalChecks =
+    comparison.signal_checks.length > 0
+      ? comparison.signal_checks
+      : signalRows.map(([label, enabled]) => ({
+          signal: label.toLowerCase().replace(/\s+/g, "_"),
+          label,
+          passed: enabled,
+          reason: enabled ? "Signal passed." : "Signal did not pass.",
+          blocking_metric_names: [],
+        }));
+  const failedSignalChecks = signalChecks.filter((check) => !check.passed);
   const highlightedMetrics = comparison.metrics
     .filter((metric) => metric.status === "regressed" || metric.status === "baseline_missing")
     .slice(0, 5);
@@ -500,13 +511,29 @@ function RunQualityPanel({ comparison }: { comparison: RunQualityComparison | nu
         />
       </div>
       <div className="run-quality-signals">
-        {signalRows.map(([label, enabled]) => (
-          <span className={enabled ? "on" : "off"} key={label}>
-            {enabled ? <CheckCircle2 size={13} aria-hidden /> : <AlertTriangle size={13} aria-hidden />}
-            {label}
+        {signalChecks.map((check) => (
+          <span className={check.passed ? "on" : "off"} key={check.signal} title={check.reason}>
+            {check.passed ? <CheckCircle2 size={13} aria-hidden /> : <AlertTriangle size={13} aria-hidden />}
+            {check.label}
           </span>
         ))}
       </div>
+      {failedSignalChecks.length > 0 ? (
+        <div className="reflection-review">
+          <h3>Signal blockers</h3>
+          {failedSignalChecks.map((check) => (
+            <article className="issue-row reflection-row" key={check.signal}>
+              <strong>{check.label}</strong>
+              <span>
+                {check.reason}
+                {check.blocking_metric_names.length > 0
+                  ? ` Blocked by ${check.blocking_metric_names.join(", ")}.`
+                  : ""}
+              </span>
+            </article>
+          ))}
+        </div>
+      ) : null}
       {highlightedMetrics.length > 0 ? (
         <div className="reflection-review">
           <h3>Watch metrics</h3>
