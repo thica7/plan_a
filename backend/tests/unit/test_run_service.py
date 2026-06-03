@@ -233,6 +233,74 @@ async def test_topic_only_run_discovers_competitors_in_planner() -> None:
 
 
 @pytest.mark.asyncio
+async def test_topic_only_planner_filters_phantom_discovery_with_homepage_gate() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    async def fake_complete_json(*, system: str, user: str, schema_hint: str) -> dict:
+        if "scoping agent" in system:
+            return {
+                "candidates": [
+                    {"name": "Cursor", "rationale": "Direct coding assistant.", "confidence": 0.9},
+                    {
+                        "name": "FAKE_PRODUCT_NOT_EXISTS",
+                        "rationale": "Hallucinated competitor.",
+                        "confidence": 0.6,
+                    },
+                    {
+                        "name": "Windsurf",
+                        "rationale": "Direct coding assistant.",
+                        "confidence": 0.8,
+                    },
+                ],
+                "selected_competitors": ["Cursor", "FAKE_PRODUCT_NOT_EXISTS", "Windsurf"],
+                "rationale": "Mixed candidate set.",
+            }
+        return {
+            "complexity": "medium",
+            "homepage_hints": {
+                "Cursor": "https://cursor.com",
+                "FAKE_PRODUCT_NOT_EXISTS": "https://fake.invalid",
+            },
+        }
+
+    service._llm.complete_json = fake_complete_json  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant comparison",
+            competitors=[],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    await service._real_planner_step(record)
+
+    assert record.detail.plan.competitors == ["Cursor", "Windsurf"]
+    assert record.detail.plan.homepage_verified == {"Cursor": True, "Windsurf": True}
+    assert record.detail.plan.homepage_hints["Cursor"].startswith("https://")
+    assert "FAKE_PRODUCT_NOT_EXISTS" not in record.detail.plan.homepage_hints
+    assert record.detail.competitor_discovery is not None
+    candidates = {
+        candidate.name: candidate.selected
+        for candidate in record.detail.competitor_discovery.candidates
+    }
+    assert candidates["Cursor"] is True
+    assert candidates["Windsurf"] is True
+    assert candidates["FAKE_PRODUCT_NOT_EXISTS"] is False
+
+
+@pytest.mark.asyncio
 async def test_create_run_filters_phantom_competitors_with_homepage_gate() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

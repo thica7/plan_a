@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from packages.business_intel.homepage import verify_homepages
 from packages.schema.models import (
     CompetitorCandidate,
     CompetitorDiscovery,
@@ -30,11 +31,18 @@ class PlannerAgentMixin:
                     "Unable to discover competitors for this topic. "
                     "Add competitors manually and retry."
                 )
+            discovery = self._verify_discovered_competitors(discovery)
+            discovered = discovery.selected_competitors
             detail.plan.competitors = discovered
             detail.competitor_discovery = discovery
-            detail.plan.homepage_hints = {
-                name: f"https://www.google.com/search?q={name}" for name in discovered
-            }
+            homepage_verifications = verify_homepages(discovered)
+            detail.plan.homepage_hints = {}
+            detail.plan.homepage_verified = {}
+            for name in discovered:
+                verification = homepage_verifications[name]
+                detail.plan.homepage_verified[name] = verification.verified
+                if verification.homepage_url is not None:
+                    detail.plan.homepage_hints[name] = str(verification.homepage_url)
             discovery_payload = {"competitor_discovery": discovery.model_dump(mode="json")}
             await self.emit(
                 detail.id,
@@ -67,8 +75,13 @@ class PlannerAgentMixin:
             detail.plan.complexity = complexity
         hints = payload.get("homepage_hints")
         if isinstance(hints, dict):
+            selected_competitors = {name.casefold() for name in detail.plan.competitors}
             detail.plan.homepage_hints.update(
-                {str(key): str(value) for key, value in hints.items()}
+                {
+                    str(key): str(value)
+                    for key, value in hints.items()
+                    if str(key).casefold() in selected_competitors
+                }
             )
         self._append_agent_message(
             record,
@@ -169,6 +182,29 @@ class PlannerAgentMixin:
             candidates=candidates,
             selected_competitors=selected,
             rationale=str(payload.get("rationale") or ""),
+        )
+
+    def _verify_discovered_competitors(
+        self,
+        discovery: CompetitorDiscovery,
+    ) -> CompetitorDiscovery:
+        verifications = verify_homepages(discovery.selected_competitors)
+        verified_names = [
+            name for name in discovery.selected_competitors if verifications[name].verified
+        ]
+        if not verified_names:
+            return discovery
+        verified_set = {name.casefold() for name in verified_names}
+        return discovery.model_copy(
+            update={
+                "selected_competitors": verified_names,
+                "candidates": [
+                    candidate.model_copy(
+                        update={"selected": candidate.name.casefold() in verified_set}
+                    )
+                    for candidate in discovery.candidates
+                ],
+            }
         )
 
     def _candidate_names(self, payload: dict, selected: list[str]) -> list[str]:
