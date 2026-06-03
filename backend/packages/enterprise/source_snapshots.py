@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from urllib.parse import urlparse
 
 from packages.artifacts import ArtifactStorage
+from packages.compliance import redact_text
 from packages.enterprise.store import EnterpriseStore, source_registry_id
 from packages.identity import compute_evidence_id, normalize_dimension_key
 from packages.schema.enterprise import (
@@ -22,6 +24,7 @@ def capture_source_snapshot(
     artifact_storage: ArtifactStorage,
     actor_id: str | None,
 ) -> SourceSnapshotResult:
+    request, redaction_counts = _redacted_research_snapshot_request(request)
     source_type = _snapshot_source_type(request)
     source = _source_from_snapshot(request)
     score, warnings = _snapshot_quality(request)
@@ -46,6 +49,7 @@ def capture_source_snapshot(
                 "source_domain": source.domain,
                 "snapshot_quality_score": score,
                 "snapshot_warnings": warnings,
+                **_snapshot_redaction_metadata(redaction_counts),
             },
         ),
         actor_id=actor_id,
@@ -190,6 +194,9 @@ def _research_evidence_from_snapshot(
             "artifact_id": str(getattr(artifact, "id", "")),
             "source_registry_id": source_registry.id,
             "source_domain": source_registry.domain,
+            **_snapshot_redaction_metadata(
+                _metadata_dict(request.metadata, "redaction_counts")
+            ),
         },
     )
 
@@ -230,3 +237,72 @@ def _metadata_text(metadata: dict[str, object], *keys: str) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def _metadata_value(metadata: dict[str, object], key: str) -> object | None:
+    return metadata.get(key)
+
+
+def _metadata_dict(metadata: dict[str, object], key: str) -> dict[str, int]:
+    value = _metadata_value(metadata, key)
+    if not isinstance(value, dict):
+        return {}
+    counts: dict[str, int] = {}
+    for item_key, item_value in value.items():
+        if isinstance(item_value, int):
+            counts[str(item_key)] = item_value
+    return counts
+
+
+def _redacted_research_snapshot_request(
+    request: SourceSnapshotCreateRequest,
+) -> tuple[SourceSnapshotCreateRequest, dict[str, int]]:
+    if request.snapshot_kind not in {"interview", "survey", "manual"}:
+        return request, {}
+    counts: dict[str, int] = {}
+    content_text = _redact_snapshot_text(request.content_text, counts)
+    metadata = _redact_snapshot_metadata(request.metadata, counts)
+    metadata.update(_snapshot_redaction_metadata(counts))
+    return request.model_copy(update={"content_text": content_text, "metadata": metadata}), counts
+
+
+def _redact_snapshot_text(value: str | None, counts: dict[str, int]) -> str | None:
+    if value is None:
+        return None
+    result = redact_text(value)
+    for key, count in result.counts.items():
+        if count:
+            counts[key] = counts.get(key, 0) + count
+    return result.text
+
+
+def _redact_snapshot_metadata(
+    value: dict[str, object],
+    counts: dict[str, int],
+) -> dict[str, object]:
+    return {
+        key: _redact_snapshot_metadata_value(item, counts)
+        for key, item in value.items()
+    }
+
+
+def _redact_snapshot_metadata_value(value: object, counts: dict[str, int]) -> object:
+    if isinstance(value, str):
+        return _redact_snapshot_text(value, counts) or ""
+    if isinstance(value, list):
+        return [_redact_snapshot_metadata_value(item, counts) for item in value]
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            redacted[str(key)] = _redact_snapshot_metadata_value(item, counts)
+        return redacted
+    return value
+
+
+def _snapshot_redaction_metadata(counts: dict[str, int]) -> dict[str, object]:
+    positive_counts = {key: value for key, value in counts.items() if value > 0}
+    return {
+        "redaction_applied": bool(positive_counts),
+        "redaction_count": sum(positive_counts.values()),
+        "redaction_counts": positive_counts,
+    }

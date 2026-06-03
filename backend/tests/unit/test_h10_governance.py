@@ -74,14 +74,24 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
             media_type="text/markdown",
             content_text=(
                 "Enterprise buyer survey: Cursor adoption depends on onboarding, "
-                "security review, and workflow fit."
+                "security review, and workflow fit. Contact buyer@example.com "
+                "with OPENROUTER_TEST_KEY_REDACTED."
             ),
             display_name="Enterprise buyer survey",
             trust_level="verified",
             metadata={
                 "competitor_id": competitor_id,
                 "dimension": "persona",
-                "summary": "Enterprise buyers evaluate workflow fit and onboarding risk.",
+                "summary": (
+                    "Enterprise buyers evaluate workflow fit and onboarding risk. "
+                    "Follow up at analyst@example.com."
+                ),
+                "quotes": [
+                    {
+                        "speaker": "buyer@example.com",
+                        "text": "Workflow fit improved after onboarding review.",
+                    }
+                ],
             },
         ),
         store=store,
@@ -104,6 +114,23 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
     assert evidence.metadata["manual_research_ingest"] is True
     assert evidence.metadata["artifact_id"] == result.artifact.id
     assert "workflow fit" in evidence.snippet
+    assert "buyer@example.com" not in evidence.snippet
+    assert "sk-or-v1-c87b" not in evidence.snippet
+    assert "[redacted:email]" in evidence.snippet
+    assert "[redacted:api_key]" in evidence.snippet
+    assert result.artifact.metadata["redaction_applied"] is True
+    assert result.artifact.metadata["redaction_count"] >= 3
+    assert result.artifact.metadata["redaction_counts"]["email"] >= 2
+    assert result.artifact.metadata["redaction_counts"]["api_key"] == 1
+    assert evidence.metadata["redaction_applied"] is True
+    artifact_path = Path(str(result.artifact.metadata["storage_root"])) / Path(
+        result.artifact.uri.removeprefix("local://")
+    )
+    artifact_text = artifact_path.read_text(encoding="utf-8")
+    assert "buyer@example.com" not in artifact_text
+    assert "sk-or-v1-c87b" not in artifact_text
+    assert "[redacted:email]" in artifact_text
+    assert "[redacted:api_key]" in artifact_text
     assert result.snapshot_quality_score >= 80
     assert result.warnings == []
 
