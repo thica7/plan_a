@@ -1018,6 +1018,12 @@ function EvalOpsPanel({
   versions: ReportVersionRecord[];
 }) {
   const watchMetrics = report.metrics.filter((metric) => metric.status !== "pass").slice(0, 4);
+  const watchCases = [...report.cases]
+    .sort((left, right) => {
+      const statusDelta = evalOpsStatusRank(right.status) - evalOpsStatusRank(left.status);
+      return statusDelta || left.score - right.score || left.case_id.localeCompare(right.case_id);
+    })
+    .slice(0, 4);
   const baselineOptions = versions
     .filter((version): version is ReportVersionRecord & { run_id: string } => Boolean(version.run_id))
     .map((version) => ({
@@ -1119,6 +1125,23 @@ function EvalOpsPanel({
               label={metric.name.replace(/_/g, " ")}
               value={metricProgressPercent(metric)}
             />
+          ))}
+        </div>
+      ) : null}
+      {watchCases.length > 0 ? (
+        <div className="recommendation-list">
+          {watchCases.map((item) => (
+            <article className={`recommendation-card ${evalOpsCasePriority(item.status)}`} key={item.case_id}>
+              <strong>{item.name}</strong>
+              <span>
+                {item.status} / {item.score}
+              </span>
+              <p>{item.summary}</p>
+              <div className="project-meta-row">
+                <span>Target {item.target_run_id ?? "n/a"}</span>
+                <span>Baseline {item.baseline_run_id ?? "none"}</span>
+              </div>
+            </article>
           ))}
         </div>
       ) : null}
@@ -2669,6 +2692,18 @@ function formatScoreDelta(value?: number | null) {
     return "n/a";
   }
   return value > 0 ? `+${value}` : `${value}`;
+}
+
+function evalOpsStatusRank(status: EvalOpsReport["regression_gate_status"]) {
+  if (status === "fail") return 3;
+  if (status === "warn") return 2;
+  return 1;
+}
+
+function evalOpsCasePriority(status: EvalOpsReport["regression_gate_status"]) {
+  if (status === "fail") return "high";
+  if (status === "warn") return "medium";
+  return "low";
 }
 
 function acceptedSchemaDimensionSet(metadata?: Record<string, unknown>) {

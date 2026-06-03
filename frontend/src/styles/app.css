@@ -2366,6 +2366,10 @@ select {
   border-color: rgba(37, 99, 235, 0.24);
 }
 
+.recommendation-card.low {
+  border-color: rgba(15, 139, 141, 0.24);
+}
+
 .recommendation-card strong,
 .recommendation-card span {
   display: block;
