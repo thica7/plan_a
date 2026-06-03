@@ -1526,6 +1526,8 @@ def update_evidence_quality(
     request: EvidenceQualityUpdateRequest,
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
+    settings: SettingsDep,
+    memory: PreferenceMemoryDep,
 ) -> EvidenceQualityUpdateResult:
     existing = _evidence_or_404(evidence_id, store)
     _require_workspace_access(user, existing.workspace_id, "evidence:review")
@@ -1537,6 +1539,7 @@ def update_evidence_quality(
     )
     if evidence is None:
         raise HTTPException(status_code=404, detail="Evidence not found")
+    _capture_evidence_quality_memory(evidence, request, user, settings, memory)
     return EvidenceQualityUpdateResult(evidence=evidence)
 
 
@@ -1748,6 +1751,60 @@ def list_audit_logs(
 ) -> list[AuditLogRecord]:
     scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "audit:read")
     return store.list_audit_logs(workspace_id=scoped_workspace_id)
+
+
+def _capture_evidence_quality_memory(
+    evidence: EvidenceRecord,
+    request: EvidenceQualityUpdateRequest,
+    user: EnterpriseUserContext,
+    settings: Settings,
+    memory: PreferenceMemoryStore,
+) -> None:
+    note = request.note.strip()
+    if request.quality_label == "accepted" and not note:
+        return
+    feedback_type = "rejection" if request.quality_label == "rejected" else "correction"
+    message_parts = [
+        (
+            f"Evidence quality review marked {evidence.title} as "
+            f"{request.quality_label}."
+        ),
+        (
+            f"Treat {evidence.dimension} source quality issues as a quality gate "
+            "before publish."
+        ),
+    ]
+    if note:
+        message_parts.append(note)
+    feedback = memory.add_feedback(
+        UserFeedbackRecord(
+            id="",
+            workspace_id=evidence.workspace_id,
+            project_id=evidence.project_id,
+            user_id=user.user_id,
+            feedback_type=feedback_type,
+            target_type="evidence",
+            target_id=evidence.id,
+            run_id=evidence.run_id,
+            message=" ".join(message_parts),
+            tags=[
+                "evidence",
+                "quality_gate",
+                request.quality_label,
+                evidence.dimension,
+                evidence.source_type,
+            ],
+            metadata={
+                "source": "evidence_quality_review",
+                "quality_label": request.quality_label,
+                "raw_source_id": evidence.raw_source_id,
+                "source_type": evidence.source_type,
+            },
+        ),
+        policy=compliance_policy_from_settings(settings),
+    )
+    for candidate in memory.extract_candidates(feedback):
+        memory.upsert_candidate(candidate)
 
 
 def _project_or_404(

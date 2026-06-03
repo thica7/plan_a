@@ -1209,6 +1209,16 @@ def test_enterprise_router_exposes_projection() -> None:
         f"/api/enterprise/evidence/{projection.evidence_records[0].id}/quality",
         json={"quality_label": "stale", "note": "Needs review."},
     )
+    quality_memory_feedback = memory.list_feedback(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+    )
+    quality_memory_recall = memory.recall(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        query="stale evidence source quality gate",
+        include_unconfirmed=True,
+    )
     report_upsert = client.post(
         "/api/enterprise/report-versions",
         json=projection.report_version.model_dump(mode="json"),
@@ -1416,6 +1426,15 @@ def test_enterprise_router_exposes_projection() -> None:
     assert publish.json()["status"] == "published"
     assert quality.status_code == 200
     assert quality.json()["evidence"]["quality_label"] == "stale"
+    assert any(
+        item.target_id == projection.evidence_records[0].id
+        and item.metadata["source"] == "evidence_quality_review"
+        for item in quality_memory_feedback
+    )
+    assert any(
+        candidate.metadata["target_id"] == projection.evidence_records[0].id
+        for candidate in quality_memory_recall.candidates
+    )
     assert report_upsert.status_code == 200
     assert report_upsert.json()["id"] == projection.report_version.id
     assert manual_revision.status_code == 200
