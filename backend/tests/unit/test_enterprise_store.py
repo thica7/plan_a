@@ -962,6 +962,11 @@ async def test_writer_node_persists_enterprise_report_version_draft() -> None:
     projection = store.get_run_projection(created.id)
     assert projection is not None
     assert projection.report_version.report_md == record.detail.report_md
+    assert record.detail.enterprise_projection == projection
+    loaded = service.get_run(created.id)
+    assert loaded is not None
+    assert loaded.enterprise_projection == projection
+    assert f"[source:{projection.evidence_records[0].id}]" in record.detail.report_md
     assert projection.report_version.version_number == 1
     assert record.events[-1].payload["enterprise_projection"]["report_version_id"] == (
         projection.report_version.id

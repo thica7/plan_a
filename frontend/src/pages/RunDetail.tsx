@@ -20,6 +20,7 @@ import { QaReviewModal } from "../features/hitl/QaReviewModal";
 import { KbMatrixView } from "../features/kb/KbMatrixView";
 import { AgentMessagesView } from "../features/messages/AgentMessagesView";
 import { ReportView } from "../features/report/ReportView";
+import { buildReportSourceBundle } from "../features/report/sourceBundle";
 import { RevisionDiff } from "../features/revisions/RevisionDiff";
 import { SwimlaneView } from "../features/swimlane/SwimlaneView";
 import { TraceList } from "../features/trace/TraceList";
@@ -53,6 +54,15 @@ export function RunDetail() {
     () => [...events].reverse().find((event) => event.type === "interrupt"),
     [events],
   );
+  const reportSources = useMemo(() => {
+    const projection = detail?.enterprise_projection;
+    if (!projection) {
+      return { sources: detail?.raw_sources ?? [], aliases: {} };
+    }
+    return buildReportSourceBundle(projection.evidence_records, {
+      scopedEvidenceIds: projection.report_version.evidence_ids,
+    });
+  }, [detail?.enterprise_projection, detail?.raw_sources]);
   const interruptStage = typeof latestInterrupt?.payload.stage === "string" ? latestInterrupt.payload.stage : null;
 
   useEffect(() => {
@@ -307,7 +317,11 @@ export function RunDetail() {
         />
         <CompetitorDiscoveryView discovery={detail.competitor_discovery} />
         <TaskDecompositionPanel tasks={detail.plan.task_decomposition} />
-        <ReportView markdown={detail.report_md} sources={detail.raw_sources} />
+        <ReportView
+          markdown={detail.report_md}
+          sourceAliases={reportSources.aliases}
+          sources={reportSources.sources}
+        />
         <KbMatrixView
           kbs={detail.competitor_kbs}
           knowledge={detail.competitor_knowledge}

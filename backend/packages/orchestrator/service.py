@@ -396,7 +396,9 @@ class RunService(
 
     def get_run(self, run_id: str) -> RunDetail | None:
         record = self._load_run_record(run_id)
-        return record.detail if record else None
+        if record is None:
+            return None
+        return self._with_enterprise_projection(record.detail)
 
     def get_trace(self, run_id: str) -> list[RunEvent] | None:
         record = self._load_run_record(run_id)
@@ -2007,11 +2009,22 @@ class RunService(
         )
         self._enterprise_store.save_projection(projection)
         detail.report_md = projection.report_version.report_md
+        detail.enterprise_projection = projection
         gate = self._evaluate_report_release_gate(projection)
         if notify_release_gate:
             self._record_release_gate_notification(projection, gate)
         self._record_usage_governance_notification(context.workspace_id, detail.id)
         return projection
+
+    def _with_enterprise_projection(self, detail: RunDetail) -> RunDetail:
+        if self._enterprise_store is None:
+            return detail
+        projection = self._enterprise_store.get_run_projection(detail.id)
+        if projection is None:
+            return detail
+        detail.enterprise_projection = projection
+        detail.report_md = projection.report_version.report_md
+        return detail
 
     def get_enterprise_projection(self, run_id: str) -> EnterpriseRunProjection | None:
         if self._enterprise_store is None:

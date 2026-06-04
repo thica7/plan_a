@@ -70,6 +70,7 @@ import {
   upsertSourceRegistry,
 } from "../api/client";
 import { ReportView } from "../features/report/ReportView";
+import { buildReportSourceBundle } from "../features/report/sourceBundle";
 import type {
   BusinessIntelPlan,
   BusinessQAEvaluation,
@@ -501,8 +502,12 @@ export function EnterpriseWorkbench({
     [evidence],
   );
   const reportSources = useMemo(
-    () => buildReportSourceBundle(evidence, competitorById, selectedVersion),
-    [competitorById, evidence, selectedVersion],
+    () =>
+      buildReportSourceBundle(evidence, {
+        competitorById,
+        scopedEvidenceIds: selectedVersion?.evidence_ids ?? null,
+      }),
+    [competitorById, evidence, selectedVersion?.evidence_ids],
   );
   const snapshottedEvidenceIds = useMemo(
     () =>
@@ -4173,61 +4178,6 @@ function ClaimList({
       })}
     </div>
   );
-}
-
-function buildReportSourceBundle(
-  evidence: EvidenceRecord[],
-  competitorById: Map<string, CompetitorRecord>,
-  selectedVersion: ReportVersionRecord | null,
-): { sources: RawSource[]; aliases: Record<string, string> } {
-  const scopedEvidenceIds =
-    selectedVersion && selectedVersion.evidence_ids.length > 0
-      ? new Set(selectedVersion.evidence_ids)
-      : null;
-  const sourcesByRawId = new Map<string, RawSource>();
-  const aliases: Record<string, string> = {};
-
-  for (const item of evidence) {
-    if (scopedEvidenceIds && !scopedEvidenceIds.has(item.id)) continue;
-    const competitorName = competitorById.get(item.competitor_id)?.name ?? item.competitor_id;
-    aliases[item.id] = item.raw_source_id;
-    for (const alias of evidenceRawSourceAliases(item)) {
-      aliases[alias] = item.raw_source_id;
-    }
-
-    const existing = sourcesByRawId.get(item.raw_source_id);
-    if (existing) {
-      if (!existing.covered_competitors.includes(competitorName)) {
-        existing.covered_competitors = [...existing.covered_competitors, competitorName];
-      }
-      existing.confidence = Math.max(existing.confidence, item.reliability_score);
-      continue;
-    }
-
-    sourcesByRawId.set(item.raw_source_id, {
-      id: item.raw_source_id,
-      competitor: competitorName,
-      covered_competitors: [competitorName],
-      dimension: item.dimension,
-      source_type: item.source_type,
-      title: item.title,
-      url: item.url ?? null,
-      snippet: item.snippet,
-      content_hash: item.content_hash,
-      confidence: item.reliability_score,
-      extracted_at: item.captured_at,
-    });
-  }
-
-  return { sources: Array.from(sourcesByRawId.values()), aliases };
-}
-
-function evidenceRawSourceAliases(item: EvidenceRecord): string[] {
-  const aliases = item.metadata.raw_source_aliases;
-  if (!Array.isArray(aliases)) return [];
-  return aliases
-    .map((alias) => String(alias).trim())
-    .filter((alias) => alias.length > 0 && alias !== item.raw_source_id);
 }
 
 function ReportHistory({

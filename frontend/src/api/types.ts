@@ -734,6 +734,7 @@ export interface RunDetail extends RunSummary {
   trace_spans: TraceSpan[];
   metrics: RunMetrics;
   current_node?: string | null;
+  enterprise_projection?: EnterpriseRunProjection | null;
 }
 
 export interface RunQualityMetric {

@@ -4617,6 +4617,7 @@ export interface components {
             metrics?: components["schemas"]["RunMetrics"];
             /** Current Node */
             current_node?: string | null;
+            enterprise_projection?: components["schemas"]["EnterpriseRunProjection"] | null;
         };
         /** RunEvent */
         RunEvent: {

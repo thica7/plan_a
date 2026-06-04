@@ -3,6 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
+from packages.schema.enterprise import EnterpriseRunProjection
 from packages.schema.models import (
     AgentMessage,
     AnalysisPlan,
@@ -213,6 +214,7 @@ class RunDetail(RunSummary):
     trace_spans: list[TraceSpan] = Field(default_factory=list)
     metrics: RunMetrics = Field(default_factory=RunMetrics)
     current_node: str | None = None
+    enterprise_projection: EnterpriseRunProjection | None = None
 
 
 class RunQualityMetric(BaseModel):
