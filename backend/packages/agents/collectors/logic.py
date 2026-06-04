@@ -87,10 +87,6 @@ KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
                 "Windsurf official getting started docs",
                 "https://docs.windsurf.com/windsurf/getting-started",
             ),
-            (
-                "Windsurf official plans and usage",
-                "https://docs.windsurf.com/windsurf/accounts/usage",
-            ),
         ],
         "security": [
             ("Windsurf official trust page", "https://windsurf.com/trust"),
@@ -1034,6 +1030,11 @@ class CollectorAgentMixin:
             return (
                 f"Source {source.id} points to a low-value page for structured evidence extraction."
             )
+        if source.url and self._is_dimension_mismatch_url(source.dimension, str(source.url)):
+            return (
+                f"Source {source.id} points to a page whose URL is mismatched for "
+                f"{source.dimension} evidence."
+            )
         if identity_problem := self._competitor_identity_problem(source):
             return identity_problem
         if not self._dimension_terms_present(source.dimension, normalized):
@@ -1174,6 +1175,23 @@ class CollectorAgentMixin:
                 "accounts.google",
             ]
         )
+
+    def _is_dimension_mismatch_url(self, dimension: str, url: str) -> bool:
+        lowered = url.casefold()
+        dimension_key = dimension.casefold()
+        if "persona" in dimension_key or "user" in dimension_key:
+            return any(
+                token in lowered
+                for token in (
+                    "/pricing",
+                    "/plans",
+                    "/billing",
+                    "/accounts/usage",
+                    "/subscription",
+                    "/manage-plan",
+                )
+            )
+        return False
 
     def _competitor_search_qualifier(self, competitor: str) -> str:
         key = self._official_registry_key(competitor)

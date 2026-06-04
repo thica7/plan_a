@@ -2901,6 +2901,7 @@ def test_collector_official_source_candidates_use_current_windsurf_urls() -> Non
     }
     assert not any(item.url in stale_windsurf_urls for item in pricing_candidates[:2])
     assert not any(item.url in stale_windsurf_urls for item in persona_candidates[:2])
+    assert not any("accounts/usage" in item.url for item in persona_candidates[:2])
 
 
 def test_collector_search_query_adds_product_qualifier_for_ambiguous_names() -> None:
@@ -3063,6 +3064,38 @@ def test_collector_accepts_windsurf_feature_docs_redirect_sources() -> None:
     )
 
     assert service._source_quality_problem(source) is None
+
+
+def test_collector_rejects_pricing_pages_as_persona_evidence() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    source = RawSource(
+        id="persona-pricing-page",
+        competitor="Windsurf",
+        dimension="persona",
+        source_type="webpage_verified",
+        title="Plans and Usage - Devin Docs",
+        url="https://docs.devin.ai/desktop/accounts/usage",
+        snippet=(
+            "Paid plans include Pro for individuals, Teams for organizations, and "
+            "Enterprise for larger companies with usage tracking."
+        ),
+        content_hash="persona-pricing-page-hash",
+        confidence=0.9,
+    )
+
+    assert "mismatched for persona evidence" in (
+        service._source_quality_problem(source) or ""
+    )
 
 
 def test_collector_keeps_feature_docs_when_navigation_contains_feature_facts() -> None:
