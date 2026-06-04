@@ -1577,6 +1577,73 @@ async def test_collect_join_normalizes_covered_competitors_and_dedupes() -> None
     assert service.get_trace(detail.id)[-1].subagent == "collect_join"
 
 
+@pytest.mark.asyncio
+async def test_collect_join_skips_cross_search_when_branch_coverage_is_complete() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx-key",
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Collect join coverage",
+            competitors=["A", "B"],
+            dimensions=["feature"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="feature-a",
+            competitor="A",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="A features",
+            url="https://a.example/features",
+            snippet="A feature evidence.",
+            content_hash="hash-a",
+            confidence=0.82,
+        ),
+        RawSource(
+            id="feature-b",
+            competitor="B",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="B features",
+            url="https://b.example/features",
+            snippet="B feature evidence.",
+            content_hash="hash-b",
+            confidence=0.81,
+        ),
+    ]
+
+    async def fail_cross_search(**kwargs):  # noqa: ANN202
+        raise AssertionError("cross-competitor search should be skipped")
+
+    service._trace_search = fail_cross_search  # type: ignore[method-assign]
+
+    await service._real_collect_join_step(record, ["feature"])
+
+    events = service.get_trace(detail.id) or []
+    skipped = next(
+        event
+        for event in events
+        if event.agent == "collector" and event.subagent == "cross::feature"
+    )
+    assert skipped.payload["skipped"] is True
+    assert skipped.payload["reason"] == "branch_coverage_complete"
+    assert skipped.payload["covered_competitors"] == ["A", "B"]
+    assert len(record.detail.raw_sources) == 2
+
+
 def test_qa_marks_matrix_unknown_source_for_comparator_redo() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

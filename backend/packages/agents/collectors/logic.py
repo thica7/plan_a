@@ -1669,6 +1669,25 @@ class CollectorAgentMixin:
         for dimension in dimensions:
             if self._has_cross_competitor_source(detail, dimension):
                 continue
+            covered_competitors = self._branch_covered_competitors(detail, dimension)
+            if len(covered_competitors) >= len(detail.plan.competitors):
+                await self.emit(
+                    detail.id,
+                    "node_completed",
+                    "collector",
+                    f"cross::{dimension}",
+                    (
+                        "Skipped cross-competitor evidence search; branch evidence "
+                        "already covers all competitors."
+                    ),
+                    {
+                        "dimension": dimension,
+                        "covered_competitors": sorted(covered_competitors),
+                        "skipped": True,
+                        "reason": "branch_coverage_complete",
+                    },
+                )
+                continue
             query = self._cross_competitor_query(detail, dimension)
             try:
                 results = await self._trace_search(
@@ -1741,6 +1760,18 @@ class CollectorAgentMixin:
             if len(covered & expected) >= max(2, min(len(expected), 3)):
                 return True
         return False
+
+    def _branch_covered_competitors(self, detail: RunDetail, dimension: str) -> set[str]:
+        covered: set[str] = set()
+        for source in detail.raw_sources:
+            if source.dimension != dimension:
+                continue
+            labels = source.covered_competitors or [source.competitor]
+            for label in labels:
+                for competitor in detail.plan.competitors:
+                    if self._competitor_label_matches(label, competitor):
+                        covered.add(competitor)
+        return covered
 
     def _cross_competitor_query(self, detail: RunDetail, dimension: str) -> str:
         competitors = " ".join(detail.plan.competitors)
