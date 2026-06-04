@@ -3,7 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from packages.config.settings import DEFAULT_ENTERPRISE_DATABASE_URL, get_settings
+from packages.config.settings import (
+    DEFAULT_ENTERPRISE_DATABASE_URL,
+    _env_file_candidates,
+    get_settings,
+)
 from packages.enterprise import EnterprisePostgresStore
 from packages.enterprise.postgres import _split_sql
 from packages.schema.enterprise import EvidenceRecord
@@ -29,6 +33,18 @@ def test_enterprise_store_settings_default_to_postgres(monkeypatch) -> None:
     assert settings.enterprise_database_url == DEFAULT_ENTERPRISE_DATABASE_URL
     assert settings.run_orchestration_backend == "temporal"
     assert settings.temporal_traffic_percent == 100
+
+
+def test_env_file_candidates_include_source_root_when_cwd_is_backend(tmp_path: Path) -> None:
+    project_root = tmp_path / "plan_a"
+    backend_root = project_root / "backend"
+    backend_root.mkdir(parents=True)
+
+    candidates = _env_file_candidates(cwd=backend_root, project_root=project_root)
+
+    assert project_root / ".env" in candidates
+    assert backend_root / ".env" in candidates
+    assert len(candidates) == len({path.resolve() for path in candidates})
 
 
 def test_enterprise_store_settings_allow_explicit_memory(monkeypatch) -> None:

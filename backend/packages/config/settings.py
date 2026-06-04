@@ -24,6 +24,25 @@ def _load_env_file(path: Path) -> None:
         os.environ.setdefault(key, value)
 
 
+def _env_file_candidates(
+    *,
+    cwd: Path | None = None,
+    project_root: Path | None = None,
+) -> list[Path]:
+    runtime_cwd = cwd or Path.cwd()
+    source_root = project_root or Path(__file__).resolve().parents[3]
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+    for root in (runtime_cwd, source_root):
+        for path in (root / ".env", root / "backend" / ".env"):
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            candidates.append(path)
+    return candidates
+
+
 def _env_bool(name: str, default: bool) -> bool:
     value = os.getenv(name)
     if value is None:
@@ -148,9 +167,8 @@ class Settings:
 
 @lru_cache
 def get_settings() -> Settings:
-    root = Path.cwd()
-    _load_env_file(root / ".env")
-    _load_env_file(root / "backend" / ".env")
+    for path in _env_file_candidates():
+        _load_env_file(path)
     enterprise_backend = os.getenv("ENTERPRISE_STORE_BACKEND", "postgres").strip().lower()
     enterprise_database_url = os.getenv("ENTERPRISE_DATABASE_URL")
     if enterprise_backend == "postgres" and not enterprise_database_url:
