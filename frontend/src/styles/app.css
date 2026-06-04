@@ -3201,6 +3201,32 @@ select {
   padding: 0;
 }
 
+.audit-filter-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(150px, 1fr));
+}
+
+.audit-filter-grid .audit-search {
+  max-width: none;
+}
+
+.audit-filter-grid select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  min-height: 42px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+@media (max-width: 900px) {
+  .audit-filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .enterprise-table-wrap {
   overflow-x: auto;
 }

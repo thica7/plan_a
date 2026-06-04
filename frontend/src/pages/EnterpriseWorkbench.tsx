@@ -1493,7 +1493,46 @@ function CompetitorLibrary({
 }
 
 function AuditLogPanel({ logs }: { logs: AuditLogRecord[] }) {
-  const recentLogs = logs.slice(0, 6);
+  const [query, setQuery] = useState("");
+  const [actionFilter, setActionFilter] = useState("");
+  const [resourceFilter, setResourceFilter] = useState("");
+  const [actorFilter, setActorFilter] = useState("");
+  const actionOptions = useMemo(
+    () => Array.from(new Set(logs.map((log) => log.action))).sort(),
+    [logs],
+  );
+  const resourceOptions = useMemo(
+    () => Array.from(new Set(logs.map((log) => log.resource_type))).sort(),
+    [logs],
+  );
+  const actorOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(logs.map((log) => `${log.actor_type}:${log.actor_id ?? "unknown"}`)),
+      ).sort(),
+    [logs],
+  );
+  const filteredLogs = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return logs.filter((log) => {
+      const actorKey = `${log.actor_type}:${log.actor_id ?? "unknown"}`;
+      const searchable = [
+        log.action,
+        log.resource_type,
+        log.resource_id,
+        log.actor_type,
+        log.actor_id ?? "",
+        auditLogSummary(log),
+      ].join(" ").toLowerCase();
+      return (
+        (!normalizedQuery || searchable.includes(normalizedQuery))
+        && (!actionFilter || log.action === actionFilter)
+        && (!resourceFilter || log.resource_type === resourceFilter)
+        && (!actorFilter || actorKey === actorFilter)
+      );
+    });
+  }, [actionFilter, actorFilter, logs, query, resourceFilter]);
+  const recentLogs = filteredLogs.slice(0, 6);
   const reportLogs = logs.filter(
     (log) => log.resource_type === "report_version" || log.action.startsWith("report_version."),
   );
@@ -1511,6 +1550,47 @@ function AuditLogPanel({ logs }: { logs: AuditLogRecord[] }) {
         <Metric icon={<FileText size={17} aria-hidden />} label="Reports" value={reportLogs.length} />
         <Metric icon={<ShieldCheck size={17} aria-hidden />} label="Status" value={statusChanges.length} />
         <Metric icon={<Briefcase size={17} aria-hidden />} label="Actors" value={actorCount} />
+      </div>
+      <div className="audit-filter-grid">
+        <label className="search-box audit-search">
+          <Search size={16} aria-hidden />
+          <input
+            aria-label="Search audit log"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search audit"
+            value={query}
+          />
+        </label>
+        <select
+          aria-label="Audit action filter"
+          onChange={(event) => setActionFilter(event.target.value)}
+          value={actionFilter}
+        >
+          <option value="">All actions</option>
+          {actionOptions.map((action) => (
+            <option key={action} value={action}>{action}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Audit resource filter"
+          onChange={(event) => setResourceFilter(event.target.value)}
+          value={resourceFilter}
+        >
+          <option value="">All resources</option>
+          {resourceOptions.map((resource) => (
+            <option key={resource} value={resource}>{resource}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Audit actor filter"
+          onChange={(event) => setActorFilter(event.target.value)}
+          value={actorFilter}
+        >
+          <option value="">All actors</option>
+          {actorOptions.map((actor) => (
+            <option key={actor} value={actor}>{actor}</option>
+          ))}
+        </select>
       </div>
       {recentLogs.length > 0 ? (
         <div className="recommendation-list">
@@ -1530,7 +1610,11 @@ function AuditLogPanel({ logs }: { logs: AuditLogRecord[] }) {
           ))}
         </div>
       ) : (
-        <p className="muted-line">No audit events recorded for this workspace.</p>
+        <p className="muted-line">
+          {logs.length > 0
+            ? "No audit events match the current filters."
+            : "No audit events recorded for this workspace."}
+        </p>
       )}
     </section>
   );
