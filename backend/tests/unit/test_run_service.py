@@ -1328,6 +1328,95 @@ def test_qa_surfaces_latest_reflector_findings() -> None:
     assert all(issue.severity == "warn" for issue in reflector_issues)
 
 
+@pytest.mark.asyncio
+async def test_reflector_prompt_includes_comparison_matrix_digest() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    captured_user = ""
+
+    async def fake_complete_json(*, system: str, user: str, schema_hint: str) -> dict:
+        nonlocal captured_user
+        captured_user = user
+        return {
+            "coverage_gaps": [],
+            "confidence_outliers": [],
+            "cross_competitor_gaps": [],
+            "suggested_redo_dimension": None,
+        }
+
+    service._llm.complete_json = fake_complete_json  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Reflector matrix digest",
+            competitors=["A", "B"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://a.example/pricing",
+            snippet="A publishes pricing.",
+            content_hash="pricing-a-hash",
+            confidence=0.9,
+        ),
+        RawSource(
+            id="pricing-b",
+            competitor="B",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="B pricing",
+            url="https://b.example/pricing",
+            snippet="B publishes pricing.",
+            content_hash="pricing-b-hash",
+            confidence=0.9,
+        ),
+    ]
+    record.detail.comparison_matrix = ComparisonMatrix(
+        competitors=["A", "B"],
+        dimensions=["pricing"],
+        cells=[
+            ComparisonCell(
+                competitor="A",
+                dimension="pricing",
+                value="A publishes pricing.",
+                source_ids=["pricing-a"],
+                confidence=0.9,
+            ),
+            ComparisonCell(
+                competitor="B",
+                dimension="pricing",
+                value="B publishes pricing.",
+                source_ids=["pricing-b"],
+                confidence=0.9,
+            ),
+        ],
+        winner_by_dimension={"pricing": "tie"},
+        summary=["[majority-vote:pricing] winner=tie; evidence=tie"],
+    )
+
+    await service._real_reflector_step(record)
+
+    assert "Comparison Matrix JSON:" in captured_user
+    assert '"source_ids": ["pricing-a"]' in captured_user
+    assert record.detail.reflections[-1].cross_competitor_gaps == []
+
+
 def test_qa_issue_redo_scopes_are_not_placeholders() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

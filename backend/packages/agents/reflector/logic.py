@@ -28,10 +28,18 @@ class ReflectorAgentMixin:
             agent="reflector",
             subagent=None,
             name="coverage_reflection",
-            system="You are a reflector. Find coverage gaps before QA. Be strict but concise.",
+            system=(
+                "You are a reflector. Find coverage gaps before QA. Be strict but concise. "
+                "Treat comparison-matrix cells with source_ids across every competitor and "
+                "dimension as side-by-side comparison coverage; only report "
+                "cross_competitor_gaps when the matrix lacks cells, source_ids, or aligned "
+                "dimension coverage."
+            ),
             user=(
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
                 f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                f"Comparison Matrix JSON: "
+                f"{json.dumps(self._reflector_matrix_digest(detail), ensure_ascii=False)}\n"
                 f"Source digest JSON: "
                 f"{json.dumps(self._source_digest(detail.raw_sources), ensure_ascii=False)}"
             ),
@@ -138,6 +146,24 @@ class ReflectorAgentMixin:
             if dimension.casefold() in normalized:
                 return dimension
         return None
+
+    def _reflector_matrix_digest(self, detail: RunDetail) -> dict[str, object]:
+        if detail.comparison_matrix is None:
+            return {"winner_by_dimension": {}, "summary": [], "cells": []}
+        return {
+            "winner_by_dimension": detail.comparison_matrix.winner_by_dimension,
+            "summary": detail.comparison_matrix.summary[:6],
+            "cells": [
+                {
+                    "competitor": cell.competitor,
+                    "dimension": cell.dimension,
+                    "source_ids": cell.source_ids[:4],
+                    "confidence": round(cell.confidence, 3),
+                    "value": cell.value[:220],
+                }
+                for cell in detail.comparison_matrix.cells[:40]
+            ],
+        }
 
     def _infer_competitor_from_text(self, detail: RunDetail, text: str) -> str | None:
         normalized = text.casefold()
