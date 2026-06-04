@@ -1074,6 +1074,67 @@ def test_final_qa_sync_replaces_stale_clean_report_claim() -> None:
     assert "No evidence sources were collected for pricing." in detail.report_md
 
 
+def test_final_qa_sync_adds_rag_gap_fill_for_collector_warnings() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        report_md="# Report\n\nPricing evidence needs follow-up. [source:pricing-1]",
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="web_search_result",
+                title="A pricing search lead",
+                url="https://example.com/pricing",
+                snippet="A pricing search result.",
+                content_hash="abc",
+                confidence=0.62,
+            )
+        ],
+        qa_findings=[
+            QCIssue(
+                id="unverified-pricing-a",
+                severity="warn",
+                detected_by="coverage",
+                target_agent="collector",
+                target_subagent="pricing",
+                target_competitor="A",
+                field_path="raw_sources[pricing]",
+                problem="Pricing source needs verified webpage evidence.",
+                redo_scope=RedoScope(
+                    kind="collector",
+                    target_subagent="pricing",
+                    target_competitor="A",
+                    rationale="Verify pricing source.",
+                ),
+            )
+        ],
+    )
+
+    service._sync_report_with_final_qa(detail)
+
+    assert "## RAG Gap Fill" in detail.report_md
+    assert "Suggested retrieval query: A pricing Pricing source needs verified" in detail.report_md
+    assert "## Final QA Gate Status" in detail.report_md
+
+
 def test_qa_marks_phantom_citation_as_writer_only_blocker() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

@@ -266,6 +266,9 @@ class QualityAgentMixin:
         if not detail.report_md.strip():
             return
         detail.report_md = self._strip_stale_qa_claims(detail.report_md)
+        ensure_sections = getattr(self, "_ensure_report_required_sections", None)
+        if callable(ensure_sections):
+            detail.report_md = ensure_sections(detail, detail.report_md)
         severity_counts = {
             "blocker": sum(1 for issue in detail.qa_findings if issue.severity == "blocker"),
             "warn": sum(1 for issue in detail.qa_findings if issue.severity == "warn"),
