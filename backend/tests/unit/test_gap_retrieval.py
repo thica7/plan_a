@@ -1,6 +1,8 @@
 import pytest
 
+from packages.artifacts import LocalArtifactStorage
 from packages.enterprise import EnterpriseMemoryStore
+from packages.enterprise.gap_fill_snapshots import capture_gap_fill_source_snapshots
 from packages.rag import (
     chunk_evidence,
     decorate_evidence_gap_report_with_retrieval,
@@ -420,7 +422,7 @@ def test_gap_fill_chain_stays_open_until_all_gaps_are_filled() -> None:
 
 
 @pytest.mark.asyncio
-async def test_online_gap_fill_collects_evidence_then_links_report_version() -> None:
+async def test_online_gap_fill_collects_evidence_then_links_report_version(tmp_path) -> None:
     store = EnterpriseMemoryStore()
     source_version = store.upsert_report_version(
         ReportVersionRecord(
@@ -533,6 +535,32 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version() -> 
     assert set(rag_payload["rerank_scores"]) == set(rag_payload["chunk_ids"])
     assert result.updated_report_version.evidence_ids == [evidence.id]
     assert f"[source:{evidence.id}]" in result.updated_report_version.report_md
+
+    snapshotted = capture_gap_fill_source_snapshots(
+        result,
+        store=store,
+        artifact_storage=LocalArtifactStorage(tmp_path / "artifacts"),
+        actor_id="system-user",
+    )
+    artifacts = store.list_artifacts(project_id="project-1", evidence_id=evidence.id)
+    source_registry = store.list_source_registry(workspace_id="workspace-1")
+    updated_evidence = store.list_evidence(project_id="project-1")[0]
+    assert len(artifacts) == 1
+    assert artifacts[0].artifact_type == "web_snapshot"
+    assert artifacts[0].metadata["captured_from"] == "online_gap_fill"
+    assert artifacts[0].metadata["source_registry_id"] == source_registry[0].id
+    assert updated_evidence.metadata["source_snapshot_artifact_id"] == artifacts[0].id
+    assert updated_evidence.metadata["source_registry_id"] == source_registry[0].id
+    assert updated_evidence.metadata["snapshot_quality_score"] >= 80
+    assert snapshotted.decision_events[-1].event_type == "tool.called"
+    assert snapshotted.decision_events[-1].agent == "source_snapshot"
+    assert snapshotted.decision_events[-1].payload["online_snapshot_artifact_ids"] == [
+        artifacts[0].id
+    ]
+    snapshotted_metadata = snapshotted.updated_report_version.quality_metadata["rag_gap_fill"]
+    assert snapshotted_metadata["online_snapshot_artifact_ids"] == [artifacts[0].id]
+    assert snapshotted_metadata["online_source_registry_ids"] == [source_registry[0].id]
+    assert snapshotted_metadata["decision_events"][-1]["agent"] == "source_snapshot"
 
 
 @pytest.mark.asyncio

@@ -53,6 +53,7 @@ from packages.enterprise import (
     EnterpriseStore,
     build_project_knowledge_graph_read_model,
     build_report_version_diff,
+    capture_gap_fill_source_snapshots,
     capture_source_snapshot,
 )
 from packages.governance import (
@@ -695,6 +696,7 @@ async def fill_project_evidence_gaps(
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
     settings: SettingsDep,
+    artifact_storage: ArtifactStorageDep,
 ) -> EvidenceGapFillResult:
     project = _project_or_404(project_id, store, user, "report:write")
     report = await get_project_evidence_gaps(project_id, store, user, settings)
@@ -730,6 +732,12 @@ async def fill_project_evidence_gaps(
             source_report_version=source_version,
             search=search_online,
             fetch=fetch_with_robots,
+        )
+        result = capture_gap_fill_source_snapshots(
+            result,
+            store=store,
+            artifact_storage=artifact_storage,
+            actor_id=user.user_id,
         )
         return _with_gap_fill_release_gate_delta(result, project=project, store=store)
     result = fill_evidence_gaps(
