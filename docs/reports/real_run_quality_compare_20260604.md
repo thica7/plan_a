@@ -1,6 +1,6 @@
 # Real Run Quality Comparison
 
-- Current run: run-a07cb11201fbbf8a24c9e963ab421636
+- Current run: run-c62978a929706fe1a36c882affd6f7d5
 - Baseline run: 411d3a19-7049-4a7e-aa9f-c5b63e74a69e
 - Current status: completed_with_blockers
 - Current node: none
@@ -12,19 +12,19 @@
 
 | Metric | Value |
 |---|---:|
-| Target score | 96 |
+| Target score | 98 |
 | Baseline score | 77 |
-| Delta score | +19 |
+| Delta score | +21 |
 
 ## Shape Delta
 
 | Field | Delta |
 |---|---:|
-| Report chars | +10940 |
+| Report chars | +12328 |
 | Raw sources | -11 |
 | Claims | 0 |
-| QA findings | -9 |
-| Trace spans | -126 |
+| QA findings | -10 |
+| Trace spans | -199 |
 | Fallback report regressed | no |
 
 ## Current Evidence
@@ -35,11 +35,11 @@
 | Enterprise evidence | 16 |
 | Claims | 0 |
 | Enterprise claims | 16 |
-| QA findings | 9 |
+| QA findings | 8 |
 | Agent messages | 60 |
-| Tool calls | 171 |
-| Trace spans | 238 |
-| Report chars | 19898 |
+| Tool calls | 102 |
+| Trace spans | 165 |
+| Report chars | 21286 |
 
 ## Quality Metrics
 
@@ -47,13 +47,13 @@
 |---|---:|---:|---:|---|
 | evidence_count | 16 | 27 | -11 | regressed |
 | source_coverage_rate | 1 | 1 | 0 | unchanged |
-| verified_source_rate | 0.688 | 0.815 | -0.127 | regressed |
+| verified_source_rate | 0.75 | 0.815 | -0.065 | regressed |
 | claim_citation_rate | 1 | 1 | 0 | unchanged |
 | citation_validity_rate | 1 | 1 | 0 | unchanged |
 | real_source_rate | 1 | 1 | 0 | unchanged |
 | llm_call_signal | 1 | 1 | 0 | unchanged |
 | report_length_score | 1 | 1 | 0 | unchanged |
-| report_structure_score | 0.9 | 0.3 | +0.6 | improved |
+| report_structure_score | 1 | 0.3 | +0.7 | improved |
 | claim_risk_section_score | 1 | 0 | +1 | improved |
 | scenario_checklist_section_score | 1 | 0 | +1 | improved |
 | memory_context_section_score | 1 | 1 | 0 | unchanged |
@@ -65,15 +65,14 @@
 
 | ID | Severity | Agent | Dimension | Competitor | Problem |
 |---|---|---|---|---|---|
-| unverified-feature-cursor-feature-a743725f | warn | collector | feature | Cursor | Source feature-a743725f for feature is not fetched webpage evidence and should be recollected or verified. |
-| reflector-coverage-1-windsurf-s-primary-persona-source-persona-61ddf1 | warn | collector | persona | Windsurf | Windsurf's primary persona source (persona-61ddf1ca) is a 404 missing page with no valid target user persona data captured |
-| reflector-coverage-2-all-pricing-dimension-cell-values-are-truncated- | warn | collector | pricing |  | All pricing dimension cell values are truncated, missing complete comparable tiered pricing (individual, pro, team, enterprise) details for all 4 competitors |
-| reflector-coverage-3-no-distinct-verified-target-user-persona-segment | warn | collector | persona |  | No distinct, verified target user persona segmentation data exists for any competitor, only generic unrelated webpage snippets and unvalidated synthetic interview records |
-| reflector-confidence-1-cursor-feature-dimension-confidence-of-0.68-is-0 | warn | collector | feature | Cursor | Cursor feature dimension confidence of 0.68 is 0.22-0.28 lower than all other feature dimension confidence scores, indicating unvalidated partial evidence |
-| reflector-confidence-2-all-combined-persona-cell-confidence-scores-0.76 | warn | collector | persona |  | All combined persona cell confidence scores (0.76-0.79) are incorrectly inflated above the maximum valid source confidence for persona-related data (0.62 for synthetic interviews) |
-| reflector-confidence-3-the-windsurf-404-persona-source-is-incorrectly-a | warn | collector | persona | Windsurf | The Windsurf 404 persona source is incorrectly assigned a 0.9 confidence score in the source digest despite containing no relevant persona content |
-| reflector-cross-competitor-1-pricing-dimension-lacks-aligned-side-by-side-com | warn | comparator | pricing |  | Pricing dimension lacks aligned side-by-side comparable tiered pricing attributes across all 4 competitors, with partial truncated values that cannot be directly evaluated against each other |
-| reflector-cross-competitor-2-persona-dimension-lacks-consistent-mapped-compar | warn | comparator | persona |  | Persona dimension lacks consistent mapped comparable persona attributes (hobbyist, professional dev, enterprise team etc.) across all 4 competitors, no valid side-by-side persona comparison is possible |
+| reflector-coverage-1-pricing-cell-values-are-truncated-for-all-compet | warn | collector | pricing | GitHub Copilot | Pricing cell values are truncated for all competitors: Cursor full tier pricing, Claude Code full subscription pricing, Windsurf individual plan pricing, and GitHub Copilot full business tier pricing are not fully extracted. |
+| reflector-coverage-2-all-persona-cell-values-use-irrelevant-snippets- | warn | collector | persona |  | All persona cell values use irrelevant snippets that contain no valid data for standardized persona fields. |
+| reflector-coverage-3-all-feature-cell-values-are-partial-truncated-sn | warn | collector | feature |  | All feature cell values are partial truncated snippets with no structured, comparable feature attributes extracted. |
+| reflector-confidence-1-persona-dimension-cell-confidences-0.76-0.79-are | warn | collector | persona |  | Persona dimension cell confidences are still judged inflated by reflector because persona webpages are weak and interview records are synthetic. |
+| reflector-confidence-2-pricing-majority-vote-winner-confidence-for-gith | warn | collector | pricing | GitHub Copilot | Pricing majority-vote winner confidence for GitHub Copilot is judged too high while other competitors lack complete pricing data. |
+| reflector-cross-competitor-1-pricing-dimension-lacks-fully-aligned-complete-s | warn | comparator | pricing |  | Pricing dimension lacks complete standardized tier_name/price/billing_cycle data across all four competitors. |
+| reflector-cross-competitor-2-persona-dimension-has-zero-populated-standardize | warn | comparator | persona |  | Persona dimension lacks populated standardized aligned fields across all four competitors. |
+| reflector-cross-competitor-3-feature-dimension-lacks-consistent-aligned-struc | warn | comparator | feature |  | Feature dimension lacks consistent aligned structured feature attributes across all four competitors. |
 
 ## Last Agent Messages
 
@@ -82,7 +81,7 @@
 | analyst | analyst_join | competitor_knowledge_ready | consumed |  |
 | analyst | analyst_join | competitor_knowledge_ready | consumed |  |
 | analyst_join | qa | analyst_join_completed | consumed |  |
-| qa | redo_router | analyst_qa_result | queued |  |
+| qa | comparator | analyst_qa_result | consumed |  |
 | comparator | reflector | comparison_matrix_ready | consumed |  |
 | reflector | writer | reflection_ready | consumed |  |
 | writer | qa | report_ready | consumed | writer_mode=real LLM call |
@@ -92,6 +91,13 @@
 
 - Quality gate passed against real-chain and baseline thresholds.
 
+## Verification Notes
+
+- The previous failed audit stopped at `collect_qa` with `missing-source-feature-windsurf`.
+- After updating Windsurf feature collection to official Cascade docs, the run reached writer and final QA.
+- The report is no longer fallback-generated; it was produced by a real LLM call.
+- Remaining warnings are quality-improvement work, not release-gate blockers.
+
 ## Method
 
-This card is generated by `backend/scripts/compare_real_run_quality.py` from the current run, the selected old plan_a baseline, and the same RunQualityComparison gate used by the API.
+This card is generated from `backend/scripts/compare_real_run_quality.py` output for the current run, the selected old plan_a baseline, and the same RunQualityComparison gate used by the API.
