@@ -2603,10 +2603,17 @@ def test_collector_official_source_candidates_use_current_windsurf_urls() -> Non
     feature_candidates = service._official_source_candidates(detail, "Windsurf", "feature")
     persona_candidates = service._official_source_candidates(detail, "Windsurf", "persona")
 
-    assert pricing_candidates[0].url == "https://windsurf.com/plans"
-    assert feature_candidates[0].url == "https://windsurf.com/features"
-    assert persona_candidates[0].url == "https://windsurf.com/customers"
-    assert not any(item.url == "https://windsurf.com/pricing" for item in pricing_candidates[:2])
+    assert pricing_candidates[0].url == "https://docs.windsurf.com/windsurf/accounts/usage"
+    assert feature_candidates[0].url == "https://docs.windsurf.com/windsurf/getting-started"
+    assert persona_candidates[0].url == "https://docs.windsurf.com/windsurf/getting-started"
+    stale_windsurf_urls = {
+        "https://windsurf.com/pricing",
+        "https://windsurf.com/plans",
+        "https://windsurf.com/customers",
+        "https://windsurf.com/use-cases",
+    }
+    assert not any(item.url in stale_windsurf_urls for item in pricing_candidates[:2])
+    assert not any(item.url in stale_windsurf_urls for item in persona_candidates[:2])
 
 
 def test_collector_search_query_adds_product_qualifier_for_ambiguous_names() -> None:
@@ -2678,6 +2685,66 @@ def test_collector_rejects_product_identity_confusion_sources() -> None:
 
     assert "rather than Windsurf" in (service._source_quality_problem(windsurf_source) or "")
     assert "rather than Cursor" in (service._source_quality_problem(cursor_source) or "")
+
+
+def test_collector_rejects_soft_404_verified_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    source = RawSource(
+        id="persona-soft-404",
+        competitor="Windsurf",
+        dimension="persona",
+        source_type="webpage_verified",
+        title="404: This page could not be found",
+        url="https://windsurf.com/customers",
+        snippet=(
+            "This page could not be found. Windsurf customers, developers, enterprise "
+            "teams, and use cases are mentioned only in navigation."
+        ),
+        content_hash="soft-404-hash",
+        confidence=0.96,
+    )
+
+    assert "soft 404" in (service._source_quality_problem(source) or "")
+
+
+def test_collector_accepts_windsurf_docs_redirect_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    source = RawSource(
+        id="persona-windsurf-docs",
+        competitor="Windsurf",
+        dimension="persona",
+        source_type="webpage_verified",
+        title="Welcome to Windsurf - Windsurf Docs",
+        url="https://docs.devin.ai/desktop/getting-started",
+        snippet=(
+            "Windsurf is a next-generation AI IDE built for developers, engineering "
+            "teams, enterprise users, and AI-powered coding workflows."
+        ),
+        content_hash="windsurf-docs-hash",
+        confidence=0.96,
+    )
+
+    assert service._source_quality_problem(source) is None
 
 
 @pytest.mark.asyncio

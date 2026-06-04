@@ -66,14 +66,31 @@ KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
         ],
     },
     "windsurf": {
-        "pricing": [("Windsurf official plans", "https://windsurf.com/plans")],
+        "pricing": [
+            (
+                "Windsurf official plans and usage",
+                "https://docs.windsurf.com/windsurf/accounts/usage",
+            )
+        ],
         "feature": [
-            ("Windsurf official features", "https://windsurf.com/features"),
-            ("Windsurf official product page", "https://windsurf.com/product"),
+            (
+                "Windsurf official getting started docs",
+                "https://docs.windsurf.com/windsurf/getting-started",
+            ),
+            (
+                "Windsurf official context awareness docs",
+                "https://docs.windsurf.com/context-awareness/windsurf-overview",
+            ),
         ],
         "persona": [
-            ("Windsurf official customers", "https://windsurf.com/customers"),
-            ("Windsurf official use cases", "https://windsurf.com/use-cases"),
+            (
+                "Windsurf official getting started docs",
+                "https://docs.windsurf.com/windsurf/getting-started",
+            ),
+            (
+                "Windsurf official plans and usage",
+                "https://docs.windsurf.com/windsurf/accounts/usage",
+            ),
         ],
         "security": [
             ("Windsurf official trust page", "https://windsurf.com/trust"),
@@ -131,6 +148,7 @@ PRODUCT_IDENTITY_HINTS: dict[str, tuple[str, ...]] = {
     "windsurf": (
         "windsurf.com",
         "docs.windsurf.com",
+        "docs.devin.ai/desktop",
         "windsurf",
         "codeium",
         "ai code editor",
@@ -996,6 +1014,8 @@ class CollectorAgentMixin:
                 f"Source {source.id} looks like unreadable binary/PDF text, "
                 "not usable extracted evidence."
             )
+        if self._looks_like_soft_404(source):
+            return f"Source {source.id} appears to be a soft 404 or not-found page."
         if self._looks_like_navigation_only(snippet_normalized):
             return f"Source {source.id} appears to contain mostly navigation or boilerplate text."
         if (
@@ -1049,6 +1069,26 @@ class CollectorAgentMixin:
             1, len(text)
         )
         return replacement_ratio > 0.02 or control_ratio > 0.01
+
+    def _looks_like_soft_404(self, source: RawSource) -> bool:
+        normalized = f"{source.title}\n{source.snippet}".casefold()
+        title = source.title.casefold().strip()
+        if title in {"404", "not found", "404: this page could not be found"}:
+            return True
+        markers = (
+            "page not found",
+            "404 not found",
+            "this page could not be found",
+            "this page does not exist",
+            "this page doesn't exist",
+            "we couldn't find that page",
+            "we could not find that page",
+        )
+        if any(marker in normalized for marker in markers):
+            return True
+        if re.search(r"(?:^|\s)404(?:\s|:|-)", normalized) and "not found" in normalized:
+            return True
+        return False
 
     def _looks_like_navigation_only(self, normalized_text: str) -> bool:
         nav_markers = [
@@ -1150,6 +1190,12 @@ class CollectorAgentMixin:
             return None
         haystack = f"{source.title}\n{source.url or ''}\n{source.snippet}".casefold()
         for term in PRODUCT_CONFUSION_TERMS.get(key, ()):
+            if (
+                key == "windsurf"
+                and term == "devin.ai"
+                and self._is_windsurf_docs_redirect_source(source, haystack)
+            ):
+                continue
             if term in haystack:
                 return (
                     f"Source {source.id} appears to describe `{term}` rather than "
@@ -1162,6 +1208,15 @@ class CollectorAgentMixin:
                 "product identity signal."
             )
         return None
+
+    def _is_windsurf_docs_redirect_source(self, source: RawSource, haystack: str) -> bool:
+        url = str(source.url or "").casefold()
+        return (
+            "docs.devin.ai/desktop" in url
+            and "windsurf" in haystack
+            and "devin desktop" not in haystack
+            and "cognition devin" not in haystack
+        )
 
     def _dimension_terms_present(self, dimension: str, normalized_text: str) -> bool:
         dimension_key = dimension.casefold()
