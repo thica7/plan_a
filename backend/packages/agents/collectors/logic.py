@@ -546,6 +546,17 @@ class CollectorAgentMixin:
                     )
                     fetched_by_url[fetched.url] = fetched
             verified = fetched is not None and fetched.ok
+            if not verified and self._requires_verified_web_evidence(detail, dimension):
+                self._trace_rejected_source_candidate(
+                    record,
+                    context=context,
+                    competitor=competitor,
+                    dimension=dimension,
+                    title=title,
+                    url=url_value,
+                    reason=self._fetch_rejection_reason(fetched),
+                )
+                continue
             extracted_facts = []
             if verified:
                 extracted_facts = extract_facts(
@@ -1335,6 +1346,17 @@ class CollectorAgentMixin:
             else await fetch_page(result.url)
         )
         verified = fetched is not None and fetched.ok
+        if not verified and self._requires_verified_web_evidence(detail, dimension):
+            self._trace_rejected_source_candidate(
+                record,
+                context=context,
+                competitor=competitor,
+                dimension=dimension,
+                title=result.title,
+                url=result.url,
+                reason=self._fetch_rejection_reason(fetched),
+            )
+            return None
         snippet = (
             self._dimension_evidence_snippet(fetched.text, dimension, fetched.snippet)
             if verified
@@ -1410,6 +1432,59 @@ class CollectorAgentMixin:
             snippet=snippet,
             content_hash=content_hash,
             confidence=confidence,
+        )
+
+    def _requires_verified_web_evidence(self, detail: RunDetail, dimension: str) -> bool:
+        return detail.execution_mode == "real" and dimension in detail.plan.dimensions
+
+    def _fetch_rejection_reason(self, fetched: Any | None) -> str:
+        if fetched is None:
+            return "fetch_not_available"
+        if getattr(fetched, "ok", False):
+            return "not_rejected"
+        error = str(getattr(fetched, "error", "") or "").strip()
+        if error:
+            return f"fetch_failed:{error[:160]}"
+        status_code = getattr(fetched, "status_code", None)
+        if status_code:
+            return f"fetch_failed:http_{status_code}"
+        return "fetch_failed"
+
+    def _trace_rejected_source_candidate(
+        self,
+        record: RunRecord | None,
+        *,
+        context: SubagentContext | None,
+        competitor: str,
+        dimension: str,
+        title: str,
+        url: str | None,
+        reason: str,
+    ) -> None:
+        if record is None:
+            return
+        self._trace_local_tool(
+            record,
+            agent="collector",
+            subagent=context.subagent if context is not None else dimension,
+            name="source_candidate_rejected",
+            input_text=json.dumps(
+                {
+                    "competitor": competitor,
+                    "dimension": dimension,
+                    "title": title,
+                    "url": url,
+                },
+                ensure_ascii=False,
+            ),
+            output_text=json.dumps({"accepted": False, "reason": reason}, ensure_ascii=False),
+            context=context,
+            metadata={
+                "competitor": competitor,
+                "dimension": dimension,
+                "has_url": bool(url),
+                "reason": reason[:180],
+            },
         )
 
     async def _real_collector_step(self, record: RunRecord, dimension: str) -> None:

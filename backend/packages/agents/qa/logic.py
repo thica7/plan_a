@@ -348,7 +348,9 @@ class QualityAgentMixin:
     def _build_collect_qa_issues(self, detail: RunDetail) -> list[QCIssue]:
         issues: list[QCIssue] = []
         missing_dimensions = self._missing_dimensions(detail)
-        strict_source_qa = self._memory_enforces_strict_source_qa(detail.plan)
+        strict_source_qa = self._memory_enforces_strict_source_qa(
+            detail.plan
+        ) or detail.execution_mode == "real"
         unverified_sources = [
             source
             for source in detail.raw_sources
@@ -431,7 +433,9 @@ class QualityAgentMixin:
     def _build_source_quality_issues(self, detail: RunDetail) -> list[QCIssue]:
         issues: list[QCIssue] = []
         seen: set[str] = set()
-        strict_source_qa = self._memory_enforces_strict_source_qa(detail.plan)
+        strict_source_qa = self._memory_enforces_strict_source_qa(
+            detail.plan
+        ) or detail.execution_mode == "real"
         for source in detail.raw_sources:
             if source.dimension not in detail.plan.dimensions:
                 continue

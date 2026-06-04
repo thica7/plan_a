@@ -41,7 +41,7 @@ class PlannerAgentMixin:
             for name in discovered:
                 verification = homepage_verifications[name]
                 detail.plan.homepage_verified[name] = verification.verified
-                if verification.homepage_url is not None:
+                if verification.verified and verification.homepage_url is not None:
                     detail.plan.homepage_hints[name] = str(verification.homepage_url)
             discovery_payload = {"competitor_discovery": discovery.model_dump(mode="json")}
             await self.emit(
@@ -76,14 +76,21 @@ class PlannerAgentMixin:
         self._refresh_task_decomposition(detail.plan)
         hints = payload.get("homepage_hints")
         if isinstance(hints, dict):
-            selected_competitors = {name.casefold() for name in detail.plan.competitors}
-            detail.plan.homepage_hints.update(
-                {
-                    str(key): str(value)
-                    for key, value in hints.items()
-                    if str(key).casefold() in selected_competitors
-                }
-            )
+            selected_by_key = {name.casefold(): name for name in detail.plan.competitors}
+            candidate_hints = {
+                selected_by_key[str(key).casefold()]: str(value)
+                for key, value in hints.items()
+                if str(key).casefold() in selected_by_key
+            }
+            for name, verification in verify_homepages(
+                detail.plan.competitors,
+                candidate_hints,
+            ).items():
+                detail.plan.homepage_verified[name] = verification.verified
+                if verification.verified and verification.homepage_url is not None:
+                    detail.plan.homepage_hints[name] = str(verification.homepage_url)
+                else:
+                    detail.plan.homepage_hints.pop(name, None)
         self._append_agent_message(
             record,
             from_agent="planner",

@@ -155,6 +155,7 @@ def test_dynamic_scenario_pack_and_homepage_gate_are_deterministic() -> None:
         dimensions=["market"],
     )
     good = verify_homepage("Cursor")
+    unknown = verify_homepage("Alpha")
     phantom = verify_homepage("FAKE_PRODUCT_NOT_EXISTS")
 
     assert pack.is_dynamic is True
@@ -162,6 +163,9 @@ def test_dynamic_scenario_pack_and_homepage_gate_are_deterministic() -> None:
     assert pack.seed_competitors == ["Fathom", "Otter", "Fireflies", "Avoma"]
     assert "market" in pack.required_dimensions
     assert good.verified is True
+    assert unknown.verified is False
+    assert unknown.homepage_url is None
+    assert unknown.reason == "no_verified_homepage"
     assert phantom.verified is False
     assert phantom.reason == "phantom_name"
 

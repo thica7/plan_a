@@ -361,7 +361,8 @@ async def test_topic_only_run_discovers_competitors_in_planner() -> None:
     await service._real_planner_step(record)
 
     assert record.detail.plan.competitors == ["Alpha", "Beta"]
-    assert record.detail.plan.homepage_hints["Alpha"] == "https://alpha.example"
+    assert record.detail.plan.homepage_hints == {}
+    assert record.detail.plan.homepage_verified == {"Alpha": False, "Beta": False}
     assert record.detail.competitor_discovery is not None
     assert record.detail.competitor_discovery.rationale == "Direct products."
     assert record.detail.competitor_discovery.candidates[0].selected is True
@@ -623,6 +624,48 @@ async def test_memory_policy_drives_collector_and_strict_source_qa() -> None:
     assert collector_done.payload["source_ids"] == ["source-feature-official"]
     assert issues[0].severity == "blocker"
     assert "MemoryAgent QA policy" in issues[0].problem
+
+
+def test_real_collect_qa_blocks_unverified_url_evidence_without_memory_policy() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-real-strict-source",
+        topic="AI coding assistant feature review",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["feature"]),
+        raw_sources=[
+            RawSource(
+                id="source-feature-search",
+                competitor="Cursor",
+                dimension="feature",
+                source_type="web_search_result",
+                title="Cursor feature search lead",
+                url="https://example.com/cursor-feature",
+                snippet="Search-only feature evidence mentions feature and api support.",
+                content_hash="hash-feature-search",
+                confidence=0.62,
+            )
+        ],
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+
+    assert issues
+    assert issues[0].severity == "blocker"
+    assert "not fetched webpage evidence" in issues[0].problem
 
 
 def test_feature_collection_uses_known_official_source_registry() -> None:
@@ -1118,7 +1161,7 @@ def test_qa_marks_unverified_source_without_missing_false_positive() -> None:
 
     assert len(issues) == 1
     assert issues[0].id.startswith("qc-issue-")
-    assert issues[0].severity == "warn"
+    assert issues[0].severity == "blocker"
     assert issues[0].redo_scope.target_competitor == "A"
 
 
@@ -3168,7 +3211,9 @@ def test_candidate_evidence_prefers_matching_search_results() -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_result_becomes_unverified_raw_source(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_real_search_result_fetch_failure_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async def fake_fetch_page(url: str):  # noqa: ANN202 - test double mirrors async tool shape.
         return None
 
@@ -3190,6 +3235,50 @@ async def test_search_result_becomes_unverified_raw_source(monkeypatch: pytest.M
         topic="Test",
         status="running",
         execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+    )
+
+    source = await service._source_from_search_result(
+        detail,
+        "A",
+        "pricing",
+        SearchResult(
+            title="A pricing",
+            url="https://example.com/pricing",
+            snippet="A has a public pricing page.",
+        ),
+    )
+
+    assert source is None
+
+
+@pytest.mark.asyncio
+async def test_demo_search_result_can_remain_unverified_raw_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_fetch_page(url: str):  # noqa: ANN202 - test double mirrors async tool shape.
+        return None
+
+    monkeypatch.setattr("packages.agents.collectors.logic.fetch_page", fake_fetch_page)
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx-key",
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="demo",
         created_at="2026-05-23T00:00:00",
         updated_at="2026-05-23T00:00:00",
         plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
@@ -3960,9 +4049,12 @@ async def test_real_pipeline_auto_runs_scoped_redo_for_qa_findings() -> None:
                 source_type="webpage_verified",
                 title=f"A {dimension}",
                 url=f"https://example.com/{dimension}",
-                snippet=f"A {dimension} evidence.",
+                snippet=(
+                    f"A {dimension} pricing plan is $20 per month for team users "
+                    "and includes enterprise billing."
+                ),
                 content_hash=f"{dimension}-hash",
-                confidence=0.8,
+                confidence=0.96,
             )
         )
 
@@ -4067,9 +4159,12 @@ async def test_real_pipeline_does_not_auto_redo_warn_only_findings() -> None:
                 source_type="webpage_verified",
                 title="A pricing",
                 url="https://example.com/pricing",
-                snippet="A pricing evidence.",
+                snippet=(
+                    "A pricing plan is $20 per month for team users and includes "
+                    "enterprise billing."
+                ),
                 content_hash="pricing-hash",
-                confidence=0.8,
+                confidence=0.96,
             )
         )
 
@@ -4171,9 +4266,12 @@ async def test_real_pipeline_auto_redoes_warn_when_run_option_enabled() -> None:
                 source_type="webpage_verified",
                 title="A pricing",
                 url="https://example.com/pricing",
-                snippet="A pricing evidence.",
+                snippet=(
+                    "A pricing plan is $20 per month for team users and includes "
+                    "enterprise billing."
+                ),
                 content_hash=f"pricing-hash-{len(record.detail.raw_sources) + 1}",
-                confidence=0.8,
+                confidence=0.96,
             )
         )
 

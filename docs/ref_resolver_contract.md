@@ -25,6 +25,23 @@ That boundary does three things:
 Frontend report views may still show RawSource-shaped cards for readability, but
 they should treat backend source reconciliation metadata as the source of truth.
 
+## Candidate And Evidence Boundary
+
+Collector candidates are not evidence until they pass the evidence admission
+gate:
+
+1. `homepage_hints` may only contain verified homepages from a trusted resolver.
+   Synthetic domains and LLM-provided hints are candidates, not verified
+   homepages.
+2. Real-mode URL evidence must be fetched successfully before it becomes a
+   `RawSource` for analyst, writer, or report citations.
+3. Failed fetches, search snippets, and unverified homepage-derived pages must be
+   recorded as trace diagnostics such as `source_candidate_rejected`, not saved
+   as report-scoped evidence.
+4. `web_search_result` may remain useful for demo, diagnostics, and quality
+   regression fixtures, but real-mode report claims should cite
+   `webpage_verified` or explicit user-research/manual evidence types.
+
 ## Domain References
 
 Use the dedicated resolver helpers instead of local string normalization:

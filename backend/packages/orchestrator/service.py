@@ -294,7 +294,8 @@ class RunService(
             homepage_hints={
                 name: str(homepage_verifications[name].homepage_url)
                 for name in competitors
-                if homepage_verifications[name].homepage_url is not None
+                if homepage_verifications[name].verified
+                and homepage_verifications[name].homepage_url is not None
             },
             homepage_verified={name: homepage_verifications[name].verified for name in competitors},
         )

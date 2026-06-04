@@ -15,8 +15,20 @@ class HomepageVerification(BaseModel):
     reason: str
 
 
+CURATED_HOMEPAGES: dict[str, str] = {
+    "cursor": "https://cursor.com",
+    "windsurf": "https://windsurf.com",
+    "githubcopilot": "https://github.com/features/copilot",
+    "claudecode": "https://www.anthropic.com/product/claude-code",
+}
+
+
 def verify_homepage(competitor: str, hint: str | None = None) -> HomepageVerification:
-    """Deterministic Phase 2 homepage gate before real source registry exists."""
+    """Resolve a verified homepage only from curated or explicitly trusted identity data.
+
+    Unknown homepage guesses are returned as unverified candidates at most. This keeps
+    synthetic domains out of the official-source pipeline.
+    """
 
     name = competitor.strip()
     if _looks_phantom(name):
@@ -26,12 +38,29 @@ def verify_homepage(competitor: str, hint: str | None = None) -> HomepageVerific
             verified=False,
             reason="phantom_name",
         )
-    url = hint if hint and _is_homepage_url(hint) else _synthetic_homepage(name)
+
+    curated = CURATED_HOMEPAGES.get(_registry_key(name))
+    if curated is not None:
+        return HomepageVerification(
+            competitor=name,
+            homepage_url=curated,  # type: ignore[arg-type]
+            verified=True,
+            reason="curated_registry",
+        )
+
+    if hint and _is_homepage_url(hint):
+        return HomepageVerification(
+            competitor=name,
+            homepage_url=hint,  # type: ignore[arg-type]
+            verified=False,
+            reason="hint_candidate_unverified",
+        )
+
     return HomepageVerification(
         competitor=name,
-        homepage_url=url,  # type: ignore[arg-type]
-        verified=True,
-        reason="synthetic_verified" if url != hint else "hint_verified",
+        homepage_url=None,
+        verified=False,
+        reason="no_verified_homepage",
     )
 
 
@@ -58,6 +87,5 @@ def _is_homepage_url(value: str) -> bool:
     return "google.com/search" not in value.casefold()
 
 
-def _synthetic_homepage(name: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "", name.casefold())
-    return f"https://www.{slug or 'competitor'}.com"
+def _registry_key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", name.casefold())
