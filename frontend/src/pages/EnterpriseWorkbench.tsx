@@ -2852,6 +2852,7 @@ function GovernanceRuntimePanel({
   const selectedProviderKind =
     modelRoute?.selected?.provider_kind ?? modelRoute?.fallback?.provider_kind ?? null;
   const kgRelations = summarizeKnowledgeGraphRelations(knowledgeGraph).slice(0, 5);
+  const kgArtifactCoverage = summarizeKnowledgeGraphArtifactCoverage(knowledgeGraph);
 
   return (
     <section className={`panel readiness-panel ${panelStatus}`}>
@@ -2884,6 +2885,11 @@ function GovernanceRuntimePanel({
           label="KG edges"
           value={knowledgeGraph?.edge_count ?? "-"}
         />
+        <Metric
+          icon={<FileText size={17} aria-hidden />}
+          label="KG artifacts"
+          value={knowledgeGraph ? kgArtifactCoverage.artifactNodeCount : "-"}
+        />
       </div>
       <div className="project-meta-row">
         <span>Policy {modelPolicy?.status ?? "loading"}</span>
@@ -2891,6 +2897,8 @@ function GovernanceRuntimePanel({
         <span>Guarded tools {toolRegistry?.guarded_count ?? "-"}</span>
         <span>Disabled tools {toolRegistry?.disabled_count ?? "-"}</span>
         <span>KG nodes {knowledgeGraph?.node_count ?? "-"}</span>
+        <span>Artifact links {kgArtifactCoverage.artifactEdgeCount}</span>
+        <span>Source archives {kgArtifactCoverage.archivedSourceCount}</span>
       </div>
       {modelRoute?.blocked_reasons.length ? (
         <div className="recommendation-list">
@@ -4687,6 +4695,22 @@ function summarizeKnowledgeGraphRelations(knowledgeGraph: KnowledgeGraphReadMode
     }
     return left.relation.localeCompare(right.relation);
   });
+}
+
+function summarizeKnowledgeGraphArtifactCoverage(knowledgeGraph: KnowledgeGraphReadModel | null) {
+  if (!knowledgeGraph) {
+    return { artifactNodeCount: 0, artifactEdgeCount: 0, archivedSourceCount: 0 };
+  }
+  const artifactNodeCount = knowledgeGraph.nodes.filter(
+    (node) => node.node_type === "artifact",
+  ).length;
+  const artifactEdgeCount = knowledgeGraph.edges.filter((edge) =>
+    ["has_artifact", "captured_as_artifact", "exported_as"].includes(edge.relation),
+  ).length;
+  const archivedSourceCount = knowledgeGraph.edges.filter(
+    (edge) => edge.relation === "archives_source",
+  ).length;
+  return { artifactNodeCount, artifactEdgeCount, archivedSourceCount };
 }
 
 function formatBytes(value: number) {

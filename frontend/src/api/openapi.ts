@@ -3259,7 +3259,7 @@ export interface components {
              * Node Type
              * @enum {string}
              */
-            node_type: "project" | "competitor" | "dimension" | "claim" | "evidence" | "source" | "report";
+            node_type: "project" | "competitor" | "dimension" | "claim" | "evidence" | "source" | "report" | "artifact";
             /** Label */
             label: string;
             /** Metadata */

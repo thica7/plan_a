@@ -1644,7 +1644,15 @@ export interface ModelRouteDecision {
 
 export interface KnowledgeGraphNode {
   id: string;
-  node_type: "project" | "competitor" | "dimension" | "claim" | "evidence" | "source" | "report";
+  node_type:
+    | "project"
+    | "competitor"
+    | "dimension"
+    | "claim"
+    | "evidence"
+    | "source"
+    | "report"
+    | "artifact";
   label: string;
   metadata: Record<string, unknown>;
 }

@@ -11162,7 +11162,8 @@
               "claim",
               "evidence",
               "source",
-              "report"
+              "report",
+              "artifact"
             ],
             "title": "Node Type"
           },
