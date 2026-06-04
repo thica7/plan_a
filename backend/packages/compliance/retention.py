@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -86,7 +86,7 @@ def build_data_retention_report(
     as_of: datetime | None = None,
 ) -> DataRetentionReport:
     policy = retention_policy_from_settings(settings)
-    now = as_of or datetime.utcnow()
+    now = _normalize_datetime(as_of or datetime.utcnow())
     projects = store.list_projects(workspace_id=workspace_id)
     project_ids = [str(project.id) for project in projects]
     evidence = [
@@ -165,7 +165,13 @@ def _bucket(
 
 def _datetime_field(item: object, field_name: str) -> datetime | None:
     value = getattr(item, field_name, None)
-    return value if isinstance(value, datetime) else None
+    return _normalize_datetime(value) if isinstance(value, datetime) else None
+
+
+def _normalize_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 def _positive_int(settings: object, name: str, default: int) -> int:

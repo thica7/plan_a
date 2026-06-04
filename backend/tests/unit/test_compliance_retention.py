@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -69,6 +69,31 @@ def test_retention_report_route_and_metrics_expose_status() -> None:
     assert metrics_response.status_code == 200
     assert 'competiscope_retention_status{status="fail"} 1' in metrics_response.text
     assert "competiscope_retention_expired_records_total " in metrics_response.text
+
+
+def test_data_retention_report_accepts_mixed_timezone_datetimes() -> None:
+    store, context = _projected_store()
+    now = datetime(2026, 6, 4, 12, 0, 0, tzinfo=UTC)
+    evidence = store.list_evidence(project_id=context.project_id)[0]
+    store.upsert_evidence(
+        evidence.model_copy(update={"captured_at": datetime(2026, 5, 25, 12, 0, 0)})
+    )
+    report = store.list_report_versions(project_id=context.project_id)[0]
+    store.upsert_report_version(
+        report.model_copy(
+            update={"created_at": datetime(2026, 6, 3, 12, 0, 0, tzinfo=UTC)}
+        )
+    )
+
+    result = build_data_retention_report(
+        store=store,
+        workspace_id=context.workspace_id,
+        settings=_settings(retention_evidence_days=7),
+        as_of=now,
+    )
+
+    assert result.status == "fail"
+    assert result.expired_count >= 1
 
 
 def _projected_store() -> tuple[EnterpriseMemoryStore, object]:
