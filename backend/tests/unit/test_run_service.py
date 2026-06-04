@@ -1712,6 +1712,9 @@ def test_comparison_matrix_majority_vote_overrides_weak_llm_winner() -> None:
     assert matrix.winner_by_dimension["pricing"] == "A"
     assert any("[majority-vote:pricing]" in item for item in matrix.summary)
     assert any("llm=B" in item and "evidence=A" in item for item in matrix.summary)
+    vote_line = next(item for item in matrix.summary if item.startswith("[majority-vote:pricing]"))
+    assert "confidence=A" not in vote_line
+    assert "cell_confidence_winner=A" in vote_line
 
 
 def test_comparison_matrix_adds_pricing_and_persona_standardization_summary() -> None:

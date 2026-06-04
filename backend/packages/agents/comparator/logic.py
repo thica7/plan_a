@@ -360,7 +360,7 @@ class ComparatorAgentMixin:
             if evidence_winner:
                 signals["evidence"] = evidence_winner
             if confidence_winner:
-                signals["confidence"] = confidence_winner
+                signals["cell_confidence_winner"] = confidence_winner
             if finding_winner:
                 signals["findings"] = finding_winner
             llm_winner = payload_winners.get(dimension)
