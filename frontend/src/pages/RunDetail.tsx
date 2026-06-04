@@ -7,6 +7,7 @@ import {
   getRun,
   getRunComplianceReport,
   getRunQualityComparison,
+  listRuns,
   redoRun,
   resumeRun,
   subscribeRun,
@@ -30,6 +31,7 @@ import type {
   DecisionReplayReport,
   ReflectionRecord,
   RunComplianceReport,
+  RunSummary,
   RunQualityComparison,
 } from "../api/types";
 
@@ -40,6 +42,8 @@ export function RunDetail() {
   const [isRedoing, setRedoing] = useState(false);
   const [planDimensions, setPlanDimensions] = useState("");
   const [qualityComparison, setQualityComparison] = useState<RunQualityComparison | null>(null);
+  const [qualityBaselineRunId, setQualityBaselineRunId] = useState("");
+  const [runHistory, setRunHistory] = useState<RunSummary[]>([]);
   const [decisionReplay, setDecisionReplay] = useState<DecisionReplayReport | null>(null);
   const [complianceReport, setComplianceReport] = useState<RunComplianceReport | null>(null);
   const [complianceExport, setComplianceExport] = useState<ArtifactRecord | null>(null);
@@ -58,6 +62,8 @@ export function RunDetail() {
     let unsubscribe: (() => void) | undefined;
     reset();
     setQualityComparison(null);
+    setQualityBaselineRunId("");
+    setRunHistory([]);
     setDecisionReplay(null);
     setComplianceReport(null);
     setComplianceExport(null);
@@ -68,12 +74,14 @@ export function RunDetail() {
           if (cancelled) return;
           setError(null);
           setDetail(loaded);
-          void getRunQualityComparison(runId)
-            .then((comparison) => {
-              if (!cancelled) setQualityComparison(comparison);
+          void listRuns()
+            .then((items) => {
+              if (!cancelled) {
+                setRunHistory(items.filter((item) => item.id !== runId));
+              }
             })
             .catch(() => {
-              if (!cancelled) setQualityComparison(null);
+              if (!cancelled) setRunHistory([]);
             });
           void getDecisionReplay(runId)
             .then((replay) => {
@@ -115,9 +123,25 @@ export function RunDetail() {
 
   useEffect(() => {
     if (!runId) return;
+    let cancelled = false;
+    setQualityComparison(null);
+    getRunQualityComparison(runId, qualityBaselineRunId || undefined)
+      .then((comparison) => {
+        if (!cancelled) setQualityComparison(comparison);
+      })
+      .catch(() => {
+        if (!cancelled) setQualityComparison(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [qualityBaselineRunId, runId]);
+
+  useEffect(() => {
+    if (!runId) return;
     if (events.some((event) => ["interrupt", "run_completed", "run_failed"].includes(event.type))) {
       getRun(runId).then(setDetail).catch((err: Error) => setError(err.message));
-      getRunQualityComparison(runId)
+      getRunQualityComparison(runId, qualityBaselineRunId || undefined)
         .then(setQualityComparison)
         .catch(() => setQualityComparison(null));
       getDecisionReplay(runId)
@@ -127,7 +151,7 @@ export function RunDetail() {
         .then(setComplianceReport)
         .catch(() => setComplianceReport(null));
     }
-  }, [events, runId, setDetail]);
+  }, [events, qualityBaselineRunId, runId, setDetail]);
 
   useEffect(() => {
     if (detail) {
@@ -294,7 +318,12 @@ export function RunDetail() {
         <TracePlayback spans={detail.trace_spans} />
         <RevisionDiff revisions={detail.revisions} />
         <CostPanel metrics={detail.metrics} spans={detail.trace_spans} />
-        <RunQualityPanel comparison={qualityComparison} />
+        <RunQualityPanel
+          baselineRunId={qualityBaselineRunId}
+          comparison={qualityComparison}
+          onBaselineRunChange={setQualityBaselineRunId}
+          runHistory={runHistory}
+        />
         <CompliancePanel
           exportArtifact={complianceExport}
           isExporting={isExportingCompliance}
@@ -532,7 +561,17 @@ function taskPriorityClass(priority: AnalysisPlanTask["priority"]) {
   return "low";
 }
 
-function RunQualityPanel({ comparison }: { comparison: RunQualityComparison | null }) {
+function RunQualityPanel({
+  baselineRunId,
+  comparison,
+  onBaselineRunChange,
+  runHistory,
+}: {
+  baselineRunId: string;
+  comparison: RunQualityComparison | null;
+  onBaselineRunChange: (runId: string) => void;
+  runHistory: RunSummary[];
+}) {
   if (!comparison) {
     return (
       <aside className="qa-panel run-quality-panel">
@@ -569,11 +608,28 @@ function RunQualityPanel({ comparison }: { comparison: RunQualityComparison | nu
     <aside className={`qa-panel run-quality-panel ${comparison.verdict}`}>
       <div className="panel-heading-row">
         <h2>Run quality</h2>
-        {comparison.verdict === "pass" ? (
-          <CheckCircle2 size={16} aria-hidden />
-        ) : (
-          <AlertTriangle size={16} aria-hidden />
-        )}
+        <div className="panel-heading-actions">
+          <label className="compact-select">
+            <span>Baseline</span>
+            <select
+              aria-label="Run quality baseline"
+              onChange={(event) => onBaselineRunChange(event.target.value)}
+              value={baselineRunId}
+            >
+              <option value="">None</option>
+              {runHistory.slice(0, 30).map((run) => (
+                <option key={run.id} value={run.id}>
+                  {run.topic} / {run.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {comparison.verdict === "pass" ? (
+            <CheckCircle2 size={16} aria-hidden />
+          ) : (
+            <AlertTriangle size={16} aria-hidden />
+          )}
+        </div>
       </div>
       <div className="metric-grid compact">
         <MetricValue label="Score" value={`${comparison.target_score}/100`} />
