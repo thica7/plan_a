@@ -780,20 +780,19 @@ class AnalystAgentMixin:
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
             claim_text = " ".join(str(claim.get("claim") or "") for claim in claims)
-            limits = self._extract_limit_hints(claim_text)
+            claim_models = [
+                KnowledgeClaim.model_validate(claim)
+                for claim in claims
+                if claim.get("source_ids")
+            ]
             return {
                 "pricing_model": {
                     "tiers": [
-                        {
-                            "name": "Extracted pricing evidence",
-                            "price": self._extract_price_hint(claim_text),
-                            "billing_cycle": self._extract_billing_cycle_hint(claim_text),
-                            "limits": limits,
-                            "claims": claims,
-                        }
-                    ]
-                    if claims
-                    else [],
+                        tier.model_dump(mode="json")
+                        for tier in self._pricing_tiers_from_text(
+                            claim_text, claim_models
+                        )
+                    ],
                     "notes": claims,
                 }
             }
@@ -1144,15 +1143,9 @@ class AnalystAgentMixin:
             claim_text = " ".join(claim.claim for claim in claims)
             knowledge.pricing_model.notes = claims
             if claims:
-                knowledge.pricing_model.tiers = [
-                    PricingTier(
-                        name="Extracted pricing evidence",
-                        claims=claims,
-                        price=self._extract_price_hint(claim_text),
-                        billing_cycle=self._extract_billing_cycle_hint(claim_text),
-                        limits=self._extract_limit_hints(claim_text),
-                    )
-                ]
+                knowledge.pricing_model.tiers = self._pricing_tiers_from_text(
+                    claim_text, claims
+                )
         elif "persona" in dimension_key or "user" in dimension_key:
             claim_text = " ".join(claim.claim for claim in claims)
             knowledge.user_personas.summary_claims = claims
@@ -1384,20 +1377,140 @@ class AnalystAgentMixin:
         return sum(confidences) / len(confidences)
 
     def _extract_price_hint(self, text: str) -> str:
-        match = re.search(
-            (
-                r"(?:\$|USD\s*)\s?\d+(?:[.,]\d+)?"
-                r"(?:\s*(?:/|per)\s*(?:month|mo|year|yr|seat|user|developer|credit|"
-                r"request|token|million tokens|usage))?"
-            ),
-            text,
-            flags=re.IGNORECASE,
-        )
+        match = self._price_hint_regex().search(text)
         if match:
             return " ".join(match.group(0).split())
         if re.search(r"\bfree\b|no credit card required", text, flags=re.IGNORECASE):
             return "$0"
         return "unknown"
+
+    def _price_hint_regex(self) -> re.Pattern[str]:
+        return re.compile(
+            (
+                r"(?:\$|USD\s*)\s?\d+(?:[.,]\d+)?"
+                r"(?:\s*(?:/|per)\s*(?:month|mo|year|yr|seat|user|developer|credit|"
+                r"request|token|million tokens|usage))?"
+            ),
+            flags=re.IGNORECASE,
+        )
+
+    def _pricing_tiers_from_text(
+        self, text: str, claims: list[KnowledgeClaim]
+    ) -> list[PricingTier]:
+        tiers: list[PricingTier] = []
+        seen_keys: set[tuple[str, str]] = set()
+        if re.search(r"\bfree\b|no credit card required", text, flags=re.IGNORECASE):
+            window = self._pricing_window_for_keyword(text, "free")
+            tiers.append(
+                PricingTier(
+                    name="Free",
+                    price="$0",
+                    billing_cycle=self._extract_billing_cycle_hint(window),
+                    limits=self._extract_limit_hints(window),
+                    claims=claims,
+                )
+            )
+            seen_keys.add((tiers[-1].name.casefold(), tiers[-1].price.casefold()))
+        for index, match in enumerate(self._price_hint_regex().finditer(text), start=1):
+            price = " ".join(match.group(0).split())
+            window = self._pricing_window_around_match(text, match)
+            name = self._extract_pricing_tier_name_near_price(text, match)
+            if not name:
+                name = self._extract_pricing_tier_name(window)
+            if not name:
+                name = f"Extracted pricing tier {index}"
+            key = (name.casefold(), price.casefold())
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            tiers.append(
+                PricingTier(
+                    name=name,
+                    price=price,
+                    billing_cycle=self._extract_billing_cycle_hint(window),
+                    limits=self._extract_limit_hints(window),
+                    claims=claims,
+                )
+            )
+            if len(tiers) >= 6:
+                break
+        if tiers:
+            return tiers
+        return [
+            PricingTier(
+                name="Extracted pricing evidence",
+                price=self._extract_price_hint(text),
+                billing_cycle=self._extract_billing_cycle_hint(text),
+                limits=self._extract_limit_hints(text),
+                claims=claims,
+            )
+        ]
+
+    def _pricing_window_around_match(self, text: str, match: re.Match[str]) -> str:
+        start = self._previous_pricing_tier_keyword_index(text, match.start())
+        end = self._next_pricing_tier_keyword_index(text, match.end())
+        return text[start:end]
+
+    def _pricing_window_for_keyword(self, text: str, keyword: str) -> str:
+        match = re.search(re.escape(keyword), text, flags=re.IGNORECASE)
+        if not match:
+            return text[:180]
+        end = self._next_pricing_tier_keyword_index(text, match.end())
+        return text[match.start() : end]
+
+    def _pricing_tier_keyword_regex(self) -> re.Pattern[str]:
+        return re.compile(
+            r"\b(?:free|hobby|pro\+|ultra|business|enterprise|teams?|individual|pro)\b",
+            flags=re.IGNORECASE,
+        )
+
+    def _previous_pricing_tier_keyword_index(self, text: str, position: int) -> int:
+        matches = list(self._pricing_tier_keyword_regex().finditer(text[:position]))
+        return matches[-1].start() if matches else max(0, position - 90)
+
+    def _next_pricing_tier_keyword_index(self, text: str, position: int) -> int:
+        match = self._pricing_tier_keyword_regex().search(text, position)
+        return match.start() if match else min(len(text), position + 140)
+
+    def _extract_pricing_tier_name(self, text: str) -> str:
+        patterns = [
+            (r"\bpro\+\b", "Pro+"),
+            (r"\bultra\b", "Ultra"),
+            (r"\bbusiness\b", "Business"),
+            (r"\benterprise\b", "Enterprise"),
+            (r"\bteam(?:s)?\b", "Team"),
+            (r"\bindividual\b", "Individual"),
+            (r"\bpro\b", "Pro"),
+            (r"\bfree\b|\bhobby\b", "Free"),
+        ]
+        for pattern, name in patterns:
+            if re.search(pattern, text, flags=re.IGNORECASE):
+                return name
+        return ""
+
+    def _extract_pricing_tier_name_near_price(
+        self, text: str, match: re.Match[str]
+    ) -> str:
+        before = text[max(0, match.start() - 90) : match.start()]
+        candidates: list[tuple[int, str]] = []
+        patterns = [
+            (r"\bpro\+\b", "Pro+"),
+            (r"\bultra\b", "Ultra"),
+            (r"\bbusiness\b", "Business"),
+            (r"\benterprise\b", "Enterprise"),
+            (r"\bteam(?:s)?\b", "Team"),
+            (r"\bindividual\b", "Individual"),
+            (r"\bpro\b", "Pro"),
+            (r"\bfree\b|\bhobby\b", "Free"),
+        ]
+        for pattern, name in patterns:
+            matches = list(re.finditer(pattern, before, flags=re.IGNORECASE))
+            if matches:
+                candidates.append((matches[-1].start(), name))
+        if candidates:
+            return max(candidates, key=lambda item: item[0])[1]
+        after = text[match.end() : min(len(text), match.end() + 60)]
+        return self._extract_pricing_tier_name(after)
 
     def _extract_billing_cycle_hint(self, text: str) -> str:
         normalized = text.casefold()
@@ -1447,6 +1560,11 @@ class AnalystAgentMixin:
         price = self._extract_price_hint(evidence_text)
         billing_cycle = self._extract_billing_cycle_hint(evidence_text)
         limits = self._extract_limit_hints(evidence_text)
+        existing_claims = [
+            *pricing_model.notes,
+            *[claim for tier in pricing_model.tiers for claim in tier.claims],
+        ]
+        extracted_tiers = self._pricing_tiers_from_text(evidence_text, existing_claims)
         for tier in pricing_model.tiers:
             if tier.price == "unknown" and price != "unknown":
                 tier.price = price
@@ -1454,6 +1572,16 @@ class AnalystAgentMixin:
                 tier.billing_cycle = billing_cycle
             if not tier.limits and limits:
                 tier.limits = limits
+        seen_keys = {
+            (tier.name.casefold(), tier.price.casefold()) for tier in pricing_model.tiers
+        }
+        for tier in extracted_tiers:
+            key = (tier.name.casefold(), tier.price.casefold())
+            if key not in seen_keys and tier.price != "unknown":
+                pricing_model.tiers.append(tier)
+                seen_keys.add(key)
+            if len(pricing_model.tiers) >= 6:
+                break
 
     def _enrich_persona_model_from_sources(
         self,

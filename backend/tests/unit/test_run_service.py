@@ -4592,6 +4592,111 @@ def test_structured_pricing_payload_enriches_unknown_fields_from_sources() -> No
     assert tier.limits == ["500 premium requests"]
 
 
+def test_deterministic_pricing_payload_extracts_multiple_tiers() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    sources = [
+        {
+            "id": "pricing-a",
+            "title": "A pricing",
+            "snippet": (
+                "Free plan includes 2,000 completions per month. "
+                "Pro costs $20/month with 500 premium requests. "
+                "Team costs $40 per user with unlimited completions."
+            ),
+            "confidence": 0.9,
+        }
+    ]
+
+    pricing = service._deterministic_structured_knowledge_payload(
+        competitor="A",
+        dimension="pricing",
+        dimension_sources=sources,
+    )
+
+    tiers = pricing["pricing_model"]["tiers"]
+    assert [tier["name"] for tier in tiers[:3]] == ["Free", "Pro", "Team"]
+    assert [tier["price"] for tier in tiers[:3]] == ["$0", "$20/month", "$40 per user"]
+    assert tiers[0]["limits"] == ["2,000 completions per month"]
+    assert tiers[1]["limits"] == ["500 premium requests"]
+    assert tiers[2]["limits"] == ["unlimited completions"]
+
+
+def test_structured_pricing_payload_appends_missing_paid_tiers_from_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="pricing-a",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://a.example/pricing",
+                snippet="Free plan is available. Pro costs $20/month with 500 premium requests.",
+                content_hash="pricing-a-hash",
+                confidence=0.9,
+            )
+        ],
+    )
+
+    service._merge_structured_knowledge_payload(
+        detail,
+        "A",
+        "pricing",
+        {
+            "pricing_model": {
+                "tiers": [
+                    {
+                        "name": "Free",
+                        "price": "$0",
+                        "billing_cycle": "unknown",
+                        "limits": [],
+                        "claims": [
+                            {
+                                "claim": "A has a free plan.",
+                                "source_ids": ["pricing-a"],
+                                "confidence": 0.9,
+                            }
+                        ],
+                    }
+                ],
+                "notes": [],
+            }
+        },
+    )
+
+    tiers = detail.competitor_knowledge["A"].pricing_model.tiers
+    assert [(tier.name, tier.price) for tier in tiers] == [("Free", "$0"), ("Pro", "$20/month")]
+    assert tiers[1].limits == ["500 premium requests"]
+
+
 def test_structured_persona_payload_enriches_unknown_fields_from_sources() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
