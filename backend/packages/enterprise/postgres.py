@@ -35,6 +35,7 @@ from packages.identity import (
     normalize_url,
     stable_prefixed_id,
 )
+from packages.refs import audit_relationship_resource_id, sort_report_versions
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     ArtifactRecord,
@@ -60,6 +61,7 @@ from packages.schema.enterprise import (
     WorkspaceRecord,
     WorkspaceUsageSummary,
 )
+from packages.sources import normalize_report_version_sources
 
 
 class EnterprisePostgresStore:
@@ -227,7 +229,11 @@ class EnterprisePostgresStore:
                         actor_id=actor_id,
                         action="project_competitor.linked",
                         resource_type="project_competitor",
-                        resource_id=f"{project_id}:{competitor_id}",
+                        resource_id=audit_relationship_resource_id(
+                            "project-competitor",
+                            project_id,
+                            competitor_id,
+                        ),
                         after={"project_id": project_id, "competitor_id": competitor_id},
                     )
                 self._upsert_run(cur, detail, context)
@@ -467,7 +473,11 @@ class EnterprisePostgresStore:
                     actor_id=DEFAULT_USER_ID,
                     action="workspace_member.upserted",
                     resource_type="workspace_member",
-                    resource_id=f"{member.workspace_id}:{member.user_id}",
+                    resource_id=audit_relationship_resource_id(
+                        "workspace-member",
+                        member.workspace_id,
+                        member.user_id,
+                    ),
                     after=member.model_dump(mode="json"),
                 )
             conn.commit()
@@ -791,7 +801,11 @@ class EnterprisePostgresStore:
                     actor_id=actor_id or review.reviewed_by,
                     action="schema_evolution.reviewed",
                     resource_type="schema_evolution_suggestion",
-                    resource_id=f"{project.id}:{review.suggestion_id}",
+                    resource_id=audit_relationship_resource_id(
+                        "schema-evolution-suggestion",
+                        project.id,
+                        review.suggestion_id,
+                    ),
                     after={
                         "project_id": project.id,
                         "suggestion_id": review.suggestion_id,
@@ -1169,20 +1183,23 @@ class EnterprisePostgresStore:
 
     def list_report_versions(self, project_id: str | None = None) -> list[ReportVersionRecord]:
         if project_id:
-            return self._list_models(
-                """
+            return sort_report_versions(
+                self._list_models(
+                    """
                 SELECT *
                 FROM report_versions
                 WHERE project_id = %s
-                ORDER BY created_at DESC, version_number DESC
                 """,
-                (project_id,),
+                    (project_id,),
+                    ReportVersionRecord,
+                )
+            )
+        return sort_report_versions(
+            self._list_models(
+                "SELECT * FROM report_versions",
+                (),
                 ReportVersionRecord,
             )
-        return self._list_models(
-            "SELECT * FROM report_versions ORDER BY created_at DESC, version_number DESC",
-            (),
-            ReportVersionRecord,
         )
 
     def get_report_version(self, version_id: str) -> ReportVersionRecord | None:
@@ -1194,6 +1211,10 @@ class EnterprisePostgresStore:
         return self._model_from_row(ReportVersionRecord, row) if row else None
 
     def upsert_report_version(self, version: ReportVersionRecord) -> ReportVersionRecord:
+        version = normalize_report_version_sources(
+            version,
+            self.list_evidence(project_id=version.project_id),
+        )
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
             with conn.cursor() as cur:
                 before_row = cur.execute(

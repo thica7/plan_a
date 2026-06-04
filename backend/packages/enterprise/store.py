@@ -27,6 +27,7 @@ from packages.identity import (
     normalize_url,
     stable_prefixed_id,
 )
+from packages.refs import audit_relationship_resource_id, sort_report_versions
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     ArtifactRecord,
@@ -54,6 +55,7 @@ from packages.schema.enterprise import (
     WorkspaceRecord,
     WorkspaceUsageSummary,
 )
+from packages.sources import normalize_report_version_sources
 
 DEFAULT_WORKSPACE_ID = "default-workspace"
 DEFAULT_USER_ID = "system-user"
@@ -425,7 +427,11 @@ class EnterpriseMemoryStore:
                     actor_id=actor_id,
                     action="project_competitor.linked",
                     resource_type="project_competitor",
-                    resource_id=f"{project_id}:{competitor_id}",
+                    resource_id=audit_relationship_resource_id(
+                        "project-competitor",
+                        project_id,
+                        competitor_id,
+                    ),
                     after={"project_id": project_id, "competitor_id": competitor_id},
                 )
             self._run_contexts[detail.id] = context
@@ -573,7 +579,11 @@ class EnterpriseMemoryStore:
                 actor_id=DEFAULT_USER_ID,
                 action="workspace_member.upserted",
                 resource_type="workspace_member",
-                resource_id=f"{member.workspace_id}:{member.user_id}",
+                resource_id=audit_relationship_resource_id(
+                    "workspace-member",
+                    member.workspace_id,
+                    member.user_id,
+                ),
                 after=member.model_dump(mode="json"),
             )
             return member
@@ -740,7 +750,11 @@ class EnterpriseMemoryStore:
                 actor_id=actor_id or review.reviewed_by,
                 action="schema_evolution.reviewed",
                 resource_type="schema_evolution_suggestion",
-                resource_id=f"{project.id}:{review.suggestion_id}",
+                resource_id=audit_relationship_resource_id(
+                    "schema-evolution-suggestion",
+                    project.id,
+                    review.suggestion_id,
+                ),
                 after={
                     "project_id": project.id,
                     "suggestion_id": review.suggestion_id,
@@ -980,11 +994,7 @@ class EnterpriseMemoryStore:
             records = list(self.report_versions.values())
             if project_id:
                 records = [item for item in records if item.project_id == project_id]
-            return sorted(
-                records,
-                key=lambda item: (item.created_at, item.version_number),
-                reverse=True,
-            )
+            return sort_report_versions(records)
 
     def get_report_version(self, version_id: str) -> ReportVersionRecord | None:
         with self._lock:
@@ -992,6 +1002,12 @@ class EnterpriseMemoryStore:
 
     def upsert_report_version(self, version: ReportVersionRecord) -> ReportVersionRecord:
         with self._lock:
+            project_evidence = [
+                item
+                for item in self.evidence_records.values()
+                if item.project_id == version.project_id
+            ]
+            version = normalize_report_version_sources(version, project_evidence)
             before_record = self.report_versions.get(version.id)
             self.report_versions[version.id] = version
             self._append_audit(

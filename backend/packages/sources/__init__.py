@@ -6,7 +6,6 @@ from packages.sources.references import (
     SourceResolutionIndex,
     SourceTokenNormalization,
     build_source_reconciliation,
-    dedupe_strings,
     evidence_by_source_token,
     evidence_source_tokens,
     merge_evidence_source_metadata,
@@ -15,7 +14,6 @@ from packages.sources.references import (
     normalize_report_version_sources,
     normalize_source_token,
     raw_source_alias_metadata,
-    string_list,
 )
 
 __all__ = [
@@ -26,14 +24,12 @@ __all__ = [
     "SourceResolutionIndex",
     "SourceTokenNormalization",
     "build_source_reconciliation",
-    "dedupe_strings",
     "evidence_by_source_token",
     "evidence_source_tokens",
     "merge_evidence_source_metadata",
     "merge_source_aliases",
     "normalize_report_source_tokens",
-    "normalize_report_version_sources",
     "normalize_source_token",
+    "normalize_report_version_sources",
     "raw_source_alias_metadata",
-    "string_list",
 ]

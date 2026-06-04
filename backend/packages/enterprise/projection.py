@@ -4,10 +4,6 @@ from collections import defaultdict
 from collections.abc import Mapping
 from datetime import datetime
 
-from packages.business_intel.source_reconciliation import (
-    build_source_reconciliation,
-    raw_source_alias_metadata,
-)
 from packages.identity import (
     compute_claim_id,
     compute_competitor_set_hash,
@@ -15,9 +11,9 @@ from packages.identity import (
     compute_report_version_id,
     compute_topic_normalized,
     normalize_dimension_key,
-    normalize_text,
     normalize_url,
 )
+from packages.refs import normalize_competitor_key
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     ClaimRecord,
@@ -26,6 +22,7 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
 )
 from packages.schema.models import CompetitorKnowledge, KnowledgeClaim, RawSource
+from packages.sources import normalize_report_source_tokens, raw_source_alias_metadata
 
 _SURVEY_SOURCE_TYPES = {"survey_simulated", "survey_response"}
 _INTERVIEW_SOURCE_TYPES = {"interview_record"}
@@ -185,6 +182,12 @@ def _build_report_version(
     competitor_ids = [_competitor_id_for(c, competitor_id_map) for c in detail.plan.competitors]
     competitor_set_hash = compute_competitor_set_hash(competitor_ids)
     topic_normalized = compute_topic_normalized(detail.topic)
+    evidence_ids = [evidence.id for evidence in evidence_records]
+    normalized_report = normalize_report_source_tokens(
+        detail.report_md,
+        evidence_records,
+        scoped_evidence_ids=evidence_ids,
+    )
     return ReportVersionRecord(
         id=compute_report_version_id(
             run_id=detail.id,
@@ -199,10 +202,14 @@ def _build_report_version(
         topic_normalized=topic_normalized,
         competitor_layer=competitor_layer,
         competitor_set_hash=competitor_set_hash,
-        report_md=detail.report_md,
+        report_md=normalized_report.report_md,
         claim_ids=[claim.id for claim in claim_records],
-        evidence_ids=[evidence.id for evidence in evidence_records],
-        quality_metadata=_build_quality_metadata(detail, evidence_records),
+        evidence_ids=normalized_report.evidence_ids,
+        quality_metadata=_build_quality_metadata(
+            detail,
+            evidence_records,
+            source_reconciliation=normalized_report.reconciliation(evidence_records),
+        ),
         created_at=_parse_datetime(detail.updated_at),
     )
 
@@ -272,8 +279,7 @@ def _source_competitors(source: RawSource) -> list[str]:
 
 
 def _record_id(value: str) -> str:
-    normalized = normalize_text(value)
-    return normalized.replace(" ", "_")
+    return normalize_competitor_key(value)
 
 
 def _competitor_id_for(
@@ -282,12 +288,8 @@ def _competitor_id_for(
 ) -> str:
     if competitor_id_map is None:
         return _record_id(value)
-    return (
-        competitor_id_map.get(value)
-        or competitor_id_map.get(_record_id(value))
-        or competitor_id_map.get(normalize_text(value))
-        or _record_id(value)
-    )
+    key = normalize_competitor_key(value)
+    return competitor_id_map.get(value) or competitor_id_map.get(key) or _record_id(value)
 
 
 def _quality_label(source: RawSource) -> str:
@@ -306,6 +308,8 @@ def _source_metadata(source: RawSource) -> dict[str, object]:
 def _build_quality_metadata(
     detail: RunDetail,
     evidence_records: list[EvidenceRecord],
+    *,
+    source_reconciliation: dict[str, object],
 ) -> dict[str, object]:
     low_confidence_source_ids = [
         source.id for source in detail.raw_sources if source.confidence < 0.75
@@ -355,11 +359,7 @@ def _build_quality_metadata(
         "search_only_source_ids": search_only_source_ids,
         "llm_public_knowledge_source_ids": llm_public_knowledge_source_ids,
         **research_source_ids,
-        "source_reconciliation": build_source_reconciliation(
-            detail.report_md,
-            evidence_records,
-            scoped_evidence_ids=[evidence.id for evidence in evidence_records],
-        ),
+        "source_reconciliation": source_reconciliation,
         "reflection_gaps": [
             {
                 "coverage_gaps": reflection.coverage_gaps,

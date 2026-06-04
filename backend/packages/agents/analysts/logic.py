@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from packages.agents import SubagentContext
 from packages.agents.analysts.citation_tools import inspect_sources, validate_source_ids
 from packages.memory import KBCacheEntry
+from packages.refs import merge_ordered_refs
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     CompetitorKB,
@@ -1006,7 +1007,7 @@ class AnalystAgentMixin:
             competitor=entry.competitor
         )
         kb.slices[entry.dimension] = entry.kb_slice
-        kb.sources = sorted(set(kb.sources + entry.source_ids))
+        kb.sources = merge_ordered_refs(kb.sources, entry.source_ids)
         kb.confidence = entry.confidence
         detail.competitor_kbs[entry.competitor] = kb
 
@@ -1021,8 +1022,10 @@ class AnalystAgentMixin:
             knowledge.user_personas = cached.user_personas
         else:
             knowledge.feature_tree = cached.feature_tree
-        knowledge.source_ids = sorted(
-            set(knowledge.source_ids + entry.source_ids + cached.source_ids)
+        knowledge.source_ids = merge_ordered_refs(
+            knowledge.source_ids,
+            entry.source_ids,
+            cached.source_ids,
         )
         knowledge.confidence = max(knowledge.confidence, cached.confidence, entry.confidence)
         detail.competitor_knowledge[entry.competitor] = knowledge
@@ -1077,7 +1080,7 @@ class AnalystAgentMixin:
                 source.id
                 for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
             ]
-            kb.sources = sorted(set(kb.sources + source_ids))
+            kb.sources = merge_ordered_refs(kb.sources, source_ids)
             source_confidences = [
                 source.confidence
                 for source in detail.raw_sources
@@ -1110,7 +1113,7 @@ class AnalystAgentMixin:
             source.id
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
         ]
-        kb.sources = sorted(set(kb.sources + source_ids))
+        kb.sources = merge_ordered_refs(kb.sources, source_ids)
         source_confidences = [
             source.confidence
             for source in detail.raw_sources
@@ -1160,7 +1163,7 @@ class AnalystAgentMixin:
             source.id
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
         ]
-        knowledge.source_ids = sorted(set(knowledge.source_ids + source_ids))
+        knowledge.source_ids = merge_ordered_refs(knowledge.source_ids, source_ids)
         source_confidences = [
             source.confidence
             for source in detail.raw_sources
@@ -1223,14 +1226,9 @@ class AnalystAgentMixin:
                     knowledge.feature_tree.summary_claims = []
 
         claims = self._structured_claims_for_dimension(knowledge, dimension)
-        knowledge.source_ids = sorted(
-            {
-                source_id
-                for source_id in [
-                    *knowledge.source_ids,
-                    *[sid for claim in claims for sid in claim.source_ids],
-                ]
-            }
+        knowledge.source_ids = merge_ordered_refs(
+            knowledge.source_ids,
+            (sid for claim in claims for sid in claim.source_ids),
         )
         knowledge.confidence = self._claim_list_confidence(claims)
         detail.competitor_knowledge[competitor] = knowledge
@@ -1250,8 +1248,9 @@ class AnalystAgentMixin:
             else claim.claim
             for claim in claims
         ]
-        kb.sources = sorted(
-            set(kb.sources + [source_id for claim in claims for source_id in claim.source_ids])
+        kb.sources = merge_ordered_refs(
+            kb.sources,
+            (source_id for claim in claims for source_id in claim.source_ids),
         )
         kb.confidence = self._claim_list_confidence(claims)
         detail.competitor_kbs[competitor] = kb

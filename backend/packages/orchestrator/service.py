@@ -62,6 +62,7 @@ from packages.orchestrator.graph import (
     build_real_analysis_graph,
     build_scoped_redo_graph,
 )
+from packages.refs import normalize_dimension_refs
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail, RunSummary
 from packages.schema.enterprise import (
     ClaimValidationReport,
@@ -2005,6 +2006,7 @@ class RunService(
             competitor_id_map=context.competitor_id_map,
         )
         self._enterprise_store.save_projection(projection)
+        detail.report_md = projection.report_version.report_md
         gate = self._evaluate_report_release_gate(projection)
         if notify_release_gate:
             self._record_release_gate_notification(projection, gate)
@@ -3286,21 +3288,12 @@ class RunService(
         require_core_schema: bool,
     ) -> list[str]:
         available = self._skill_registry.names()
-        seen: set[str] = set()
-        normalized = [
-            dimension
-            for dimension in dimensions
-            if dimension in available and not (dimension in seen or seen.add(dimension))
-        ]
-        if not normalized:
-            normalized = [
-                dimension for dimension in CORE_SCHEMA_DIMENSIONS if dimension in available
-            ]
-        if require_core_schema:
-            for dimension in CORE_SCHEMA_DIMENSIONS:
-                if dimension in available and dimension not in normalized:
-                    normalized.append(dimension)
-        return normalized
+        return normalize_dimension_refs(
+            dimensions,
+            allowed=available,
+            fallback=CORE_SCHEMA_DIMENSIONS,
+            require=CORE_SCHEMA_DIMENSIONS if require_core_schema else (),
+        )
 
     def _scenario_seed_competitors(self, scenario_id: str | None) -> list[str]:
         if not scenario_id:

@@ -12,6 +12,7 @@ from packages.identity import (
     compute_raw_source_id,
     compute_survey_respondent_id,
 )
+from packages.refs import merge_ordered_refs
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     CompetitorKB,
@@ -480,7 +481,7 @@ class SurveyInterviewAgentMixin:
         )
         if not any(existing.name == segment.name for existing in knowledge.user_personas.segments):
             knowledge.user_personas.segments.append(segment)
-        knowledge.source_ids = sorted({*knowledge.source_ids, *source_ids})
+        knowledge.source_ids = merge_ordered_refs(knowledge.source_ids, source_ids)
         existing_confidence = knowledge.confidence if knowledge.confidence > 0 else claim.confidence
         knowledge.confidence = round((existing_confidence + claim.confidence) / 2, 3)
         detail.competitor_knowledge[competitor] = knowledge
@@ -491,7 +492,7 @@ class SurveyInterviewAgentMixin:
         if finding not in findings:
             findings.append(finding)
         kb.slices[dimension] = findings
-        kb.sources = sorted({*kb.sources, *source_ids})
+        kb.sources = merge_ordered_refs(kb.sources, source_ids)
         kb.confidence = max(kb.confidence, claim.confidence)
         detail.competitor_kbs[competitor] = kb
 

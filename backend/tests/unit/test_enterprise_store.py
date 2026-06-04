@@ -26,6 +26,7 @@ from packages.enterprise import (
 )
 from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.service import RunService
+from packages.refs import audit_relationship_resource_id
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
     ArtifactRecord,
@@ -649,7 +650,12 @@ def test_schema_suggestion_review_persists_metadata_and_updates_plan_dimensions(
     assert any(
         log.action == "schema_evolution.reviewed"
         and log.resource_type == "schema_evolution_suggestion"
-        and log.resource_id == f"{context.project_id}:{suggestion.id}"
+        and log.resource_id
+        == audit_relationship_resource_id(
+            "schema-evolution-suggestion",
+            context.project_id,
+            suggestion.id,
+        )
         and log.after["decision"] == "accepted"
         and log.after["normalized_dimension"] == "enterprise_sso"
         for log in store.list_audit_logs()

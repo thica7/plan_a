@@ -101,8 +101,8 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
     ]
     assert set(knowledge.source_ids) == {survey_source.id, interview_source.id}
     assert record.detail.competitor_kbs["Acme"].sources == [
-        interview_source.id,
         survey_source.id,
+        interview_source.id,
     ]
     assert "workflow fit" in record.detail.competitor_kbs["Acme"].slices["persona"][0]
     span = next(span for span in record.detail.trace_spans if span.name == "survey_interview_agent")

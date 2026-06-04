@@ -69,6 +69,7 @@ from packages.rag import (
     fill_evidence_gaps_online,
     ingest_evidence_seed_corpus,
 )
+from packages.refs import build_competitor_alias_map, quality_entry_keys
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
     ArtifactCreateResult,
@@ -1172,6 +1173,14 @@ def _with_quality_peer_review_metadata(
                 "metadata": {
                     **entry.metadata,
                     "peer_review_mode": "deterministic_cross_agent_matrix",
+                    "quality_finding_keys": quality_entry_keys(
+                        agent_name=entry.agent_name,
+                        blocker_count=entry.blocker_count,
+                        warn_count=entry.warn_count,
+                        evidence_ids=entry.evidence_ids,
+                        claim_ids=entry.claim_ids,
+                        summary=entry.summary,
+                    ),
                     "peer_reviewed_by": sorted(reviewed_by.get(entry.agent_name, [])),
                     "review_targets": sorted(
                         target
@@ -1977,18 +1986,7 @@ def _competitor_id_map_for_project(
     project_id: str,
     store: EnterpriseStore,
 ) -> dict[str, str]:
-    mapping: dict[str, str] = {}
-    for competitor in store.list_competitors(project_id=project_id):
-        keys = [competitor.name, competitor.normalized_name, *competitor.aliases]
-        for key in keys:
-            normalized = _slug_key(key)
-            if normalized:
-                mapping[normalized] = competitor.id
-    return mapping
-
-
-def _slug_key(value: str) -> str:
-    return "-".join(re.findall(r"[a-z0-9]+", value.casefold()))
+    return build_competitor_alias_map(store.list_competitors(project_id=project_id))
 
 
 def _report_version_or_404(

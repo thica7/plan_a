@@ -1,9 +1,11 @@
 from packages.business_intel.source_reconciliation import (
     build_source_reconciliation,
     evidence_by_source_token,
+    normalize_report_source_tokens,
+    normalize_report_version_sources,
     raw_source_alias_metadata,
 )
-from packages.schema.enterprise import EvidenceRecord
+from packages.schema.enterprise import EvidenceRecord, ReportVersionRecord
 
 
 def test_source_reconciliation_resolves_ids_raw_sources_aliases_and_chunks() -> None:
@@ -38,3 +40,150 @@ def test_source_reconciliation_resolves_ids_raw_sources_aliases_and_chunks() -> 
     assert reconciliation["evidence_source_aliases"] == {
         "evidence-1": ["pricing-current", "pricing-old"]
     }
+
+
+def test_source_normalizer_rewrites_raw_source_tokens_to_evidence_tokens() -> None:
+    evidence = EvidenceRecord(
+        id="evidence-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="pricing-raw",
+        competitor_id="cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor publishes pricing.",
+        content_hash="hash-1",
+        reliability_score=0.9,
+        metadata=raw_source_alias_metadata("pricing-old"),
+    )
+
+    normalized = normalize_report_source_tokens(
+        "Known [source:pricing-old#chunk:0] and [source:pricing-raw].",
+        [evidence],
+        scoped_evidence_ids=["evidence-1"],
+    )
+
+    assert normalized.report_md == "Known [source:evidence-1] and [source:evidence-1]."
+    assert normalized.evidence_ids == ["evidence-1"]
+    assert [item.status for item in normalized.resolutions] == ["alias", "alias"]
+    reconciliation = normalized.reconciliation([evidence])
+    assert reconciliation["canonical_report_md_changed"] is True
+    assert reconciliation["canonical_report_source_tokens"] == ["evidence-1"]
+    assert reconciliation["unresolved_report_source_tokens"] == []
+
+
+def test_source_reconciliation_without_scope_uses_all_evidence() -> None:
+    evidence = EvidenceRecord(
+        id="evidence-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="pricing-raw",
+        competitor_id="cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor publishes pricing.",
+        content_hash="hash-1",
+        reliability_score=0.9,
+    )
+
+    reconciliation = build_source_reconciliation(
+        "Cursor pricing. [source:pricing-raw]",
+        [evidence],
+    )
+
+    assert reconciliation["scoped_evidence_ids"] == ["evidence-1"]
+    assert reconciliation["unresolved_report_source_tokens"] == []
+
+
+def test_source_normalizer_without_scope_uses_all_evidence() -> None:
+    evidence = EvidenceRecord(
+        id="evidence-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="pricing-raw",
+        competitor_id="cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor publishes pricing.",
+        content_hash="hash-1",
+        reliability_score=0.9,
+    )
+
+    normalized = normalize_report_source_tokens(
+        "Cursor pricing. [source:pricing-raw]",
+        [evidence],
+    )
+
+    assert normalized.report_md == "Cursor pricing. [source:evidence-1]"
+    assert normalized.evidence_ids == ["evidence-1"]
+    assert normalized.resolutions[0].status == "alias"
+
+
+def test_report_version_normalizer_preserves_empty_explicit_scope() -> None:
+    evidence = EvidenceRecord(
+        id="evidence-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="pricing-raw",
+        competitor_id="cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor publishes pricing.",
+        content_hash="hash-1",
+        reliability_score=0.9,
+    )
+    version = ReportVersionRecord(
+        id="report-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        version_number=1,
+        topic_normalized="topic",
+        competitor_layer="L1",
+        competitor_set_hash="set",
+        report_md="No citations yet.",
+        evidence_ids=[],
+    )
+
+    normalized = normalize_report_version_sources(version, [evidence])
+
+    assert normalized.evidence_ids == []
+    assert normalized.report_md == "No citations yet."
+
+
+def test_source_normalizer_adds_known_out_of_scope_evidence_to_report_scope() -> None:
+    evidence = EvidenceRecord(
+        id="evidence-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="pricing-raw",
+        competitor_id="cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor publishes pricing.",
+        content_hash="hash-1",
+        reliability_score=0.9,
+    )
+    version = ReportVersionRecord(
+        id="report-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        version_number=1,
+        topic_normalized="topic",
+        competitor_layer="L1",
+        competitor_set_hash="set",
+        report_md="Cursor pricing. [source:pricing-raw]",
+        evidence_ids=[],
+    )
+
+    normalized = normalize_report_version_sources(version, [evidence])
+
+    assert normalized.report_md == "Cursor pricing. [source:evidence-1]"
+    assert normalized.evidence_ids == ["evidence-1"]
+    reconciliation = normalized.quality_metadata["source_reconciliation"]
+    assert reconciliation["unresolved_report_source_tokens"] == []
+    assert reconciliation["source_resolutions"][0]["status"] == "alias"
