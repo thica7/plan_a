@@ -102,6 +102,7 @@ async def current_run_summary(
     dimensions: list[str],
     execution_mode: str,
     hitl_enabled: bool,
+    timeout_seconds: float,
 ) -> tuple[dict[str, object], RunDetail]:
     settings = get_settings()
     store = EnterpriseMemoryStore()
@@ -126,7 +127,14 @@ async def current_run_summary(
                 idempotency_key=f"quality-compare-{uuid4().hex}",
             )
         )
-        await service.run_pipeline(detail.id)
+        pipeline_timed_out = False
+        try:
+            await asyncio.wait_for(
+                service.run_pipeline(detail.id),
+                timeout=max(1.0, float(timeout_seconds)),
+            )
+        except TimeoutError:
+            pipeline_timed_out = True
         completed = service.get_run(detail.id)
         if completed is None:
             raise RuntimeError("Current run did not persist a detail.")
@@ -139,6 +147,15 @@ async def current_run_summary(
                 "report_version_id": projection.report_version.id if projection else None,
             }
         )
+        if pipeline_timed_out:
+            timeout = max(1.0, float(timeout_seconds))
+            payload.update(
+                {
+                    "pipeline_timed_out": True,
+                    "timeout_seconds": timeout,
+                    "comparison_error": f"pipeline timeout after {timeout:g} seconds",
+                }
+            )
         return payload, completed
     finally:
         await checkpoint.aclose()
@@ -180,17 +197,21 @@ async def compare_real_run_quality(args: argparse.Namespace) -> dict[str, object
         dimensions=args.dimensions,
         execution_mode=args.execution_mode,
         hitl_enabled=args.hitl_enabled,
+        timeout_seconds=args.timeout_seconds,
     )
     quality = apply_pipeline_completion_gate(
         compare_run_quality(current_detail, baseline=baseline_detail).model_dump(mode="json"),
         current_summary_payload,
     )
-    return {
+    payload: dict[str, object] = {
         "old": old_summary_payload,
         "current": current_summary_payload,
         "delta": build_summary_delta(old_summary_payload, current_summary_payload),
         "quality": quality,
     }
+    if current_summary_payload.get("comparison_error"):
+        payload["comparison_error"] = current_summary_payload["comparison_error"]
+    return payload
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -226,7 +247,7 @@ async def main(argv: list[str] | None = None) -> None:
     try:
         payload = await asyncio.wait_for(
             compare_real_run_quality(args),
-            timeout=max(1.0, float(args.timeout_seconds)),
+            timeout=max(1.0, float(args.timeout_seconds)) + 30.0,
         )
     except TimeoutError:
         payload = build_timeout_payload(args)
@@ -478,6 +499,9 @@ def _pipeline_completion_reasons(current_summary_value: dict[str, object]) -> li
     status = _text(current_summary_value.get("status")) or "unknown"
     current_node = _text(current_summary_value.get("current_node")) or "none"
     reasons: list[str] = []
+    if current_summary_value.get("pipeline_timed_out") is True:
+        timeout = _numeric(current_summary_value.get("timeout_seconds"))
+        reasons.append(f"current run pipeline timed out after {timeout:g} seconds")
     if status != "completed":
         reasons.append(
             f"current run did not complete: status={status}, current_node={current_node}"

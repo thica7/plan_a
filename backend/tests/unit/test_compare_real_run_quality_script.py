@@ -226,6 +226,8 @@ def test_pipeline_completion_gate_marks_incomplete_run_as_failed() -> None:
             "status": "interrupted",
             "current_node": "qa_hitl",
             "report_chars": 0,
+            "pipeline_timed_out": True,
+            "timeout_seconds": 45,
         },
     )
     markdown = script.render_compare_markdown(
@@ -237,9 +239,12 @@ def test_pipeline_completion_gate_marks_incomplete_run_as_failed() -> None:
                 "current_node": "qa_hitl",
                 "execution_mode": "real",
                 "report_chars": 0,
+                "pipeline_timed_out": True,
+                "timeout_seconds": 45,
             },
             "delta": {"baseline_available": False},
             "quality": quality,
+            "comparison_error": "pipeline timeout after 45 seconds",
         }
     )
 
@@ -247,12 +252,16 @@ def test_pipeline_completion_gate_marks_incomplete_run_as_failed() -> None:
     assert quality["regression_gate_status"] == "fail"
     assert quality["regression_gate_passed"] is False
     assert quality["pipeline_incomplete"] is True
+    assert "current run pipeline timed out after 45 seconds" in quality[
+        "regression_gate_reasons"
+    ]
     assert (
         "current run did not complete: status=interrupted, current_node=qa_hitl"
         in quality["regression_gate_reasons"]
     )
     assert "current run did not produce report_md" in quality["regression_gate_reasons"]
     assert "- Pipeline incomplete: yes" in markdown
+    assert "- Comparison error: pipeline timeout after 45 seconds" in markdown
 
 
 def test_timeout_payload_renders_failed_comparison_card(tmp_path: Path) -> None:
