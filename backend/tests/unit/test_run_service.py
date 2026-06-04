@@ -4962,6 +4962,90 @@ def test_structured_pricing_payload_dedupes_free_tiers() -> None:
     assert [claim.source_ids for claim in tiers[0].claims] == [["pricing-a"], ["pricing-b"]]
 
 
+def test_structured_pricing_payload_labels_duplicate_paid_tiers() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["Claude Code"], dimensions=["pricing"]),
+    )
+
+    service._merge_structured_knowledge_payload(
+        detail,
+        "Claude Code",
+        "pricing",
+        {
+            "pricing_model": {
+                "tiers": [
+                    {
+                        "name": "Enterprise",
+                        "price": "$100/month",
+                        "billing_cycle": "monthly",
+                        "limits": ["usage tracking"],
+                        "claims": [
+                            {
+                                "claim": "Claude Code has an enterprise cost reference.",
+                                "source_ids": ["pricing-a"],
+                                "confidence": 0.8,
+                            }
+                        ],
+                    },
+                    {
+                        "name": "Enterprise",
+                        "price": "$200/month",
+                        "billing_cycle": "monthly",
+                        "limits": ["expanded usage"],
+                        "claims": [
+                            {
+                                "claim": "Claude Code has another enterprise cost reference.",
+                                "source_ids": ["pricing-b"],
+                                "confidence": 0.8,
+                            }
+                        ],
+                    },
+                    {
+                        "name": "Enterprise",
+                        "price": "custom",
+                        "billing_cycle": "annual",
+                        "limits": ["SSO"],
+                        "claims": [
+                            {
+                                "claim": "Claude Code enterprise can be custom priced.",
+                                "source_ids": ["pricing-c"],
+                                "confidence": 0.8,
+                            }
+                        ],
+                    },
+                ],
+                "notes": [],
+            }
+        },
+    )
+
+    tiers = detail.competitor_knowledge["Claude Code"].pricing_model.tiers
+    assert [tier.name for tier in tiers] == [
+        "Enterprise ($100/month)",
+        "Enterprise ($200/month)",
+        "Enterprise (custom)",
+    ]
+    assert len({tier.name for tier in tiers}) == 3
+    assert all(tier.name != "Enterprise" for tier in tiers)
+
+
 def test_deterministic_pricing_payload_extracts_multiple_tiers() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

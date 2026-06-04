@@ -1602,6 +1602,63 @@ class AnalystAgentMixin:
                 continue
             self._merge_pricing_tier(existing, tier)
         pricing_model.tiers = [merged[key] for key in ordered_keys]
+        self._disambiguate_duplicate_pricing_tier_names(pricing_model)
+
+    def _disambiguate_duplicate_pricing_tier_names(
+        self, pricing_model: PricingModel
+    ) -> None:
+        canonical_counts: dict[str, int] = {}
+        for tier in pricing_model.tiers:
+            canonical = self._canonical_pricing_tier_name(tier.name)
+            canonical_counts[canonical] = canonical_counts.get(canonical, 0) + 1
+        if not any(count > 1 for count in canonical_counts.values()):
+            return
+        seen: dict[str, int] = {}
+        for tier in pricing_model.tiers:
+            canonical = self._canonical_pricing_tier_name(tier.name)
+            if canonical_counts.get(canonical, 0) <= 1:
+                continue
+            seen[canonical] = seen.get(canonical, 0) + 1
+            tier.name = self._qualified_pricing_tier_name(
+                canonical,
+                tier,
+                seen[canonical],
+            )
+
+    def _qualified_pricing_tier_name(
+        self, canonical_name: str, tier: PricingTier, index: int
+    ) -> str:
+        display_name = self._display_pricing_tier_name(canonical_name, tier.name)
+        qualifier = self._pricing_tier_name_qualifier(tier, index)
+        return f"{display_name} ({qualifier})" if qualifier else display_name
+
+    def _display_pricing_tier_name(self, canonical_name: str, fallback: str) -> str:
+        labels = {
+            "business": "Business",
+            "enterprise": "Enterprise",
+            "free": "Free",
+            "individual": "Individual",
+            "pro": "Pro",
+            "pro+": "Pro+",
+            "team": "Team",
+            "ultra": "Ultra",
+        }
+        return labels.get(canonical_name, fallback or "Pricing tier")
+
+    def _pricing_tier_name_qualifier(self, tier: PricingTier, index: int) -> str:
+        price = " ".join((tier.price or "").split())
+        if price and price != "unknown":
+            return self._compact_pricing_label(price)
+        cycle = " ".join((tier.billing_cycle or "").split())
+        if cycle and cycle != "unknown":
+            return cycle
+        return f"entry {index}"
+
+    def _compact_pricing_label(self, value: str, limit: int = 42) -> str:
+        text = " ".join(value.split())
+        if len(text) <= limit:
+            return text
+        return f"{text[: limit - 1].rstrip()}..."
 
     def _pricing_tier_dedupe_key(self, tier: PricingTier) -> tuple[str, str]:
         name = self._canonical_pricing_tier_name(tier.name)
