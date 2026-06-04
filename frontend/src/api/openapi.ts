@@ -8759,6 +8759,14 @@ export interface operations {
         parameters: {
             query?: {
                 workspace_id?: string | null;
+                action?: string | null;
+                actor_id?: string | null;
+                actor_type?: string | null;
+                resource_type?: string | null;
+                resource_id?: string | null;
+                created_from?: string | null;
+                created_to?: string | null;
+                limit?: number;
             };
             header?: {
                 "X-User-Id"?: string | null;

@@ -6410,6 +6410,132 @@
             }
           },
           {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "name": "actor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor Id"
+            }
+          },
+          {
+            "name": "actor_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor Type"
+            }
+          },
+          {
+            "name": "resource_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resource Type"
+            }
+          },
+          {
+            "name": "resource_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resource Id"
+            }
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created From"
+            }
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created To"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
             "name": "X-User-Id",
             "in": "header",
             "required": false,
@@ -9336,6 +9462,7 @@
               "real_llm",
               "report_quality",
               "rag_gap_fill",
+              "human_review",
               "decision_replay"
             ],
             "title": "Step"
@@ -9565,6 +9692,41 @@
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Human Correction Rate"
+          },
+          "hitl_redo_loop_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Hitl Redo Loop Rate",
+            "default": 1.0
+          },
+          "memory_recall_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Memory Recall Rate",
+            "default": 1.0
+          },
+          "user_research_evidence_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "User Research Evidence Rate",
+            "default": 1.0
+          },
+          "rag_gap_fill_context_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Rag Gap Fill Context Rate",
+            "default": 1.0
+          },
+          "rag_gap_fill_section_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Rag Gap Fill Section Rate",
+            "default": 1.0
           },
           "redo_iteration_count": {
             "type": "integer",
@@ -11535,6 +11697,13 @@
             "minimum": 0.0,
             "title": "Compliance Score"
           },
+          "routing_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Routing Score",
+            "default": 0
+          },
           "supports_tool_calling": {
             "type": "boolean",
             "title": "Supports Tool Calling",
@@ -11544,6 +11713,20 @@
             "type": "boolean",
             "title": "Supports Json Schema",
             "default": true
+          },
+          "routing_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Routing Reasons"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Flags"
           },
           "reason": {
             "type": "string",
