@@ -4532,6 +4532,83 @@ def test_structured_pricing_payload_enriches_unknown_fields_from_sources() -> No
     assert tier.limits == ["500 premium requests"]
 
 
+def test_structured_persona_payload_enriches_unknown_fields_from_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="persona-a",
+                competitor="A",
+                dimension="persona",
+                source_type="webpage_verified",
+                title="A customers",
+                url="https://a.example/customers",
+                snippet=(
+                    "A is used by enterprise engineering teams and developers in "
+                    "large codebases to reduce context switching during pull requests."
+                ),
+                content_hash="persona-a-hash",
+                confidence=0.9,
+            )
+        ],
+    )
+
+    service._merge_structured_knowledge_payload(
+        detail,
+        "A",
+        "persona",
+        {
+            "user_personas": {
+                "segments": [
+                    {
+                        "name": "unknown",
+                        "role": "unknown",
+                        "company_size": "unknown",
+                        "pain_points": [],
+                        "use_cases": [],
+                        "claims": [
+                            {
+                                "claim": "A targets developers.",
+                                "source_ids": ["persona-a"],
+                                "confidence": 0.9,
+                            }
+                        ],
+                    }
+                ],
+                "summary_claims": [],
+            }
+        },
+    )
+
+    segment = detail.competitor_knowledge["A"].user_personas.segments[0]
+    assert segment.name == "Enterprise engineering teams"
+    assert segment.role == "developer"
+    assert segment.company_size == "enterprise"
+    assert segment.pain_points == [
+        "context switching",
+        "large codebase maintenance",
+        "code review throughput",
+    ]
+    assert segment.use_cases == ["code review"]
+
+
 @pytest.mark.asyncio
 async def test_analyst_empty_structured_payload_falls_back_to_source_claims() -> None:
     service = RunService(

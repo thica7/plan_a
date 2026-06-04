@@ -798,17 +798,20 @@ class AnalystAgentMixin:
                 }
             }
         if "persona" in dimension_key or "user" in dimension_key:
+            claim_text = " ".join(str(claim.get("claim") or "") for claim in claims)
+            use_cases = self._extract_persona_use_cases(claim_text) or [
+                str(claim.get("claim") or "") for claim in claims[:3]
+            ]
+            pain_points = self._extract_persona_pain_points(claim_text)
             return {
                 "user_personas": {
                     "segments": [
                         {
-                            "name": "Inferred target segment",
-                            "role": "unknown",
-                            "company_size": "unknown",
-                            "pain_points": [],
-                            "use_cases": [
-                                str(claim.get("claim") or "") for claim in claims[:3]
-                            ],
+                            "name": self._extract_persona_segment_name(claim_text),
+                            "role": self._extract_persona_role_hint(claim_text),
+                            "company_size": self._extract_company_size_hint(claim_text),
+                            "pain_points": pain_points,
+                            "use_cases": use_cases,
                             "claims": claims,
                         }
                     ]
@@ -1149,13 +1152,18 @@ class AnalystAgentMixin:
                     )
                 ]
         elif "persona" in dimension_key or "user" in dimension_key:
+            claim_text = " ".join(claim.claim for claim in claims)
             knowledge.user_personas.summary_claims = claims
             if claims:
                 knowledge.user_personas.segments = [
                     UserPersonaSegment(
-                        name="Inferred target segment",
+                        name=self._extract_persona_segment_name(claim_text),
+                        role=self._extract_persona_role_hint(claim_text),
+                        company_size=self._extract_company_size_hint(claim_text),
+                        pain_points=self._extract_persona_pain_points(claim_text),
+                        use_cases=self._extract_persona_use_cases(claim_text)
+                        or [claim.claim for claim in claims[:3]],
                         claims=claims,
-                        use_cases=[claim.claim for claim in claims[:3]],
                     )
                 ]
         else:
@@ -1211,6 +1219,9 @@ class AnalystAgentMixin:
             if isinstance(section, dict):
                 try:
                     knowledge.user_personas = UserPersonaModel.model_validate(section)
+                    self._enrich_persona_model_from_sources(
+                        detail, competitor, dimension, knowledge.user_personas
+                    )
                 except Exception:
                     knowledge.user_personas.segments = []
                     knowledge.user_personas.summary_claims = []
@@ -1441,6 +1452,114 @@ class AnalystAgentMixin:
                 tier.billing_cycle = billing_cycle
             if not tier.limits and limits:
                 tier.limits = limits
+
+    def _enrich_persona_model_from_sources(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        personas: UserPersonaModel,
+    ) -> None:
+        evidence_text = " ".join(
+            " ".join((source.title, source.snippet))
+            for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
+        )
+        if not evidence_text.strip():
+            return
+        segment_name = self._extract_persona_segment_name(evidence_text)
+        role = self._extract_persona_role_hint(evidence_text)
+        company_size = self._extract_company_size_hint(evidence_text)
+        pain_points = self._extract_persona_pain_points(evidence_text)
+        use_cases = self._extract_persona_use_cases(evidence_text)
+        if not personas.segments:
+            personas.segments = [
+                UserPersonaSegment(
+                    name=segment_name,
+                    role=role,
+                    company_size=company_size,
+                    pain_points=pain_points,
+                    use_cases=use_cases,
+                )
+            ]
+            return
+        for segment in personas.segments:
+            if segment.name.casefold() in {"unknown", "inferred target segment"}:
+                segment.name = segment_name
+            if segment.role == "unknown" and role != "unknown":
+                segment.role = role
+            if segment.company_size == "unknown" and company_size != "unknown":
+                segment.company_size = company_size
+            if not segment.pain_points and pain_points:
+                segment.pain_points = pain_points
+            if not segment.use_cases and use_cases:
+                segment.use_cases = use_cases
+
+    def _extract_persona_segment_name(self, text: str) -> str:
+        normalized = text.casefold()
+        if re.search(r"\benterprise|organization|governance|procurement\b", normalized):
+            return "Enterprise engineering teams"
+        if re.search(r"\bstartup|founder|small team\b", normalized):
+            return "Startup engineering teams"
+        if re.search(r"\bdeveloper|engineer|coder|programmer\b", normalized):
+            return "Developers"
+        return "Inferred target segment"
+
+    def _extract_persona_role_hint(self, text: str) -> str:
+        normalized = text.casefold()
+        if re.search(r"\bprocurement|buyer|cio|cto|it admin|administrator\b", normalized):
+            return "technical buyer"
+        if re.search(r"\bdeveloper|engineer|coder|programmer\b", normalized):
+            return "developer"
+        if re.search(r"\bproduct manager|pm\b", normalized):
+            return "product"
+        return "unknown"
+
+    def _extract_company_size_hint(self, text: str) -> str:
+        normalized = text.casefold()
+        if re.search(r"\benterprise|large organization|organization|governance\b", normalized):
+            return "enterprise"
+        if re.search(r"\bstartup|small team|small business\b", normalized):
+            return "startup"
+        if re.search(r"\bteam|teams|company|companies\b", normalized):
+            return "team"
+        if re.search(r"\bindividual|solo|hobby\b", normalized):
+            return "individual"
+        return "unknown"
+
+    def _extract_persona_pain_points(self, text: str) -> list[str]:
+        patterns = [
+            (r"context switching", "context switching"),
+            (r"legacy code|large codebase|codebase", "large codebase maintenance"),
+            (r"security|vulnerabilit|secret", "security risk"),
+            (r"cost|budget|spend", "cost control"),
+            (r"onboarding|ramp", "developer onboarding"),
+            (r"review|pull request|pr\b", "code review throughput"),
+        ]
+        return self._extract_labeled_hints(text, patterns)
+
+    def _extract_persona_use_cases(self, text: str) -> list[str]:
+        patterns = [
+            (r"code completion|autocomplete|completion", "code completion"),
+            (r"agentic|agent|multi-file|edit", "agentic coding"),
+            (r"debug|fix", "debugging and fixes"),
+            (r"refactor|migration", "refactoring"),
+            (r"ide|editor", "IDE workflow"),
+            (r"review|pull request|pr\b", "code review"),
+            (r"documentation|docs", "documentation lookup"),
+        ]
+        return self._extract_labeled_hints(text, patterns)
+
+    def _extract_labeled_hints(
+        self, text: str, patterns: list[tuple[str, str]]
+    ) -> list[str]:
+        normalized = text.casefold()
+        hints: list[str] = []
+        for pattern, label in patterns:
+            if re.search(pattern, normalized) and label not in hints:
+                hints.append(label)
+            if len(hints) >= 3:
+                break
+        return hints
 
     def _normalize_competitor_findings(
         self, detail: RunDetail, payload: dict
