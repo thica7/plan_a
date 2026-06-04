@@ -44,16 +44,22 @@ def load_run_payload_from_sqlite(db_path: Path, run_id: str) -> dict[str, Any]:
 
 def summarize_run_detail_payload(detail: dict[str, Any]) -> dict[str, object]:
     sources = _list_value(detail.get("raw_sources"))
+    agent_messages = _list_value(detail.get("agent_messages"))
+    tool_call_messages = _list_value(detail.get("tool_call_messages"))
     report = str(detail.get("report_md") or "")
     return {
         "run_id": detail.get("id"),
         "status": detail.get("status"),
+        "current_node": detail.get("current_node"),
         "execution_mode": detail.get("execution_mode"),
         "plan": detail.get("plan"),
         "report_chars": len(report),
         "raw_sources": len(sources),
         "claims": len(_list_value(detail.get("knowledge_claims"))),
         "qa_findings": len(_list_value(detail.get("qa_findings"))),
+        "agent_messages": len(agent_messages),
+        "tool_call_messages": len(tool_call_messages),
+        "last_agent_messages": _agent_message_diagnostics(agent_messages),
         "trace_spans": len(_list_value(detail.get("trace_spans"))),
         "metrics": detail.get("metrics") or {},
         "source_types": dict(
@@ -230,6 +236,8 @@ def render_compare_markdown(payload: dict[str, object]) -> str:
         "",
         f"- Current run: {_text(current.get('run_id')) or 'unknown'}",
         f"- Baseline run: {baseline_run_id or 'none'}",
+        f"- Current status: {_text(current.get('status')) or 'unknown'}",
+        f"- Current node: {_text(current.get('current_node')) or 'none'}",
         f"- Execution mode: {_text(current.get('execution_mode')) or 'unknown'}",
         f"- Quality verdict: {_text(quality.get('verdict')) or 'unknown'}",
         f"- Regression gate: {_text(quality.get('regression_gate_status')) or 'unknown'}",
@@ -274,6 +282,9 @@ def render_compare_markdown(payload: dict[str, object]) -> str:
             f"| Enterprise evidence | {_number_text(current.get('enterprise_evidence'))} |",
             f"| Claims | {_number_text(current.get('claims'))} |",
             f"| Enterprise claims | {_number_text(current.get('enterprise_claims'))} |",
+            f"| QA findings | {_number_text(current.get('qa_findings'))} |",
+            f"| Agent messages | {_number_text(current.get('agent_messages'))} |",
+            f"| Tool calls | {_number_text(current.get('tool_call_messages'))} |",
             f"| Trace spans | {_number_text(current.get('trace_spans'))} |",
             f"| Report chars | {_number_text(current.get('report_chars'))} |",
             "",
@@ -293,6 +304,28 @@ def render_compare_markdown(payload: dict[str, object]) -> str:
                 status=_escape_table(_text(metric.get("status"))),
             )
         )
+
+    last_messages = _list_of_dicts(current.get("last_agent_messages"))
+    if last_messages:
+        lines.extend(
+            [
+                "",
+                "## Last Agent Messages",
+                "",
+                "| From | To | Type | Status | Detail |",
+                "|---|---|---|---|---|",
+            ]
+        )
+        for message in last_messages:
+            lines.append(
+                "| {from_agent} | {to_agent} | {message_type} | {status} | {detail} |".format(
+                    from_agent=_escape_table(_text(message.get("from_agent"))),
+                    to_agent=_escape_table(_text(message.get("to_agent"))),
+                    message_type=_escape_table(_text(message.get("message_type"))),
+                    status=_escape_table(_text(message.get("status"))),
+                    detail=_escape_table(_text(message.get("detail")))[:180],
+                )
+            )
 
     gate_reasons = _string_list(quality.get("regression_gate_reasons"))
     if gate_reasons:
@@ -326,6 +359,48 @@ def _list_value(value: object) -> list[Any]:
 
 def _source_field(value: object, field: str) -> object:
     return value.get(field) if isinstance(value, dict) else None
+
+
+def _agent_message_diagnostics(messages: list[Any]) -> list[dict[str, object]]:
+    diagnostics: list[dict[str, object]] = []
+    for message in messages[-8:]:
+        if not isinstance(message, dict):
+            continue
+        payload = message.get("payload")
+        detail = ""
+        if isinstance(payload, dict):
+            for key in (
+                "writer_mode",
+                "error",
+                "decision",
+                "feedback_id",
+                "report_md",
+                "qa_feedback",
+            ):
+                value = payload.get(key)
+                if value:
+                    detail = _summarize_payload_value(value)
+                    break
+        diagnostics.append(
+            {
+                "from_agent": message.get("from_agent"),
+                "to_agent": message.get("to_agent"),
+                "message_type": message.get("message_type"),
+                "status": message.get("status"),
+                "detail": detail,
+            }
+        )
+    return diagnostics
+
+
+def _summarize_payload_value(value: object) -> str:
+    if isinstance(value, str):
+        return " ".join(value.split())[:220]
+    if isinstance(value, list):
+        return f"{len(value)} item(s)"
+    if isinstance(value, dict):
+        return ", ".join(sorted(str(key) for key in value)[:6])
+    return str(value)[:220]
 
 
 def _looks_like_fallback_report(report: str) -> bool:

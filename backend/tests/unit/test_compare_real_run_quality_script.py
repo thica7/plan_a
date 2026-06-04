@@ -25,6 +25,7 @@ def test_summarize_run_detail_payload_extracts_quality_shape() -> None:
         {
             "id": "run-1",
             "status": "completed",
+            "current_node": "writer",
             "execution_mode": "real",
             "report_md": "# Report\n\nDecision-grade report body.",
             "raw_sources": [
@@ -39,6 +40,16 @@ def test_summarize_run_detail_payload_extracts_quality_shape() -> None:
             ],
             "knowledge_claims": [{"id": "claim-1"}],
             "qa_findings": [],
+            "agent_messages": [
+                {
+                    "from_agent": "writer",
+                    "to_agent": "qa",
+                    "message_type": "report_ready",
+                    "status": "consumed",
+                    "payload": {"writer_mode": "real LLM call"},
+                }
+            ],
+            "tool_call_messages": [{"id": "tool-1"}],
             "trace_spans": [{"id": "span-1"}],
             "metrics": {"llm_calls": 2},
         }
@@ -47,6 +58,9 @@ def test_summarize_run_detail_payload_extracts_quality_shape() -> None:
     assert summary["run_id"] == "run-1"
     assert summary["raw_sources"] == 1
     assert summary["claims"] == 1
+    assert summary["agent_messages"] == 1
+    assert summary["tool_call_messages"] == 1
+    assert summary["last_agent_messages"][0]["detail"] == "real LLM call"
     assert summary["trace_spans"] == 1
     assert summary["source_types"] == {"webpage_verified": 1}
     assert summary["by_competitor"] == {"Cursor": 1}
@@ -125,6 +139,8 @@ def test_render_compare_markdown_summarizes_quality_gate() -> None:
             "old": {"run_id": "old-run"},
             "current": {
                 "run_id": "current-run",
+                "status": "failed",
+                "current_node": "writer",
                 "execution_mode": "real",
                 "raw_sources": 5,
                 "enterprise_evidence": 5,
@@ -132,6 +148,17 @@ def test_render_compare_markdown_summarizes_quality_gate() -> None:
                 "enterprise_claims": 3,
                 "trace_spans": 12,
                 "report_chars": 2400,
+                "agent_messages": 2,
+                "tool_call_messages": 4,
+                "last_agent_messages": [
+                    {
+                        "from_agent": "writer",
+                        "to_agent": "qa",
+                        "message_type": "report_ready",
+                        "status": "consumed",
+                        "detail": "preserved previous report after writer error",
+                    }
+                ],
             },
             "delta": {
                 "baseline_available": True,
@@ -164,6 +191,9 @@ def test_render_compare_markdown_summarizes_quality_gate() -> None:
 
     assert "# Real Run Quality Comparison" in markdown
     assert "- Current run: current-run" in markdown
+    assert "- Current status: failed" in markdown
+    assert "| Agent messages | 2 |" in markdown
+    assert "preserved previous report after writer error" in markdown
     assert "| Delta score | +16 |" in markdown
     assert "| Raw sources | +3 |" in markdown
     assert "| report_length_score | 1 | 0.4 | +0.6 | improved |" in markdown
