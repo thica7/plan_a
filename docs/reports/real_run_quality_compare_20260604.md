@@ -1,6 +1,6 @@
 # Real Run Quality Comparison
 
-- Current run: run-42c16cb835055579f8166c06d80b76e1
+- Current run: run-51d722d7257935d9c0ac7b33d97ff873
 - Baseline run: 411d3a19-7049-4a7e-aa9f-c5b63e74a69e
 - Current status: completed_with_blockers
 - Current node: none
@@ -20,11 +20,11 @@
 
 | Field | Delta |
 |---|---:|
-| Report chars | +12281 |
+| Report chars | +10777 |
 | Raw sources | -11 |
 | Claims | 0 |
 | QA findings | -11 |
-| Trace spans | -187 |
+| Trace spans | -180 |
 | Fallback report regressed | no |
 
 ## Current Evidence
@@ -37,9 +37,9 @@
 | Enterprise claims | 16 |
 | QA findings | 7 |
 | Agent messages | 60 |
-| Tool calls | 112 |
-| Trace spans | 177 |
-| Report chars | 21239 |
+| Tool calls | 119 |
+| Trace spans | 184 |
+| Report chars | 19735 |
 
 ## Quality Metrics
 
@@ -65,13 +65,13 @@
 
 | ID | Severity | Agent | Dimension | Competitor | Problem |
 |---|---|---|---|---|---|
-| reflector-coverage-1-pricing-cells-have-truncated-values-missing-comp | warn | collector | pricing | Claude Code | Pricing now extracts multiple tiers, but some cells still have truncated values, incomplete billing cycle/limit fields, or duplicated unlabeled enterprise tiers. |
-| reflector-coverage-2-feature-cells-have-truncated-incomplete-descript | warn | collector | feature |  | Feature cells still have one partial generic feature entry per competitor instead of a shared feature taxonomy. |
-| reflector-coverage-3-all-persona-dimension-webpage-sources-do-not-con | warn | collector | persona |  | Persona attributes are still mostly supported by low-confidence synthetic interview records rather than verified persona-specific webpages. |
-| reflector-confidence-1-all-4-persona-cells-have-uniform-0.62-confidence | warn | collector | persona |  | Persona cells are intentionally capped at 0.62 because interview records are low-confidence, but the report needs clearer rationale when verified webpages are also present. |
-| reflector-confidence-2-the-windsurf-persona-webpage-source-has-0.88-nat | warn | collector | persona | Windsurf | Windsurf persona source confidence is higher than the merged persona cell confidence; the confidence-cap rationale needs to be explicit in matrix/report output. |
-| reflector-cross-competitor-1-no-fully-aligned-standardized-pricing-comparison | warn | comparator | pricing |  | Pricing still needs a fully aligned plan taxonomy and normalized tier names across all four competitors. |
-| reflector-cross-competitor-2-no-aligned-side-by-side-feature-comparison-acros | warn | comparator | feature |  | Feature comparison still needs consistent feature names and overlapping comparable feature entries across all competitors. |
+| reflector-coverage-1-all-feature-dimension-cell-values-are-truncated- | warn | collector | feature |  | Feature taxonomy now exists, but all feature dimension cells are still truncated mid-description and do not expose complete standardized feature data in the matrix. |
+| reflector-coverage-2-pricing-dimension-has-missing-billing-cycle-and- | warn | collector | pricing | Claude Code | Pricing still has missing billing cycle and usage-limit fields for some tiers; Claude Code and Windsurf include duplicate or unclear enterprise tier labels. |
+| reflector-coverage-3-persona-dimension-lacks-verified-non-enterprise- | warn | collector | persona |  | Persona coverage still lacks verified non-enterprise user segments; synthetic interview records remain directional rather than primary evidence. |
+| reflector-confidence-1-all-4-persona-dimension-cells-have-a-uniform-0.6 | warn | collector | persona |  | Persona cells all sit at 0.62 confidence because low-confidence interview evidence dominates the merged persona model. |
+| reflector-cross-competitor-1-pricing-dimension-lacks-aligned-cross-competitor | warn | comparator | pricing |  | Pricing needs stronger aligned tier naming across competitors, especially Claude Code and Windsurf. |
+| reflector-cross-competitor-2-feature-dimension-lacks-full-aligned-cross-compe | warn | comparator | feature |  | Feature comparison has shared taxonomy names, but source coverage is still uneven across competitors. |
+| reflector-cross-competitor-3-no-cross-competitor-aligned-differentiated-perso | warn | comparator | persona |  | Persona coverage is still too similar across competitors and needs differentiated individual, team, enterprise, and buyer segments. |
 
 ## Last Agent Messages
 
@@ -100,8 +100,10 @@
 - Persona confidence is capped by low-confidence user-research sources, and persona segment names are now competitor-specific instead of a single generic label.
 - Pricing winner selection now requires structural support from evidence or findings; confidence alone cannot break a pricing tie.
 - Analyst pricing extraction now emits multiple pricing tiers from one source when the source contains Free/Pro/Team style plan evidence.
+- Analyst feature extraction now maps source text into a shared taxonomy: code completion, agentic coding, chat, IDE integration, review/security, tool use, repository context, and enterprise administration.
+- The old feature warning about "no shared feature taxonomy" is resolved; the remaining feature warning is about matrix/report cell truncation and uneven competitor coverage.
 - The report is no longer fallback-generated; it was produced by a real LLM call.
-- Remaining warnings are quality-improvement work around normalized pricing tier taxonomy, shared feature taxonomy, and persona confidence rationale/source quality, not release-gate blockers.
+- Remaining warnings are quality-improvement work around normalized pricing tier coverage, feature matrix rendering/completeness, and persona source quality/differentiation, not release-gate blockers.
 
 ## Method
 
