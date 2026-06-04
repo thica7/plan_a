@@ -1913,6 +1913,93 @@ def test_comparison_matrix_caps_confidence_by_structured_claims() -> None:
     assert matrix.cells[0].confidence == pytest.approx(0.62)
 
 
+def test_comparison_matrix_adds_feature_standardization_summary() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A", "B"], dimensions=["feature"]),
+        competitor_knowledge={
+            "A": CompetitorKnowledge(
+                competitor="A",
+                feature_tree={
+                    "nodes": [
+                        {
+                            "name": "Agentic coding",
+                            "description": "Multi-file edits and tool use.",
+                            "claims": [
+                                {
+                                    "claim": "A supports agentic coding.",
+                                    "source_ids": ["feature-a"],
+                                    "confidence": 0.88,
+                                }
+                            ],
+                            "children": [
+                                {
+                                    "name": "Terminal tools",
+                                    "description": "Runs terminal tasks.",
+                                    "claims": [
+                                        {
+                                            "claim": "A can use terminal tools.",
+                                            "source_ids": ["feature-a"],
+                                            "confidence": 0.84,
+                                        }
+                                    ],
+                                    "children": [],
+                                }
+                            ],
+                        }
+                    ]
+                },
+            ),
+            "B": CompetitorKnowledge(
+                competitor="B",
+                feature_tree={
+                    "nodes": [
+                        {
+                            "name": "Autocomplete",
+                            "description": "Inline suggestions.",
+                            "claims": [
+                                {
+                                    "claim": "B supports autocomplete.",
+                                    "source_ids": ["feature-b"],
+                                    "confidence": 0.82,
+                                }
+                            ],
+                            "children": [],
+                        }
+                    ]
+                },
+            ),
+        },
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+
+    assert any(
+        item.startswith("[feature-standardization:feature]")
+        and "aligned_fields=feature_name,description,claim_count,child_count" in item
+        and "A features=Agentic coding(Multi-file edits and tool use.;claims=1;children=1)"
+        in item
+        and "B features=Autocomplete(Inline suggestions.;claims=1;children=0)" in item
+        for item in matrix.summary
+    )
+
+
 @pytest.mark.asyncio
 async def test_comparator_timeout_falls_back_to_deterministic_matrix() -> None:
     service = RunService(

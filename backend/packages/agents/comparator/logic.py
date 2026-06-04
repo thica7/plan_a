@@ -145,6 +145,8 @@ class ComparatorAgentMixin:
                 summary.append(self._pricing_standardization_summary(detail, dimension))
             elif "persona" in dimension_key or "user" in dimension_key:
                 summary.append(self._persona_standardization_summary(detail, dimension))
+            elif "feature" in dimension_key:
+                summary.append(self._feature_standardization_summary(detail, dimension))
         return summary
 
     def _pricing_standardization_summary(self, detail: RunDetail, dimension: str) -> str:
@@ -221,6 +223,48 @@ class ComparatorAgentMixin:
         return (
             f"{compact_name}({compact_role}/{compact_size};"
             f"use_cases={use_case_count};pain_points={pain_point_count})"
+        )
+
+    def _feature_standardization_summary(self, detail: RunDetail, dimension: str) -> str:
+        profiles: list[str] = []
+        missing: list[str] = []
+        for competitor in detail.plan.competitors:
+            knowledge = detail.competitor_knowledge.get(competitor)
+            feature_tree = knowledge.feature_tree if knowledge is not None else None
+            nodes = list(feature_tree.nodes) if feature_tree is not None else []
+            if not nodes:
+                missing.append(competitor)
+                profiles.append(f"{competitor} features=missing")
+                continue
+            feature_parts = [
+                self._compact_feature_node(
+                    node.name,
+                    node.description,
+                    len(node.claims),
+                    len(node.children),
+                )
+                for node in nodes[:4]
+            ]
+            profiles.append(f"{competitor} features={'|'.join(feature_parts)}")
+        missing_note = f"; missing={','.join(missing)}" if missing else ""
+        return (
+            f"[feature-standardization:{dimension}] "
+            "aligned_fields=feature_name,description,claim_count,child_count; "
+            f"{'; '.join(profiles)}{missing_note}"
+        )
+
+    def _compact_feature_node(
+        self,
+        name: str,
+        description: str,
+        claim_count: int,
+        child_count: int,
+    ) -> str:
+        compact_name = self._compact_matrix_text(name or "unknown", 32)
+        compact_description = self._compact_matrix_text(description or "unknown", 44)
+        return (
+            f"{compact_name}({compact_description};claims={claim_count};"
+            f"children={child_count})"
         )
 
     def _compact_matrix_text(self, value: str, limit: int) -> str:
