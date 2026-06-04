@@ -3477,6 +3477,44 @@ async def test_analyst_branch_timeout_falls_back_to_deterministic_knowledge() ->
     assert "documented workflow" in knowledge.feature_tree.summary_claims[0].claim
 
 
+def test_deterministic_structured_knowledge_payload_matches_schema_shape() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    sources = [
+        {
+            "id": "pricing-a",
+            "title": "A pricing",
+            "snippet": "A publishes a $10 per month plan.",
+            "confidence": 0.87,
+        }
+    ]
+
+    pricing = service._deterministic_structured_knowledge_payload(
+        competitor="A",
+        dimension="pricing",
+        dimension_sources=sources,
+    )
+    persona = service._deterministic_structured_knowledge_payload(
+        competitor="A",
+        dimension="persona",
+        dimension_sources=sources,
+    )
+
+    assert pricing["pricing_model"]["tiers"][0]["claims"][0]["source_ids"] == ["pricing-a"]
+    assert pricing["pricing_model"]["tiers"][0]["price"] == "$10"
+    assert persona["user_personas"]["segments"][0]["claims"][0]["source_ids"] == ["pricing-a"]
+    assert persona["user_personas"]["segments"][0]["use_cases"]
+
+
 @pytest.mark.asyncio
 async def test_analyst_fanout_branch_timeout_uses_short_budget() -> None:
     service = RunService(

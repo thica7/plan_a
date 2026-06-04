@@ -742,16 +742,40 @@ class AnalystAgentMixin:
             ]
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
+            claim_text = " ".join(str(claim.get("claim") or "") for claim in claims)
             return {
                 "pricing_model": {
-                    "tiers": [],
+                    "tiers": [
+                        {
+                            "name": "Extracted pricing evidence",
+                            "price": self._extract_price_hint(claim_text),
+                            "billing_cycle": "unknown",
+                            "limits": [],
+                            "claims": claims,
+                        }
+                    ]
+                    if claims
+                    else [],
                     "notes": claims,
                 }
             }
         if "persona" in dimension_key or "user" in dimension_key:
             return {
                 "user_personas": {
-                    "segments": [],
+                    "segments": [
+                        {
+                            "name": "Inferred target segment",
+                            "role": "unknown",
+                            "company_size": "unknown",
+                            "pain_points": [],
+                            "use_cases": [
+                                str(claim.get("claim") or "") for claim in claims[:3]
+                            ],
+                            "claims": claims,
+                        }
+                    ]
+                    if claims
+                    else [],
                     "summary_claims": claims,
                 }
             }
