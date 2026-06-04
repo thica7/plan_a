@@ -1524,6 +1524,64 @@ def test_comparison_matrix_majority_vote_overrides_weak_llm_winner() -> None:
 
 
 @pytest.mark.asyncio
+async def test_comparator_timeout_falls_back_to_deterministic_matrix() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            comparator_timeout_seconds=0.05,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Comparator timeout budget",
+            competitors=["A", "B"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://a.example/pricing",
+            snippet="A publishes a $10 plan.",
+            content_hash="pricing-a-hash",
+            confidence=0.9,
+        )
+    ]
+    service._merge_kb_slice(record.detail, "pricing", {"A": ["A publishes a $10 plan."]})
+
+    async def slow_complete_json(*, system: str, user: str, schema_hint: str) -> dict:
+        await asyncio.sleep(1)
+        return {}
+
+    service._llm.complete_json = slow_complete_json  # type: ignore[method-assign]
+
+    await service._real_comparator_step(record)
+
+    assert record.detail.comparison_matrix is not None
+    assert record.detail.comparison_matrix.cells[0].source_ids == ["pricing-a"]
+    events = service.get_trace(detail.id) or []
+    completed = next(
+        event
+        for event in reversed(events)
+        if event.type == "node_completed" and event.agent == "comparator"
+    )
+    assert completed.payload["fallback"]["reason"] == "timeout"
+    assert completed.payload["fallback"]["deterministic_fallback"] is True
+
+
+@pytest.mark.asyncio
 async def test_collect_join_normalizes_covered_competitors_and_dedupes() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

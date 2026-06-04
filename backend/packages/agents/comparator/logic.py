@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections import Counter
 from datetime import datetime
@@ -23,24 +24,39 @@ class ComparatorAgentMixin:
             message_types={"analyst_qa_result"},
         )
         await self.emit(detail.id, "node_started", "comparator", None, "Calling comparator.")
-        payload = await self._trace_llm_json(
-            record,
-            agent="comparator",
-            subagent=None,
-            name="comparison_matrix",
-            system="You are a comparator. Build a compact cross-competitor matrix summary.",
-            user=(
-                f"Topic: {detail.topic}\n"
-                f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                f"Competitor KB JSON: {self._competitor_kb_json(detail)}\n"
-                f"Competitor Knowledge Schema JSON: {self._competitor_knowledge_json(detail)}\n"
-                f"Source digest JSON: {self._source_digest_json(detail)}"
-            ),
-            schema_hint=(
-                '{"matrix_summary":["row"],"winner_by_dimension":{"dimension":"competitor or tie"}}'
-            ),
-        )
+        fallback: dict[str, object] = {}
+        timeout_seconds = max(0.05, float(self._settings.comparator_timeout_seconds))
+        try:
+            payload = await asyncio.wait_for(
+                self._trace_llm_json(
+                    record,
+                    agent="comparator",
+                    subagent=None,
+                    name="comparison_matrix",
+                    system="You are a comparator. Build a compact cross-competitor matrix summary.",
+                    user=(
+                        f"Topic: {detail.topic}\n"
+                        f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                        f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                        f"Competitor KB JSON: {self._competitor_kb_json(detail)}\n"
+                        "Competitor Knowledge Schema JSON: "
+                        f"{self._competitor_knowledge_json(detail)}\n"
+                        f"Source digest JSON: {self._source_digest_json(detail)}"
+                    ),
+                    schema_hint=(
+                        '{"matrix_summary":["row"],'
+                        '"winner_by_dimension":{"dimension":"competitor or tie"}}'
+                    ),
+                ),
+                timeout=timeout_seconds,
+            )
+        except TimeoutError:
+            payload = self._deterministic_comparator_payload(timeout_seconds)
+            fallback = {
+                "reason": "timeout",
+                "timeout_seconds": timeout_seconds,
+                "deterministic_fallback": True,
+            }
         detail.comparison_matrix = self._build_comparison_matrix(detail, payload)
         self._append_agent_message(
             record,
@@ -57,8 +73,19 @@ class ComparatorAgentMixin:
             "comparator",
             None,
             "Comparator completed.",
-            {"matrix": payload},
+            {"matrix": payload, "fallback": fallback},
         )
+
+    def _deterministic_comparator_payload(self, timeout_seconds: float) -> dict[str, object]:
+        return {
+            "matrix_summary": [
+                (
+                    "Comparator LLM exceeded "
+                    f"{timeout_seconds:g}s; generated deterministic evidence matrix."
+                )
+            ],
+            "winner_by_dimension": {},
+        }
 
     def _build_comparison_matrix(self, detail: RunDetail, payload: dict) -> ComparisonMatrix:
         cells: list[ComparisonCell] = []
