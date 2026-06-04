@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -591,28 +592,44 @@ class AnalystAgentMixin:
             react_payload["fanout_branch_count"] = self._analyst_fanout_branch_count(detail)
             react_payload["fanout_threshold"] = self._settings.analyst_react_fanout_threshold
 
-        payload = await self._trace_llm_json(
-            record,
-            agent="analyst",
-            subagent=branch_id,
-            name=f"{dimension}_{self._issue_id_fragment(competitor)}_analyst",
-            system=(
-                "You are an analyst subagent. Produce strict structured competitor "
-                "knowledge for exactly one competitor and one dimension. Do not output "
-                "free-form findings as the primary artifact. Every factual claim must "
-                "include at least one source_id from the provided RawSource JSON."
-            ),
-            user=(
-                f"Topic: {detail.topic}\n"
-                f"Competitor: {competitor}\n"
-                f"Dimension: {dimension}\n"
-                f"Sources JSON: {json.dumps(dimension_sources, ensure_ascii=False)}\n\n"
-                f"QA feedback for this branch: {json.dumps(qa_feedback, ensure_ascii=False)}\n\n"
-                "Return only the relevant CompetitorKnowledge slice for this dimension."
-            ),
-            schema_hint=self._structured_knowledge_schema_hint(dimension),
-            context=context,
-        )
+        qa_feedback_json = json.dumps(qa_feedback, ensure_ascii=False)
+        try:
+            payload = await asyncio.wait_for(
+                self._trace_llm_json(
+                    record,
+                    agent="analyst",
+                    subagent=branch_id,
+                    name=f"{dimension}_{self._issue_id_fragment(competitor)}_analyst",
+                    system=(
+                        "You are an analyst subagent. Produce strict structured competitor "
+                        "knowledge for exactly one competitor and one dimension. Do not output "
+                        "free-form findings as the primary artifact. Every factual claim must "
+                        "include at least one source_id from the provided RawSource JSON."
+                    ),
+                    user=(
+                        f"Topic: {detail.topic}\n"
+                        f"Competitor: {competitor}\n"
+                        f"Dimension: {dimension}\n"
+                        f"Sources JSON: {json.dumps(dimension_sources, ensure_ascii=False)}\n\n"
+                        f"QA feedback for this branch: {qa_feedback_json}\n\n"
+                        "Return only the relevant CompetitorKnowledge slice for this dimension."
+                    ),
+                    schema_hint=self._structured_knowledge_schema_hint(dimension),
+                    context=context,
+                ),
+                timeout=max(0.05, float(self._settings.analyst_branch_timeout_seconds)),
+            )
+        except TimeoutError:
+            payload = self._deterministic_structured_knowledge_payload(
+                competitor=competitor,
+                dimension=dimension,
+                dimension_sources=dimension_sources,
+            )
+            react_payload["analysis_timeout"] = (
+                f"one-shot analyst exceeded "
+                f"{self._settings.analyst_branch_timeout_seconds:g}s"
+            )
+            react_payload["deterministic_fallback"] = True
         self._merge_structured_knowledge_payload(detail, competitor, dimension, payload)
         self._store_kb_cache_entry(detail, competitor, dimension, cache_content_hash)
         knowledge = detail.competitor_knowledge.get(competitor)
@@ -671,6 +688,75 @@ class AnalystAgentMixin:
 
     def _analyst_fanout_branch_count(self, detail: RunDetail) -> int:
         return len(detail.plan.competitors) * len(detail.plan.dimensions)
+
+    def _deterministic_structured_knowledge_payload(
+        self,
+        *,
+        competitor: str,
+        dimension: str,
+        dimension_sources: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        usable_sources = [
+            source
+            for source in dimension_sources
+            if str(source.get("id") or "").strip()
+        ][:3]
+        claims = [
+            {
+                "claim": self._deterministic_claim_text(competitor, dimension, source),
+                "source_ids": [str(source.get("id"))],
+                "confidence": float(source.get("confidence") or 0.65),
+            }
+            for source in usable_sources
+        ]
+        if not claims:
+            claims = [
+                {
+                    "claim": f"{competitor} has no usable {dimension} source in this run.",
+                    "source_ids": [],
+                    "confidence": 0.0,
+                }
+            ]
+        dimension_key = dimension.casefold()
+        if "pricing" in dimension_key:
+            return {
+                "pricing_model": {
+                    "tiers": [],
+                    "notes": claims,
+                }
+            }
+        if "persona" in dimension_key or "user" in dimension_key:
+            return {
+                "user_personas": {
+                    "segments": [],
+                    "summary_claims": claims,
+                }
+            }
+        return {
+            "feature_tree": {
+                "nodes": [
+                    {
+                        "name": f"{dimension} evidence",
+                        "description": claim["claim"],
+                        "claims": [claim],
+                        "children": [],
+                    }
+                    for claim in claims
+                ],
+                "summary_claims": claims,
+            }
+        }
+
+    def _deterministic_claim_text(
+        self,
+        competitor: str,
+        dimension: str,
+        source: dict[str, Any],
+    ) -> str:
+        snippet = " ".join(str(source.get("snippet") or "").split())
+        title = " ".join(str(source.get("title") or "").split())
+        evidence_text = snippet or title or "has collected evidence"
+        return f"{competitor} {dimension}: {evidence_text[:240]}"
 
     async def _real_analyst_step(self, record: RunRecord, dimension: str) -> None:
         detail = record.detail

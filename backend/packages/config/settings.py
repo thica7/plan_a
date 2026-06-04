@@ -110,6 +110,7 @@ class Settings:
     analyst_react_enabled: bool = True
     analyst_react_max_turns: int = 3
     analyst_react_fanout_threshold: int = 8
+    analyst_branch_timeout_seconds: float = 25.0
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
@@ -212,6 +213,12 @@ def get_settings() -> Settings:
             8,
             minimum=1,
             maximum=64,
+        ),
+        analyst_branch_timeout_seconds=_env_float(
+            "ANALYST_BRANCH_TIMEOUT_SECONDS",
+            25.0,
+            minimum=0.05,
+            maximum=120.0,
         ),
         langfuse_public_key=os.getenv("LANGFUSE_PUBLIC_KEY") or None,
         langfuse_secret_key=os.getenv("LANGFUSE_SECRET_KEY") or None,
