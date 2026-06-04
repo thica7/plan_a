@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Protocol
@@ -12,6 +11,8 @@ from packages.business_intel.source_reconciliation import (
 from packages.identity import (
     compute_content_hash,
     compute_evidence_id,
+    compute_gap_fill_report_version_id,
+    compute_raw_source_id,
     normalize_dimension_key,
     normalize_url,
 )
@@ -275,8 +276,15 @@ def _online_evidence_from_gap(
     competitor_id = (gap.competitor_id or gap.competitor_name or "unknown").strip()
     dimension = normalize_dimension_key(gap.dimension or "general")
     evidence_id = compute_evidence_id(source_url, content_hash, competitor_id, dimension)
-    raw_source_id = (
-        f"online-gap-{hashlib.sha256(f'{gap.id}|{source_url}'.encode()).hexdigest()[:16]}"
+    raw_source_id = compute_raw_source_id(
+        source_type=source_type,
+        competitor=competitor_id,
+        dimension=dimension,
+        url=source_url,
+        content_hash=content_hash,
+        title=title,
+        snippet=snippet,
+        source_role=f"online-gap:{gap.id}",
     )
     return EvidenceRecord(
         id=evidence_id,
@@ -594,10 +602,7 @@ def _gap_fill_report_version_id(
     filled_gap_ids: list[str],
     candidate_ids: list[str],
 ) -> str:
-    digest = hashlib.sha256(
-        "|".join([source.id, *filled_gap_ids, *candidate_ids]).encode("utf-8")
-    ).hexdigest()[:16]
-    return f"report-version-gap-fill-{digest}"
+    return compute_gap_fill_report_version_id(source.id, filled_gap_ids, candidate_ids)
 
 
 def _next_version_number(store: GapFillStore, project_id: str) -> int:

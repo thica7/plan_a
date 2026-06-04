@@ -18,8 +18,6 @@ from packages.enterprise.store import (
     DEFAULT_WORKSPACE_ID,
     EnterpriseRunContext,
     _memory_feedback_audit_after,
-    _normalize_key,
-    _short_hash,
     _title_from_id,
     source_registry_from_evidence,
 )
@@ -28,7 +26,15 @@ from packages.enterprise.usage import (
     build_workspace_usage_summary,
     current_month_window,
 )
-from packages.identity import compute_competitor_set_hash, compute_topic_normalized, normalize_url
+from packages.identity import (
+    compute_competitor_id,
+    compute_competitor_set_hash,
+    compute_project_id,
+    compute_topic_normalized,
+    normalize_key,
+    normalize_url,
+    stable_prefixed_id,
+)
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     ArtifactRecord,
@@ -1451,7 +1457,7 @@ class EnterprisePostgresStore:
                 competitor_id,
                 workspace_id,
                 name,
-                _normalize_key(name),
+                normalize_key(name),
                 detail.plan.competitor_layer,
                 detail.plan.homepage_hints.get(name),
                 self._json(
@@ -2120,7 +2126,7 @@ class EnterprisePostgresStore:
         after: dict[str, Any],
         before: dict[str, Any] | None = None,
     ) -> None:
-        audit_id = f"audit-{_short_hash(f'{action}|{resource_id}|{after}')}"
+        audit_id = stable_prefixed_id("audit", action, resource_id, after, length=16)
         cur.execute(
             """
             INSERT INTO audit_logs (
@@ -2147,18 +2153,10 @@ class EnterprisePostgresStore:
         return self._jsonb(value)
 
     def _competitor_id(self, workspace_id: str, name: str) -> str:
-        raw = f"{workspace_id}|{_normalize_key(name)}"
-        return f"competitor-{_short_hash(raw)}"
+        return compute_competitor_id(workspace_id, name)
 
     def _project_id(self, workspace_id: str, topic: str, competitor_ids: list[str]) -> str:
-        raw = "|".join(
-            [
-                workspace_id,
-                compute_topic_normalized(topic),
-                compute_competitor_set_hash(competitor_ids),
-            ]
-        )
-        return f"project-{_short_hash(raw)}"
+        return compute_project_id(workspace_id, topic, competitor_ids)
 
 
 def _schema_path() -> Path:

@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.events import RunEvent
+from packages.identity import stable_prefixed_id
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import AuditLogRecord, ReportVersionRecord
 
@@ -168,7 +169,7 @@ def _synthetic_decisions(
         source_ids = [source.id for source in detail.raw_sources]
         decisions.append(
             DecisionReplayEvent(
-                id=f"{detail.id}:rag-retrieved",
+                id=stable_prefixed_id("decision", detail.id, "rag-retrieved", length=16),
                 run_id=detail.id,
                 event_type="rag.retrieved",
                 agent="collector",
@@ -191,7 +192,7 @@ def _synthetic_decisions(
         claim_count = _knowledge_claim_count(detail)
         decisions.append(
             DecisionReplayEvent(
-                id=f"{detail.id}:claim-validation",
+                id=stable_prefixed_id("decision", detail.id, "claim-validation", length=16),
                 run_id=detail.id,
                 event_type="claim.validated",
                 agent="quality",
@@ -213,7 +214,7 @@ def _synthetic_decisions(
     if detail.raw_sources and "self_consistency.sampled" not in existing_event_types:
         decisions.append(
             DecisionReplayEvent(
-                id=f"{detail.id}:self-consistency",
+                id=stable_prefixed_id("decision", detail.id, "self-consistency", length=16),
                 run_id=detail.id,
                 event_type="self_consistency.sampled",
                 agent="quality",
@@ -241,7 +242,7 @@ def _synthetic_decisions(
     ) and "memory.recalled" not in existing_event_types:
         decisions.append(
             DecisionReplayEvent(
-                id=f"{detail.id}:memory-recall",
+                id=stable_prefixed_id("decision", detail.id, "memory-recall", length=16),
                 run_id=detail.id,
                 event_type="memory.recalled",
                 agent="memory",
@@ -260,7 +261,7 @@ def _synthetic_decisions(
     ) and "benchmark.scored" not in existing_event_types:
         decisions.append(
             DecisionReplayEvent(
-                id=f"{detail.id}:benchmark",
+                id=stable_prefixed_id("decision", detail.id, "benchmark", length=16),
                 run_id=detail.id,
                 event_type="benchmark.scored",
                 agent="observability",
@@ -319,7 +320,15 @@ def _report_version_decisions(
             payload_dict.setdefault("source", "report_version_quality_metadata")
             decisions.append(
                 DecisionReplayEvent(
-                    id=f"{detail.id}:report-version:{version.id}:{index}:{event_type}",
+                    id=stable_prefixed_id(
+                        "decision",
+                        detail.id,
+                        "report-version",
+                        version.id,
+                        index,
+                        event_type,
+                        length=16,
+                    ),
                     run_id=detail.id,
                     event_type=event_type,
                     agent=_optional_string(raw_event.get("agent")) or "rag_gap_fill",
@@ -359,7 +368,13 @@ def _report_version_ready_event(
         ),
     }
     return DecisionReplayEvent(
-        id=f"{detail.id}:report-version-ready:{version.id}",
+        id=stable_prefixed_id(
+            "decision",
+            detail.id,
+            "report-version-ready",
+            version.id,
+            length=16,
+        ),
         run_id=detail.id,
         event_type="report.ready",
         agent="report_version",
@@ -508,9 +523,7 @@ def _audit_log_decision(
                 "candidate_ids": _string_list(_audit_after_value(log, "candidate_ids")),
                 "candidate_count": candidate_count,
                 "candidate_kinds": _string_list(_audit_after_value(log, "candidate_kinds")),
-                "candidate_statuses": _string_list(
-                    _audit_after_value(log, "candidate_statuses")
-                ),
+                "candidate_statuses": _string_list(_audit_after_value(log, "candidate_statuses")),
                 "target_type": _audit_after_string(log, "target_type"),
                 "target_id": _audit_after_string(log, "target_id"),
                 "run_id": _audit_after_string(log, "run_id"),
@@ -563,7 +576,7 @@ def _audit_event(
         "source": "enterprise_audit_log",
     }
     return DecisionReplayEvent(
-        id=f"{detail.id}:audit:{log.id}",
+        id=stable_prefixed_id("decision", detail.id, "audit", log.id, length=16),
         run_id=detail.id,
         event_type=event_type,
         agent=agent,
@@ -597,7 +610,7 @@ def _event(
     payload: dict[str, Any] | None = None,
 ) -> DecisionReplayEvent:
     return DecisionReplayEvent(
-        id=f"{run_id}:decision:{source.id}",
+        id=stable_prefixed_id("decision", run_id, source.id, length=16),
         run_id=run_id,
         event_type=event_type,
         agent=source.agent,

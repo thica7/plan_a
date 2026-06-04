@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from collections import Counter
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,6 +10,7 @@ from packages.agents.pydantic_ai_adapter import (
 )
 from packages.business_intel.dimensions import effective_analysis_dimensions
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS
+from packages.identity import compute_red_team_finding_id
 from packages.schema.enterprise import (
     BusinessIntelPlan,
     BusinessQAEvaluation,
@@ -167,8 +167,7 @@ def _evidence_findings(agent_input: RedTeamInput) -> list[RedTeamFinding]:
                     competitor_name=competitor.name if competitor else None,
                     dimension=evidence.dimension,
                     message=(
-                        f"Evidence is marked {evidence.quality_label} "
-                        "but remains in the project."
+                        f"Evidence is marked {evidence.quality_label} but remains in the project."
                     ),
                     recommendation="Replace this evidence with current accepted evidence.",
                     evidence_ids=[evidence.id],
@@ -214,8 +213,7 @@ def _coverage_bias_findings(agent_input: RedTeamInput) -> list[RedTeamFinding]:
                 competitor_name=competitor.name,
                 dimension=", ".join(missing),
                 message=(
-                    "The comparison may bias against a competitor with missing "
-                    "required evidence."
+                    "The comparison may bias against a competitor with missing required evidence."
                 ),
                 recommendation="Collect missing evidence before ranking or recommending a winner.",
             )
@@ -260,19 +258,16 @@ def _finding(
     evidence_ids: list[str] | None = None,
     claim_ids: list[str] | None = None,
 ) -> RedTeamFinding:
-    raw = "|".join(
-        [
-            severity,
-            finding_type,
-            competitor_id or "",
-            dimension or "",
-            message,
-            ",".join(evidence_ids or []),
-            ",".join(claim_ids or []),
-        ]
-    )
     return RedTeamFinding(
-        id=f"red-team-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}",
+        id=compute_red_team_finding_id(
+            finding_type,
+            competitor_id,
+            dimension,
+            message,
+            severity=severity,
+            evidence_ids=evidence_ids,
+            claim_ids=claim_ids,
+        ),
         severity=severity,  # type: ignore[arg-type]
         finding_type=finding_type,  # type: ignore[arg-type]
         competitor_id=competitor_id,

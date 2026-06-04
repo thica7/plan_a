@@ -4,6 +4,7 @@ import hashlib
 import math
 import re
 
+from packages.identity import stable_prefixed_id
 from packages.schema.enterprise import EvidenceEmbeddingRecord, EvidenceRecord
 
 EMBEDDING_DIMENSIONS = 384
@@ -14,7 +15,7 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 def build_evidence_embedding_record(evidence: EvidenceRecord) -> EvidenceEmbeddingRecord:
     text = evidence_embedding_text(evidence)
     return EvidenceEmbeddingRecord(
-        id=f"embedding-{evidence.id}",
+        id=stable_prefixed_id("embedding", evidence.id, length=24),
         workspace_id=evidence.workspace_id,
         project_id=evidence.project_id,
         evidence_id=evidence.id,

@@ -1306,7 +1306,7 @@ def test_enterprise_router_exposes_projection() -> None:
     diff = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}/diff")
 
     assert response.status_code == 200
-    assert response.json()["report_version"]["id"].startswith("report-run-1")
+    assert response.json()["report_version"]["id"].startswith("report-version-")
     assert workspaces.status_code == 200
     assert workspaces.json()[0]["id"] == "default-workspace"
     assert usage.status_code == 200

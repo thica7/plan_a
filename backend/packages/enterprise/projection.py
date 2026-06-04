@@ -12,6 +12,7 @@ from packages.identity import (
     compute_claim_id,
     compute_competitor_set_hash,
     compute_evidence_id,
+    compute_report_version_id,
     compute_topic_normalized,
     normalize_dimension_key,
     normalize_text,
@@ -183,13 +184,19 @@ def _build_report_version(
 ) -> ReportVersionRecord:
     competitor_ids = [_competitor_id_for(c, competitor_id_map) for c in detail.plan.competitors]
     competitor_set_hash = compute_competitor_set_hash(competitor_ids)
+    topic_normalized = compute_topic_normalized(detail.topic)
     return ReportVersionRecord(
-        id=f"report-{detail.id}-v{version_number}",
+        id=compute_report_version_id(
+            run_id=detail.id,
+            version_number=version_number,
+            topic_normalized=topic_normalized,
+            competitor_set_hash=competitor_set_hash,
+        ),
         workspace_id=workspace_id,
         project_id=project_id,
         run_id=detail.id,
         version_number=version_number,
-        topic_normalized=compute_topic_normalized(detail.topic),
+        topic_normalized=topic_normalized,
         competitor_layer=competitor_layer,
         competitor_set_hash=competitor_set_hash,
         report_md=detail.report_md,

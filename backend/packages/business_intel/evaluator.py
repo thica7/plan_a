@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import hashlib
-
 from packages.business_intel.dimensions import effective_analysis_dimensions
+from packages.identity import compute_business_qa_finding_id
 from packages.schema.enterprise import (
     BusinessIntelPlan,
     BusinessQAEvaluation,
@@ -233,16 +232,13 @@ def _finding(
     claim_ids: list[str] | None = None,
     recommendation: str = "",
 ) -> BusinessQAFinding:
-    raw = "|".join(
-        [
-            rule.id,
-            competitor.id if competitor else "",
-            dimension or "",
-            message,
-        ]
-    )
     return BusinessQAFinding(
-        id=f"business-qa-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}",
+        id=compute_business_qa_finding_id(
+            rule.id,
+            competitor.id if competitor else None,
+            dimension,
+            message,
+        ),
         rule_id=rule.id,
         rule_name=rule.name,
         severity=rule.severity,

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import re
 import sqlite3
 from collections.abc import Iterable
@@ -8,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from packages.compliance import CompliancePolicy, redact_text
+from packages.identity import compute_feedback_id, compute_memory_candidate_id
 from packages.schema.enterprise import (
     MemoryCandidate,
     MemoryCandidateKind,
@@ -425,7 +425,7 @@ class PreferenceMemoryStore:
             confirmed_count = conn.execute(
                 f"""
                 select count(*) from memory_candidates
-                {where + (' and ' if where else ' where ')} status = 'confirmed'
+                {where + (" and " if where else " where ")} status = 'confirmed'
                 """,
                 params,
             ).fetchone()[0]
@@ -544,17 +544,18 @@ class PreferenceMemoryStore:
 
 
 def _feedback_id(feedback: UserFeedbackRecord, message: str) -> str:
-    raw = "|".join(
-        [
-            feedback.workspace_id,
-            feedback.project_id,
-            feedback.user_id,
-            feedback.target_type,
-            feedback.target_id,
-            message.strip().casefold(),
-        ]
+    return compute_feedback_id(
+        "|".join(
+            [
+                feedback.workspace_id,
+                feedback.project_id,
+                feedback.user_id,
+                feedback.target_type,
+                feedback.target_id,
+            ]
+        ),
+        message.strip().casefold(),
     )
-    return f"feedback-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:20]}"
 
 
 def _candidate_id(
@@ -563,8 +564,7 @@ def _candidate_id(
     kind: MemoryCandidateKind,
     statement: str,
 ) -> str:
-    raw = "|".join([workspace_id, project_id, kind, statement.strip().casefold()])
-    return f"memory-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:20]}"
+    return compute_memory_candidate_id(workspace_id, project_id, kind, statement.strip().casefold())
 
 
 def _scope_where(

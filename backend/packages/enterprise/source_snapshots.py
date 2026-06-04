@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from packages.artifacts import ArtifactStorage
 from packages.compliance import redact_text
 from packages.enterprise.store import EnterpriseStore, source_registry_id
-from packages.identity import compute_evidence_id, normalize_dimension_key
+from packages.identity import compute_evidence_id, compute_raw_source_id, normalize_dimension_key
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
     EvidenceRecord,
@@ -74,9 +74,7 @@ def capture_source_snapshot(
 
 
 def _source_from_snapshot(request: SourceSnapshotCreateRequest) -> SourceRegistryRecord:
-    domain, homepage_url = _source_location(
-        str(request.source_url or request.external_uri or "")
-    )
+    domain, homepage_url = _source_location(str(request.source_url or request.external_uri or ""))
     now = datetime.utcnow()
     display_name = request.display_name or domain.replace("-", " ").title()
     source_type = _snapshot_source_type(request)
@@ -157,25 +155,38 @@ def _research_evidence_from_snapshot(
     content_hash = str(getattr(artifact, "content_hash", ""))
     source_url = request.source_url
     canonical_url = str(source_url) if source_url else f"artifact:{getattr(artifact, 'id', '')}"
-    competitor_id = _metadata_text(
-        request.metadata,
-        "competitor_id",
-        "competitor",
-        "competitor_name",
-    ) or "manual_research"
+    competitor_id = (
+        _metadata_text(
+            request.metadata,
+            "competitor_id",
+            "competitor",
+            "competitor_name",
+        )
+        or "manual_research"
+    )
     dimension = normalize_dimension_key(
-        _metadata_text(request.metadata, "dimension", "research_dimension")
-        or "user_research"
+        _metadata_text(request.metadata, "dimension", "research_dimension") or "user_research"
     )
     evidence_id = compute_evidence_id(canonical_url, content_hash, competitor_id, dimension)
     source_type = _research_source_type(request)
     snippet = _snapshot_snippet(request)
+    raw_source_id = compute_raw_source_id(
+        source_type=source_type,
+        competitor=competitor_id,
+        dimension=dimension,
+        url=str(source_url) if source_url else canonical_url,
+        content_hash=content_hash,
+        title=request.display_name or request.filename,
+        snippet=snippet,
+        run_id=request.run_id,
+        source_role=f"snapshot:{request.snapshot_kind}",
+    )
     return EvidenceRecord(
         id=evidence_id,
         workspace_id=request.workspace_id,
         project_id=request.project_id,
         run_id=request.run_id,
-        raw_source_id=f"snapshot-{getattr(artifact, 'id', evidence_id)}",
+        raw_source_id=raw_source_id,
         competitor_id=competitor_id,
         dimension=dimension,
         source_type=source_type,
@@ -194,9 +205,7 @@ def _research_evidence_from_snapshot(
             "artifact_id": str(getattr(artifact, "id", "")),
             "source_registry_id": source_registry.id,
             "source_domain": source_registry.domain,
-            **_snapshot_redaction_metadata(
-                _metadata_dict(request.metadata, "redaction_counts")
-            ),
+            **_snapshot_redaction_metadata(_metadata_dict(request.metadata, "redaction_counts")),
         },
     )
 
@@ -280,10 +289,7 @@ def _redact_snapshot_metadata(
     value: dict[str, object],
     counts: dict[str, int],
 ) -> dict[str, object]:
-    return {
-        key: _redact_snapshot_metadata_value(item, counts)
-        for key, item in value.items()
-    }
+    return {key: _redact_snapshot_metadata_value(item, counts) for key, item in value.items()}
 
 
 def _redact_snapshot_metadata_value(value: object, counts: dict[str, int]) -> object:

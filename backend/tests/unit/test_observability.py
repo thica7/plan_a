@@ -63,23 +63,14 @@ def test_build_run_event_applies_trace_sanitizer() -> None:
 
 def test_trace_payload_sanitizes_sensitive_text_values() -> None:
     sanitized = sanitize_for_trace(
-        {
-            "note": (
-                "Contact alice@example.com with "
-                "OPENROUTER_TEST_KEY_REDACTED."
-            )
-        }
+        {"note": ("Contact alice@example.com with OPENROUTER_TEST_KEY_REDACTED.")}
     )
 
-    assert sanitized["note"] == (
-        "Contact [redacted:email] with [redacted:api_key]."
-    )
+    assert sanitized["note"] == ("Contact [redacted:email] with [redacted:api_key].")
 
 
 def test_compliance_redactor_reports_counts_by_kind() -> None:
-    result = redact_text(
-        "Bearer abcdef1234567890 belongs to bob@example.com and +1 415 555 2671."
-    )
+    result = redact_text("Bearer abcdef1234567890 belongs to bob@example.com and +1 415 555 2671.")
 
     assert result.total_count == 3
     assert result.counts == {"bearer_token": 1, "email": 1, "phone": 1}
@@ -424,11 +415,10 @@ def test_decision_replay_reconstructs_rag_event_from_persisted_sources() -> None
     ]
 
     replay = build_decision_replay(detail, events)
-    rag_event = next(
-        event for event in replay.events if event.id == "run-synthetic-rag:rag-retrieved"
-    )
+    rag_event = next(event for event in replay.events if event.event_type == "rag.retrieved")
 
     assert replay.replay_coverage_score == 100
+    assert rag_event.id.startswith("decision-")
     assert rag_event.event_type == "rag.retrieved"
     assert rag_event.evidence_ids == ["source-1"]
     assert rag_event.payload["source"] == "run_detail_projection"
@@ -665,10 +655,13 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
 
     replay = build_decision_replay(detail, [], report_versions=[version])
     gap_events = [
-        event for event in replay.events if event.id.startswith("run-gap-fill:report-version:")
+        event
+        for event in replay.events
+        if event.payload.get("source") == "report_version_quality_metadata"
     ]
 
     assert [event.event_type for event in gap_events] == ["rag.retrieved", "report.ready"]
+    assert all(event.id.startswith("decision-") for event in gap_events)
     assert gap_events[0].evidence_ids == ["evidence-gap-1"]
     assert gap_events[0].payload["gap_ids"] == ["gap-security"]
     assert gap_events[0].payload["gap_closure_rate"] == 1.0
@@ -676,15 +669,11 @@ def test_decision_replay_includes_report_version_gap_fill_events() -> None:
     assert gap_events[0].payload["retrieval_contexts"][0]["chunk_ids"] == ["chunk-gap-1"]
     assert gap_events[0].payload["chunk_ids"] == ["chunk-gap-1"]
     assert gap_events[0].payload["rerank_scores"] == {"chunk-gap-1": 0.92}
-    assert gap_events[0].payload["gap_evidence_links"] == {
-        "gap-security": ["evidence-gap-1"]
-    }
+    assert gap_events[0].payload["gap_evidence_links"] == {"gap-security": ["evidence-gap-1"]}
     assert gap_events[0].payload["report_version_id"] == "report-gap-fill-v2"
     assert gap_events[1].payload["gap_ids"] == ["gap-security"]
     assert gap_events[1].payload["gap_fill_chain_closed"] is True
-    assert gap_events[1].payload["gap_evidence_links"] == {
-        "gap-security": ["evidence-gap-1"]
-    }
+    assert gap_events[1].payload["gap_evidence_links"] == {"gap-security": ["evidence-gap-1"]}
     assert gap_events[1].payload["release_gate_delta"]["release_gate_improved"] is True
     assert gap_events[1].payload["release_gate_blocker_delta"] == 2
     assert gap_events[1].payload["readiness_score_delta"] == 12
@@ -733,9 +722,12 @@ def test_decision_replay_includes_manual_report_revision_version_event() -> None
     version_event = next(
         event
         for event in replay.events
-        if event.id == "run-manual-revision:report-version-ready:report-manual-v2"
+        if event.event_type == "report.ready"
+        and event.agent == "report_version"
+        and event.payload["report_version_id"] == "report-manual-v2"
     )
 
+    assert version_event.id.startswith("decision-")
     assert version_event.event_type == "report.ready"
     assert version_event.agent == "report_version"
     assert version_event.evidence_ids == ["evidence-1"]
@@ -873,27 +865,24 @@ def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
         report_versions=[version],
     )
     audit_events = {
-        event.id: event for event in replay.events if event.id.startswith("run-audit:audit:")
+        event.payload["audit_log_id"]: event
+        for event in replay.events
+        if event.payload.get("source") == "enterprise_audit_log"
     }
 
     assert set(audit_events) == {
-        "run-audit:audit:audit-source-review",
-        "run-audit:audit:audit-report-approval",
-        "run-audit:audit:audit-compliance-export",
-        "run-audit:audit:audit-memory-feedback",
+        "audit-source-review",
+        "audit-report-approval",
+        "audit-compliance-export",
+        "audit-memory-feedback",
     }
-    assert audit_events["run-audit:audit:audit-source-review"].event_type == "hitl.reviewed"
-    assert audit_events["run-audit:audit:audit-source-review"].payload[
-        "policy_review_status"
-    ] == "approved"
-    assert audit_events["run-audit:audit:audit-report-approval"].payload[
-        "report_version_status"
-    ] == "approved"
-    assert audit_events["run-audit:audit:audit-compliance-export"].event_type == "report.ready"
-    assert audit_events["run-audit:audit:audit-compliance-export"].payload[
-        "export_kind"
-    ] == "run_compliance_report"
-    memory_event = audit_events["run-audit:audit:audit-memory-feedback"]
+    assert all(event.id.startswith("decision-") for event in audit_events.values())
+    assert audit_events["audit-source-review"].event_type == "hitl.reviewed"
+    assert audit_events["audit-source-review"].payload["policy_review_status"] == "approved"
+    assert audit_events["audit-report-approval"].payload["report_version_status"] == "approved"
+    assert audit_events["audit-compliance-export"].event_type == "report.ready"
+    assert audit_events["audit-compliance-export"].payload["export_kind"] == "run_compliance_report"
+    memory_event = audit_events["audit-memory-feedback"]
     assert memory_event.event_type == "memory.feedback_captured"
     assert memory_event.payload["feedback_id"] == "feedback-1"
     assert memory_event.payload["candidate_ids"] == ["memory-candidate-1"]

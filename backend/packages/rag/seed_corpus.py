@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import re
-from pathlib import Path
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Protocol
 
 from pydantic import ValidationError
 
+from packages.identity import compute_raw_source_id, normalize_key, stable_prefixed_id
 from packages.schema.enterprise import (
     EvidenceRecord,
     EvidenceReindexResult,
@@ -15,9 +16,7 @@ from packages.schema.enterprise import (
     EvidenceSeedRow,
 )
 
-DEFAULT_EVIDENCE_SEED_PATH = (
-    Path(__file__).resolve().parents[3] / "data" / "evidence_seed.jsonl"
-)
+DEFAULT_EVIDENCE_SEED_PATH = Path(__file__).resolve().parents[3] / "data" / "evidence_seed.jsonl"
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
@@ -62,14 +61,14 @@ def filter_evidence_seed_rows(
     dimensions: list[str] | None = None,
     limit: int | None = None,
 ) -> list[EvidenceSeedRow]:
-    competitor_keys = {_normalize_key(item) for item in competitors or [] if item.strip()}
-    dimension_keys = {_normalize_key(item) for item in dimensions or [] if item.strip()}
+    competitor_keys = {normalize_key(item) for item in competitors or [] if item.strip()}
+    dimension_keys = {normalize_key(item) for item in dimensions or [] if item.strip()}
     matched = [
         row
         for row in rows
         if _topic_matches(row.topic, topic)
-        and (not competitor_keys or _normalize_key(row.competitor) in competitor_keys)
-        and (not dimension_keys or _normalize_key(row.dimension) in dimension_keys)
+        and (not competitor_keys or normalize_key(row.competitor) in competitor_keys)
+        and (not dimension_keys or normalize_key(row.dimension) in dimension_keys)
     ]
     return matched[:limit] if limit is not None else matched
 
@@ -146,20 +145,32 @@ def seed_row_to_evidence_record(
         f"{snippet} Topic={row.topic}. Competitor={row.competitor}. "
         f"Dimension={row.dimension}. Source type={row.source_type}."
     )
+    content_hash = _content_hash(row)
+    competitor_id = _competitor_id(row.competitor, competitor_id_map or {})
     return EvidenceRecord(
         id=_stable_evidence_id(workspace_id, project_id, row.id),
         workspace_id=workspace_id,
         project_id=project_id,
         run_id=run_id or "seed-corpus",
-        raw_source_id=f"raw-{row.id}",
-        competitor_id=_competitor_id(row.competitor, competitor_id_map or {}),
+        raw_source_id=compute_raw_source_id(
+            source_type=row.source_type,
+            competitor=row.competitor,
+            dimension=row.dimension,
+            url=source_url,
+            content_hash=content_hash,
+            title=title,
+            snippet=snippet,
+            run_id=run_id or "seed-corpus",
+            source_role=f"seed:{row.id}",
+        ),
+        competitor_id=competitor_id,
         dimension=row.dimension,
         source_type=row.source_type,
         title=title,
         url=row.url,
         canonical_url=source_url,
         snippet=snippet,
-        content_hash=_content_hash(row),
+        content_hash=content_hash,
         reliability_score=row.reliability,
         freshness_score=max(0.5, min(row.reliability, 0.9)),
         quality_label="accepted" if row.reliability >= 0.8 else "unreviewed",
@@ -177,8 +188,7 @@ def seed_row_to_evidence_record(
 
 
 def _stable_evidence_id(workspace_id: str, project_id: str, seed_id: str) -> str:
-    digest = hashlib.sha256(f"{workspace_id}|{project_id}|{seed_id}".encode()).hexdigest()
-    return f"evidence-seed-{digest[:20]}"
+    return stable_prefixed_id("evidence-seed", workspace_id, project_id, seed_id, length=20)
 
 
 def _content_hash(row: EvidenceSeedRow) -> str:
@@ -197,25 +207,20 @@ def _content_hash(row: EvidenceSeedRow) -> str:
 
 
 def _competitor_id(competitor: str, competitor_id_map: dict[str, str]) -> str:
-    key = _normalize_key(competitor)
+    key = normalize_key(competitor)
     return competitor_id_map.get(key) or f"competitor-seed-{key}"
 
 
 def _topic_matches(seed_topic: str, requested_topic: str | None) -> bool:
     if not requested_topic or not requested_topic.strip():
         return True
-    seed_key = _normalize_key(seed_topic)
-    requested_key = _normalize_key(requested_topic)
+    seed_key = normalize_key(seed_topic)
+    requested_key = normalize_key(requested_topic)
     if seed_key in requested_key or requested_key in seed_key:
         return True
     seed_tokens = set(_TOKEN_RE.findall(seed_key))
     requested_tokens = set(_TOKEN_RE.findall(requested_key))
     return bool(seed_tokens) and seed_tokens.issubset(requested_tokens)
-
-
-def _normalize_key(value: str) -> str:
-    tokens = _TOKEN_RE.findall(value.casefold())
-    return "-".join(tokens)
 
 
 def _sorted_unique(values: Iterable[str]) -> list[str]:

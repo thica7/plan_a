@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from packages.agents import SubagentContext
+from packages.identity import compute_raw_source_id
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import RawSource
 from packages.search import SearchResult
@@ -118,12 +119,22 @@ async def collect_competitor_with_skill_tools(
             metadata={"record_count": len(records), "source_type": "interview_record"},
         )
         for item in records[:1]:
+            title = f"{item.respondent} interview note"
             source = RawSource(
-                id=service._new_source_id(dimension),
+                id=compute_raw_source_id(
+                    source_type="interview_record",
+                    competitor=competitor,
+                    dimension=dimension,
+                    content_hash=item.content_hash,
+                    title=title,
+                    snippet=item.summary,
+                    run_id=detail.id,
+                    source_role="skill-tool-survey",
+                ),
                 competitor=competitor,
                 dimension=dimension,
                 source_type="interview_record",
-                title=f"{item.respondent} interview note",
+                title=title,
                 snippet=item.summary,
                 content_hash=item.content_hash,
                 confidence=0.56,

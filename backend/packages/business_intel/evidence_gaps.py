@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from packages.agents.pydantic_ai_adapter import (
@@ -10,6 +8,7 @@ from packages.agents.pydantic_ai_adapter import (
 )
 from packages.business_intel.dimensions import effective_analysis_dimensions
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS
+from packages.identity import compute_evidence_gap_id, compute_schema_suggestion_id
 from packages.schema.enterprise import (
     BusinessIntelPlan,
     BusinessQAEvaluation,
@@ -127,8 +126,7 @@ def _coverage_gaps(
                         dimension=dimension,
                         source_type_required="webpage_verified",
                         message=(
-                            f"{competitor.name} has {dimension} evidence, "
-                            "but no verified source."
+                            f"{competitor.name} has {dimension} evidence, but no verified source."
                         ),
                         recommended_query=_query(competitor.name, dimension),
                         evidence_ids=[item.id for item in usable],
@@ -270,19 +268,16 @@ def _gap(
 ) -> EvidenceGapItem:
     resolved_competitor_id = competitor.id if competitor else competitor_id
     resolved_competitor_name = competitor.name if competitor else competitor_name
-    raw = "|".join(
-        [
-            severity,
-            gap_type,
-            resolved_competitor_id or "",
-            dimension or "",
-            message,
-            ",".join(evidence_ids or []),
-            ",".join(claim_ids or []),
-        ]
-    )
     return EvidenceGapItem(
-        id=f"evidence-gap-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}",
+        id=compute_evidence_gap_id(
+            severity=severity,
+            gap_type=gap_type,
+            competitor_id=resolved_competitor_id,
+            dimension=dimension,
+            message=message,
+            evidence_ids=evidence_ids or [],
+            claim_ids=claim_ids or [],
+        ),
         severity=severity,  # type: ignore[arg-type]
         gap_type=gap_type,  # type: ignore[arg-type]
         competitor_id=resolved_competitor_id,
@@ -342,10 +337,9 @@ def _schema_evolution_suggestions(
     suggestions: list[SchemaEvolutionSuggestion] = []
     for dimension_key, dimension_gaps in sorted(gaps_by_new_dimension.items()):
         gap_ids = [gap.id for gap in dimension_gaps]
-        raw = "|".join([dimension_key, *gap_ids])
         suggestions.append(
             SchemaEvolutionSuggestion(
-                id=f"schema-suggestion-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}",
+                id=compute_schema_suggestion_id(dimension_key, gap_ids),
                 dimension=dimension_gaps[0].dimension or dimension_key,
                 normalized_dimension=dimension_key,
                 reason=(

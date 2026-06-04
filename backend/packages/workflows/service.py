@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -10,6 +9,12 @@ from temporalio.client import Client, WorkflowHandle
 from temporalio.exceptions import WorkflowAlreadyStartedError
 
 from packages.config import Settings
+from packages.identity import (
+    compute_cutover_bucket,
+    compute_run_id_for_idempotency_key,
+    compute_workflow_id,
+    compute_workflow_idempotency_key,
+)
 from packages.schema.api_dto import (
     MonitorStartRequest,
     MonitorStartResponse,
@@ -358,37 +363,36 @@ def temporal_cutover_status(settings: Settings) -> TemporalCutoverStatus:
 
 def workflow_idempotency_key(request: RunCreateRequest) -> str:
     payload = request.model_dump(mode="json", exclude={"idempotency_key"})
-    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
-    return f"workflow:{digest}"
+    normalized_payload = json.loads(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    )
+    return compute_workflow_idempotency_key(normalized_payload)
 
 
 def run_id_for_idempotency_key(idempotency_key: str) -> str:
-    digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:32]
-    return f"run-{digest}"
+    return compute_run_id_for_idempotency_key(idempotency_key)
 
 
 def _stable_cutover_bucket(request: RunCreateRequest) -> int:
     key = request.idempotency_key or workflow_idempotency_key(request)
-    digest = hashlib.sha256(f"temporal-cutover:{key}".encode()).hexdigest()
-    return int(digest[:8], 16) % 100
+    return compute_cutover_bucket(key)
 
 
 def report_approval_workflow_id(report_version_id: str) -> str:
-    digest = hashlib.sha256(report_version_id.encode("utf-8")).hexdigest()[:32]
-    return f"report-approval-{digest}"
+    return compute_workflow_id("report-approval", report_version_id)
 
 
 def scheduled_scan_workflow_id(request: ScheduledScanWorkflowInput) -> str:
-    raw = f"{request.workspace_id}|{request.schedule_id}"
-    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
-    return f"scheduled-scan-{digest}"
+    return compute_workflow_id("scheduled-scan", request.workspace_id, request.schedule_id)
 
 
 def monitor_workflow_id(request: MonitorWorkflowInput) -> str:
-    raw = f"{request.workspace_id}|{request.project_id}|{request.monitor_id}"
-    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
-    return f"monitor-{digest}"
+    return compute_workflow_id(
+        "monitor",
+        request.workspace_id,
+        request.project_id,
+        request.monitor_id,
+    )
 
 
 def _workflow_state_status(value: object) -> str:

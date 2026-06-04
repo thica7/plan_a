@@ -4,6 +4,7 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
+from packages.identity import stable_prefixed_id
 from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
@@ -279,9 +280,7 @@ class QualityAgentMixin:
                 f"- {issue.severity}: {issue.problem}"
                 for issue in sorted(
                     detail.qa_findings,
-                    key=lambda item: {"blocker": 0, "warn": 1, "info": 2}.get(
-                        item.severity, 3
-                    ),
+                    key=lambda item: {"blocker": 0, "warn": 1, "info": 2}.get(item.severity, 3),
                 )[:8]
             )
             section = (
@@ -361,7 +360,7 @@ class QualityAgentMixin:
             )
             issues.append(
                 QCIssue(
-                    id=f"missing-{dimension}",
+                    id=stable_prefixed_id("qc-issue", "missing", dimension, length=16),
                     severity="blocker",
                     detected_by="coverage",
                     target_agent="collector",
@@ -390,14 +389,15 @@ class QualityAgentMixin:
                     "and should be recollected or verified."
                 )
                 if strict_source_qa:
-                    problem += (
-                        " MemoryAgent QA policy escalates unverified evidence to a blocker."
-                    )
+                    problem += " MemoryAgent QA policy escalates unverified evidence to a blocker."
                 issue = QCIssue(
-                    id=(
-                        f"unverified-{dimension}-"
-                        f"{self._issue_id_fragment(competitor or source.competitor)}-"
-                        f"{self._issue_id_fragment(source.id)}"
+                    id=stable_prefixed_id(
+                        "qc-issue",
+                        "unverified",
+                        dimension,
+                        competitor or source.competitor,
+                        source.id,
+                        length=16,
                     ),
                     severity="blocker" if strict_source_qa else "warn",
                     detected_by="coverage",
@@ -442,10 +442,13 @@ class QualityAgentMixin:
                 competitor for competitor in covered if competitor in detail.plan.competitors
             ] or [None]
             for competitor in targets:
-                issue_id = (
-                    f"low-quality-source-{source.dimension}-"
-                    f"{self._issue_id_fragment(competitor or source.competitor)}-"
-                    f"{self._issue_id_fragment(source.id)}"
+                issue_id = stable_prefixed_id(
+                    "qc-issue",
+                    "low-quality-source",
+                    source.dimension,
+                    competitor or source.competitor,
+                    source.id,
+                    length=16,
                 )
                 if issue_id in seen:
                     continue
@@ -490,7 +493,12 @@ class QualityAgentMixin:
             )
             unknown = sorted(value for value in covered if value not in expected_competitors)
             if not covered or unknown:
-                issue_id = f"invalid-source-coverage-{self._issue_id_fragment(source.id)}"
+                issue_id = stable_prefixed_id(
+                    "qc-issue",
+                    "invalid-source-coverage",
+                    source.id,
+                    length=16,
+                )
                 if issue_id in seen_issue_ids:
                     continue
                 seen_issue_ids.add(issue_id)
@@ -526,7 +534,13 @@ class QualityAgentMixin:
                     continue
                 issues.append(
                     QCIssue(
-                        id=f"missing-source-{dimension}-{self._issue_id_fragment(competitor)}",
+                        id=stable_prefixed_id(
+                            "qc-issue",
+                            "missing-source",
+                            dimension,
+                            competitor,
+                            length=16,
+                        ),
                         severity="blocker",
                         detected_by="coverage",
                         target_agent="collector",
@@ -615,7 +629,13 @@ class QualityAgentMixin:
                         "but no structured knowledge claims."
                     )
                     issue = QCIssue(
-                        id=f"schema-missing-{dimension}-{self._issue_id_fragment(competitor)}",
+                        id=stable_prefixed_id(
+                            "qc-issue",
+                            "schema-missing",
+                            dimension,
+                            competitor,
+                            length=16,
+                        ),
                         severity="blocker",
                         detected_by="schema",
                         target_agent="analyst",
@@ -647,7 +667,14 @@ class QualityAgentMixin:
                         )
                         problem = f"{competitor} {dimension} claim is missing source_ids."
                         issue = QCIssue(
-                            id=f"schema-claim-no-source-{dimension}-{self._issue_id_fragment(competitor)}-{index}",
+                            id=stable_prefixed_id(
+                                "qc-issue",
+                                "schema-claim-no-source",
+                                dimension,
+                                competitor,
+                                index,
+                                length=16,
+                            ),
                             severity="blocker",
                             detected_by="schema",
                             target_agent="analyst",
@@ -679,9 +706,13 @@ class QualityAgentMixin:
                             f"unknown source id {source_id}."
                         )
                         issue = QCIssue(
-                            id=(
-                                f"schema-claim-unknown-source-{dimension}-"
-                                f"{self._issue_id_fragment(competitor)}-{self._issue_id_fragment(source_id)}"
+                            id=stable_prefixed_id(
+                                "qc-issue",
+                                "schema-claim-unknown-source",
+                                dimension,
+                                competitor,
+                                source_id,
+                                length=16,
                             ),
                             severity="blocker",
                             detected_by="schema",
@@ -735,7 +766,7 @@ class QualityAgentMixin:
         else:
             return None
         issue = QCIssue(
-            id=f"schema-shape-{dimension}-{self._issue_id_fragment(competitor)}",
+            id=stable_prefixed_id("qc-issue", "schema-shape", dimension, competitor, length=16),
             severity="blocker",
             detected_by="schema",
             target_agent="analyst",
@@ -808,7 +839,13 @@ class QualityAgentMixin:
                     f"findings for {competitor}."
                 )
                 issue = QCIssue(
-                    id=f"empty-analyst-{dimension}-{self._issue_id_fragment(competitor)}",
+                    id=stable_prefixed_id(
+                        "qc-issue",
+                        "empty-analyst",
+                        dimension,
+                        competitor,
+                        length=16,
+                    ),
                     severity="blocker",
                     detected_by="schema",
                     target_agent="analyst",
@@ -847,9 +884,13 @@ class QualityAgentMixin:
                         f"{cited_id} for {competitor}."
                     )
                     issue = QCIssue(
-                        id=(
-                            f"kb-unknown-source-{self._issue_id_fragment(competitor)}-"
-                            f"{self._issue_id_fragment(dimension)}-{self._issue_id_fragment(cited_id)}"
+                        id=stable_prefixed_id(
+                            "qc-issue",
+                            "kb-unknown-source",
+                            competitor,
+                            dimension,
+                            cited_id,
+                            length=16,
                         ),
                         severity="blocker",
                         detected_by="citation",
@@ -880,7 +921,7 @@ class QualityAgentMixin:
         for cited_id in phantom_ids:
             problem = f"Report cites unknown source id {cited_id}."
             issue = QCIssue(
-                id=f"phantom-citation-{self._issue_id_fragment(cited_id)}",
+                id=stable_prefixed_id("qc-issue", "phantom-citation", cited_id, length=16),
                 severity="blocker",
                 detected_by="citation",
                 target_agent="writer",
@@ -902,7 +943,12 @@ class QualityAgentMixin:
         if detail.comparison_matrix is None:
             if detail.competitor_kbs and detail.report_md:
                 issue = QCIssue(
-                    id="matrix-missing",
+                    id=stable_prefixed_id(
+                        "qc-issue",
+                        "matrix-missing",
+                        "comparison_matrix",
+                        length=16,
+                    ),
                     severity="blocker",
                     detected_by="consistency",
                     target_agent="comparator",
@@ -1035,7 +1081,7 @@ class QualityAgentMixin:
         problem: str,
     ) -> QCIssue:
         issue = QCIssue(
-            id=issue_id,
+            id=stable_prefixed_id("qc-issue", issue_id, field_path, problem, length=16),
             severity=severity,
             detected_by="consistency",
             target_agent="comparator",

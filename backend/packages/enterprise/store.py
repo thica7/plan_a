@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import re
 from dataclasses import dataclass
 from datetime import datetime
 from threading import RLock
@@ -19,7 +17,16 @@ from packages.enterprise.usage import (
     build_workspace_usage_summary,
     current_month_window,
 )
-from packages.identity import compute_competitor_set_hash, compute_topic_normalized, normalize_url
+from packages.identity import (
+    compute_competitor_id,
+    compute_competitor_set_hash,
+    compute_project_id,
+    compute_source_registry_id,
+    compute_topic_normalized,
+    normalize_key,
+    normalize_url,
+    stable_prefixed_id,
+)
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     ArtifactRecord,
@@ -378,7 +385,7 @@ class EnterpriseMemoryStore:
                         id=competitor_id,
                         workspace_id=workspace_id,
                         name=name,
-                        normalized_name=_normalize_key(name),
+                        normalized_name=normalize_key(name),
                         layer=detail.plan.competitor_layer,
                         homepage_url=detail.plan.homepage_hints.get(name),
                         metadata={
@@ -1211,7 +1218,7 @@ class EnterpriseMemoryStore:
     ) -> None:
         self.audit_logs.append(
             AuditLogRecord(
-                id=f"audit-{len(self.audit_logs) + 1:06d}",
+                id=stable_prefixed_id("audit", len(self.audit_logs) + 1, length=12),
                 workspace_id=workspace_id,
                 actor_type="system",
                 actor_id=actor_id,
@@ -1261,22 +1268,10 @@ class EnterpriseMemoryStore:
         )
 
     def _competitor_id(self, workspace_id: str, name: str) -> str:
-        raw = f"{workspace_id}|{_normalize_key(name)}"
-        return f"competitor-{_short_hash(raw)}"
+        return compute_competitor_id(workspace_id, name)
 
     def _project_id(self, workspace_id: str, topic: str, competitor_ids: list[str]) -> str:
-        raw = "|".join(
-            [
-                workspace_id,
-                compute_topic_normalized(topic),
-                compute_competitor_set_hash(competitor_ids),
-            ]
-        )
-        return f"project-{_short_hash(raw)}"
-
-
-def _short_hash(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+        return compute_project_id(workspace_id, topic, competitor_ids)
 
 
 def _memory_feedback_audit_after(
@@ -1299,11 +1294,6 @@ def _memory_feedback_audit_after(
         "redaction_counts": feedback.redaction_counts,
         "message_excerpt": feedback.message[:240],
     }
-
-
-def _normalize_key(value: str) -> str:
-    normalized = re.sub(r"[^a-z0-9]+", "-", value.lower().strip()).strip("-")
-    return normalized or _short_hash(value)
 
 
 def _title_from_id(value: str) -> str:
@@ -1395,8 +1385,7 @@ def _embedding_dedupe_strategy(dedupe_key: str) -> str:
 
 
 def source_registry_id(workspace_id: str, domain: str, source_type: str) -> str:
-    raw = f"{workspace_id}|{domain.casefold()}|{source_type.casefold()}"
-    return f"source-{_short_hash(raw)}"
+    return compute_source_registry_id(workspace_id, domain, source_type)
 
 
 def source_registry_from_evidence(evidence: EvidenceRecord) -> SourceRegistryRecord:
@@ -1438,7 +1427,7 @@ def _source_location(evidence: EvidenceRecord) -> tuple[str, str | None]:
             domain = domain[4:]
         scheme = parsed.scheme if parsed.scheme in {"http", "https"} else "https"
         return domain, f"{scheme}://{domain}"
-    return _normalize_key(evidence.source_type or "unknown"), None
+    return normalize_key(evidence.source_type or "unknown"), None
 
 
 def _source_trust_level(evidence: EvidenceRecord) -> str:

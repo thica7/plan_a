@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import re
 from urllib.parse import urlparse
 
@@ -12,6 +11,7 @@ from packages.business_intel.source_reconciliation import (
     evidence_by_source_token,
     normalize_source_token,
 )
+from packages.identity import compute_release_gate_issue_id
 from packages.schema.enterprise import (
     BusinessQAFinding,
     ClaimRecord,
@@ -700,9 +700,8 @@ def _gate_issue(
     severity: str = "blocker",
     recommendation: str,
 ) -> BusinessQAFinding:
-    raw = "|".join([rule_id, message, ",".join(evidence_ids or []), ",".join(claim_ids or [])])
     return BusinessQAFinding(
-        id=f"release-gate-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}",
+        id=compute_release_gate_issue_id(rule_id, message, evidence_ids, claim_ids),
         rule_id=rule_id,
         rule_name=rule_name,
         severity=severity,  # type: ignore[arg-type]

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import hashlib
-
 from temporalio.client import Client
 
+from packages.identity import compute_workflow_id
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
 from packages.workflows.models import (
     DEFAULT_TEMPORAL_TASK_QUEUE,
@@ -38,5 +37,4 @@ def workflow_id_for_request(request: CompetitiveIntelWorkflowInput) -> str:
             ",".join(request.dimensions),
         ]
     )
-    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()[:32]
-    return f"competitive-intel-{digest}"
+    return compute_workflow_id("competitive-intel", source)

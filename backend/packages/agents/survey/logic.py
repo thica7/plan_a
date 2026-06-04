@@ -7,6 +7,11 @@ from typing import TYPE_CHECKING
 
 from packages.agents import SubagentContext
 from packages.compliance import compliance_policy_from_settings, redact_text
+from packages.identity import (
+    compute_content_hash,
+    compute_raw_source_id,
+    compute_survey_respondent_id,
+)
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     CompetitorKB,
@@ -251,7 +256,12 @@ class SurveyInterviewAgentMixin:
         ]
         responses = [
             SurveyResponse(
-                respondent_id=f"{self._issue_id_fragment(competitor)}-proxy-1",
+                respondent_id=compute_survey_respondent_id(
+                    detail.id,
+                    competitor,
+                    dimension,
+                    1,
+                ),
                 competitor=redacted_competitor,
                 dimension=redacted_dimension,
                 role="target user proxy",
@@ -329,14 +339,24 @@ class SurveyInterviewAgentMixin:
         redacted_competitor = self._redact_research_text(competitor, redaction_counts)
         redacted_dimension = self._redact_research_text(dimension, redaction_counts)
         bundle.redaction_counts = redaction_counts
+        survey_title = f"{redacted_competitor} {redacted_dimension} survey synthesis"
         sources = [
             RawSource(
-                id=self._new_source_id(f"{dimension}-survey"),
+                id=compute_raw_source_id(
+                    source_type=bundle.source_type,
+                    competitor=redacted_competitor,
+                    dimension=redacted_dimension,
+                    content_hash=bundle.content_hash,
+                    title=survey_title,
+                    snippet=bundle.evidence_summary,
+                    run_id=detail.id,
+                    source_role="survey",
+                ),
                 competitor=redacted_competitor,
                 covered_competitors=[redacted_competitor],
                 dimension=redacted_dimension,
                 source_type=bundle.source_type,
-                title=f"{redacted_competitor} {redacted_dimension} survey synthesis",
+                title=survey_title,
                 snippet=bundle.evidence_summary,
                 content_hash=bundle.content_hash,
                 confidence=bundle.confidence,
@@ -352,18 +372,30 @@ class SurveyInterviewAgentMixin:
             )
             interview_summary = self._redact_research_text(interview_summary, redaction_counts)
             bundle.redaction_counts = redaction_counts
+            interview_title = f"{redacted_competitor} {redacted_dimension} interview synthesis"
+            interview_snippet = f"{interview_summary} {bundle.evidence_summary}".strip()
+            interview_hash = compute_content_hash(f"{interview_summary}|{bundle.evidence_summary}")[
+                :16
+            ]
             sources.append(
                 RawSource(
-                    id=self._new_source_id(f"{dimension}-interview"),
+                    id=compute_raw_source_id(
+                        source_type="interview_record",
+                        competitor=redacted_competitor,
+                        dimension=redacted_dimension,
+                        content_hash=interview_hash,
+                        title=interview_title,
+                        snippet=interview_snippet,
+                        run_id=detail.id,
+                        source_role="interview",
+                    ),
                     competitor=redacted_competitor,
                     covered_competitors=[redacted_competitor],
                     dimension=redacted_dimension,
                     source_type="interview_record",
-                    title=f"{redacted_competitor} {redacted_dimension} interview synthesis",
-                    snippet=f"{interview_summary} {bundle.evidence_summary}".strip(),
-                    content_hash=hashlib.sha256(
-                        f"{interview_summary}|{bundle.evidence_summary}".encode()
-                    ).hexdigest()[:16],
+                    title=interview_title,
+                    snippet=interview_snippet,
+                    content_hash=interview_hash,
                     confidence=max(bundle.confidence, 0.62),
                     extracted_at=detail.updated_at,
                 )
@@ -437,11 +469,7 @@ class SurveyInterviewAgentMixin:
             role="target user proxy",
             company_size="unknown",
             pain_points=sorted(
-                {
-                    point
-                    for interview in bundle.interviews
-                    for point in interview.pain_points
-                }
+                {point for interview in bundle.interviews for point in interview.pain_points}
             )
             or ["workflow fit uncertainty", "switching cost"],
             use_cases=sorted(

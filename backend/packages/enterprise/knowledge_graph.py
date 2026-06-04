@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 from packages.enterprise.store import EnterpriseStore, source_registry_from_evidence
+from packages.identity import compute_knowledge_graph_edge_id
 from packages.schema.enterprise import (
     ArtifactRecord,
     EvidenceRecord,
@@ -306,8 +306,7 @@ def _add_edge(
 
 
 def _edge_id(source_id: str, target_id: str, relation: str) -> str:
-    raw = f"{source_id}|{relation}|{target_id}"
-    return f"kg-edge-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:24]}"
+    return compute_knowledge_graph_edge_id(source_id, target_id, relation)
 
 
 def _metadata_string(artifact: ArtifactRecord, key: str) -> str | None:

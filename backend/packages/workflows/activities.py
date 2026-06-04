@@ -9,6 +9,11 @@ from temporalio import activity
 
 from packages.business_intel import evaluate_report_release_gate
 from packages.enterprise import EnterpriseStore
+from packages.identity import (
+    compute_monitor_anomaly_id,
+    compute_notification_id,
+    compute_workflow_id,
+)
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
@@ -248,8 +253,7 @@ def _scheduled_scan_idempotency_key(
     project_id: str,
     scan_started_at: str,
 ) -> str:
-    raw = f"{schedule_id}|{project_id}|{scan_started_at}"
-    return f"scheduled:{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:32]}"
+    return compute_workflow_id("scheduled", schedule_id, project_id, scan_started_at)
 
 
 def _scheduled_scan_notification_id(
@@ -257,8 +261,7 @@ def _scheduled_scan_notification_id(
     schedule_id: str,
     scan_started_at: str,
 ) -> str:
-    raw = f"{workspace_id}|{schedule_id}|{scan_started_at}"
-    return f"notification-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:24]}"
+    return compute_notification_id(workspace_id, schedule_id, scan_started_at)
 
 
 def _scheduled_scan_project_status(status: str) -> str:
@@ -503,9 +506,8 @@ def _monitor_anomaly(
     message: str,
     **metadata: str | int,
 ) -> MonitorAnomaly:
-    raw = f"{cycle_index}|{anomaly_type}|{message}|{metadata}"
     return MonitorAnomaly(
-        id=f"anomaly-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}",
+        id=compute_monitor_anomaly_id(cycle_index, anomaly_type, message, metadata),
         severity=severity,
         anomaly_type=anomaly_type,
         message=message,
@@ -519,8 +521,13 @@ def _monitor_cycle_idempotency_key(
     cycle_index: int,
     monitor_started_at: str,
 ) -> str:
-    raw = f"{monitor_id}|{project_id}|{cycle_index}|{monitor_started_at}"
-    return f"monitor:{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:32]}"
+    return compute_workflow_id(
+        "monitor",
+        monitor_id,
+        project_id,
+        cycle_index,
+        monitor_started_at,
+    )
 
 
 def _monitor_notification_id(
@@ -530,8 +537,13 @@ def _monitor_notification_id(
     cycle_index: int,
     monitor_started_at: str,
 ) -> str:
-    raw = f"{workspace_id}|{project_id}|{monitor_id}|{cycle_index}|{monitor_started_at}"
-    return f"notification-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:24]}"
+    return compute_notification_id(
+        workspace_id,
+        project_id,
+        monitor_id,
+        cycle_index,
+        monitor_started_at,
+    )
 
 
 def _notification_severity(anomalies: list[MonitorAnomaly]) -> str:

@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from packages.identity import stable_prefixed_id
 from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import QCIssue, RedoScope, ReflectionRecord
@@ -111,7 +112,14 @@ class ReflectorAgentMixin:
                 dimension = self._infer_dimension_from_text(detail, finding)
                 competitor = self._infer_competitor_from_text(detail, finding)
                 issue = QCIssue(
-                    id=f"reflector-{group_name}-{index}-{self._issue_id_fragment(finding)[:48]}",
+                    id=stable_prefixed_id(
+                        "qc-issue",
+                        "reflector",
+                        group_name,
+                        index,
+                        finding,
+                        length=16,
+                    ),
                     severity="warn",
                     detected_by="reflector",
                     target_agent=target_agent,

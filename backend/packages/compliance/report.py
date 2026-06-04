@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime
 from typing import Literal
 from urllib.parse import urlparse
@@ -8,6 +7,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field
 
 from packages.compliance.pii import compliance_policy_from_settings, redact_text
+from packages.identity import compute_compliance_finding_id
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import RawSource, TraceSpan
 
@@ -66,12 +66,8 @@ def build_run_compliance_report(
         "redact_phones": policy.redact_phones,
         "allowed_domains": list(getattr(settings, "compliance_allowed_domains", ())),
         "blocked_domains": list(getattr(settings, "compliance_blocked_domains", ())),
-        "require_source_urls": bool(
-            getattr(settings, "compliance_require_source_urls", False)
-        ),
-        "require_trace_context": bool(
-            getattr(settings, "compliance_require_trace_context", True)
-        ),
+        "require_source_urls": bool(getattr(settings, "compliance_require_source_urls", False)),
+        "require_trace_context": bool(getattr(settings, "compliance_require_trace_context", True)),
     }
 
     findings.extend(_policy_findings(detail.id, policy_snapshot))
@@ -268,10 +264,12 @@ def _finding(
     message: str,
     recommendation: str,
 ) -> ComplianceFinding:
-    raw = "|".join([severity, category, target_type, target_id, message])
-    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
     return ComplianceFinding(
-        id=f"compliance-{digest}",
+        id=compute_compliance_finding_id(
+            target_id,
+            f"{severity}:{category}:{target_type}",
+            message,
+        ),
         severity=severity,
         category=category,
         target_type=target_type,

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 from typing import Any, cast
 
 from app.events import RunEvent, RunEventType
 from packages.compliance import redact_text
+from packages.identity import compute_otel_span_id, compute_trace_id
 
 SENSITIVE_KEY_PARTS = (
     "api_key",
@@ -67,13 +67,11 @@ def _is_sensitive_key(key: str) -> bool:
 
 
 def trace_id_for_run(run_id: str) -> str:
-    return hashlib.sha256(f"competiscope-trace:{run_id}".encode()).hexdigest()[:32]
+    return compute_trace_id(run_id)
 
 
 def otel_span_id_for_span(run_id: str, span_id: str) -> str:
-    return hashlib.sha256(f"competiscope-span:{run_id}:{span_id}".encode()).hexdigest()[
-        :16
-    ]
+    return compute_otel_span_id(run_id, span_id)
 
 
 def traceparent_for_span(trace_id: str, otel_span_id: str) -> str:

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import hashlib
 import re
 
+from packages.identity import compute_retrieval_chunk_id
 from packages.schema.enterprise import EvidenceRecord
 from packages.schema.rag import RetrievalChunk
 
@@ -92,8 +92,7 @@ def _chunk_text(
 
 
 def _chunk_id(evidence_id: str, index: int, text: str) -> str:
-    digest = hashlib.sha256(f"{evidence_id}|{index}|{text}".encode()).hexdigest()
-    return f"chunk-{digest[:24]}"
+    return compute_retrieval_chunk_id(evidence_id, index, text)
 
 
 def _normalize(text: str) -> str:

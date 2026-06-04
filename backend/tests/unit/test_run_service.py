@@ -400,19 +400,13 @@ async def test_create_run_builds_adaptive_task_decomposition() -> None:
 
     tasks = detail.plan.task_decomposition
     pricing_collector = next(
-        task
-        for task in tasks
-        if task.stage == "collector" and task.dimension == "pricing"
+        task for task in tasks if task.stage == "collector" and task.dimension == "pricing"
     )
     persona_collector = next(
-        task
-        for task in tasks
-        if task.stage == "collector" and task.dimension == "persona"
+        task for task in tasks if task.stage == "collector" and task.dimension == "persona"
     )
     persona_survey = next(
-        task
-        for task in tasks
-        if task.stage == "survey_interview" and task.dimension == "persona"
+        task for task in tasks if task.stage == "survey_interview" and task.dimension == "persona"
     )
 
     assert {task.stage for task in tasks} >= {"collector", "analyst", "survey_interview"}
@@ -1015,10 +1009,7 @@ async def test_trace_spans_redact_sensitive_text_before_storage() -> None:
         name="compliance_probe",
         status="ok",
         started=time.perf_counter(),
-        input_text=(
-            "contact alice@example.com with "
-            "OPENROUTER_TEST_KEY_REDACTED"
-        ),
+        input_text=("contact alice@example.com with OPENROUTER_TEST_KEY_REDACTED"),
         output_text="Bearer abcdef1234567890 accepted",
     )
 
@@ -1125,7 +1116,8 @@ def test_qa_marks_unverified_source_without_missing_false_positive() -> None:
 
     issues = service._build_qa_issues(detail)
 
-    assert [issue.id for issue in issues] == ["unverified-pricing-a-pricing-1"]
+    assert len(issues) == 1
+    assert issues[0].id.startswith("qc-issue-")
     assert issues[0].severity == "warn"
     assert issues[0].redo_scope.target_competitor == "A"
 
@@ -1154,7 +1146,8 @@ def test_qa_marks_missing_dimension_as_blocker() -> None:
 
     issues = service._build_qa_issues(detail)
 
-    assert [issue.id for issue in issues] == ["missing-pricing"]
+    assert len(issues) == 1
+    assert issues[0].id.startswith("qc-issue-")
     assert issues[0].severity == "blocker"
     assert issues[0].redo_scope.kind == "collector"
 
@@ -1317,7 +1310,7 @@ def test_qa_marks_phantom_citation_as_writer_only_blocker() -> None:
 
     issues = service._build_qa_issues(detail)
 
-    phantom = [issue for issue in issues if issue.id == "phantom-citation-pricing-404"]
+    phantom = [issue for issue in issues if "pricing-404" in issue.problem]
     assert len(phantom) == 1
     assert phantom[0].severity == "blocker"
     assert phantom[0].redo_scope.kind == "writer_only"
@@ -1580,18 +1573,10 @@ def test_qa_issue_redo_scopes_are_not_placeholders() -> None:
 
     assert issues
     assert all(issue.redo_scope.rationale != "placeholder" for issue in issues)
-    assert {
-        issue.redo_scope.kind
-        for issue in issues
-        if issue.id
-        in {
-            "unverified-pricing-a-pricing-1",
-            "kb-unknown-source-a-pricing-pricing-404",
-            "phantom-citation-pricing-999",
-            "matrix-unknown-source-pricing-404",
-            "reflector-coverage-1-pricing-needs-verified-webpage-evidence-for-a",
-        }
-    } == {"collector", "analyst", "writer_only", "comparator"}
+    assert all(issue.id.startswith("qc-issue-") for issue in issues)
+    assert {"collector", "analyst", "writer_only", "comparator"}.issubset(
+        {issue.redo_scope.kind for issue in issues}
+    )
 
 
 def test_qa_marks_empty_analyst_output_for_scoped_redo() -> None:
@@ -1631,7 +1616,8 @@ def test_qa_marks_empty_analyst_output_for_scoped_redo() -> None:
 
     issues = service._build_qa_issues(detail)
 
-    assert [issue.id for issue in issues] == ["empty-analyst-pricing-a"]
+    assert len(issues) == 1
+    assert issues[0].id.startswith("qc-issue-")
     assert issues[0].target_agent == "analyst"
     assert issues[0].redo_scope.kind == "analyst"
     assert issues[0].redo_scope.target_subagent == "pricing"
@@ -1984,8 +1970,7 @@ def test_comparison_matrix_adds_pricing_and_persona_standardization_summary() ->
         item.startswith("[persona-standardization:persona]")
         and "aligned_fields=segment,role,company_size,use_cases,pain_points" in item
         and "A segments=Developer(engineering/individual;use_cases=1;pain_points=1)" in item
-        and "B segments=Enterprise buyer(procurement/enterprise;use_cases=2;pain_points=1)"
-        in item
+        and "B segments=Enterprise buyer(procurement/enterprise;use_cases=2;pain_points=1)" in item
         for item in matrix.summary
     )
     pricing_cell = next(
@@ -2239,8 +2224,7 @@ def test_comparison_matrix_adds_feature_standardization_summary() -> None:
     assert any(
         item.startswith("[feature-standardization:feature]")
         and "aligned_fields=feature_name,description,claim_count,child_count" in item
-        and "A features=Agentic coding(Multi-file edits and tool use.;claims=1;children=1)"
-        in item
+        and "A features=Agentic coding(Multi-file edits and tool use.;claims=1;children=1)" in item
         and "B features=Autocomplete(Inline suggestions.;claims=1;children=0)" in item
         for item in matrix.summary
     )
@@ -2326,10 +2310,7 @@ def test_writer_and_reflector_digests_preserve_feature_matrix_cells() -> None:
     )
     long_feature_value = " | ".join(
         [
-            (
-                f"feature_name={name}; description={description}; "
-                "claim_count=1; child_count=0"
-            )
+            (f"feature_name={name}; description={description}; claim_count=1; child_count=0")
             for name, description in [
                 ("Code completion", "Inline suggestions and completion assistance."),
                 ("Agentic coding", "Multi-file edits and refactoring workflows."),
@@ -2391,10 +2372,7 @@ def test_writer_and_reflector_digests_preserve_pricing_matrix_cells() -> None:
     )
     long_pricing_value = " | ".join(
         [
-            (
-                f"tier_name={name}; price={price}; billing_cycle={cycle}; "
-                f"limits={limits}"
-            )
+            (f"tier_name={name}; price={price}; billing_cycle={cycle}; limits={limits}")
             for name, price, cycle, limits in [
                 ("Free", "$0", "monthly", "2,000 completions, limited chat"),
                 ("Pro", "$10/user", "monthly", "higher completions and chat quota"),
@@ -2675,8 +2653,9 @@ def test_qa_marks_matrix_unknown_source_for_comparator_redo() -> None:
 
     issues = service._build_qa_issues(detail)
 
-    matrix = [issue for issue in issues if issue.id == "matrix-unknown-source-pricing-404"]
+    matrix = [issue for issue in issues if "pricing-404" in issue.problem]
     assert len(matrix) == 1
+    assert matrix[0].id.startswith("qc-issue-")
     assert matrix[0].severity == "blocker"
     assert matrix[0].redo_scope.kind == "comparator"
 
@@ -2739,10 +2718,9 @@ def test_qa_marks_matrix_value_citation_missing_from_source_ids() -> None:
 
     issues = service._build_qa_issues(detail)
 
-    matrix = [
-        issue for issue in issues if issue.id == "matrix-missing-cited-source-a-feature-feature-1"
-    ]
+    matrix = [issue for issue in issues if "feature-1" in issue.problem]
     assert len(matrix) == 1
+    assert matrix[0].id.startswith("qc-issue-")
     assert matrix[0].severity == "blocker"
     assert matrix[0].redo_scope.kind == "comparator"
 
@@ -2822,8 +2800,9 @@ def test_qa_marks_matrix_missing_cell_for_comparator_redo() -> None:
 
     issues = service._build_qa_issues(detail)
 
-    matrix = [issue for issue in issues if issue.id == "matrix-missing-cell-b-pricing"]
+    matrix = [issue for issue in issues if "missing the pricing cell for B" in issue.problem]
     assert len(matrix) == 1
+    assert matrix[0].id.startswith("qc-issue-")
     assert matrix[0].severity == "warn"
     assert matrix[0].redo_scope.kind == "comparator"
 
@@ -3531,9 +3510,7 @@ def test_collector_rejects_pricing_pages_as_persona_evidence() -> None:
         confidence=0.9,
     )
 
-    assert "mismatched for persona evidence" in (
-        service._source_quality_problem(source) or ""
-    )
+    assert "mismatched for persona evidence" in (service._source_quality_problem(source) or "")
 
 
 def test_collector_keeps_feature_docs_when_navigation_contains_feature_facts() -> None:
@@ -3756,9 +3733,7 @@ async def test_real_collector_replay_links_rag_event_to_source_ids() -> None:
 
     events = service.get_trace(detail.id) or []
     collector_done = next(
-        event
-        for event in events
-        if event.type == "node_completed" and event.agent == "collector"
+        event for event in events if event.type == "node_completed" and event.agent == "collector"
     )
     assert collector_done.payload["source_ids"] == ["source-pricing-1"]
     assert collector_done.payload["source_count"] == 1
@@ -4914,9 +4889,7 @@ def test_structured_feature_payload_appends_taxonomy_nodes_from_sources() -> Non
         },
     )
 
-    node_names = [
-        node.name for node in detail.competitor_knowledge["A"].feature_tree.nodes
-    ]
+    node_names = [node.name for node in detail.competitor_knowledge["A"].feature_tree.nodes]
     assert "Generic feature" in node_names
     assert "Code completion" in node_names
     assert "Code review and security" in node_names

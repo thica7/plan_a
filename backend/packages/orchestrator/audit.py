@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from packages.identity import stable_prefixed_id
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import RedoScope, RevisionRecord
 
@@ -17,7 +18,7 @@ def build_revision_record(
     issue_count_before: int,
 ) -> RevisionRecord:
     return RevisionRecord(
-        id=f"rev-{iteration}",
+        id=stable_prefixed_id("revision", detail.id, iteration, stage, length=16),
         iteration=iteration,
         stage=stage,
         target_subagent=redo_scope.target_subagent,

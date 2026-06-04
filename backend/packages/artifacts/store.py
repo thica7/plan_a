@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Literal, Protocol
 
-from packages.identity import compute_content_hash
+from packages.identity import compute_artifact_id, compute_content_hash
 from packages.schema.enterprise import ArtifactCreateRequest, ArtifactRecord, ArtifactStorageBackend
 
 
@@ -161,17 +161,14 @@ def artifact_id_for(
     filename: str,
     content_hash: str,
 ) -> str:
-    raw = "|".join(
-        [
-            workspace_id,
-            project_id,
-            evidence_id or "",
-            artifact_type,
-            _safe_filename(filename).casefold(),
-            content_hash,
-        ]
+    return compute_artifact_id(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        evidence_id=evidence_id,
+        artifact_type=artifact_type,
+        filename=_safe_filename(filename),
+        content_hash=content_hash,
     )
-    return f"artifact-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:32]}"
 
 
 def _payload_bytes(request: ArtifactCreateRequest) -> bytes:

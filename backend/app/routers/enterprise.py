@@ -1,5 +1,4 @@
 import csv
-import hashlib
 import html
 import io
 import re
@@ -62,6 +61,7 @@ from packages.governance import (
     build_model_route_decision,
     build_tool_registry_report,
 )
+from packages.identity import compute_content_hash, stable_prefixed_id
 from packages.memory import PreferenceMemoryStore
 from packages.rag import (
     decorate_evidence_gap_report_with_retrieval,
@@ -610,7 +610,7 @@ async def get_project_evidence_gaps(
     )
     result = await build_evidence_gap_agent().execute(
         AgentExecutionRequest(
-            run_id=f"enterprise:{project_id}:evidence_gap",
+            run_id=stable_prefixed_id("enterprise-run", project_id, "evidence_gap", length=16),
             agent_name="evidence_gap",
             context=_pydantic_ai_context(settings),
             payload={
@@ -674,9 +674,7 @@ async def review_project_schema_suggestion(
         reviewed_by=user.user_id,
         note=request.note,
     )
-    updated_project = store.upsert_project(
-        _project_with_schema_review(project, review)
-    )
+    updated_project = store.upsert_project(_project_with_schema_review(project, review))
     store.audit_schema_evolution_review(updated_project, review, actor_id=user.user_id)
     return SchemaEvolutionReviewResult(
         project_id=project_id,
@@ -719,7 +717,7 @@ async def fill_project_evidence_gaps(
                     ok=False,
                     title="",
                     text="",
-                    content_hash=hashlib.sha256(f"robots:{url}".encode()).hexdigest()[:16],
+                    content_hash=compute_content_hash(f"robots:{url}")[:16],
                     error=f"Blocked by robots.txt at {robots.robots_url}",
                 )
             return await fetch_page(url)
@@ -771,7 +769,7 @@ async def get_project_red_team(
     report_versions = store.list_report_versions(project_id=project_id)
     result = await build_red_team_agent().execute(
         AgentExecutionRequest(
-            run_id=f"enterprise:{project_id}:red_team",
+            run_id=stable_prefixed_id("enterprise-run", project_id, "red_team", length=16),
             agent_name="red_team",
             context=_pydantic_ai_context(settings),
             payload={
@@ -864,9 +862,7 @@ async def get_project_quality_matrix(
             claim_ids=_unique_ids(
                 claim_id for finding in qa_evaluation.findings for claim_id in finding.claim_ids
             ),
-            suggested_redos=business_findings_to_redo_scopes(
-                qa_evaluation.findings
-            )[:3],
+            suggested_redos=business_findings_to_redo_scopes(qa_evaluation.findings)[:3],
         ),
         QualityAgentMatrixEntry(
             agent_name="ClaimValidator",
@@ -913,9 +909,7 @@ async def get_project_quality_matrix(
                     for sample in result.validation_samples
                 ][:12],
             },
-            suggested_redos=claim_validation_issues_to_redo_scopes(
-                claim_validation.issues
-            )[:3],
+            suggested_redos=claim_validation_issues_to_redo_scopes(claim_validation.issues)[:3],
         ),
         QualityAgentMatrixEntry(
             agent_name="EvidenceGap",
@@ -1014,13 +1008,9 @@ async def get_project_quality_matrix(
                     for evidence_id in issue.evidence_ids
                 ),
                 claim_ids=_unique_ids(
-                    claim_id
-                    for issue in latest_release_gate.issues
-                    for claim_id in issue.claim_ids
+                    claim_id for issue in latest_release_gate.issues for claim_id in issue.claim_ids
                 ),
-                suggested_redos=business_findings_to_redo_scopes(
-                    latest_release_gate.issues
-                )[:3],
+                suggested_redos=business_findings_to_redo_scopes(latest_release_gate.issues)[:3],
             )
             if latest_release_gate is not None
             else QualityAgentMatrixEntry(
@@ -1346,10 +1336,7 @@ def _business_plan_for_project(
     competitors = store.list_competitors(project_id=project_id)
     accepted_dimensions = _accepted_schema_dimensions(project.metadata)
     dimensions = sorted(
-        {
-            item.dimension
-            for item in store.list_evidence(project_id=project_id)
-        }
+        {item.dimension for item in store.list_evidence(project_id=project_id)}
         | set(accepted_dimensions)
     )
     if not dimensions:
@@ -1779,9 +1766,7 @@ def publish_report_version(
             detail={
                 "status": "blocked",
                 "reason": "report_approval_required",
-                "message": (
-                    "Report version must be approved before it can be published."
-                ),
+                "message": ("Report version must be approved before it can be published."),
                 "report_version_id": version.id,
                 "current_status": version.status,
             },
@@ -1880,14 +1865,8 @@ def _capture_evidence_quality_memory(
         return
     feedback_type = "rejection" if request.quality_label == "rejected" else "correction"
     message_parts = [
-        (
-            f"Evidence quality review marked {evidence.title} as "
-            f"{request.quality_label}."
-        ),
-        (
-            f"Treat {evidence.dimension} source quality issues as a quality gate "
-            "before publish."
-        ),
+        (f"Evidence quality review marked {evidence.title} as {request.quality_label}."),
+        (f"Treat {evidence.dimension} source quality issues as a quality gate before publish."),
     ]
     if note:
         message_parts.append(note)
@@ -2030,10 +2009,13 @@ def _manual_report_revision_id(
     version_number: int,
     report_md: str,
 ) -> str:
-    digest = hashlib.sha256(
-        "|".join([source.id, str(version_number), report_md]).encode("utf-8")
-    ).hexdigest()[:16]
-    return f"report-version-manual-{digest}"
+    return stable_prefixed_id(
+        "report-version-manual",
+        source.id,
+        version_number,
+        report_md,
+        length=16,
+    )
 
 
 def _normalize_report_export_format(value: str) -> str:

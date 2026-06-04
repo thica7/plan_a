@@ -4,6 +4,7 @@ import re
 from datetime import datetime
 from urllib.parse import urlparse
 
+from packages.identity import stable_prefixed_id
 from packages.schema.enterprise import (
     ClaimRecord,
     ClaimValidationIssue,
@@ -73,19 +74,19 @@ def validate_project_claims(
             evidence_quality_score=evidence_quality_score,
             triangulation_score=triangulation_score,
         )
+        has_blocker = False
 
         if not claim.evidence_ids or not usable:
             issue = _issue(
                 claim.id,
                 "blocker",
-                "missing_evidence"
-                if not claim.evidence_ids
-                else "stale_or_rejected_evidence",
+                "missing_evidence" if not claim.evidence_ids else "stale_or_rejected_evidence",
                 "Claim has no usable evidence after quality filtering.",
                 claim.evidence_ids,
             )
             issues.append(issue)
             claim_issue_ids.append(issue.id)
+            has_blocker = True
         elif text_support_score < 40:
             issue = _issue(
                 claim.id,
@@ -148,11 +149,6 @@ def validate_project_claims(
             issues.append(issue)
             claim_issue_ids.append(issue.id)
 
-        has_blocker = any(
-            item.endswith(":missing_evidence")
-            or item.endswith(":stale_or_rejected_evidence")
-            for item in claim_issue_ids
-        )
         if has_blocker:
             status = "blocked"
         elif support_score >= 75 and not claim_issue_ids:
@@ -184,11 +180,7 @@ def validate_project_claims(
         )
 
     low_consistency_count = len(
-        [
-            item
-            for item in results
-            if item.status != "blocked" and item.self_consistency_score < 55
-        ]
+        [item for item in results if item.status != "blocked" and item.self_consistency_score < 55]
     )
     return ClaimValidationReport(
         project_id=project_id,
@@ -218,7 +210,7 @@ def _issue(
     evidence_ids: list[str],
 ) -> ClaimValidationIssue:
     return ClaimValidationIssue(
-        id=f"{claim_id}:{issue_type}",
+        id=stable_prefixed_id("claim-validation-issue", claim_id, issue_type, length=16),
         claim_id=claim_id,
         severity=severity,  # type: ignore[arg-type]
         issue_type=issue_type,  # type: ignore[arg-type]
@@ -281,9 +273,7 @@ def _self_consistency_score(
     triangulation_score: int,
 ) -> int:
     return round(
-        text_support_score * 0.5
-        + evidence_quality_score * 0.3
-        + triangulation_score * 0.2
+        text_support_score * 0.5 + evidence_quality_score * 0.3 + triangulation_score * 0.2
     )
 
 

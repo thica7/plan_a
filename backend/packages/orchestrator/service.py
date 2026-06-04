@@ -1,12 +1,10 @@
 import asyncio
-import hashlib
 import json
 import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
-from uuid import uuid4
 
 from langgraph.types import Command, interrupt
 
@@ -35,7 +33,17 @@ from packages.enterprise import (
     build_enterprise_projection,
 )
 from packages.governance import build_model_policy_report, model_policy_block_message
-from packages.identity import compute_competitor_set_hash, compute_topic_normalized
+from packages.identity import (
+    compute_competitor_set_hash,
+    compute_content_hash,
+    compute_graph_thread_id,
+    compute_raw_source_id,
+    compute_run_id_for_idempotency_key,
+    compute_topic_normalized,
+    new_run_id,
+    runtime_prefixed_id,
+    stable_prefixed_id,
+)
 from packages.llm import DoubaoClient
 from packages.memory import KBCache, PreferenceMemoryStore, RunJournal
 from packages.observability import (
@@ -215,9 +223,7 @@ class RunService(
             competitors = self._scenario_seed_competitors(request.scenario_id)
         homepage_verifications = verify_homepages(competitors)
         verified_competitors = [
-            competitor
-            for competitor in competitors
-            if homepage_verifications[competitor].verified
+            competitor for competitor in competitors if homepage_verifications[competitor].verified
         ]
         if verified_competitors:
             competitors = verified_competitors
@@ -256,7 +262,7 @@ class RunService(
                 business_plan.scenario_pack.required_dimensions,
             )
         now = datetime.utcnow()
-        run_id = _run_id_for_idempotency_key(request.idempotency_key) or str(uuid4())
+        run_id = _run_id_for_idempotency_key(request.idempotency_key) or new_run_id()
         idempotency_key = request.idempotency_key or f"run:{run_id}"
         if request.idempotency_key:
             async with self._lock:
@@ -272,9 +278,7 @@ class RunService(
             scenario_id=business_plan.scenario_pack.id,
             scenario_recommended_dimensions=business_plan.recommended_dimensions,
             qa_rule_ids=[rule.id for rule in business_plan.qa_rules],
-            memory_candidate_ids=[
-                candidate.id for candidate in memory_context.candidates
-            ]
+            memory_candidate_ids=[candidate.id for candidate in memory_context.candidates]
             if memory_context is not None
             else [],
             memory_prompt_context=memory_context.prompt_context
@@ -291,9 +295,7 @@ class RunService(
                 for name in competitors
                 if homepage_verifications[name].homepage_url is not None
             },
-            homepage_verified={
-                name: homepage_verifications[name].verified for name in competitors
-            },
+            homepage_verified={name: homepage_verifications[name].verified for name in competitors},
         )
         self._refresh_task_decomposition(plan)
         detail = RunDetail(
@@ -484,8 +486,7 @@ class RunService(
                             priority=priority,
                             max_turns=1,
                             reason=(
-                                "Generate user-research evidence for persona or "
-                                "buying criteria."
+                                "Generate user-research evidence for persona or buying criteria."
                             ),
                             depends_on=[collector_id],
                         )
@@ -558,10 +559,7 @@ class RunService(
                 for task in plan.task_decomposition
                 if task.stage == stage
                 and task.dimension.casefold() == dimension_key
-                and (
-                    competitor_key is None
-                    or (task.competitor or "").casefold() == competitor_key
-                )
+                and (competitor_key is None or (task.competitor or "").casefold() == competitor_key)
             ),
             None,
         )
@@ -596,9 +594,13 @@ class RunService(
         return any(token in key for token in ("persona", "user", "review", "buying"))
 
     def _plan_task_id(self, stage: str, dimension: str, competitor: str) -> str:
-        raw = f"{stage}|{dimension.casefold()}|{competitor.casefold()}"
-        digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:10]
-        return f"{stage}-{self._task_slug(dimension)}-{self._task_slug(competitor)}-{digest}"
+        return stable_prefixed_id(
+            f"{stage}-{self._task_slug(dimension)}-{self._task_slug(competitor)}",
+            stage,
+            dimension,
+            competitor,
+            length=10,
+        )
 
     def _task_slug(self, value: str) -> str:
         slug = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
@@ -854,7 +856,7 @@ class RunService(
         completed = await self._invoke_graph(
             record,
             kind="demo",
-            thread_id=f"{run_id}:demo",
+            thread_id=compute_graph_thread_id(run_id, "demo"),
             graph_input={
                 "run_id": run_id,
                 "dimensions": list(record.detail.plan.dimensions),
@@ -1430,7 +1432,15 @@ class RunService(
         completed = await self._invoke_graph(
             record,
             kind="scoped_redo",
-            thread_id=f"{detail.id}:redo:{len(detail.revisions) + 1}",
+            thread_id=compute_graph_thread_id(
+                detail.id,
+                "redo",
+                len(detail.revisions) + 1,
+                scope.kind,
+                scope.target_subagent or "",
+                scope.target_competitor or "",
+                scope.target_competitors,
+            ),
             graph_input={
                 "run_id": detail.id,
                 "dimensions": dimensions,
@@ -1616,7 +1626,12 @@ class RunService(
         message_payload = payload or {}
         validate_agent_message_payload(payload_schema, message_payload)
         message = AgentMessage(
-            id=f"msg-{len(record.detail.agent_messages) + 1}",
+            id=stable_prefixed_id(
+                "msg",
+                record.detail.id,
+                len(record.detail.agent_messages) + 1,
+                length=16,
+            ),
             run_id=record.detail.id,
             from_agent=from_agent,
             to_agent=to_agent,
@@ -1853,7 +1868,12 @@ class RunService(
         source_message_id: str | None = None,
     ) -> ToolCallMessage:
         message = ToolCallMessage(
-            id=f"tool-{len(record.detail.tool_call_messages) + 1}",
+            id=stable_prefixed_id(
+                "tool",
+                record.detail.id,
+                len(record.detail.tool_call_messages) + 1,
+                length=16,
+            ),
             run_id=record.detail.id,
             agent=agent,
             subagent=subagent,
@@ -2096,7 +2116,7 @@ class RunService(
         usage = decision.usage
         period_key = usage.period_start.strftime("%Y%m")
         notification = NotificationRecord(
-            id=f"quota-{workspace_id}-{period_key}",
+            id=stable_prefixed_id("quota", workspace_id, period_key, length=16),
             workspace_id=workspace_id,
             notification_type="quota_warning",
             severity="critical" if decision.status == "exceeded" else "warning",
@@ -2129,15 +2149,14 @@ class RunService(
             return
         top_issue_messages = [issue.message for issue in gate.issues[:3]]
         notification = NotificationRecord(
-            id=f"release-gate-{projection.report_version.id}",
+            id=stable_prefixed_id("release-gate-matrix", projection.report_version.id, length=16),
             workspace_id=projection.workspace_id,
             project_id=projection.project_id,
             notification_type="release_gate_blocked",
             severity="critical",
             status="queued",
             title="Report blocked by release gate",
-            body="; ".join(top_issue_messages)
-            or "Report is not ready for enterprise approval.",
+            body="; ".join(top_issue_messages) or "Report is not ready for enterprise approval.",
             resource_type="report_version",
             resource_id=projection.report_version.id,
             created_by="system-user",
@@ -2634,7 +2653,7 @@ class RunService(
                 ok=False,
                 title="",
                 text="",
-                content_hash=hashlib.sha256(f"robots:{url}".encode()).hexdigest()[:16],
+                content_hash=compute_content_hash(f"robots:{url}")[:16],
                 error=f"Blocked by robots.txt at {robots_result.robots_url}",
             )
         started = time.perf_counter()
@@ -3093,14 +3112,25 @@ class RunService(
         return f"{cleaned[: limit - 3]}..."
 
     def _new_source_id(self, dimension: str) -> str:
-        return f"{dimension}-{uuid4().hex[:8]}"
+        return runtime_prefixed_id("raw-source")
 
     def _demo_source(
         self, detail: RunDetail, dimension: str, competitor: str | None = None
     ) -> RawSource:
         competitor = competitor or detail.plan.competitors[0]
-        source_id = f"{dimension}-{len(detail.raw_sources) + 1}"
-        content_hash = hashlib.sha256(f"{detail.id}:{source_id}".encode()).hexdigest()[:16]
+        content_hash = compute_content_hash(
+            f"{detail.id}:{competitor}:{dimension}:{len(detail.raw_sources) + 1}"
+        )[:16]
+        source_id = compute_raw_source_id(
+            source_type="webpage_verified",
+            competitor=competitor,
+            dimension=dimension,
+            url=f"https://example.com/{self._issue_id_fragment(competitor)}/{dimension}",
+            content_hash=content_hash,
+            title=f"{competitor} {dimension} evidence fixture",
+            run_id=detail.id,
+            source_role="demo",
+        )
         return RawSource(
             id=source_id,
             competitor=competitor,
@@ -3143,7 +3173,7 @@ class RunService(
             rationale=f"{dimension.title()} evidence coverage is incomplete.",
         )
         return QCIssue(
-            id=f"demo-{dimension}-coverage",
+            id=stable_prefixed_id("qc-demo", dimension, "coverage", length=16),
             severity="warn",
             detected_by="coverage",
             target_agent="collector",
@@ -3362,26 +3392,18 @@ class RunService(
         if note.startswith("Auto-accepted after HITL timeout"):
             return None
         dimensions = [
-            dimension.strip()
-            for dimension in (request.dimensions or [])
-            if dimension.strip()
+            dimension.strip() for dimension in (request.dimensions or []) if dimension.strip()
         ]
         if request.decision == "accept" and not note and not dimensions:
             return None
-        feedback_type = (
-            "approval"
-            if request.decision in {"accept", "force_pass"}
-            else "correction"
-        )
+        feedback_type = "approval" if request.decision in {"accept", "force_pass"} else "correction"
         target_type = "dimension" if dimensions else "project"
         target_id = ",".join(dimensions) if dimensions else detail.project_id
         message_parts = [f"HITL decision: {request.decision}."]
         if note:
             message_parts.append(note)
         if dimensions:
-            message_parts.append(
-                "Reviewer adjusted dimensions to " + ", ".join(dimensions) + "."
-            )
+            message_parts.append("Reviewer adjusted dimensions to " + ", ".join(dimensions) + ".")
         feedback = self._preference_memory.add_feedback(
             UserFeedbackRecord(
                 id="",
@@ -3525,8 +3547,7 @@ class RunService(
 def _run_id_for_idempotency_key(idempotency_key: str | None) -> str | None:
     if not idempotency_key:
         return None
-    digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:32]
-    return f"run-{digest}"
+    return compute_run_id_for_idempotency_key(idempotency_key)
 
 
 def _span_redaction_count(span: TraceSpan) -> int:

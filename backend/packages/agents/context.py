@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from uuid import uuid4
+
+from packages.identity import new_subagent_context_id
 
 
 @dataclass
@@ -14,7 +15,7 @@ class SubagentContext:
     tool_trace: list[dict[str, str]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        self.context_id = f"{self.run_id}:{self.agent}:{self.subagent}:{uuid4().hex[:8]}"
+        self.context_id = new_subagent_context_id(self.run_id, self.agent, self.subagent)
 
     def add_message(self, role: str, content: str) -> None:
         self.messages.append({"role": role, "content": content})

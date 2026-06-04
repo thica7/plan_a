@@ -1,6 +1,5 @@
 import asyncio
 from typing import Annotated
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
@@ -13,6 +12,7 @@ from app.governance import ensure_model_policy_allows_execution_mode
 from packages.business_intel import compare_run_quality
 from packages.config import Settings
 from packages.enterprise import WorkspaceQuotaExceededError
+from packages.identity import new_ui_run_idempotency_key
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import (
     RunCreateRequest,
@@ -109,7 +109,7 @@ async def _ensure_temporal_run_visible(
 def _with_run_idempotency_key(request: RunCreateRequest) -> RunCreateRequest:
     if request.idempotency_key:
         return request
-    return request.model_copy(update={"idempotency_key": f"ui-run:{uuid4().hex}"})
+    return request.model_copy(update={"idempotency_key": new_ui_run_idempotency_key()})
 
 
 def _ensure_workspace_quota(service: RunService, workspace_id: str) -> None:

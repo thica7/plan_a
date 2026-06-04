@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 from statistics import mean
 from typing import Literal
 
 from packages.business_intel.dimensions import effective_analysis_dimensions
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS
+from packages.identity import compute_recommendation_id
 from packages.schema.enterprise import (
     BusinessIntelPlan,
     BusinessQAEvaluation,
@@ -35,10 +35,7 @@ def score_project_readiness(
     coverage_score = _coverage_score(plan, competitors, evidence)
     qa_score = _qa_score(qa_evaluation)
     score = round(
-        qa_score * 0.35
-        + coverage_score * 0.25
-        + evidence_score * 0.25
-        + claim_score * 0.15
+        qa_score * 0.35 + coverage_score * 0.25 + evidence_score * 0.25 + claim_score * 0.15
     )
     risk_level = _risk_level(score, qa_evaluation)
     recommendations = _recommendations(
@@ -81,10 +78,7 @@ def score_competitors(
         for competitor in competitors
     ]
     scores = sorted(scores, key=lambda item: item.total_score, reverse=True)
-    ranked = [
-        item.model_copy(update={"rank": index + 1})
-        for index, item in enumerate(scores)
-    ]
+    ranked = [item.model_copy(update={"rank": index + 1}) for index, item in enumerate(scores)]
     return CompetitorScoreReport(
         project_id=project_id,
         top_competitor_id=ranked[0].competitor_id if ranked else None,
@@ -142,8 +136,7 @@ def _evidence_score(evidence: list[EvidenceRecord]) -> int:
     if not evidence:
         return 0
     weighted = [
-        item.reliability_score * _quality_multiplier(item.quality_label)
-        for item in evidence
+        item.reliability_score * _quality_multiplier(item.quality_label) for item in evidence
     ]
     return _percent(mean(weighted))
 
@@ -213,9 +206,7 @@ def _dimension_score(
     )
     avg_claim_confidence = mean([item.confidence for item in claims]) if claims else 0.0
     score = _percent(
-        evidence_part * 0.35
-        + avg_evidence_reliability * 0.35
-        + avg_claim_confidence * 0.30
+        evidence_part * 0.35 + avg_evidence_reliability * 0.35 + avg_claim_confidence * 0.30
     )
     return CompetitorDimensionScore(
         dimension=dimension,
@@ -245,11 +236,7 @@ def _dimension_average(scores: list[CompetitorDimensionScore]) -> int:
 
 
 def _qa_score(evaluation: BusinessQAEvaluation) -> int:
-    penalty = (
-        evaluation.blocker_count * 22
-        + evaluation.warn_count * 8
-        + evaluation.info_count * 3
-    )
+    penalty = evaluation.blocker_count * 22 + evaluation.warn_count * 8 + evaluation.info_count * 3
     return max(0, 100 - penalty)
 
 
@@ -303,8 +290,7 @@ def _recommendations(
                 priority="high",
                 title="Close evidence coverage gaps",
                 detail=(
-                    f"Required coverage for {plan.scenario_pack.name} is only "
-                    f"{coverage_score}%."
+                    f"Required coverage for {plan.scenario_pack.name} is only {coverage_score}%."
                 ),
                 action_type="collect_evidence",
             )
@@ -392,8 +378,7 @@ def _summary(
         )
     if risk_level == "at_risk":
         return (
-            f"Score {score}: evidence and QA gaps remain material; "
-            f"coverage is {coverage_score}%."
+            f"Score {score}: evidence and QA gaps remain material; coverage is {coverage_score}%."
         )
     if risk_level == "watch":
         return f"Score {score}: usable but still worth reviewing warnings before approval."
@@ -415,9 +400,13 @@ def _recommendation(
     target_type: Literal["project", "competitor", "dimension", "evidence", "claim"] = "project",
     target_id: str | None = None,
 ) -> BusinessRecommendation:
-    raw = "|".join([priority, title, detail, action_type, target_type, target_id or ""])
     return BusinessRecommendation(
-        id=f"recommendation-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}",
+        id=compute_recommendation_id(
+            target_id or "project",
+            action_type,
+            title,
+            [priority, detail, target_type],
+        ),
         priority=priority,
         title=title,
         detail=detail,

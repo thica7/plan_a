@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from packages.agents import SubagentContext
 from packages.agents.collectors.skill_tools import collect_competitor_with_skill_tools
+from packages.identity import compute_raw_source_id
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     RawSource,
@@ -171,9 +172,7 @@ PRODUCT_CONFUSION_TERMS: dict[str, tuple[str, ...]] = {
         "devin desktop",
         "cognition devin",
     ),
-    "claudecode": (
-        "generic claude",
-    ),
+    "claudecode": ("generic claude",),
 }
 
 USER_RESEARCH_SOURCE_TYPES = {
@@ -570,32 +569,48 @@ class CollectorAgentMixin:
                     context=context,
                     metadata={"fact_count": len(extracted_facts), "url": fetched.url},
                 )
+            source_type = (
+                "webpage_verified"
+                if verified
+                else "web_search_result"
+                if url_value
+                else "llm_public_knowledge"
+            )
+            source_title = fetched.title if verified and fetched.title else title
+            source_url = fetched.url if fetched is not None else url_value
+            snippet = (
+                (
+                    " ".join(fact.fact for fact in extracted_facts[:2])
+                    if extracted_facts
+                    else fetched.snippet
+                )
+                if verified
+                else summary
+            )
+            content_hash = (
+                fetched.content_hash
+                if fetched is not None
+                else hashlib.sha256(content_basis.encode()).hexdigest()[:16]
+            )
             sources.append(
                 source := RawSource(
-                    id=self._new_source_id(dimension),
+                    id=compute_raw_source_id(
+                        source_type=source_type,
+                        competitor=competitor,
+                        dimension=dimension,
+                        url=source_url,
+                        content_hash=content_hash,
+                        title=source_title,
+                        snippet=snippet,
+                        run_id=detail.id,
+                    ),
                     competitor=competitor,
                     dimension=dimension,
-                    source_type=(
-                        "webpage_verified"
-                        if verified
-                        else "web_search_result"
-                        if url_value
-                        else "llm_public_knowledge"
-                    ),
-                    title=fetched.title if verified and fetched.title else title,
-                    url=fetched.url if fetched is not None else url_value,
-                    snippet=(
-                        " ".join(fact.fact for fact in extracted_facts[:2])
-                        if extracted_facts
-                        else fetched.snippet
-                    )
-                    if verified
-                    else summary,
-                    content_hash=(
-                        fetched.content_hash
-                        if fetched is not None
-                        else hashlib.sha256(content_basis.encode()).hexdigest()[:16]
-                    ),
+                    source_type=source_type,
+                    title=source_title,
+                    url=source_url,
+                    snippet=snippet,
+                    content_hash=content_hash,
                     confidence=(
                         min(
                             1.0, self._coerce_confidence(item.get("confidence"), default=0.7) + 0.03
@@ -1314,7 +1329,6 @@ class CollectorAgentMixin:
             for source in detail.raw_sources
         ):
             return None
-        source_id = self._new_source_id(dimension)
         fetched = (
             await self._trace_fetch(record, "collector", dimension, result.url, context)
             if record is not None
@@ -1338,7 +1352,22 @@ class CollectorAgentMixin:
             else 0.68
         )
         provisional = RawSource(
-            id=source_id,
+            id=compute_raw_source_id(
+                source_type="webpage_verified" if verified else "web_search_result",
+                competitor=competitor,
+                dimension=dimension,
+                url=fetched.url if verified else result.url,
+                content_hash=(
+                    fetched.content_hash
+                    if fetched is not None
+                    else hashlib.sha256(
+                        (snippet or result.title or result.url).encode()
+                    ).hexdigest()[:16]
+                ),
+                title=fetched.title if verified and fetched.title else result.title,
+                snippet=snippet,
+                run_id=detail.id,
+            ),
             competitor=competitor,
             dimension=dimension,
             source_type="webpage_verified" if verified else "web_search_result",
@@ -1357,19 +1386,29 @@ class CollectorAgentMixin:
         if not self._source_is_usable(provisional):
             return None
         content_basis = snippet or result.title or result.url
+        content_hash = (
+            fetched.content_hash
+            if fetched is not None
+            else hashlib.sha256(content_basis.encode()).hexdigest()[:16]
+        )
         return RawSource(
-            id=source_id,
+            id=compute_raw_source_id(
+                source_type="webpage_verified" if verified else "web_search_result",
+                competitor=competitor,
+                dimension=dimension,
+                url=fetched.url if verified else result.url,
+                content_hash=content_hash,
+                title=fetched.title if verified and fetched.title else result.title,
+                snippet=snippet,
+                run_id=detail.id,
+            ),
             competitor=competitor,
             dimension=dimension,
             source_type="webpage_verified" if verified else "web_search_result",
             title=(fetched.title if verified and fetched.title else result.title),
             url=(fetched.url if verified else result.url),
             snippet=snippet,
-            content_hash=(
-                fetched.content_hash
-                if fetched is not None
-                else hashlib.sha256(content_basis.encode()).hexdigest()[:16]
-            ),
+            content_hash=content_hash,
             confidence=confidence,
         )
 
@@ -1524,7 +1563,6 @@ class CollectorAgentMixin:
             competitor = str(item.get("competitor") or detail.plan.competitors[0])
             title = str(item.get("title") or f"{competitor} {dimension} evidence")
             summary = str(item.get("summary") or title)
-            source_id = self._new_source_id(dimension)
             url_value = item.get("url")
             if not isinstance(url_value, str) or not url_value.startswith(("http://", "https://")):
                 url_value = None
@@ -1543,12 +1581,22 @@ class CollectorAgentMixin:
                 if fetched is not None
                 else hashlib.sha256(summary.encode()).hexdigest()[:16]
             )
+            source_type = "webpage_verified" if verified else "llm_public_knowledge"
             detail.raw_sources.append(
                 RawSource(
-                    id=source_id,
+                    id=compute_raw_source_id(
+                        source_type=source_type,
+                        competitor=competitor,
+                        dimension=dimension,
+                        url=source_url,
+                        content_hash=content_hash,
+                        title=source_title,
+                        snippet=snippet,
+                        run_id=detail.id,
+                    ),
                     competitor=competitor,
                     dimension=dimension,
-                    source_type="webpage_verified" if verified else "llm_public_knowledge",
+                    source_type=source_type,
                     title=source_title,
                     url=source_url,
                     snippet=snippet,
@@ -1662,9 +1710,7 @@ class CollectorAgentMixin:
         branch_id = self._analyst_branch_id(dimension, competitor)
         context = SubagentContext(run_id=detail.id, agent="collector", subagent=branch_id)
         qa_feedback = self._qa_feedback_for_branch(detail, "collector", dimension, competitor)
-        task_metadata = self._plan_task_metadata(
-            detail.plan, "collector", dimension, competitor
-        )
+        task_metadata = self._plan_task_metadata(detail.plan, "collector", dimension, competitor)
         detail.current_node = "collector"
         task_message = self._append_agent_message(
             record,
