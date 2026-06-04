@@ -24,6 +24,7 @@ from packages.skills.registry import SkillRegistry
 
 DEFAULT_OLD_RUN_ID = "411d3a19-7049-4a7e-aa9f-c5b63e74a69e"
 DEFAULT_OLD_DB = Path(r"D:\codex_workspace\plan_a_old\plan_a\runs\run_journal.db")
+TERMINAL_RUN_STATUSES = {"completed", "completed_with_blockers"}
 
 
 def load_run_payload_from_sqlite(db_path: Path, run_id: str) -> dict[str, Any]:
@@ -557,7 +558,7 @@ def _pipeline_completion_reasons(current_summary_value: dict[str, object]) -> li
     if current_summary_value.get("pipeline_timed_out") is True:
         timeout = _numeric(current_summary_value.get("timeout_seconds"))
         reasons.append(f"current run pipeline timed out after {timeout:g} seconds")
-    if status != "completed":
+    if status not in TERMINAL_RUN_STATUSES:
         reasons.append(
             f"current run did not complete: status={status}, current_node={current_node}"
         )

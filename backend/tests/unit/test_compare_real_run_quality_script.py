@@ -279,6 +279,28 @@ def test_pipeline_completion_gate_marks_incomplete_run_as_failed() -> None:
     assert "- Comparison error: pipeline timeout after 45 seconds" in markdown
 
 
+def test_pipeline_completion_gate_accepts_terminal_completed_with_blockers() -> None:
+    script = _load_script()
+
+    quality = script.apply_pipeline_completion_gate(
+        {
+            "verdict": "fail",
+            "regression_gate_status": "fail",
+            "regression_gate_passed": False,
+            "regression_gate_reasons": ["source quality regressed"],
+            "recommendations": ["Improve source verification."],
+        },
+        {
+            "status": "completed_with_blockers",
+            "current_node": None,
+            "report_chars": 2400,
+        },
+    )
+
+    assert quality["pipeline_incomplete"] is False
+    assert quality["regression_gate_reasons"] == ["source quality regressed"]
+
+
 def test_timeout_payload_renders_failed_comparison_card(tmp_path: Path) -> None:
     script = _load_script()
     missing_db = tmp_path / "missing.db"
