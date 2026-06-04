@@ -5,6 +5,7 @@ from typing import Any
 
 from packages.enterprise.store import EnterpriseStore, source_registry_from_evidence
 from packages.schema.enterprise import (
+    ArtifactRecord,
     EvidenceRecord,
     KnowledgeGraphEdge,
     KnowledgeGraphNode,
@@ -28,6 +29,7 @@ def build_project_knowledge_graph_read_model(
     claims = store.list_claims(project_id=project_id)
     reports = store.list_report_versions(project_id=project_id)
     competitors = store.list_competitors(project_id=project_id)
+    artifacts = store.list_artifacts(project_id=project_id)
     source_registry = {
         item.id: item for item in store.list_source_registry(workspace_id=project.workspace_id)
     }
@@ -57,6 +59,9 @@ def build_project_knowledge_graph_read_model(
             metadata={"role": "project_competitor"},
         )
 
+    for source in source_registry.values():
+        _add_source_node(nodes, source)
+
     evidence_by_id = {item.id: item for item in evidence}
     for item in evidence:
         dimension_id = f"dimension:{project_id}:{item.dimension}"
@@ -85,15 +90,7 @@ def build_project_knowledge_graph_read_model(
         )
         source = _source_for_evidence(item, source_registry)
         source_registry[source.id] = source
-        _add_node(
-            nodes,
-            "source",
-            source.id,
-            source.display_name,
-            domain=source.domain,
-            trust_level=source.trust_level,
-            robots_status=source.robots_status,
-        )
+        _add_source_node(nodes, source)
         _add_edge(
             edges,
             item.id,
@@ -156,6 +153,14 @@ def build_project_knowledge_graph_read_model(
                     evidence_ids=[evidence_id],
                 )
 
+    _add_artifacts(
+        nodes,
+        edges,
+        project_id=project.id,
+        artifacts=artifacts,
+        source_registry=source_registry,
+    )
+
     return KnowledgeGraphReadModel(
         workspace_id=project.workspace_id,
         project_id=project_id,
@@ -172,6 +177,87 @@ def _source_for_evidence(
 ) -> SourceRegistryRecord:
     derived = source_registry_from_evidence(evidence)
     return source_registry.get(derived.id) or derived
+
+
+def _add_artifacts(
+    nodes: dict[str, KnowledgeGraphNode],
+    edges: dict[str, KnowledgeGraphEdge],
+    *,
+    project_id: str,
+    artifacts: list[ArtifactRecord],
+    source_registry: dict[str, SourceRegistryRecord],
+) -> None:
+    for artifact in artifacts:
+        _add_node(
+            nodes,
+            "artifact",
+            artifact.id,
+            artifact.filename,
+            artifact_type=artifact.artifact_type,
+            storage_backend=artifact.storage_backend,
+            uri=artifact.uri,
+            byte_size=artifact.byte_size,
+            evidence_id=artifact.evidence_id,
+            run_id=artifact.run_id,
+            source_url=str(artifact.source_url) if artifact.source_url else "",
+            snapshot_kind=artifact.metadata.get("snapshot_kind"),
+            export_format=artifact.metadata.get("export_format"),
+        )
+        _add_edge(
+            edges,
+            project_id,
+            artifact.id,
+            "has_artifact",
+            metadata={"artifact_type": artifact.artifact_type},
+        )
+        if artifact.evidence_id and artifact.evidence_id in nodes:
+            _add_edge(
+                edges,
+                artifact.evidence_id,
+                artifact.id,
+                "captured_as_artifact",
+                evidence_ids=[artifact.evidence_id],
+                metadata={"artifact_type": artifact.artifact_type},
+            )
+        report_version_id = _metadata_string(artifact, "report_version_id")
+        if report_version_id and report_version_id in nodes:
+            _add_edge(
+                edges,
+                report_version_id,
+                artifact.id,
+                "exported_as",
+                metadata={
+                    "artifact_type": artifact.artifact_type,
+                    "export_format": artifact.metadata.get("export_format"),
+                },
+            )
+        source_id = _metadata_string(artifact, "source_registry_id")
+        source = source_registry.get(source_id or "")
+        if source is not None:
+            _add_source_node(nodes, source)
+            _add_edge(
+                edges,
+                artifact.id,
+                source.id,
+                "archives_source",
+                metadata={"source_domain": source.domain},
+            )
+
+
+def _add_source_node(
+    nodes: dict[str, KnowledgeGraphNode],
+    source: SourceRegistryRecord,
+) -> None:
+    _add_node(
+        nodes,
+        "source",
+        source.id,
+        source.display_name,
+        domain=source.domain,
+        trust_level=source.trust_level,
+        robots_status=source.robots_status,
+        policy_review_status=source.policy_review_status,
+    )
 
 
 def _add_node(
@@ -222,3 +308,8 @@ def _add_edge(
 def _edge_id(source_id: str, target_id: str, relation: str) -> str:
     raw = f"{source_id}|{relation}|{target_id}"
     return f"kg-edge-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:24]}"
+
+
+def _metadata_string(artifact: ArtifactRecord, key: str) -> str | None:
+    value = artifact.metadata.get(key)
+    return value if isinstance(value, str) and value else None

@@ -17,7 +17,7 @@ from packages.enterprise import (
 )
 from packages.governance import build_model_route_decision, build_tool_registry_report
 from packages.schema.api_dto import RunDetail
-from packages.schema.enterprise import SourceSnapshotCreateRequest
+from packages.schema.enterprise import ArtifactRecord, SourceSnapshotCreateRequest
 from packages.schema.models import (
     AnalysisPlan,
     CompetitorKnowledge,
@@ -137,17 +137,71 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
 
 def test_knowledge_graph_read_model_links_sources_claims_and_reports() -> None:
     store, context = _projected_store()
+    evidence = store.list_evidence(project_id=context.project_id)[0]
+    report = store.list_report_versions(project_id=context.project_id)[0]
+    snapshot = capture_source_snapshot(
+        SourceSnapshotCreateRequest(
+            workspace_id=context.workspace_id,
+            project_id=context.project_id,
+            evidence_id=evidence.id,
+            run_id="run-1",
+            snapshot_kind="webpage",
+            filename="Cursor pricing snapshot.html",
+            media_type="text/html",
+            content_text="<html>Cursor pricing</html>",
+            source_url="https://cursor.sh/pricing",
+            display_name="Cursor pricing",
+            trust_level="official",
+            robots_status="allowed",
+        ),
+        store=store,
+        artifact_storage=LocalArtifactStorage(Path("backend/.test-artifacts/h10-kg")),
+        actor_id="analyst-1",
+    )
+    export_artifact = store.upsert_artifact(
+        ArtifactRecord(
+            id="artifact-report-export",
+            workspace_id=context.workspace_id,
+            project_id=context.project_id,
+            run_id="run-1",
+            artifact_type="report_export",
+            filename="report-v1.md",
+            media_type="text/markdown",
+            storage_backend="external",
+            uri="https://example.com/report-v1.md",
+            byte_size=0,
+            content_hash="report-export-hash",
+            metadata={
+                "report_version_id": report.id,
+                "export_format": "markdown",
+            },
+        )
+    )
 
     graph = build_project_knowledge_graph_read_model(store=store, project_id=context.project_id)
 
     assert graph.workspace_id == context.workspace_id
     assert graph.node_count >= 5
-    assert {"project", "competitor", "evidence", "claim", "source", "report"} <= {
+    assert {"project", "competitor", "evidence", "claim", "source", "report", "artifact"} <= {
         node.node_type for node in graph.nodes
     }
-    assert {"tracks_competitor", "supported_by", "sourced_from", "contains_claim"} <= {
+    assert {
+        "tracks_competitor",
+        "supported_by",
+        "sourced_from",
+        "contains_claim",
+        "has_artifact",
+        "captured_as_artifact",
+        "exported_as",
+        "archives_source",
+    } <= {
         edge.relation for edge in graph.edges
     }
+    artifacts = {node.id: node for node in graph.nodes if node.node_type == "artifact"}
+    assert snapshot.artifact.id in artifacts
+    assert export_artifact.id in artifacts
+    assert artifacts[snapshot.artifact.id].metadata["snapshot_kind"] == "webpage"
+    assert artifacts[export_artifact.id].metadata["export_format"] == "markdown"
 
 
 def test_tool_registry_and_model_router_explain_enterprise_policy() -> None:

@@ -75,6 +75,7 @@ KnowledgeGraphNodeType = Literal[
     "evidence",
     "source",
     "report",
+    "artifact",
 ]
 
 
