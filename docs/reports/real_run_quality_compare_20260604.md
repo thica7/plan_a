@@ -1,58 +1,58 @@
 # Real Run Quality Comparison
 
-- Current run: run-0a6f77e8231d45d14f38775bb4eb8b61
+- Current run: run-511b77dc7eed450187c7f46a7b019da6
 - Baseline run: 411d3a19-7049-4a7e-aa9f-c5b63e74a69e
 - Current status: running
-- Current node: analyst
+- Current node: comparator
 - Execution mode: real
 - Quality verdict: fail
 - Regression gate: fail
 - Pipeline incomplete: yes
-- Comparison error: pipeline timeout after 90 seconds
+- Comparison error: pipeline timeout after 180 seconds
 
 ## Score
 
 | Metric | Value |
 |---|---:|
-| Target score | 60 |
+| Target score | 59 |
 | Baseline score | 77 |
-| Delta score | -17 |
+| Delta score | -18 |
 
 ## Shape Delta
 
 | Field | Delta |
 |---|---:|
 | Report chars | -8958 |
-| Raw sources | -3 |
+| Raw sources | -5 |
 | Claims | 0 |
 | QA findings | -18 |
-| Trace spans | -152 |
+| Trace spans | -62 |
 | Fallback report regressed | no |
 
 ## Current Evidence
 
 | Field | Value |
 |---|---:|
-| Raw sources | 24 |
+| Raw sources | 22 |
 | Enterprise evidence | 0 |
 | Claims | 0 |
 | Enterprise claims | 0 |
 | QA findings | 0 |
-| Agent messages | 44 |
-| Tool calls | 147 |
-| Trace spans | 212 |
+| Agent messages | 75 |
+| Tool calls | 196 |
+| Trace spans | 302 |
 | Report chars | 0 |
 
 ## Quality Metrics
 
 | Metric | Target | Baseline | Delta | Status |
 |---|---:|---:|---:|---|
-| evidence_count | 24 | 27 | -3 | regressed |
+| evidence_count | 22 | 27 | -5 | regressed |
 | source_coverage_rate | 1 | 1 | 0 | unchanged |
-| verified_source_rate | 0.5 | 0.815 | -0.315 | regressed |
+| verified_source_rate | 0.409 | 0.815 | -0.406 | regressed |
 | claim_citation_rate | 1 | 1 | 0 | unchanged |
 | citation_validity_rate | 0 | 1 | -1 | regressed |
-| real_source_rate | 0.667 | 1 | -0.333 | regressed |
+| real_source_rate | 0.636 | 1 | -0.364 | regressed |
 | llm_call_signal | 1 | 1 | 0 | unchanged |
 | report_length_score | 0 | 1 | -1 | regressed |
 | report_structure_score | 0.1 | 0.3 | -0.2 | regressed |
@@ -67,23 +67,23 @@
 
 | From | To | Type | Status | Detail |
 |---|---|---|---|---|
-| analyst_dispatch | analyst | analysis_task | consumed |  |
-| analyst_dispatch | analyst | analysis_task | consumed |  |
-| analyst_dispatch | analyst | analysis_task | consumed |  |
-| analyst_dispatch | analyst | analysis_task | consumed |  |
-| analyst_dispatch | analyst | analysis_task | consumed |  |
-| analyst_dispatch | analyst | analysis_task | consumed |  |
-| analyst | analyst_join | competitor_knowledge_ready | queued |  |
-| analyst | analyst_join | competitor_knowledge_ready | queued |  |
+| analyst | analyst_join | competitor_knowledge_ready | consumed |  |
+| analyst | analyst_join | competitor_knowledge_ready | consumed |  |
+| analyst | analyst_join | competitor_knowledge_ready | consumed |  |
+| analyst | analyst_join | competitor_knowledge_ready | consumed |  |
+| analyst | analyst_join | competitor_knowledge_ready | consumed |  |
+| analyst | analyst_join | competitor_knowledge_ready | consumed |  |
+| analyst_join | qa | analyst_join_completed | consumed |  |
+| qa | redo_router | analyst_qa_result | queued |  |
 
 ## Gate Reasons
 
-- current run pipeline timed out after 90 seconds
-- current run did not complete: status=running, current_node=analyst
+- current run pipeline timed out after 180 seconds
+- current run did not complete: status=running, current_node=comparator
 - current run did not produce report_md
 - report_quality signal is below release threshold.
-- delta_score -17 regressed by at least 10 points.
-- core metric regression: verified_source_rate -0.32, citation_validity_rate -1.00, real_source_rate -0.33, report_structure_score -0.20
+- delta_score -18 regressed by at least 10 points.
+- core metric regression: verified_source_rate -0.41, citation_validity_rate -1.00, real_source_rate -0.36, report_structure_score -0.20
 
 ## Recommendations
 
