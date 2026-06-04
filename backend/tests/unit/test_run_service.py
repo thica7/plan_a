@@ -337,6 +337,60 @@ async def test_create_run_builds_adaptive_task_decomposition() -> None:
 
 
 @pytest.mark.asyncio
+async def test_survey_interview_enrichment_emits_research_evidence_payload() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            collector_react_max_turns=3,
+            analyst_react_max_turns=3,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Cursor persona adoption research",
+            competitors=["Cursor"],
+            dimensions=["persona"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    await service._run_survey_interview_enrichment(record, ["persona"], ["Cursor"])
+
+    source_types = {source.source_type for source in record.detail.raw_sources}
+    assert {"survey_simulated", "interview_record"} <= source_types
+    assert record.detail.competitor_knowledge["Cursor"].user_personas.summary_claims
+    completed = next(
+        event
+        for event in service.get_trace(detail.id) or []
+        if event.type == "node_completed" and event.agent == "survey_interview"
+    )
+    assert completed.payload["source_types"] == ["interview_record", "survey_simulated"]
+    assert completed.payload["bundle_count"] == 1
+    assert completed.payload["question_count"] == 2
+    assert completed.payload["response_count"] == 1
+    assert completed.payload["interview_count"] >= 1
+    assert completed.payload["redaction_count"] >= 0
+
+    replay = build_decision_replay(record.detail, service.get_trace(detail.id) or [])
+    replay_event = next(
+        event
+        for event in replay.events
+        if event.event_type == "agent.finished" and event.agent == "survey_interview"
+    )
+    assert replay_event.payload["source_types"] == ["interview_record", "survey_simulated"]
+    assert replay_event.payload["question_count"] == 2
+    assert replay_event.payload["response_count"] == 1
+    assert replay_event.payload["interview_count"] >= 1
+
+
+@pytest.mark.asyncio
 async def test_planner_complexity_refreshes_task_decomposition_budget() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

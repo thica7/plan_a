@@ -165,13 +165,26 @@ class SurveyInterviewAgentMixin:
             },
         )
         detail.updated_at = datetime.utcnow()
+        redaction_counts = self._merge_research_redaction_counts(bundles)
         await self.emit(
             detail.id,
             "node_completed",
             "survey_interview",
             None,
             f"Survey/interview enrichment added {len(added_sources)} research evidence source(s).",
-            {"added": len(added_sources), "source_ids": [source.id for source in added_sources]},
+            {
+                "added": len(added_sources),
+                "source_ids": [source.id for source in added_sources],
+                "source_types": sorted({source.source_type for source in added_sources}),
+                "dimension_count": len(target_dimensions),
+                "bundle_count": len(bundles),
+                "question_count": sum(len(bundle.questions) for bundle in bundles),
+                "response_count": sum(len(bundle.responses) for bundle in bundles),
+                "interview_count": sum(len(bundle.interviews) for bundle in bundles),
+                "redaction_counts": redaction_counts,
+                "redaction_count": sum(redaction_counts.values()),
+                **self._research_redaction_metadata(redaction_counts),
+            },
         )
 
     def _dimension_needs_user_research(self, dimension: str) -> bool:
@@ -467,6 +480,16 @@ class SurveyInterviewAgentMixin:
             "research_redacted": bool(counts),
             **{f"research_redaction_{key}_count": value for key, value in counts.items()},
         }
+
+    def _merge_research_redaction_counts(
+        self,
+        bundles: list[SurveyEvidenceBundle],
+    ) -> dict[str, int]:
+        merged: dict[str, int] = {}
+        for bundle in bundles:
+            for key, value in bundle.redaction_counts.items():
+                merged[key] = merged.get(key, 0) + value
+        return merged
 
     def _research_question_id(self, dimension: str, suffix: str) -> str:
         return f"{self._issue_id_fragment(dimension)}-{suffix}"
