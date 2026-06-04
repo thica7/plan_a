@@ -276,6 +276,12 @@ _IDENTITIES: tuple[CompetitorIdentity, ...] = (
                     "https://developers.openai.com/api/docs/pricing",
                     "pricing",
                 ),
+                source_candidate(
+                    "OpenAI platform model reference",
+                    "https://platform.openai.com/docs/models",
+                    "pricing",
+                    rationale="Official model reference used as pricing fallback context.",
+                ),
             ),
             "feature": (
                 source_candidate(
@@ -283,11 +289,31 @@ _IDENTITIES: tuple[CompetitorIdentity, ...] = (
                     "https://developers.openai.com/api/docs/guides/latest-model",
                     "feature",
                 ),
+                source_candidate(
+                    "OpenAI API models reference",
+                    "https://platform.openai.com/docs/models",
+                    "feature",
+                ),
                 source_candidate("OpenAI product updates", "https://openai.com/news/", "feature"),
             ),
             "persona": (
                 source_candidate(
                     "OpenAI business solutions", "https://openai.com/business/", "persona"
+                ),
+                source_candidate(
+                    "ChatGPT Enterprise",
+                    "https://openai.com/chatgpt/enterprise/",
+                    "persona",
+                ),
+                source_candidate(
+                    "OpenAI customer stories",
+                    "https://openai.com/customer-stories/",
+                    "persona",
+                ),
+                source_candidate(
+                    "ChatGPT Enterprise help center",
+                    "https://help.openai.com/en/collections/3742473-chatgpt-enterprise",
+                    "persona",
                 ),
             ),
             "security": (
@@ -333,6 +359,14 @@ _IDENTITIES: tuple[CompetitorIdentity, ...] = (
                 source_candidate(
                     "Claude enterprise plan",
                     "https://support.claude.com/en/articles/9797531-what-is-the-enterprise-plan",
+                    "persona",
+                ),
+                source_candidate(
+                    "Claude product page", "https://www.anthropic.com/claude", "persona"
+                ),
+                source_candidate(
+                    "Claude for Enterprise",
+                    "https://www.anthropic.com/enterprise",
                     "persona",
                 ),
             ),
@@ -383,6 +417,16 @@ _IDENTITIES: tuple[CompetitorIdentity, ...] = (
                     "https://docs.cloud.google.com/gemini/enterprise/docs/example-use-cases",
                     "persona",
                 ),
+                source_candidate(
+                    "Gemini for Google Cloud",
+                    "https://cloud.google.com/products/gemini",
+                    "persona",
+                ),
+                source_candidate(
+                    "Gemini customer stories",
+                    "https://cloud.google.com/customers?products=Gemini",
+                    "persona",
+                ),
             ),
             "security": (
                 source_candidate(
@@ -411,6 +455,18 @@ _IDENTITIES: tuple[CompetitorIdentity, ...] = (
                         "distributed without API seat pricing."
                     ),
                 ),
+                source_candidate(
+                    "Llama license",
+                    "https://www.llama.com/llama4/license/",
+                    "pricing",
+                    rationale="Official license page used when no seat/API pricing exists.",
+                ),
+                source_candidate(
+                    "Meta Llama 4 announcement",
+                    "https://ai.meta.com/blog/llama-4-multimodal-intelligence/",
+                    "pricing",
+                    rationale="Official announcement fallback for open model availability context.",
+                ),
             ),
             "feature": (
                 source_candidate(
@@ -419,10 +475,25 @@ _IDENTITIES: tuple[CompetitorIdentity, ...] = (
                     "feature",
                 ),
                 source_candidate("Llama product site", "https://www.llama.com/", "feature"),
+                source_candidate(
+                    "Llama docs",
+                    "https://www.llama.com/docs/",
+                    "feature",
+                ),
             ),
             "persona": (
                 source_candidate(
                     "Llama official product site", "https://www.llama.com/", "persona"
+                ),
+                source_candidate(
+                    "Meta Llama 4 announcement",
+                    "https://ai.meta.com/blog/llama-4-multimodal-intelligence/",
+                    "persona",
+                ),
+                source_candidate(
+                    "Llama docs",
+                    "https://www.llama.com/docs/",
+                    "persona",
                 ),
             ),
             "security": (

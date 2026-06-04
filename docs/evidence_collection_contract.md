@@ -36,6 +36,17 @@ Module: `backend/packages/tools/official_docs.py`
 
 Collector, ReAct skill tools, and official-first collection all use this same function.
 
+Real collector branches target multiple verified sources instead of stopping at
+the first successful page. The default target is 3 fetched `webpage_verified`
+sources per competitor/dimension branch and can be tuned with:
+
+- `COLLECTOR_TARGET_VERIFIED_SOURCES_PER_BRANCH` (default `3`, range `1..5`)
+- `COLLECTOR_SEARCH_MAX_RESULTS` (default `6`, range `3..10`)
+
+Official candidates are tried first. If they do not meet the target, the
+collector uses search fallback candidates until the target is reached or the
+candidate set is exhausted.
+
 ## Evidence Fetching
 
 Module: `backend/packages/tools/evidence_fetch.py`
@@ -59,3 +70,5 @@ Collector rule:
 - Real runs require verified fetched web evidence for planned dimensions.
 - Search results are candidates, not evidence, until fetch succeeds.
 - Failed candidates are traced as `source_candidate_rejected` with a failure reason.
+- A 403/short-text/JS failure must not be promoted to evidence. The collector should
+  continue to official alternates, homepage-derived alternates, and search results.

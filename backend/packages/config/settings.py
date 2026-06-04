@@ -107,6 +107,8 @@ class Settings:
     hitl_timeout_seconds: float = 60.0
     collector_react_enabled: bool = True
     collector_react_max_turns: int = 3
+    collector_target_verified_sources_per_branch: int = 3
+    collector_search_max_results: int = 6
     analyst_react_enabled: bool = True
     analyst_react_max_turns: int = 3
     analyst_react_fanout_threshold: int = 8
@@ -209,6 +211,18 @@ def get_settings() -> Settings:
         hitl_timeout_seconds=max(1.0, float(os.getenv("HITL_TIMEOUT_SECONDS", "60"))),
         collector_react_enabled=_env_bool("COLLECTOR_REACT_ENABLED", True),
         collector_react_max_turns=max(1, min(6, int(os.getenv("COLLECTOR_REACT_MAX_TURNS", "3")))),
+        collector_target_verified_sources_per_branch=_env_int(
+            "COLLECTOR_TARGET_VERIFIED_SOURCES_PER_BRANCH",
+            3,
+            minimum=1,
+            maximum=5,
+        ),
+        collector_search_max_results=_env_int(
+            "COLLECTOR_SEARCH_MAX_RESULTS",
+            6,
+            minimum=3,
+            maximum=10,
+        ),
         analyst_react_enabled=_env_bool("ANALYST_REACT_ENABLED", True),
         analyst_react_max_turns=max(1, min(6, int(os.getenv("ANALYST_REACT_MAX_TURNS", "3")))),
         analyst_react_fanout_threshold=_env_int(

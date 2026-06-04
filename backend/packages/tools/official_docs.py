@@ -48,14 +48,40 @@ def find_official_docs(
 def _dimension_paths(dimension: str) -> list[str]:
     key = dimension.casefold()
     if "pricing" in key:
-        return ["/pricing", "/plans", "/enterprise"]
+        return [
+            "/pricing",
+            "/plans",
+            "/enterprise",
+            "/business",
+            "/docs/pricing",
+            "/api/pricing",
+        ]
     if "security" in key:
-        return ["/security", "/trust", "/compliance"]
+        return ["/security", "/trust", "/compliance", "/privacy", "/enterprise/security"]
     if "integration" in key:
-        return ["/integrations", "/developers", "/docs"]
+        return ["/integrations", "/developers", "/docs", "/api", "/changelog"]
     if "persona" in key:
-        return ["/customers", "/case-studies", "/use-cases"]
-    return ["/features", "/product", "/docs", "/changelog"]
+        return [
+            "/customers",
+            "/customer-stories",
+            "/case-studies",
+            "/use-cases",
+            "/solutions",
+            "/enterprise",
+            "/business",
+            "/docs",
+        ]
+    return [
+        "/features",
+        "/product",
+        "/products",
+        "/docs",
+        "/docs/models",
+        "/models",
+        "/changelog",
+        "/news",
+        "/blog",
+    ]
 
 
 def _dedupe_candidates(candidates: list[OfficialDocCandidate]) -> list[OfficialDocCandidate]:

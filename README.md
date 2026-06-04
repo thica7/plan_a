@@ -52,6 +52,8 @@ HITL_ENABLED=false
 HITL_TIMEOUT_SECONDS=60
 COLLECTOR_REACT_ENABLED=true
 COLLECTOR_REACT_MAX_TURNS=3
+COLLECTOR_TARGET_VERIFIED_SOURCES_PER_BRANCH=3
+COLLECTOR_SEARCH_MAX_RESULTS=6
 ANALYST_REACT_ENABLED=true
 ANALYST_REACT_MAX_TURNS=3
 ENTERPRISE_STORE_BACKEND=postgres
@@ -63,7 +65,13 @@ TEMPORAL_TASK_QUEUE=competitive-intel
 
 Then restart the backend with `make dev-backend`. The New Run screen will show whether the backend detected `ARK_API_KEY` and `ARK_MODEL`; choose `Real API` to send real chat completion calls through the backend. The API key is never sent from the browser.
 Leave Competitors on `Auto-discover` to provide only a topic; the planner will search and select direct competitors before evidence collection.
-When `PPLX_API_KEY` is present, collector subagents prefer Perplexity `web_search` results, fetch and hash the returned pages, and fall back to LLM-generated evidence candidates if search is unavailable.
+When `PPLX_API_KEY` is present, collector subagents prefer official source
+registry candidates, then Perplexity `web_search` results, fetch and hash the
+returned pages, and fall back to LLM-generated evidence candidates if search is
+unavailable. Real collector branches target
+`COLLECTOR_TARGET_VERIFIED_SOURCES_PER_BRANCH` fetched `webpage_verified`
+sources before falling back, bounded by `COLLECTOR_SEARCH_MAX_RESULTS` search
+candidates per query.
 
 M0 smoke checks:
 

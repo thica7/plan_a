@@ -502,17 +502,44 @@ class CollectorAgentMixin:
         skill = self._skill_registry.get(dimension)
         added = 0
         for competitor in detail.plan.competitors:
+            target_source_count = self._collector_target_source_count(detail, dimension)
             query = self._web_search_query(detail, competitor, dimension)
             competitor_added = 0
+            competitor_sources: list[RawSource] = []
+            if self._should_collect_official_first(dimension):
+                official_sources = await self._collect_official_sources(
+                    record,
+                    detail,
+                    dimension,
+                    competitor,
+                    context,
+                )
+                for source in official_sources:
+                    if len(competitor_sources) >= target_source_count:
+                        break
+                    detail.raw_sources.append(source)
+                    competitor_sources.append(source)
+                    added += 1
+                    competitor_added += 1
             results = await self._trace_search(
                 record,
                 agent="collector",
                 subagent=dimension,
                 query=query,
-                max_results=3,
+                max_results=self._collector_search_max_results(),
                 context=context,
             )
             for result in self._rank_search_results(detail, competitor, dimension, results):
+                if len(competitor_sources) >= target_source_count:
+                    break
+                if self._candidate_already_collected(
+                    detail,
+                    competitor_sources,
+                    competitor=competitor,
+                    dimension=dimension,
+                    url=result.url,
+                ):
+                    continue
                 source = await self._source_from_search_result(
                     detail,
                     competitor,
@@ -524,20 +551,30 @@ class CollectorAgentMixin:
                 if source is None:
                     continue
                 detail.raw_sources.append(source)
+                competitor_sources.append(source)
                 added += 1
                 competitor_added += 1
-                break
-            if competitor_added == 0 and skill is not None:
+            if len(competitor_sources) < target_source_count and skill is not None:
                 fallback_query = f"{competitor} {skill.description}"
                 results = await self._trace_search(
                     record,
                     agent="collector",
                     subagent=dimension,
                     query=fallback_query,
-                    max_results=3,
+                    max_results=self._collector_search_max_results(),
                     context=context,
                 )
                 for result in self._rank_search_results(detail, competitor, dimension, results):
+                    if len(competitor_sources) >= target_source_count:
+                        break
+                    if self._candidate_already_collected(
+                        detail,
+                        competitor_sources,
+                        competitor=competitor,
+                        dimension=dimension,
+                        url=result.url,
+                    ):
+                        continue
                     source = await self._source_from_search_result(
                         detail,
                         competitor,
@@ -549,9 +586,9 @@ class CollectorAgentMixin:
                     if source is None:
                         continue
                     detail.raw_sources.append(source)
+                    competitor_sources.append(source)
                     added += 1
                     competitor_added += 1
-                    break
         return added
 
     async def _collect_competitor_with_web_search(
@@ -560,10 +597,15 @@ class CollectorAgentMixin:
         dimension: str,
         competitor: str,
         context: SubagentContext,
+        *,
+        seed_sources: list[RawSource] | None = None,
+        include_official: bool = True,
     ) -> list[RawSource]:
         detail = record.detail
         skill = self._skill_registry.get(dimension)
-        if self._should_collect_official_first(dimension):
+        target_source_count = self._collector_target_source_count(detail, dimension)
+        sources = list(seed_sources or [])
+        if include_official and self._should_collect_official_first(dimension):
             official_sources = await self._collect_official_sources(
                 record,
                 detail,
@@ -571,8 +613,14 @@ class CollectorAgentMixin:
                 competitor,
                 context,
             )
-            if official_sources:
-                return official_sources
+            for source in official_sources:
+                if len(sources) >= target_source_count:
+                    break
+                if self._source_already_in_batch(source, sources):
+                    continue
+                sources.append(source)
+        if len(sources) >= target_source_count:
+            return sources
         queries = [self._web_search_query(detail, competitor, dimension)]
         if skill is not None:
             queries.append(f"{competitor} {skill.description}")
@@ -582,10 +630,20 @@ class CollectorAgentMixin:
                 agent="collector",
                 subagent=context.subagent,
                 query=query,
-                max_results=3,
+                max_results=self._collector_search_max_results(),
                 context=context,
             )
             for result in self._rank_search_results(detail, competitor, dimension, results):
+                if len(sources) >= target_source_count:
+                    return sources
+                if self._candidate_already_collected(
+                    detail,
+                    sources,
+                    competitor=competitor,
+                    dimension=dimension,
+                    url=result.url,
+                ):
+                    continue
                 source = await self._source_from_search_result(
                     detail,
                     competitor,
@@ -595,8 +653,8 @@ class CollectorAgentMixin:
                     context,
                 )
                 if source is not None:
-                    return [source]
-        return []
+                    sources.append(source)
+        return sources
 
     async def _collect_official_sources(
         self,
@@ -607,7 +665,19 @@ class CollectorAgentMixin:
         context: SubagentContext,
     ) -> list[RawSource]:
         sources: list[RawSource] = []
-        for candidate in self._official_source_candidates(detail, competitor, dimension):
+        candidates = self._official_source_candidates(detail, competitor, dimension)
+        target_source_count = self._collector_target_source_count(detail, dimension)
+        for candidate in candidates:
+            if len(sources) >= target_source_count:
+                break
+            if self._candidate_already_collected(
+                detail,
+                sources,
+                competitor=competitor,
+                dimension=dimension,
+                url=candidate.url,
+            ):
+                continue
             source = await self._source_from_search_result(
                 detail,
                 competitor,
@@ -619,7 +689,6 @@ class CollectorAgentMixin:
             if source is None:
                 continue
             sources.append(source)
-            break
         if sources:
             self._trace_local_tool(
                 record,
@@ -639,7 +708,11 @@ class CollectorAgentMixin:
                     ensure_ascii=False,
                 ),
                 context=context,
-                metadata={"source_count": len(sources)},
+                metadata={
+                    "source_count": len(sources),
+                    "target_source_count": target_source_count,
+                    "candidate_count": len(candidates),
+                },
             )
         return sources
 
@@ -683,6 +756,45 @@ class CollectorAgentMixin:
                 "buyer",
             )
         )
+
+    def _collector_target_source_count(self, detail: RunDetail, dimension: str) -> int:
+        if not self._requires_verified_web_evidence(detail, dimension):
+            return 1
+        return max(1, int(self._settings.collector_target_verified_sources_per_branch))
+
+    def _collector_search_max_results(self) -> int:
+        return max(3, int(self._settings.collector_search_max_results))
+
+    def _candidate_already_collected(
+        self,
+        detail: RunDetail,
+        batch_sources: list[RawSource],
+        *,
+        competitor: str,
+        dimension: str,
+        url: str | None,
+    ) -> bool:
+        if not url:
+            return False
+        normalized_url = url.rstrip("/")
+        for source in (*detail.raw_sources, *batch_sources):
+            if source.dimension != dimension or not self._source_matches_competitor(
+                source, competitor
+            ):
+                continue
+            if source.url and str(source.url).rstrip("/") == normalized_url:
+                return True
+        return False
+
+    def _source_already_in_batch(self, source: RawSource, batch_sources: list[RawSource]) -> bool:
+        source_url = str(source.url).rstrip("/") if source.url else None
+        for existing in batch_sources:
+            if source.id == existing.id:
+                return True
+            existing_url = str(existing.url).rstrip("/") if existing.url else None
+            if source_url and existing_url and source_url == existing_url:
+                return True
+        return False
 
     async def _collect_competitor_with_skill_tools(
         self,
@@ -1659,9 +1771,11 @@ class CollectorAgentMixin:
             },
         )
         sources: list[RawSource] = []
+        target_source_count = self._collector_target_source_count(detail, dimension)
         collect_payload: dict[str, object] = {
             "provider": self._settings.web_search_provider,
             "results": [],
+            "target_source_count": target_source_count,
             **task_metadata,
         }
         memory_official_first = self._memory_prefers_official_sources(detail.plan)
@@ -1679,20 +1793,35 @@ class CollectorAgentMixin:
             except Exception as exc:  # noqa: BLE001 - official-first should degrade to search.
                 collect_payload["official_error"] = str(exc)
                 collect_payload["memory_official_first"] = memory_official_first
-        if not sources and self._settings.collector_react_enabled and self._search.is_enabled:
+        if (
+            len(sources) < target_source_count
+            and self._settings.collector_react_enabled
+            and self._search.is_enabled
+        ):
             try:
-                sources = await self._run_collector_competitor_react(
+                react_sources = await self._run_collector_competitor_react(
                     record, dimension, competitor, context
                 )
-                collect_payload["react_added"] = len(sources)
+                for source in react_sources:
+                    if len(sources) >= target_source_count:
+                        break
+                    if self._source_already_in_batch(source, sources):
+                        continue
+                    sources.append(source)
+                collect_payload["react_added"] = len(react_sources)
             except Exception as exc:  # noqa: BLE001 - deterministic fallback continues.
                 collect_payload["react_error"] = str(exc)
-        if not sources and self._search.is_enabled:
+        if len(sources) < target_source_count and self._search.is_enabled:
             try:
                 sources = await self._collect_competitor_with_web_search(
-                    record, dimension, competitor, context
+                    record,
+                    dimension,
+                    competitor,
+                    context,
+                    seed_sources=sources,
+                    include_official=False,
                 )
-                collect_payload["added"] = len(sources)
+                collect_payload["post_search_source_count"] = len(sources)
             except Exception as exc:  # noqa: BLE001 - LLM fallback continues.
                 collect_payload["error"] = str(exc)
         if not sources:

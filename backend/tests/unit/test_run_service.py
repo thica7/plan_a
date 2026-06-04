@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pytest
 
+from packages.agents import SubagentContext
 from packages.business_intel.homepage import HomepageVerification
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
@@ -27,6 +28,7 @@ from packages.schema.models import (
 )
 from packages.search import SearchResult
 from packages.skills.registry import SkillRegistry
+from packages.tools.evidence_fetch import EvidenceFetchResult
 from packages.tools.fetch_page import FetchPageResult
 
 
@@ -3440,11 +3442,87 @@ def test_collector_official_source_candidates_include_llm_registry_seeds() -> No
     claude_features = service._official_source_candidates(detail, "Claude", "feature")
     gemini_pricing = service._official_source_candidates(detail, "Gemini", "pricing")
     llama_features = service._official_source_candidates(detail, "Llama 4", "feature")
+    openai_persona = service._official_source_candidates(detail, "GPT-5.5", "persona")
 
     assert any("developers.openai.com" in item.url for item in gpt_pricing)
     assert any("anthropic.com" in item.url for item in claude_features)
     assert any("ai.google.dev" in item.url for item in gemini_pricing)
     assert any("ai.meta.com" in item.url or "llama.com" in item.url for item in llama_features)
+    assert len(openai_persona) >= 3
+    assert any("chatgpt/enterprise" in item.url for item in openai_persona)
+    assert any("help.openai.com" in item.url for item in openai_persona)
+
+
+@pytest.mark.asyncio
+async def test_collector_official_source_collection_collects_configured_target() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            collector_target_verified_sources_per_branch=3,
+            collector_search_max_results=6,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Most Powerful LLM",
+            competitors=["GPT-5.5"],
+            dimensions=["persona"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    context = SubagentContext(run_id=detail.id, agent="collector", subagent="persona::GPT-5.5")
+    fetch_calls: list[str] = []
+
+    async def fake_trace_fetch(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        url,
+        context=None,
+    ) -> EvidenceFetchResult:
+        fetch_calls.append(url)
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title=f"Official source {len(fetch_calls)}",
+            text=(
+                "Customer user buyer persona case study evidence for enterprise teams "
+                "evaluating GPT-5.5 adoption, workflow fit, onboarding, support, "
+                f"and use cases. Source URL: {url}"
+            ),
+            content_hash=f"hash-{len(fetch_calls)}",
+            status_code=200,
+            fetch_method="test_fetch",
+            quality_score=0.95,
+            text_length=180,
+        )
+
+    service._trace_fetch = fake_trace_fetch  # type: ignore[method-assign]
+
+    sources = await service._collect_official_sources(
+        record,
+        record.detail,
+        "persona",
+        "GPT-5.5",
+        context,
+    )
+
+    assert len(sources) == 3
+    assert len(fetch_calls) == 3
+    assert all(source.source_type == "webpage_verified" for source in sources)
+    assert len({source.url for source in sources}) == 3
+    registry_span = next(
+        span for span in record.detail.trace_spans if span.name == "official_source_registry"
+    )
+    assert registry_span.metadata["source_count"] == 3
+    assert registry_span.metadata["target_source_count"] == 3
 
 
 def test_collector_search_query_adds_product_qualifier_for_ambiguous_names() -> None:
