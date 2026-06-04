@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import Iterable
@@ -77,54 +78,71 @@ class WriterAgentMixin:
         grounding_prompt = self._writer_grounding_prompt(detail)
         user_research_policy = writer_user_research_policy_text()
         try:
-            report_md = await self._trace_llm_text(
-                record,
-                agent="writer",
-                subagent=None,
-                name="report_writer",
-                system=(
-                    "You are a senior enterprise competitive-intelligence analyst. "
-                    "Produce a decision-grade markdown report, not a short summary. "
-                    "Write with consulting depth: executive recommendation, source quality, "
-                    "side-by-side matrices, dimension analysis, risks, buying implications, "
-                    "and explicit next validation tasks. Cite factual claims with existing "
-                    "source IDs using [source:ID]. Do not invent source IDs. "
-                    "Do not use web_search_result or confidence < 0.75 as the sole support "
-                    "for a winner, legal/security certification, pricing, or procurement "
-                    "recommendation. If evidence is incomplete, say the conclusion is "
-                    "tentative and list the exact evidence gap. Do not claim all sources are "
-                    "verified when any source_type is web_search_result or llm_public_knowledge. "
-                    "Follow the Grounded Evidence Contract exactly. "
-                    f"{user_research_policy} "
-                    "Honor confirmed memory guidance when it does not conflict with evidence, "
-                    "schema requirements, or compliance policy. "
-                    "Use the requested competitive layer to choose the report shape: L1 is a "
-                    "direct battlecard, L2 is adjacent workflow and enterprise-risk analysis, "
-                    "and L3 is market landscape and category strategy."
+            timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
+            report_md = await asyncio.wait_for(
+                self._trace_llm_text(
+                    record,
+                    agent="writer",
+                    subagent=None,
+                    name="report_writer",
+                    system=(
+                        "You are a senior enterprise competitive-intelligence analyst. "
+                        "Produce a decision-grade markdown report, not a short summary. "
+                        "Write with consulting depth: executive recommendation, source quality, "
+                        "side-by-side matrices, dimension analysis, risks, buying implications, "
+                        "and explicit next validation tasks. Cite factual claims with existing "
+                        "source IDs using [source:ID]. Do not invent source IDs. "
+                        "Do not use web_search_result or confidence < 0.75 as the sole support "
+                        "for a winner, legal/security certification, pricing, or procurement "
+                        "recommendation. If evidence is incomplete, say the conclusion is "
+                        "tentative and list the exact evidence gap. Do not claim all sources are "
+                        "verified when any source_type is web_search_result or "
+                        "llm_public_knowledge. "
+                        "Follow the Grounded Evidence Contract exactly. "
+                        f"{user_research_policy} "
+                        "Honor confirmed memory guidance when it does not conflict with evidence, "
+                        "schema requirements, or compliance policy. "
+                        "Use the requested competitive layer to choose the report shape: L1 is a "
+                        "direct battlecard, L2 is adjacent workflow and enterprise-risk analysis, "
+                        "and L3 is market landscape and category strategy."
+                    ),
+                    user=(
+                        f"Topic: {detail.topic}\n"
+                        f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                        f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                        f"Competitive Layer: {detail.plan.competitor_layer}\n"
+                        f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
+                        "Scenario Recommended Dimensions: "
+                        f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
+                        f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
+                        f"Confirmed Memory Preferences:\n{memory_context}\n"
+                        f"Layer Report Context: {layer_context}\n"
+                        f"{grounding_prompt}\n"
+                        f"Competitor KB JSON: {competitor_kb_json}\n"
+                        f"Competitor Knowledge Schema JSON: {competitor_knowledge_json}\n"
+                        f"Comparison Matrix JSON: {comparison_matrix_json}\n"
+                        f"Source digest JSON: {source_digest_json}\n"
+                        f"Reflections JSON: {reflections_json}\n"
+                        f"Run QA Findings JSON: {qa_findings_json}\n\n"
+                        f"Required sections:\n{required_sections}\n"
+                        "Prefer complete analysis over brevity, but stay under 12,000 characters."
+                    ),
                 ),
-                user=(
-                    f"Topic: {detail.topic}\n"
-                    f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                    f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                    f"Competitive Layer: {detail.plan.competitor_layer}\n"
-                    f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
-                    "Scenario Recommended Dimensions: "
-                    f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
-                    f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
-                    f"Confirmed Memory Preferences:\n{memory_context}\n"
-                    f"Layer Report Context: {layer_context}\n"
-                    f"{grounding_prompt}\n"
-                    f"Competitor KB JSON: {competitor_kb_json}\n"
-                    f"Competitor Knowledge Schema JSON: {competitor_knowledge_json}\n"
-                    f"Comparison Matrix JSON: {comparison_matrix_json}\n"
-                    f"Source digest JSON: {source_digest_json}\n"
-                    f"Reflections JSON: {reflections_json}\n"
-                    f"Run QA Findings JSON: {qa_findings_json}\n\n"
-                    f"Required sections:\n{required_sections}\n"
-                    "Prefer complete analysis over brevity, but stay under 12,000 characters."
-                ),
+                timeout=timeout_seconds,
             )
             detail.report_md = self._harden_report_markdown(detail, report_md)
+        except TimeoutError as exc:
+            timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
+            writer_error = timeout_reason
+            if previous_report.strip():
+                detail.report_md = previous_report
+                writer_mode = "preserved previous report after writer error"
+            else:
+                detail.report_md = self._harden_report_markdown(
+                    detail,
+                    self._fallback_report_markdown(detail, writer_error),
+                )
+                writer_mode = "deterministic fallback after writer error"
         except Exception as exc:  # noqa: BLE001 - writer fallback keeps long runs demo-safe.
             writer_error = str(exc)
             if previous_report.strip():

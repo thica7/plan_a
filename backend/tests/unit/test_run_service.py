@@ -2106,6 +2106,75 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
     assert record.detail.trace_spans[-2].status == "error"
 
 
+@pytest.mark.asyncio
+async def test_writer_budget_timeout_generates_deterministic_report() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=0.05,
+        ),
+    )
+
+    async def slow_complete_text(*, system: str, user: str) -> str:
+        await asyncio.sleep(1)
+        return "# Slow report"
+
+    service._llm.complete_text = slow_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer budget fallback",
+            competitors=["A"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-1",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://example.com/pricing",
+            snippet="A costs $10 per month.",
+            content_hash="abc",
+            confidence=0.9,
+        )
+    ]
+    record.detail.comparison_matrix = ComparisonMatrix(
+        competitors=["A"],
+        dimensions=["pricing"],
+        cells=[
+            ComparisonCell(
+                competitor="A",
+                dimension="pricing",
+                value="A costs $10 per month.",
+                source_ids=["pricing-1"],
+                confidence=0.9,
+            )
+        ],
+        winner_by_dimension={"pricing": "A"},
+        summary=["A has transparent pricing."],
+    )
+
+    await service._real_writer_step(record)
+
+    assert "## Generation Notes" in record.detail.report_md
+    assert "writer LLM exceeded 0.05s" in record.detail.report_md
+    assert (
+        record.detail.agent_messages[-1].payload["writer_mode"]
+        == "deterministic fallback after writer error"
+    )
+    assert record.detail.agent_messages[-1].payload["error"] == "writer LLM exceeded 0.05s"
+
+
 def test_candidate_evidence_prefers_matching_search_results() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
