@@ -1,6 +1,6 @@
 # Real Run Quality Comparison
 
-- Current run: run-4c23bf2ea8b349d76a28ec9e36419329
+- Current run: run-704b6abff857d01b3bb722da5f96a047
 - Baseline run: 411d3a19-7049-4a7e-aa9f-c5b63e74a69e
 - Current status: completed_with_blockers
 - Current node: none
@@ -20,8 +20,8 @@
 
 | Field | Delta |
 |---|---:|
-| Report chars | +13522 |
-| Raw sources | -9 |
+| Report chars | +12003 |
+| Raw sources | -10 |
 | Claims | 0 |
 | QA findings | -10 |
 | Trace spans | -184 |
@@ -31,23 +31,23 @@
 
 | Field | Value |
 |---|---:|
-| Raw sources | 18 |
-| Enterprise evidence | 18 |
+| Raw sources | 17 |
+| Enterprise evidence | 17 |
 | Claims | 0 |
 | Enterprise claims | 17 |
 | QA findings | 8 |
 | Agent messages | 60 |
 | Tool calls | 115 |
 | Trace spans | 180 |
-| Report chars | 22480 |
+| Report chars | 20961 |
 
 ## Quality Metrics
 
 | Metric | Target | Baseline | Delta | Status |
 |---|---:|---:|---:|---|
-| evidence_count | 18 | 27 | -9 | regressed |
+| evidence_count | 17 | 27 | -10 | regressed |
 | source_coverage_rate | 1 | 1 | 0 | unchanged |
-| verified_source_rate | 0.778 | 0.815 | -0.037 | regressed |
+| verified_source_rate | 0.765 | 0.815 | -0.05 | regressed |
 | claim_citation_rate | 1 | 1 | 0 | unchanged |
 | citation_validity_rate | 1 | 1 | 0 | unchanged |
 | real_source_rate | 1 | 1 | 0 | unchanged |
@@ -65,14 +65,14 @@
 
 | ID | Severity | Agent | Dimension | Competitor | Problem |
 |---|---|---|---|---|---|
-| reflector-coverage-1-pricing-dimension:-github-copilot-cell-value-tru | warn | collector | pricing | GitHub Copilot | Pricing dimension: GitHub Copilot cell value truncates full paid tier pricing details, Cursor cell value omits explicit individual/Pro tier full pricing, Claude Code cell value does not capture explicit public subscription pricing numbers, Windsurf cell value lacks individual tier pricing data, only Teams/Enterprise credit allocation is documented. |
-| reflector-coverage-2-persona-dimension:-github-copilot-cursor-claude- | warn | collector | persona | GitHub Copilot | Persona dimension: GitHub Copilot, Cursor, Claude Code cells do not populate required aligned fields with verified data, all three are marked as unknown segment. |
-| reflector-coverage-3-feature-dimension:-all-4-competitors-feature-cel | warn | collector | feature |  | Feature dimension: all four feature cells are truncated partial snippets, no standardized aligned fields are fully populated for side-by-side comparison. |
-| reflector-confidence-1-persona-aggregated-cell-confidence-values-0.76-0 | warn | collector | persona |  | Persona aggregated cell confidence values are still judged inflated relative to the 0.62 confidence of synthetic interview persona sources. |
-| reflector-confidence-2-majority-vote-pricing-result-incorrectly-lists-c | warn | collector | pricing | GitHub Copilot | Majority-vote pricing result incorrectly lists confidence value as `GitHub Copilot` instead of a numeric or valid categorical confidence score. |
-| reflector-cross-competitor-1-pricing-dimension-has-no-fully-aligned-complete- | warn | comparator | pricing |  | Pricing dimension still lacks a complete side-by-side tier pricing comparison across all four competitors. |
-| reflector-cross-competitor-2-persona-dimension-has-no-aligned-complete-side-b | warn | comparator | persona |  | Persona dimension still lacks aligned target segment, role, company size, and pain point data across all four competitors. |
-| reflector-cross-competitor-3-feature-dimension-has-no-standardized-comparable | warn | comparator | feature |  | Feature dimension still lacks a standardized comparable feature-set mapping across all four competitors. |
+| reflector-coverage-1-pricing-dimension-missing-full-tiered-data:-gith | warn | collector | pricing | GitHub Copilot | Pricing dimension still misses full tiered data: GitHub Copilot Pro, Cursor paid tiers, and complete Claude Code/Windsurf usage-limit data are not fully captured. |
+| reflector-coverage-2-feature-dimension-only-extracted-1-truncated-par | warn | collector | feature |  | Feature dimension only extracts one partial feature per competitor; a complete standardized shared feature taxonomy is still missing. |
+| reflector-coverage-3-persona-dimension-lacks-coverage-of-non-enterpri | warn | collector | persona |  | Persona dimension still lacks non-enterprise user segments such as individual hobbyists and SMB/startup teams. |
+| reflector-confidence-1-all-4-persona-dimension-competitor-cells-have-un | warn | collector | pricing |  | Persona confidence is now capped at 0.62 for low-confidence interview-backed cells, but the reflector asks for clearer rationale because verified persona webpages also exist. |
+| reflector-confidence-2-pricing-majority-vote-declares-github-copilot-as | warn | collector | pricing | GitHub Copilot | Pricing majority vote still creates a weak winner when evidence and findings tie; winner confidence needs a stricter tie policy. |
+| reflector-cross-competitor-1-no-side-by-side-aligned-full-tiered-pricing-indi | warn | comparator | pricing |  | No full aligned paid-tier pricing table across individual, pro, and enterprise tiers for all four competitors. |
+| reflector-cross-competitor-2-no-cross-competitor-aligned-standardized-feature | warn | comparator | feature |  | No shared cross-competitor feature taxonomy has been applied to all four tools. |
+| reflector-cross-competitor-3-no-aligned-cross-competitor-persona-coverage-for | warn | comparator | persona |  | Persona coverage still lacks aligned non-enterprise segment coverage across competitors. |
 
 ## Last Agent Messages
 
@@ -96,8 +96,11 @@
 - The previous failed audit stopped at `collect_qa` with `missing-source-feature-windsurf`.
 - After updating Windsurf feature collection to official Cascade docs, the run reached writer and final QA.
 - After raising the default LLM and writer timeout to 90 seconds, the latest run kept `writer_mode=real LLM call` instead of falling back to deterministic writing.
+- Comparator cell values now prefer structured pricing/persona/feature fields before falling back to snippets.
+- Analyst pricing schema enrichment now fills price, billing cycle, and limits from verified source text when the model leaves fields unknown.
+- Persona confidence is capped by low-confidence user-research sources, and persona segment names are now competitor-specific instead of a single generic label.
 - The report is no longer fallback-generated; it was produced by a real LLM call.
-- Remaining warnings are quality-improvement work around aligned pricing, persona, feature extraction, and comparator confidence formatting, not release-gate blockers.
+- Remaining warnings are quality-improvement work around full paid-tier pricing, a shared feature taxonomy, non-enterprise persona coverage, and stricter tied-winner handling, not release-gate blockers.
 
 ## Method
 
