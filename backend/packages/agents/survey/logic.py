@@ -342,6 +342,7 @@ class SurveyInterviewAgentMixin:
                 RawSource(
                     id=self._new_source_id(f"{dimension}-interview"),
                     competitor=redacted_competitor,
+                    covered_competitors=[redacted_competitor],
                     dimension=redacted_dimension,
                     source_type="interview_record",
                     title=f"{redacted_competitor} {redacted_dimension} interview synthesis",
@@ -357,6 +358,7 @@ class SurveyInterviewAgentMixin:
             RawSource(
                 id=self._new_source_id(f"{dimension}-survey"),
                 competitor=redacted_competitor,
+                covered_competitors=[redacted_competitor],
                 dimension=redacted_dimension,
                 source_type=bundle.source_type,
                 title=f"{redacted_competitor} {redacted_dimension} survey synthesis",

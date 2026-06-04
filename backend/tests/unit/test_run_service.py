@@ -368,6 +368,7 @@ async def test_survey_interview_enrichment_emits_research_evidence_payload() -> 
     assert source_types == {"interview_record"}
     assert len(record.detail.raw_sources) == 1
     assert "Simulated survey and interview research" in record.detail.raw_sources[0].snippet
+    assert record.detail.raw_sources[0].covered_competitors == ["Cursor"]
     assert record.detail.competitor_knowledge["Cursor"].user_personas.summary_claims
     completed = next(
         event
