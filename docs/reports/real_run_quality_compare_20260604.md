@@ -1,6 +1,6 @@
 # Real Run Quality Comparison
 
-- Current run: run-f6444b70c022eb7dfa22fe9314a46e30
+- Current run: run-d0d94bb39d3f6369cd5be532c27f9a56
 - Baseline run: 411d3a19-7049-4a7e-aa9f-c5b63e74a69e
 - Current status: completed_with_blockers
 - Current node: none
@@ -12,48 +12,48 @@
 
 | Metric | Value |
 |---|---:|
-| Target score | 97 |
+| Target score | 98 |
 | Baseline score | 77 |
-| Delta score | +20 |
+| Delta score | +21 |
 
 ## Shape Delta
 
 | Field | Delta |
 |---|---:|
-| Report chars | +11588 |
-| Raw sources | -11 |
+| Report chars | +11780 |
+| Raw sources | -10 |
 | Claims | 0 |
 | QA findings | -9 |
-| Trace spans | -180 |
+| Trace spans | -184 |
 | Fallback report regressed | no |
 
 ## Current Evidence
 
 | Field | Value |
 |---|---:|
-| Raw sources | 16 |
-| Enterprise evidence | 16 |
+| Raw sources | 17 |
+| Enterprise evidence | 17 |
 | Claims | 0 |
-| Enterprise claims | 16 |
+| Enterprise claims | 17 |
 | QA findings | 9 |
 | Agent messages | 60 |
-| Tool calls | 119 |
-| Trace spans | 184 |
-| Report chars | 20546 |
+| Tool calls | 115 |
+| Trace spans | 180 |
+| Report chars | 20738 |
 
 ## Quality Metrics
 
 | Metric | Target | Baseline | Delta | Status |
 |---|---:|---:|---:|---|
-| evidence_count | 16 | 27 | -11 | regressed |
+| evidence_count | 17 | 27 | -10 | regressed |
 | source_coverage_rate | 1 | 1 | 0 | unchanged |
-| verified_source_rate | 0.75 | 0.815 | -0.065 | regressed |
+| verified_source_rate | 0.765 | 0.815 | -0.05 | regressed |
 | claim_citation_rate | 1 | 1 | 0 | unchanged |
 | citation_validity_rate | 1 | 1 | 0 | unchanged |
 | real_source_rate | 1 | 1 | 0 | unchanged |
 | llm_call_signal | 1 | 1 | 0 | unchanged |
 | report_length_score | 1 | 1 | 0 | unchanged |
-| report_structure_score | 0.9 | 0.3 | +0.6 | improved |
+| report_structure_score | 1 | 0.3 | +0.7 | improved |
 | claim_risk_section_score | 1 | 0 | +1 | improved |
 | scenario_checklist_section_score | 1 | 0 | +1 | improved |
 | memory_context_section_score | 1 | 1 | 0 | unchanged |
@@ -65,15 +65,15 @@
 
 | ID | Severity | Agent | Dimension | Competitor | Problem |
 |---|---|---|---|---|---|
-| reflector-coverage-1-all-pricing-dimension-cells-have-truncated-value | warn | collector | pricing |  | Pricing cells still expose incomplete billing-cycle, usage-limit, and subscription-vs-usage details. |
-| reflector-coverage-2-github-copilot-feature-dimension-lacks-documente | warn | collector | feature | GitHub Copilot | GitHub Copilot feature coverage lacks IDE integration and tool/terminal-use evidence that exists for other competitors. |
-| reflector-coverage-3-persona-dimension-has-no-coverage-of-non-enterpr | warn | collector | persona |  | Persona coverage lacks non-enterprise user segments and non-technical stakeholder roles for all competitors. |
-| reflector-coverage-4-claude-code-and-windsurf-pricing-entries-have-du | warn | collector | pricing | Claude Code | Claude Code and Windsurf still include duplicate or unstandardized enterprise tier entries. |
-| reflector-confidence-1-all-4-persona-dimension-cells-have-a-uniform-con | warn | collector | persona |  | Persona cells remain a low-confidence outlier cluster at 0.62 versus 0.90+ pricing/feature cells. |
-| reflector-confidence-2-all-persona-webpage-source-snippets-do-not-conta | warn | collector | persona |  | Persona webpage snippets do not yet contain explicit segment, role, or pain-point data. |
-| reflector-cross-competitor-1-no-fully-aligned-side-by-side-pricing-comparison | warn | comparator | pricing |  | Pricing still lacks complete aligned tier_name, price, and billing_cycle coverage across all public tiers. |
-| reflector-cross-competitor-2-missing-cross-competitor-aligned-feature-coverag | warn | comparator | feature |  | Feature taxonomy is preserved, but GitHub Copilot is missing aligned IDE/tool coverage. |
-| reflector-cross-competitor-3-no-differentiated-cross-competitor-persona-segme | warn | comparator | persona |  | Persona segmentation is still too similar across competitors and needs competitor-specific attributes. |
+| reflector-coverage-1-pricing-dimension:-multiple-tiers-across-all-4-c | warn | collector | pricing |  | Pricing truncation is resolved; remaining issue is missing billing-cycle and usage-limit values across equivalent tiers. |
+| reflector-coverage-2-pricing-dimension:-claude-code-has-duplicate-unl | warn | collector | pricing | Claude Code | Claude Code still has duplicate unlabeled enterprise tier entries and no clear public individual/Pro tier. |
+| reflector-coverage-3-persona-dimension:-no-coverage-of-non-enterprise | warn | collector | persona |  | Persona coverage lacks non-enterprise user segments such as solo developers and SMB teams. |
+| reflector-coverage-4-feature-dimension:-github-copilot-and-claude-cod | warn | collector | feature | GitHub Copilot | GitHub Copilot and Claude Code lack documented IDE integration entries compared with Cursor/Windsurf. |
+| reflector-confidence-1-all-4-persona-dimension-competitor-cells-have-un | warn | collector | persona |  | Persona cells remain a low-confidence outlier cluster at 0.62 because interview sources dominate. |
+| reflector-confidence-2-persona-interview-source-records-have-empty-cove | warn | collector | persona |  | Persona interview source records still have empty covered_competitors metadata. |
+| reflector-cross-competitor-1-no-fully-aligned-cross-competitor-pricing-datase | warn | comparator | pricing |  | Pricing needs consistently populated billing-cycle and usage-limit fields for Free, Individual/Pro, Team, and Enterprise levels. |
+| reflector-cross-competitor-2-no-aligned-cross-competitor-persona-dataset:-all | warn | comparator | persona |  | Persona segmentation is still too generic and similar across competitors. |
+| reflector-cross-competitor-3-no-aligned-cross-competitor-feature-dataset:-the | warn | comparator | feature |  | Enterprise administration is not yet represented for Claude Code and Windsurf. |
 
 ## Last Agent Messages
 
@@ -105,6 +105,7 @@
 - Analyst feature extraction now maps source text into a shared taxonomy: code completion, agentic coding, chat, IDE integration, review/security, tool use, repository context, and enterprise administration.
 - Comparator now prioritizes canonical taxonomy feature nodes over generic model-generated nodes, and writer/reflector digests preserve longer feature matrix cells.
 - The previous feature warning about truncated feature cells is resolved; the remaining feature warning is about GitHub Copilot source coverage for IDE integration and tool/terminal use.
+- Comparator and writer/reflector digests now preserve longer pricing matrix cells; the previous pricing truncation warning is resolved.
 - The report is no longer fallback-generated; it was produced by a real LLM call.
 - Remaining warnings are quality-improvement work around normalized pricing tier completeness, feature source coverage parity, and persona source quality/differentiation, not release-gate blockers.
 
