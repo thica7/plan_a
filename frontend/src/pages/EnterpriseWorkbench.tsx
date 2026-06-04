@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  XCircle,
 } from "lucide-react";
 import {
   exportRunComplianceReport,
@@ -1310,7 +1311,11 @@ export function EnterpriseWorkbench({
                 toolRegistry={toolRegistry}
               />
 
-              <AuditLogPanel logs={auditLogs} />
+              <AuditLogPanel
+                logs={auditLogs}
+                onLogsChange={setAuditLogs}
+                workspaceId={selectedProject.workspace_id}
+              />
 
               <MemoryAgentPanel
                 feedback={memoryFeedback}
@@ -1492,11 +1497,44 @@ function CompetitorLibrary({
   );
 }
 
-function AuditLogPanel({ logs }: { logs: AuditLogRecord[] }) {
+function toAuditIsoFilter(value: string): string | undefined {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed.toISOString();
+}
+
+function parseAuditActorFilter(value: string): {
+  actorId?: string;
+  actorType?: AuditLogRecord["actor_type"];
+} {
+  if (!value) return {};
+  const [actorTypeValue, ...actorIdParts] = value.split(":");
+  if (!["user", "agent", "workflow", "system"].includes(actorTypeValue)) return {};
+  const actorId = actorIdParts.join(":");
+  return {
+    actorId: actorId && actorId !== "unknown" ? actorId : undefined,
+    actorType: actorTypeValue as AuditLogRecord["actor_type"],
+  };
+}
+
+function AuditLogPanel({
+  logs,
+  onLogsChange,
+  workspaceId,
+}: {
+  logs: AuditLogRecord[];
+  onLogsChange: (logs: AuditLogRecord[]) => void;
+  workspaceId: string;
+}) {
   const [query, setQuery] = useState("");
   const [actionFilter, setActionFilter] = useState("");
   const [resourceFilter, setResourceFilter] = useState("");
   const [actorFilter, setActorFilter] = useState("");
+  const [createdFromFilter, setCreatedFromFilter] = useState("");
+  const [createdToFilter, setCreatedToFilter] = useState("");
+  const [isLoadingAuditLogs, setLoadingAuditLogs] = useState(false);
+  const [auditFilterError, setAuditFilterError] = useState<string | null>(null);
   const actionOptions = useMemo(
     () => Array.from(new Set(logs.map((log) => log.action))).sort(),
     [logs],
@@ -1529,15 +1567,58 @@ function AuditLogPanel({ logs }: { logs: AuditLogRecord[] }) {
         && (!actionFilter || log.action === actionFilter)
         && (!resourceFilter || log.resource_type === resourceFilter)
         && (!actorFilter || actorKey === actorFilter)
+        && (!createdFromFilter || new Date(log.created_at) >= new Date(createdFromFilter))
+        && (!createdToFilter || new Date(log.created_at) <= new Date(createdToFilter))
       );
     });
-  }, [actionFilter, actorFilter, logs, query, resourceFilter]);
+  }, [actionFilter, actorFilter, createdFromFilter, createdToFilter, logs, query, resourceFilter]);
   const recentLogs = filteredLogs.slice(0, 6);
   const reportLogs = logs.filter(
     (log) => log.resource_type === "report_version" || log.action.startsWith("report_version."),
   );
   const statusChanges = logs.filter((log) => log.action === "report_version.status_changed");
   const actorCount = new Set(logs.map((log) => `${log.actor_type}:${log.actor_id ?? "unknown"}`)).size;
+
+  async function handleApplyAuditFilters() {
+    setLoadingAuditLogs(true);
+    setAuditFilterError(null);
+    try {
+      const actor = parseAuditActorFilter(actorFilter);
+      const refreshedLogs = await listEnterpriseAuditLogs({
+        workspaceId,
+        action: actionFilter || undefined,
+        actorId: actor.actorId,
+        actorType: actor.actorType,
+        resourceType: resourceFilter || undefined,
+        createdFrom: toAuditIsoFilter(createdFromFilter),
+        createdTo: toAuditIsoFilter(createdToFilter),
+        limit: 200,
+      });
+      onLogsChange(refreshedLogs);
+    } catch (err) {
+      setAuditFilterError(err instanceof Error ? err.message : "Unable to filter audit log.");
+    } finally {
+      setLoadingAuditLogs(false);
+    }
+  }
+
+  async function handleClearAuditFilters() {
+    setQuery("");
+    setActionFilter("");
+    setResourceFilter("");
+    setActorFilter("");
+    setCreatedFromFilter("");
+    setCreatedToFilter("");
+    setAuditFilterError(null);
+    setLoadingAuditLogs(true);
+    try {
+      onLogsChange(await listEnterpriseAuditLogs({ workspaceId, limit: 200 }));
+    } catch (err) {
+      setAuditFilterError(err instanceof Error ? err.message : "Unable to refresh audit log.");
+    } finally {
+      setLoadingAuditLogs(false);
+    }
+  }
 
   return (
     <section className="panel readiness-panel pass">
@@ -1591,7 +1672,38 @@ function AuditLogPanel({ logs }: { logs: AuditLogRecord[] }) {
             <option key={actor} value={actor}>{actor}</option>
           ))}
         </select>
+        <input
+          aria-label="Audit created from filter"
+          onChange={(event) => setCreatedFromFilter(event.target.value)}
+          type="datetime-local"
+          value={createdFromFilter}
+        />
+        <input
+          aria-label="Audit created to filter"
+          onChange={(event) => setCreatedToFilter(event.target.value)}
+          type="datetime-local"
+          value={createdToFilter}
+        />
+        <button
+          className="icon-button"
+          disabled={isLoadingAuditLogs}
+          onClick={handleApplyAuditFilters}
+          title="Apply audit filters"
+          type="button"
+        >
+          <RefreshCw size={16} aria-hidden />
+        </button>
+        <button
+          className="icon-button"
+          disabled={isLoadingAuditLogs}
+          onClick={handleClearAuditFilters}
+          title="Clear audit filters"
+          type="button"
+        >
+          <XCircle size={16} aria-hidden />
+        </button>
       </div>
+      {auditFilterError ? <p className="inline-error">{auditFilterError}</p> : null}
       {recentLogs.length > 0 ? (
         <div className="recommendation-list">
           {recentLogs.map((log) => (

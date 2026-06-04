@@ -3202,15 +3202,22 @@ select {
 }
 
 .audit-filter-grid {
+  align-items: center;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(150px, 1fr));
+  grid-template-columns:
+    minmax(220px, 1.5fr)
+    repeat(3, minmax(150px, 1fr))
+    repeat(2, minmax(180px, 1fr))
+    auto
+    auto;
 }
 
 .audit-filter-grid .audit-search {
   max-width: none;
 }
 
+.audit-filter-grid input,
 .audit-filter-grid select {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -3219,6 +3226,20 @@ select {
   min-height: 42px;
   min-width: 0;
   padding: 0 10px;
+}
+
+.audit-filter-grid .icon-button {
+  min-height: 42px;
+}
+
+.audit-filter-grid .icon-button {
+  width: 42px;
+}
+
+.inline-error {
+  color: #b91c1c;
+  font-size: 12px;
+  margin: 6px 0 0;
 }
 
 @media (max-width: 900px) {
