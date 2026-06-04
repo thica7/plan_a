@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 
 from app.deps import (
@@ -1801,9 +1801,63 @@ def list_audit_logs(
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
     workspace_id: str | None = None,
+    action: str | None = None,
+    actor_id: str | None = None,
+    actor_type: str | None = None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
 ) -> list[AuditLogRecord]:
     scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "audit:read")
-    return store.list_audit_logs(workspace_id=scoped_workspace_id)
+    logs = store.list_audit_logs(workspace_id=scoped_workspace_id)
+    return _filter_audit_logs(
+        logs,
+        action=action,
+        actor_id=actor_id,
+        actor_type=actor_type,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+    )
+
+
+def _filter_audit_logs(
+    logs: list[AuditLogRecord],
+    *,
+    action: str | None,
+    actor_id: str | None,
+    actor_type: str | None,
+    resource_type: str | None,
+    resource_id: str | None,
+    created_from: datetime | None,
+    created_to: datetime | None,
+    limit: int,
+) -> list[AuditLogRecord]:
+    if created_from and created_to and created_from > created_to:
+        raise HTTPException(
+            status_code=400,
+            detail="created_from must be earlier than or equal to created_to.",
+        )
+    filtered = logs
+    if action:
+        filtered = [log for log in filtered if log.action == action]
+    if actor_id:
+        filtered = [log for log in filtered if log.actor_id == actor_id]
+    if actor_type:
+        filtered = [log for log in filtered if log.actor_type == actor_type]
+    if resource_type:
+        filtered = [log for log in filtered if log.resource_type == resource_type]
+    if resource_id:
+        filtered = [log for log in filtered if log.resource_id == resource_id]
+    if created_from:
+        filtered = [log for log in filtered if log.created_at >= created_from]
+    if created_to:
+        filtered = [log for log in filtered if log.created_at <= created_to]
+    return filtered[:limit]
 
 
 def _capture_evidence_quality_memory(

@@ -266,9 +266,32 @@ export function listEnterpriseProjects(workspaceId?: string) {
   return request<ProjectRecord[]>(`/enterprise/projects${params}`);
 }
 
-export function listEnterpriseAuditLogs(workspaceId?: string) {
-  const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
-  return request<AuditLogRecord[]>(`/enterprise/audit-logs${params}`);
+export function listEnterpriseAuditLogs(
+  options: string | {
+    workspaceId?: string;
+    action?: string;
+    actorId?: string;
+    actorType?: string;
+    resourceType?: string;
+    resourceId?: string;
+    createdFrom?: string;
+    createdTo?: string;
+    limit?: number;
+  } = {},
+) {
+  const resolved = typeof options === "string" ? { workspaceId: options } : options;
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set("workspace_id", resolved.workspaceId);
+  if (resolved.action) params.set("action", resolved.action);
+  if (resolved.actorId) params.set("actor_id", resolved.actorId);
+  if (resolved.actorType) params.set("actor_type", resolved.actorType);
+  if (resolved.resourceType) params.set("resource_type", resolved.resourceType);
+  if (resolved.resourceId) params.set("resource_id", resolved.resourceId);
+  if (resolved.createdFrom) params.set("created_from", resolved.createdFrom);
+  if (resolved.createdTo) params.set("created_to", resolved.createdTo);
+  if (resolved.limit !== undefined) params.set("limit", String(resolved.limit));
+  const query = params.toString();
+  return request<AuditLogRecord[]>(`/enterprise/audit-logs${query ? `?${query}` : ""}`);
 }
 
 export function listScenarioPacks() {

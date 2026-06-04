@@ -1168,6 +1168,29 @@ def test_enterprise_router_exposes_projection() -> None:
     audit_logs = client.get(
         f"/api/enterprise/audit-logs?workspace_id={context.workspace_id}"
     )
+    audit_filtered = client.get(
+        "/api/enterprise/audit-logs",
+        params={
+            "workspace_id": context.workspace_id,
+            "action": "memory.feedback_captured",
+            "actor_id": "system-user",
+            "actor_type": "system",
+            "resource_type": "memory_feedback",
+            "resource_id": memory_ingest.json()["feedback"]["id"],
+        },
+    )
+    audit_limited = client.get(
+        "/api/enterprise/audit-logs",
+        params={"workspace_id": context.workspace_id, "limit": 1},
+    )
+    audit_invalid_range = client.get(
+        "/api/enterprise/audit-logs",
+        params={
+            "workspace_id": context.workspace_id,
+            "created_from": "2026-01-02T00:00:00",
+            "created_to": "2026-01-01T00:00:00",
+        },
+    )
     readiness = client.get(f"/api/enterprise/projects/{context.project_id}/readiness-score")
     gaps = client.get(f"/api/enterprise/projects/{context.project_id}/evidence-gaps")
     red_team = client.get(f"/api/enterprise/projects/{context.project_id}/red-team")
@@ -1315,6 +1338,14 @@ def test_enterprise_router_exposes_projection() -> None:
     assert memory_stats.status_code == 200
     assert memory_stats.json()["confirmed_candidate_count"] >= 1
     assert audit_logs.status_code == 200
+    assert audit_filtered.status_code == 200
+    assert len(audit_filtered.json()) == 1
+    assert audit_filtered.json()[0]["action"] == "memory.feedback_captured"
+    assert audit_filtered.json()[0]["resource_id"] == memory_ingest.json()["feedback"]["id"]
+    assert audit_limited.status_code == 200
+    assert len(audit_limited.json()) == 1
+    assert audit_invalid_range.status_code == 400
+    assert "created_from" in audit_invalid_range.json()["detail"]
     assert any(
         log["action"] == "memory.feedback_captured"
         and log["resource_id"] == memory_ingest.json()["feedback"]["id"]
