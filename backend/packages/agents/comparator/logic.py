@@ -108,11 +108,11 @@ class ComparatorAgentMixin:
                         dimension=dimension,
                         value=value or "No structured finding available.",
                         source_ids=[source.id for source in related_sources],
-                        confidence=(
-                            sum(source.confidence for source in related_sources)
-                            / len(related_sources)
-                            if related_sources
-                            else 0.0
+                        confidence=self._matrix_cell_confidence(
+                            detail,
+                            competitor,
+                            dimension,
+                            related_sources,
                         ),
                     )
                 )
@@ -228,6 +228,57 @@ class ComparatorAgentMixin:
         if len(text) <= limit:
             return text
         return f"{text[: limit - 1].rstrip()}..."
+
+    def _matrix_cell_confidence(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        related_sources: list[RawSource],
+    ) -> float:
+        source_confidence = (
+            sum(source.confidence for source in related_sources) / len(related_sources)
+            if related_sources
+            else 0.0
+        )
+        claim_confidences = self._structured_claim_confidences(detail, competitor, dimension)
+        if not claim_confidences:
+            return source_confidence
+        claim_confidence = sum(claim_confidences) / len(claim_confidences)
+        if source_confidence <= 0:
+            return claim_confidence
+        return min(source_confidence, claim_confidence)
+
+    def _structured_claim_confidences(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+    ) -> list[float]:
+        knowledge = detail.competitor_knowledge.get(competitor)
+        if knowledge is None:
+            return []
+        dimension_key = dimension.casefold()
+        if "pricing" in dimension_key:
+            claims = [
+                *knowledge.pricing_model.notes,
+                *[claim for tier in knowledge.pricing_model.tiers for claim in tier.claims],
+            ]
+        elif "persona" in dimension_key or "user" in dimension_key:
+            claims = [
+                *knowledge.user_personas.summary_claims,
+                *[
+                    claim
+                    for segment in knowledge.user_personas.segments
+                    for claim in segment.claims
+                ],
+            ]
+        else:
+            claims = [
+                *knowledge.feature_tree.summary_claims,
+                *[claim for node in knowledge.feature_tree.nodes for claim in node.claims],
+            ]
+        return [claim.confidence for claim in claims if claim.confidence > 0]
 
     def _matrix_majority_vote(
         self,

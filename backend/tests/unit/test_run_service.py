@@ -1831,6 +1831,88 @@ def test_comparison_matrix_adds_pricing_and_persona_standardization_summary() ->
     )
 
 
+def test_comparison_matrix_caps_confidence_by_structured_claims() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="persona-official",
+                competitor="A",
+                dimension="persona",
+                source_type="webpage_verified",
+                title="A customers",
+                url="https://a.example/customers",
+                snippet="A is used by developers and enterprise teams.",
+                content_hash="persona-official-hash",
+                confidence=0.96,
+            ),
+            RawSource(
+                id="persona-survey",
+                competitor="A",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="A persona survey",
+                url=None,
+                snippet="Surveyed developers cite context switching.",
+                content_hash="persona-survey-hash",
+                confidence=0.62,
+            ),
+        ],
+        competitor_knowledge={
+            "A": CompetitorKnowledge(
+                competitor="A",
+                user_personas={
+                    "segments": [
+                        {
+                            "name": "Developer",
+                            "role": "engineering",
+                            "company_size": "team",
+                            "use_cases": ["daily coding"],
+                            "pain_points": ["context switching"],
+                            "claims": [
+                                {
+                                    "claim": "A targets developers.",
+                                    "source_ids": ["persona-survey"],
+                                    "confidence": 0.62,
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+        },
+        competitor_kbs={
+            "A": CompetitorKB(
+                competitor="A",
+                slices={"persona": ["A targets developers. [source:persona-survey]"]},
+                sources=["persona-survey"],
+                confidence=0.62,
+            )
+        },
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+
+    assert matrix.cells[0].confidence == pytest.approx(0.62)
+
+
 @pytest.mark.asyncio
 async def test_comparator_timeout_falls_back_to_deterministic_matrix() -> None:
     service = RunService(
