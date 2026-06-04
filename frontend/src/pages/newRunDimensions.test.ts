@@ -6,6 +6,7 @@ import {
   lockedDimensionsForScenario,
   mergeDimensions,
   scenarioCompetitorPreset,
+  starterPresets,
 } from "./newRunDimensions";
 
 describe("New Run dimension helpers", () => {
@@ -56,6 +57,24 @@ describe("New Run dimension helpers", () => {
 
     expect(scenarioCompetitorPreset(pack)).toBe("Cursor, GitHub Copilot, Windsurf");
     expect(scenarioCompetitorPreset(null)).toBe("");
+  });
+
+  it("ships one-click starter presets for L1, L2, and L3 demos", () => {
+    expect(starterPresets.map((preset) => preset.competitorLayer)).toEqual([
+      "L1",
+      "L2",
+      "L3",
+    ]);
+    expect(starterPresets.map((preset) => preset.scenarioId)).toEqual([
+      "l1_pricing_pack",
+      "l2_adjacent_workflow",
+      "l3_market_landscape",
+    ]);
+    for (const preset of starterPresets) {
+      expect(preset.competitors.length).toBeGreaterThanOrEqual(3);
+      expect(preset.dimensions.length).toBeGreaterThanOrEqual(4);
+      expect(mergeDimensions(preset.dimensions, [], [])).toEqual(preset.dimensions);
+    }
   });
 });
 

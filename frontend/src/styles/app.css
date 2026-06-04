@@ -306,6 +306,48 @@ select {
   padding: 4px 8px;
 }
 
+.preset-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.preset-tile {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  min-height: 104px;
+  padding: 12px;
+  text-align: left;
+}
+
+.preset-tile.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.preset-tile strong,
+.preset-tile span,
+.preset-tile small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.preset-tile span {
+  color: #445064;
+  font-size: 12px;
+}
+
+.preset-tile small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .skill-grid {
   display: grid;
   gap: 10px;

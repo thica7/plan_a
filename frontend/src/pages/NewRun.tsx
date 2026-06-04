@@ -15,6 +15,8 @@ import {
   lockedDimensionsForScenario,
   mergeDimensions,
   scenarioCompetitorPreset,
+  starterPresets,
+  type StarterPreset,
 } from "./newRunDimensions";
 
 const defaultWorkspaceId = "default-workspace";
@@ -113,6 +115,15 @@ export function NewRun() {
     }
   }
 
+  function applyStarterPreset(preset: StarterPreset) {
+    setTopic(preset.topic);
+    setSelectedLayer(preset.competitorLayer);
+    setScenarioId(preset.scenarioId);
+    setCompetitorMode("manual");
+    setCompetitors(preset.competitors.join(", "));
+    setSelected((current) => mergeDimensions(preset.dimensions, [], current));
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (runBlockedByQuota) {
@@ -155,6 +166,24 @@ export function NewRun() {
           Topic
           <input value={topic} onChange={(event) => setTopic(event.target.value)} />
         </label>
+
+        <fieldset>
+          <legend>Starter presets</legend>
+          <div className="preset-grid">
+            {starterPresets.map((preset) => (
+              <button
+                className={`preset-tile${scenarioId === preset.scenarioId ? " active" : ""}`}
+                key={preset.id}
+                type="button"
+                onClick={() => applyStarterPreset(preset)}
+              >
+                <strong>{preset.name}</strong>
+                <span>{preset.competitorLayer} 路 {preset.scenarioId}</span>
+                <small>{preset.competitors.join(", ")}</small>
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
         <fieldset>
           <legend>Competitors</legend>
