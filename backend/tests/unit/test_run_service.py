@@ -1881,7 +1881,7 @@ def test_comparison_matrix_adds_pricing_and_persona_standardization_summary() ->
 
     assert any(
         item.startswith("[pricing-standardization:pricing]")
-        and "aligned_fields=tier_name,price,billing_cycle" in item
+        and "aligned_fields=tier_name,price,billing_cycle,limits" in item
         and "A tiers=Free=$0/monthly" in item
         and "B tiers=Team=$10 per seat/monthly" in item
         for item in matrix.summary
@@ -1901,6 +1901,10 @@ def test_comparison_matrix_adds_pricing_and_persona_standardization_summary() ->
         cell for cell in matrix.cells if cell.competitor == "A" and cell.dimension == "persona"
     )
     assert "tier_name=Free; price=$0; billing_cycle=monthly" in pricing_cell.value
+    b_pricing_cell = next(
+        cell for cell in matrix.cells if cell.competitor == "B" and cell.dimension == "pricing"
+    )
+    assert "limits=not stated in collected source" in b_pricing_cell.value
     assert "segment=Developer; role=engineering; company_size=individual" in persona_cell.value
     assert "use_cases=code generation; pain_points=context switching" in persona_cell.value
 
@@ -5044,6 +5048,59 @@ def test_structured_pricing_payload_labels_duplicate_paid_tiers() -> None:
     ]
     assert len({tier.name for tier in tiers}) == 3
     assert all(tier.name != "Enterprise" for tier in tiers)
+
+
+def test_structured_pricing_payload_standardizes_missing_paid_limit_metadata() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+    )
+
+    service._merge_structured_knowledge_payload(
+        detail,
+        "A",
+        "pricing",
+        {
+            "pricing_model": {
+                "tiers": [
+                    {
+                        "name": "Team",
+                        "price": "$30 per user per month",
+                        "billing_cycle": "unknown",
+                        "limits": [],
+                        "claims": [
+                            {
+                                "claim": "A publishes Team pricing.",
+                                "source_ids": ["pricing-a"],
+                                "confidence": 0.8,
+                            }
+                        ],
+                    }
+                ],
+                "notes": [],
+            }
+        },
+    )
+
+    tier = detail.competitor_knowledge["A"].pricing_model.tiers[0]
+    assert tier.billing_cycle == "monthly"
+    assert tier.limits == ["not stated in collected source"]
 
 
 def test_deterministic_pricing_payload_extracts_multiple_tiers() -> None:

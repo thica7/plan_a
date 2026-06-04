@@ -182,7 +182,7 @@ class ComparatorAgentMixin:
                 name=self._compact_matrix_text(tier.name or "unknown", 44),
                 price=self._compact_matrix_text(tier.price or "unknown", 120),
                 cycle=self._compact_matrix_text(tier.billing_cycle or "unknown", 40),
-                limits=self._compact_list_text(tier.limits, 160),
+                limits=self._compact_pricing_limits_text(tier.limits, 160),
             )
             for tier in pricing.tiers[:6]
         ]
@@ -244,6 +244,12 @@ class ComparatorAgentMixin:
             return "unknown"
         return self._compact_matrix_text(", ".join(cleaned[:3]), limit)
 
+    def _compact_pricing_limits_text(self, values: list[str], limit: int) -> str:
+        cleaned = [value.strip() for value in values if value and value.strip()]
+        if not cleaned:
+            return "not stated in collected source"
+        return self._compact_matrix_text(", ".join(cleaned[:3]), limit)
+
     def _matrix_standardization_summary(self, detail: RunDetail) -> list[str]:
         summary: list[str] = []
         for dimension in detail.plan.dimensions:
@@ -275,7 +281,7 @@ class ComparatorAgentMixin:
         missing_note = f"; missing={','.join(missing)}" if missing else ""
         return (
             f"[pricing-standardization:{dimension}] "
-            "aligned_fields=tier_name,price,billing_cycle; "
+            "aligned_fields=tier_name,price,billing_cycle,limits; "
             f"{'; '.join(profiles)}{missing_note}"
         )
 

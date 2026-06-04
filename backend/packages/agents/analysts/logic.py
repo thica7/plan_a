@@ -1604,7 +1604,24 @@ class AnalystAgentMixin:
                 continue
             self._merge_pricing_tier(existing, tier)
         pricing_model.tiers = [merged[key] for key in ordered_keys]
+        self._standardize_pricing_tier_metadata(pricing_model)
         self._disambiguate_duplicate_pricing_tier_names(pricing_model)
+
+    def _standardize_pricing_tier_metadata(self, pricing_model: PricingModel) -> None:
+        for tier in pricing_model.tiers:
+            if tier.billing_cycle == "unknown":
+                cycle = self._extract_billing_cycle_hint(
+                    " ".join([tier.price, *tier.limits])
+                )
+                if cycle != "unknown":
+                    tier.billing_cycle = cycle
+            if not tier.limits and self._is_paid_pricing_tier(tier):
+                tier.limits = ["not stated in collected source"]
+
+    def _is_paid_pricing_tier(self, tier: PricingTier) -> bool:
+        name = self._canonical_pricing_tier_name(tier.name)
+        price = self._canonical_pricing_price(tier.price)
+        return name != "free" and price not in {"$0", "unknown"}
 
     def _disambiguate_duplicate_pricing_tier_names(
         self, pricing_model: PricingModel
