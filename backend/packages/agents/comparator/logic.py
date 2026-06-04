@@ -485,7 +485,7 @@ class ComparatorAgentMixin:
             llm_winner = payload_winners.get(dimension)
             if llm_winner in detail.plan.competitors or llm_winner == "tie":
                 signals["llm"] = llm_winner
-            winner = self._winner_from_votes(signals)
+            winner = self._winner_from_matrix_signals(dimension, signals)
             if winner is None:
                 winner = llm_winner if isinstance(llm_winner, str) and llm_winner else "tie"
             winners[dimension] = winner
@@ -534,6 +534,19 @@ class ComparatorAgentMixin:
         if rest and rest[0][1] == count:
             return "tie"
         return winner
+
+    def _winner_from_matrix_signals(
+        self, dimension: str, signals: dict[str, str]
+    ) -> str | None:
+        dimension_key = dimension.casefold()
+        structural_winners = [
+            signals[name]
+            for name in ("evidence", "findings")
+            if signals.get(name) and signals[name] != "tie"
+        ]
+        if "pricing" in dimension_key and not structural_winners:
+            return "tie" if signals else None
+        return self._winner_from_votes(signals)
 
     def _source_digest(self, sources: list[RawSource]) -> list[dict[str, object]]:
         return [

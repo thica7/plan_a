@@ -1717,6 +1717,66 @@ def test_comparison_matrix_majority_vote_overrides_weak_llm_winner() -> None:
     assert "cell_confidence_winner=A" in vote_line
 
 
+def test_comparison_matrix_pricing_confidence_signal_cannot_break_structural_tie() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A", "B"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="pricing-a",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://a.example/pricing",
+                snippet="A has pricing.",
+                content_hash="pricing-a",
+                confidence=0.96,
+            ),
+            RawSource(
+                id="pricing-b",
+                competitor="B",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="B pricing",
+                url="https://b.example/pricing",
+                snippet="B has pricing.",
+                content_hash="pricing-b",
+                confidence=0.8,
+            ),
+        ],
+    )
+    service._merge_kb_slice(
+        detail,
+        "pricing",
+        {"A": ["A has pricing evidence."], "B": ["B has pricing evidence."]},
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+
+    assert matrix.winner_by_dimension["pricing"] == "tie"
+    vote_line = next(item for item in matrix.summary if item.startswith("[majority-vote:pricing]"))
+    assert "cell_confidence_winner=A" in vote_line
+    assert "evidence=tie" in vote_line
+    assert "findings=tie" in vote_line
+
+
 def test_comparison_matrix_adds_pricing_and_persona_standardization_summary() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
