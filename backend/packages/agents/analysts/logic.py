@@ -553,6 +553,12 @@ class AnalystAgentMixin:
                     dimension_sources,
                 )
                 if payload is not None:
+                    payload, fallback_reason = self._ensure_structured_payload_has_claims(
+                        competitor=competitor,
+                        dimension=dimension,
+                        dimension_sources=dimension_sources,
+                        payload=payload,
+                    )
                     self._merge_structured_knowledge_payload(detail, competitor, dimension, payload)
                     self._store_kb_cache_entry(detail, competitor, dimension, cache_content_hash)
                     knowledge = detail.competitor_knowledge.get(competitor)
@@ -578,6 +584,7 @@ class AnalystAgentMixin:
                         f"ReAct analyst completed {competitor} / {dimension} slice.",
                         {
                             "analysis": payload,
+                            "fallback_reason": fallback_reason,
                             "context": context.metadata(),
                             "dimension": dimension,
                             "competitor": competitor,
@@ -632,6 +639,15 @@ class AnalystAgentMixin:
             react_payload["analysis_timeout"] = (
                 f"one-shot analyst exceeded {branch_timeout:g}s"
             )
+            react_payload["deterministic_fallback"] = True
+        payload, fallback_reason = self._ensure_structured_payload_has_claims(
+            competitor=competitor,
+            dimension=dimension,
+            dimension_sources=dimension_sources,
+            payload=payload,
+        )
+        if fallback_reason:
+            react_payload["fallback_reason"] = fallback_reason
             react_payload["deterministic_fallback"] = True
         self._merge_structured_knowledge_payload(detail, competitor, dimension, payload)
         self._store_kb_cache_entry(detail, competitor, dimension, cache_content_hash)
@@ -711,6 +727,27 @@ class AnalystAgentMixin:
             float(self._settings.analyst_fanout_branch_timeout_seconds),
         )
         return min(base_timeout, fanout_timeout)
+
+    def _ensure_structured_payload_has_claims(
+        self,
+        *,
+        competitor: str,
+        dimension: str,
+        dimension_sources: list[dict[str, Any]],
+        payload: dict[str, Any],
+    ) -> tuple[dict[str, Any], str]:
+        if self._claims_from_structured_payload(payload, dimension):
+            return payload, ""
+        if not any(str(source.get("id") or "").strip() for source in dimension_sources):
+            return payload, ""
+        return (
+            self._deterministic_structured_knowledge_payload(
+                competitor=competitor,
+                dimension=dimension,
+                dimension_sources=dimension_sources,
+            ),
+            "empty_structured_payload",
+        )
 
     def _deterministic_structured_knowledge_payload(
         self,

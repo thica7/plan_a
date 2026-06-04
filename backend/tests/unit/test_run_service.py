@@ -3577,6 +3577,64 @@ def test_deterministic_structured_knowledge_payload_matches_schema_shape() -> No
 
 
 @pytest.mark.asyncio
+async def test_analyst_empty_structured_payload_falls_back_to_source_claims() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            analyst_react_enabled=True,
+            analyst_react_fanout_threshold=1,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Empty analyst payload fallback",
+            competitors=["A", "B"],
+            dimensions=["pricing", "feature"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://a.example/pricing",
+            snippet="A publishes a $10 per month plan.",
+            content_hash="pricing-a-hash",
+            confidence=0.88,
+        )
+    ]
+
+    async def empty_complete_json(*, system: str, user: str, schema_hint: str) -> dict:
+        return {"pricing_model": {"tiers": [], "notes": []}}
+
+    service._llm.complete_json = empty_complete_json  # type: ignore[method-assign]
+
+    await service._real_analyst_branch_step(record, "pricing", "A")
+
+    kb = record.detail.competitor_kbs["A"]
+    knowledge = record.detail.competitor_knowledge["A"]
+    events = service.get_trace(detail.id) or []
+    completed = next(
+        event
+        for event in reversed(events)
+        if event.type == "node_completed" and event.agent == "analyst"
+    )
+    assert kb.slices["pricing"]
+    assert knowledge.pricing_model.tiers[0].claims[0].source_ids == ["pricing-a"]
+    assert completed.payload["react"]["fallback_reason"] == "empty_structured_payload"
+
+
+@pytest.mark.asyncio
 async def test_analyst_fanout_branch_timeout_uses_short_budget() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
