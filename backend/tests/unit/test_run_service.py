@@ -3351,6 +3351,65 @@ async def test_analyst_branch_timeout_falls_back_to_deterministic_knowledge() ->
 
 
 @pytest.mark.asyncio
+async def test_analyst_fanout_branch_timeout_uses_short_budget() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            analyst_react_enabled=True,
+            analyst_react_fanout_threshold=1,
+            analyst_branch_timeout_seconds=10,
+            analyst_fanout_branch_timeout_seconds=0.05,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Fanout analyst timeout budget",
+            competitors=["A", "B"],
+            dimensions=["feature", "pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="feature-a",
+            competitor="A",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="A feature",
+            url="https://a.example/features",
+            snippet="A supports a budgeted analyst fallback workflow.",
+            content_hash="feature-a-hash",
+            confidence=0.81,
+        )
+    ]
+
+    async def slow_complete_json(*, system: str, user: str, schema_hint: str) -> dict:
+        await asyncio.sleep(1)
+        return {}
+
+    service._llm.complete_json = slow_complete_json  # type: ignore[method-assign]
+
+    await service._real_analyst_branch_step(record, "feature", "A")
+
+    events = service.get_trace(detail.id) or []
+    completed = next(
+        event
+        for event in reversed(events)
+        if event.type == "node_completed" and event.agent == "analyst"
+    )
+    assert completed.payload["react"]["react_skipped"] == "fanout_budget"
+    assert completed.payload["react"]["analysis_timeout"] == "one-shot analyst exceeded 0.05s"
+    assert completed.payload["react"]["deterministic_fallback"] is True
+
+
+@pytest.mark.asyncio
 async def test_analyst_react_runner_auto_validates_finish() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

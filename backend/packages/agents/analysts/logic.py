@@ -593,6 +593,10 @@ class AnalystAgentMixin:
             react_payload["fanout_threshold"] = self._settings.analyst_react_fanout_threshold
 
         qa_feedback_json = json.dumps(qa_feedback, ensure_ascii=False)
+        branch_timeout = self._analyst_branch_timeout_seconds(
+            detail,
+            qa_feedback=qa_feedback,
+        )
         try:
             payload = await asyncio.wait_for(
                 self._trace_llm_json(
@@ -617,7 +621,7 @@ class AnalystAgentMixin:
                     schema_hint=self._structured_knowledge_schema_hint(dimension),
                     context=context,
                 ),
-                timeout=max(0.05, float(self._settings.analyst_branch_timeout_seconds)),
+                timeout=branch_timeout,
             )
         except TimeoutError:
             payload = self._deterministic_structured_knowledge_payload(
@@ -626,8 +630,7 @@ class AnalystAgentMixin:
                 dimension_sources=dimension_sources,
             )
             react_payload["analysis_timeout"] = (
-                f"one-shot analyst exceeded "
-                f"{self._settings.analyst_branch_timeout_seconds:g}s"
+                f"one-shot analyst exceeded {branch_timeout:g}s"
             )
             react_payload["deterministic_fallback"] = True
         self._merge_structured_knowledge_payload(detail, competitor, dimension, payload)
@@ -688,6 +691,26 @@ class AnalystAgentMixin:
 
     def _analyst_fanout_branch_count(self, detail: RunDetail) -> int:
         return len(detail.plan.competitors) * len(detail.plan.dimensions)
+
+    def _analyst_branch_timeout_seconds(
+        self,
+        detail: RunDetail,
+        *,
+        qa_feedback: list[dict[str, Any]],
+    ) -> float:
+        base_timeout = max(0.05, float(self._settings.analyst_branch_timeout_seconds))
+        if qa_feedback:
+            return base_timeout
+        if (
+            self._analyst_fanout_branch_count(detail)
+            <= self._settings.analyst_react_fanout_threshold
+        ):
+            return base_timeout
+        fanout_timeout = max(
+            0.05,
+            float(self._settings.analyst_fanout_branch_timeout_seconds),
+        )
+        return min(base_timeout, fanout_timeout)
 
     def _deterministic_structured_knowledge_payload(
         self,
