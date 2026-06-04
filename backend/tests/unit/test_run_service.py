@@ -533,6 +533,44 @@ async def test_memory_policy_drives_collector_and_strict_source_qa() -> None:
     assert "MemoryAgent QA policy" in issues[0].problem
 
 
+def test_feature_collection_uses_known_official_source_registry() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding",
+            competitors=["Cursor", "GitHub Copilot", "Claude Code", "Windsurf"],
+            dimensions=["feature"],
+        ),
+    )
+
+    cursor = service._official_source_candidates(detail, "Cursor", "feature")
+    copilot = service._official_source_candidates(detail, "GitHub Copilot", "feature")
+    claude = service._official_source_candidates(detail, "Claude Code", "feature")
+    windsurf = service._official_source_candidates(detail, "Windsurf", "feature")
+
+    assert service._should_collect_official_first("feature") is True
+    assert cursor[0].url == "https://www.cursor.com/features"
+    assert copilot[0].url == "https://docs.github.com/en/copilot/get-started/features"
+    assert claude[0].url == "https://www.anthropic.com/product/claude-code"
+    assert windsurf[0].url == "https://docs.windsurf.com/windsurf/getting-started"
+
+
 @pytest.mark.asyncio
 async def test_topic_only_planner_filters_phantom_discovery_with_homepage_gate() -> None:
     service = RunService(

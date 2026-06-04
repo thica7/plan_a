@@ -27,9 +27,20 @@ CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
 KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
     "cursor": {
         "pricing": [("Cursor official pricing", "https://cursor.com/pricing")],
+        "feature": [("Cursor official features", "https://www.cursor.com/features")],
         "security": [("Cursor official security", "https://cursor.com/security")],
     },
     "githubcopilot": {
+        "feature": [
+            (
+                "GitHub Copilot official feature docs",
+                "https://docs.github.com/en/copilot/get-started/features",
+            ),
+            (
+                "GitHub Copilot official product page",
+                "https://github.com/features/copilot",
+            ),
+        ],
         "pricing": [
             (
                 "GitHub Copilot official plans and pricing",
@@ -49,7 +60,38 @@ KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
     },
     "windsurf": {
         "pricing": [("Windsurf official pricing", "https://windsurf.com/pricing")],
+        "feature": [
+            (
+                "Windsurf official getting started docs",
+                "https://docs.windsurf.com/windsurf/getting-started",
+            )
+        ],
         "security": [("Windsurf official security", "https://windsurf.com/security")],
+    },
+    "claudecode": {
+        "feature": [
+            (
+                "Claude Code official product page",
+                "https://www.anthropic.com/product/claude-code",
+            ),
+            (
+                "Claude Code official overview docs",
+                "https://docs.anthropic.com/en/docs/claude-code/overview",
+            ),
+        ],
+        "pricing": [
+            (
+                "Claude Code cost management docs",
+                "https://code.claude.com/docs/en/costs",
+            ),
+            ("Claude official pricing", "https://claude.com/pricing"),
+        ],
+        "security": [
+            (
+                "Claude Code official security docs",
+                "https://docs.claude.com/en/docs/claude-code/security",
+            )
+        ],
     },
 }
 
@@ -660,7 +702,10 @@ class CollectorAgentMixin:
 
     def _should_collect_official_first(self, dimension: str) -> bool:
         key = dimension.casefold()
-        return any(token in key for token in ("pricing", "security", "compliance", "trust"))
+        return any(
+            token in key
+            for token in ("pricing", "security", "compliance", "trust", "feature")
+        )
 
     async def _collect_competitor_with_skill_tools(
         self,
