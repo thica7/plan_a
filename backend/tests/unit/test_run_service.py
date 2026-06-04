@@ -365,17 +365,25 @@ async def test_survey_interview_enrichment_emits_research_evidence_payload() -> 
     await service._run_survey_interview_enrichment(record, ["persona"], ["Cursor"])
 
     source_types = {source.source_type for source in record.detail.raw_sources}
-    assert source_types == {"interview_record"}
-    assert len(record.detail.raw_sources) == 1
-    assert "Simulated survey and interview research" in record.detail.raw_sources[0].snippet
-    assert record.detail.raw_sources[0].covered_competitors == ["Cursor"]
+    assert source_types == {"survey_simulated", "interview_record"}
+    assert len(record.detail.raw_sources) == 2
+    survey_source = next(
+        source for source in record.detail.raw_sources if source.source_type == "survey_simulated"
+    )
+    interview_source = next(
+        source for source in record.detail.raw_sources if source.source_type == "interview_record"
+    )
+    assert "Simulated survey and interview research" in survey_source.snippet
+    assert "Synthetic interview record" in interview_source.snippet
+    assert survey_source.covered_competitors == ["Cursor"]
+    assert interview_source.covered_competitors == ["Cursor"]
     assert record.detail.competitor_knowledge["Cursor"].user_personas.summary_claims
     completed = next(
         event
         for event in service.get_trace(detail.id) or []
         if event.type == "node_completed" and event.agent == "survey_interview"
     )
-    assert completed.payload["source_types"] == ["interview_record"]
+    assert completed.payload["source_types"] == ["interview_record", "survey_simulated"]
     assert completed.payload["bundle_count"] == 1
     assert completed.payload["question_count"] == 2
     assert completed.payload["response_count"] == 1
@@ -388,7 +396,7 @@ async def test_survey_interview_enrichment_emits_research_evidence_payload() -> 
         for event in replay.events
         if event.event_type == "agent.finished" and event.agent == "survey_interview"
     )
-    assert replay_event.payload["source_types"] == ["interview_record"]
+    assert replay_event.payload["source_types"] == ["interview_record", "survey_simulated"]
     assert replay_event.payload["question_count"] == 2
     assert replay_event.payload["response_count"] == 1
     assert replay_event.payload["interview_count"] >= 1

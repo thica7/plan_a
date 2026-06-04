@@ -329,6 +329,20 @@ class SurveyInterviewAgentMixin:
         redacted_competitor = self._redact_research_text(competitor, redaction_counts)
         redacted_dimension = self._redact_research_text(dimension, redaction_counts)
         bundle.redaction_counts = redaction_counts
+        sources = [
+            RawSource(
+                id=self._new_source_id(f"{dimension}-survey"),
+                competitor=redacted_competitor,
+                covered_competitors=[redacted_competitor],
+                dimension=redacted_dimension,
+                source_type=bundle.source_type,
+                title=f"{redacted_competitor} {redacted_dimension} survey synthesis",
+                snippet=bundle.evidence_summary,
+                content_hash=bundle.content_hash,
+                confidence=bundle.confidence,
+                extracted_at=detail.updated_at,
+            )
+        ]
         if bundle.interviews:
             interview_summary = self._interview_evidence_summary(
                 detail,
@@ -338,7 +352,7 @@ class SurveyInterviewAgentMixin:
             )
             interview_summary = self._redact_research_text(interview_summary, redaction_counts)
             bundle.redaction_counts = redaction_counts
-            return [
+            sources.append(
                 RawSource(
                     id=self._new_source_id(f"{dimension}-interview"),
                     competitor=redacted_competitor,
@@ -353,21 +367,8 @@ class SurveyInterviewAgentMixin:
                     confidence=max(bundle.confidence, 0.62),
                     extracted_at=detail.updated_at,
                 )
-            ]
-        return [
-            RawSource(
-                id=self._new_source_id(f"{dimension}-survey"),
-                competitor=redacted_competitor,
-                covered_competitors=[redacted_competitor],
-                dimension=redacted_dimension,
-                source_type=bundle.source_type,
-                title=f"{redacted_competitor} {redacted_dimension} survey synthesis",
-                snippet=bundle.evidence_summary,
-                content_hash=bundle.content_hash,
-                confidence=bundle.confidence,
-                extracted_at=detail.updated_at,
             )
-        ]
+        return sources
 
     def _survey_evidence_summary(
         self,
