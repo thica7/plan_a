@@ -113,7 +113,7 @@ class Settings:
     analyst_branch_timeout_seconds: float = 25.0
     analyst_fanout_branch_timeout_seconds: float = 8.0
     comparator_timeout_seconds: float = 8.0
-    writer_timeout_seconds: float = 60.0
+    writer_timeout_seconds: float = 90.0
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
@@ -190,7 +190,7 @@ def get_settings() -> Settings:
             "BACKUP_LLM_BASE_URL", "https://openrouter.ai/api/v1"
         ).rstrip("/"),
         backup_llm_model=os.getenv("BACKUP_LLM_MODEL") or None,
-        llm_timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "60")),
+        llm_timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "90")),
         llm_temperature=float(os.getenv("LLM_TEMPERATURE", "0.2")),
         llm_max_retries=_env_int("LLM_MAX_RETRIES", 2, minimum=0, maximum=5),
         llm_retry_backoff_seconds=_env_float(
@@ -237,7 +237,7 @@ def get_settings() -> Settings:
         ),
         writer_timeout_seconds=_env_float(
             "WRITER_TIMEOUT_SECONDS",
-            60.0,
+            90.0,
             minimum=0.05,
             maximum=120.0,
         ),

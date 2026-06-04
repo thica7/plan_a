@@ -34,7 +34,8 @@ def test_enterprise_store_settings_default_to_postgres(monkeypatch) -> None:
     assert settings.enterprise_database_url == DEFAULT_ENTERPRISE_DATABASE_URL
     assert settings.run_orchestration_backend == "temporal"
     assert settings.temporal_traffic_percent == 100
-    assert settings.writer_timeout_seconds == 60.0
+    assert settings.llm_timeout_seconds == 90.0
+    assert settings.writer_timeout_seconds == 90.0
 
 
 def test_writer_timeout_settings_allow_explicit_override(monkeypatch) -> None:
