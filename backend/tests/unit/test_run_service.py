@@ -1925,6 +1925,80 @@ def test_comparison_matrix_caps_confidence_by_structured_claims() -> None:
     assert matrix.cells[0].confidence == pytest.approx(0.62)
 
 
+def test_comparison_matrix_caps_persona_confidence_by_user_research_source() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="persona-official",
+                competitor="A",
+                dimension="persona",
+                source_type="webpage_verified",
+                title="A customers",
+                url="https://a.example/customers",
+                snippet="A is used by developers and enterprise teams.",
+                content_hash="persona-official-hash",
+                confidence=0.96,
+            ),
+            RawSource(
+                id="persona-interview",
+                competitor="A",
+                dimension="persona",
+                source_type="interview_record",
+                title="A persona interview",
+                url=None,
+                snippet="Interviewed developers cite context switching.",
+                content_hash="persona-interview-hash",
+                confidence=0.62,
+            ),
+        ],
+        competitor_knowledge={
+            "A": CompetitorKnowledge(
+                competitor="A",
+                user_personas={
+                    "segments": [
+                        {
+                            "name": "Developer",
+                            "role": "engineering",
+                            "company_size": "team",
+                            "use_cases": ["daily coding"],
+                            "pain_points": ["context switching"],
+                            "claims": [
+                                {
+                                    "claim": "A targets developers.",
+                                    "source_ids": ["persona-official"],
+                                    "confidence": 0.9,
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+        },
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+
+    assert matrix.cells[0].confidence == pytest.approx(0.62)
+
+
 def test_comparison_matrix_adds_feature_standardization_summary() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

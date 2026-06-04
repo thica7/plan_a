@@ -381,11 +381,36 @@ class ComparatorAgentMixin:
         )
         claim_confidences = self._structured_claim_confidences(detail, competitor, dimension)
         if not claim_confidences:
-            return source_confidence
+            return self._persona_user_research_confidence_cap(
+                dimension, related_sources, source_confidence
+            )
         claim_confidence = sum(claim_confidences) / len(claim_confidences)
         if source_confidence <= 0:
-            return claim_confidence
-        return min(source_confidence, claim_confidence)
+            return self._persona_user_research_confidence_cap(
+                dimension, related_sources, claim_confidence
+            )
+        confidence = min(source_confidence, claim_confidence)
+        return self._persona_user_research_confidence_cap(
+            dimension, related_sources, confidence
+        )
+
+    def _persona_user_research_confidence_cap(
+        self,
+        dimension: str,
+        related_sources: list[RawSource],
+        confidence: float,
+    ) -> float:
+        dimension_key = dimension.casefold()
+        if "persona" not in dimension_key and "user" not in dimension_key:
+            return confidence
+        user_research_sources = [
+            source
+            for source in related_sources
+            if source.source_type in {"interview_record", "survey_simulated"}
+        ]
+        if not user_research_sources:
+            return confidence
+        return min(confidence, min(source.confidence for source in user_research_sources))
 
     def _structured_claim_confidences(
         self,
