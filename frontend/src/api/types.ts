@@ -763,6 +763,9 @@ export interface RunQualityComparison {
   baseline_score?: number | null;
   delta_score?: number | null;
   verdict: "pass" | "warn" | "fail";
+  regression_gate_status: "pass" | "warn" | "fail";
+  regression_gate_passed: boolean;
+  regression_gate_reasons: string[];
   real_collection_signal: boolean;
   real_llm_signal: boolean;
   report_quality_signal: boolean;

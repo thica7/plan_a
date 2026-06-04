@@ -14596,6 +14596,27 @@
             ],
             "title": "Verdict"
           },
+          "regression_gate_status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "title": "Regression Gate Status"
+          },
+          "regression_gate_passed": {
+            "type": "boolean",
+            "title": "Regression Gate Passed",
+            "default": false
+          },
+          "regression_gate_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Regression Gate Reasons"
+          },
           "real_collection_signal": {
             "type": "boolean",
             "title": "Real Collection Signal",
@@ -14644,7 +14665,8 @@
           "target_run_id",
           "target_execution_mode",
           "target_score",
-          "verdict"
+          "verdict",
+          "regression_gate_status"
         ],
         "title": "RunQualityComparison"
       },

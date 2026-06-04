@@ -4765,6 +4765,18 @@ export interface components {
              */
             verdict: "pass" | "warn" | "fail";
             /**
+             * Regression Gate Status
+             * @enum {string}
+             */
+            regression_gate_status: "pass" | "warn" | "fail";
+            /**
+             * Regression Gate Passed
+             * @default false
+             */
+            regression_gate_passed: boolean;
+            /** Regression Gate Reasons */
+            regression_gate_reasons?: string[];
+            /**
              * Real Collection Signal
              * @default false
              */

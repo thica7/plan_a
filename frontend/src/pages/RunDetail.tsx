@@ -578,6 +578,7 @@ function RunQualityPanel({ comparison }: { comparison: RunQualityComparison | nu
       <div className="metric-grid compact">
         <MetricValue label="Score" value={`${comparison.target_score}/100`} />
         <MetricValue label="Verdict" value={comparison.verdict} />
+        <MetricValue label="Gate" value={comparison.regression_gate_status} />
         <MetricValue
           label="Baseline"
           value={comparison.baseline_score === null || comparison.baseline_score === undefined ? "none" : `${comparison.baseline_score}/100`}
@@ -593,6 +594,15 @@ function RunQualityPanel({ comparison }: { comparison: RunQualityComparison | nu
             {check.passed ? <CheckCircle2 size={13} aria-hidden /> : <AlertTriangle size={13} aria-hidden />}
             {check.label}
           </span>
+        ))}
+      </div>
+      <div className="reflection-review">
+        <h3>Regression gate</h3>
+        {comparison.regression_gate_reasons.map((reason) => (
+          <article className="issue-row reflection-row" key={reason}>
+            <strong>{comparison.regression_gate_passed ? "pass" : comparison.regression_gate_status}</strong>
+            <span>{reason}</span>
+          </article>
         ))}
       </div>
       {failedSignalChecks.length > 0 ? (

@@ -84,6 +84,11 @@ def test_compare_run_quality_scores_real_run_against_baseline() -> None:
     assert comparison.target_score > comparison.baseline_score
     assert comparison.delta_score is not None and comparison.delta_score > 0
     assert comparison.verdict == "pass"
+    assert comparison.regression_gate_status == "pass"
+    assert comparison.regression_gate_passed is True
+    assert comparison.regression_gate_reasons == [
+        "Quality gate passed against real-chain and baseline thresholds."
+    ]
     assert comparison.real_collection_signal is True
     assert comparison.real_llm_signal is True
     assert comparison.report_quality_signal is True
@@ -106,6 +111,58 @@ def test_compare_run_quality_scores_real_run_against_baseline() -> None:
     assert next(
         metric for metric in comparison.metrics if metric.name == "citation_validity_rate"
     ).target_value == 1.0
+
+
+def test_compare_run_quality_regression_gate_fails_on_core_metric_drop() -> None:
+    baseline = _run_detail(
+        run_id="baseline-strong-run",
+        execution_mode="real",
+        source_count=4,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+    target = _run_detail(
+        run_id="target-regressed-run",
+        execution_mode="real",
+        source_count=4,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=0.25,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=baseline.trace_spans,
+        source_types=[
+            "web_search_result",
+            "web_search_result",
+            "web_search_result",
+            "webpage_verified",
+        ],
+    )
+
+    comparison = compare_run_quality(target, baseline=baseline)
+
+    assert comparison.regression_gate_status == "fail"
+    assert comparison.regression_gate_passed is False
+    assert any("core metric regression" in reason for reason in comparison.regression_gate_reasons)
 
 
 def test_compare_run_quality_flags_unresolved_report_source_tokens() -> None:

@@ -248,6 +248,9 @@ class RunQualityComparison(BaseModel):
     baseline_score: int | None = Field(default=None, ge=0, le=100)
     delta_score: int | None = None
     verdict: Literal["pass", "warn", "fail"]
+    regression_gate_status: Literal["pass", "warn", "fail"]
+    regression_gate_passed: bool = False
+    regression_gate_reasons: list[str] = Field(default_factory=list)
     real_collection_signal: bool = False
     real_llm_signal: bool = False
     report_quality_signal: bool = False

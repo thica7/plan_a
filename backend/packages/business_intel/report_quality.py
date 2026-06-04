@@ -79,6 +79,12 @@ def compare_run_quality(
         target_snapshot.score - baseline_snapshot.score if baseline_snapshot is not None else None
     )
     verdict = _verdict(target_snapshot.score, delta_score, target_snapshot)
+    gate_status, gate_reasons = _regression_gate(
+        target_snapshot,
+        baseline_snapshot,
+        delta_score,
+        metrics,
+    )
     return RunQualityComparison(
         target_run_id=target.id,
         baseline_run_id=baseline.id if baseline else None,
@@ -88,6 +94,9 @@ def compare_run_quality(
         baseline_score=baseline_snapshot.score if baseline_snapshot else None,
         delta_score=delta_score,
         verdict=verdict,
+        regression_gate_status=gate_status,
+        regression_gate_passed=gate_status == "pass",
+        regression_gate_reasons=gate_reasons,
         real_collection_signal=target_snapshot.real_collection_signal,
         real_llm_signal=target_snapshot.real_llm_signal,
         report_quality_signal=target_snapshot.report_quality_signal,
@@ -511,6 +520,60 @@ def _verdict(
     if score < 72 or (delta_score is not None and delta_score < 0):
         return "warn"
     return "pass"
+
+
+def _regression_gate(
+    target: _QualitySnapshot,
+    baseline: _QualitySnapshot | None,
+    delta_score: int | None,
+    metrics: list[RunQualityMetric],
+) -> tuple[Literal["pass", "warn", "fail"], list[str]]:
+    reasons: list[str] = []
+    if not target.real_collection_signal:
+        reasons.append("real_collection signal is missing.")
+    if not target.real_llm_signal:
+        reasons.append("real_llm signal is missing.")
+    if not target.report_quality_signal:
+        reasons.append("report_quality signal is below release threshold.")
+    if target.score < 55:
+        reasons.append(f"target_score {target.score} is below the hard floor 55.")
+    if delta_score is not None and delta_score <= -10:
+        reasons.append(f"delta_score {delta_score} regressed by at least 10 points.")
+
+    core_regressions = [
+        metric
+        for metric in metrics
+        if metric.name
+        in {
+            "source_coverage_rate",
+            "verified_source_rate",
+            "claim_citation_rate",
+            "citation_validity_rate",
+            "real_source_rate",
+            "report_structure_score",
+        }
+        and metric.delta is not None
+        and metric.delta <= -0.15
+    ]
+    if core_regressions:
+        reasons.append(
+            "core metric regression: "
+            + ", ".join(f"{metric.name} {metric.delta:+.2f}" for metric in core_regressions)
+        )
+
+    if reasons:
+        return "fail", reasons
+
+    warn_reasons: list[str] = []
+    if baseline is None:
+        warn_reasons.append("No baseline run was supplied; regression delta was not checked.")
+    if target.score < 72:
+        warn_reasons.append(f"target_score {target.score} is below the preferred floor 72.")
+    if delta_score is not None and delta_score < 0:
+        warn_reasons.append(f"delta_score {delta_score} is negative.")
+    if warn_reasons:
+        return "warn", warn_reasons
+    return "pass", ["Quality gate passed against real-chain and baseline thresholds."]
 
 
 def _clean_recommendations(
