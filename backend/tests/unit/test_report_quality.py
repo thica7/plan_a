@@ -305,6 +305,43 @@ def test_compare_run_quality_counts_official_business_sources_as_real_verified()
     assert comparison.real_collection_signal is True
 
 
+def test_compare_run_quality_excludes_user_research_from_factual_source_rates() -> None:
+    detail = _run_detail(
+        run_id="mixed-research-and-official-sources",
+        execution_mode="real",
+        source_count=4,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(llm_calls=3, claim_citation_rate=1.0),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+        source_types=[
+            "survey_simulated",
+            "interview_record",
+            "webpage_verified",
+            "official_docs",
+        ],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["verified_source_rate"].target_value == 1.0
+    assert metrics["real_source_rate"].target_value == 1.0
+    assert metrics["user_research_section_score"].target_value == 0.0
+    assert comparison.real_collection_signal is True
+    assert comparison.report_quality_signal is False
+
+
 def test_compare_run_quality_requires_verified_source_for_real_collection_signal() -> None:
     detail = _run_detail(
         run_id="search-only-real-run",

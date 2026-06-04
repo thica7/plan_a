@@ -348,11 +348,12 @@ def _source_coverage_rate(sources: list[RawSource], competitors: list[str]) -> f
 
 
 def _verified_source_rate(sources: list[RawSource]) -> float:
-    if not sources:
+    factual_sources = _factual_sources(sources)
+    if not factual_sources:
         return 0.0
     verified = [
         source
-        for source in sources
+        for source in factual_sources
         if source.source_type
         in {
             "webpage_verified",
@@ -366,7 +367,7 @@ def _verified_source_rate(sources: list[RawSource]) -> float:
             "trust_center",
         }
     ]
-    return len(verified) / len(sources)
+    return len(verified) / len(factual_sources)
 
 
 def _claim_citation_rate(detail: RunDetail) -> float:
@@ -401,14 +402,23 @@ def _report_source_token_count(report_md: str) -> int:
 
 
 def _real_source_rate(sources: list[RawSource]) -> float:
-    if not sources:
+    factual_sources = _factual_sources(sources)
+    if not factual_sources:
         return 0.0
     real_sources = [
         source
-        for source in sources
+        for source in factual_sources
         if source.url is not None and source.source_type.casefold() in REAL_SOURCE_TYPES
     ]
-    return len(real_sources) / len(sources)
+    return len(real_sources) / len(factual_sources)
+
+
+def _factual_sources(sources: list[RawSource]) -> list[RawSource]:
+    return [
+        source
+        for source in sources
+        if source.source_type and source.source_type.casefold() not in USER_RESEARCH_SOURCE_TYPES
+    ]
 
 
 def _report_structure_score(detail: RunDetail) -> float:
