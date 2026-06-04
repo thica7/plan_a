@@ -1206,7 +1206,8 @@ class EnterpriseMemoryStore:
         actor_id: str | None,
         audit_once: bool,
     ) -> SourceRegistryRecord:
-        before_record = self.source_registry.get(record.id)
+        existing_id = self._source_registry_id_by_natural_key(record)
+        before_record = self.source_registry.get(existing_id or record.id)
         merged = _merge_source_registry(before_record, record)
         self.source_registry[merged.id] = merged
         append_audit = self._append_audit_once if audit_once else self._append_audit
@@ -1220,6 +1221,19 @@ class EnterpriseMemoryStore:
             after=merged.model_dump(mode="json"),
         )
         return merged
+
+    def _source_registry_id_by_natural_key(
+        self,
+        record: SourceRegistryRecord,
+    ) -> str | None:
+        for item in self.source_registry.values():
+            if (
+                item.workspace_id == record.workspace_id
+                and item.domain == record.domain
+                and item.source_type == record.source_type
+            ):
+                return item.id
+        return None
 
     def _append_audit(
         self,
@@ -1532,6 +1546,7 @@ def _merge_source_registry(
     )
     return incoming.model_copy(
         update={
+            "id": existing.id,
             "trust_level": _stronger_trust_level(existing.trust_level, incoming.trust_level),
             "robots_status": incoming.robots_status
             if incoming.robots_status != "unknown"

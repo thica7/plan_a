@@ -259,8 +259,10 @@ class EnterprisePostgresStore:
                 for evidence in projection.evidence_records:
                     self._upsert_evidence(cur, evidence)
                     self._upsert_evidence_embedding(cur, evidence)
-                    registry_record = source_registry_from_evidence(evidence)
-                    self._upsert_source_registry(cur, registry_record)
+                    registry_record = self._upsert_source_registry(
+                        cur,
+                        source_registry_from_evidence(evidence),
+                    )
                     self._append_audit_once(
                         cur,
                         workspace_id=registry_record.workspace_id,
@@ -865,8 +867,10 @@ class EnterprisePostgresStore:
                     self._delete_evidence_embedding(cur, evidence.id)
                 else:
                     self._upsert_evidence_embedding(cur, evidence)
-                registry_record = source_registry_from_evidence(evidence)
-                self._upsert_source_registry(cur, registry_record)
+                registry_record = self._upsert_source_registry(
+                    cur,
+                    source_registry_from_evidence(evidence),
+                )
                 self._append_audit_once(
                     cur,
                     workspace_id=registry_record.workspace_id,
@@ -1094,16 +1098,8 @@ class EnterprisePostgresStore:
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
             with conn.cursor() as cur:
                 self._upsert_workspace(cur, record.workspace_id)
-                before_row = cur.execute(
-                    "SELECT * FROM source_registry WHERE id = %s",
-                    (record.id,),
-                ).fetchone()
-                self._upsert_source_registry(cur, record)
-                row = cur.execute(
-                    "SELECT * FROM source_registry WHERE id = %s",
-                    (record.id,),
-                ).fetchone()
-                updated = self._model_from_row(SourceRegistryRecord, row)
+                before_row = self._select_source_registry_by_key(cur, record)
+                updated = self._upsert_source_registry(cur, record)
                 self._append_audit(
                     cur,
                     workspace_id=updated.workspace_id,
@@ -1768,8 +1764,26 @@ class EnterprisePostgresStore:
             return None
         return canonical.id, matching_keys[0]
 
-    def _upsert_source_registry(self, cur: Any, record: SourceRegistryRecord) -> None:
-        cur.execute(
+    def _select_source_registry_by_key(
+        self,
+        cur: Any,
+        record: SourceRegistryRecord,
+    ) -> Any | None:
+        return cur.execute(
+            """
+            SELECT *
+            FROM source_registry
+            WHERE workspace_id = %s AND domain = %s AND source_type = %s
+            """,
+            (record.workspace_id, record.domain, record.source_type),
+        ).fetchone()
+
+    def _upsert_source_registry(
+        self,
+        cur: Any,
+        record: SourceRegistryRecord,
+    ) -> SourceRegistryRecord:
+        row = cur.execute(
             """
             INSERT INTO source_registry (
                 id, workspace_id, domain, source_type, display_name, homepage_url,
@@ -1780,7 +1794,7 @@ class EnterprisePostgresStore:
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
-            ON CONFLICT (id) DO UPDATE SET
+            ON CONFLICT (workspace_id, domain, source_type) DO UPDATE SET
                 display_name = EXCLUDED.display_name,
                 homepage_url = COALESCE(EXCLUDED.homepage_url, source_registry.homepage_url),
                 trust_level = CASE
@@ -1831,6 +1845,7 @@ class EnterprisePostgresStore:
                     ELSE GREATEST(source_registry.seen_count, EXCLUDED.seen_count)
                 END,
                 metadata = source_registry.metadata || EXCLUDED.metadata
+            RETURNING *
             """,
             (
                 record.id,
@@ -1851,7 +1866,8 @@ class EnterprisePostgresStore:
                 record.seen_count,
                 self._json(record.metadata),
             ),
-        )
+        ).fetchone()
+        return self._model_from_row(SourceRegistryRecord, row)
 
     def _upsert_claim(self, cur: Any, claim: ClaimRecord) -> None:
         cur.execute(

@@ -432,6 +432,37 @@ def test_enterprise_store_registers_sources_from_evidence_lifecycle() -> None:
     assert any(log.action == "source_registry.upserted" for log in store.list_audit_logs())
 
 
+def test_enterprise_store_merges_source_registry_by_natural_key() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    [existing] = store.list_source_registry(workspace_id=context.workspace_id)
+
+    updated = store.upsert_source_registry(
+        existing.model_copy(
+            update={
+                "id": "legacy-source-registry-id",
+                "display_name": "Cursor source registry",
+                "last_seen_run_id": "run-2",
+            }
+        )
+    )
+
+    records = store.list_source_registry(workspace_id=context.workspace_id)
+    assert len(records) == 1
+    assert updated.id == existing.id
+    assert records[0].id == existing.id
+    assert records[0].display_name == "Cursor source registry"
+    assert records[0].last_seen_run_id == "run-2"
+
+
 def test_enterprise_store_queues_source_policy_review_from_evidence_metadata() -> None:
     store = EnterpriseMemoryStore()
     detail = _detail()
