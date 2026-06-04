@@ -329,7 +329,31 @@ class SurveyInterviewAgentMixin:
         redacted_competitor = self._redact_research_text(competitor, redaction_counts)
         redacted_dimension = self._redact_research_text(dimension, redaction_counts)
         bundle.redaction_counts = redaction_counts
-        sources = [
+        if bundle.interviews:
+            interview_summary = self._interview_evidence_summary(
+                detail,
+                dimension=dimension,
+                competitor=competitor,
+                interviews=bundle.interviews,
+            )
+            interview_summary = self._redact_research_text(interview_summary, redaction_counts)
+            bundle.redaction_counts = redaction_counts
+            return [
+                RawSource(
+                    id=self._new_source_id(f"{dimension}-interview"),
+                    competitor=redacted_competitor,
+                    dimension=redacted_dimension,
+                    source_type="interview_record",
+                    title=f"{redacted_competitor} {redacted_dimension} interview synthesis",
+                    snippet=f"{interview_summary} {bundle.evidence_summary}".strip(),
+                    content_hash=hashlib.sha256(
+                        f"{interview_summary}|{bundle.evidence_summary}".encode()
+                    ).hexdigest()[:16],
+                    confidence=max(bundle.confidence, 0.62),
+                    extracted_at=detail.updated_at,
+                )
+            ]
+        return [
             RawSource(
                 id=self._new_source_id(f"{dimension}-survey"),
                 competitor=redacted_competitor,
@@ -342,31 +366,6 @@ class SurveyInterviewAgentMixin:
                 extracted_at=detail.updated_at,
             )
         ]
-        if bundle.interviews:
-            interview_summary = self._interview_evidence_summary(
-                detail,
-                dimension=dimension,
-                competitor=competitor,
-                interviews=bundle.interviews,
-            )
-            interview_summary = self._redact_research_text(interview_summary, redaction_counts)
-            bundle.redaction_counts = redaction_counts
-            sources.append(
-                RawSource(
-                    id=self._new_source_id(f"{dimension}-interview"),
-                    competitor=redacted_competitor,
-                    dimension=redacted_dimension,
-                    source_type="interview_record",
-                    title=f"{redacted_competitor} {redacted_dimension} interview synthesis",
-                    snippet=interview_summary,
-                    content_hash=hashlib.sha256(
-                        interview_summary.encode("utf-8")
-                    ).hexdigest()[:16],
-                    confidence=max(bundle.confidence, 0.62),
-                    extracted_at=detail.updated_at,
-                )
-            )
-        return sources
 
     def _survey_evidence_summary(
         self,
