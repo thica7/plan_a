@@ -48,28 +48,8 @@ class WriterAgentMixin:
         previous_report = detail.report_md
         writer_mode = "real LLM call"
         writer_error: str | None = None
-        competitor_kb_json = json.dumps(
-            {key: value.model_dump(mode="json") for key, value in detail.competitor_kbs.items()},
-            ensure_ascii=False,
-        )
-        competitor_knowledge_json = json.dumps(
-            {
-                key: value.model_dump(mode="json")
-                for key, value in detail.competitor_knowledge.items()
-            },
-            ensure_ascii=False,
-        )
-        comparison_matrix_json = json.dumps(
-            (detail.comparison_matrix.model_dump(mode="json") if detail.comparison_matrix else {}),
-            ensure_ascii=False,
-        )
-        source_digest_json = json.dumps(self._source_digest(detail.raw_sources), ensure_ascii=False)
-        reflections_json = json.dumps(
-            [reflection.model_dump(mode="json") for reflection in detail.reflections],
-            ensure_ascii=False,
-        )
-        qa_findings_json = json.dumps(
-            [issue.model_dump(mode="json") for issue in detail.qa_findings],
+        writer_context_json = json.dumps(
+            self._writer_context_package(detail),
             ensure_ascii=False,
         )
         layer_context = self._writer_layer_context(detail)
@@ -118,12 +98,7 @@ class WriterAgentMixin:
                         f"Confirmed Memory Preferences:\n{memory_context}\n"
                         f"Layer Report Context: {layer_context}\n"
                         f"{grounding_prompt}\n"
-                        f"Competitor KB JSON: {competitor_kb_json}\n"
-                        f"Competitor Knowledge Schema JSON: {competitor_knowledge_json}\n"
-                        f"Comparison Matrix JSON: {comparison_matrix_json}\n"
-                        f"Source digest JSON: {source_digest_json}\n"
-                        f"Reflections JSON: {reflections_json}\n"
-                        f"Run QA Findings JSON: {qa_findings_json}\n\n"
+                        f"Writer Context JSON: {writer_context_json}\n\n"
                         f"Required sections:\n{required_sections}\n"
                         "Prefer complete analysis over brevity, but stay under 12,000 characters."
                     ),
@@ -548,6 +523,148 @@ class WriterAgentMixin:
             sources=detail.raw_sources,
             qa_findings=detail.qa_findings,
         )
+
+    def _writer_context_package(self, detail: RunDetail) -> dict[str, object]:
+        return {
+            "sources": self._writer_source_digest(detail.raw_sources),
+            "competitors": {
+                competitor: self._writer_competitor_digest(detail, competitor)
+                for competitor in detail.plan.competitors
+            },
+            "comparison_matrix": self._writer_matrix_digest(detail),
+            "qa_findings": [self._writer_issue_digest(issue) for issue in detail.qa_findings[:10]],
+            "reflections": [
+                {
+                    "iteration": reflection.iteration,
+                    "coverage_gaps": [
+                        self._trim_sentence(item, 180) for item in reflection.coverage_gaps[:4]
+                    ],
+                    "confidence_outliers": [
+                        self._trim_sentence(item, 180)
+                        for item in reflection.confidence_outliers[:4]
+                    ],
+                    "cross_competitor_gaps": [
+                        self._trim_sentence(item, 180)
+                        for item in reflection.cross_competitor_gaps[:4]
+                    ],
+                }
+                for reflection in detail.reflections[-2:]
+            ],
+        }
+
+    def _writer_source_digest(self, sources: list[RawSource]) -> list[dict[str, object]]:
+        return [
+            {
+                "id": source.id,
+                "competitor": source.competitor,
+                "covered_competitors": source.covered_competitors,
+                "dimension": source.dimension,
+                "source_type": source.source_type,
+                "title": self._trim_sentence(source.title, 120),
+                "url": str(source.url) if source.url else None,
+                "snippet": self._trim_sentence(source.snippet, 240),
+                "confidence": round(source.confidence, 3),
+            }
+            for source in sources[:24]
+        ]
+
+    def _writer_competitor_digest(self, detail: RunDetail, competitor: str) -> dict[str, object]:
+        kb = detail.competitor_kbs.get(competitor)
+        knowledge = detail.competitor_knowledge.get(competitor)
+        slices = {}
+        if kb is not None:
+            slices = {
+                dimension: [self._trim_sentence(item, 180) for item in findings[:3]]
+                for dimension, findings in kb.slices.items()
+                if dimension in detail.plan.dimensions
+            }
+        return {
+            "kb_slices": slices,
+            "source_ids": (knowledge.source_ids[:8] if knowledge is not None else []),
+            "confidence": (
+                round(knowledge.confidence, 3) if knowledge is not None else None
+            ),
+            "pricing": self._writer_pricing_digest(knowledge),
+            "feature_claims": self._writer_feature_claim_digest(knowledge),
+            "persona_claims": self._writer_persona_claim_digest(knowledge),
+        }
+
+    def _writer_pricing_digest(self, knowledge: object | None) -> dict[str, object]:
+        if knowledge is None or not hasattr(knowledge, "pricing_model"):
+            return {"tiers": [], "notes": []}
+        pricing = knowledge.pricing_model
+        return {
+            "tiers": [
+                {
+                    "name": self._trim_sentence(tier.name, 80),
+                    "price": self._trim_sentence(tier.price, 80),
+                    "claims": self._writer_claim_digest(tier.claims, limit=2),
+                }
+                for tier in pricing.tiers[:4]
+            ],
+            "notes": self._writer_claim_digest(pricing.notes, limit=3),
+        }
+
+    def _writer_feature_claim_digest(self, knowledge: object | None) -> list[dict[str, object]]:
+        if knowledge is None or not hasattr(knowledge, "feature_tree"):
+            return []
+        claims = list(knowledge.feature_tree.summary_claims)
+        for node in knowledge.feature_tree.nodes[:4]:
+            claims.extend(node.claims[:2])
+        return self._writer_claim_digest(claims, limit=8)
+
+    def _writer_persona_claim_digest(self, knowledge: object | None) -> list[dict[str, object]]:
+        if knowledge is None or not hasattr(knowledge, "user_personas"):
+            return []
+        claims = list(knowledge.user_personas.summary_claims)
+        for segment in knowledge.user_personas.segments[:4]:
+            claims.extend(segment.claims[:2])
+        return self._writer_claim_digest(claims, limit=8)
+
+    def _writer_claim_digest(
+        self,
+        claims: list[KnowledgeClaim],
+        *,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "claim": self._trim_sentence(claim.claim, 180),
+                "source_ids": claim.source_ids[:4],
+                "confidence": round(claim.confidence, 3),
+            }
+            for claim in claims[:limit]
+        ]
+
+    def _writer_matrix_digest(self, detail: RunDetail) -> dict[str, object]:
+        if detail.comparison_matrix is None:
+            return {"winner_by_dimension": {}, "summary": [], "cells": []}
+        return {
+            "winner_by_dimension": detail.comparison_matrix.winner_by_dimension,
+            "summary": [
+                self._trim_sentence(item, 180) for item in detail.comparison_matrix.summary[:6]
+            ],
+            "cells": [
+                {
+                    "competitor": cell.competitor,
+                    "dimension": cell.dimension,
+                    "value": self._trim_sentence(cell.value, 180),
+                    "source_ids": cell.source_ids[:4],
+                    "confidence": round(cell.confidence, 3),
+                }
+                for cell in detail.comparison_matrix.cells[:32]
+            ],
+        }
+
+    def _writer_issue_digest(self, issue: QCIssue) -> dict[str, object]:
+        return {
+            "id": issue.id,
+            "severity": issue.severity,
+            "target_agent": issue.target_agent,
+            "target_subagent": issue.target_subagent,
+            "target_competitor": issue.target_competitor,
+            "problem": self._trim_sentence(issue.problem, 180),
+        }
 
     def _matrix_source_ids(self, detail: RunDetail) -> list[str]:
         if detail.comparison_matrix is None:

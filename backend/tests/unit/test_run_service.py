@@ -2276,6 +2276,78 @@ async def test_writer_budget_timeout_generates_deterministic_report() -> None:
     assert record.detail.agent_messages[-1].payload["error"] == "writer LLM exceeded 0.05s"
 
 
+@pytest.mark.asyncio
+async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    captured_user = ""
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal captured_user
+        captured_user = user
+        return "# A vs B\n\nA has stronger pricing evidence. [source:pricing-a]"
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer compact context",
+            competitors=["A", "B"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    long_snippet = "A pricing is published. " + ("long-context-token " * 400)
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://a.example/pricing",
+            snippet=long_snippet,
+            content_hash="pricing-a-hash",
+            confidence=0.95,
+        )
+    ]
+    record.detail.comparison_matrix = ComparisonMatrix(
+        competitors=["A", "B"],
+        dimensions=["pricing"],
+        cells=[
+            ComparisonCell(
+                competitor="A",
+                dimension="pricing",
+                value="A has stronger pricing evidence.",
+                source_ids=["pricing-a"],
+                confidence=0.95,
+            )
+        ],
+        winner_by_dimension={"pricing": "A"},
+        summary=["A wins the pricing evidence vote."],
+    )
+    service._merge_kb_slice(record.detail, "pricing", {"A": [long_snippet]})
+
+    await service._real_writer_step(record)
+
+    assert "Writer Context JSON:" in captured_user
+    assert "Competitor KB JSON:" not in captured_user
+    assert "Competitor Knowledge Schema JSON:" not in captured_user
+    assert len(captured_user) < 15000
+    assert captured_user.count("long-context-token") < 80
+    assert record.detail.agent_messages[-1].payload["writer_mode"] == "real LLM call"
+
+
 def test_candidate_evidence_prefers_matching_search_results() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
