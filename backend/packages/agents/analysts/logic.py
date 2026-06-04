@@ -807,7 +807,9 @@ class AnalystAgentMixin:
                 "user_personas": {
                     "segments": [
                         {
-                            "name": self._extract_persona_segment_name(claim_text),
+                            "name": self._extract_persona_segment_name(
+                                claim_text, competitor
+                            ),
                             "role": self._extract_persona_role_hint(claim_text),
                             "company_size": self._extract_company_size_hint(claim_text),
                             "pain_points": pain_points,
@@ -1157,7 +1159,7 @@ class AnalystAgentMixin:
             if claims:
                 knowledge.user_personas.segments = [
                     UserPersonaSegment(
-                        name=self._extract_persona_segment_name(claim_text),
+                        name=self._extract_persona_segment_name(claim_text, competitor),
                         role=self._extract_persona_role_hint(claim_text),
                         company_size=self._extract_company_size_hint(claim_text),
                         pain_points=self._extract_persona_pain_points(claim_text),
@@ -1466,7 +1468,7 @@ class AnalystAgentMixin:
         )
         if not evidence_text.strip():
             return
-        segment_name = self._extract_persona_segment_name(evidence_text)
+        segment_name = self._extract_persona_segment_name(evidence_text, competitor)
         role = self._extract_persona_role_hint(evidence_text)
         company_size = self._extract_company_size_hint(evidence_text)
         pain_points = self._extract_persona_pain_points(evidence_text)
@@ -1494,9 +1496,18 @@ class AnalystAgentMixin:
             if not segment.use_cases and use_cases:
                 segment.use_cases = use_cases
 
-    def _extract_persona_segment_name(self, text: str) -> str:
+    def _extract_persona_segment_name(self, text: str, competitor: str = "") -> str:
+        competitor_key = competitor.casefold()
+        if "github" in competitor_key and "copilot" in competitor_key:
+            return "GitHub workflow developers"
+        if "cursor" in competitor_key:
+            return "Cursor AI-native IDE developers"
+        if "claude" in competitor_key:
+            return "Claude Code agentic coding teams"
+        if "windsurf" in competitor_key:
+            return "Windsurf Cascade IDE developers"
         normalized = text.casefold()
-        if re.search(r"\benterprise|organization|governance|procurement\b", normalized):
+        if re.search(r"\benterprise|governance|procurement\b", normalized):
             return "Enterprise engineering teams"
         if re.search(r"\bstartup|founder|small team\b", normalized):
             return "Startup engineering teams"

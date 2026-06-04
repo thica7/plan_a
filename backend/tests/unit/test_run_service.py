@@ -4609,6 +4609,33 @@ def test_structured_persona_payload_enriches_unknown_fields_from_sources() -> No
     assert segment.use_cases == ["code review"]
 
 
+def test_persona_segment_names_are_competitor_specific() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    assert (
+        service._extract_persona_segment_name("Developers use Cursor.", "Cursor")
+        == "Cursor AI-native IDE developers"
+    )
+    assert (
+        service._extract_persona_segment_name("Developers use Claude.", "Claude Code")
+        == "Claude Code agentic coding teams"
+    )
+    assert (
+        service._extract_persona_segment_name("Developers use Windsurf.", "Windsurf")
+        == "Windsurf Cascade IDE developers"
+    )
+
+
 @pytest.mark.asyncio
 async def test_analyst_empty_structured_payload_falls_back_to_source_claims() -> None:
     service = RunService(
