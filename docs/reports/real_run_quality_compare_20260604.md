@@ -1,6 +1,6 @@
 # Real Run Quality Comparison
 
-- Current run: run-c62978a929706fe1a36c882affd6f7d5
+- Current run: run-4c23bf2ea8b349d76a28ec9e36419329
 - Baseline run: 411d3a19-7049-4a7e-aa9f-c5b63e74a69e
 - Current status: completed_with_blockers
 - Current node: none
@@ -20,34 +20,34 @@
 
 | Field | Delta |
 |---|---:|
-| Report chars | +12328 |
-| Raw sources | -11 |
+| Report chars | +13522 |
+| Raw sources | -9 |
 | Claims | 0 |
 | QA findings | -10 |
-| Trace spans | -199 |
+| Trace spans | -184 |
 | Fallback report regressed | no |
 
 ## Current Evidence
 
 | Field | Value |
 |---|---:|
-| Raw sources | 16 |
-| Enterprise evidence | 16 |
+| Raw sources | 18 |
+| Enterprise evidence | 18 |
 | Claims | 0 |
-| Enterprise claims | 16 |
+| Enterprise claims | 17 |
 | QA findings | 8 |
 | Agent messages | 60 |
-| Tool calls | 102 |
-| Trace spans | 165 |
-| Report chars | 21286 |
+| Tool calls | 115 |
+| Trace spans | 180 |
+| Report chars | 22480 |
 
 ## Quality Metrics
 
 | Metric | Target | Baseline | Delta | Status |
 |---|---:|---:|---:|---|
-| evidence_count | 16 | 27 | -11 | regressed |
+| evidence_count | 18 | 27 | -9 | regressed |
 | source_coverage_rate | 1 | 1 | 0 | unchanged |
-| verified_source_rate | 0.75 | 0.815 | -0.065 | regressed |
+| verified_source_rate | 0.778 | 0.815 | -0.037 | regressed |
 | claim_citation_rate | 1 | 1 | 0 | unchanged |
 | citation_validity_rate | 1 | 1 | 0 | unchanged |
 | real_source_rate | 1 | 1 | 0 | unchanged |
@@ -65,14 +65,14 @@
 
 | ID | Severity | Agent | Dimension | Competitor | Problem |
 |---|---|---|---|---|---|
-| reflector-coverage-1-pricing-cell-values-are-truncated-for-all-compet | warn | collector | pricing | GitHub Copilot | Pricing cell values are truncated for all competitors: Cursor full tier pricing, Claude Code full subscription pricing, Windsurf individual plan pricing, and GitHub Copilot full business tier pricing are not fully extracted. |
-| reflector-coverage-2-all-persona-cell-values-use-irrelevant-snippets- | warn | collector | persona |  | All persona cell values use irrelevant snippets that contain no valid data for standardized persona fields. |
-| reflector-coverage-3-all-feature-cell-values-are-partial-truncated-sn | warn | collector | feature |  | All feature cell values are partial truncated snippets with no structured, comparable feature attributes extracted. |
-| reflector-confidence-1-persona-dimension-cell-confidences-0.76-0.79-are | warn | collector | persona |  | Persona dimension cell confidences are still judged inflated by reflector because persona webpages are weak and interview records are synthetic. |
-| reflector-confidence-2-pricing-majority-vote-winner-confidence-for-gith | warn | collector | pricing | GitHub Copilot | Pricing majority-vote winner confidence for GitHub Copilot is judged too high while other competitors lack complete pricing data. |
-| reflector-cross-competitor-1-pricing-dimension-lacks-fully-aligned-complete-s | warn | comparator | pricing |  | Pricing dimension lacks complete standardized tier_name/price/billing_cycle data across all four competitors. |
-| reflector-cross-competitor-2-persona-dimension-has-zero-populated-standardize | warn | comparator | persona |  | Persona dimension lacks populated standardized aligned fields across all four competitors. |
-| reflector-cross-competitor-3-feature-dimension-lacks-consistent-aligned-struc | warn | comparator | feature |  | Feature dimension lacks consistent aligned structured feature attributes across all four competitors. |
+| reflector-coverage-1-pricing-dimension:-github-copilot-cell-value-tru | warn | collector | pricing | GitHub Copilot | Pricing dimension: GitHub Copilot cell value truncates full paid tier pricing details, Cursor cell value omits explicit individual/Pro tier full pricing, Claude Code cell value does not capture explicit public subscription pricing numbers, Windsurf cell value lacks individual tier pricing data, only Teams/Enterprise credit allocation is documented. |
+| reflector-coverage-2-persona-dimension:-github-copilot-cursor-claude- | warn | collector | persona | GitHub Copilot | Persona dimension: GitHub Copilot, Cursor, Claude Code cells do not populate required aligned fields with verified data, all three are marked as unknown segment. |
+| reflector-coverage-3-feature-dimension:-all-4-competitors-feature-cel | warn | collector | feature |  | Feature dimension: all four feature cells are truncated partial snippets, no standardized aligned fields are fully populated for side-by-side comparison. |
+| reflector-confidence-1-persona-aggregated-cell-confidence-values-0.76-0 | warn | collector | persona |  | Persona aggregated cell confidence values are still judged inflated relative to the 0.62 confidence of synthetic interview persona sources. |
+| reflector-confidence-2-majority-vote-pricing-result-incorrectly-lists-c | warn | collector | pricing | GitHub Copilot | Majority-vote pricing result incorrectly lists confidence value as `GitHub Copilot` instead of a numeric or valid categorical confidence score. |
+| reflector-cross-competitor-1-pricing-dimension-has-no-fully-aligned-complete- | warn | comparator | pricing |  | Pricing dimension still lacks a complete side-by-side tier pricing comparison across all four competitors. |
+| reflector-cross-competitor-2-persona-dimension-has-no-aligned-complete-side-b | warn | comparator | persona |  | Persona dimension still lacks aligned target segment, role, company size, and pain point data across all four competitors. |
+| reflector-cross-competitor-3-feature-dimension-has-no-standardized-comparable | warn | comparator | feature |  | Feature dimension still lacks a standardized comparable feature-set mapping across all four competitors. |
 
 ## Last Agent Messages
 
@@ -95,8 +95,9 @@
 
 - The previous failed audit stopped at `collect_qa` with `missing-source-feature-windsurf`.
 - After updating Windsurf feature collection to official Cascade docs, the run reached writer and final QA.
+- After raising the default LLM and writer timeout to 90 seconds, the latest run kept `writer_mode=real LLM call` instead of falling back to deterministic writing.
 - The report is no longer fallback-generated; it was produced by a real LLM call.
-- Remaining warnings are quality-improvement work, not release-gate blockers.
+- Remaining warnings are quality-improvement work around aligned pricing, persona, feature extraction, and comparator confidence formatting, not release-gate blockers.
 
 ## Method
 
