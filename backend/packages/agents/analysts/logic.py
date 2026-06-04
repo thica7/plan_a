@@ -1466,7 +1466,7 @@ class AnalystAgentMixin:
 
     def _pricing_tier_keyword_regex(self) -> re.Pattern[str]:
         return re.compile(
-            r"\b(?:free|hobby|pro\+|ultra|business|enterprise|teams?|individual|pro)\b",
+            r"\b(?:free|hobby|pro\+|ultra|max|business|enterprise|teams?|individual|pro)\b",
             flags=re.IGNORECASE,
         )
 
@@ -1482,6 +1482,7 @@ class AnalystAgentMixin:
         patterns = [
             (r"\bpro\+\b", "Pro+"),
             (r"\bultra\b", "Ultra"),
+            (r"\bmax\b", "Max"),
             (r"\bbusiness\b", "Business"),
             (r"\benterprise\b", "Enterprise"),
             (r"\bteam(?:s)?\b", "Team"),
@@ -1502,6 +1503,7 @@ class AnalystAgentMixin:
         patterns = [
             (r"\bpro\+\b", "Pro+"),
             (r"\bultra\b", "Ultra"),
+            (r"\bmax\b", "Max"),
             (r"\bbusiness\b", "Business"),
             (r"\benterprise\b", "Enterprise"),
             (r"\bteam(?:s)?\b", "Team"),
@@ -1638,6 +1640,7 @@ class AnalystAgentMixin:
             "enterprise": "Enterprise",
             "free": "Free",
             "individual": "Individual",
+            "max": "Max",
             "pro": "Pro",
             "pro+": "Pro+",
             "team": "Team",
@@ -1673,6 +1676,7 @@ class AnalystAgentMixin:
             (r"\bfree\b|\bhobby\b", "free"),
             (r"\bpro\+\b", "pro+"),
             (r"\bultra\b", "ultra"),
+            (r"\bmax\b", "max"),
             (r"\bbusiness\b", "business"),
             (r"\benterprise\b", "enterprise"),
             (r"\bteam(?:s)?\b", "team"),

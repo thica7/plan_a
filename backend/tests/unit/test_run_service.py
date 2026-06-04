@@ -5085,6 +5085,50 @@ def test_deterministic_pricing_payload_extracts_multiple_tiers() -> None:
     assert tiers[2]["limits"] == ["unlimited completions"]
 
 
+def test_deterministic_pricing_payload_maps_claude_code_max_tiers() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    sources = [
+        {
+            "id": "claude-pricing",
+            "title": "Claude Code pricing",
+            "snippet": (
+                "Claude Code is available for enterprise engineering teams. "
+                "Pro costs $20/month. Max costs $100/month. "
+                "Max 20x costs $200/month. Team costs $30 per user."
+            ),
+            "confidence": 0.9,
+        }
+    ]
+
+    pricing = service._deterministic_structured_knowledge_payload(
+        competitor="Claude Code",
+        dimension="pricing",
+        dimension_sources=sources,
+    )
+
+    tiers = pricing["pricing_model"]["tiers"]
+    tier_names = [tier["name"] for tier in tiers]
+    assert "Pro" in tier_names
+    assert "Max" in tier_names
+    assert "Team" in tier_names
+    assert "Enterprise" not in tier_names
+    assert [
+        (tier["name"], tier["price"])
+        for tier in tiers
+        if tier["price"] in {"$100/month", "$200/month"}
+    ] == [("Max", "$100/month"), ("Max", "$200/month")]
+
+
 def test_structured_pricing_payload_appends_missing_paid_tiers_from_sources() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
