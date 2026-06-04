@@ -54,6 +54,17 @@ def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, value))
 
 
+def _env_float(name: str, default: float, *, minimum: float, maximum: float) -> float:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        value = float(raw_value)
+    except ValueError:
+        return default
+    return max(minimum, min(maximum, value))
+
+
 @dataclass(frozen=True)
 class Settings:
     demo_mode: bool
@@ -62,6 +73,8 @@ class Settings:
     ark_base_url: str
     llm_timeout_seconds: float
     llm_temperature: float
+    llm_max_retries: int = 2
+    llm_retry_backoff_seconds: float = 0.25
     backup_llm_api_key: str | None = None
     backup_llm_base_url: str = "https://openrouter.ai/api/v1"
     backup_llm_model: str | None = None
@@ -156,6 +169,13 @@ def get_settings() -> Settings:
         backup_llm_model=os.getenv("BACKUP_LLM_MODEL") or None,
         llm_timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "60")),
         llm_temperature=float(os.getenv("LLM_TEMPERATURE", "0.2")),
+        llm_max_retries=_env_int("LLM_MAX_RETRIES", 2, minimum=0, maximum=5),
+        llm_retry_backoff_seconds=_env_float(
+            "LLM_RETRY_BACKOFF_SECONDS",
+            0.25,
+            minimum=0.0,
+            maximum=5.0,
+        ),
         pplx_api_key=os.getenv("PPLX_API_KEY") or os.getenv("PERPLEXITY_API_KEY") or None,
         pplx_base_url=os.getenv("PPLX_BASE_URL", "https://api.perplexity.ai").rstrip("/"),
         web_search_provider=os.getenv("WEB_SEARCH_PROVIDER", "perplexity").strip().lower(),

@@ -13,6 +13,8 @@ def _settings(**overrides: object) -> Settings:
         "ark_base_url": "https://ark.example/api/v3",
         "llm_timeout_seconds": 10,
         "llm_temperature": 0.2,
+        "llm_max_retries": 0,
+        "llm_retry_backoff_seconds": 0.0,
     }
     values.update(overrides)
     return Settings(**values)
@@ -101,6 +103,80 @@ async def test_complete_text_falls_back_to_backup_provider(monkeypatch) -> None:
         completion_tokens=2,
         total_tokens=5,
     )
+
+
+@pytest.mark.asyncio
+async def test_complete_text_retries_retryable_status_before_failing_over(monkeypatch) -> None:
+    calls = 0
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            self.timeout = timeout
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def post(
+            self,
+            url: str,
+            *,
+            json: dict[str, object],
+            headers: dict[str, str],
+        ) -> httpx.Response:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return httpx.Response(429, text="rate limited")
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "retry ok"}}]},
+            )
+
+    monkeypatch.setattr("packages.llm.doubao_client.httpx.AsyncClient", FakeAsyncClient)
+    client = DoubaoClient(_settings(llm_max_retries=1))
+
+    content = await client.complete_text(system="system", user="user")
+
+    assert content == "retry ok"
+    assert calls == 2
+    assert client.last_provider() == "doubao"
+
+
+@pytest.mark.asyncio
+async def test_complete_text_does_not_retry_non_retryable_status(monkeypatch) -> None:
+    calls = 0
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            self.timeout = timeout
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def post(
+            self,
+            url: str,
+            *,
+            json: dict[str, object],
+            headers: dict[str, str],
+        ) -> httpx.Response:
+            nonlocal calls
+            calls += 1
+            return httpx.Response(401, text="bad key")
+
+    monkeypatch.setattr("packages.llm.doubao_client.httpx.AsyncClient", FakeAsyncClient)
+    client = DoubaoClient(_settings(llm_max_retries=2))
+
+    with pytest.raises(LLMError, match="401"):
+        await client.complete_text(system="system", user="user")
+
+    assert calls == 1
 
 
 @pytest.mark.asyncio

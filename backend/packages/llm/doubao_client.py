@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,6 +14,13 @@ from packages.schema.enterprise import ModelProviderKind, ModelRouteDecision
 
 class LLMError(RuntimeError):
     pass
+
+
+class _RetryableLLMError(LLMError):
+    pass
+
+
+_RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
 
 
 @dataclass(frozen=True)
@@ -112,18 +120,50 @@ class DoubaoClient:
         }
         url = f"{provider.base_url}/chat/completions"
 
+        attempts = max(1, self._settings.llm_max_retries + 1)
+        for attempt in range(attempts):
+            try:
+                response = await self._post_chat_completion(url, payload, headers)
+                if response.status_code >= 400:
+                    message = (
+                        f"LLM request failed with {response.status_code}: "
+                        f"{response.text[:500]}"
+                    )
+                    if response.status_code not in _RETRYABLE_STATUS_CODES:
+                        raise LLMError(message)
+                    raise _RetryableLLMError(message)
+                return self._parse_text_response(response, provider)
+            except _RetryableLLMError as exc:
+                if attempt + 1 >= attempts:
+                    raise LLMError(
+                        f"LLM request failed after {attempts} attempts: {exc}"
+                    ) from exc
+                await self._sleep_before_retry(attempt)
+        raise LLMError("LLM request failed before response.")
+
+    async def _post_chat_completion(
+        self,
+        url: str,
+        payload: dict[str, object],
+        headers: dict[str, str],
+    ) -> httpx.Response:
         try:
             async with httpx.AsyncClient(timeout=self._settings.llm_timeout_seconds) as client:
-                response = await client.post(url, json=payload, headers=headers)
+                return await client.post(url, json=payload, headers=headers)
         except httpx.TimeoutException as exc:
-            raise LLMError(
+            raise _RetryableLLMError(
                 f"LLM request timed out after {self._settings.llm_timeout_seconds} seconds."
             ) from exc
         except httpx.HTTPError as exc:
-            raise LLMError(f"LLM request failed before response: {exc}") from exc
-        if response.status_code >= 400:
-            raise LLMError(f"LLM request failed with {response.status_code}: {response.text[:500]}")
+            raise _RetryableLLMError(f"LLM request failed before response: {exc}") from exc
 
+    async def _sleep_before_retry(self, attempt_index: int) -> None:
+        backoff_seconds = max(0.0, self._settings.llm_retry_backoff_seconds)
+        if backoff_seconds <= 0:
+            return
+        await asyncio.sleep(backoff_seconds * (2**attempt_index))
+
+    def _parse_text_response(self, response: httpx.Response, provider: LLMProviderConfig) -> str:
         data = response.json()
         self._last_usage = self._parse_usage(data.get("usage"))
         self._last_provider = provider.name
