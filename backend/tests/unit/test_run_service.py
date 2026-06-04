@@ -57,6 +57,92 @@ def _collector_issue(issue_id: str, subagent: str, competitor: str) -> QCIssue:
     )
 
 
+def test_refresh_quality_metrics_excludes_user_research_from_verified_rate() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-quality-source-rate",
+        topic="AI coding assistant adoption",
+        status="completed",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding assistant adoption",
+            competitors=["Acme"],
+            dimensions=["persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="survey-1",
+                competitor="Acme",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="Acme survey",
+                snippet="Surveyed target users cite onboarding effort.",
+                content_hash="surveyhash",
+                confidence=0.58,
+            ),
+            RawSource(
+                id="interview-1",
+                competitor="Acme",
+                dimension="persona",
+                source_type="interview_record",
+                title="Acme interview",
+                snippet="Interviewed users discuss workflow fit and switching cost.",
+                content_hash="interviewhash",
+                confidence=0.62,
+            ),
+            RawSource(
+                id="official-1",
+                competitor="Acme",
+                dimension="persona",
+                source_type="webpage_verified",
+                title="Acme official page",
+                url="https://example.com/acme",
+                snippet="Official Acme page describes user workflow adoption.",
+                content_hash="officialhash",
+                confidence=0.92,
+            ),
+            RawSource(
+                id="docs-1",
+                competitor="Acme",
+                dimension="persona",
+                source_type="official_docs",
+                title="Acme docs",
+                url="https://docs.example.com/acme",
+                snippet="Official docs describe onboarding and adoption controls.",
+                content_hash="docshash",
+                confidence=0.94,
+            ),
+            RawSource(
+                id="search-1",
+                competitor="Acme",
+                dimension="persona",
+                source_type="web_search_result",
+                title="Acme search result",
+                url="https://search.example.com/acme",
+                snippet="Search result points to user adoption commentary.",
+                content_hash="searchhash",
+                confidence=0.7,
+            ),
+        ],
+    )
+
+    service._refresh_quality_metrics(detail)
+
+    assert detail.metrics.verified_source_rate == 0.667
+
+
 @pytest.mark.asyncio
 async def test_real_mode_requires_ark_credentials() -> None:
     settings = Settings(

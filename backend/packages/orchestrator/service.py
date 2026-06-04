@@ -82,6 +82,25 @@ from packages.skills.registry import SkillRegistry
 from packages.tools import WebSearchRequest, fetch_page, robots_check, web_search
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+QUALITY_VERIFIED_SOURCE_TYPES = {
+    "webpage_verified",
+    "official",
+    "official_docs",
+    "official_pricing",
+    "official_site",
+    "official_api",
+    "pricing_page",
+    "review_site",
+    "trust_center",
+}
+QUALITY_USER_RESEARCH_SOURCE_TYPES = {
+    "survey_simulated",
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+    "manual_note",
+    "manual",
+}
 
 
 def _aggregate_consistency_votes(validation: ClaimValidationReport) -> dict[str, int]:
@@ -107,6 +126,15 @@ def _claim_validation_sample_payload(validation: ClaimValidationReport) -> list[
                 }
             )
     return samples
+
+
+def _factual_quality_sources(sources: list[RawSource]) -> list[RawSource]:
+    return [
+        source
+        for source in sources
+        if source.source_type
+        and source.source_type.casefold() not in QUALITY_USER_RESEARCH_SOURCE_TYPES
+    ]
 
 
 @dataclass
@@ -2984,13 +3012,18 @@ class RunService(
             if expected_pairs
             else 0.0
         )
+        factual_sources = _factual_quality_sources(detail.raw_sources)
         metrics.verified_source_rate = (
             round(
-                sum(1 for source in detail.raw_sources if source.source_type == "webpage_verified")
-                / len(detail.raw_sources),
+                sum(
+                    1
+                    for source in factual_sources
+                    if source.source_type.casefold() in QUALITY_VERIFIED_SOURCE_TYPES
+                )
+                / len(factual_sources),
                 3,
             )
-            if detail.raw_sources
+            if factual_sources
             else 0.0
         )
         metrics.claim_citation_rate = (
