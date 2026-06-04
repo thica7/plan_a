@@ -2249,14 +2249,32 @@ function DecisionReplayPanel({
   replay: DecisionReplayReport | null;
   runId?: string | null;
 }) {
+  const [eventTypeFilter, setEventTypeFilter] = useState("");
+  const [replayQuery, setReplayQuery] = useState("");
   if (!runId) return null;
 
-  const timelineEvents = [...(replay?.events ?? [])]
-    .sort((left, right) => right.created_at.localeCompare(left.created_at))
-    .slice(0, 8);
   const eventTypeCounts = replay
     ? Object.entries(replay.event_type_counts).sort((left, right) => right[1] - left[1])
     : [];
+  const normalizedReplayQuery = replayQuery.trim().toLowerCase();
+  const timelineEvents = [...(replay?.events ?? [])]
+    .filter((event) => {
+      const searchable = [
+        event.event_type,
+        event.agent ?? "",
+        event.message,
+        event.evidence_ids.join(" "),
+        event.claim_ids.join(" "),
+        event.related_span_ids.join(" "),
+        decisionPayloadSummary(event),
+      ].join(" ").toLowerCase();
+      return (
+        (!eventTypeFilter || event.event_type === eventTypeFilter)
+        && (!normalizedReplayQuery || searchable.includes(normalizedReplayQuery))
+      );
+    })
+    .sort((left, right) => right.created_at.localeCompare(left.created_at))
+    .slice(0, 8);
   const status = !replay
     ? "warn"
     : replay.blocker_count > 0
@@ -2299,6 +2317,41 @@ function DecisionReplayPanel({
               ))}
             </div>
           ) : null}
+          <div className="decision-filter-grid">
+            <label className="search-box">
+              <Search size={16} aria-hidden />
+              <input
+                aria-label="Search decision replay"
+                onChange={(event) => setReplayQuery(event.target.value)}
+                placeholder="Search replay"
+                value={replayQuery}
+              />
+            </label>
+            <select
+              aria-label="Decision replay event type filter"
+              onChange={(event) => setEventTypeFilter(event.target.value)}
+              value={eventTypeFilter}
+            >
+              <option value="">All event types</option>
+              {eventTypeCounts.map(([eventType, count]) => (
+                <option key={eventType} value={eventType}>
+                  {formatDecisionEventType(eventType)} ({count})
+                </option>
+              ))}
+            </select>
+            <button
+              className="icon-button"
+              disabled={!eventTypeFilter && !replayQuery}
+              onClick={() => {
+                setEventTypeFilter("");
+                setReplayQuery("");
+              }}
+              title="Clear replay filters"
+              type="button"
+            >
+              <XCircle size={16} aria-hidden />
+            </button>
+          </div>
           {timelineEvents.length > 0 ? (
             <div className="decision-timeline">
               {timelineEvents.map((event) => (

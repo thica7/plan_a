@@ -2516,6 +2516,32 @@ select {
   font-weight: 700;
 }
 
+.decision-filter-grid {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(180px, 1fr) auto;
+}
+
+.decision-filter-grid .search-box {
+  max-width: none;
+}
+
+.decision-filter-grid select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  min-height: 42px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.decision-filter-grid .icon-button {
+  min-height: 42px;
+  width: 42px;
+}
+
 .decision-event-card {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -3243,6 +3269,7 @@ select {
 }
 
 @media (max-width: 900px) {
+  .decision-filter-grid,
   .audit-filter-grid {
     grid-template-columns: 1fr;
   }
