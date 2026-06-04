@@ -2377,6 +2377,111 @@ def test_collector_official_source_candidates_include_curated_enterprise_urls() 
     assert any("github.blog/changelog" in item.url for item in candidates)
 
 
+def test_collector_official_source_candidates_include_persona_product_pages() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="AI coding assistant buyer persona comparison",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant buyer persona comparison",
+            competitors=["Cursor", "Claude Code"],
+            dimensions=["persona"],
+        ),
+    )
+
+    cursor_candidates = service._official_source_candidates(detail, "Cursor", "persona")
+    claude_candidates = service._official_source_candidates(detail, "Claude Code", "persona")
+
+    assert service._should_collect_official_first("persona") is True
+    assert any(item.url == "https://cursor.com" for item in cursor_candidates)
+    assert any("anthropic.com/product/claude-code" in item.url for item in claude_candidates)
+
+
+def test_collector_search_query_adds_product_qualifier_for_ambiguous_names() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="AI coding assistant feature comparison",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant feature comparison",
+            competitors=["Cursor"],
+            dimensions=["feature"],
+        ),
+    )
+
+    query = service._web_search_query(detail, "Cursor", "feature")
+
+    assert "AI code editor" in query
+    assert "official source" in query
+
+
+def test_collector_rejects_product_identity_confusion_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    windsurf_source = RawSource(
+        id="pricing-windsurf-confused",
+        competitor="Windsurf",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Devin pricing",
+        url="https://devin.ai/pricing",
+        snippet="Devin Desktop pricing includes a Team plan and Enterprise plan.",
+        content_hash="hash-windsurf",
+        confidence=0.96,
+    )
+    cursor_source = RawSource(
+        id="feature-cursor-confused",
+        competitor="Cursor",
+        dimension="feature",
+        source_type="webpage_verified",
+        title="Cursor Extractor",
+        url="https://example.com/cursor-extractor",
+        snippet="Cursor Extractor is a database pagination utility with cursor-based pages.",
+        content_hash="hash-cursor",
+        confidence=0.96,
+    )
+
+    assert "rather than Windsurf" in (service._source_quality_problem(windsurf_source) or "")
+    assert "rather than Cursor" in (service._source_quality_problem(cursor_source) or "")
+
+
 @pytest.mark.asyncio
 async def test_verified_source_uses_dimension_specific_snippet_and_confidence(
     monkeypatch: pytest.MonkeyPatch,

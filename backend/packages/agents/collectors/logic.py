@@ -28,6 +28,7 @@ KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
     "cursor": {
         "pricing": [("Cursor official pricing", "https://cursor.com/pricing")],
         "feature": [("Cursor official features", "https://www.cursor.com/features")],
+        "persona": [("Cursor official product page", "https://cursor.com")],
         "security": [("Cursor official security", "https://cursor.com/security")],
     },
     "githubcopilot": {
@@ -45,6 +46,12 @@ KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
             (
                 "GitHub Copilot official plans and pricing",
                 "https://github.com/features/copilot/plans",
+            )
+        ],
+        "persona": [
+            (
+                "GitHub Copilot official product page",
+                "https://github.com/features/copilot",
             )
         ],
         "security": [
@@ -66,6 +73,7 @@ KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
                 "https://docs.windsurf.com/windsurf/getting-started",
             )
         ],
+        "persona": [("Windsurf official product page", "https://windsurf.com")],
         "security": [("Windsurf official security", "https://windsurf.com/security")],
     },
     "claudecode": {
@@ -86,6 +94,12 @@ KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
             ),
             ("Claude official pricing", "https://claude.com/pricing"),
         ],
+        "persona": [
+            (
+                "Claude Code official product page",
+                "https://www.anthropic.com/product/claude-code",
+            )
+        ],
         "security": [
             (
                 "Claude Code official security docs",
@@ -93,6 +107,64 @@ KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
             )
         ],
     },
+}
+
+PRODUCT_IDENTITY_HINTS: dict[str, tuple[str, ...]] = {
+    "cursor": (
+        "cursor.com",
+        "cursor ai",
+        "ai code editor",
+        "code editor",
+        "coding agent",
+        "composer",
+    ),
+    "githubcopilot": (
+        "github.com/features/copilot",
+        "docs.github.com/en/copilot",
+        "github copilot",
+        "copilot",
+    ),
+    "windsurf": (
+        "windsurf.com",
+        "docs.windsurf.com",
+        "windsurf",
+        "codeium",
+        "ai code editor",
+    ),
+    "claudecode": (
+        "claude-code",
+        "claude code",
+        "code.claude.com",
+        "anthropic.com/product/claude-code",
+    ),
+}
+
+PRODUCT_CONFUSION_TERMS: dict[str, tuple[str, ...]] = {
+    "cursor": (
+        "cursor extractor",
+        "database cursor",
+        "pagination cursor",
+        "sql cursor",
+        "css cursor",
+        "mouse cursor",
+    ),
+    "windsurf": (
+        "devin.ai",
+        "devin desktop",
+        "cognition devin",
+    ),
+    "claudecode": (
+        "generic claude",
+    ),
+}
+
+USER_RESEARCH_SOURCE_TYPES = {
+    "survey_simulated",
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+    "manual_note",
+    "manual",
 }
 
 if TYPE_CHECKING:
@@ -704,7 +776,17 @@ class CollectorAgentMixin:
         key = dimension.casefold()
         return any(
             token in key
-            for token in ("pricing", "security", "compliance", "trust", "feature")
+            for token in (
+                "pricing",
+                "security",
+                "compliance",
+                "trust",
+                "feature",
+                "persona",
+                "user",
+                "customer",
+                "buyer",
+            )
         )
 
     async def _collect_competitor_with_skill_tools(
@@ -731,6 +813,9 @@ class CollectorAgentMixin:
             query = template.format(competitor=competitor)
         else:
             query = f"{competitor} {dimension}"
+        qualifier = self._competitor_search_qualifier(competitor)
+        if qualifier and qualifier.casefold() not in query.casefold():
+            query = f"{query} {qualifier}"
         return f"{query} {detail.topic} official source"
 
     def _rank_search_results(
@@ -923,6 +1008,8 @@ class CollectorAgentMixin:
             return (
                 f"Source {source.id} points to a low-value page for structured evidence extraction."
             )
+        if identity_problem := self._competitor_identity_problem(source):
+            return identity_problem
         if not self._dimension_terms_present(source.dimension, normalized):
             return (
                 f"Source {source.id} does not contain enough {source.dimension} "
@@ -1038,6 +1125,39 @@ class CollectorAgentMixin:
                 "accounts.google",
             ]
         )
+
+    def _competitor_search_qualifier(self, competitor: str) -> str:
+        key = self._official_registry_key(competitor)
+        if key == "cursor":
+            return "AI code editor"
+        if key == "githubcopilot":
+            return "GitHub Copilot coding assistant"
+        if key == "windsurf":
+            return "Windsurf AI code editor"
+        if key == "claudecode":
+            return "Claude Code coding agent"
+        return ""
+
+    def _competitor_identity_problem(self, source: RawSource) -> str | None:
+        if source.source_type in USER_RESEARCH_SOURCE_TYPES:
+            return None
+        key = self._official_registry_key(source.competitor)
+        if not key or key.startswith("crossmodel"):
+            return None
+        haystack = f"{source.title}\n{source.url or ''}\n{source.snippet}".casefold()
+        for term in PRODUCT_CONFUSION_TERMS.get(key, ()):
+            if term in haystack:
+                return (
+                    f"Source {source.id} appears to describe `{term}` rather than "
+                    f"{source.competitor}."
+                )
+        hints = PRODUCT_IDENTITY_HINTS.get(key, ())
+        if hints and not any(term in haystack for term in hints):
+            return (
+                f"Source {source.id} does not expose a recognizable {source.competitor} "
+                "product identity signal."
+            )
+        return None
 
     def _dimension_terms_present(self, dimension: str, normalized_text: str) -> bool:
         dimension_key = dimension.casefold()
