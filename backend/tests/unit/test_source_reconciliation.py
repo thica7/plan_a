@@ -1,11 +1,24 @@
+from datetime import datetime
+
+from packages.agents.qa.logic import QualityAgentMixin
 from packages.business_intel.source_reconciliation import (
     build_source_reconciliation,
     evidence_by_source_token,
+    malformed_source_tokens,
     normalize_report_source_tokens,
     normalize_report_version_sources,
     raw_source_alias_metadata,
+    source_token_alias_map,
+    source_tokens,
 )
-from packages.schema.enterprise import EvidenceRecord, ReportVersionRecord
+from packages.schema.api_dto import RunDetail
+from packages.schema.enterprise import EnterpriseRunProjection, EvidenceRecord, ReportVersionRecord
+from packages.schema.models import AnalysisPlan, QCIssue, RawSource, RedoScope
+
+
+class _QaHarness(QualityAgentMixin):
+    def _extract_cited_source_ids(self, text: str) -> list[str]:
+        return source_tokens(text)
 
 
 def test_source_reconciliation_resolves_ids_raw_sources_aliases_and_chunks() -> None:
@@ -187,3 +200,177 @@ def test_source_normalizer_adds_known_out_of_scope_evidence_to_report_scope() ->
     reconciliation = normalized.quality_metadata["source_reconciliation"]
     assert reconciliation["unresolved_report_source_tokens"] == []
     assert reconciliation["source_resolutions"][0]["status"] == "alias"
+
+
+def test_source_normalizer_removes_malformed_report_tokens() -> None:
+    evidence = EvidenceRecord(
+        id="evidence-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="pricing-raw",
+        competitor_id="cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor publishes pricing.",
+        content_hash="hash-1",
+        reliability_score=0.9,
+    )
+
+    normalized = normalize_report_source_tokens(
+        "Valid [source:pricing-raw]. Invalid [source: all persona cells].",
+        [evidence],
+    )
+
+    assert normalized.report_md == "Valid [source:evidence-1]. Invalid ."
+    assert malformed_source_tokens("Invalid [source: all persona cells].") == [
+        "all persona cells"
+    ]
+    reconciliation = normalized.reconciliation([evidence])
+    assert reconciliation["unresolved_report_source_tokens"] == ["all persona cells"]
+    assert reconciliation["source_resolutions"][-1]["status"] == "malformed"
+
+
+def test_source_token_alias_map_unifies_raw_and_evidence_tokens() -> None:
+    raw_source = RawSource(
+        id="pricing-raw",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.com/pricing",
+        snippet="Cursor publishes pricing.",
+        content_hash="hash-1",
+        confidence=0.9,
+    )
+    evidence = EvidenceRecord(
+        id="evidence-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="pricing-raw",
+        competitor_id="cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor publishes pricing.",
+        content_hash="hash-1",
+        reliability_score=0.9,
+        metadata=raw_source_alias_metadata("pricing-old"),
+    )
+
+    aliases = source_token_alias_map(raw_sources=[raw_source], evidence=[evidence])
+
+    assert aliases["evidence-1"] == "evidence-1"
+    assert aliases["pricing-raw"] == "evidence-1"
+    assert aliases["pricing-old"] == "evidence-1"
+
+
+def test_run_qa_resolves_enterprise_evidence_tokens() -> None:
+    detail = _run_detail_with_enterprise_report()
+
+    issues = _QaHarness()._build_phantom_citation_issues(detail)
+
+    assert [issue.problem for issue in issues] == [
+        "Report contains malformed source token all persona cells."
+    ]
+
+
+def test_run_qa_refresh_replaces_stale_writer_source_findings() -> None:
+    detail = _run_detail_with_enterprise_report()
+    retained_issue = QCIssue(
+        id="qc-retained",
+        severity="warn",
+        detected_by="coverage",
+        target_agent="collector",
+        field_path="raw_sources",
+        problem="Coverage still needs review.",
+        redo_scope=RedoScope(kind="collector", rationale="coverage review"),
+        self_found=False,
+    )
+    detail.qa_findings = [
+        QCIssue(
+            id="qc-stale-evidence",
+            severity="blocker",
+            detected_by="citation",
+            target_agent="writer",
+            field_path="report_md",
+            problem="Report cites unknown source id evidence-1.",
+            redo_scope=RedoScope(kind="writer_only", rationale="stale citation"),
+            self_found=False,
+        ),
+        retained_issue,
+    ]
+
+    changed = _QaHarness()._refresh_report_source_qa_findings(detail)
+
+    assert changed is True
+    assert [issue.problem for issue in detail.qa_findings] == [
+        "Coverage still needs review.",
+        "Report contains malformed source token all persona cells.",
+    ]
+
+
+def _run_detail_with_enterprise_report() -> RunDetail:
+    raw_source = RawSource(
+        id="pricing-raw",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.com/pricing",
+        snippet="Cursor publishes pricing.",
+        content_hash="hash-1",
+        confidence=0.9,
+    )
+    evidence = EvidenceRecord(
+        id="evidence-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-1",
+        raw_source_id="pricing-raw",
+        competitor_id="cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor publishes pricing.",
+        content_hash="hash-1",
+        reliability_score=0.9,
+    )
+    return RunDetail(
+        id="run-1",
+        workspace_id="workspace-1",
+        topic="Cursor pricing",
+        status="completed",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="Cursor pricing",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        report_md=(
+            "Cursor publishes pricing. [source:evidence-1] "
+            "Bad aggregate marker. [source: all persona cells]"
+        ),
+        raw_sources=[raw_source],
+        enterprise_projection=EnterpriseRunProjection(
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id="run-1",
+            evidence_records=[evidence],
+            claim_records=[],
+            report_version=ReportVersionRecord(
+                id="report-1",
+                workspace_id="workspace-1",
+                project_id="project-1",
+                run_id="run-1",
+                version_number=1,
+                topic_normalized="cursor-pricing",
+                competitor_layer="L1",
+                competitor_set_hash="set",
+                report_md="Cursor publishes pricing. [source:evidence-1]",
+                evidence_ids=["evidence-1"],
+            ),
+        ),
+    )

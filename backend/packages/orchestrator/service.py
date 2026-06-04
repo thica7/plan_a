@@ -2007,6 +2007,18 @@ class RunService(
             competitor_layer=detail.plan.competitor_layer,
             competitor_id_map=context.competitor_id_map,
         )
+        detail.enterprise_projection = projection
+        detail.report_md = projection.report_version.report_md
+        if self._refresh_report_source_qa_findings(detail):
+            self._refresh_quality_metrics(detail)
+            projection = build_enterprise_projection(
+                detail,
+                workspace_id=context.workspace_id,
+                project_id=context.project_id,
+                version_number=version_number,
+                competitor_layer=detail.plan.competitor_layer,
+                competitor_id_map=context.competitor_id_map,
+            )
         self._enterprise_store.save_projection(projection)
         detail.report_md = projection.report_version.report_md
         detail.enterprise_projection = projection
@@ -2024,6 +2036,8 @@ class RunService(
             return detail
         detail.enterprise_projection = projection
         detail.report_md = projection.report_version.report_md
+        if self._refresh_report_source_qa_findings(detail):
+            self._refresh_quality_metrics(detail)
         return detail
 
     def get_enterprise_projection(self, run_id: str) -> EnterpriseRunProjection | None:

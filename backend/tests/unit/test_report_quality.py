@@ -8,6 +8,7 @@ from packages.agents.writer.logic import (
 from packages.business_intel import compare_run_quality
 from packages.rag.grounded_prompt import format_retrieval_records_for_prompt
 from packages.schema.api_dto import RunDetail
+from packages.schema.enterprise import EnterpriseRunProjection, EvidenceRecord, ReportVersionRecord
 from packages.schema.models import (
     AnalysisPlan,
     ComparisonCell,
@@ -204,6 +205,74 @@ def test_compare_run_quality_flags_unresolved_report_source_tokens() -> None:
     assert comparison.report_quality_signal is False
     assert comparison.verdict == "warn"
     assert any("source tokens" in item for item in comparison.recommendations)
+
+
+def test_compare_run_quality_resolves_enterprise_evidence_source_tokens() -> None:
+    detail = _run_detail(
+        run_id="enterprise-citations",
+        execution_mode="real",
+        source_count=1,
+        report_md=_structured_report_md().replace("source-0", "evidence-0"),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+    evidence = EvidenceRecord(
+        id="evidence-0",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id=detail.id,
+        raw_source_id="source-0",
+        competitor_id="competitor-cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://example.com/source-0",
+        snippet="Verified pricing evidence.",
+        content_hash="hash-0",
+        reliability_score=0.9,
+    )
+    detail.enterprise_projection = EnterpriseRunProjection(
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id=detail.id,
+        evidence_records=[evidence],
+        claim_records=[],
+        report_version=ReportVersionRecord(
+            id="report-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id=detail.id,
+            version_number=1,
+            topic_normalized="cursor-pricing",
+            competitor_layer="L1",
+            competitor_set_hash="set",
+            report_md=detail.report_md,
+            evidence_ids=["evidence-0"],
+        ),
+    )
+
+    comparison = compare_run_quality(detail)
+    metric = next(
+        item for item in comparison.metrics if item.name == "citation_validity_rate"
+    )
+
+    assert metric.target_value > 0.0
 
 
 def test_compare_run_quality_flags_long_unstructured_report() -> None:

@@ -923,6 +923,59 @@ def test_report_release_gate_blocks_unresolved_run_qa_metadata() -> None:
     assert "run_qa_findings_unresolved" in {issue.rule_id for issue in gate.issues}
 
 
+def test_report_release_gate_separates_malformed_source_tokens_from_missing_sources() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        report_md=(
+            "# Report\n\nCursor publishes pricing. [source:evidence-1] "
+            "Persona caveat. [source: all persona cells]"
+        ),
+        evidence_ids=["evidence-1"],
+        claim_ids=["claim-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+    rule_ids = {issue.rule_id for issue in gate.issues}
+
+    assert "report_citation_token_format" in rule_ids
+    assert "report_citation_resolves" not in rule_ids
+
+
 def test_report_release_gate_blocks_failed_schema_metadata() -> None:
     competitor = _competitor()
     evidence = [

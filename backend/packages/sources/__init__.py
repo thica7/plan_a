@@ -8,12 +8,16 @@ from packages.sources.references import (
     build_source_reconciliation,
     evidence_by_source_token,
     evidence_source_tokens,
+    malformed_source_tokens,
     merge_evidence_source_metadata,
     merge_source_aliases,
     normalize_report_source_tokens,
     normalize_report_version_sources,
     normalize_source_token,
     raw_source_alias_metadata,
+    resolve_source_token,
+    source_token_alias_map,
+    source_tokens,
 )
 
 __all__ = [
@@ -26,10 +30,14 @@ __all__ = [
     "build_source_reconciliation",
     "evidence_by_source_token",
     "evidence_source_tokens",
+    "malformed_source_tokens",
     "merge_evidence_source_metadata",
     "merge_source_aliases",
     "normalize_report_source_tokens",
     "normalize_source_token",
     "normalize_report_version_sources",
     "raw_source_alias_metadata",
+    "resolve_source_token",
+    "source_token_alias_map",
+    "source_tokens",
 ]

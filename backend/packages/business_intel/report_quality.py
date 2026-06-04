@@ -11,6 +11,7 @@ from packages.schema.api_dto import (
     RunQualitySignalCheck,
 )
 from packages.schema.models import RawSource
+from packages.sources import resolve_source_token, source_token_alias_map, source_tokens
 
 REAL_SOURCE_TYPES = {
     "official",
@@ -389,16 +390,25 @@ def _claim_citation_rate(detail: RunDetail) -> float:
 
 
 def _citation_validity_rate(detail: RunDetail) -> float:
-    tokens = re.findall(r"\[source:([A-Za-z0-9_.:#-]+)\]", detail.report_md)
+    tokens = source_tokens(detail.report_md, include_malformed=True)
     if not tokens:
         return 0.0
-    source_ids = {source.id for source in detail.raw_sources}
-    resolved = sum(1 for token in tokens if token.split("#", 1)[0] in source_ids)
+    aliases = _source_alias_map(detail)
+    resolved = sum(1 for token in tokens if resolve_source_token(token, aliases))
     return resolved / len(tokens)
 
 
 def _report_source_token_count(report_md: str) -> int:
-    return len(re.findall(r"\[source:([A-Za-z0-9_.:#-]+)\]", report_md))
+    return len(source_tokens(report_md, include_malformed=True))
+
+
+def _source_alias_map(detail: RunDetail) -> dict[str, str]:
+    projection = detail.enterprise_projection
+    return source_token_alias_map(
+        raw_sources=detail.raw_sources,
+        evidence=projection.evidence_records if projection else (),
+        scoped_evidence_ids=projection.report_version.evidence_ids if projection else None,
+    )
 
 
 def _real_source_rate(sources: list[RawSource]) -> float:

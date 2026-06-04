@@ -13,6 +13,11 @@ from packages.schema.models import (
     QCIssue,
     RedoScope,
 )
+from packages.sources import (
+    malformed_source_tokens,
+    resolve_source_token,
+    source_token_alias_map,
+)
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
 
@@ -605,7 +610,7 @@ class QualityAgentMixin:
         missing_dimensions: list[str],
     ) -> list[QCIssue]:
         issues: list[QCIssue] = []
-        known_source_ids = {source.id for source in detail.raw_sources}
+        source_aliases = self._source_alias_map(detail)
         for competitor in detail.plan.competitors:
             knowledge = detail.competitor_knowledge.get(competitor)
             for dimension in detail.plan.dimensions:
@@ -695,7 +700,7 @@ class QualityAgentMixin:
                         issue.redo_scope = assign_redo_scope(issue)
                         issues.append(issue)
                     for source_id in claim.source_ids:
-                        if source_id in known_source_ids:
+                        if resolve_source_token(source_id, source_aliases):
                             continue
                         field_path = (
                             f"competitor_knowledge[{competitor}].{dimension}"
@@ -868,7 +873,7 @@ class QualityAgentMixin:
         return issues
 
     def _build_kb_citation_issues(self, detail: RunDetail) -> list[QCIssue]:
-        known_source_ids = {source.id for source in detail.raw_sources}
+        source_aliases = self._source_alias_map(detail)
         issues: list[QCIssue] = []
         for competitor, kb in detail.competitor_kbs.items():
             for dimension, findings in kb.slices.items():
@@ -876,7 +881,7 @@ class QualityAgentMixin:
                     cited_id
                     for finding in findings
                     for cited_id in self._extract_cited_source_ids(finding)
-                    if cited_id not in known_source_ids
+                    if not resolve_source_token(cited_id, source_aliases)
                 ):
                     field_path = f"competitor_kbs[{competitor}].slices[{dimension}]"
                     problem = (
@@ -914,10 +919,31 @@ class QualityAgentMixin:
         return issues
 
     def _build_phantom_citation_issues(self, detail: RunDetail) -> list[QCIssue]:
-        known_source_ids = {source.id for source in detail.raw_sources}
+        source_aliases = self._source_alias_map(detail)
         cited_ids = self._extract_cited_source_ids(detail.report_md)
-        phantom_ids = sorted(cited_id for cited_id in cited_ids if cited_id not in known_source_ids)
+        phantom_ids = sorted(
+            cited_id for cited_id in cited_ids if not resolve_source_token(cited_id, source_aliases)
+        )
         issues: list[QCIssue] = []
+        for malformed in malformed_source_tokens(detail.report_md):
+            problem = f"Report contains malformed source token {malformed}."
+            issue = QCIssue(
+                id=stable_prefixed_id("qc-issue", "malformed-citation", malformed, length=16),
+                severity="blocker",
+                detected_by="citation",
+                target_agent="writer",
+                field_path="report_md",
+                problem=problem,
+                redo_scope=self._initial_redo_scope(
+                    detected_by="citation",
+                    target_agent="writer",
+                    field_path="report_md",
+                    problem=problem,
+                ),
+                self_found=False,
+            )
+            issue.redo_scope = assign_redo_scope(issue)
+            issues.append(issue)
         for cited_id in phantom_ids:
             problem = f"Report cites unknown source id {cited_id}."
             issue = QCIssue(
@@ -938,6 +964,23 @@ class QualityAgentMixin:
             issue.redo_scope = assign_redo_scope(issue)
             issues.append(issue)
         return issues
+
+    def _refresh_report_source_qa_findings(self, detail: RunDetail) -> bool:
+        refreshed = self._build_phantom_citation_issues(detail)
+        retained = [
+            issue
+            for issue in detail.qa_findings
+            if not (
+                issue.detected_by == "citation"
+                and issue.target_agent == "writer"
+                and issue.field_path == "report_md"
+            )
+        ]
+        updated = [*retained, *refreshed]
+        if [issue.id for issue in updated] == [issue.id for issue in detail.qa_findings]:
+            return False
+        detail.qa_findings = updated
+        return True
 
     def _build_matrix_consistency_issues(self, detail: RunDetail) -> list[QCIssue]:
         if detail.comparison_matrix is None:
@@ -974,7 +1017,7 @@ class QualityAgentMixin:
         expected_dimensions = set(detail.plan.dimensions)
         matrix_competitors = set(matrix.competitors)
         matrix_dimensions = set(matrix.dimensions)
-        known_source_ids = {source.id for source in detail.raw_sources}
+        source_aliases = self._source_alias_map(detail)
         seen_cells: set[tuple[str, str]] = set()
 
         if matrix_competitors != expected_competitors:
@@ -1030,7 +1073,7 @@ class QualityAgentMixin:
                     )
                 )
             for source_id in cell.source_ids:
-                if source_id not in known_source_ids:
+                if not resolve_source_token(source_id, source_aliases):
                     issues.append(
                         self._matrix_issue(
                             f"matrix-unknown-source-{self._issue_id_fragment(source_id)}",
@@ -1040,7 +1083,13 @@ class QualityAgentMixin:
                         )
                     )
             for cited_id in self._extract_cited_source_ids(cell.value):
-                if cited_id in known_source_ids and cited_id not in cell.source_ids:
+                canonical_cited = resolve_source_token(cited_id, source_aliases)
+                canonical_cell_sources = {
+                    canonical
+                    for source_id in cell.source_ids
+                    if (canonical := resolve_source_token(source_id, source_aliases))
+                }
+                if canonical_cited and canonical_cited not in canonical_cell_sources:
                     issues.append(
                         self._matrix_issue(
                             f"matrix-missing-cited-source-{self._issue_id_fragment(cell.competitor)}-"
@@ -1072,6 +1121,14 @@ class QualityAgentMixin:
                     )
                 )
         return issues
+
+    def _source_alias_map(self, detail: RunDetail) -> dict[str, str]:
+        projection = detail.enterprise_projection
+        return source_token_alias_map(
+            raw_sources=detail.raw_sources,
+            evidence=projection.evidence_records if projection else (),
+            scoped_evidence_ids=projection.report_version.evidence_ids if projection else None,
+        )
 
     def _matrix_issue(
         self,

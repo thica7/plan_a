@@ -9,7 +9,9 @@ from packages.business_intel.planning import build_business_intel_plan
 from packages.business_intel.scorer import score_project_readiness
 from packages.business_intel.source_reconciliation import (
     evidence_by_source_token,
+    malformed_source_tokens,
     normalize_source_token,
+    source_tokens,
 )
 from packages.identity import compute_release_gate_issue_id
 from packages.schema.enterprise import (
@@ -50,8 +52,10 @@ def evaluate_report_release_gate(
 ) -> ReportReleaseGate:
     """Strict enterprise gate for approving or publishing a report version."""
 
-    scoped_evidence = _scope_evidence(report_version, evidence)
-    scoped_evidence = _apply_source_registry_policy(scoped_evidence, source_registry or [])
+    report_scoped_evidence = _scope_evidence(report_version, evidence)
+    scoped_evidence = _apply_source_registry_policy(
+        report_scoped_evidence, source_registry or []
+    )
     scoped_claims = _scope_claims(report_version, claims)
     dimensions = sorted({item.dimension for item in scoped_evidence}) or [
         "pricing",
@@ -88,8 +92,8 @@ def evaluate_report_release_gate(
         *_source_quality_issues(scoped_evidence),
         *_claim_evidence_quality_issues(scoped_claims, scoped_evidence),
         *_claim_validation_issues(scoped_claims, scoped_evidence),
-        *_missing_report_citation_issues(report_version, scoped_evidence),
-        *_report_citation_quality_issues(report_version, scoped_evidence),
+        *_missing_report_citation_issues(report_version, report_scoped_evidence),
+        *_report_citation_quality_issues(report_version, report_scoped_evidence),
         *_run_quality_issues(report_version),
         *_readiness_issues(readiness),
         *_strict_qa_issues(qa_evaluation.findings),
@@ -550,6 +554,7 @@ def _missing_report_citation_issues(
     evidence: list[EvidenceRecord],
 ) -> list[BusinessQAFinding]:
     evidence_by_token = evidence_by_source_token(evidence)
+    malformed = malformed_source_tokens(report_version.report_md)
     missing = sorted(
         {
             token
@@ -557,22 +562,39 @@ def _missing_report_citation_issues(
             if normalize_source_token(token) not in evidence_by_token
         }
     )
+    issues: list[BusinessQAFinding] = []
+    if malformed:
+        issues.append(
+            _gate_issue(
+                "report_citation_token_format",
+                "Report citation token format",
+                (
+                    "Report contains malformed source token(s): "
+                    f"{', '.join(malformed[:8])}."
+                ),
+                recommendation=(
+                    "Remove malformed [source:...] markers or replace them with canonical "
+                    "EvidenceRecord ids/raw source ids."
+                ),
+            )
+        )
     if not missing:
-        return []
-    return [
+        return issues
+    issues.append(
         _gate_issue(
             "report_citation_resolves",
             "Report citations resolve",
             (
-                "Report contains source token(s) that do not resolve to scoped evidence: "
-                f"{', '.join(missing[:8])}."
+                "Report contains source token(s) that do not resolve to the report evidence "
+                f"scope: {', '.join(missing[:8])}."
             ),
             recommendation=(
-                "Replace missing source tokens with EvidenceRecord ids/raw source ids or remove "
-                "the unsupported sentence."
+                "Attach the cited evidence to this report version, replace the token with a "
+                "canonical EvidenceRecord/raw source id, or remove the unsupported sentence."
             ),
         )
-    ]
+    )
+    return issues
 
 
 def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAFinding]:
@@ -713,7 +735,7 @@ def _gate_issue(
 
 
 def _cited_source_tokens(line: str) -> list[str]:
-    return re.findall(r"\[source:([A-Za-z0-9_.:#-]+)\]", line)
+    return source_tokens(line)
 
 
 def _string_list(value: object) -> list[str]:

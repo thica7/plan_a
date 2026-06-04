@@ -3,15 +3,17 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from packages.schema.enterprise import EvidenceRecord, ReportVersionRecord
 
 RAW_SOURCE_ALIASES_KEY = "raw_source_aliases"
 RUN_RAW_SOURCE_ID_KEY = "run_raw_source_id"
 SOURCE_TOKEN_RE = re.compile(r"\[source:([A-Za-z0-9_.:#-]+)\]")
+ANY_SOURCE_TOKEN_RE = re.compile(r"\[source:([^\]]+)\]")
+VALID_SOURCE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.:#-]+$")
 
-SourceResolutionStatus = Literal["resolved", "alias", "out_of_scope", "missing"]
+SourceResolutionStatus = Literal["resolved", "alias", "out_of_scope", "missing", "malformed"]
 
 
 @dataclass(frozen=True)
@@ -150,6 +152,17 @@ def normalize_report_source_tokens(
     def replace(match: re.Match[str]) -> str:
         nonlocal changed
         token = match.group(1)
+        if not is_valid_source_token(token):
+            resolutions.append(
+                SourceResolution(
+                    token=token,
+                    normalized_token=normalize_source_token(token),
+                    status="malformed",
+                    reason="Token does not match the canonical source token grammar.",
+                )
+            )
+            changed = True
+            return ""
         resolution = index.resolve(token)
         if resolution.status == "out_of_scope" and resolution.evidence_id:
             resolution = SourceResolution(
@@ -173,7 +186,7 @@ def normalize_report_source_tokens(
             return replacement
         return match.group(0)
 
-    normalized_report_md = SOURCE_TOKEN_RE.sub(replace, report_md)
+    normalized_report_md = ANY_SOURCE_TOKEN_RE.sub(replace, report_md)
     resolved_ids = dedupe_strings(canonical_ids)
     if scope_was_provided:
         evidence_ids = _merge_ids(scoped_ids, resolved_ids)
@@ -237,9 +250,22 @@ def build_source_reconciliation(
         scoped_evidence_ids=scoped_ids if scope_was_provided else None,
     )
     report_tokens = dedupe_strings(
-        normalize_source_token(token) for token in SOURCE_TOKEN_RE.findall(report_md)
+        normalize_source_token(token) for token in ANY_SOURCE_TOKEN_RE.findall(report_md)
     )
-    resolutions = list(precomputed_resolutions or [index.resolve(token) for token in report_tokens])
+    resolutions = list(
+        precomputed_resolutions
+        or [
+            index.resolve(token)
+            if is_valid_source_token(token)
+            else SourceResolution(
+                token=token,
+                normalized_token=normalize_source_token(token),
+                status="malformed",
+                reason="Token does not match the canonical source token grammar.",
+            )
+            for token in report_tokens
+        ]
+    )
     scoped_evidence = index.scoped_evidence
 
     evidence_aliases: dict[str, list[str]] = {}
@@ -254,7 +280,7 @@ def build_source_reconciliation(
     unresolved = [
         resolution.normalized_token
         for resolution in resolutions
-        if resolution.status in {"missing", "out_of_scope"}
+        if resolution.status in {"missing", "out_of_scope", "malformed"}
     ]
     return {
         "report_source_tokens": report_tokens,
@@ -279,6 +305,49 @@ def evidence_by_source_token(
     return SourceResolutionIndex(evidence).evidence_by_token()
 
 
+def source_token_alias_map(
+    *,
+    raw_sources: Iterable[Any] = (),
+    evidence: Iterable[EvidenceRecord] = (),
+    scoped_evidence_ids: Iterable[str] | None = None,
+) -> dict[str, str]:
+    """Return every accepted report token mapped to one canonical source identity."""
+
+    aliases: dict[str, str] = {}
+    for source in raw_sources:
+        source_id = normalize_source_token(str(getattr(source, "id", "") or ""))
+        if source_id:
+            aliases[source_id] = source_id
+    for token, item in SourceResolutionIndex(
+        evidence,
+        scoped_evidence_ids=scoped_evidence_ids,
+    ).evidence_by_token().items():
+        aliases[token] = item.id
+    return aliases
+
+
+def resolve_source_token(
+    token: str,
+    alias_map: Mapping[str, str],
+) -> str | None:
+    if not is_valid_source_token(token):
+        return None
+    return alias_map.get(normalize_source_token(token))
+
+
+def source_tokens(markdown: str, *, include_malformed: bool = False) -> list[str]:
+    pattern = ANY_SOURCE_TOKEN_RE if include_malformed else SOURCE_TOKEN_RE
+    return [match.group(1) for match in pattern.finditer(markdown)]
+
+
+def malformed_source_tokens(markdown: str) -> list[str]:
+    return dedupe_strings(
+        token
+        for token in source_tokens(markdown, include_malformed=True)
+        if not is_valid_source_token(token)
+    )
+
+
 def evidence_source_tokens(evidence: EvidenceRecord) -> set[str]:
     tokens = {evidence.id, evidence.raw_source_id}
     tokens.update(string_list(evidence.metadata.get(RAW_SOURCE_ALIASES_KEY)))
@@ -287,6 +356,10 @@ def evidence_source_tokens(evidence: EvidenceRecord) -> set[str]:
 
 def normalize_source_token(token: str) -> str:
     return token.split("#", 1)[0].strip()
+
+
+def is_valid_source_token(token: str) -> bool:
+    return bool(VALID_SOURCE_TOKEN_RE.fullmatch(token.strip()))
 
 
 def merge_source_aliases(*values: object) -> list[str]:
