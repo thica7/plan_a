@@ -66,15 +66,19 @@ KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
         ],
     },
     "windsurf": {
-        "pricing": [("Windsurf official pricing", "https://windsurf.com/pricing")],
+        "pricing": [("Windsurf official plans", "https://windsurf.com/plans")],
         "feature": [
-            (
-                "Windsurf official getting started docs",
-                "https://docs.windsurf.com/windsurf/getting-started",
-            )
+            ("Windsurf official features", "https://windsurf.com/features"),
+            ("Windsurf official product page", "https://windsurf.com/product"),
         ],
-        "persona": [("Windsurf official product page", "https://windsurf.com")],
-        "security": [("Windsurf official security", "https://windsurf.com/security")],
+        "persona": [
+            ("Windsurf official customers", "https://windsurf.com/customers"),
+            ("Windsurf official use cases", "https://windsurf.com/use-cases"),
+        ],
+        "security": [
+            ("Windsurf official trust page", "https://windsurf.com/trust"),
+            ("Windsurf official compliance page", "https://windsurf.com/compliance"),
+        ],
     },
     "claudecode": {
         "feature": [

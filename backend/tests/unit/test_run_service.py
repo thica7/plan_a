@@ -570,7 +570,7 @@ def test_feature_collection_uses_known_official_source_registry() -> None:
     assert cursor[0].url == "https://www.cursor.com/features"
     assert copilot[0].url == "https://docs.github.com/en/copilot/get-started/features"
     assert claude[0].url == "https://www.anthropic.com/product/claude-code"
-    assert windsurf[0].url == "https://docs.windsurf.com/windsurf/getting-started"
+    assert windsurf[0].url == "https://windsurf.com/features"
 
 
 @pytest.mark.asyncio
@@ -2409,6 +2409,42 @@ def test_collector_official_source_candidates_include_persona_product_pages() ->
     assert service._should_collect_official_first("persona") is True
     assert any(item.url == "https://cursor.com" for item in cursor_candidates)
     assert any("anthropic.com/product/claude-code" in item.url for item in claude_candidates)
+
+
+def test_collector_official_source_candidates_use_current_windsurf_urls() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Windsurf AI coding assistant comparison",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(
+            topic="Windsurf AI coding assistant comparison",
+            competitors=["Windsurf"],
+            dimensions=["pricing", "feature", "persona"],
+        ),
+    )
+
+    pricing_candidates = service._official_source_candidates(detail, "Windsurf", "pricing")
+    feature_candidates = service._official_source_candidates(detail, "Windsurf", "feature")
+    persona_candidates = service._official_source_candidates(detail, "Windsurf", "persona")
+
+    assert pricing_candidates[0].url == "https://windsurf.com/plans"
+    assert feature_candidates[0].url == "https://windsurf.com/features"
+    assert persona_candidates[0].url == "https://windsurf.com/customers"
+    assert not any(item.url == "https://windsurf.com/pricing" for item in pricing_candidates[:2])
 
 
 def test_collector_search_query_adds_product_qualifier_for_ambiguous_names() -> None:
