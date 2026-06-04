@@ -130,8 +130,104 @@ class ComparatorAgentMixin:
             dimensions=detail.plan.dimensions,
             cells=cells,
             winner_by_dimension=voted_winners,
-            summary=[*self._string_list(payload.get("matrix_summary")), *vote_summary],
+            summary=[
+                *self._matrix_standardization_summary(detail),
+                *self._string_list(payload.get("matrix_summary")),
+                *vote_summary,
+            ],
         )
+
+    def _matrix_standardization_summary(self, detail: RunDetail) -> list[str]:
+        summary: list[str] = []
+        for dimension in detail.plan.dimensions:
+            dimension_key = dimension.casefold()
+            if "pricing" in dimension_key:
+                summary.append(self._pricing_standardization_summary(detail, dimension))
+            elif "persona" in dimension_key or "user" in dimension_key:
+                summary.append(self._persona_standardization_summary(detail, dimension))
+        return summary
+
+    def _pricing_standardization_summary(self, detail: RunDetail, dimension: str) -> str:
+        profiles: list[str] = []
+        missing: list[str] = []
+        for competitor in detail.plan.competitors:
+            knowledge = detail.competitor_knowledge.get(competitor)
+            pricing = knowledge.pricing_model if knowledge is not None else None
+            tiers = list(pricing.tiers) if pricing is not None else []
+            if not tiers:
+                missing.append(competitor)
+                profiles.append(f"{competitor} tiers=missing")
+                continue
+            tier_parts = [
+                self._compact_pricing_tier(tier.name, tier.price, tier.billing_cycle)
+                for tier in tiers[:4]
+            ]
+            profiles.append(f"{competitor} tiers={'|'.join(tier_parts)}")
+        missing_note = f"; missing={','.join(missing)}" if missing else ""
+        return (
+            f"[pricing-standardization:{dimension}] "
+            "aligned_fields=tier_name,price,billing_cycle; "
+            f"{'; '.join(profiles)}{missing_note}"
+        )
+
+    def _compact_pricing_tier(self, name: str, price: str, billing_cycle: str) -> str:
+        compact_name = self._compact_matrix_text(name or "unknown", 32)
+        compact_price = self._compact_matrix_text(price or "unknown", 48)
+        compact_cycle = self._compact_matrix_text(billing_cycle or "unknown", 24)
+        if compact_cycle == "unknown" or compact_cycle in compact_price.casefold():
+            return f"{compact_name}={compact_price}"
+        return f"{compact_name}={compact_price}/{compact_cycle}"
+
+    def _persona_standardization_summary(self, detail: RunDetail, dimension: str) -> str:
+        profiles: list[str] = []
+        missing: list[str] = []
+        for competitor in detail.plan.competitors:
+            knowledge = detail.competitor_knowledge.get(competitor)
+            personas = knowledge.user_personas if knowledge is not None else None
+            segments = list(personas.segments) if personas is not None else []
+            if not segments:
+                missing.append(competitor)
+                profiles.append(f"{competitor} segments=missing")
+                continue
+            segment_parts = [
+                self._compact_persona_segment(
+                    segment.name,
+                    segment.role,
+                    segment.company_size,
+                    len(segment.use_cases),
+                    len(segment.pain_points),
+                )
+                for segment in segments[:3]
+            ]
+            profiles.append(f"{competitor} segments={'|'.join(segment_parts)}")
+        missing_note = f"; missing={','.join(missing)}" if missing else ""
+        return (
+            f"[persona-standardization:{dimension}] "
+            "aligned_fields=segment,role,company_size,use_cases,pain_points; "
+            f"{'; '.join(profiles)}{missing_note}"
+        )
+
+    def _compact_persona_segment(
+        self,
+        name: str,
+        role: str,
+        company_size: str,
+        use_case_count: int,
+        pain_point_count: int,
+    ) -> str:
+        compact_name = self._compact_matrix_text(name or "unknown", 32)
+        compact_role = self._compact_matrix_text(role or "unknown", 32)
+        compact_size = self._compact_matrix_text(company_size or "unknown", 28)
+        return (
+            f"{compact_name}({compact_role}/{compact_size};"
+            f"use_cases={use_case_count};pain_points={pain_point_count})"
+        )
+
+    def _compact_matrix_text(self, value: str, limit: int) -> str:
+        text = " ".join(value.split())
+        if len(text) <= limit:
+            return text
+        return f"{text[: limit - 1].rstrip()}..."
 
     def _matrix_majority_vote(
         self,

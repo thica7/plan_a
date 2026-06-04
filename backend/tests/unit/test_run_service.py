@@ -18,6 +18,7 @@ from packages.schema.models import (
     ComparisonCell,
     ComparisonMatrix,
     CompetitorKB,
+    CompetitorKnowledge,
     QCIssue,
     RawSource,
     RedoScope,
@@ -1711,6 +1712,123 @@ def test_comparison_matrix_majority_vote_overrides_weak_llm_winner() -> None:
     assert matrix.winner_by_dimension["pricing"] == "A"
     assert any("[majority-vote:pricing]" in item for item in matrix.summary)
     assert any("llm=B" in item and "evidence=A" in item for item in matrix.summary)
+
+
+def test_comparison_matrix_adds_pricing_and_persona_standardization_summary() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A", "B"], dimensions=["pricing", "persona"]),
+        competitor_knowledge={
+            "A": CompetitorKnowledge(
+                competitor="A",
+                pricing_model={
+                    "tiers": [
+                        {
+                            "name": "Free",
+                            "price": "$0",
+                            "billing_cycle": "monthly",
+                            "claims": [
+                                {
+                                    "claim": "A has a free plan.",
+                                    "source_ids": ["pricing-a"],
+                                    "confidence": 0.9,
+                                }
+                            ],
+                        }
+                    ]
+                },
+                user_personas={
+                    "segments": [
+                        {
+                            "name": "Developer",
+                            "role": "engineering",
+                            "company_size": "individual",
+                            "use_cases": ["code generation"],
+                            "pain_points": ["context switching"],
+                            "claims": [
+                                {
+                                    "claim": "A targets developers.",
+                                    "source_ids": ["persona-a"],
+                                    "confidence": 0.86,
+                                }
+                            ],
+                        }
+                    ]
+                },
+            ),
+            "B": CompetitorKnowledge(
+                competitor="B",
+                pricing_model={
+                    "tiers": [
+                        {
+                            "name": "Team",
+                            "price": "$10 per seat",
+                            "billing_cycle": "monthly",
+                            "claims": [
+                                {
+                                    "claim": "B has a team plan.",
+                                    "source_ids": ["pricing-b"],
+                                    "confidence": 0.85,
+                                }
+                            ],
+                        }
+                    ]
+                },
+                user_personas={
+                    "segments": [
+                        {
+                            "name": "Enterprise buyer",
+                            "role": "procurement",
+                            "company_size": "enterprise",
+                            "use_cases": ["vendor evaluation", "governance"],
+                            "pain_points": ["risk"],
+                            "claims": [
+                                {
+                                    "claim": "B targets enterprise buyers.",
+                                    "source_ids": ["persona-b"],
+                                    "confidence": 0.84,
+                                }
+                            ],
+                        }
+                    ]
+                },
+            ),
+        },
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+
+    assert any(
+        item.startswith("[pricing-standardization:pricing]")
+        and "aligned_fields=tier_name,price,billing_cycle" in item
+        and "A tiers=Free=$0/monthly" in item
+        and "B tiers=Team=$10 per seat/monthly" in item
+        for item in matrix.summary
+    )
+    assert any(
+        item.startswith("[persona-standardization:persona]")
+        and "aligned_fields=segment,role,company_size,use_cases,pain_points" in item
+        and "A segments=Developer(engineering/individual;use_cases=1;pain_points=1)" in item
+        and "B segments=Enterprise buyer(procurement/enterprise;use_cases=2;pain_points=1)"
+        in item
+        for item in matrix.summary
+    )
 
 
 @pytest.mark.asyncio
