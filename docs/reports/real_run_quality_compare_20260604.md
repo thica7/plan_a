@@ -1,6 +1,6 @@
 # Real Run Quality Comparison
 
-- Current run: run-4635d9d667b4aecc0f81da844c3bb8c5
+- Current run: run-a07cb11201fbbf8a24c9e963ab421636
 - Baseline run: 411d3a19-7049-4a7e-aa9f-c5b63e74a69e
 - Current status: completed_with_blockers
 - Current node: none
@@ -12,19 +12,19 @@
 
 | Metric | Value |
 |---|---:|
-| Target score | 97 |
+| Target score | 96 |
 | Baseline score | 77 |
-| Delta score | +20 |
+| Delta score | +19 |
 
 ## Shape Delta
 
 | Field | Delta |
 |---|---:|
-| Report chars | +11200 |
+| Report chars | +10940 |
 | Raw sources | -11 |
 | Claims | 0 |
-| QA findings | -10 |
-| Trace spans | -74 |
+| QA findings | -9 |
+| Trace spans | -126 |
 | Fallback report regressed | no |
 
 ## Current Evidence
@@ -34,12 +34,12 @@
 | Raw sources | 16 |
 | Enterprise evidence | 16 |
 | Claims | 0 |
-| Enterprise claims | 45 |
-| QA findings | 8 |
-| Agent messages | 63 |
-| Tool calls | 209 |
-| Trace spans | 290 |
-| Report chars | 20158 |
+| Enterprise claims | 16 |
+| QA findings | 9 |
+| Agent messages | 60 |
+| Tool calls | 171 |
+| Trace spans | 238 |
+| Report chars | 19898 |
 
 ## Quality Metrics
 
@@ -53,7 +53,7 @@
 | real_source_rate | 1 | 1 | 0 | unchanged |
 | llm_call_signal | 1 | 1 | 0 | unchanged |
 | report_length_score | 1 | 1 | 0 | unchanged |
-| report_structure_score | 1 | 0.3 | +0.7 | improved |
+| report_structure_score | 0.9 | 0.3 | +0.6 | improved |
 | claim_risk_section_score | 1 | 0 | +1 | improved |
 | scenario_checklist_section_score | 1 | 0 | +1 | improved |
 | memory_context_section_score | 1 | 1 | 0 | unchanged |
@@ -65,14 +65,15 @@
 
 | ID | Severity | Agent | Dimension | Competitor | Problem |
 |---|---|---|---|---|---|
-| unverified-feature-cursor-feature-e9c48173 | warn | collector | feature | Cursor | Source feature-e9c48173 for feature is not fetched webpage evidence and should be recollected or verified. |
-| reflector-coverage-1-windsurf-feature-dimension-source-snippet-contai | warn | collector | feature | Windsurf | Windsurf feature dimension source snippet contains no concrete feature details, only page navigation and language selector content with no valid feature coverage |
-| reflector-coverage-2-windsurf-pricing-dimension-only-confirms-the-fre | warn | collector | pricing | Windsurf | Windsurf pricing dimension only confirms the free individual tier, lacks complete pricing tier breakdown including paid individual, team, enterprise pricing and corresponding usage entitlements |
-| reflector-coverage-3-github-copilot-persona-source-snippet-only-cover | warn | collector | persona | GitHub Copilot | GitHub Copilot persona source snippet only covers privacy policy content, no clear target user segmentation, core user persona or use case details |
-| reflector-coverage-4-claude-code-persona-source-snippet-only-lists-ge | warn | collector | persona | Claude Code | Claude Code persona source snippet only lists general industry verticals, no specific coding-focused user persona segmentation or target use case details |
-| reflector-confidence-1-four-synthetic-interview-persona-records-for-git | warn | collector | persona | GitHub Copilot | Four synthetic interview persona records for GitHub Copilot, Cursor, Claude Code, Windsurf have 0.62 confidence, empty covered_competitors fields, and no actionable verified persona data |
-| reflector-confidence-2-cursor-feature-third-party-medium-source-has-0.6 | warn | collector | feature | Cursor | Cursor feature third-party Medium source has 0.68 confidence, only describes generic high-level value with no specific distinct feature details |
-| reflector-cross-competitor-1-no-cross-competitor-comparative-data-points-exis | warn | comparator | pricing |  | No cross-competitor comparative data points exist across pricing, feature, persona dimensions, all existing sources only cover one individual competitor with no side-by-side benchmarking or relative comparison data |
+| unverified-feature-cursor-feature-a743725f | warn | collector | feature | Cursor | Source feature-a743725f for feature is not fetched webpage evidence and should be recollected or verified. |
+| reflector-coverage-1-windsurf-s-primary-persona-source-persona-61ddf1 | warn | collector | persona | Windsurf | Windsurf's primary persona source (persona-61ddf1ca) is a 404 missing page with no valid target user persona data captured |
+| reflector-coverage-2-all-pricing-dimension-cell-values-are-truncated- | warn | collector | pricing |  | All pricing dimension cell values are truncated, missing complete comparable tiered pricing (individual, pro, team, enterprise) details for all 4 competitors |
+| reflector-coverage-3-no-distinct-verified-target-user-persona-segment | warn | collector | persona |  | No distinct, verified target user persona segmentation data exists for any competitor, only generic unrelated webpage snippets and unvalidated synthetic interview records |
+| reflector-confidence-1-cursor-feature-dimension-confidence-of-0.68-is-0 | warn | collector | feature | Cursor | Cursor feature dimension confidence of 0.68 is 0.22-0.28 lower than all other feature dimension confidence scores, indicating unvalidated partial evidence |
+| reflector-confidence-2-all-combined-persona-cell-confidence-scores-0.76 | warn | collector | persona |  | All combined persona cell confidence scores (0.76-0.79) are incorrectly inflated above the maximum valid source confidence for persona-related data (0.62 for synthetic interviews) |
+| reflector-confidence-3-the-windsurf-404-persona-source-is-incorrectly-a | warn | collector | persona | Windsurf | The Windsurf 404 persona source is incorrectly assigned a 0.9 confidence score in the source digest despite containing no relevant persona content |
+| reflector-cross-competitor-1-pricing-dimension-lacks-aligned-side-by-side-com | warn | comparator | pricing |  | Pricing dimension lacks aligned side-by-side comparable tiered pricing attributes across all 4 competitors, with partial truncated values that cannot be directly evaluated against each other |
+| reflector-cross-competitor-2-persona-dimension-lacks-consistent-mapped-compar | warn | comparator | persona |  | Persona dimension lacks consistent mapped comparable persona attributes (hobbyist, professional dev, enterprise team etc.) across all 4 competitors, no valid side-by-side persona comparison is possible |
 
 ## Last Agent Messages
 
