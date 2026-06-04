@@ -322,18 +322,24 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
     assert result.updated_report_version.parent_version_id == "report-v1"
     assert result.updated_report_version.version_number == 2
     assert result.updated_report_version.evidence_ids == ["evidence-trust-1"]
-    assert result.updated_report_version.quality_metadata["rag_gap_fill"][
-        "filled_gap_ids"
-    ] == ["gap-security"]
-    assert result.updated_report_version.quality_metadata["rag_gap_fill"][
-        "gap_evidence_links"
-    ] == {"gap-security": ["evidence-trust-1"]}
-    assert result.updated_report_version.quality_metadata["rag_gap_fill"][
-        "decision_events"
-    ][0]["event_type"] == "rag.retrieved"
-    assert result.updated_report_version.quality_metadata["rag_gap_fill"][
-        "decision_events"
-    ][1]["payload"]["gap_evidence_links"] == {"gap-security": ["evidence-trust-1"]}
+    assert result.updated_report_version.quality_metadata["rag_gap_fill"]["filled_gap_ids"] == [
+        "gap-security"
+    ]
+    assert result.updated_report_version.quality_metadata["rag_gap_fill"]["gap_evidence_links"] == {
+        "gap-security": ["evidence-trust-1"]
+    }
+    assert (
+        result.updated_report_version.quality_metadata["rag_gap_fill"]["decision_events"][0][
+            "event_type"
+        ]
+        == "rag.retrieved"
+    )
+    assert result.updated_report_version.quality_metadata["rag_gap_fill"]["decision_events"][1][
+        "payload"
+    ]["gap_evidence_links"] == {"gap-security": ["evidence-trust-1"]}
+    reconciliation = result.updated_report_version.quality_metadata["source_reconciliation"]
+    assert reconciliation["unresolved_report_source_tokens"] == []
+    assert reconciliation["evidence_source_aliases"] == {"evidence-trust-1": ["trust-1"]}
     assert "## RAG Gap Fill" in result.updated_report_version.report_md
     assert "[source:evidence-trust-1]" in result.updated_report_version.report_md
     assert store.get_report_version(result.updated_report_version.id) is not None
@@ -534,6 +540,9 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version(tmp_p
     assert rag_payload["chunk_ids"][0].startswith("chunk-")
     assert set(rag_payload["rerank_scores"]) == set(rag_payload["chunk_ids"])
     assert result.updated_report_version.evidence_ids == [evidence.id]
+    reconciliation = result.updated_report_version.quality_metadata["source_reconciliation"]
+    assert reconciliation["unresolved_report_source_tokens"] == []
+    assert reconciliation["evidence_source_aliases"][evidence.id] == [evidence.raw_source_id]
     assert f"[source:{evidence.id}]" in result.updated_report_version.report_md
 
     snapshotted = capture_gap_fill_source_snapshots(

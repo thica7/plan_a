@@ -8,6 +8,10 @@ from packages.business_intel.claim_validator import validate_project_claims
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS, evaluate_business_qa
 from packages.business_intel.planning import build_business_intel_plan
 from packages.business_intel.scorer import score_project_readiness
+from packages.business_intel.source_reconciliation import (
+    evidence_by_source_token,
+    normalize_source_token,
+)
 from packages.schema.enterprise import (
     BusinessQAFinding,
     ClaimRecord,
@@ -506,7 +510,7 @@ def _report_citation_quality_issues(
     report_version: ReportVersionRecord,
     evidence: list[EvidenceRecord],
 ) -> list[BusinessQAFinding]:
-    evidence_by_token = _evidence_by_source_token(evidence)
+    evidence_by_token = evidence_by_source_token(evidence)
 
     issues: list[BusinessQAFinding] = []
     for line in report_version.report_md.splitlines():
@@ -515,7 +519,7 @@ def _report_citation_quality_issues(
         weak = [
             evidence_by_token[normalized]
             for token in _cited_source_tokens(line)
-            if (normalized := _normalize_source_token(token)) in evidence_by_token
+            if (normalized := normalize_source_token(token)) in evidence_by_token
             and (
                 evidence_by_token[normalized].source_type != "webpage_verified"
                 or evidence_by_token[normalized].reliability_score < MIN_RELEASE_SOURCE_CONFIDENCE
@@ -545,12 +549,12 @@ def _missing_report_citation_issues(
     report_version: ReportVersionRecord,
     evidence: list[EvidenceRecord],
 ) -> list[BusinessQAFinding]:
-    evidence_by_token = _evidence_by_source_token(evidence)
+    evidence_by_token = evidence_by_source_token(evidence)
     missing = sorted(
         {
             token
             for token in _cited_source_tokens(report_version.report_md)
-            if _normalize_source_token(token) not in evidence_by_token
+            if normalize_source_token(token) not in evidence_by_token
         }
     )
     if not missing:
@@ -711,28 +715,6 @@ def _gate_issue(
 
 def _cited_source_tokens(line: str) -> list[str]:
     return re.findall(r"\[source:([A-Za-z0-9_.:#-]+)\]", line)
-
-
-def _normalize_source_token(token: str) -> str:
-    """Resolve chunk-level RAG citations back to their EvidenceRecord id."""
-
-    return token.split("#", 1)[0].strip()
-
-
-def _evidence_by_source_token(evidence: list[EvidenceRecord]) -> dict[str, EvidenceRecord]:
-    evidence_by_token: dict[str, EvidenceRecord] = {}
-    for item in evidence:
-        for token in _evidence_source_tokens(item):
-            evidence_by_token[token] = item
-    return evidence_by_token
-
-
-def _evidence_source_tokens(evidence: EvidenceRecord) -> set[str]:
-    tokens = {evidence.id, evidence.raw_source_id}
-    aliases = evidence.metadata.get("raw_source_aliases")
-    if isinstance(aliases, list):
-        tokens.update(str(alias).strip() for alias in aliases if str(alias).strip())
-    return tokens
 
 
 def _string_list(value: object) -> list[str]:

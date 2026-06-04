@@ -8,6 +8,7 @@ from threading import RLock
 from typing import Protocol
 from urllib.parse import urlparse
 
+from packages.business_intel.source_reconciliation import merge_evidence_source_metadata
 from packages.enterprise.embedding_index import (
     build_evidence_embedding_record,
     cosine_similarity,
@@ -1322,7 +1323,7 @@ def _merge_evidence_lifecycle(
     incoming: EvidenceRecord,
 ) -> EvidenceRecord:
     current_run_id = incoming.last_seen_run_id or incoming.run_id
-    metadata = _merge_evidence_source_metadata(existing, incoming)
+    metadata = merge_evidence_source_metadata(existing, incoming)
     if existing is None:
         return incoming.model_copy(
             update={
@@ -1346,42 +1347,6 @@ def _merge_evidence_lifecycle(
             "metadata": metadata,
         }
     )
-
-
-def _merge_evidence_source_metadata(
-    existing: EvidenceRecord | None,
-    incoming: EvidenceRecord,
-) -> dict[str, object]:
-    metadata: dict[str, object] = {}
-    if existing is not None:
-        metadata.update(existing.metadata)
-    metadata.update(incoming.metadata)
-
-    aliases: list[str] = []
-    if existing is not None:
-        aliases.extend(_string_list(existing.metadata.get("raw_source_aliases")))
-        aliases.append(existing.raw_source_id)
-    aliases.extend(_string_list(incoming.metadata.get("raw_source_aliases")))
-    aliases.append(incoming.raw_source_id)
-    metadata["raw_source_aliases"] = _dedupe_string_list(aliases)
-    return metadata
-
-
-def _string_list(value: object) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(item).strip() for item in value if str(item).strip()]
-
-
-def _dedupe_string_list(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for value in values:
-        item = value.strip()
-        if item and item not in seen:
-            seen.add(item)
-            result.append(item)
-    return result
 
 
 def _embedding_dedupe_key(evidence: EvidenceRecord) -> str:

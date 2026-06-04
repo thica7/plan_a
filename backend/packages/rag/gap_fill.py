@@ -5,6 +5,10 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Protocol
 
+from packages.business_intel.source_reconciliation import (
+    build_source_reconciliation,
+    raw_source_alias_metadata,
+)
 from packages.identity import (
     compute_content_hash,
     compute_evidence_id,
@@ -165,9 +169,7 @@ def _finalize_gap_fill(
     online_collected_evidence_ids: list[str] | None = None,
     online_failures: list[dict[str, str]] | None = None,
 ) -> EvidenceGapFillResult:
-    updated_gaps, filled_gap_ids, candidate_ids, gap_evidence_links = _filled_gaps(
-        decorated.gaps
-    )
+    updated_gaps, filled_gap_ids, candidate_ids, gap_evidence_links = _filled_gaps(decorated.gaps)
     updated_report = decorated.model_copy(update={"gaps": updated_gaps})
     remaining_gap_ids = [gap.id for gap in updated_gaps if not gap.evidence_ids]
     before_gap_count = len(updated_gaps)
@@ -273,12 +275,15 @@ def _online_evidence_from_gap(
     competitor_id = (gap.competitor_id or gap.competitor_name or "unknown").strip()
     dimension = normalize_dimension_key(gap.dimension or "general")
     evidence_id = compute_evidence_id(source_url, content_hash, competitor_id, dimension)
+    raw_source_id = (
+        f"online-gap-{hashlib.sha256(f'{gap.id}|{source_url}'.encode()).hexdigest()[:16]}"
+    )
     return EvidenceRecord(
         id=evidence_id,
         workspace_id=workspace_id,
         project_id=project_id,
         run_id=None,
-        raw_source_id=f"online-gap-{hashlib.sha256(f'{gap.id}|{source_url}'.encode()).hexdigest()[:16]}",
+        raw_source_id=raw_source_id,
         competitor_id=competitor_id,
         dimension=dimension,
         source_type=source_type,
@@ -290,20 +295,23 @@ def _online_evidence_from_gap(
         reliability_score=0.82 if fetched.ok else 0.64,
         freshness_score=0.75,
         quality_label="unreviewed",
-        metadata={
-            "online_gap_fill": True,
-            "gap_id": gap.id,
-            "query": query,
-            "recommended_query": gap.recommended_query,
-            "search_title": result.title,
-            "search_snippet": result.snippet,
-            "search_date": result.date,
-            "search_last_updated": result.last_updated,
-            "fetch_ok": fetched.ok,
-            "fetch_status_code": fetched.status_code,
-            "fetch_error": fetched.error,
-            "full_text": full_text[:12000],
-        },
+        metadata=raw_source_alias_metadata(
+            raw_source_id,
+            {
+                "online_gap_fill": True,
+                "gap_id": gap.id,
+                "query": query,
+                "recommended_query": gap.recommended_query,
+                "search_title": result.title,
+                "search_snippet": result.snippet,
+                "search_date": result.date,
+                "search_last_updated": result.last_updated,
+                "fetch_ok": fetched.ok,
+                "fetch_status_code": fetched.status_code,
+                "fetch_error": fetched.error,
+                "full_text": full_text[:12000],
+            },
+        ),
     )
 
 
@@ -338,9 +346,7 @@ def _filled_gaps(
             gap_evidence_links[gap.id] = new_candidate_ids
         updated_gaps.append(
             gap.model_copy(
-                update={
-                    "evidence_ids": _unique_ids(gap.evidence_ids + new_candidate_ids)
-                }
+                update={"evidence_ids": _unique_ids(gap.evidence_ids + new_candidate_ids)}
             )
         )
     return (
@@ -364,6 +370,12 @@ def _write_gap_fill_report_version(
     online_failures: list[dict[str, str]],
     decision_events: list[EvidenceGapFillDecisionEvent],
 ) -> ReportVersionRecord:
+    evidence_ids = _unique_ids(source.evidence_ids + candidate_ids)
+    report_md = _append_gap_fill_section(
+        source.report_md,
+        report.gaps,
+        filled_gap_ids=filled_gap_ids,
+    )
     metadata = dict(source.quality_metadata)
     metadata["rag_gap_fill"] = {
         "source_report_version_id": source.id,
@@ -379,9 +391,7 @@ def _write_gap_fill_report_version(
         "remaining_gap_ids": remaining_gap_ids,
         "unfilled_gap_ids": remaining_gap_ids,
         "candidate_evidence_ids": candidate_ids,
-        "gap_fill_chain_closed": (
-            bool(filled_gap_ids and candidate_ids) and not remaining_gap_ids
-        ),
+        "gap_fill_chain_closed": (bool(filled_gap_ids and candidate_ids) and not remaining_gap_ids),
         "online_collected_evidence_ids": online_collected_evidence_ids,
         "online_failures": online_failures,
         "retrieval_records": [
@@ -392,18 +402,19 @@ def _write_gap_fill_report_version(
         "decision_events": [event.model_dump(mode="json") for event in decision_events],
         "generated_at": datetime.utcnow().isoformat(),
     }
+    metadata["source_reconciliation"] = build_source_reconciliation(
+        report_md,
+        store.list_evidence(project_id=source.project_id),
+        scoped_evidence_ids=evidence_ids,
+    )
     version = source.model_copy(
         update={
             "id": _gap_fill_report_version_id(source, filled_gap_ids, candidate_ids),
             "parent_version_id": source.id,
             "version_number": _next_version_number(store, source.project_id),
             "status": "draft",
-            "report_md": _append_gap_fill_section(
-                source.report_md,
-                report.gaps,
-                filled_gap_ids=filled_gap_ids,
-            ),
-            "evidence_ids": _unique_ids(source.evidence_ids + candidate_ids),
+            "report_md": report_md,
+            "evidence_ids": evidence_ids,
             "quality_metadata": metadata,
             "created_at": datetime.utcnow(),
             "published_at": None,
