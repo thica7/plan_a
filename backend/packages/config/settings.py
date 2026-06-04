@@ -109,6 +109,7 @@ class Settings:
     collector_react_max_turns: int = 3
     analyst_react_enabled: bool = True
     analyst_react_max_turns: int = 3
+    analyst_react_fanout_threshold: int = 8
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
@@ -206,6 +207,12 @@ def get_settings() -> Settings:
         collector_react_max_turns=max(1, min(6, int(os.getenv("COLLECTOR_REACT_MAX_TURNS", "3")))),
         analyst_react_enabled=_env_bool("ANALYST_REACT_ENABLED", True),
         analyst_react_max_turns=max(1, min(6, int(os.getenv("ANALYST_REACT_MAX_TURNS", "3")))),
+        analyst_react_fanout_threshold=_env_int(
+            "ANALYST_REACT_FANOUT_THRESHOLD",
+            8,
+            minimum=1,
+            maximum=64,
+        ),
         langfuse_public_key=os.getenv("LANGFUSE_PUBLIC_KEY") or None,
         langfuse_secret_key=os.getenv("LANGFUSE_SECRET_KEY") or None,
         langfuse_host=os.getenv("LANGFUSE_HOST") or None,

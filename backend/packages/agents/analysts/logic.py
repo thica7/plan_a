@@ -537,7 +537,12 @@ class AnalystAgentMixin:
                 )
                 return
         react_payload: dict[str, object] = {}
-        if self._settings.analyst_react_enabled:
+        use_react = self._should_use_analyst_react(
+            detail,
+            dimension=dimension,
+            qa_feedback=qa_feedback,
+        )
+        if use_react:
             try:
                 payload = await self._run_analyst_competitor_react(
                     record,
@@ -581,6 +586,10 @@ class AnalystAgentMixin:
                     return
             except Exception as exc:  # noqa: BLE001 - bounded ReAct falls back to one-shot analysis.
                 react_payload["react_error"] = str(exc)
+        elif self._settings.analyst_react_enabled:
+            react_payload["react_skipped"] = "fanout_budget"
+            react_payload["fanout_branch_count"] = self._analyst_fanout_branch_count(detail)
+            react_payload["fanout_threshold"] = self._settings.analyst_react_fanout_threshold
 
         payload = await self._trace_llm_json(
             record,
@@ -636,6 +645,32 @@ class AnalystAgentMixin:
                 **task_metadata,
             },
         )
+
+    def _should_use_analyst_react(
+        self,
+        detail: RunDetail,
+        *,
+        dimension: str,
+        qa_feedback: list[dict[str, Any]],
+    ) -> bool:
+        if not self._settings.analyst_react_enabled:
+            return False
+        if qa_feedback:
+            return True
+        if (
+            self._analyst_fanout_branch_count(detail)
+            <= self._settings.analyst_react_fanout_threshold
+        ):
+            return True
+        dimension_sources = [
+            source
+            for source in detail.raw_sources
+            if source.dimension == dimension
+        ]
+        return not dimension_sources
+
+    def _analyst_fanout_branch_count(self, detail: RunDetail) -> int:
+        return len(detail.plan.competitors) * len(detail.plan.dimensions)
 
     async def _real_analyst_step(self, record: RunRecord, dimension: str) -> None:
         detail = record.detail

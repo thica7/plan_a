@@ -3208,6 +3208,89 @@ async def test_analyst_react_runner_inspects_validates_and_finishes() -> None:
 
 
 @pytest.mark.asyncio
+async def test_analyst_branch_skips_react_when_fanout_budget_is_exceeded() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            analyst_react_enabled=True,
+            analyst_react_fanout_threshold=2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Fanout analyst budget",
+            competitors=["A", "B", "C"],
+            dimensions=["feature", "pricing", "persona"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="feature-a",
+            competitor="A",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="A feature",
+            url="https://a.example/features",
+            snippet="A supports the key workflow.",
+            content_hash="feature-a-hash",
+            confidence=0.84,
+        )
+    ]
+
+    async def fake_complete_json(*, system: str, user: str, schema_hint: str) -> dict:
+        if "bounded analyst ReAct runner" in system:
+            raise AssertionError("large fanout should skip analyst ReAct")
+        return {
+            "feature_tree": {
+                "nodes": [
+                    {
+                        "name": "Workflow feature",
+                        "description": "A supports the key workflow.",
+                        "claims": [
+                            {
+                                "claim": "A supports the key workflow.",
+                                "source_ids": ["feature-a"],
+                                "confidence": 0.84,
+                            }
+                        ],
+                        "children": [],
+                    }
+                ],
+                "summary_claims": [
+                    {
+                        "claim": "A supports the key workflow.",
+                        "source_ids": ["feature-a"],
+                        "confidence": 0.84,
+                    }
+                ],
+            }
+        }
+
+    service._llm.complete_json = fake_complete_json  # type: ignore[method-assign]
+
+    await service._real_analyst_branch_step(record, "feature", "A")
+
+    events = service.get_trace(detail.id) or []
+    completed = next(
+        event
+        for event in reversed(events)
+        if event.type == "node_completed" and event.agent == "analyst"
+    )
+    assert completed.payload["react"]["react_skipped"] == "fanout_budget"
+    assert completed.payload["react"]["fanout_branch_count"] == 9
+    assert completed.payload["react"]["fanout_threshold"] == 2
+    assert record.detail.competitor_knowledge["A"].feature_tree.summary_claims
+
+
+@pytest.mark.asyncio
 async def test_analyst_react_runner_auto_validates_finish() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
