@@ -61,11 +61,41 @@ def test_summarize_run_detail_payload_extracts_quality_shape() -> None:
     assert summary["claims"] == 1
     assert summary["agent_messages"] == 1
     assert summary["tool_call_messages"] == 1
-    assert summary["last_agent_messages"][0]["detail"] == "real LLM call"
+    assert summary["last_agent_messages"][0]["detail"] == "writer_mode=real LLM call"
     assert summary["trace_spans"] == 1
     assert summary["source_types"] == {"webpage_verified": 1}
     assert summary["by_competitor"] == {"Cursor": 1}
     assert summary["fallback_report"] is False
+
+
+def test_agent_message_diagnostics_includes_writer_error_with_mode() -> None:
+    script = _load_script()
+    summary = script.summarize_run_detail_payload(
+        {
+            "id": "run-writer-error",
+            "status": "completed_with_blockers",
+            "execution_mode": "real",
+            "report_md": "# Report",
+            "raw_sources": [],
+            "agent_messages": [
+                {
+                    "from_agent": "writer",
+                    "to_agent": "qa",
+                    "message_type": "report_ready",
+                    "status": "consumed",
+                    "payload": {
+                        "writer_mode": "deterministic fallback after writer error",
+                        "error": "writer LLM exceeded 30s",
+                    },
+                }
+            ],
+        }
+    )
+
+    assert summary["last_agent_messages"][0]["detail"] == (
+        "writer_mode=deterministic fallback after writer error; "
+        "error=writer LLM exceeded 30s"
+    )
 
 
 def test_old_run_summary_reads_sqlite_journal(tmp_path: Path) -> None:

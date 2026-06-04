@@ -457,18 +457,26 @@ def _agent_message_diagnostics(messages: list[Any]) -> list[dict[str, object]]:
         payload = message.get("payload")
         detail = ""
         if isinstance(payload, dict):
-            for key in (
-                "writer_mode",
-                "error",
-                "decision",
-                "feedback_id",
-                "report_md",
-                "qa_feedback",
-            ):
-                value = payload.get(key)
-                if value:
-                    detail = _summarize_payload_value(value)
-                    break
+            detail_parts: list[str] = []
+            writer_mode = payload.get("writer_mode")
+            if writer_mode:
+                detail_parts.append(f"writer_mode={_summarize_payload_value(writer_mode)}")
+            error = payload.get("error")
+            if error:
+                detail_parts.append(f"error={_summarize_payload_value(error)}")
+            if detail_parts:
+                detail = "; ".join(detail_parts)
+            else:
+                for key in (
+                    "decision",
+                    "feedback_id",
+                    "report_md",
+                    "qa_feedback",
+                ):
+                    value = payload.get(key)
+                    if value:
+                        detail = _summarize_payload_value(value)
+                        break
         diagnostics.append(
             {
                 "from_agent": message.get("from_agent"),
