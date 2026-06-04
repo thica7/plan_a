@@ -798,23 +798,18 @@ class AnalystAgentMixin:
             }
         if "persona" in dimension_key or "user" in dimension_key:
             claim_text = " ".join(str(claim.get("claim") or "") for claim in claims)
-            use_cases = self._extract_persona_use_cases(claim_text) or [
-                str(claim.get("claim") or "") for claim in claims[:3]
+            claim_models = [
+                KnowledgeClaim.model_validate(claim)
+                for claim in claims
+                if claim.get("source_ids")
             ]
-            pain_points = self._extract_persona_pain_points(claim_text)
             return {
                 "user_personas": {
                     "segments": [
-                        {
-                            "name": self._extract_persona_segment_name(
-                                claim_text, competitor
-                            ),
-                            "role": self._extract_persona_role_hint(claim_text),
-                            "company_size": self._extract_company_size_hint(claim_text),
-                            "pain_points": pain_points,
-                            "use_cases": use_cases,
-                            "claims": claims,
-                        }
+                        segment.model_dump(mode="json")
+                        for segment in self._persona_segments_from_text(
+                            claim_text, competitor, claim_models
+                        )
                     ]
                     if claims
                     else [],
@@ -1153,17 +1148,9 @@ class AnalystAgentMixin:
             claim_text = " ".join(claim.claim for claim in claims)
             knowledge.user_personas.summary_claims = claims
             if claims:
-                knowledge.user_personas.segments = [
-                    UserPersonaSegment(
-                        name=self._extract_persona_segment_name(claim_text, competitor),
-                        role=self._extract_persona_role_hint(claim_text),
-                        company_size=self._extract_company_size_hint(claim_text),
-                        pain_points=self._extract_persona_pain_points(claim_text),
-                        use_cases=self._extract_persona_use_cases(claim_text)
-                        or [claim.claim for claim in claims[:3]],
-                        claims=claims,
-                    )
-                ]
+                knowledge.user_personas.segments = self._persona_segments_from_text(
+                    claim_text, competitor, claims
+                )
         else:
             knowledge.feature_tree.summary_claims = claims
             knowledge.feature_tree.nodes = self._feature_nodes_from_text(
@@ -1897,21 +1884,18 @@ class AnalystAgentMixin:
         )
         if not evidence_text.strip():
             return
+        inferred_segments = self._persona_segments_from_text(
+            evidence_text,
+            competitor,
+            personas.summary_claims,
+        )
         segment_name = self._extract_persona_segment_name(evidence_text, competitor)
         role = self._extract_persona_role_hint(evidence_text)
         company_size = self._extract_company_size_hint(evidence_text)
         pain_points = self._extract_persona_pain_points(evidence_text)
         use_cases = self._extract_persona_use_cases(evidence_text)
         if not personas.segments:
-            personas.segments = [
-                UserPersonaSegment(
-                    name=segment_name,
-                    role=role,
-                    company_size=company_size,
-                    pain_points=pain_points,
-                    use_cases=use_cases,
-                )
-            ]
+            personas.segments = inferred_segments
             return
         for segment in personas.segments:
             if segment.name.casefold() in {"unknown", "inferred target segment"}:
@@ -1924,6 +1908,84 @@ class AnalystAgentMixin:
                 segment.pain_points = pain_points
             if not segment.use_cases and use_cases:
                 segment.use_cases = use_cases
+        existing_keys = {
+            self._persona_segment_key(segment) for segment in personas.segments
+        }
+        for segment in inferred_segments:
+            key = self._persona_segment_key(segment)
+            if key in existing_keys:
+                continue
+            personas.segments.append(segment)
+            existing_keys.add(key)
+            if len(personas.segments) >= 4:
+                break
+
+    def _persona_segments_from_text(
+        self,
+        text: str,
+        competitor: str = "",
+        claims: list[KnowledgeClaim] | None = None,
+    ) -> list[UserPersonaSegment]:
+        normalized = text.casefold()
+        pain_points = self._extract_persona_pain_points(text)
+        use_cases = self._extract_persona_use_cases(text) or [
+            claim.claim for claim in (claims or [])[:3]
+        ]
+        segment_specs: list[tuple[str, str, str]] = []
+        if re.search(r"\bindividual|solo|hobby(?:ist)?|indie developer\b", normalized):
+            segment_specs.append(("Individual developers", "developer", "individual"))
+        if re.search(
+            r"\bsmb|startup|founder|small team|small business|small compan",
+            normalized,
+        ):
+            segment_specs.append(
+                ("SMB and startup engineering teams", "developer", "startup")
+            )
+        if re.search(
+            r"\benterprise|large organization|organization|governance|procurement\b",
+            normalized,
+        ):
+            segment_specs.append(
+                (
+                    "Enterprise engineering teams",
+                    self._extract_persona_role_hint(text),
+                    "enterprise",
+                )
+            )
+        if not segment_specs:
+            segment_specs.append(
+                (
+                    self._extract_persona_segment_name(text, competitor),
+                    self._extract_persona_role_hint(text),
+                    self._extract_company_size_hint(text),
+                )
+            )
+        segments: list[UserPersonaSegment] = []
+        seen: set[tuple[str, str]] = set()
+        for name, role, company_size in segment_specs:
+            key = (name.casefold(), company_size.casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            segments.append(
+                UserPersonaSegment(
+                    name=name,
+                    role=role,
+                    company_size=company_size,
+                    pain_points=pain_points,
+                    use_cases=use_cases,
+                    claims=claims or [],
+                )
+            )
+            if len(segments) >= 4:
+                break
+        return segments
+
+    def _persona_segment_key(self, segment: UserPersonaSegment) -> tuple[str, str]:
+        return (
+            " ".join((segment.name or "").split()).casefold(),
+            " ".join((segment.company_size or "").split()).casefold(),
+        )
 
     def _extract_persona_segment_name(self, text: str, competitor: str = "") -> str:
         competitor_key = competitor.casefold()
@@ -1958,7 +2020,7 @@ class AnalystAgentMixin:
         normalized = text.casefold()
         if re.search(r"\benterprise|large organization|organization|governance\b", normalized):
             return "enterprise"
-        if re.search(r"\bstartup|small team|small business\b", normalized):
+        if re.search(r"\bsmb|startup|small team|small business|small compan", normalized):
             return "startup"
         if re.search(r"\bteam|teams|company|companies\b", normalized):
             return "team"

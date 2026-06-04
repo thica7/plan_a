@@ -5329,6 +5329,126 @@ def test_structured_persona_payload_enriches_unknown_fields_from_sources() -> No
     assert segment.use_cases == ["code review"]
 
 
+def test_deterministic_persona_payload_extracts_multiple_market_segments() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    sources = [
+        {
+            "id": "persona-a",
+            "title": "A customers",
+            "snippet": (
+                "A supports individual developers, SMB startup engineering teams, "
+                "and enterprise organizations using IDE workflows to reduce "
+                "context switching."
+            ),
+            "confidence": 0.9,
+        }
+    ]
+
+    persona = service._deterministic_structured_knowledge_payload(
+        competitor="A",
+        dimension="persona",
+        dimension_sources=sources,
+    )
+
+    segments = persona["user_personas"]["segments"]
+    assert [segment["company_size"] for segment in segments] == [
+        "individual",
+        "startup",
+        "enterprise",
+    ]
+    assert [segment["name"] for segment in segments] == [
+        "Individual developers",
+        "SMB and startup engineering teams",
+        "Enterprise engineering teams",
+    ]
+    assert all("IDE workflow" in segment["use_cases"] for segment in segments)
+
+
+def test_structured_persona_payload_appends_non_enterprise_segments_from_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="persona-a",
+                competitor="A",
+                dimension="persona",
+                source_type="webpage_verified",
+                title="A customers",
+                url="https://a.example/customers",
+                snippet=(
+                    "A targets individual developers, SMB startup teams, and "
+                    "enterprise organizations for agentic IDE workflows."
+                ),
+                content_hash="persona-a-hash",
+                confidence=0.9,
+            )
+        ],
+    )
+
+    service._merge_structured_knowledge_payload(
+        detail,
+        "A",
+        "persona",
+        {
+            "user_personas": {
+                "segments": [
+                    {
+                        "name": "Enterprise engineering teams",
+                        "role": "developer",
+                        "company_size": "enterprise",
+                        "pain_points": [],
+                        "use_cases": [],
+                        "claims": [
+                            {
+                                "claim": "A targets enterprise teams.",
+                                "source_ids": ["persona-a"],
+                                "confidence": 0.9,
+                            }
+                        ],
+                    }
+                ],
+                "summary_claims": [],
+            }
+        },
+    )
+
+    segments = detail.competitor_knowledge["A"].user_personas.segments
+    assert [segment.company_size for segment in segments] == [
+        "enterprise",
+        "individual",
+        "startup",
+    ]
+    assert segments[1].name == "Individual developers"
+    assert segments[2].name == "SMB and startup engineering teams"
+
+
 def test_persona_segment_names_are_competitor_specific() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
