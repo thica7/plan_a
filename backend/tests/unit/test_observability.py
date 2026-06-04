@@ -240,6 +240,8 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
                 "self_consistency_score": 88,
                 "sample_count": 3,
                 "minority_sample_count": 1,
+                "low_consistency_count": 1,
+                "claim_validation_issue_count": 2,
                 "minority_validation_samples": [
                     {
                         "claim_id": "claim-1",
@@ -294,6 +296,8 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
     )
     assert consistency_event.payload["sample_count"] == 3
     assert consistency_event.payload["minority_sample_count"] == 1
+    assert consistency_event.payload["low_consistency_count"] == 1
+    assert consistency_event.payload["claim_validation_issue_count"] == 2
     assert consistency_event.payload["minority_validation_samples"][0]["checker"] == "triangulation"
     assert any(event.evidence_ids == ["source-1"] for event in replay.events)
 
@@ -339,6 +343,7 @@ def test_decision_replay_prefers_real_claim_validation_events() -> None:
                 "claim_count": 1,
                 "source_count": 1,
                 "release_gate": {"status": "blocked", "issue_count": 2},
+                "claim_validation_issue_count": 2,
                 "validation_sample_count": 3,
                 "validation_samples": [
                     {
@@ -361,6 +366,7 @@ def test_decision_replay_prefers_real_claim_validation_events() -> None:
     assert claim_events[0].evidence_ids == ["source-1"]
     assert claim_events[0].payload["claim_count"] == 1
     assert claim_events[0].payload["release_gate"] == {"status": "blocked", "issue_count": 2}
+    assert claim_events[0].payload["claim_validation_issue_count"] == 2
     assert claim_events[0].payload["validation_sample_count"] == 3
     assert claim_events[0].payload["validation_samples"][0]["checker"] == "text_support"
 
