@@ -10,6 +10,7 @@ from packages.config.settings import (
 )
 from packages.enterprise import EnterprisePostgresStore
 from packages.enterprise.postgres import _split_sql
+from packages.enterprise.postgres_sanitizer import sanitize_postgres_text, sanitize_postgres_value
 from packages.schema.enterprise import EvidenceRecord
 
 
@@ -183,6 +184,32 @@ def test_postgres_store_filters_generated_columns_when_validating_rows() -> None
 
     assert evidence.id == "ev-1"
     assert not hasattr(evidence, "search_vector")
+
+
+def test_postgres_sanitizer_removes_nul_and_control_chars_from_text() -> None:
+    assert sanitize_postgres_text("alpha\x00beta\x18gamma") == "alphabeta gamma"
+
+
+def test_postgres_sanitizer_recurses_through_json_payloads() -> None:
+    payload = {
+        "bad\x00key": [
+            "value\x00one",
+            {"nested": "alpha\x00beta\x18gamma"},
+        ],
+    }
+
+    sanitized = sanitize_postgres_value(payload)
+
+    assert sanitized == {"badkey": ["valueone", {"nested": "alphabeta gamma"}]}
+
+
+def test_postgres_store_json_boundary_sanitizes_payloads() -> None:
+    store = object.__new__(EnterprisePostgresStore)
+    store._jsonb = lambda value: value
+
+    sanitized = store._json({"detail_json": {"raw": "contains\x00nul"}})
+
+    assert sanitized == {"detail_json": {"raw": "containsnul"}}
 
 
 class _FakePostgresConnection:

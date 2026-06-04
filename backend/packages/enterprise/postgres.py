@@ -13,6 +13,7 @@ from packages.enterprise.embedding_index import (
     deterministic_embedding,
     vector_literal,
 )
+from packages.enterprise.postgres_sanitizer import sanitize_postgres_text, sanitize_postgres_value
 from packages.enterprise.store import (
     DEFAULT_USER_ID,
     DEFAULT_WORKSPACE_ID,
@@ -761,8 +762,8 @@ class EnterprisePostgresStore:
                     (
                         project.id,
                         project.workspace_id,
-                        project.name,
-                        project.topic,
+                        self._text(project.name),
+                        self._text(project.topic),
                         project.topic_normalized,
                         project.competitor_layer,
                         project.competitor_set_hash,
@@ -1372,7 +1373,7 @@ class EnterprisePostgresStore:
             VALUES (%s, %s, %s)
             ON CONFLICT (id) DO NOTHING
             """,
-            (workspace_id, _title_from_id(workspace_id), "Phase 1 workspace."),
+            (workspace_id, self._text(_title_from_id(workspace_id)), "Phase 1 workspace."),
         )
         self._upsert_default_user(cur)
         cur.execute(
@@ -1401,7 +1402,7 @@ class EnterprisePostgresStore:
             VALUES (%s, %s, %s, %s)
             ON CONFLICT (id) DO NOTHING
             """,
-            (user_id, f"{user_id}@local", _title_from_id(user_id), "viewer"),
+            (user_id, f"{user_id}@local", self._text(_title_from_id(user_id)), "viewer"),
         )
 
     def _upsert_project(
@@ -1436,8 +1437,8 @@ class EnterprisePostgresStore:
             (
                 context.project_id,
                 context.workspace_id,
-                detail.topic,
-                detail.topic,
+                self._text(detail.topic),
+                self._text(detail.topic),
                 compute_topic_normalized(detail.topic),
                 detail.plan.competitor_layer,
                 compute_competitor_set_hash(context.competitor_ids),
@@ -1473,10 +1474,10 @@ class EnterprisePostgresStore:
             (
                 competitor_id,
                 workspace_id,
-                name,
+                self._text(name),
                 normalize_key(name),
                 detail.plan.competitor_layer,
-                detail.plan.homepage_hints.get(name),
+                self._text(detail.plan.homepage_hints.get(name)),
                 self._json(
                     {
                         "scenario_id": detail.plan.scenario_id,
@@ -1527,7 +1528,7 @@ class EnterprisePostgresStore:
                 detail.idempotency_key or detail.id,
                 context.workspace_id,
                 context.project_id,
-                detail.topic,
+                self._text(detail.topic),
                 detail.status,
                 detail.execution_mode,
                 self._json(detail.model_dump(mode="json")),
@@ -1592,12 +1593,12 @@ class EnterprisePostgresStore:
                 evidence.run_id,
                 evidence.raw_source_id,
                 evidence.competitor_id,
-                evidence.dimension,
-                evidence.source_type,
-                evidence.title,
-                str(evidence.url) if evidence.url else None,
-                evidence.canonical_url,
-                evidence.snippet,
+                self._text(evidence.dimension),
+                self._text(evidence.source_type),
+                self._text(evidence.title),
+                self._text(str(evidence.url) if evidence.url else None),
+                self._text(evidence.canonical_url),
+                self._text(evidence.snippet),
                 evidence.content_hash,
                 evidence.reliability_score,
                 evidence.freshness_score,
@@ -1635,14 +1636,14 @@ class EnterprisePostgresStore:
                 artifact.project_id,
                 artifact.evidence_id,
                 artifact.run_id,
-                artifact.artifact_type,
-                artifact.filename,
-                artifact.media_type,
-                artifact.storage_backend,
-                artifact.uri,
+                self._text(artifact.artifact_type),
+                self._text(artifact.filename),
+                self._text(artifact.media_type),
+                self._text(artifact.storage_backend),
+                self._text(artifact.uri),
                 artifact.byte_size,
                 artifact.content_hash,
-                str(artifact.source_url) if artifact.source_url else None,
+                self._text(str(artifact.source_url) if artifact.source_url else None),
                 artifact.created_by,
                 artifact.created_at,
                 self._json(artifact.metadata),
@@ -1677,10 +1678,10 @@ class EnterprisePostgresStore:
                 record.workspace_id,
                 record.project_id,
                 record.evidence_id,
-                record.embedding_model,
+                self._text(record.embedding_model),
                 record.embedding_dimensions,
                 record.embedding_hash,
-                record.embedding_text,
+                self._text(record.embedding_text),
                 embedding,
                 record.created_at,
                 self._json(record.metadata),
@@ -1850,14 +1851,14 @@ class EnterprisePostgresStore:
             (
                 record.id,
                 record.workspace_id,
-                record.domain,
-                record.source_type,
-                record.display_name,
-                str(record.homepage_url) if record.homepage_url else None,
+                self._text(record.domain),
+                self._text(record.source_type),
+                self._text(record.display_name),
+                self._text(str(record.homepage_url) if record.homepage_url else None),
                 record.trust_level,
                 record.robots_status,
                 record.policy_review_status,
-                record.policy_review_reason,
+                self._text(record.policy_review_reason),
                 record.is_active,
                 record.first_seen_run_id,
                 record.last_seen_run_id,
@@ -1888,12 +1889,12 @@ class EnterprisePostgresStore:
                 claim.project_id,
                 claim.run_id,
                 claim.competitor_id,
-                claim.claim_type,
-                claim.claim_text,
+                self._text(claim.claim_type),
+                self._text(claim.claim_text),
                 claim.evidence_ids,
                 claim.confidence,
                 claim.status,
-                claim.created_by_agent,
+                self._text(claim.created_by_agent),
                 claim.created_at,
             ),
         )
@@ -1916,12 +1917,12 @@ class EnterprisePostgresStore:
                     claim.project_id,
                     claim.run_id,
                     claim.competitor_id,
-                    claim.claim_type,
-                    claim.claim_text,
+                    self._text(claim.claim_type),
+                    self._text(claim.claim_text),
                     claim.evidence_ids,
                     claim.confidence,
                     claim.status,
-                    claim.created_by_agent,
+                    self._text(claim.created_by_agent),
                     claim.created_at,
                 ),
             )
@@ -1955,7 +1956,7 @@ class EnterprisePostgresStore:
                 report.competitor_layer,
                 report.competitor_set_hash,
                 report.status,
-                report.report_md,
+                self._text(report.report_md),
                 report.claim_ids,
                 report.evidence_ids,
                 self._json(report.quality_metadata),
@@ -1997,9 +1998,9 @@ class EnterprisePostgresStore:
                 notification.channel,
                 notification.severity,
                 notification.status,
-                notification.title,
-                notification.body,
-                notification.resource_type,
+                self._text(notification.title),
+                self._text(notification.body),
+                self._text(notification.resource_type),
                 notification.resource_id,
                 notification.created_by,
                 notification.created_at,
@@ -2178,8 +2179,8 @@ class EnterprisePostgresStore:
                 workspace_id,
                 "system",
                 actor_id,
-                action,
-                resource_type,
+                self._text(action),
+                self._text(resource_type),
                 resource_id,
                 self._json(before) if before is not None else None,
                 self._json(after),
@@ -2187,7 +2188,10 @@ class EnterprisePostgresStore:
         )
 
     def _json(self, value: dict[str, Any]) -> Any:
-        return self._jsonb(value)
+        return self._jsonb(sanitize_postgres_value(value))
+
+    def _text(self, value: str | None) -> str | None:
+        return sanitize_postgres_text(value)
 
     def _competitor_id(self, workspace_id: str, name: str) -> str:
         return compute_competitor_id(workspace_id, name)
