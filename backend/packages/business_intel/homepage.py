@@ -5,6 +5,12 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, HttpUrl
 
+from packages.business_intel.entity_resolver import (
+    is_trusted_url_for_competitor,
+    normalize_competitor_key,
+    resolve_competitor_identity,
+)
+
 
 class HomepageVerification(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -13,14 +19,6 @@ class HomepageVerification(BaseModel):
     homepage_url: HttpUrl | None = None
     verified: bool
     reason: str
-
-
-CURATED_HOMEPAGES: dict[str, str] = {
-    "cursor": "https://cursor.com",
-    "windsurf": "https://windsurf.com",
-    "githubcopilot": "https://github.com/features/copilot",
-    "claudecode": "https://www.anthropic.com/product/claude-code",
-}
 
 
 def verify_homepage(competitor: str, hint: str | None = None) -> HomepageVerification:
@@ -39,21 +37,29 @@ def verify_homepage(competitor: str, hint: str | None = None) -> HomepageVerific
             reason="phantom_name",
         )
 
-    curated = CURATED_HOMEPAGES.get(_registry_key(name))
-    if curated is not None:
-        return HomepageVerification(
-            competitor=name,
-            homepage_url=curated,  # type: ignore[arg-type]
-            verified=True,
-            reason="curated_registry",
-        )
-
+    identity = resolve_competitor_identity(name)
     if hint and _is_homepage_url(hint):
+        if identity is not None and is_trusted_url_for_competitor(name, hint):
+            return HomepageVerification(
+                competitor=name,
+                homepage_url=hint,  # type: ignore[arg-type]
+                verified=True,
+                reason="trusted_hint",
+            )
+        if identity is None:
+            return HomepageVerification(
+                competitor=name,
+                homepage_url=hint,  # type: ignore[arg-type]
+                verified=False,
+                reason="hint_candidate_unverified",
+            )
+
+    if identity is not None:
         return HomepageVerification(
             competitor=name,
-            homepage_url=hint,  # type: ignore[arg-type]
-            verified=False,
-            reason="hint_candidate_unverified",
+            homepage_url=identity.homepage_url,  # type: ignore[arg-type]
+            verified=True,
+            reason="trusted_identity_registry",
         )
 
     return HomepageVerification(
@@ -70,8 +76,7 @@ def verify_homepages(
 ) -> dict[str, HomepageVerification]:
     hints = hints or {}
     return {
-        competitor: verify_homepage(competitor, hints.get(competitor))
-        for competitor in competitors
+        competitor: verify_homepage(competitor, hints.get(competitor)) for competitor in competitors
     }
 
 
@@ -88,4 +93,4 @@ def _is_homepage_url(value: str) -> bool:
 
 
 def _registry_key(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", name.casefold())
+    return normalize_competitor_key(name)

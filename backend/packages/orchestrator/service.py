@@ -88,7 +88,7 @@ from packages.schema.models import (
 )
 from packages.search import PerplexitySearchClient, SearchResult
 from packages.skills.registry import SkillRegistry
-from packages.tools import WebSearchRequest, fetch_page, robots_check, web_search
+from packages.tools import WebSearchRequest, fetch_evidence_page, robots_check, web_search
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
 QUALITY_VERIFIED_SOURCE_TYPES = {
@@ -2689,12 +2689,16 @@ class RunService(
         started = time.perf_counter()
         if context is not None:
             context.add_tool_call("fetch_page", url)
-        result = await fetch_page(url)
+        result = await fetch_evidence_page(url)
         metadata: dict[str, str | int | float | bool | None] = {
             "url": result.url,
             "ok": result.ok,
             "status_code": result.status_code,
             "error": result.error,
+            "fetch_method": getattr(result, "fetch_method", None),
+            "quality_score": getattr(result, "quality_score", None),
+            "text_length": getattr(result, "text_length", None),
+            "failure_reason": getattr(result, "failure_reason", None),
         }
         span_id = self._append_trace_span(
             record,

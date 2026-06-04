@@ -49,6 +49,7 @@ async def advanced_fetch_page(
     *,
     mode: str = "auto",
     timeout_seconds: float = 15.0,
+    quality_threshold: float = 0.55,
     profile: str | None = None,
     artifact_dir: str | None = None,
     screenshot: bool = False,
@@ -71,6 +72,8 @@ async def advanced_fetch_page(
         mode,
         "--timeout",
         str(timeout_seconds),
+        "--quality-threshold",
+        str(quality_threshold),
     ]
     if profile:
         command.extend(["--profile", profile])

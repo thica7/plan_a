@@ -19,6 +19,7 @@ from packages.business_intel import (
     score_project_readiness,
     validate_project_claims,
 )
+from packages.business_intel.entity_resolver import trusted_source_candidates
 from packages.business_intel.homepage import verify_homepage
 from packages.business_intel.layers import assess_competitor_layer
 from packages.schema.enterprise import (
@@ -168,6 +169,37 @@ def test_dynamic_scenario_pack_and_homepage_gate_are_deterministic() -> None:
     assert unknown.reason == "no_verified_homepage"
     assert phantom.verified is False
     assert phantom.reason == "phantom_name"
+
+
+def test_entity_resolver_seeds_llm_official_sources() -> None:
+    gpt = verify_homepage("GPT-5.5")
+    claude = verify_homepage("Claude")
+    gemini = verify_homepage("Gemini")
+    llama = verify_homepage("Llama 4")
+    unknown = verify_homepage("Unverified New Entrant", "https://example.com")
+
+    assert gpt.verified is True
+    assert "openai.com" in str(gpt.homepage_url)
+    assert claude.verified is True
+    assert gemini.verified is True
+    assert llama.verified is True
+    assert unknown.verified is False
+
+    assert any(
+        "developers.openai.com" in item.url
+        for item in trusted_source_candidates("GPT-5.5", "pricing")
+    )
+    assert any(
+        "docs.anthropic.com" in item.url or "claude.com" in item.url
+        for item in trusted_source_candidates("Claude", "feature")
+    )
+    assert any(
+        "ai.google.dev" in item.url for item in trusted_source_candidates("Gemini", "pricing")
+    )
+    assert any(
+        "ai.meta.com" in item.url or "llama.com" in item.url
+        for item in trusted_source_candidates("Llama 4", "feature")
+    )
 
 
 def test_dynamic_schema_dimensions_drive_quality_risk_and_scoring() -> None:

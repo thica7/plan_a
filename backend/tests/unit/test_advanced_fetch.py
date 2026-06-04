@@ -5,7 +5,13 @@ import pytest
 
 from packages.config import Settings
 from packages.governance import build_tool_registry_report
-from packages.tools import advanced_fetch_page
+from packages.tools import (
+    AdvancedFetchQuality,
+    AdvancedFetchResult,
+    FetchPageResult,
+    advanced_fetch_page,
+    fetch_evidence_page,
+)
 
 
 class _FakeProcess:
@@ -105,3 +111,98 @@ def test_tool_registry_lists_advanced_fetch_as_guarded_when_unconfigured(
     assert entry.status == "guarded"
     assert entry.allowed_in_real_mode is False
     assert "WEBFETCH_V2_ROOT" in entry.reason
+
+
+@pytest.mark.asyncio
+async def test_fetch_evidence_page_falls_back_to_webfetch_v2_for_weak_basic_fetch(
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+
+    async def fake_basic_fetch(url: str, timeout_seconds: float = 12.0) -> FetchPageResult:
+        calls.append(f"basic:{timeout_seconds}")
+        return FetchPageResult(
+            url=url,
+            ok=True,
+            title="Loading",
+            text="Loading...",
+            content_hash="basic-low-quality",
+            status_code=200,
+        )
+
+    async def fake_advanced_fetch(
+        url: str,
+        *,
+        mode: str = "auto",
+        timeout_seconds: float = 15.0,
+        quality_threshold: float = 0.55,
+        **_: object,
+    ) -> AdvancedFetchResult:
+        calls.append(f"advanced:{mode}:{timeout_seconds}:{quality_threshold}")
+        return AdvancedFetchResult(
+            url=url,
+            final_url=url,
+            ok=True,
+            fetch_method="playwright",
+            title="Example pricing",
+            text="Example pricing starts at $10 per seat for enterprise teams.",
+            markdown="",
+            status_code=200,
+            quality=AdvancedFetchQuality(score=0.92, text_length=60, has_title=True),
+        )
+
+    monkeypatch.setattr("packages.tools.evidence_fetch.fetch_page", fake_basic_fetch)
+    monkeypatch.setattr("packages.tools.evidence_fetch.advanced_fetch_page", fake_advanced_fetch)
+
+    result = await fetch_evidence_page("https://example.com/pricing")
+
+    assert result.ok is True
+    assert result.fetch_method == "webfetch_v2:playwright"
+    assert result.quality_score == 0.92
+    assert result.text.startswith("Example pricing")
+    assert calls == ["basic:12.0", "advanced:auto:15.0:0.55"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_evidence_page_preserves_structured_failure_reason(monkeypatch) -> None:
+    async def fake_basic_fetch(url: str, timeout_seconds: float = 12.0) -> FetchPageResult:
+        return FetchPageResult(
+            url=url,
+            ok=False,
+            title="",
+            text="",
+            content_hash="basic-failed",
+            status_code=403,
+            error="403 Forbidden",
+        )
+
+    async def fake_advanced_fetch(
+        url: str,
+        *,
+        mode: str = "auto",
+        timeout_seconds: float = 15.0,
+        quality_threshold: float = 0.55,
+        **_: object,
+    ) -> AdvancedFetchResult:
+        return AdvancedFetchResult(
+            url=url,
+            final_url=url,
+            ok=False,
+            fetch_method="playwright",
+            title="",
+            text="",
+            markdown="",
+            status_code=403,
+            failure_reason="blocked_or_login_required",
+            error="blocked",
+        )
+
+    monkeypatch.setattr("packages.tools.evidence_fetch.fetch_page", fake_basic_fetch)
+    monkeypatch.setattr("packages.tools.evidence_fetch.advanced_fetch_page", fake_advanced_fetch)
+
+    result = await fetch_evidence_page("https://example.com/private")
+
+    assert result.ok is False
+    assert result.status_code == 403
+    assert result.fetch_method == "webfetch_v2:playwright"
+    assert result.failure_reason == "blocked_or_login_required"

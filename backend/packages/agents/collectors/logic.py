@@ -9,6 +9,13 @@ from urllib.parse import urlparse
 
 from packages.agents import SubagentContext
 from packages.agents.collectors.skill_tools import collect_competitor_with_skill_tools
+from packages.business_intel.entity_resolver import (
+    confusion_terms_for_competitor,
+    identity_terms_for_competitor,
+    is_trusted_url_for_competitor,
+    normalize_competitor_key,
+    search_qualifier_for_competitor,
+)
 from packages.identity import compute_raw_source_id
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
@@ -17,163 +24,13 @@ from packages.schema.models import (
 from packages.search import SearchResult
 from packages.tools import (
     extract_facts,
-    fetch_page,
+    fetch_evidence_page,
     find_official_docs,
     search_review_site_queries,
     survey_simulator,
 )
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
-
-KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
-    "cursor": {
-        "pricing": [("Cursor official pricing", "https://cursor.com/pricing")],
-        "feature": [("Cursor official features", "https://www.cursor.com/features")],
-        "persona": [("Cursor official product page", "https://cursor.com")],
-        "security": [("Cursor official security", "https://cursor.com/security")],
-    },
-    "githubcopilot": {
-        "feature": [
-            (
-                "GitHub Copilot official feature docs",
-                "https://docs.github.com/en/copilot/get-started/features",
-            ),
-            (
-                "GitHub Copilot official product page",
-                "https://github.com/features/copilot",
-            ),
-        ],
-        "pricing": [
-            (
-                "GitHub Copilot official plans and pricing",
-                "https://github.com/features/copilot/plans",
-            )
-        ],
-        "persona": [
-            (
-                "GitHub Copilot official product page",
-                "https://github.com/features/copilot",
-            )
-        ],
-        "security": [
-            (
-                "GitHub Copilot enterprise approval resources",
-                "https://docs.github.com/en/enterprise-cloud@latest/copilot/tutorials/roll-out-at-scale/govern-at-scale/resources-for-approval",
-            ),
-            (
-                "GitHub Copilot compliance changelog",
-                "https://github.blog/changelog/2024-06-03-github-copilot-compliance-soc-2-type-1-report-and-iso-iec-270012013-certification-scope/",
-            ),
-        ],
-    },
-    "windsurf": {
-        "pricing": [
-            (
-                "Windsurf official plans and usage",
-                "https://docs.windsurf.com/windsurf/accounts/usage",
-            )
-        ],
-        "feature": [
-            (
-                "Windsurf official Cascade docs",
-                "https://docs.windsurf.com/plugins/cascade/cascade-overview",
-            ),
-            (
-                "Windsurf official plugin docs",
-                "https://docs.windsurf.com/plugins",
-            ),
-        ],
-        "persona": [
-            (
-                "Windsurf official getting started docs",
-                "https://docs.windsurf.com/windsurf/getting-started",
-            ),
-        ],
-        "security": [
-            ("Windsurf official trust page", "https://windsurf.com/trust"),
-            ("Windsurf official compliance page", "https://windsurf.com/compliance"),
-        ],
-    },
-    "claudecode": {
-        "feature": [
-            (
-                "Claude Code official product page",
-                "https://www.anthropic.com/product/claude-code",
-            ),
-            (
-                "Claude Code official overview docs",
-                "https://docs.anthropic.com/en/docs/claude-code/overview",
-            ),
-        ],
-        "pricing": [
-            (
-                "Claude Code cost management docs",
-                "https://code.claude.com/docs/en/costs",
-            ),
-            ("Claude official pricing", "https://claude.com/pricing"),
-        ],
-        "persona": [
-            (
-                "Claude Code official product page",
-                "https://www.anthropic.com/product/claude-code",
-            )
-        ],
-        "security": [
-            (
-                "Claude Code official security docs",
-                "https://docs.claude.com/en/docs/claude-code/security",
-            )
-        ],
-    },
-}
-
-PRODUCT_IDENTITY_HINTS: dict[str, tuple[str, ...]] = {
-    "cursor": (
-        "cursor.com",
-        "cursor ai",
-        "ai code editor",
-        "code editor",
-        "coding agent",
-        "composer",
-    ),
-    "githubcopilot": (
-        "github.com/features/copilot",
-        "docs.github.com/en/copilot",
-        "github copilot",
-        "copilot",
-    ),
-    "windsurf": (
-        "windsurf.com",
-        "docs.windsurf.com",
-        "docs.devin.ai/desktop",
-        "windsurf",
-        "codeium",
-        "ai code editor",
-    ),
-    "claudecode": (
-        "claude-code",
-        "claude code",
-        "code.claude.com",
-        "anthropic.com/product/claude-code",
-    ),
-}
-
-PRODUCT_CONFUSION_TERMS: dict[str, tuple[str, ...]] = {
-    "cursor": (
-        "cursor extractor",
-        "database cursor",
-        "pagination cursor",
-        "sql cursor",
-        "css cursor",
-        "mouse cursor",
-    ),
-    "windsurf": (
-        "devin.ai",
-        "devin desktop",
-        "cognition devin",
-    ),
-    "claudecode": ("generic claude",),
-}
 
 USER_RESEARCH_SOURCE_TYPES = {
     "survey_simulated",
@@ -792,13 +649,7 @@ class CollectorAgentMixin:
         competitor: str,
         dimension: str,
     ) -> list[SearchResult]:
-        normalized_competitor = self._official_registry_key(competitor)
-        normalized_dimension = self._official_dimension_key(dimension)
         raw_candidates: list[tuple[str, str, str]] = []
-        for title, url in KNOWN_OFFICIAL_SOURCE_HINTS.get(normalized_competitor, {}).get(
-            normalized_dimension, []
-        ):
-            raw_candidates.append((title, url, "Curated official source registry entry."))
         for candidate in find_official_docs(
             competitor=competitor,
             dimension=dimension,
@@ -880,6 +731,8 @@ class CollectorAgentMixin:
             host = self._host(result.url)
             haystack = f"{result.title} {result.url} {result.snippet}".casefold()
             value = 0
+            if is_trusted_url_for_competitor(competitor, result.url):
+                value += 110
             if homepage_host and (host == homepage_host or host.endswith(f".{homepage_host}")):
                 value += 100
             if any(term in host for term in competitor_terms):
@@ -916,15 +769,7 @@ class CollectorAgentMixin:
         return [normalized, "feature", "docs"]
 
     def _official_registry_key(self, competitor: str) -> str:
-        return re.sub(r"[^a-z0-9]+", "", competitor.casefold())
-
-    def _official_dimension_key(self, dimension: str) -> str:
-        normalized = dimension.casefold()
-        if "pricing" in normalized:
-            return "pricing"
-        if any(token in normalized for token in ("security", "trust", "compliance")):
-            return "security"
-        return normalized
+        return normalize_competitor_key(competitor)
 
     def _host(self, url: str) -> str:
         if not url:
@@ -1007,7 +852,7 @@ class CollectorAgentMixin:
         official_host = bool(
             homepage_host
             and (source_host == homepage_host or source_host.endswith(f".{homepage_host}"))
-        )
+        ) or is_trusted_url_for_competitor(competitor, url)
         dimension_fact = self._has_dimension_specific_fact(dimension, snippet.casefold())
         if official_host and dimension_fact:
             return 0.96
@@ -1220,16 +1065,7 @@ class CollectorAgentMixin:
         return False
 
     def _competitor_search_qualifier(self, competitor: str) -> str:
-        key = self._official_registry_key(competitor)
-        if key == "cursor":
-            return "AI code editor"
-        if key == "githubcopilot":
-            return "GitHub Copilot coding assistant"
-        if key == "windsurf":
-            return "Windsurf AI code editor"
-        if key == "claudecode":
-            return "Claude Code coding agent"
-        return ""
+        return search_qualifier_for_competitor(competitor)
 
     def _competitor_identity_problem(self, source: RawSource) -> str | None:
         if source.source_type in USER_RESEARCH_SOURCE_TYPES:
@@ -1238,7 +1074,7 @@ class CollectorAgentMixin:
         if not key or key.startswith("crossmodel"):
             return None
         haystack = f"{source.title}\n{source.url or ''}\n{source.snippet}".casefold()
-        for term in PRODUCT_CONFUSION_TERMS.get(key, ()):
+        for term in confusion_terms_for_competitor(source.competitor):
             if (
                 key == "windsurf"
                 and term == "devin.ai"
@@ -1250,7 +1086,7 @@ class CollectorAgentMixin:
                     f"Source {source.id} appears to describe `{term}` rather than "
                     f"{source.competitor}."
                 )
-        hints = PRODUCT_IDENTITY_HINTS.get(key, ())
+        hints = identity_terms_for_competitor(source.competitor)
         if hints and not any(term in haystack for term in hints):
             return (
                 f"Source {source.id} does not expose a recognizable {source.competitor} "
@@ -1343,7 +1179,7 @@ class CollectorAgentMixin:
         fetched = (
             await self._trace_fetch(record, "collector", dimension, result.url, context)
             if record is not None
-            else await fetch_page(result.url)
+            else await fetch_evidence_page(result.url)
         )
         verified = fetched is not None and fetched.ok
         if not verified and self._requires_verified_web_evidence(detail, dimension):
@@ -1442,6 +1278,9 @@ class CollectorAgentMixin:
             return "fetch_not_available"
         if getattr(fetched, "ok", False):
             return "not_rejected"
+        failure_reason = str(getattr(fetched, "failure_reason", "") or "").strip()
+        if failure_reason:
+            return f"fetch_failed:{failure_reason[:160]}"
         error = str(getattr(fetched, "error", "") or "").strip()
         if error:
             return f"fetch_failed:{error[:160]}"

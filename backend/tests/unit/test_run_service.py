@@ -3217,7 +3217,7 @@ async def test_real_search_result_fetch_failure_is_rejected(
     async def fake_fetch_page(url: str):  # noqa: ANN202 - test double mirrors async tool shape.
         return None
 
-    monkeypatch.setattr("packages.agents.collectors.logic.fetch_page", fake_fetch_page)
+    monkeypatch.setattr("packages.agents.collectors.logic.fetch_evidence_page", fake_fetch_page)
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -3247,7 +3247,7 @@ async def test_real_search_result_fetch_failure_is_rejected(
         SearchResult(
             title="A pricing",
             url="https://example.com/pricing",
-            snippet="A has a public pricing page.",
+            snippet="A pricing starts at $10 per seat.",
         ),
     )
 
@@ -3261,7 +3261,7 @@ async def test_demo_search_result_can_remain_unverified_raw_source(
     async def fake_fetch_page(url: str):  # noqa: ANN202 - test double mirrors async tool shape.
         return None
 
-    monkeypatch.setattr("packages.agents.collectors.logic.fetch_page", fake_fetch_page)
+    monkeypatch.setattr("packages.agents.collectors.logic.fetch_evidence_page", fake_fetch_page)
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -3291,7 +3291,7 @@ async def test_demo_search_result_can_remain_unverified_raw_source(
         SearchResult(
             title="A pricing",
             url="https://example.com/pricing",
-            snippet="A has a public pricing page.",
+            snippet="A pricing starts at $10 per seat.",
         ),
     )
 
@@ -3408,6 +3408,43 @@ def test_collector_official_source_candidates_use_current_windsurf_urls() -> Non
     assert not any(item.url in stale_windsurf_urls for item in pricing_candidates[:2])
     assert not any(item.url in stale_windsurf_urls for item in persona_candidates[:2])
     assert not any("accounts/usage" in item.url for item in persona_candidates[:2])
+
+
+def test_collector_official_source_candidates_include_llm_registry_seeds() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Most Powerful LLM",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(
+            topic="Most Powerful LLM",
+            competitors=["GPT-5.5", "Claude", "Gemini", "Llama 4"],
+            dimensions=["pricing", "feature"],
+        ),
+    )
+
+    gpt_pricing = service._official_source_candidates(detail, "GPT-5.5", "pricing")
+    claude_features = service._official_source_candidates(detail, "Claude", "feature")
+    gemini_pricing = service._official_source_candidates(detail, "Gemini", "pricing")
+    llama_features = service._official_source_candidates(detail, "Llama 4", "feature")
+
+    assert any("developers.openai.com" in item.url for item in gpt_pricing)
+    assert any("anthropic.com" in item.url for item in claude_features)
+    assert any("ai.google.dev" in item.url for item in gemini_pricing)
+    assert any("ai.meta.com" in item.url or "llama.com" in item.url for item in llama_features)
 
 
 def test_collector_search_query_adds_product_qualifier_for_ambiguous_names() -> None:
@@ -3652,7 +3689,7 @@ async def test_verified_source_uses_dimension_specific_snippet_and_confidence(
             status_code=200,
         )
 
-    monkeypatch.setattr("packages.agents.collectors.logic.fetch_page", fake_fetch_page)
+    monkeypatch.setattr("packages.agents.collectors.logic.fetch_evidence_page", fake_fetch_page)
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -4440,7 +4477,7 @@ async def test_collector_react_runner_searches_fetches_and_finishes(
             status_code=200,
         )
 
-    monkeypatch.setattr("packages.orchestrator.service.fetch_page", fake_fetch_page)
+    monkeypatch.setattr("packages.orchestrator.service.fetch_evidence_page", fake_fetch_page)
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -4562,7 +4599,7 @@ async def test_collector_react_finish_fetches_uninspected_urls(
             status_code=200,
         )
 
-    monkeypatch.setattr("packages.orchestrator.service.fetch_page", fake_fetch_page)
+    monkeypatch.setattr("packages.orchestrator.service.fetch_evidence_page", fake_fetch_page)
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(

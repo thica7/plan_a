@@ -3,6 +3,7 @@ from packages.tools.advanced_fetch import (
     AdvancedFetchResult,
     advanced_fetch_page,
 )
+from packages.tools.evidence_fetch import EvidenceFetchResult, fetch_evidence_page
 from packages.tools.extract_facts import ExtractedFact, extract_facts
 from packages.tools.fetch_page import FetchPageResult, fetch_page
 from packages.tools.official_docs import OfficialDocCandidate, find_official_docs
@@ -16,6 +17,7 @@ __all__ = [
     "AdvancedFetchQuality",
     "AdvancedFetchResult",
     "ExtractedFact",
+    "EvidenceFetchResult",
     "InterviewRecord",
     "OfficialDocCandidate",
     "ReviewSearchPlan",
@@ -24,6 +26,7 @@ __all__ = [
     "extract_facts",
     "advanced_fetch_page",
     "fetch_page",
+    "fetch_evidence_page",
     "find_official_docs",
     "robots_check",
     "search_review_site_queries",
