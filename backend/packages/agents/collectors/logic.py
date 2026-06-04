@@ -74,12 +74,12 @@ KNOWN_OFFICIAL_SOURCE_HINTS: dict[str, dict[str, list[tuple[str, str]]]] = {
         ],
         "feature": [
             (
-                "Windsurf official getting started docs",
-                "https://docs.windsurf.com/windsurf/getting-started",
+                "Windsurf official Cascade docs",
+                "https://docs.windsurf.com/plugins/cascade/cascade-overview",
             ),
             (
-                "Windsurf official context awareness docs",
-                "https://docs.windsurf.com/context-awareness/windsurf-overview",
+                "Windsurf official plugin docs",
+                "https://docs.windsurf.com/plugins",
             ),
         ],
         "persona": [
@@ -1016,7 +1016,9 @@ class CollectorAgentMixin:
             )
         if self._looks_like_soft_404(source):
             return f"Source {source.id} appears to be a soft 404 or not-found page."
-        if self._looks_like_navigation_only(snippet_normalized):
+        if self._looks_like_navigation_only(
+            snippet_normalized
+        ) and not self._has_dimension_specific_fact(source.dimension, snippet_normalized):
             return f"Source {source.id} appears to contain mostly navigation or boilerplate text."
         if (
             source.source_type == "webpage_verified"
@@ -1153,7 +1155,10 @@ class CollectorAgentMixin:
         return bool(
             re.search(
                 r"(?:supports|provides|includes|offers|can\s+(?:write|generate|explain|run)|"
-                r"context window|tool calls?|code completion|pull requests?|api|benchmark)",
+                r"context window|context awareness|tool calls?|code completion|"
+                r"pull requests?|api|benchmark|cascade|autocomplete|supercomplete|"
+                r"write/chat modes?|auto-execution|model context protocol|mcp|"
+                r"jetbrains plugin|command|tab)",
                 normalized_text,
             )
         )
@@ -1212,7 +1217,7 @@ class CollectorAgentMixin:
     def _is_windsurf_docs_redirect_source(self, source: RawSource, haystack: str) -> bool:
         url = str(source.url or "").casefold()
         return (
-            "docs.devin.ai/desktop" in url
+            any(path in url for path in ("docs.devin.ai/desktop", "docs.devin.ai/windsurf"))
             and "windsurf" in haystack
             and "devin desktop" not in haystack
             and "cognition devin" not in haystack

@@ -571,7 +571,7 @@ def test_feature_collection_uses_known_official_source_registry() -> None:
     assert cursor[0].url == "https://www.cursor.com/features"
     assert copilot[0].url == "https://docs.github.com/en/copilot/get-started/features"
     assert claude[0].url == "https://www.anthropic.com/product/claude-code"
-    assert windsurf[0].url == "https://docs.windsurf.com/windsurf/getting-started"
+    assert windsurf[0].url == "https://docs.windsurf.com/plugins/cascade/cascade-overview"
 
 
 @pytest.mark.asyncio
@@ -2804,7 +2804,7 @@ def test_collector_official_source_candidates_use_current_windsurf_urls() -> Non
     persona_candidates = service._official_source_candidates(detail, "Windsurf", "persona")
 
     assert pricing_candidates[0].url == "https://docs.windsurf.com/windsurf/accounts/usage"
-    assert feature_candidates[0].url == "https://docs.windsurf.com/windsurf/getting-started"
+    assert feature_candidates[0].url == "https://docs.windsurf.com/plugins/cascade/cascade-overview"
     assert persona_candidates[0].url == "https://docs.windsurf.com/windsurf/getting-started"
     stale_windsurf_urls = {
         "https://windsurf.com/pricing",
@@ -2942,6 +2942,69 @@ def test_collector_accepts_windsurf_docs_redirect_sources() -> None:
         ),
         content_hash="windsurf-docs-hash",
         confidence=0.96,
+    )
+
+    assert service._source_quality_problem(source) is None
+
+
+def test_collector_accepts_windsurf_feature_docs_redirect_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    source = RawSource(
+        id="feature-windsurf-docs",
+        competitor="Windsurf",
+        dimension="feature",
+        source_type="webpage_verified",
+        title="Windsurf - Cascade",
+        url="https://docs.devin.ai/windsurf/plugins/cascade/cascade-overview",
+        snippet=(
+            "Windsurf Cascade brings agentic AI coding to JetBrains with Write/Chat "
+            "modes, voice input, tool access, turbo mode, autocomplete, MCP, and "
+            "real-time collaboration."
+        ),
+        content_hash="windsurf-feature-docs-hash",
+        confidence=0.84,
+    )
+
+    assert service._source_quality_problem(source) is None
+
+
+def test_collector_keeps_feature_docs_when_navigation_contains_feature_facts() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    source = RawSource(
+        id="feature-windsurf-nav-docs",
+        competitor="Windsurf",
+        dimension="feature",
+        source_type="webpage_verified",
+        title="Windsurf - Cascade",
+        url="https://docs.devin.ai/windsurf/plugins/cascade/cascade-overview",
+        snippet=(
+            "Skip to main content Open menu Resources Docs Changelog Features "
+            "Cascade (JetBrains) Overview Models Web and Docs Search Memories & Rules "
+            "Model Context Protocol (MCP). Cascade brings agentic AI coding to "
+            "JetBrains with Write/Chat modes and tool access."
+        ),
+        content_hash="windsurf-feature-nav-docs-hash",
+        confidence=0.84,
     )
 
     assert service._source_quality_problem(source) is None
