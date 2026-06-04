@@ -1148,6 +1148,7 @@ class AnalystAgentMixin:
                 knowledge.pricing_model.tiers = self._pricing_tiers_from_text(
                     claim_text, claims
                 )
+            self._dedupe_pricing_model_tiers(knowledge.pricing_model)
         elif "persona" in dimension_key or "user" in dimension_key:
             claim_text = " ".join(claim.claim for claim in claims)
             knowledge.user_personas.summary_claims = claims
@@ -1207,6 +1208,7 @@ class AnalystAgentMixin:
                     self._enrich_pricing_model_from_sources(
                         detail, competitor, dimension, knowledge.pricing_model
                     )
+                    self._dedupe_pricing_model_tiers(knowledge.pricing_model)
                 except Exception:
                     knowledge.pricing_model.tiers = []
                     knowledge.pricing_model.notes = []
@@ -1586,6 +1588,85 @@ class AnalystAgentMixin:
                 seen_keys.add(key)
             if len(pricing_model.tiers) >= 6:
                 break
+        self._dedupe_pricing_model_tiers(pricing_model)
+
+    def _dedupe_pricing_model_tiers(self, pricing_model: PricingModel) -> None:
+        merged: dict[tuple[str, str], PricingTier] = {}
+        ordered_keys: list[tuple[str, str]] = []
+        for tier in pricing_model.tiers:
+            key = self._pricing_tier_dedupe_key(tier)
+            existing = merged.get(key)
+            if existing is None:
+                merged[key] = tier
+                ordered_keys.append(key)
+                continue
+            self._merge_pricing_tier(existing, tier)
+        pricing_model.tiers = [merged[key] for key in ordered_keys]
+
+    def _pricing_tier_dedupe_key(self, tier: PricingTier) -> tuple[str, str]:
+        name = self._canonical_pricing_tier_name(tier.name)
+        price = self._canonical_pricing_price(tier.price)
+        if name == "free" or price == "$0":
+            return ("free", "$0")
+        return (name, price)
+
+    def _canonical_pricing_tier_name(self, name: str) -> str:
+        text = " ".join((name or "").split()).casefold()
+        patterns = [
+            (r"\bfree\b|\bhobby\b", "free"),
+            (r"\bpro\+\b", "pro+"),
+            (r"\bultra\b", "ultra"),
+            (r"\bbusiness\b", "business"),
+            (r"\benterprise\b", "enterprise"),
+            (r"\bteam(?:s)?\b", "team"),
+            (r"\bindividual\b", "individual"),
+            (r"\bpro\b", "pro"),
+        ]
+        for pattern, canonical in patterns:
+            if re.search(pattern, text, flags=re.IGNORECASE):
+                return canonical
+        return text or "unknown"
+
+    def _canonical_pricing_price(self, price: str) -> str:
+        text = " ".join((price or "").split()).casefold()
+        if not text or text == "unknown":
+            return "unknown"
+        if "free" in text or re.search(r"(?:^|\D)(?:\$|usd\s*)?0(?:\.0+)?(?:\D|$)", text):
+            return "$0"
+        if re.search(r"\b(custom|contact|enterprise)\b", text):
+            return "custom"
+        return re.sub(r"\s+", "", text)
+
+    def _merge_pricing_tier(self, target: PricingTier, duplicate: PricingTier) -> None:
+        if target.price == "unknown" and duplicate.price != "unknown":
+            target.price = duplicate.price
+        if target.billing_cycle == "unknown" and duplicate.billing_cycle != "unknown":
+            target.billing_cycle = duplicate.billing_cycle
+        target.limits = self._merge_unique_texts(target.limits, duplicate.limits)
+        target.claims = self._merge_unique_claims(target.claims, duplicate.claims)
+
+    def _merge_unique_texts(self, left: list[str], right: list[str]) -> list[str]:
+        merged: list[str] = []
+        seen: set[str] = set()
+        for value in [*left, *right]:
+            cleaned = " ".join((value or "").split())
+            key = cleaned.casefold()
+            if cleaned and key not in seen:
+                seen.add(key)
+                merged.append(cleaned)
+        return merged
+
+    def _merge_unique_claims(
+        self, left: list[KnowledgeClaim], right: list[KnowledgeClaim]
+    ) -> list[KnowledgeClaim]:
+        merged: list[KnowledgeClaim] = []
+        seen: set[tuple[str, tuple[str, ...]]] = set()
+        for claim in [*left, *right]:
+            key = (claim.claim.casefold(), tuple(sorted(claim.source_ids)))
+            if key not in seen:
+                seen.add(key)
+                merged.append(claim)
+        return merged
 
     def _feature_taxonomy(self) -> list[tuple[str, str, list[str]]]:
         return [

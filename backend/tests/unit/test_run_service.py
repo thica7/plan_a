@@ -4892,6 +4892,76 @@ def test_structured_pricing_payload_enriches_unknown_fields_from_sources() -> No
     assert tier.limits == ["500 premium requests"]
 
 
+def test_structured_pricing_payload_dedupes_free_tiers() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+    )
+
+    service._merge_structured_knowledge_payload(
+        detail,
+        "A",
+        "pricing",
+        {
+            "pricing_model": {
+                "tiers": [
+                    {
+                        "name": "Free",
+                        "price": "$0",
+                        "billing_cycle": "unknown",
+                        "limits": ["2,000 completions per month"],
+                        "claims": [
+                            {
+                                "claim": "A has a Free plan.",
+                                "source_ids": ["pricing-a"],
+                                "confidence": 0.9,
+                            }
+                        ],
+                    },
+                    {
+                        "name": "Hobby",
+                        "price": "Free",
+                        "billing_cycle": "monthly",
+                        "limits": ["limited chat messages"],
+                        "claims": [
+                            {
+                                "claim": "A Hobby plan is free.",
+                                "source_ids": ["pricing-b"],
+                                "confidence": 0.8,
+                            }
+                        ],
+                    },
+                ],
+                "notes": [],
+            }
+        },
+    )
+
+    tiers = detail.competitor_knowledge["A"].pricing_model.tiers
+    assert len(tiers) == 1
+    assert tiers[0].name == "Free"
+    assert tiers[0].price == "$0"
+    assert tiers[0].billing_cycle == "monthly"
+    assert tiers[0].limits == ["2,000 completions per month", "limited chat messages"]
+    assert [claim.source_ids for claim in tiers[0].claims] == [["pricing-a"], ["pricing-b"]]
+
+
 def test_deterministic_pricing_payload_extracts_multiple_tiers() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
