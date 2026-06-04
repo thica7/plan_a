@@ -4525,6 +4525,120 @@ def test_deterministic_structured_knowledge_payload_matches_schema_shape() -> No
     assert persona["user_personas"]["segments"][0]["use_cases"]
 
 
+def test_deterministic_feature_payload_uses_shared_taxonomy() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    sources = [
+        {
+            "id": "feature-a",
+            "title": "A features",
+            "snippet": (
+                "A provides autocomplete, agentic multi-file edits, VS Code plugin "
+                "support, terminal tool use, and repository context."
+            ),
+            "confidence": 0.9,
+        }
+    ]
+
+    feature = service._deterministic_structured_knowledge_payload(
+        competitor="A",
+        dimension="feature",
+        dimension_sources=sources,
+    )
+
+    node_names = [node["name"] for node in feature["feature_tree"]["nodes"]]
+    assert node_names[:5] == [
+        "Code completion",
+        "Agentic coding",
+        "IDE integration",
+        "Tool and terminal use",
+        "Repository context",
+    ]
+    assert all(node["description"] for node in feature["feature_tree"]["nodes"])
+    assert feature["feature_tree"]["nodes"][0]["claims"][0]["source_ids"] == ["feature-a"]
+
+
+def test_structured_feature_payload_appends_taxonomy_nodes_from_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["feature"]),
+        raw_sources=[
+            RawSource(
+                id="feature-a",
+                competitor="A",
+                dimension="feature",
+                source_type="webpage_verified",
+                title="A features",
+                url="https://a.example/features",
+                snippet=(
+                    "A supports autocomplete, pull request review, security scanning, "
+                    "and enterprise admin policies."
+                ),
+                content_hash="feature-a-hash",
+                confidence=0.9,
+            )
+        ],
+    )
+
+    service._merge_structured_knowledge_payload(
+        detail,
+        "A",
+        "feature",
+        {
+            "feature_tree": {
+                "nodes": [
+                    {
+                        "name": "Generic feature",
+                        "description": "A has feature evidence.",
+                        "claims": [
+                            {
+                                "claim": "A has feature evidence.",
+                                "source_ids": ["feature-a"],
+                                "confidence": 0.9,
+                            }
+                        ],
+                        "children": [],
+                    }
+                ],
+                "summary_claims": [],
+            }
+        },
+    )
+
+    node_names = [
+        node.name for node in detail.competitor_knowledge["A"].feature_tree.nodes
+    ]
+    assert "Generic feature" in node_names
+    assert "Code completion" in node_names
+    assert "Code review and security" in node_names
+    assert "Enterprise administration" in node_names
+
+
 def test_structured_pricing_payload_enriches_unknown_fields_from_sources() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

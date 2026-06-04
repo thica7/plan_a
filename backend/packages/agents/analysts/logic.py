@@ -824,13 +824,15 @@ class AnalystAgentMixin:
         return {
             "feature_tree": {
                 "nodes": [
-                    {
-                        "name": f"{dimension} evidence",
-                        "description": claim["claim"],
-                        "claims": [claim],
-                        "children": [],
-                    }
-                    for claim in claims
+                    node.model_dump(mode="json")
+                    for node in self._feature_nodes_from_text(
+                        " ".join(str(claim.get("claim") or "") for claim in claims),
+                        [
+                            KnowledgeClaim.model_validate(claim)
+                            for claim in claims
+                            if claim.get("source_ids")
+                        ],
+                    )
                 ],
                 "summary_claims": claims,
             }
@@ -1163,10 +1165,9 @@ class AnalystAgentMixin:
                 ]
         else:
             knowledge.feature_tree.summary_claims = claims
-            knowledge.feature_tree.nodes = [
-                FeatureNode(name=dimension, description=claim.claim, claims=[claim])
-                for claim in claims
-            ]
+            knowledge.feature_tree.nodes = self._feature_nodes_from_text(
+                " ".join(claim.claim for claim in claims), claims
+            )
         source_ids = [
             source.id
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
@@ -1225,6 +1226,9 @@ class AnalystAgentMixin:
             if isinstance(section, dict):
                 try:
                     knowledge.feature_tree = FeatureTree.model_validate(section)
+                    self._enrich_feature_tree_from_sources(
+                        detail, competitor, dimension, knowledge.feature_tree
+                    )
                 except Exception:
                     knowledge.feature_tree.nodes = []
                     knowledge.feature_tree.summary_claims = []
@@ -1582,6 +1586,144 @@ class AnalystAgentMixin:
                 seen_keys.add(key)
             if len(pricing_model.tiers) >= 6:
                 break
+
+    def _feature_taxonomy(self) -> list[tuple[str, str, list[str]]]:
+        return [
+            (
+                "Code completion",
+                "Inline suggestions, autocomplete, and completion assistance.",
+                [r"\bautocomplete\b", r"\bcompletion", r"inline suggestion", r"\bsuggest"],
+            ),
+            (
+                "Agentic coding",
+                "Agent-driven multi-step coding, editing, and refactoring workflows.",
+                [r"\bagentic\b", r"\bagent\b", r"\bcascade\b", r"multi-?file", r"refactor"],
+            ),
+            (
+                "Chat and Q&A",
+                "Conversational coding assistance and repository question answering.",
+                [r"\bchat\b", r"\bask\b", r"question", r"assistant", r"conversation"],
+            ),
+            (
+                "IDE integration",
+                "Editor, IDE, extension, and plugin integration.",
+                [
+                    r"\bide\b",
+                    r"\beditor\b",
+                    r"vs\s*code",
+                    r"\bvscode\b",
+                    r"jetbrains",
+                    r"plugin",
+                    r"extension",
+                ],
+            ),
+            (
+                "Code review and security",
+                "Pull request review, vulnerability scanning, and secret/security support.",
+                [
+                    r"pull request",
+                    r"\bpr\b",
+                    r"review",
+                    r"vulnerab",
+                    r"secret",
+                    r"security",
+                    r"scan",
+                ],
+            ),
+            (
+                "Tool and terminal use",
+                "Tool calling, terminal commands, MCP, and external workflow actions.",
+                [
+                    r"terminal",
+                    r"command",
+                    r"tool use",
+                    r"\bmcp\b",
+                    r"model context protocol",
+                    r"\bshell\b",
+                ],
+            ),
+            (
+                "Repository context",
+                "Codebase, repository, directory, and project context understanding.",
+                [r"codebase", r"repository", r"\brepo\b", r"context", r"directory", r"index"],
+            ),
+            (
+                "Enterprise administration",
+                "Team, organization, governance, policy, SSO, and admin controls.",
+                [
+                    r"enterprise",
+                    r"organization",
+                    r"\bteam\b",
+                    r"admin",
+                    r"policy",
+                    r"\bsso\b",
+                    r"governance",
+                ],
+            ),
+        ]
+
+    def _feature_nodes_from_text(
+        self, text: str, claims: list[KnowledgeClaim]
+    ) -> list[FeatureNode]:
+        nodes: list[FeatureNode] = []
+        for name, description, patterns in self._feature_taxonomy():
+            if not self._any_pattern_matches(text, patterns):
+                continue
+            related_claims = [
+                claim
+                for claim in claims
+                if self._any_pattern_matches(claim.claim, patterns)
+            ]
+            nodes.append(
+                FeatureNode(
+                    name=name,
+                    description=description,
+                    claims=related_claims or claims,
+                    children=[],
+                )
+            )
+            if len(nodes) >= 6:
+                break
+        if nodes:
+            return nodes
+        return [
+            FeatureNode(
+                name="Feature evidence",
+                description=claim.claim,
+                claims=[claim],
+                children=[],
+            )
+            for claim in claims
+        ]
+
+    def _enrich_feature_tree_from_sources(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        feature_tree: FeatureTree,
+    ) -> None:
+        evidence_text = " ".join(
+            " ".join((source.title, source.snippet))
+            for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
+        )
+        if not evidence_text.strip():
+            return
+        existing_claims = [
+            *feature_tree.summary_claims,
+            *[claim for node in feature_tree.nodes for claim in node.claims],
+        ]
+        extracted_nodes = self._feature_nodes_from_text(evidence_text, existing_claims)
+        seen_names = {node.name.casefold() for node in feature_tree.nodes}
+        for node in extracted_nodes:
+            if node.name.casefold() not in seen_names:
+                feature_tree.nodes.append(node)
+                seen_names.add(node.name.casefold())
+            if len(feature_tree.nodes) >= 8:
+                break
+
+    def _any_pattern_matches(self, text: str, patterns: list[str]) -> bool:
+        return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
 
     def _enrich_persona_model_from_sources(
         self,
