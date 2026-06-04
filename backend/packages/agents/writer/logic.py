@@ -587,6 +587,7 @@ class WriterAgentMixin:
                 round(knowledge.confidence, 3) if knowledge is not None else None
             ),
             "pricing": self._writer_pricing_digest(knowledge),
+            "feature_tree": self._writer_feature_tree_digest(knowledge),
             "feature_claims": self._writer_feature_claim_digest(knowledge),
             "persona_claims": self._writer_persona_claim_digest(knowledge),
         }
@@ -614,6 +615,21 @@ class WriterAgentMixin:
         for node in knowledge.feature_tree.nodes[:4]:
             claims.extend(node.claims[:2])
         return self._writer_claim_digest(claims, limit=8)
+
+    def _writer_feature_tree_digest(self, knowledge: object | None) -> list[dict[str, object]]:
+        if knowledge is None or not hasattr(knowledge, "feature_tree"):
+            return []
+        nodes = list(knowledge.feature_tree.nodes)
+        return [
+            {
+                "name": self._trim_sentence(node.name, 80),
+                "description": self._trim_sentence(node.description, 160),
+                "source_ids": self._feature_node_source_ids(node)[:4],
+                "claim_count": len(node.claims),
+                "child_count": len(node.children),
+            }
+            for node in nodes[:8]
+        ]
 
     def _writer_persona_claim_digest(self, knowledge: object | None) -> list[dict[str, object]]:
         if knowledge is None or not hasattr(knowledge, "user_personas"):
@@ -644,19 +660,40 @@ class WriterAgentMixin:
         return {
             "winner_by_dimension": detail.comparison_matrix.winner_by_dimension,
             "summary": [
-                self._trim_sentence(item, 180) for item in detail.comparison_matrix.summary[:6]
+                self._writer_matrix_summary_item(item)
+                for item in detail.comparison_matrix.summary[:6]
             ],
             "cells": [
                 {
                     "competitor": cell.competitor,
                     "dimension": cell.dimension,
-                    "value": self._trim_sentence(cell.value, 180),
+                    "value": self._writer_matrix_cell_value(cell),
                     "source_ids": cell.source_ids[:4],
                     "confidence": round(cell.confidence, 3),
                 }
                 for cell in detail.comparison_matrix.cells[:32]
             ],
         }
+
+    def _writer_matrix_summary_item(self, item: str) -> str:
+        limit = 1200 if item.startswith("[feature-standardization:") else 180
+        return self._trim_sentence(item, limit)
+
+    def _writer_matrix_cell_value(self, cell: object) -> str:
+        dimension = str(getattr(cell, "dimension", "")).casefold()
+        limit = 1200 if "feature" in dimension else 180
+        return self._trim_sentence(str(getattr(cell, "value", "")), limit)
+
+    def _feature_node_source_ids(self, node: FeatureNode) -> list[str]:
+        source_ids: list[str] = []
+        seen: set[str] = set()
+        claims = [*node.claims, *self._feature_child_claims(node)]
+        for claim in claims:
+            for source_id in claim.source_ids:
+                if source_id not in seen:
+                    seen.add(source_id)
+                    source_ids.append(source_id)
+        return source_ids
 
     def _writer_issue_digest(self, issue: QCIssue) -> dict[str, object]:
         return {

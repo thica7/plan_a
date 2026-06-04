@@ -10,6 +10,7 @@ from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     ComparisonCell,
     ComparisonMatrix,
+    FeatureNode,
     FeatureTree,
     PricingModel,
     RawSource,
@@ -18,6 +19,18 @@ from packages.schema.models import (
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
+
+
+FEATURE_TAXONOMY_ORDER = (
+    "code completion",
+    "agentic coding",
+    "chat and q&a",
+    "ide integration",
+    "code review and security",
+    "tool and terminal use",
+    "repository context",
+    "enterprise administration",
+)
 
 
 class ComparatorAgentMixin:
@@ -204,15 +217,15 @@ class ComparatorAgentMixin:
                 "feature_name={name}; description={description}; "
                 "claim_count={claim_count}; child_count={child_count}"
             ).format(
-                name=self._compact_matrix_text(node.name or "unknown", 36),
-                description=self._compact_matrix_text(node.description or "unknown", 72),
+                name=self._compact_matrix_text(node.name or "unknown", 44),
+                description=self._compact_matrix_text(node.description or "unknown", 120),
                 claim_count=len(node.claims),
                 child_count=len(node.children),
             )
-            for node in feature_tree.nodes[:4]
+            for node in self._prioritized_feature_nodes(feature_tree)[:6]
         ]
         summary_parts = [
-            self._compact_matrix_text(claim.claim, 96)
+            self._compact_matrix_text(claim.claim, 140)
             for claim in feature_tree.summary_claims[:2]
         ]
         return self._join_structured_parts(feature_parts, "summary", summary_parts)
@@ -337,7 +350,7 @@ class ComparatorAgentMixin:
                     len(node.claims),
                     len(node.children),
                 )
-                for node in nodes[:4]
+                for node in self._prioritized_feature_nodes(feature_tree)[:6]
             ]
             profiles.append(f"{competitor} features={'|'.join(feature_parts)}")
         missing_note = f"; missing={','.join(missing)}" if missing else ""
@@ -347,6 +360,28 @@ class ComparatorAgentMixin:
             f"{'; '.join(profiles)}{missing_note}"
         )
 
+    def _prioritized_feature_nodes(self, feature_tree: FeatureTree) -> list[FeatureNode]:
+        return [
+            node
+            for _, _, node in sorted(
+                (
+                    self._feature_taxonomy_rank(node.name),
+                    index,
+                    node,
+                )
+                for index, node in enumerate(feature_tree.nodes)
+            )
+        ]
+
+    def _feature_taxonomy_rank(self, name: str) -> int:
+        normalized = (name or "").casefold()
+        if normalized == "autocomplete":
+            normalized = "code completion"
+        try:
+            return FEATURE_TAXONOMY_ORDER.index(normalized)
+        except ValueError:
+            return len(FEATURE_TAXONOMY_ORDER)
+
     def _compact_feature_node(
         self,
         name: str,
@@ -354,8 +389,8 @@ class ComparatorAgentMixin:
         claim_count: int,
         child_count: int,
     ) -> str:
-        compact_name = self._compact_matrix_text(name or "unknown", 32)
-        compact_description = self._compact_matrix_text(description or "unknown", 44)
+        compact_name = self._compact_matrix_text(name or "unknown", 36)
+        compact_description = self._compact_matrix_text(description or "unknown", 72)
         return (
             f"{compact_name}({compact_description};claims={claim_count};"
             f"children={child_count})"

@@ -159,11 +159,15 @@ class ReflectorAgentMixin:
                     "dimension": cell.dimension,
                     "source_ids": cell.source_ids[:4],
                     "confidence": round(cell.confidence, 3),
-                    "value": cell.value[:220],
+                    "value": self._reflector_matrix_cell_value(cell.dimension, cell.value),
                 }
                 for cell in detail.comparison_matrix.cells[:40]
             ],
         }
+
+    def _reflector_matrix_cell_value(self, dimension: str, value: str) -> str:
+        limit = 1200 if "feature" in dimension.casefold() else 220
+        return value[:limit]
 
     def _infer_competitor_from_text(self, detail: RunDetail, text: str) -> str | None:
         normalized = text.casefold()

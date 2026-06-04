@@ -1583,7 +1583,8 @@ def test_comparison_matrix_uses_kb_and_sources() -> None:
         {"matrix_summary": ["A is cheaper."], "winner_by_dimension": {"pricing": "A"}},
     )
 
-    assert matrix.cells[0].value == "A has a $10 plan."
+    assert "tier_name=Extracted pricing tier 1" in matrix.cells[0].value
+    assert "price=$10" in matrix.cells[0].value
     assert matrix.cells[0].source_ids == ["pricing-1"]
     assert matrix.winner_by_dimension["pricing"] == "A"
 
@@ -2152,6 +2153,129 @@ def test_comparison_matrix_adds_feature_standardization_summary() -> None:
         in feature_cell.value
     )
     assert "claim_count=1; child_count=1" in feature_cell.value
+
+
+def test_comparison_matrix_prioritizes_taxonomy_feature_nodes() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["feature"]),
+        competitor_knowledge={
+            "A": CompetitorKnowledge(
+                competitor="A",
+                feature_tree={
+                    "nodes": [
+                        {
+                            "name": "Generic feature",
+                            "description": "A model-generated generic feature node.",
+                            "claims": [],
+                            "children": [],
+                        },
+                        {
+                            "name": "Repository context",
+                            "description": "Codebase and repository understanding.",
+                            "claims": [],
+                            "children": [],
+                        },
+                        {
+                            "name": "Code completion",
+                            "description": "Inline suggestions and completion assistance.",
+                            "claims": [],
+                            "children": [],
+                        },
+                    ]
+                },
+            )
+        },
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+    feature_cell = matrix.cells[0]
+
+    assert feature_cell.value.startswith("feature_name=Code completion")
+    assert feature_cell.value.index("Repository context") < feature_cell.value.index(
+        "Generic feature"
+    )
+
+
+def test_writer_and_reflector_digests_preserve_feature_matrix_cells() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    long_feature_value = " | ".join(
+        [
+            (
+                f"feature_name={name}; description={description}; "
+                "claim_count=1; child_count=0"
+            )
+            for name, description in [
+                ("Code completion", "Inline suggestions and completion assistance."),
+                ("Agentic coding", "Multi-file edits and refactoring workflows."),
+                ("Chat and Q&A", "Conversational repository question answering."),
+                ("IDE integration", "Editor extension and plugin integration."),
+                ("Code review and security", "Pull request and security scanning."),
+                ("Tool and terminal use", "Terminal commands and external tool actions."),
+                (
+                    "Enterprise administration",
+                    "Team, organization, policy, and SSO administration.",
+                ),
+            ]
+        ]
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["feature"]),
+        comparison_matrix=ComparisonMatrix(
+            competitors=["A"],
+            dimensions=["feature"],
+            cells=[
+                ComparisonCell(
+                    competitor="A",
+                    dimension="feature",
+                    value=long_feature_value,
+                    source_ids=["feature-a"],
+                    confidence=0.9,
+                )
+            ],
+            winner_by_dimension={"feature": "A"},
+            summary=[f"[feature-standardization:feature] {long_feature_value}"],
+        ),
+    )
+
+    writer_digest = service._writer_matrix_digest(detail)
+    reflector_digest = service._reflector_matrix_digest(detail)
+
+    assert "Enterprise administration" in writer_digest["cells"][0]["value"]
+    assert "Enterprise administration" in reflector_digest["cells"][0]["value"]
+    assert "Enterprise administration" in writer_digest["summary"][0]
 
 
 @pytest.mark.asyncio
