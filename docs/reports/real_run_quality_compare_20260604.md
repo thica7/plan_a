@@ -1,6 +1,6 @@
 # Real Run Quality Comparison
 
-- Current run: run-b8e528c7c39b32ef11a210da6da2d0eb
+- Current run: run-4635d9d667b4aecc0f81da844c3bb8c5
 - Baseline run: 411d3a19-7049-4a7e-aa9f-c5b63e74a69e
 - Current status: completed_with_blockers
 - Current node: none
@@ -20,11 +20,11 @@
 
 | Field | Delta |
 |---|---:|
-| Report chars | +13889 |
+| Report chars | +11200 |
 | Raw sources | -11 |
 | Claims | 0 |
-| QA findings | -8 |
-| Trace spans | -127 |
+| QA findings | -10 |
+| Trace spans | -74 |
 | Fallback report regressed | no |
 
 ## Current Evidence
@@ -34,12 +34,12 @@
 | Raw sources | 16 |
 | Enterprise evidence | 16 |
 | Claims | 0 |
-| Enterprise claims | 16 |
-| QA findings | 10 |
-| Agent messages | 60 |
-| Tool calls | 171 |
-| Trace spans | 237 |
-| Report chars | 22847 |
+| Enterprise claims | 45 |
+| QA findings | 8 |
+| Agent messages | 63 |
+| Tool calls | 209 |
+| Trace spans | 290 |
+| Report chars | 20158 |
 
 ## Quality Metrics
 
@@ -65,16 +65,14 @@
 
 | ID | Severity | Agent | Dimension | Competitor | Problem |
 |---|---|---|---|---|---|
-| unverified-feature-cursor-feature-ce6d2b54 | warn | collector | feature | Cursor | Source feature-ce6d2b54 for feature is not fetched webpage evidence and should be recollected or verified. |
-| reflector-coverage-1-cursor-feature-dimension-data-is-incomplete-sour | warn | collector | feature | Cursor | Cursor feature dimension data is incomplete, sourced from a non-official Medium article with only partial workflow functionality details, no official verified full feature set coverage |
-| reflector-coverage-2-windsurf-persona-source-points-to-a-404-non-exis | warn | collector | persona | Windsurf | Windsurf persona source points to a 404 non-existent page, no valid verified target user/use case persona insights are captured |
-| reflector-coverage-3-claude-code-pricing-data-is-incomplete-no-explic | warn | collector | pricing | Claude Code | Claude Code pricing data is incomplete, no explicit per-user subscription tier pricing values are provided, only vague reference to token-based billing and external pricing page |
-| reflector-coverage-4-github-copilot-existing-persona-source-only-incl | warn | collector | persona | GitHub Copilot | GitHub Copilot existing persona source only includes partial usage policy snippets, no clear defined target user segments or core use case persona details |
-| reflector-confidence-1-cursor-feature-entry-with-0.68-confidence-far-be | warn | collector | feature | Cursor | Cursor feature entry with 0.68 confidence, far below the 0.9+ baseline of all other official webpage verified sources |
-| reflector-confidence-2-four-synthetic-un-sourced-persona-interview-reco | warn | collector | persona |  | Four synthetic un-sourced persona interview records for all 4 competitors with 0.62 confidence, no real verified user data and no valid covered competitors listed |
-| reflector-cross-competitor-1-no-aligned-side-by-side-comparative-pricing-mapp | warn | comparator | pricing |  | No aligned side-by-side comparative pricing mapping across all 4 competitors for equivalent individual, team and enterprise subscription tiers |
-| reflector-cross-competitor-2-no-cross-competitor-feature-benchmarking-that-ma | warn | comparator | feature |  | No cross-competitor feature benchmarking that maps overlapping capabilities and exclusive unique selling points across the 4 AI coding tools |
-| reflector-cross-competitor-3-no-cross-competitor-persona-segmentation-analysi | warn | comparator | persona |  | No cross-competitor persona segmentation analysis that contrasts target user groups, core use cases and unique pain points across all 4 products |
+| unverified-feature-cursor-feature-e9c48173 | warn | collector | feature | Cursor | Source feature-e9c48173 for feature is not fetched webpage evidence and should be recollected or verified. |
+| reflector-coverage-1-windsurf-feature-dimension-source-snippet-contai | warn | collector | feature | Windsurf | Windsurf feature dimension source snippet contains no concrete feature details, only page navigation and language selector content with no valid feature coverage |
+| reflector-coverage-2-windsurf-pricing-dimension-only-confirms-the-fre | warn | collector | pricing | Windsurf | Windsurf pricing dimension only confirms the free individual tier, lacks complete pricing tier breakdown including paid individual, team, enterprise pricing and corresponding usage entitlements |
+| reflector-coverage-3-github-copilot-persona-source-snippet-only-cover | warn | collector | persona | GitHub Copilot | GitHub Copilot persona source snippet only covers privacy policy content, no clear target user segmentation, core user persona or use case details |
+| reflector-coverage-4-claude-code-persona-source-snippet-only-lists-ge | warn | collector | persona | Claude Code | Claude Code persona source snippet only lists general industry verticals, no specific coding-focused user persona segmentation or target use case details |
+| reflector-confidence-1-four-synthetic-interview-persona-records-for-git | warn | collector | persona | GitHub Copilot | Four synthetic interview persona records for GitHub Copilot, Cursor, Claude Code, Windsurf have 0.62 confidence, empty covered_competitors fields, and no actionable verified persona data |
+| reflector-confidence-2-cursor-feature-third-party-medium-source-has-0.6 | warn | collector | feature | Cursor | Cursor feature third-party Medium source has 0.68 confidence, only describes generic high-level value with no specific distinct feature details |
+| reflector-cross-competitor-1-no-cross-competitor-comparative-data-points-exis | warn | comparator | pricing |  | No cross-competitor comparative data points exist across pricing, feature, persona dimensions, all existing sources only cover one individual competitor with no side-by-side benchmarking or relative comparison data |
 
 ## Last Agent Messages
 
@@ -86,7 +84,7 @@
 | qa | redo_router | analyst_qa_result | queued |  |
 | comparator | reflector | comparison_matrix_ready | consumed |  |
 | reflector | writer | reflection_ready | consumed |  |
-| writer | qa | report_ready | consumed | deterministic fallback after writer error |
+| writer | qa | report_ready | consumed | writer_mode=real LLM call |
 | qa | redo_router | final_qa_result | queued |  |
 
 ## Gate Reasons
