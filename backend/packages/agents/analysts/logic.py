@@ -780,14 +780,15 @@ class AnalystAgentMixin:
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
             claim_text = " ".join(str(claim.get("claim") or "") for claim in claims)
+            limits = self._extract_limit_hints(claim_text)
             return {
                 "pricing_model": {
                     "tiers": [
                         {
                             "name": "Extracted pricing evidence",
                             "price": self._extract_price_hint(claim_text),
-                            "billing_cycle": "unknown",
-                            "limits": [],
+                            "billing_cycle": self._extract_billing_cycle_hint(claim_text),
+                            "limits": limits,
                             "claims": claims,
                         }
                     ]
@@ -1135,13 +1136,16 @@ class AnalystAgentMixin:
         claims = self._claims_from_findings(detail, competitor, dimension, findings)
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
+            claim_text = " ".join(claim.claim for claim in claims)
             knowledge.pricing_model.notes = claims
             if claims:
                 knowledge.pricing_model.tiers = [
                     PricingTier(
                         name="Extracted pricing evidence",
                         claims=claims,
-                        price=self._extract_price_hint(" ".join(claim.claim for claim in claims)),
+                        price=self._extract_price_hint(claim_text),
+                        billing_cycle=self._extract_billing_cycle_hint(claim_text),
+                        limits=self._extract_limit_hints(claim_text),
                     )
                 ]
         elif "persona" in dimension_key or "user" in dimension_key:
@@ -1196,6 +1200,9 @@ class AnalystAgentMixin:
             if isinstance(section, dict):
                 try:
                     knowledge.pricing_model = PricingModel.model_validate(section)
+                    self._enrich_pricing_model_from_sources(
+                        detail, competitor, dimension, knowledge.pricing_model
+                    )
                 except Exception:
                     knowledge.pricing_model.tiers = []
                     knowledge.pricing_model.notes = []
@@ -1365,9 +1372,75 @@ class AnalystAgentMixin:
 
     def _extract_price_hint(self, text: str) -> str:
         match = re.search(
-            r"(?:\$|USD\s*)\s?\d+(?:[.,]\d+)?(?:\s?/\s?\w+)?", text, flags=re.IGNORECASE
+            (
+                r"(?:\$|USD\s*)\s?\d+(?:[.,]\d+)?"
+                r"(?:\s*(?:/|per)\s*(?:month|mo|year|yr|seat|user|developer|credit|"
+                r"request|token|million tokens|usage))?"
+            ),
+            text,
+            flags=re.IGNORECASE,
         )
-        return match.group(0) if match else "unknown"
+        if match:
+            return " ".join(match.group(0).split())
+        if re.search(r"\bfree\b|no credit card required", text, flags=re.IGNORECASE):
+            return "$0"
+        return "unknown"
+
+    def _extract_billing_cycle_hint(self, text: str) -> str:
+        normalized = text.casefold()
+        if re.search(r"\b(per month|/month|monthly|/mo|per mo)\b", normalized):
+            return "monthly"
+        if re.search(r"\b(per year|/year|annual|annually|yearly|/yr|per yr)\b", normalized):
+            return "annual"
+        if re.search(r"\b(usage|credit|request|token|metered|consumption)\b", normalized):
+            return "usage"
+        return "unknown"
+
+    def _extract_limit_hints(self, text: str) -> list[str]:
+        patterns = [
+            r"\b\d[\d,]*(?:\.\d+)?\s*(?:k|m|million|billion)?\s+"
+            r"(?:completions|requests|credits|tokens|messages|agent requests|premium requests)"
+            r"(?:\s+per\s+\w+)?\b",
+            r"\b(?:unlimited|limited)\s+"
+            r"(?:completions|requests|credits|tokens|messages|usage|agent requests)\b",
+            r"\b\d[\d,]*(?:\.\d+)?\s*(?:x|times)\s+(?:usage|capacity|limit)\b",
+        ]
+        hints: list[str] = []
+        seen: set[str] = set()
+        for pattern in patterns:
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                hint = " ".join(match.group(0).split())
+                key = hint.casefold()
+                if key not in seen:
+                    seen.add(key)
+                    hints.append(hint)
+                if len(hints) >= 3:
+                    return hints
+        return hints
+
+    def _enrich_pricing_model_from_sources(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        pricing_model: PricingModel,
+    ) -> None:
+        evidence_text = " ".join(
+            " ".join((source.title, source.snippet))
+            for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
+        )
+        if not evidence_text.strip():
+            return
+        price = self._extract_price_hint(evidence_text)
+        billing_cycle = self._extract_billing_cycle_hint(evidence_text)
+        limits = self._extract_limit_hints(evidence_text)
+        for tier in pricing_model.tiers:
+            if tier.price == "unknown" and price != "unknown":
+                tier.price = price
+            if tier.billing_cycle == "unknown" and billing_cycle != "unknown":
+                tier.billing_cycle = billing_cycle
+            if not tier.limits and limits:
+                tier.limits = limits
 
     def _normalize_competitor_findings(
         self, detail: RunDetail, payload: dict

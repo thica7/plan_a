@@ -4367,7 +4367,7 @@ def test_deterministic_structured_knowledge_payload_matches_schema_shape() -> No
         {
             "id": "pricing-a",
             "title": "A pricing",
-            "snippet": "A publishes a $10 per month plan.",
+            "snippet": "A publishes a $10 per month plan with 2,000 completions per month.",
             "confidence": 0.87,
         }
     ]
@@ -4384,9 +4384,78 @@ def test_deterministic_structured_knowledge_payload_matches_schema_shape() -> No
     )
 
     assert pricing["pricing_model"]["tiers"][0]["claims"][0]["source_ids"] == ["pricing-a"]
-    assert pricing["pricing_model"]["tiers"][0]["price"] == "$10"
+    assert pricing["pricing_model"]["tiers"][0]["price"] == "$10 per month"
+    assert pricing["pricing_model"]["tiers"][0]["billing_cycle"] == "monthly"
+    assert pricing["pricing_model"]["tiers"][0]["limits"] == ["2,000 completions per month"]
     assert persona["user_personas"]["segments"][0]["claims"][0]["source_ids"] == ["pricing-a"]
     assert persona["user_personas"]["segments"][0]["use_cases"]
+
+
+def test_structured_pricing_payload_enriches_unknown_fields_from_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="pricing-a",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://a.example/pricing",
+                snippet="A Pro costs $20/month and includes 500 premium requests.",
+                content_hash="pricing-a-hash",
+                confidence=0.9,
+            )
+        ],
+    )
+
+    service._merge_structured_knowledge_payload(
+        detail,
+        "A",
+        "pricing",
+        {
+            "pricing_model": {
+                "tiers": [
+                    {
+                        "name": "Pro",
+                        "price": "unknown",
+                        "billing_cycle": "unknown",
+                        "limits": [],
+                        "claims": [
+                            {
+                                "claim": "A publishes Pro pricing.",
+                                "source_ids": ["pricing-a"],
+                                "confidence": 0.9,
+                            }
+                        ],
+                    }
+                ],
+                "notes": [],
+            }
+        },
+    )
+
+    tier = detail.competitor_knowledge["A"].pricing_model.tiers[0]
+    assert tier.price == "$20/month"
+    assert tier.billing_cycle == "monthly"
+    assert tier.limits == ["500 premium requests"]
 
 
 @pytest.mark.asyncio
