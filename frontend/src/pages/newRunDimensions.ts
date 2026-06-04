@@ -55,6 +55,10 @@ export function scenarioCompetitorPreset(pack: ScenarioPack | null) {
   return pack?.seed_competitors.map((item) => item.trim()).filter(Boolean).join(", ") ?? "";
 }
 
+export function starterPresetDimensions(preset: StarterPreset) {
+  return mergeDimensions(preset.dimensions, [], []);
+}
+
 export function mergeDimensions(current: string[], required: string[], optional: string[]) {
   const merged: string[] = [];
   const seen = new Set<string>();

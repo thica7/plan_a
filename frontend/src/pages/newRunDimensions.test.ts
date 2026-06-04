@@ -6,6 +6,7 @@ import {
   lockedDimensionsForScenario,
   mergeDimensions,
   scenarioCompetitorPreset,
+  starterPresetDimensions,
   starterPresets,
 } from "./newRunDimensions";
 
@@ -73,8 +74,23 @@ describe("New Run dimension helpers", () => {
     for (const preset of starterPresets) {
       expect(preset.competitors.length).toBeGreaterThanOrEqual(3);
       expect(preset.dimensions.length).toBeGreaterThanOrEqual(4);
-      expect(mergeDimensions(preset.dimensions, [], [])).toEqual(preset.dimensions);
+      expect(starterPresetDimensions(preset)).toEqual(preset.dimensions);
     }
+  });
+
+  it("resets preset dimensions instead of carrying stale manual selections", () => {
+    const preset = starterPresets[0];
+    const staleSelection = ["market", "benchmark", "integrations"];
+
+    expect(starterPresetDimensions(preset)).not.toEqual(
+      mergeDimensions(preset.dimensions, [], staleSelection),
+    );
+    expect(starterPresetDimensions(preset)).toEqual([
+      "pricing",
+      "feature",
+      "persona",
+      "security",
+    ]);
   });
 });
 

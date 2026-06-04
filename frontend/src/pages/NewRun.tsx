@@ -15,6 +15,7 @@ import {
   lockedDimensionsForScenario,
   mergeDimensions,
   scenarioCompetitorPreset,
+  starterPresetDimensions,
   starterPresets,
   type StarterPreset,
 } from "./newRunDimensions";
@@ -121,7 +122,7 @@ export function NewRun() {
     setScenarioId(preset.scenarioId);
     setCompetitorMode("manual");
     setCompetitors(preset.competitors.join(", "));
-    setSelected((current) => mergeDimensions(preset.dimensions, [], current));
+    setSelected(starterPresetDimensions(preset));
   }
 
   async function handleSubmit(event: FormEvent) {
