@@ -218,9 +218,12 @@ def test_parse_args_disables_hitl_for_automated_comparison_by_default() -> None:
 
     default_args = script.parse_args([])
     hitl_args = script.parse_args(["--hitl-enabled"])
+    warn_redo_args = script.parse_args(["--auto-redo-warn-enabled"])
 
     assert default_args.hitl_enabled is False
+    assert default_args.auto_redo_warn_enabled is False
     assert hitl_args.hitl_enabled is True
+    assert warn_redo_args.auto_redo_warn_enabled is True
 
 
 def test_pipeline_completion_gate_marks_incomplete_run_as_failed() -> None:

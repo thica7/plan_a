@@ -104,6 +104,7 @@ async def current_run_summary(
     dimensions: list[str],
     execution_mode: str,
     hitl_enabled: bool,
+    auto_redo_warn_enabled: bool,
     timeout_seconds: float,
 ) -> tuple[dict[str, object], RunDetail]:
     settings = get_settings()
@@ -126,6 +127,7 @@ async def current_run_summary(
                 dimensions=dimensions,
                 execution_mode=execution_mode,
                 hitl_enabled=hitl_enabled,
+                auto_redo_warn_enabled=auto_redo_warn_enabled,
                 idempotency_key=f"quality-compare-{uuid4().hex}",
             )
         )
@@ -199,6 +201,7 @@ async def compare_real_run_quality(args: argparse.Namespace) -> dict[str, object
         dimensions=args.dimensions,
         execution_mode=args.execution_mode,
         hitl_enabled=args.hitl_enabled,
+        auto_redo_warn_enabled=args.auto_redo_warn_enabled,
         timeout_seconds=args.timeout_seconds,
     )
     quality = apply_pipeline_completion_gate(
@@ -237,6 +240,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Allow HITL interrupts during automated comparison. By default the audit "
             "runs without HITL so it can reach a terminal report state."
+        ),
+    )
+    parser.add_argument(
+        "--auto-redo-warn-enabled",
+        action="store_true",
+        help=(
+            "Allow warning-only final QA findings to trigger scoped redo during the "
+            "comparison. Disabled by default so audits can reach a terminal report state."
         ),
     )
     parser.add_argument("--timeout-seconds", type=float, default=600.0)
