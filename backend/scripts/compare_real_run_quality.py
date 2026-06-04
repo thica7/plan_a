@@ -101,6 +101,7 @@ async def current_run_summary(
     competitors: list[str],
     dimensions: list[str],
     execution_mode: str,
+    hitl_enabled: bool,
 ) -> tuple[dict[str, object], RunDetail]:
     settings = get_settings()
     store = EnterpriseMemoryStore()
@@ -121,6 +122,7 @@ async def current_run_summary(
                 competitors=competitors,
                 dimensions=dimensions,
                 execution_mode=execution_mode,
+                hitl_enabled=hitl_enabled,
                 idempotency_key=f"quality-compare-{uuid4().hex}",
             )
         )
@@ -177,13 +179,17 @@ async def compare_real_run_quality(args: argparse.Namespace) -> dict[str, object
         competitors=args.competitors,
         dimensions=args.dimensions,
         execution_mode=args.execution_mode,
+        hitl_enabled=args.hitl_enabled,
     )
-    quality = compare_run_quality(current_detail, baseline=baseline_detail)
+    quality = apply_pipeline_completion_gate(
+        compare_run_quality(current_detail, baseline=baseline_detail).model_dump(mode="json"),
+        current_summary_payload,
+    )
     return {
         "old": old_summary_payload,
         "current": current_summary_payload,
         "delta": build_summary_delta(old_summary_payload, current_summary_payload),
-        "quality": quality.model_dump(mode="json"),
+        "quality": quality,
     }
 
 
@@ -202,6 +208,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--dimensions", nargs="+", default=["pricing", "feature", "persona"])
     parser.add_argument("--execution-mode", choices=["demo", "real"], default="real")
     parser.add_argument("--format", choices=["json", "markdown"], default="json")
+    parser.add_argument(
+        "--hitl-enabled",
+        action="store_true",
+        help=(
+            "Allow HITL interrupts during automated comparison. By default the audit "
+            "runs without HITL so it can reach a terminal report state."
+        ),
+    )
     parser.add_argument("--timeout-seconds", type=float, default=600.0)
     parser.add_argument("--output", type=Path, default=None)
     return parser.parse_args(argv)
@@ -249,6 +263,8 @@ def render_compare_markdown(payload: dict[str, object]) -> str:
         f"- Quality verdict: {_text(quality.get('verdict')) or 'unknown'}",
         f"- Regression gate: {_text(quality.get('regression_gate_status')) or 'unknown'}",
     ]
+    if quality.get("pipeline_incomplete") is True:
+        lines.append("- Pipeline incomplete: yes")
     if payload.get("comparison_error"):
         lines.append(f"- Comparison error: {_escape_table(_text(payload.get('comparison_error')))}")
     lines.extend(
@@ -426,6 +442,49 @@ def _numeric(value: object) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def apply_pipeline_completion_gate(
+    quality: dict[str, object],
+    current_summary_value: dict[str, object],
+) -> dict[str, object]:
+    reasons = _pipeline_completion_reasons(current_summary_value)
+    if not reasons:
+        quality["pipeline_incomplete"] = False
+        return quality
+
+    existing_reasons = _string_list(quality.get("regression_gate_reasons"))
+    existing_recommendations = _string_list(quality.get("recommendations"))
+    quality.update(
+        {
+            "verdict": "fail",
+            "regression_gate_status": "fail",
+            "regression_gate_passed": False,
+            "pipeline_incomplete": True,
+            "regression_gate_reasons": [*reasons, *existing_reasons],
+            "recommendations": [
+                (
+                    "Resolve pipeline completion before judging narrative quality: "
+                    "the automated comparison must finish with a non-empty report_md."
+                ),
+                *existing_recommendations,
+            ],
+        }
+    )
+    return quality
+
+
+def _pipeline_completion_reasons(current_summary_value: dict[str, object]) -> list[str]:
+    status = _text(current_summary_value.get("status")) or "unknown"
+    current_node = _text(current_summary_value.get("current_node")) or "none"
+    reasons: list[str] = []
+    if status != "completed":
+        reasons.append(
+            f"current run did not complete: status={status}, current_node={current_node}"
+        )
+    if _numeric(current_summary_value.get("report_chars")) <= 0:
+        reasons.append("current run did not produce report_md")
+    return reasons
 
 
 def build_timeout_payload(args: argparse.Namespace) -> dict[str, object]:

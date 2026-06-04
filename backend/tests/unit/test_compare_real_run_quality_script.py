@@ -201,6 +201,60 @@ def test_render_compare_markdown_summarizes_quality_gate() -> None:
     assert "Keep source snapshots attached" in markdown
 
 
+def test_parse_args_disables_hitl_for_automated_comparison_by_default() -> None:
+    script = _load_script()
+
+    default_args = script.parse_args([])
+    hitl_args = script.parse_args(["--hitl-enabled"])
+
+    assert default_args.hitl_enabled is False
+    assert hitl_args.hitl_enabled is True
+
+
+def test_pipeline_completion_gate_marks_incomplete_run_as_failed() -> None:
+    script = _load_script()
+
+    quality = script.apply_pipeline_completion_gate(
+        {
+            "verdict": "pass",
+            "regression_gate_status": "pass",
+            "regression_gate_passed": True,
+            "regression_gate_reasons": ["existing quality reason"],
+            "recommendations": ["existing recommendation"],
+        },
+        {
+            "status": "interrupted",
+            "current_node": "qa_hitl",
+            "report_chars": 0,
+        },
+    )
+    markdown = script.render_compare_markdown(
+        {
+            "old": {"run_id": "old-run"},
+            "current": {
+                "run_id": "current-run",
+                "status": "interrupted",
+                "current_node": "qa_hitl",
+                "execution_mode": "real",
+                "report_chars": 0,
+            },
+            "delta": {"baseline_available": False},
+            "quality": quality,
+        }
+    )
+
+    assert quality["verdict"] == "fail"
+    assert quality["regression_gate_status"] == "fail"
+    assert quality["regression_gate_passed"] is False
+    assert quality["pipeline_incomplete"] is True
+    assert (
+        "current run did not complete: status=interrupted, current_node=qa_hitl"
+        in quality["regression_gate_reasons"]
+    )
+    assert "current run did not produce report_md" in quality["regression_gate_reasons"]
+    assert "- Pipeline incomplete: yes" in markdown
+
+
 def test_timeout_payload_renders_failed_comparison_card(tmp_path: Path) -> None:
     script = _load_script()
     missing_db = tmp_path / "missing.db"
