@@ -151,6 +151,16 @@ def test_render_compare_markdown_summarizes_quality_gate() -> None:
                 "report_chars": 2400,
                 "agent_messages": 2,
                 "tool_call_messages": 4,
+                "qa_issue_diagnostics": [
+                    {
+                        "id": "schema-missing-pricing-a",
+                        "severity": "blocker",
+                        "target_agent": "analyst",
+                        "target_subagent": "pricing",
+                        "target_competitor": "A",
+                        "problem": "A has sources for pricing, but no structured claims.",
+                    }
+                ],
                 "last_agent_messages": [
                     {
                         "from_agent": "writer",
@@ -198,6 +208,8 @@ def test_render_compare_markdown_summarizes_quality_gate() -> None:
     assert "| Delta score | +16 |" in markdown
     assert "| Raw sources | +3 |" in markdown
     assert "| report_length_score | 1 | 0.4 | +0.6 | improved |" in markdown
+    assert "## QA Issue Diagnostics" in markdown
+    assert "schema-missing-pricing-a" in markdown
     assert "Keep source snapshots attached" in markdown
 
 

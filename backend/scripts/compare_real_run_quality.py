@@ -46,6 +46,7 @@ def summarize_run_detail_payload(detail: dict[str, Any]) -> dict[str, object]:
     sources = _list_value(detail.get("raw_sources"))
     agent_messages = _list_value(detail.get("agent_messages"))
     tool_call_messages = _list_value(detail.get("tool_call_messages"))
+    qa_findings = _list_value(detail.get("qa_findings"))
     report = str(detail.get("report_md") or "")
     return {
         "run_id": detail.get("id"),
@@ -56,7 +57,8 @@ def summarize_run_detail_payload(detail: dict[str, Any]) -> dict[str, object]:
         "report_chars": len(report),
         "raw_sources": len(sources),
         "claims": len(_list_value(detail.get("knowledge_claims"))),
-        "qa_findings": len(_list_value(detail.get("qa_findings"))),
+        "qa_findings": len(qa_findings),
+        "qa_issue_diagnostics": _qa_issue_diagnostics(qa_findings),
         "agent_messages": len(agent_messages),
         "tool_call_messages": len(tool_call_messages),
         "last_agent_messages": _agent_message_diagnostics(agent_messages),
@@ -356,6 +358,30 @@ def render_compare_markdown(payload: dict[str, object]) -> str:
         )
 
     last_messages = _list_of_dicts(current.get("last_agent_messages"))
+    qa_diagnostics = _list_of_dicts(current.get("qa_issue_diagnostics"))
+    if qa_diagnostics:
+        lines.extend(
+            [
+                "",
+                "## QA Issue Diagnostics",
+                "",
+                "| ID | Severity | Agent | Dimension | Competitor | Problem |",
+                "|---|---|---|---|---|---|",
+            ]
+        )
+        for issue in qa_diagnostics:
+            lines.append(
+                "| {id} | {severity} | {target_agent} | {dimension} | "
+                "{competitor} | {problem} |".format(
+                    id=_escape_table(_text(issue.get("id"))),
+                    severity=_escape_table(_text(issue.get("severity"))),
+                    target_agent=_escape_table(_text(issue.get("target_agent"))),
+                    dimension=_escape_table(_text(issue.get("target_subagent"))),
+                    competitor=_escape_table(_text(issue.get("target_competitor"))),
+                    problem=_escape_table(_text(issue.get("problem")))[:240],
+                )
+            )
+
     if last_messages:
         lines.extend(
             [
@@ -438,6 +464,24 @@ def _agent_message_diagnostics(messages: list[Any]) -> list[dict[str, object]]:
                 "message_type": message.get("message_type"),
                 "status": message.get("status"),
                 "detail": detail,
+            }
+        )
+    return diagnostics
+
+
+def _qa_issue_diagnostics(issues: list[Any]) -> list[dict[str, object]]:
+    diagnostics: list[dict[str, object]] = []
+    for issue in issues[:12]:
+        if not isinstance(issue, dict):
+            continue
+        diagnostics.append(
+            {
+                "id": issue.get("id"),
+                "severity": issue.get("severity"),
+                "target_agent": issue.get("target_agent"),
+                "target_subagent": issue.get("target_subagent"),
+                "target_competitor": issue.get("target_competitor"),
+                "problem": issue.get("problem"),
             }
         )
     return diagnostics
