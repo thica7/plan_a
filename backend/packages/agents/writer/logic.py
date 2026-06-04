@@ -676,12 +676,15 @@ class WriterAgentMixin:
         }
 
     def _writer_matrix_summary_item(self, item: str) -> str:
-        limit = 1200 if item.startswith("[feature-standardization:") else 180
+        long_summary = item.startswith(
+            ("[feature-standardization:", "[pricing-standardization:")
+        )
+        limit = 1200 if long_summary else 180
         return self._trim_sentence(item, limit)
 
     def _writer_matrix_cell_value(self, cell: object) -> str:
         dimension = str(getattr(cell, "dimension", "")).casefold()
-        limit = 1200 if "feature" in dimension else 180
+        limit = 1200 if "feature" in dimension or "pricing" in dimension else 180
         return self._trim_sentence(str(getattr(cell, "value", "")), limit)
 
     def _feature_node_source_ids(self, node: FeatureNode) -> list[str]:

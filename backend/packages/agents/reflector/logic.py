@@ -166,7 +166,8 @@ class ReflectorAgentMixin:
         }
 
     def _reflector_matrix_cell_value(self, dimension: str, value: str) -> str:
-        limit = 1200 if "feature" in dimension.casefold() else 220
+        dimension_key = dimension.casefold()
+        limit = 1200 if "feature" in dimension_key or "pricing" in dimension_key else 220
         return value[:limit]
 
     def _infer_competitor_from_text(self, detail: RunDetail, text: str) -> str | None:

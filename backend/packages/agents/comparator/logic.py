@@ -179,15 +179,15 @@ class ComparatorAgentMixin:
             (
                 "tier_name={name}; price={price}; billing_cycle={cycle}; limits={limits}"
             ).format(
-                name=self._compact_matrix_text(tier.name or "unknown", 36),
-                price=self._compact_matrix_text(tier.price or "unknown", 56),
-                cycle=self._compact_matrix_text(tier.billing_cycle or "unknown", 28),
-                limits=self._compact_list_text(tier.limits, 72),
+                name=self._compact_matrix_text(tier.name or "unknown", 44),
+                price=self._compact_matrix_text(tier.price or "unknown", 120),
+                cycle=self._compact_matrix_text(tier.billing_cycle or "unknown", 40),
+                limits=self._compact_list_text(tier.limits, 160),
             )
-            for tier in pricing.tiers[:4]
+            for tier in pricing.tiers[:6]
         ]
         note_parts = [
-            self._compact_matrix_text(claim.claim, 96) for claim in pricing.notes[:2]
+            self._compact_matrix_text(claim.claim, 180) for claim in pricing.notes[:2]
         ]
         return self._join_structured_parts(tier_parts, "notes", note_parts)
 
@@ -269,7 +269,7 @@ class ComparatorAgentMixin:
                 continue
             tier_parts = [
                 self._compact_pricing_tier(tier.name, tier.price, tier.billing_cycle)
-                for tier in tiers[:4]
+                for tier in tiers[:6]
             ]
             profiles.append(f"{competitor} tiers={'|'.join(tier_parts)}")
         missing_note = f"; missing={','.join(missing)}" if missing else ""
@@ -280,9 +280,9 @@ class ComparatorAgentMixin:
         )
 
     def _compact_pricing_tier(self, name: str, price: str, billing_cycle: str) -> str:
-        compact_name = self._compact_matrix_text(name or "unknown", 32)
-        compact_price = self._compact_matrix_text(price or "unknown", 48)
-        compact_cycle = self._compact_matrix_text(billing_cycle or "unknown", 24)
+        compact_name = self._compact_matrix_text(name or "unknown", 36)
+        compact_price = self._compact_matrix_text(price or "unknown", 72)
+        compact_cycle = self._compact_matrix_text(billing_cycle or "unknown", 32)
         if compact_cycle == "unknown" or compact_cycle in compact_price.casefold():
             return f"{compact_name}={compact_price}"
         return f"{compact_name}={compact_price}/{compact_cycle}"

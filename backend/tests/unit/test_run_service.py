@@ -2278,6 +2278,67 @@ def test_writer_and_reflector_digests_preserve_feature_matrix_cells() -> None:
     assert "Enterprise administration" in writer_digest["summary"][0]
 
 
+def test_writer_and_reflector_digests_preserve_pricing_matrix_cells() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    long_pricing_value = " | ".join(
+        [
+            (
+                f"tier_name={name}; price={price}; billing_cycle={cycle}; "
+                f"limits={limits}"
+            )
+            for name, price, cycle, limits in [
+                ("Free", "$0", "monthly", "2,000 completions, limited chat"),
+                ("Pro", "$10/user", "monthly", "higher completions and chat quota"),
+                ("Business", "$19/user", "monthly", "organization controls and policy"),
+                ("Team", "$40/user", "monthly", "team admin controls and pooled usage"),
+                ("Enterprise", "custom", "annual", "SSO, audit, support, and governance"),
+                ("Usage add-on", "metered", "usage-based", "additional premium requests"),
+            ]
+        ]
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        comparison_matrix=ComparisonMatrix(
+            competitors=["A"],
+            dimensions=["pricing"],
+            cells=[
+                ComparisonCell(
+                    competitor="A",
+                    dimension="pricing",
+                    value=long_pricing_value,
+                    source_ids=["pricing-a"],
+                    confidence=0.9,
+                )
+            ],
+            winner_by_dimension={"pricing": "A"},
+            summary=[f"[pricing-standardization:pricing] {long_pricing_value}"],
+        ),
+    )
+
+    writer_digest = service._writer_matrix_digest(detail)
+    reflector_digest = service._reflector_matrix_digest(detail)
+
+    assert "Usage add-on" in writer_digest["cells"][0]["value"]
+    assert "Usage add-on" in reflector_digest["cells"][0]["value"]
+    assert "Usage add-on" in writer_digest["summary"][0]
+
+
 @pytest.mark.asyncio
 async def test_comparator_timeout_falls_back_to_deterministic_matrix() -> None:
     service = RunService(
