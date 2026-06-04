@@ -25,6 +25,7 @@ def test_enterprise_store_settings_default_to_postgres(monkeypatch) -> None:
     monkeypatch.delenv("ENTERPRISE_DATABASE_URL", raising=False)
     monkeypatch.delenv("RUN_ORCHESTRATION_BACKEND", raising=False)
     monkeypatch.delenv("TEMPORAL_TRAFFIC_PERCENT", raising=False)
+    monkeypatch.delenv("WRITER_TIMEOUT_SECONDS", raising=False)
     get_settings.cache_clear()
 
     settings = get_settings()
@@ -33,6 +34,16 @@ def test_enterprise_store_settings_default_to_postgres(monkeypatch) -> None:
     assert settings.enterprise_database_url == DEFAULT_ENTERPRISE_DATABASE_URL
     assert settings.run_orchestration_backend == "temporal"
     assert settings.temporal_traffic_percent == 100
+    assert settings.writer_timeout_seconds == 30.0
+
+
+def test_writer_timeout_settings_allow_explicit_override(monkeypatch) -> None:
+    monkeypatch.setenv("WRITER_TIMEOUT_SECONDS", "45")
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.writer_timeout_seconds == 45.0
 
 
 def test_env_file_candidates_include_source_root_when_cwd_is_backend(tmp_path: Path) -> None:
