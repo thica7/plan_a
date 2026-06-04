@@ -1,9 +1,9 @@
 # Real Run Quality Comparison
 
-- Current run: run-83dc8b7bc2d16c713349aaba1426af86
+- Current run: run-0a6f77e8231d45d14f38775bb4eb8b61
 - Baseline run: 411d3a19-7049-4a7e-aa9f-c5b63e74a69e
 - Current status: running
-- Current node: collect_join
+- Current node: analyst
 - Execution mode: real
 - Quality verdict: fail
 - Regression gate: fail
@@ -14,45 +14,45 @@
 
 | Metric | Value |
 |---|---:|
-| Target score | 58 |
+| Target score | 60 |
 | Baseline score | 77 |
-| Delta score | -19 |
+| Delta score | -17 |
 
 ## Shape Delta
 
 | Field | Delta |
 |---|---:|
 | Report chars | -8958 |
-| Raw sources | -11 |
+| Raw sources | -3 |
 | Claims | 0 |
 | QA findings | -18 |
-| Trace spans | -184 |
+| Trace spans | -152 |
 | Fallback report regressed | no |
 
 ## Current Evidence
 
 | Field | Value |
 |---|---:|
-| Raw sources | 16 |
+| Raw sources | 24 |
 | Enterprise evidence | 0 |
 | Claims | 0 |
 | Enterprise claims | 0 |
 | QA findings | 0 |
-| Agent messages | 26 |
-| Tool calls | 136 |
-| Trace spans | 180 |
+| Agent messages | 44 |
+| Tool calls | 147 |
+| Trace spans | 212 |
 | Report chars | 0 |
 
 ## Quality Metrics
 
 | Metric | Target | Baseline | Delta | Status |
 |---|---:|---:|---:|---|
-| evidence_count | 16 | 27 | -11 | regressed |
+| evidence_count | 24 | 27 | -3 | regressed |
 | source_coverage_rate | 1 | 1 | 0 | unchanged |
-| verified_source_rate | 0.875 | 0.815 | +0.06 | improved |
-| claim_citation_rate | 0 | 1 | -1 | regressed |
+| verified_source_rate | 0.5 | 0.815 | -0.315 | regressed |
+| claim_citation_rate | 1 | 1 | 0 | unchanged |
 | citation_validity_rate | 0 | 1 | -1 | regressed |
-| real_source_rate | 1 | 1 | 0 | unchanged |
+| real_source_rate | 0.667 | 1 | -0.333 | regressed |
 | llm_call_signal | 1 | 1 | 0 | unchanged |
 | report_length_score | 0 | 1 | -1 | regressed |
 | report_structure_score | 0.1 | 0.3 | -0.2 | regressed |
@@ -67,23 +67,23 @@
 
 | From | To | Type | Status | Detail |
 |---|---|---|---|---|
-| collector | collect_join | raw_sources_collected | consumed |  |
-| collector | collect_join | raw_sources_collected | consumed |  |
-| collector | collect_join | raw_sources_collected | consumed |  |
-| collector | collect_join | raw_sources_collected | consumed |  |
-| collector | collect_join | raw_sources_collected | consumed |  |
-| collector | collect_join | raw_sources_collected | consumed |  |
-| collector | collect_join | raw_sources_collected | consumed |  |
-| collector | collect_join | raw_sources_collected | consumed |  |
+| analyst_dispatch | analyst | analysis_task | consumed |  |
+| analyst_dispatch | analyst | analysis_task | consumed |  |
+| analyst_dispatch | analyst | analysis_task | consumed |  |
+| analyst_dispatch | analyst | analysis_task | consumed |  |
+| analyst_dispatch | analyst | analysis_task | consumed |  |
+| analyst_dispatch | analyst | analysis_task | consumed |  |
+| analyst | analyst_join | competitor_knowledge_ready | queued |  |
+| analyst | analyst_join | competitor_knowledge_ready | queued |  |
 
 ## Gate Reasons
 
 - current run pipeline timed out after 90 seconds
-- current run did not complete: status=running, current_node=collect_join
+- current run did not complete: status=running, current_node=analyst
 - current run did not produce report_md
 - report_quality signal is below release threshold.
-- delta_score -19 regressed by at least 10 points.
-- core metric regression: claim_citation_rate -1.00, citation_validity_rate -1.00, report_structure_score -0.20
+- delta_score -17 regressed by at least 10 points.
+- core metric regression: verified_source_rate -0.32, citation_validity_rate -1.00, real_source_rate -0.33, report_structure_score -0.20
 
 ## Recommendations
 
