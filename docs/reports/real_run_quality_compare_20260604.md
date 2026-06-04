@@ -1,53 +1,53 @@
 # Real Run Quality Comparison
 
-- Current run: run-ff59f88a0e8e1f9ac3511c5508a13f9a
+- Current run: run-b8e528c7c39b32ef11a210da6da2d0eb
 - Baseline run: 411d3a19-7049-4a7e-aa9f-c5b63e74a69e
 - Current status: completed_with_blockers
 - Current node: none
 - Execution mode: real
 - Quality verdict: pass
-- Regression gate: fail
+- Regression gate: pass
 
 ## Score
 
 | Metric | Value |
 |---|---:|
-| Target score | 96 |
+| Target score | 97 |
 | Baseline score | 77 |
-| Delta score | +19 |
+| Delta score | +20 |
 
 ## Shape Delta
 
 | Field | Delta |
 |---|---:|
-| Report chars | +14050 |
-| Raw sources | -9 |
+| Report chars | +13889 |
+| Raw sources | -11 |
 | Claims | 0 |
-| QA findings | -5 |
-| Trace spans | -103 |
+| QA findings | -8 |
+| Trace spans | -127 |
 | Fallback report regressed | no |
 
 ## Current Evidence
 
 | Field | Value |
 |---|---:|
-| Raw sources | 18 |
-| Enterprise evidence | 18 |
+| Raw sources | 16 |
+| Enterprise evidence | 16 |
 | Claims | 0 |
-| Enterprise claims | 17 |
-| QA findings | 13 |
+| Enterprise claims | 16 |
+| QA findings | 10 |
 | Agent messages | 60 |
-| Tool calls | 186 |
-| Trace spans | 261 |
-| Report chars | 23008 |
+| Tool calls | 171 |
+| Trace spans | 237 |
+| Report chars | 22847 |
 
 ## Quality Metrics
 
 | Metric | Target | Baseline | Delta | Status |
 |---|---:|---:|---:|---|
-| evidence_count | 18 | 27 | -9 | regressed |
+| evidence_count | 16 | 27 | -11 | regressed |
 | source_coverage_rate | 1 | 1 | 0 | unchanged |
-| verified_source_rate | 0.611 | 0.815 | -0.204 | regressed |
+| verified_source_rate | 0.688 | 0.815 | -0.127 | regressed |
 | claim_citation_rate | 1 | 1 | 0 | unchanged |
 | citation_validity_rate | 1 | 1 | 0 | unchanged |
 | real_source_rate | 1 | 1 | 0 | unchanged |
@@ -65,18 +65,16 @@
 
 | ID | Severity | Agent | Dimension | Competitor | Problem |
 |---|---|---|---|---|---|
-| unverified-persona-claude-code-persona-e33cc67c | warn | collector | persona | Claude Code | Source persona-e33cc67c for persona is not fetched webpage evidence and should be recollected or verified. |
-| unverified-persona-cursor-persona-1acfcf1a | warn | collector | persona | Cursor | Source persona-1acfcf1a for persona is not fetched webpage evidence and should be recollected or verified. |
-| unverified-feature-cursor-feature-c8e4d17f | warn | collector | feature | Cursor | Source feature-c8e4d17f for feature is not fetched webpage evidence and should be recollected or verified. |
-| reflector-coverage-1-windsurf-pricing-dimension-has-no-valid-official | warn | collector | pricing | Windsurf | Windsurf pricing dimension has no valid official coverage: existing Windsurf pricing source incorrectly links to Devin.ai (a separate competing AI coding product) pricing page, no actual Windsurf plan/tier pricing data is captured |
-| reflector-coverage-2-cursor-feature-dimension-has-no-valid-coverage:- | warn | collector | feature | Cursor | Cursor feature dimension has no valid coverage: existing Cursor feature source describes a generic database pagination utility named 'Cursor Extractor' completely unrelated to the Cursor AI code editor product |
-| reflector-coverage-3-claude-code-persona-dimension-has-no-verified-co | warn | collector | persona | Claude Code | Claude Code persona dimension has no verified coding-specific target user data: existing source only covers generic Claude LLM use cases unrelated to Claude Code's coding-focused user segments |
-| reflector-coverage-4-github-copilot-persona-dimension-only-contains-a | warn | collector | persona | GitHub Copilot | GitHub Copilot persona dimension only contains a low-detail synthetic interview note with no concrete target user profile, use case or segment data |
-| reflector-confidence-1-1.0-confidence-windsurf-persona-source-is-misatt | warn | collector | persona | Windsurf | 1.0 confidence Windsurf persona source is misattributed: it pulls content from Devin Desktop documentation (not Windsurf product content), the maximum confidence rating is unjustified |
-| reflector-confidence-2-github-copilot-persona-source-with-0.56-confiden | warn | collector | persona | GitHub Copilot | GitHub Copilot persona source with 0.56 confidence is a low-value synthetic record that contains no specific, verifiable persona details |
-| reflector-confidence-3-three-near-identical-synthetic-persona-interview | warn | collector | persona | Claude Code | Three near-identical synthetic persona interview records for Cursor, Claude Code, Windsurf (all 0.62 confidence) only contain generic repeated text with no unique, product-specific persona insights |
-| reflector-cross-competitor-1-no-side-by-side-comparative-pricing-data-across- | warn | comparator | pricing |  | No side-by-side comparative pricing data across all 4 competitors, all existing pricing sources only cover one individual product with no aligned tier/feature-to-cost comparison |
-| reflector-cross-competitor-2-no-standardized-cross-competitor-feature-compari | warn | comparator | feature |  | No standardized cross-competitor feature comparison across the 4 products, no aligned benchmark of core coding capabilities, agent performance, IDE integration or supported model sets |
+| unverified-feature-cursor-feature-ce6d2b54 | warn | collector | feature | Cursor | Source feature-ce6d2b54 for feature is not fetched webpage evidence and should be recollected or verified. |
+| reflector-coverage-1-cursor-feature-dimension-data-is-incomplete-sour | warn | collector | feature | Cursor | Cursor feature dimension data is incomplete, sourced from a non-official Medium article with only partial workflow functionality details, no official verified full feature set coverage |
+| reflector-coverage-2-windsurf-persona-source-points-to-a-404-non-exis | warn | collector | persona | Windsurf | Windsurf persona source points to a 404 non-existent page, no valid verified target user/use case persona insights are captured |
+| reflector-coverage-3-claude-code-pricing-data-is-incomplete-no-explic | warn | collector | pricing | Claude Code | Claude Code pricing data is incomplete, no explicit per-user subscription tier pricing values are provided, only vague reference to token-based billing and external pricing page |
+| reflector-coverage-4-github-copilot-existing-persona-source-only-incl | warn | collector | persona | GitHub Copilot | GitHub Copilot existing persona source only includes partial usage policy snippets, no clear defined target user segments or core use case persona details |
+| reflector-confidence-1-cursor-feature-entry-with-0.68-confidence-far-be | warn | collector | feature | Cursor | Cursor feature entry with 0.68 confidence, far below the 0.9+ baseline of all other official webpage verified sources |
+| reflector-confidence-2-four-synthetic-un-sourced-persona-interview-reco | warn | collector | persona |  | Four synthetic un-sourced persona interview records for all 4 competitors with 0.62 confidence, no real verified user data and no valid covered competitors listed |
+| reflector-cross-competitor-1-no-aligned-side-by-side-comparative-pricing-mapp | warn | comparator | pricing |  | No aligned side-by-side comparative pricing mapping across all 4 competitors for equivalent individual, team and enterprise subscription tiers |
+| reflector-cross-competitor-2-no-cross-competitor-feature-benchmarking-that-ma | warn | comparator | feature |  | No cross-competitor feature benchmarking that maps overlapping capabilities and exclusive unique selling points across the 4 AI coding tools |
+| reflector-cross-competitor-3-no-cross-competitor-persona-segmentation-analysi | warn | comparator | persona |  | No cross-competitor persona segmentation analysis that contrasts target user groups, core use cases and unique pain points across all 4 products |
 
 ## Last Agent Messages
 
@@ -93,7 +91,7 @@
 
 ## Gate Reasons
 
-- core metric regression: verified_source_rate -0.20
+- Quality gate passed against real-chain and baseline thresholds.
 
 ## Method
 
