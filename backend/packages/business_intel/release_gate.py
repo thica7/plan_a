@@ -476,14 +476,8 @@ def _claim_validation_issues(
         failed_checkers = [
             sample.checker for sample in result.validation_samples if sample.vote == "fail"
         ]
-        issue_summary = (
-            f"; issue_types={', '.join(claim_issue_types)}"
-            if claim_issue_types
-            else ""
-        )
-        checker_summary = (
-            f"; failed_checks={', '.join(failed_checkers)}" if failed_checkers else ""
-        )
+        issue_summary = f"; issue_types={', '.join(claim_issue_types)}" if claim_issue_types else ""
+        checker_summary = f"; failed_checks={', '.join(failed_checkers)}" if failed_checkers else ""
         issues.append(
             _gate_issue(
                 "claim_self_consistency_required",
@@ -512,10 +506,7 @@ def _report_citation_quality_issues(
     report_version: ReportVersionRecord,
     evidence: list[EvidenceRecord],
 ) -> list[BusinessQAFinding]:
-    evidence_by_token: dict[str, EvidenceRecord] = {}
-    for item in evidence:
-        evidence_by_token[item.id] = item
-        evidence_by_token[item.raw_source_id] = item
+    evidence_by_token = _evidence_by_source_token(evidence)
 
     issues: list[BusinessQAFinding] = []
     for line in report_version.report_md.splitlines():
@@ -554,10 +545,7 @@ def _missing_report_citation_issues(
     report_version: ReportVersionRecord,
     evidence: list[EvidenceRecord],
 ) -> list[BusinessQAFinding]:
-    evidence_by_token: dict[str, EvidenceRecord] = {}
-    for item in evidence:
-        evidence_by_token[item.id] = item
-        evidence_by_token[item.raw_source_id] = item
+    evidence_by_token = _evidence_by_source_token(evidence)
     missing = sorted(
         {
             token
@@ -611,19 +599,13 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
         gap_evidence_links = rag_gap_fill.get("gap_evidence_links")
         has_links = isinstance(gap_evidence_links, dict) and any(gap_evidence_links.values())
         unresolved_count = (
-            int(after_gap_count)
-            if isinstance(after_gap_count, int)
-            else len(unfilled_gap_ids)
+            int(after_gap_count) if isinstance(after_gap_count, int) else len(unfilled_gap_ids)
         )
         if chain_closed is False or unresolved_count > 0 or not has_links:
             unfilled_summary = ", ".join(unfilled_gap_ids[:5]) or "n/a"
-            online_failure_summary = _online_failure_summary(
-                rag_gap_fill.get("online_failures")
-            )
+            online_failure_summary = _online_failure_summary(rag_gap_fill.get("online_failures"))
             online_failure_sentence = (
-                f" online_failures={online_failure_summary}."
-                if online_failure_summary
-                else ""
+                f" online_failures={online_failure_summary}." if online_failure_summary else ""
             )
             issues.append(
                 _gate_issue(
@@ -734,7 +716,23 @@ def _cited_source_tokens(line: str) -> list[str]:
 def _normalize_source_token(token: str) -> str:
     """Resolve chunk-level RAG citations back to their EvidenceRecord id."""
 
-    return token.split("#", 1)[0]
+    return token.split("#", 1)[0].strip()
+
+
+def _evidence_by_source_token(evidence: list[EvidenceRecord]) -> dict[str, EvidenceRecord]:
+    evidence_by_token: dict[str, EvidenceRecord] = {}
+    for item in evidence:
+        for token in _evidence_source_tokens(item):
+            evidence_by_token[token] = item
+    return evidence_by_token
+
+
+def _evidence_source_tokens(evidence: EvidenceRecord) -> set[str]:
+    tokens = {evidence.id, evidence.raw_source_id}
+    aliases = evidence.metadata.get("raw_source_aliases")
+    if isinstance(aliases, list):
+        tokens.update(str(alias).strip() for alias in aliases if str(alias).strip())
+    return tokens
 
 
 def _string_list(value: object) -> list[str]:

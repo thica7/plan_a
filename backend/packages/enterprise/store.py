@@ -636,12 +636,8 @@ class EnterpriseMemoryStore:
                 completed_run_count=sum(1 for item in runs if item.status == "completed"),
                 failed_run_count=sum(1 for item in runs if item.status == "failed"),
                 interrupted_run_count=sum(1 for item in runs if item.status == "interrupted"),
-                input_tokens_estimate=sum(
-                    item.metrics.input_tokens_estimate for item in runs
-                ),
-                output_tokens_estimate=sum(
-                    item.metrics.output_tokens_estimate for item in runs
-                ),
+                input_tokens_estimate=sum(item.metrics.input_tokens_estimate for item in runs),
+                output_tokens_estimate=sum(item.metrics.output_tokens_estimate for item in runs),
                 cost_estimate_usd=sum(item.metrics.cost_estimate_usd for item in runs),
             )
 
@@ -1326,12 +1322,14 @@ def _merge_evidence_lifecycle(
     incoming: EvidenceRecord,
 ) -> EvidenceRecord:
     current_run_id = incoming.last_seen_run_id or incoming.run_id
+    metadata = _merge_evidence_source_metadata(existing, incoming)
     if existing is None:
         return incoming.model_copy(
             update={
                 "first_seen_run_id": incoming.first_seen_run_id or incoming.run_id,
                 "last_seen_run_id": current_run_id,
                 "seen_count": max(1, incoming.seen_count),
+                "metadata": metadata,
             }
         )
 
@@ -1345,8 +1343,45 @@ def _merge_evidence_lifecycle(
             or incoming.run_id,
             "last_seen_run_id": current_run_id or existing.last_seen_run_id,
             "seen_count": max(1, existing.seen_count + increment),
+            "metadata": metadata,
         }
     )
+
+
+def _merge_evidence_source_metadata(
+    existing: EvidenceRecord | None,
+    incoming: EvidenceRecord,
+) -> dict[str, object]:
+    metadata: dict[str, object] = {}
+    if existing is not None:
+        metadata.update(existing.metadata)
+    metadata.update(incoming.metadata)
+
+    aliases: list[str] = []
+    if existing is not None:
+        aliases.extend(_string_list(existing.metadata.get("raw_source_aliases")))
+        aliases.append(existing.raw_source_id)
+    aliases.extend(_string_list(incoming.metadata.get("raw_source_aliases")))
+    aliases.append(incoming.raw_source_id)
+    metadata["raw_source_aliases"] = _dedupe_string_list(aliases)
+    return metadata
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _dedupe_string_list(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        item = value.strip()
+        if item and item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
 
 
 def _embedding_dedupe_key(evidence: EvidenceRecord) -> str:
@@ -1522,8 +1557,7 @@ def _merge_source_registry(
 
     run_increment = (
         1
-        if incoming.last_seen_run_id
-        and incoming.last_seen_run_id != existing.last_seen_run_id
+        if incoming.last_seen_run_id and incoming.last_seen_run_id != existing.last_seen_run_id
         else 0
     )
     return incoming.model_copy(
@@ -1535,8 +1569,7 @@ def _merge_source_registry(
             "policy_review_status": incoming.policy_review_status
             if incoming.policy_review_status != "not_required"
             else existing.policy_review_status,
-            "policy_review_reason": incoming.policy_review_reason
-            or existing.policy_review_reason,
+            "policy_review_reason": incoming.policy_review_reason or existing.policy_review_reason,
             "is_active": existing.is_active,
             "first_seen_run_id": existing.first_seen_run_id or incoming.first_seen_run_id,
             "first_seen_at": min(existing.first_seen_at, incoming.first_seen_at),

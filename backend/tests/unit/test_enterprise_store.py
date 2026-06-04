@@ -359,6 +359,41 @@ def test_enterprise_store_tracks_evidence_lifecycle_across_runs() -> None:
     assert evidence.run_id == "run-1"
 
 
+def test_enterprise_store_preserves_raw_source_aliases_across_lifecycle_runs() -> None:
+    store = EnterpriseMemoryStore()
+    first_detail = _detail()
+    first_context = store.start_run(first_detail)
+    first_projection = build_enterprise_projection(
+        first_detail,
+        workspace_id=first_context.workspace_id,
+        project_id=first_context.project_id,
+        competitor_id_map=first_context.competitor_id_map,
+    )
+    store.save_projection(first_projection)
+
+    second_detail = _detail().model_copy(
+        deep=True,
+        update={"id": "run-2", "report_md": _structured_demo_report("pricing-2")},
+    )
+    second_detail.raw_sources = [
+        second_detail.raw_sources[0].model_copy(update={"id": "pricing-2"})
+    ]
+    second_detail.competitor_knowledge["Cursor"].pricing_model.notes[0].source_ids = ["pricing-2"]
+    second_context = store.start_run(second_detail)
+    second_projection = build_enterprise_projection(
+        second_detail,
+        workspace_id=second_context.workspace_id,
+        project_id=second_context.project_id,
+        version_number=2,
+        competitor_id_map=second_context.competitor_id_map,
+    )
+    store.save_projection(second_projection)
+
+    [evidence] = store.list_evidence(project_id=first_context.project_id)
+    assert evidence.seen_count == 2
+    assert set(evidence.metadata["raw_source_aliases"]) == {"pricing-1", "pricing-2"}
+
+
 def test_enterprise_store_registers_sources_from_evidence_lifecycle() -> None:
     store = EnterpriseMemoryStore()
     first_detail = _detail()
@@ -541,9 +576,7 @@ def test_enterprise_store_deduplicates_embedding_index_by_canonical_url() -> Non
     assert reindexed.indexed_count == 1
     assert reindexed.duplicate_count == 1
     assert (
-        store.evidence_records["zz-url-duplicate-evidence"].metadata[
-            "embedding_dedupe_strategy"
-        ]
+        store.evidence_records["zz-url-duplicate-evidence"].metadata["embedding_dedupe_strategy"]
         == "canonical_url"
     )
 
@@ -720,9 +753,7 @@ def test_enterprise_store_audits_report_version_status_changes() -> None:
 
     store.upsert_report_version(projection.report_version.model_copy(update={"status": "approved"}))
     status_logs = [
-        log
-        for log in store.list_audit_logs()
-        if log.action == "report_version.status_changed"
+        log for log in store.list_audit_logs() if log.action == "report_version.status_changed"
     ]
 
     assert len(status_logs) == 1
@@ -749,8 +780,7 @@ def test_report_version_diff_uses_previous_version() -> None:
         update={
             "id": "run-2",
             "report_md": (
-                f"{first_detail.report_md}\n"
-                "Cursor has a public paid plan. [source:pricing-1]"
+                f"{first_detail.report_md}\nCursor has a public paid plan. [source:pricing-1]"
             ),
         },
     )
@@ -1102,9 +1132,7 @@ def test_enterprise_router_exposes_projection() -> None:
         f"/api/enterprise/workspaces/{context.workspace_id}/quota",
         json={"monthly_run_quota": 1, "quota_enforcement": "monitor"},
     )
-    quota_decision = client.get(
-        f"/api/enterprise/workspaces/{context.workspace_id}/quota-decision"
-    )
+    quota_decision = client.get(f"/api/enterprise/workspaces/{context.workspace_id}/quota-decision")
     notification_upsert = client.post(
         "/api/enterprise/notifications",
         json=NotificationRecord(
@@ -1116,9 +1144,7 @@ def test_enterprise_router_exposes_projection() -> None:
             title="Scheduled scan finished",
         ).model_dump(mode="json"),
     )
-    notifications = client.get(
-        f"/api/enterprise/notifications?workspace_id={context.workspace_id}"
-    )
+    notifications = client.get(f"/api/enterprise/notifications?workspace_id={context.workspace_id}")
     policy_actions = client.get("/api/enterprise/policy/actions")
     policy_decision = client.post(
         "/api/enterprise/policy/evaluate",
@@ -1133,9 +1159,7 @@ def test_enterprise_router_exposes_projection() -> None:
     project = client.get(f"/api/enterprise/projects/{context.project_id}")
     business_plan = client.get(f"/api/enterprise/projects/{context.project_id}/business-plan")
     qa_evaluation = client.get(f"/api/enterprise/projects/{context.project_id}/qa-evaluation")
-    claim_validation = client.get(
-        f"/api/enterprise/projects/{context.project_id}/claim-validation"
-    )
+    claim_validation = client.get(f"/api/enterprise/projects/{context.project_id}/claim-validation")
     memory_ingest = client.post(
         f"/api/enterprise/projects/{context.project_id}/memory/feedback",
         json={
@@ -1161,13 +1185,9 @@ def test_enterprise_router_exposes_projection() -> None:
         f"/api/enterprise/projects/{context.project_id}/memory/recall",
         params={"query": "pricing source risk"},
     )
-    memory_feedback = client.get(
-        f"/api/enterprise/projects/{context.project_id}/memory/feedback"
-    )
+    memory_feedback = client.get(f"/api/enterprise/projects/{context.project_id}/memory/feedback")
     memory_stats = client.get(f"/api/enterprise/projects/{context.project_id}/memory/stats")
-    audit_logs = client.get(
-        f"/api/enterprise/audit-logs?workspace_id={context.workspace_id}"
-    )
+    audit_logs = client.get(f"/api/enterprise/audit-logs?workspace_id={context.workspace_id}")
     audit_filtered = client.get(
         "/api/enterprise/audit-logs",
         params={
@@ -1256,9 +1276,7 @@ def test_enterprise_router_exposes_projection() -> None:
             mode="json"
         ),
     )
-    publish = client.post(
-        f"/api/enterprise/report-versions/{projection.report_version.id}/publish"
-    )
+    publish = client.post(f"/api/enterprise/report-versions/{projection.report_version.id}/publish")
     quality = client.patch(
         f"/api/enterprise/evidence/{projection.evidence_records[0].id}/quality",
         json={"quality_label": "stale", "note": "Needs review."},
@@ -1377,8 +1395,7 @@ def test_enterprise_router_exposes_projection() -> None:
     assert red_team.json()["pydantic_ai_runtime_prompt_chars"] > 0
     assert quality_matrix.status_code == 200
     assert all(
-        isinstance(item["suggested_redos"], list)
-        for item in quality_matrix.json()["entries"]
+        isinstance(item["suggested_redos"], list) for item in quality_matrix.json()["entries"]
     )
     assert {item["agent_name"] for item in quality_matrix.json()["entries"]} >= {
         "BusinessQA",
@@ -1514,8 +1531,7 @@ def test_enterprise_router_exposes_projection() -> None:
     assert manual_revision.json()["status"] == "draft"
     assert "Manual correction." in manual_revision.json()["report_md"]
     assert (
-        manual_revision.json()["quality_metadata"]["manual_revision"]["edited_by"]
-        == "system-user"
+        manual_revision.json()["quality_metadata"]["manual_revision"]["edited_by"] == "system-user"
     )
     assert (
         manual_revision.json()["quality_metadata"]["manual_revision"]["source_report_version_id"]
@@ -1728,9 +1744,12 @@ def test_gap_fill_result_carries_release_gate_improvement_delta() -> None:
     assert release_delta["release_gate_blocker_delta"] == enriched.release_gate_blocker_delta
     stored_version = store.get_report_version(projection.report_version.id)
     assert stored_version is not None
-    assert stored_version.quality_metadata["rag_gap_fill"]["release_gate_delta"][
-        "release_gate_improved"
-    ] is True
+    assert (
+        stored_version.quality_metadata["rag_gap_fill"]["release_gate_delta"][
+            "release_gate_improved"
+        ]
+        is True
+    )
 
 
 def test_enterprise_router_enforces_rbac_workspace_scope() -> None:

@@ -4191,6 +4191,9 @@ function buildReportSourceBundle(
     if (scopedEvidenceIds && !scopedEvidenceIds.has(item.id)) continue;
     const competitorName = competitorById.get(item.competitor_id)?.name ?? item.competitor_id;
     aliases[item.id] = item.raw_source_id;
+    for (const alias of evidenceRawSourceAliases(item)) {
+      aliases[alias] = item.raw_source_id;
+    }
 
     const existing = sourcesByRawId.get(item.raw_source_id);
     if (existing) {
@@ -4217,6 +4220,14 @@ function buildReportSourceBundle(
   }
 
   return { sources: Array.from(sourcesByRawId.values()), aliases };
+}
+
+function evidenceRawSourceAliases(item: EvidenceRecord): string[] {
+  const aliases = item.metadata.raw_source_aliases;
+  if (!Array.isArray(aliases)) return [];
+  return aliases
+    .map((alias) => String(alias).trim())
+    .filter((alias) => alias.length > 0 && alias !== item.raw_source_id);
 }
 
 function ReportHistory({

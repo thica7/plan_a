@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping
 from datetime import datetime
+import re
 
 from packages.identity import (
     compute_claim_id,
@@ -28,6 +29,7 @@ _MANUAL_RESEARCH_SOURCE_TYPES = {"manual_transcript", "manual_note", "manual"}
 _USER_RESEARCH_SOURCE_TYPES = (
     _SURVEY_SOURCE_TYPES | _INTERVIEW_SOURCE_TYPES | _MANUAL_RESEARCH_SOURCE_TYPES
 )
+_REPORT_SOURCE_TOKEN_RE = re.compile(r"\[source:([A-Za-z0-9_.:#-]+)\]")
 
 
 def build_enterprise_projection(
@@ -119,7 +121,7 @@ def _build_evidence_records(
                     last_seen_run_id=detail.id,
                     seen_count=1,
                     captured_at=source.extracted_at,
-                    metadata={"source_competitor": source.competitor},
+                    metadata=_source_metadata(source),
                 )
             )
     return records
@@ -191,7 +193,7 @@ def _build_report_version(
         report_md=detail.report_md,
         claim_ids=[claim.id for claim in claim_records],
         evidence_ids=[evidence.id for evidence in evidence_records],
-        quality_metadata=_build_quality_metadata(detail),
+        quality_metadata=_build_quality_metadata(detail, evidence_records),
         created_at=_parse_datetime(detail.updated_at),
     )
 
@@ -285,7 +287,18 @@ def _quality_label(source: RawSource) -> str:
     return "unreviewed"
 
 
-def _build_quality_metadata(detail: RunDetail) -> dict[str, object]:
+def _source_metadata(source: RawSource) -> dict[str, object]:
+    return {
+        "source_competitor": source.competitor,
+        "run_raw_source_id": source.id,
+        "raw_source_aliases": [source.id],
+    }
+
+
+def _build_quality_metadata(
+    detail: RunDetail,
+    evidence_records: list[EvidenceRecord],
+) -> dict[str, object]:
     low_confidence_source_ids = [
         source.id for source in detail.raw_sources if source.confidence < 0.75
     ]
@@ -334,6 +347,7 @@ def _build_quality_metadata(detail: RunDetail) -> dict[str, object]:
         "search_only_source_ids": search_only_source_ids,
         "llm_public_knowledge_source_ids": llm_public_knowledge_source_ids,
         **research_source_ids,
+        "source_reconciliation": _build_source_reconciliation(detail, evidence_records),
         "reflection_gaps": [
             {
                 "coverage_gaps": reflection.coverage_gaps,
@@ -394,9 +408,7 @@ def _build_memory_observations(
             {
                 "id": f"{detail.id}:qa-findings",
                 "kind": "quality_pattern",
-                "warn_count": sum(
-                    1 for issue in detail.qa_findings if issue.severity == "warn"
-                ),
+                "warn_count": sum(1 for issue in detail.qa_findings if issue.severity == "warn"),
                 "blocker_count": sum(
                     1 for issue in detail.qa_findings if issue.severity == "blocker"
                 ),
@@ -420,11 +432,60 @@ def _build_memory_observations(
     return observations
 
 
+def _build_source_reconciliation(
+    detail: RunDetail,
+    evidence_records: list[EvidenceRecord],
+) -> dict[str, object]:
+    report_tokens = _dedupe_strings(
+        _normalize_source_token(token)
+        for token in _REPORT_SOURCE_TOKEN_RE.findall(detail.report_md)
+    )
+    scoped_tokens: set[str] = set()
+    evidence_aliases: dict[str, list[str]] = {}
+    for evidence in evidence_records:
+        tokens = _evidence_source_tokens(evidence)
+        scoped_tokens.update(tokens)
+        aliases = sorted(token for token in tokens if token != evidence.id)
+        if aliases:
+            evidence_aliases[evidence.id] = aliases
+
+    unresolved = [token for token in report_tokens if token not in scoped_tokens]
+    return {
+        "report_source_tokens": report_tokens,
+        "report_source_token_count": len(report_tokens),
+        "scoped_source_token_count": len(scoped_tokens),
+        "unresolved_report_source_tokens": unresolved,
+        "unresolved_report_source_token_count": len(unresolved),
+        "evidence_source_aliases": evidence_aliases,
+    }
+
+
+def _evidence_source_tokens(evidence: EvidenceRecord) -> set[str]:
+    tokens = {evidence.id, evidence.raw_source_id}
+    aliases = evidence.metadata.get("raw_source_aliases")
+    if isinstance(aliases, list):
+        tokens.update(str(alias).strip() for alias in aliases if str(alias).strip())
+    return tokens
+
+
+def _normalize_source_token(token: str) -> str:
+    return token.split("#", 1)[0].strip()
+
+
+def _dedupe_strings(values: object) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        item = str(value).strip()
+        if item and item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
 def _classify_user_research_sources(raw_sources: list[RawSource]) -> dict[str, list[str]]:
     survey_source_ids = [
-        source.id
-        for source in raw_sources
-        if source.source_type.casefold() in _SURVEY_SOURCE_TYPES
+        source.id for source in raw_sources if source.source_type.casefold() in _SURVEY_SOURCE_TYPES
     ]
     interview_source_ids = [
         source.id

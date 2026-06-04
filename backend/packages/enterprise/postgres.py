@@ -1195,9 +1195,7 @@ class EnterprisePostgresStore:
                     (version.id,),
                 ).fetchone()
                 before_record = (
-                    self._model_from_row(ReportVersionRecord, before_row)
-                    if before_row
-                    else None
+                    self._model_from_row(ReportVersionRecord, before_row) if before_row else None
                 )
                 self._upsert_report_version(cur, version)
                 self._append_audit(
@@ -1539,7 +1537,30 @@ class EnterprisePostgresStore:
                     THEN evidence_records.seen_count + 1
                     ELSE evidence_records.seen_count
                 END,
-                metadata = EXCLUDED.metadata
+                metadata = (
+                    (evidence_records.metadata || EXCLUDED.metadata)
+                    || jsonb_build_object(
+                        'raw_source_aliases',
+                        (
+                            SELECT COALESCE(jsonb_agg(DISTINCT alias), '[]'::jsonb)
+                            FROM jsonb_array_elements_text(
+                                COALESCE(
+                                    evidence_records.metadata->'raw_source_aliases',
+                                    '[]'::jsonb
+                                )
+                                || COALESCE(
+                                    EXCLUDED.metadata->'raw_source_aliases',
+                                    '[]'::jsonb
+                                )
+                                || jsonb_build_array(
+                                    evidence_records.raw_source_id,
+                                    EXCLUDED.raw_source_id
+                                )
+                            ) AS raw_source_alias(alias)
+                            WHERE alias <> ''
+                        )
+                    )
+                )
             """,
             (
                 evidence.id,

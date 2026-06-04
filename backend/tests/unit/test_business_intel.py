@@ -220,18 +220,15 @@ def test_dynamic_schema_dimensions_drive_quality_risk_and_scoring() -> None:
 
     assert "enterprise_sso" in plan.requested_dimensions
     assert any(
-        finding.rule_id == "coverage_min_verified"
-        and finding.dimension == "enterprise_sso"
+        finding.rule_id == "coverage_min_verified" and finding.dimension == "enterprise_sso"
         for finding in evaluation.findings
     )
     assert any(
-        finding.finding_type == "competitive_bias"
-        and "enterprise_sso" in (finding.dimension or "")
+        finding.finding_type == "competitive_bias" and "enterprise_sso" in (finding.dimension or "")
         for finding in red_team.findings
     )
     assert any(
-        score.dimension == "enterprise_sso"
-        for score in score_report.scores[0].dimension_scores
+        score.dimension == "enterprise_sso" for score in score_report.scores[0].dimension_scores
     )
 
 
@@ -1035,9 +1032,10 @@ def test_report_release_gate_blocks_unclosed_rag_gap_fill_chain() -> None:
     assert "rag_gap_fill_chain_unclosed" in issues
     assert "gap-security" in issues["rag_gap_fill_chain_unclosed"].message
     assert "robots" in issues["rag_gap_fill_chain_unclosed"].message
-    assert "online search/fetch/robots failures" in issues[
-        "rag_gap_fill_chain_unclosed"
-    ].recommendation
+    assert (
+        "online search/fetch/robots failures"
+        in issues["rag_gap_fill_chain_unclosed"].recommendation
+    )
 
 
 def test_report_release_gate_reads_remaining_gap_ids_from_gap_fill_metadata() -> None:
@@ -1254,6 +1252,55 @@ def test_report_release_gate_resolves_rag_chunk_source_tokens() -> None:
     ]
     report = _report_version(
         report_md=_structured_release_report(source_token="evidence-1#chunk:0"),
+        evidence_ids=["evidence-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert gate.allowed is True
+    assert "report_citation_resolves" not in {issue.rule_id for issue in gate.issues}
+
+
+def test_report_release_gate_resolves_raw_source_alias_tokens() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-old",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+            metadata={"raw_source_aliases": ["pricing-current"]},
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        report_md=_structured_release_report(source_token="pricing-current"),
         evidence_ids=["evidence-1"],
     )
 
