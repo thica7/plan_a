@@ -115,3 +115,56 @@ def test_build_summary_delta_tolerates_missing_baseline() -> None:
     assert script.build_summary_delta({"error": "missing"}, {"report_chars": 10}) == {
         "baseline_available": False
     }
+
+
+def test_render_compare_markdown_summarizes_quality_gate() -> None:
+    script = _load_script()
+
+    markdown = script.render_compare_markdown(
+        {
+            "old": {"run_id": "old-run"},
+            "current": {
+                "run_id": "current-run",
+                "execution_mode": "real",
+                "raw_sources": 5,
+                "enterprise_evidence": 5,
+                "claims": 3,
+                "enterprise_claims": 3,
+                "trace_spans": 12,
+                "report_chars": 2400,
+            },
+            "delta": {
+                "baseline_available": True,
+                "report_chars": 1200,
+                "raw_sources": 3,
+                "claims": 2,
+                "qa_findings": -1,
+                "trace_spans": 8,
+                "fallback_report_regressed": False,
+            },
+            "quality": {
+                "target_score": 86,
+                "baseline_score": 70,
+                "delta_score": 16,
+                "verdict": "pass",
+                "regression_gate_status": "pass",
+                "metrics": [
+                    {
+                        "name": "report_length_score",
+                        "target_value": 1.0,
+                        "baseline_value": 0.4,
+                        "delta": 0.6,
+                        "status": "improved",
+                    }
+                ],
+                "recommendations": ["Keep source snapshots attached to gap-filled evidence."],
+            },
+        }
+    )
+
+    assert "# Real Run Quality Comparison" in markdown
+    assert "- Current run: current-run" in markdown
+    assert "| Delta score | +16 |" in markdown
+    assert "| Raw sources | +3 |" in markdown
+    assert "| report_length_score | 1 | 0.4 | +0.6 | improved |" in markdown
+    assert "Keep source snapshots attached" in markdown

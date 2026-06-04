@@ -195,6 +195,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--dimensions", nargs="+", default=["pricing", "feature", "persona"])
     parser.add_argument("--execution-mode", choices=["demo", "real"], default="real")
+    parser.add_argument("--format", choices=["json", "markdown"], default="json")
     parser.add_argument("--output", type=Path, default=None)
     return parser.parse_args(argv)
 
@@ -202,13 +203,121 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 async def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     payload = await compare_real_run_quality(args)
-    encoded = json.dumps(payload, ensure_ascii=True, indent=2)
+    encoded = (
+        render_compare_markdown(payload)
+        if args.format == "markdown"
+        else json.dumps(payload, ensure_ascii=True, indent=2)
+    )
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(encoded + "\n", encoding="utf-8")
+        args.output.write_text(encoded.rstrip() + "\n", encoding="utf-8")
+    if args.format == "markdown":
+        print(encoded.rstrip())
+        return
     print("COMPARE_JSON_START")
     print(encoded)
     print("COMPARE_JSON_END")
+
+
+def render_compare_markdown(payload: dict[str, object]) -> str:
+    old = _dict_value(payload.get("old"))
+    current = _dict_value(payload.get("current"))
+    delta = _dict_value(payload.get("delta"))
+    quality = _dict_value(payload.get("quality"))
+    baseline_run_id = _text(old.get("run_id")) or _text(quality.get("baseline_run_id"))
+    lines = [
+        "# Real Run Quality Comparison",
+        "",
+        f"- Current run: {_text(current.get('run_id')) or 'unknown'}",
+        f"- Baseline run: {baseline_run_id or 'none'}",
+        f"- Execution mode: {_text(current.get('execution_mode')) or 'unknown'}",
+        f"- Quality verdict: {_text(quality.get('verdict')) or 'unknown'}",
+        f"- Regression gate: {_text(quality.get('regression_gate_status')) or 'unknown'}",
+        "",
+        "## Score",
+        "",
+        "| Metric | Value |",
+        "|---|---:|",
+        f"| Target score | {_number_text(quality.get('target_score'))} |",
+        f"| Baseline score | {_number_text(quality.get('baseline_score'))} |",
+        f"| Delta score | {_signed_number_text(quality.get('delta_score'))} |",
+        "",
+        "## Shape Delta",
+        "",
+    ]
+    if delta.get("baseline_available") is False:
+        lines.append("- Baseline unavailable; shape deltas were not computed.")
+    else:
+        lines.extend(
+            [
+                "| Field | Delta |",
+                "|---|---:|",
+                f"| Report chars | {_signed_number_text(delta.get('report_chars'))} |",
+                f"| Raw sources | {_signed_number_text(delta.get('raw_sources'))} |",
+                f"| Claims | {_signed_number_text(delta.get('claims'))} |",
+                f"| QA findings | {_signed_number_text(delta.get('qa_findings'))} |",
+                f"| Trace spans | {_signed_number_text(delta.get('trace_spans'))} |",
+                (
+                    "| Fallback report regressed | "
+                    f"{'yes' if delta.get('fallback_report_regressed') is True else 'no'} |"
+                ),
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Current Evidence",
+            "",
+            "| Field | Value |",
+            "|---|---:|",
+            f"| Raw sources | {_number_text(current.get('raw_sources'))} |",
+            f"| Enterprise evidence | {_number_text(current.get('enterprise_evidence'))} |",
+            f"| Claims | {_number_text(current.get('claims'))} |",
+            f"| Enterprise claims | {_number_text(current.get('enterprise_claims'))} |",
+            f"| Trace spans | {_number_text(current.get('trace_spans'))} |",
+            f"| Report chars | {_number_text(current.get('report_chars'))} |",
+            "",
+            "## Quality Metrics",
+            "",
+            "| Metric | Target | Baseline | Delta | Status |",
+            "|---|---:|---:|---:|---|",
+        ]
+    )
+    for metric in _list_of_dicts(quality.get("metrics"))[:16]:
+        lines.append(
+            "| {name} | {target} | {baseline} | {delta_value} | {status} |".format(
+                name=_escape_table(_text(metric.get("name"))),
+                target=_number_text(metric.get("target_value")),
+                baseline=_number_text(metric.get("baseline_value")),
+                delta_value=_signed_number_text(metric.get("delta")),
+                status=_escape_table(_text(metric.get("status"))),
+            )
+        )
+
+    gate_reasons = _string_list(quality.get("regression_gate_reasons"))
+    if gate_reasons:
+        lines.extend(["", "## Gate Reasons", ""])
+        lines.extend(f"- {item}" for item in gate_reasons)
+
+    recommendations = _string_list(quality.get("recommendations"))
+    if recommendations:
+        lines.extend(["", "## Recommendations", ""])
+        lines.extend(f"- {item}" for item in recommendations)
+
+    lines.extend(
+        [
+            "",
+            "## Method",
+            "",
+            (
+                "This card is generated by `backend/scripts/compare_real_run_quality.py` "
+                "from the current run, the selected old plan_a baseline, and the same "
+                "RunQualityComparison gate used by the API."
+            ),
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _list_value(value: object) -> list[Any]:
@@ -229,6 +338,54 @@ def _numeric(value: object) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _dict_value(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def _list_of_dicts(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item]
+
+
+def _text(value: object) -> str:
+    return str(value) if value is not None else ""
+
+
+def _number_text(value: object) -> str:
+    if value is None:
+        return "n/a"
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return f"{value:.3f}".rstrip("0").rstrip(".")
+    try:
+        parsed = float(str(value))
+    except (TypeError, ValueError):
+        return _escape_table(str(value))
+    return f"{parsed:.3f}".rstrip("0").rstrip(".")
+
+
+def _signed_number_text(value: object) -> str:
+    if value is None:
+        return "n/a"
+    number = _numeric(value)
+    prefix = "+" if number > 0 else ""
+    return f"{prefix}{_number_text(number)}"
+
+
+def _escape_table(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")
 
 
 if __name__ == "__main__":
