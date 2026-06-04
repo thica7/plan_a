@@ -202,13 +202,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--dimensions", nargs="+", default=["pricing", "feature", "persona"])
     parser.add_argument("--execution-mode", choices=["demo", "real"], default="real")
     parser.add_argument("--format", choices=["json", "markdown"], default="json")
+    parser.add_argument("--timeout-seconds", type=float, default=600.0)
     parser.add_argument("--output", type=Path, default=None)
     return parser.parse_args(argv)
 
 
 async def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    payload = await compare_real_run_quality(args)
+    try:
+        payload = await asyncio.wait_for(
+            compare_real_run_quality(args),
+            timeout=max(1.0, float(args.timeout_seconds)),
+        )
+    except TimeoutError:
+        payload = build_timeout_payload(args)
     encoded = (
         render_compare_markdown(payload)
         if args.format == "markdown"
@@ -241,18 +248,24 @@ def render_compare_markdown(payload: dict[str, object]) -> str:
         f"- Execution mode: {_text(current.get('execution_mode')) or 'unknown'}",
         f"- Quality verdict: {_text(quality.get('verdict')) or 'unknown'}",
         f"- Regression gate: {_text(quality.get('regression_gate_status')) or 'unknown'}",
-        "",
-        "## Score",
-        "",
-        "| Metric | Value |",
-        "|---|---:|",
-        f"| Target score | {_number_text(quality.get('target_score'))} |",
-        f"| Baseline score | {_number_text(quality.get('baseline_score'))} |",
-        f"| Delta score | {_signed_number_text(quality.get('delta_score'))} |",
-        "",
-        "## Shape Delta",
-        "",
     ]
+    if payload.get("comparison_error"):
+        lines.append(f"- Comparison error: {_escape_table(_text(payload.get('comparison_error')))}")
+    lines.extend(
+        [
+            "",
+            "## Score",
+            "",
+            "| Metric | Value |",
+            "|---|---:|",
+            f"| Target score | {_number_text(quality.get('target_score'))} |",
+            f"| Baseline score | {_number_text(quality.get('baseline_score'))} |",
+            f"| Delta score | {_signed_number_text(quality.get('delta_score'))} |",
+            "",
+            "## Shape Delta",
+            "",
+        ]
+    )
     if delta.get("baseline_available") is False:
         lines.append("- Baseline unavailable; shape deltas were not computed.")
     else:
@@ -413,6 +426,58 @@ def _numeric(value: object) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def build_timeout_payload(args: argparse.Namespace) -> dict[str, object]:
+    timeout_seconds = max(1.0, float(args.timeout_seconds))
+    try:
+        old_summary_payload = old_run_summary(args.old_db, args.old_run_id)
+    except Exception as exc:
+        old_summary_payload = {
+            "run_id": args.old_run_id,
+            "error": str(exc),
+        }
+    current_summary_payload = {
+        "run_id": None,
+        "status": "timeout",
+        "current_node": None,
+        "execution_mode": args.execution_mode,
+        "report_chars": 0,
+        "raw_sources": 0,
+        "claims": 0,
+        "qa_findings": 0,
+        "agent_messages": 0,
+        "tool_call_messages": 0,
+        "trace_spans": 0,
+        "timeout_seconds": timeout_seconds,
+    }
+    return {
+        "old": old_summary_payload,
+        "current": current_summary_payload,
+        "delta": {
+            "baseline_available": not bool(old_summary_payload.get("error")),
+            "timed_out": True,
+        },
+        "quality": {
+            "target_score": 0,
+            "baseline_score": None,
+            "delta_score": None,
+            "verdict": "fail",
+            "regression_gate_status": "fail",
+            "regression_gate_passed": False,
+            "regression_gate_reasons": [
+                f"real run comparison timed out after {timeout_seconds:g} seconds"
+            ],
+            "metrics": [],
+            "recommendations": [
+                (
+                    "Inspect external search, fetch, and LLM stages; reduce scenario size or "
+                    "raise --timeout-seconds only after stage-level progress is visible."
+                )
+            ],
+        },
+        "comparison_error": f"timeout after {timeout_seconds:g} seconds",
+    }
 
 
 def _dict_value(value: object) -> dict[str, object]:

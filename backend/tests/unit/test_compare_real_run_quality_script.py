@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sqlite3
+from argparse import Namespace
 from pathlib import Path
 from types import ModuleType
 
@@ -198,3 +199,23 @@ def test_render_compare_markdown_summarizes_quality_gate() -> None:
     assert "| Raw sources | +3 |" in markdown
     assert "| report_length_score | 1 | 0.4 | +0.6 | improved |" in markdown
     assert "Keep source snapshots attached" in markdown
+
+
+def test_timeout_payload_renders_failed_comparison_card(tmp_path: Path) -> None:
+    script = _load_script()
+    missing_db = tmp_path / "missing.db"
+
+    payload = script.build_timeout_payload(
+        Namespace(
+            old_db=missing_db,
+            old_run_id="old-run",
+            execution_mode="real",
+            timeout_seconds=12,
+        )
+    )
+    markdown = script.render_compare_markdown(payload)
+
+    assert payload["current"]["status"] == "timeout"
+    assert payload["quality"]["regression_gate_status"] == "fail"
+    assert "- Comparison error: timeout after 12 seconds" in markdown
+    assert "real run comparison timed out after 12 seconds" in markdown
