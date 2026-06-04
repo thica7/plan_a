@@ -67,8 +67,9 @@ class WriterAgentMixin:
                     name="report_writer",
                     system=(
                         "You are a senior enterprise competitive-intelligence analyst. "
-                        "Produce a decision-grade markdown report, not a short summary. "
-                        "Write with consulting depth: executive recommendation, source quality, "
+                        "Produce a concise decision-grade markdown first draft, not a short "
+                        "summary. Write with consulting depth: executive recommendation, "
+                        "source quality, "
                         "side-by-side matrices, dimension analysis, risks, buying implications, "
                         "and explicit next validation tasks. Cite factual claims with existing "
                         "source IDs using [source:ID]. Do not invent source IDs. "
@@ -100,7 +101,8 @@ class WriterAgentMixin:
                         f"{grounding_prompt}\n"
                         f"Writer Context JSON: {writer_context_json}\n\n"
                         f"Required sections:\n{required_sections}\n"
-                        "Prefer complete analysis over brevity, but stay under 12,000 characters."
+                        "Keep the first draft under 4,500 characters with compact bullets and "
+                        "tables; prioritize cited conclusions over narrative polish."
                     ),
                 ),
                 timeout=timeout_seconds,

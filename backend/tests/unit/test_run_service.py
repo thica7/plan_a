@@ -2341,6 +2341,7 @@ async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
     await service._real_writer_step(record)
 
     assert "Writer Context JSON:" in captured_user
+    assert "under 4,500 characters" in captured_user
     assert "Competitor KB JSON:" not in captured_user
     assert "Competitor Knowledge Schema JSON:" not in captured_user
     assert len(captured_user) < 15000
