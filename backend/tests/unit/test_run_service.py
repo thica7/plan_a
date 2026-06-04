@@ -1832,6 +1832,15 @@ def test_comparison_matrix_adds_pricing_and_persona_standardization_summary() ->
         in item
         for item in matrix.summary
     )
+    pricing_cell = next(
+        cell for cell in matrix.cells if cell.competitor == "A" and cell.dimension == "pricing"
+    )
+    persona_cell = next(
+        cell for cell in matrix.cells if cell.competitor == "A" and cell.dimension == "persona"
+    )
+    assert "tier_name=Free; price=$0; billing_cycle=monthly" in pricing_cell.value
+    assert "segment=Developer; role=engineering; company_size=individual" in persona_cell.value
+    assert "use_cases=code generation; pain_points=context switching" in persona_cell.value
 
 
 def test_comparison_matrix_caps_confidence_by_structured_claims() -> None:
@@ -2001,6 +2010,14 @@ def test_comparison_matrix_adds_feature_standardization_summary() -> None:
         and "B features=Autocomplete(Inline suggestions.;claims=1;children=0)" in item
         for item in matrix.summary
     )
+    feature_cell = next(
+        cell for cell in matrix.cells if cell.competitor == "A" and cell.dimension == "feature"
+    )
+    assert (
+        "feature_name=Agentic coding; description=Multi-file edits and tool use."
+        in feature_cell.value
+    )
+    assert "claim_count=1; child_count=1" in feature_cell.value
 
 
 @pytest.mark.asyncio

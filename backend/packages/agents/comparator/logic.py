@@ -7,7 +7,14 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from packages.schema.api_dto import RunDetail
-from packages.schema.models import ComparisonCell, ComparisonMatrix, RawSource
+from packages.schema.models import (
+    ComparisonCell,
+    ComparisonMatrix,
+    FeatureTree,
+    PricingModel,
+    RawSource,
+    UserPersonaModel,
+)
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
@@ -99,7 +106,9 @@ class ComparatorAgentMixin:
                         detail, competitor, dimension
                     )
                 ]
-                value = "; ".join(findings[:2])
+                value = self._structured_matrix_value(detail, competitor, dimension)
+                if not value:
+                    value = "; ".join(findings[:2])
                 if not value and related_sources:
                     value = related_sources[0].snippet or related_sources[0].title
                 cells.append(
@@ -136,6 +145,91 @@ class ComparatorAgentMixin:
                 *vote_summary,
             ],
         )
+
+    def _structured_matrix_value(
+        self, detail: RunDetail, competitor: str, dimension: str
+    ) -> str:
+        knowledge = detail.competitor_knowledge.get(competitor)
+        if knowledge is None:
+            return ""
+        dimension_key = dimension.casefold()
+        if "pricing" in dimension_key:
+            return self._structured_pricing_cell_value(knowledge.pricing_model)
+        if "persona" in dimension_key or "user" in dimension_key:
+            return self._structured_persona_cell_value(knowledge.user_personas)
+        if "feature" in dimension_key:
+            return self._structured_feature_cell_value(knowledge.feature_tree)
+        return ""
+
+    def _structured_pricing_cell_value(self, pricing: PricingModel) -> str:
+        tier_parts = [
+            (
+                "tier_name={name}; price={price}; billing_cycle={cycle}; limits={limits}"
+            ).format(
+                name=self._compact_matrix_text(tier.name or "unknown", 36),
+                price=self._compact_matrix_text(tier.price or "unknown", 56),
+                cycle=self._compact_matrix_text(tier.billing_cycle or "unknown", 28),
+                limits=self._compact_list_text(tier.limits, 72),
+            )
+            for tier in pricing.tiers[:4]
+        ]
+        note_parts = [
+            self._compact_matrix_text(claim.claim, 96) for claim in pricing.notes[:2]
+        ]
+        return self._join_structured_parts(tier_parts, "notes", note_parts)
+
+    def _structured_persona_cell_value(self, personas: UserPersonaModel) -> str:
+        segment_parts = [
+            (
+                "segment={segment}; role={role}; company_size={size}; "
+                "use_cases={use_cases}; pain_points={pain_points}"
+            ).format(
+                segment=self._compact_matrix_text(segment.name or "unknown", 36),
+                role=self._compact_matrix_text(segment.role or "unknown", 36),
+                size=self._compact_matrix_text(segment.company_size or "unknown", 32),
+                use_cases=self._compact_list_text(segment.use_cases, 72),
+                pain_points=self._compact_list_text(segment.pain_points, 72),
+            )
+            for segment in personas.segments[:3]
+        ]
+        summary_parts = [
+            self._compact_matrix_text(claim.claim, 96)
+            for claim in personas.summary_claims[:2]
+        ]
+        return self._join_structured_parts(segment_parts, "summary", summary_parts)
+
+    def _structured_feature_cell_value(self, feature_tree: FeatureTree) -> str:
+        feature_parts = [
+            (
+                "feature_name={name}; description={description}; "
+                "claim_count={claim_count}; child_count={child_count}"
+            ).format(
+                name=self._compact_matrix_text(node.name or "unknown", 36),
+                description=self._compact_matrix_text(node.description or "unknown", 72),
+                claim_count=len(node.claims),
+                child_count=len(node.children),
+            )
+            for node in feature_tree.nodes[:4]
+        ]
+        summary_parts = [
+            self._compact_matrix_text(claim.claim, 96)
+            for claim in feature_tree.summary_claims[:2]
+        ]
+        return self._join_structured_parts(feature_parts, "summary", summary_parts)
+
+    def _join_structured_parts(
+        self, primary_parts: list[str], fallback_label: str, fallback_parts: list[str]
+    ) -> str:
+        parts = list(primary_parts)
+        if not parts and fallback_parts:
+            parts = [f"{fallback_label}={part}" for part in fallback_parts]
+        return " | ".join(parts)
+
+    def _compact_list_text(self, values: list[str], limit: int) -> str:
+        cleaned = [value.strip() for value in values if value and value.strip()]
+        if not cleaned:
+            return "unknown"
+        return self._compact_matrix_text(", ".join(cleaned[:3]), limit)
 
     def _matrix_standardization_summary(self, detail: RunDetail) -> list[str]:
         summary: list[str] = []
