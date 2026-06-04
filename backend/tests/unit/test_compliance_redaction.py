@@ -1,6 +1,5 @@
 from packages.compliance import CompliancePolicy, redact_text
 
-
 FAKE_OPENROUTER_KEY = "sk-or-v1-" + "test" * 12
 
 

@@ -1,9 +1,9 @@
-from packages.tools.extract_facts import ExtractedFact, extract_facts
 from packages.tools.advanced_fetch import (
     AdvancedFetchQuality,
     AdvancedFetchResult,
     advanced_fetch_page,
 )
+from packages.tools.extract_facts import ExtractedFact, extract_facts
 from packages.tools.fetch_page import FetchPageResult, fetch_page
 from packages.tools.official_docs import OfficialDocCandidate, find_official_docs
 from packages.tools.review_site import ReviewSearchPlan, search_review_site_queries

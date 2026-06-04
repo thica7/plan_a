@@ -16,7 +16,6 @@ from packages.business_intel import (  # noqa: E402
 from packages.business_intel.homepage import verify_homepage  # noqa: E402
 from packages.schema.enterprise import BusinessQAFinding  # noqa: E402
 
-
 PRESET_CASES = (
     {
         "id": "l1_direct_battlecard",

@@ -246,7 +246,10 @@ def _model_backed_requested(context: dict[str, Any]) -> bool:
     return mode in {"model_backed", "test_model"}
 
 
-def _model_name_from_context(context: dict[str, Any], default_model: object | str | None) -> str | None:
+def _model_name_from_context(
+    context: dict[str, Any],
+    default_model: object | str | None,
+) -> str | None:
     model = context.get("pydantic_ai_model") or default_model
     if model is None:
         return None

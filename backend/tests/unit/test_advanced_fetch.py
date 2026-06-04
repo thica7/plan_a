@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from packages.governance import build_tool_registry_report
 from packages.config import Settings
+from packages.governance import build_tool_registry_report
 from packages.tools import advanced_fetch_page
 
 

@@ -1,8 +1,8 @@
-from packages.orchestrator.scoping import assign_redo_scope
 from packages.orchestrator.redo_seed_cases import (
     build_redo_scope_seed_cases,
     redo_scope_seed_snapshot,
 )
+from packages.orchestrator.scoping import assign_redo_scope
 from packages.orchestrator.state import GraphState
 
 __all__ = [
