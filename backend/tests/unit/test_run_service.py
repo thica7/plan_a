@@ -571,7 +571,7 @@ def test_feature_collection_uses_known_official_source_registry() -> None:
     assert cursor[0].url == "https://www.cursor.com/features"
     assert copilot[0].url == "https://docs.github.com/en/copilot/get-started/features"
     assert claude[0].url == "https://www.anthropic.com/product/claude-code"
-    assert windsurf[0].url == "https://windsurf.com/features"
+    assert windsurf[0].url == "https://docs.windsurf.com/windsurf/getting-started"
 
 
 @pytest.mark.asyncio
