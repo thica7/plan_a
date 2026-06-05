@@ -156,6 +156,33 @@ Validation:
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/tests/unit/test_research_pipeline.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py -q`
 
+## 2026-06-06 - Step 9: Research Assembly Output
+
+Commit: pending
+
+Scope:
+
+- Added `research.assembly.assemble_research_summary()` as the standard
+  branch-level assembly output for accepted fields, rejected fields, gaps, and
+  repair tasks.
+- Added `ResearchResult.assembly` so the pipeline returns an evidence package,
+  not only raw stage artifacts.
+- Wired `run_research_pipeline()` to populate assembly output.
+- Added test assertions that assembly carries branch key, accepted evidence
+  counts, and field summaries.
+
+Why:
+
+- Closes the assembly layer without rewriting the existing report writer.
+- Gives comparator/writer/release-gate follow-up work a stable research package
+  to consume.
+- Keeps report generation separate from evidence-field assembly.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/tests/unit/test_research_pipeline.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py -q`
+
 ## 2026-06-06 - Step 7: Release Gate To Auto-Redo Integration
 
 Commit: pending

@@ -271,4 +271,5 @@ class ResearchResult(ResearchBaseModel):
     raw_source_ids: list[str] = Field(default_factory=list)
     gaps: list[QualityGap] = Field(default_factory=list)
     repair_tasks: list[RepairTask] = Field(default_factory=list)
+    assembly: dict[str, Any] = Field(default_factory=dict)
     metrics: dict[str, Any] = Field(default_factory=dict)

@@ -412,6 +412,9 @@ async def test_run_research_pipeline_connects_discover_capture_extract_repair() 
     assert result.captured_pages
     assert result.extractions
     assert result.evidence_items
+    assert result.assembly["branch_key"] == brief.branch_key
+    assert result.assembly["accepted_evidence_item_count"] > 0
+    assert result.assembly["fields"]
     assert result.metrics["verified_capture_rate"] == 1.0
     assert result.metrics["evidence_item_count"] == len(result.evidence_items)
 

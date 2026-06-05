@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from packages.research.assembly import assemble_research_summary
 from packages.research.capture import CaptureCache, capture_candidate
 from packages.research.discovery import (
     build_search_queries,
@@ -57,6 +58,12 @@ async def run_research_pipeline(
     evidence_items = evidence_items_from_extractions(extractions)
     gaps = quality_gaps_from_extractions(brief, extractions)
     planned_repairs = repair_tasks_from_gaps(gaps)
+    assembly = assemble_research_summary(
+        brief,
+        evidence_items=evidence_items,
+        gaps=gaps,
+        repair_tasks=planned_repairs,
+    )
     return ResearchResult(
         brief=brief,
         candidates=candidates,
@@ -65,6 +72,7 @@ async def run_research_pipeline(
         evidence_items=evidence_items,
         gaps=gaps,
         repair_tasks=planned_repairs,
+        assembly=assembly,
         metrics={
             **_metrics(candidates, captured_pages, extractions, evidence_items, gaps, brief),
             **capture_metrics,
