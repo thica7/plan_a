@@ -6,8 +6,16 @@ from packages.research.discovery import (
     rank_and_dedupe_candidates,
     trusted_registry_candidates,
 )
+from packages.research.evaluation import quality_gaps_from_extractions
 from packages.research.evidence import raw_source_from_capture, source_quality_problem
+from packages.research.extraction import (
+    extract_feature_slots,
+    extract_page,
+    extract_persona_schema,
+    extract_pricing_model,
+)
 from packages.research.models import CapturedPage, ResearchBrief, SourceCandidate
+from packages.research.repair import repair_tasks_from_gaps
 from packages.schema.models import RawSource
 from packages.tools.evidence_fetch import EvidenceFetchResult
 
@@ -147,3 +155,129 @@ def test_source_quality_problem_rejects_soft_404() -> None:
     )
 
     assert "soft 404" in (source_quality_problem(source) or "")
+
+
+def test_pricing_extractor_marks_open_weight_pricing_not_applicable() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="Most powerful LLM",
+        competitor="Llama",
+        dimension="pricing",
+    )
+    page = CapturedPage(
+        candidate_id="candidate-llama-license",
+        requested_url="https://www.llama.com/llama-downloads/",
+        final_url="https://www.llama.com/llama-downloads/",
+        status="ok",
+        title="Llama downloads",
+        text=(
+            "Llama is an open weight model available under a license for "
+            "self-hosted deployment. Review the license terms before use."
+        ),
+        content_hash="hash-llama-license",
+        status_code=200,
+        fetch_method="webfetch_v2",
+        quality_score=0.92,
+    )
+
+    extraction = extract_pricing_model(brief, page)
+    gaps = quality_gaps_from_extractions(brief, [extraction])
+
+    assert extraction.status == "not_applicable"
+    assert extraction.fields["pricing_model_type"] == "open_weight_self_hosted"
+    assert extraction.not_applicable_reason
+    assert gaps == []
+
+
+def test_feature_extractor_emits_slot_matrix_and_gap_repair_task() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agent",
+        competitor="Claude Code",
+        dimension="feature",
+    )
+    page = CapturedPage(
+        candidate_id="candidate-claude-code-docs",
+        requested_url="https://docs.anthropic.com/en/docs/claude-code/overview",
+        final_url="https://docs.anthropic.com/en/docs/claude-code/overview",
+        status="ok",
+        title="Claude Code overview",
+        text=(
+            "Claude Code is an agentic coding assistant for developers. It can "
+            "work with a repository and codebase, use tools, and run tasks in an IDE."
+        ),
+        content_hash="hash-claude-code-docs",
+        status_code=200,
+        fetch_method="webfetch_v2",
+        quality_score=0.91,
+    )
+
+    extraction = extract_feature_slots(brief, page)
+    gaps = quality_gaps_from_extractions(brief, [extraction])
+    repair_tasks = repair_tasks_from_gaps(gaps)
+
+    assert extraction.fields["agentic_workflow"]["status"] == "supported"
+    assert extraction.fields["repository_context"]["status"] == "supported"
+    assert gaps
+    assert repair_tasks
+    assert repair_tasks[0].strategy == "feature_slot_repair"
+    assert repair_tasks[0].query_hints
+
+
+def test_persona_extractor_gaps_become_structured_repair_task() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI assistant market",
+        competitor="Gemini",
+        dimension="persona",
+    )
+    page = CapturedPage(
+        candidate_id="candidate-gemini-use-cases",
+        requested_url="https://workspace.google.com/solutions/ai/",
+        final_url="https://workspace.google.com/solutions/ai/",
+        status="ok",
+        title="Gemini for Workspace",
+        text=(
+            "Developers use Gemini to automate work, analyze information, and "
+            "collaborate in a cloud workspace."
+        ),
+        content_hash="hash-gemini-persona",
+        status_code=200,
+        fetch_method="webfetch_v2",
+        quality_score=0.86,
+    )
+
+    extraction = extract_persona_schema(brief, page)
+    gaps = quality_gaps_from_extractions(brief, [extraction])
+    repair_tasks = repair_tasks_from_gaps(gaps)
+
+    assert extraction.fields["buyer_or_user_role"]
+    assert extraction.fields["primary_use_case"]
+    assert any(gap.suggested_action == "persona_schema_repair" for gap in gaps)
+    assert repair_tasks[0].target_fields
+    assert any("customer" in query.casefold() for query in repair_tasks[0].query_hints)
+
+
+def test_extract_page_dispatches_by_dimension() -> None:
+    pricing_brief = ResearchBrief(
+        run_id="run-1",
+        topic="LLM APIs",
+        competitor="OpenAI",
+        dimension="pricing",
+    )
+    page = CapturedPage(
+        candidate_id="candidate-openai-pricing",
+        requested_url="https://platform.openai.com/docs/pricing",
+        final_url="https://platform.openai.com/docs/pricing",
+        status="ok",
+        title="OpenAI pricing",
+        text="OpenAI API pricing uses input and output token pricing with enterprise options.",
+        content_hash="hash-openai-pricing-dispatch",
+        status_code=200,
+        fetch_method="basic_httpx",
+        quality_score=0.9,
+    )
+
+    extraction = extract_page(pricing_brief, page)
+
+    assert extraction.extractor_name == "pricing_model"

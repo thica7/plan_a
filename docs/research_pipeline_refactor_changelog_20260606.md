@@ -32,7 +32,7 @@ Validation:
 
 ## 2026-06-06 - Step 2: Discovery, Capture, And Admission Boundaries
 
-Commit: pending
+Commit: `afcf480 refactor(research): split discovery capture admission`
 
 Scope:
 
@@ -63,3 +63,36 @@ Validation:
 
 - `ruff check backend/packages/research backend/packages/agents/collectors/logic.py backend/tests/unit/test_research_pipeline.py`
 - `pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
+
+## 2026-06-06 - Step 3: Extraction, Evaluation, And Repair Tasks
+
+Commit: `refactor(research): add extract evaluate repair stages`
+
+Scope:
+
+- Added `research.extraction` modules for pricing, feature-slot, and persona
+  schema extraction from captured pages.
+- Added `extract_page()` dimension dispatch so downstream collector integration
+  has one typed extraction entry point.
+- Added `research.evaluation.quality_gaps_from_extractions()` to convert
+  extraction results into structured quality gaps instead of mixing warnings
+  into collector control flow.
+- Added `research.repair.repair_tasks_from_gaps()` to convert QA-warning and
+  gap-driven findings into targeted discovery queries.
+- Added tests for open-weight pricing not-applicability, feature-slot gap
+  repair, persona schema repair, and dimension-based extraction dispatch.
+
+Why:
+
+- Keeps Clean Research Pipeline as the main architecture while making
+  QA-warning/GAP-driven behavior a first-class evaluation and repair stage.
+- Prevents objects like Llama from being forced into SaaS pricing tier
+  schemas when the verified public source describes open-weight or license
+  access.
+- Gives future release-gate and redo logic a typed repair contract instead of
+  scattered string warnings.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/tests/unit/test_research_pipeline.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
