@@ -44,6 +44,7 @@ ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 PPLX_API_KEY=your_perplexity_key
 PPLX_BASE_URL=https://api.perplexity.ai
 WEB_SEARCH_PROVIDER=perplexity
+WEBFETCH_V2_ROOT=
 DEMO_MODE=false
 MAX_ITERATIONS=2
 AUTO_REDO_ENABLED=true
@@ -72,6 +73,10 @@ unavailable. Real collector branches target
 `COLLECTOR_TARGET_VERIFIED_SOURCES_PER_BRANCH` fetched `webpage_verified`
 sources before falling back, bounded by `COLLECTOR_SEARCH_MAX_RESULTS` search
 candidates per query.
+JavaScript-heavy or short/blocked pages fall back to the vendored
+`third_party/webfetch_v2` CLI boundary. Leave `WEBFETCH_V2_ROOT` empty for the
+deployment default; set it only when intentionally testing a different
+webfetch_v2 checkout.
 
 M0 smoke checks:
 
@@ -145,4 +150,5 @@ backend/    FastAPI app, schema, skill registry, orchestration service
 frontend/   React/Vite app, API client, run pages, live swimlane view
 docs/       Architecture and API contract notes
 docker/     nginx reverse proxy config
+third_party/ Vendored runtime helpers, including webfetch_v2 for deployable fetch fallback
 ```

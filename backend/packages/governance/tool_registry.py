@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 from packages.schema.enterprise import ToolRegistryEntry, ToolRegistryReport
+from packages.tools.webfetch_runtime import resolve_webfetch_v2_root
 
 
 def build_tool_registry_report(settings: object) -> ToolRegistryReport:
     has_search = bool(getattr(settings, "has_web_search_credentials", False))
     redaction_enabled = bool(getattr(settings, "compliance_redaction_enabled", True))
     trace_required = bool(getattr(settings, "compliance_require_trace_context", True))
-    advanced_fetch_root = Path(
-        os.getenv("WEBFETCH_V2_ROOT", r"D:\codex_workspace\webfetch_v2")
-    )
+    advanced_fetch_root = resolve_webfetch_v2_root()
     advanced_fetch_configured = advanced_fetch_root.exists()
     entries = [
         ToolRegistryEntry(
@@ -49,7 +45,7 @@ def build_tool_registry_report(settings: object) -> ToolRegistryReport:
             name="advanced_fetch_page",
             category="collection",
             description=(
-                "Optional external webfetch_v2 boundary for JavaScript-heavy pages, "
+                "Vendored webfetch_v2 boundary for JavaScript-heavy pages, "
                 "quality diagnostics, markdown extraction, and screenshots."
             ),
             input_schema="AdvancedFetchRequest",
@@ -66,7 +62,10 @@ def build_tool_registry_report(settings: object) -> ToolRegistryReport:
             reason=(
                 f"webfetch_v2 root is configured at {advanced_fetch_root}."
                 if advanced_fetch_configured and trace_required
-                else "Requires WEBFETCH_V2_ROOT and trace context before real browser fetches."
+                else (
+                    "Requires the vendored webfetch_v2 root or WEBFETCH_V2_ROOT "
+                    "override plus trace context before real browser fetches."
+                )
             ),
         ),
         ToolRegistryEntry(

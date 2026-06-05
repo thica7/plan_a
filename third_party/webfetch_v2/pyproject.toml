@@ -1,0 +1,39 @@
+[project]
+name = "webfetch-v2"
+version = "0.1.0"
+description = "Advanced WebFetch for research agents with static and browser extraction modes"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "beautifulsoup4>=4.12.0",
+]
+
+[project.optional-dependencies]
+extraction = [
+    "trafilatura>=1.8.0",
+    "readability-lxml>=0.8.1",
+]
+browser = [
+    "playwright>=1.44.0",
+]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+webfetch-v2 = "webfetch_v2.cli:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+markers = [
+    "browser: optional browser tests that may require Playwright/Chromium",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.setuptools.packages.find]
+include = ["webfetch_v2*"]

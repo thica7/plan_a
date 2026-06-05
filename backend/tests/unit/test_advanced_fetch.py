@@ -12,6 +12,7 @@ from packages.tools import (
     advanced_fetch_page,
     fetch_evidence_page,
 )
+from packages.tools.webfetch_runtime import DEFAULT_WEBFETCH_V2_ROOT, resolve_webfetch_v2_root
 
 
 class _FakeProcess:
@@ -76,6 +77,17 @@ async def test_advanced_fetch_page_parses_webfetch_v2_payload(monkeypatch, tmp_p
     assert calls[0][1]["cwd"] == str(tmp_path)
 
 
+def test_default_webfetch_v2_root_is_vendored_with_plan_a() -> None:
+    assert DEFAULT_WEBFETCH_V2_ROOT.name == "webfetch_v2"
+    assert DEFAULT_WEBFETCH_V2_ROOT.parent.name == "third_party"
+    assert (DEFAULT_WEBFETCH_V2_ROOT / "webfetch_v2" / "__main__.py").exists()
+
+
+def test_blank_webfetch_v2_root_uses_vendored_default(monkeypatch) -> None:
+    monkeypatch.setenv("WEBFETCH_V2_ROOT", "")
+    assert resolve_webfetch_v2_root() == DEFAULT_WEBFETCH_V2_ROOT
+
+
 @pytest.mark.asyncio
 async def test_advanced_fetch_page_surfaces_invalid_json(monkeypatch, tmp_path) -> None:
     async def fake_subprocess(*args: object, **kwargs: object) -> _FakeProcess:  # noqa: ARG001
@@ -110,7 +122,7 @@ def test_tool_registry_lists_advanced_fetch_as_guarded_when_unconfigured(
     entry = next(item for item in report.entries if item.name == "advanced_fetch_page")
     assert entry.status == "guarded"
     assert entry.allowed_in_real_mode is False
-    assert "WEBFETCH_V2_ROOT" in entry.reason
+    assert "webfetch_v2" in entry.reason
 
 
 @pytest.mark.asyncio

@@ -59,6 +59,10 @@ Module: `backend/packages/tools/evidence_fetch.py`
 - `text_length`
 - `failure_reason`
 
+`advanced_fetch_page` runs `webfetch_v2` from the vendored default
+`third_party/webfetch_v2`. `WEBFETCH_V2_ROOT` is an optional override for local
+experiments; an empty value uses the vendored deployment default.
+
 Flow:
 
 1. Try fast `fetch_page`.

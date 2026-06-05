@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-DEFAULT_WEBFETCH_V2_ROOT = Path(r"D:\codex_workspace\webfetch_v2")
+from packages.tools.webfetch_runtime import resolve_webfetch_v2_root
 
 
 @dataclass(frozen=True)
@@ -55,13 +54,13 @@ async def advanced_fetch_page(
     screenshot: bool = False,
     webfetch_root: Path | None = None,
 ) -> AdvancedFetchResult:
-    """Fetch a page through the external webfetch_v2 CLI.
+    """Fetch a page through the vendored webfetch_v2 CLI.
 
-    The external boundary keeps Playwright/browser dependencies optional for plan_a.
+    The subprocess boundary keeps Playwright/browser dependencies optional for plan_a.
     Use persistent profiles only with explicit user authorization.
     """
 
-    root = webfetch_root or Path(os.environ.get("WEBFETCH_V2_ROOT", str(DEFAULT_WEBFETCH_V2_ROOT)))
+    root = resolve_webfetch_v2_root(webfetch_root)
     command = [
         sys.executable,
         "-m",
