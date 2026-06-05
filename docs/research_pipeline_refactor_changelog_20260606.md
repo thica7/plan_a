@@ -96,3 +96,37 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/tests/unit/test_research_pipeline.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
+
+## 2026-06-06 - Step 4: Collector Adapter Integration
+
+Commit: pending
+
+Scope:
+
+- Routed collector official-source discovery through `ResearchBrief`,
+  `trusted_registry_candidates()`, and `homepage_candidates()`.
+- Routed collector search-result candidates through
+  `search_result_candidates()` so web search, Perplexity, and derived
+  candidates share the same ranking/dedupe boundary.
+- Changed `_source_from_search_result()` to capture pages with
+  `capture_candidate()` and create `RawSource` records with
+  `raw_source_from_capture()` instead of hand-writing duplicate RawSource
+  construction logic.
+- Updated skill-tool collection to use the same research discovery candidate
+  contract as the main collector path.
+- Hardened `capture_candidate()` for legacy fetch results and `None` returns,
+  so fetch compatibility stays in capture rather than leaking back into
+  collector logic.
+
+Why:
+
+- Makes Clean Research Pipeline the actual collector boundary, not just a
+  parallel package.
+- Reduces source identity drift by generating source candidates and RawSource
+  lineage in one place.
+- Keeps webfetch/basic-fetch compatibility behind the capture stage.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/agents/collectors backend/packages/research backend/tests/unit/test_research_pipeline.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`

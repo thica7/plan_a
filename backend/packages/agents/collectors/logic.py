@@ -17,7 +17,14 @@ from packages.business_intel.entity_resolver import (
     search_qualifier_for_competitor,
 )
 from packages.identity import compute_raw_source_id
-from packages.research.evidence import source_quality_problem
+from packages.research.capture import capture_candidate
+from packages.research.discovery import (
+    homepage_candidates,
+    search_result_candidates,
+    trusted_registry_candidates,
+)
+from packages.research.evidence import raw_source_from_capture, source_quality_problem
+from packages.research.models import ResearchBrief
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     RawSource,
@@ -26,13 +33,11 @@ from packages.search import SearchResult
 from packages.tools import (
     extract_facts,
     fetch_evidence_page,
-    find_official_docs,
     search_review_site_queries,
     survey_simulator,
 )
 from packages.tools.source_discovery import (
     SourceCandidate,
-    dedupe_source_candidates,
     source_candidate_from_search_result,
 )
 
@@ -268,11 +273,11 @@ class CollectorAgentMixin:
                 )
                 continue
             if action == "find_official_docs":
-                candidates = find_official_docs(
-                    competitor=competitor,
-                    dimension=dimension,
-                    homepage_hint=detail.plan.homepage_hints.get(competitor),
-                )
+                brief = self._research_brief(detail, competitor, dimension)
+                candidates = [
+                    *trusted_registry_candidates(brief),
+                    *homepage_candidates(brief),
+                ]
                 self._trace_local_tool(
                     record,
                     agent="collector",
@@ -287,7 +292,8 @@ class CollectorAgentMixin:
                         ensure_ascii=False,
                     ),
                     output_text=json.dumps(
-                        [candidate.__dict__ for candidate in candidates], ensure_ascii=False
+                        [candidate.model_dump(mode="json") for candidate in candidates],
+                        ensure_ascii=False,
                     ),
                     context=context,
                     metadata={"candidate_count": len(candidates)},
@@ -296,7 +302,9 @@ class CollectorAgentMixin:
                     {
                         "turn": turn,
                         "action": action,
-                        "candidates": [candidate.__dict__ for candidate in candidates[:4]],
+                        "candidates": [
+                            candidate.model_dump(mode="json") for candidate in candidates[:4]
+                        ],
                     }
                 )
                 continue
@@ -641,13 +649,9 @@ class CollectorAgentMixin:
         competitor: str,
         dimension: str,
     ) -> list[SourceCandidate]:
-        candidates = self._official_doc_candidates(detail, competitor, dimension)
-        trusted = [candidate for candidate in candidates if candidate.origin == "trusted_registry"]
-        if trusted:
-            return dedupe_source_candidates(trusted)
-        return dedupe_source_candidates(
-            [candidate for candidate in candidates if candidate.origin == "homepage_derived"]
-        )
+        brief = self._research_brief(detail, competitor, dimension)
+        trusted = trusted_registry_candidates(brief)
+        return trusted or homepage_candidates(brief)
 
     def _homepage_source_candidates(
         self,
@@ -655,39 +659,7 @@ class CollectorAgentMixin:
         competitor: str,
         dimension: str,
     ) -> list[SourceCandidate]:
-        return dedupe_source_candidates(
-            [
-                candidate
-                for candidate in self._official_doc_candidates(detail, competitor, dimension)
-                if candidate.origin == "homepage_derived"
-            ]
-        )
-
-    def _official_doc_candidates(
-        self,
-        detail: RunDetail,
-        competitor: str,
-        dimension: str,
-    ) -> list[SourceCandidate]:
-        candidates: list[SourceCandidate] = []
-        for candidate in find_official_docs(
-            competitor=competitor,
-            dimension=dimension,
-            homepage_hint=detail.plan.homepage_hints.get(competitor),
-        ):
-            candidates.append(
-                SourceCandidate(
-                    title=candidate.title,
-                    url=candidate.url,
-                    snippet=candidate.rationale,
-                    origin=candidate.origin,
-                    competitor=competitor,
-                    dimension=dimension,
-                    rank=candidate.rank,
-                    confidence=candidate.confidence,
-                )
-            )
-        return dedupe_source_candidates(candidates)
+        return homepage_candidates(self._research_brief(detail, competitor, dimension))
 
     async def _collect_homepage_fallback_sources(
         self,
@@ -939,20 +911,11 @@ class CollectorAgentMixin:
         results: list[SearchResult],
     ) -> list[SourceCandidate]:
         origin = self._settings.web_search_provider or "web_search"
-        candidates = [
-            source_candidate_from_search_result(
-                result,
-                origin=origin,
-                rank=rank,
-                confidence=self._search_candidate_confidence(competitor, result),
-                competitor=competitor,
-                dimension=dimension,
-            )
-            for rank, result in enumerate(
-                self._rank_search_results(detail, competitor, dimension, results)
-            )
-        ]
-        return dedupe_source_candidates(candidates)
+        return search_result_candidates(
+            self._research_brief(detail, competitor, dimension),
+            self._rank_search_results(detail, competitor, dimension, results),
+            origin=origin,
+        )
 
     def _search_candidate_confidence(self, competitor: str, result: SearchResult) -> float:
         if is_trusted_url_for_competitor(competitor, result.url):
@@ -988,6 +951,26 @@ class CollectorAgentMixin:
         if not url:
             return ""
         return (urlparse(url).hostname or "").casefold().removeprefix("www.")
+
+    def _research_brief(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+    ) -> ResearchBrief:
+        return ResearchBrief(
+            run_id=detail.id,
+            topic=detail.topic,
+            competitor=competitor,
+            dimension=dimension,
+            execution_mode=detail.execution_mode,
+            homepage_hint=detail.plan.homepage_hints.get(competitor),
+            target_source_count=self._collector_target_source_count(detail, dimension),
+            max_search_queries=2,
+            max_candidates=max(6, self._collector_search_max_results()),
+            max_fetches=max(3, self._collector_target_source_count(detail, dimension)),
+            max_advanced_fetches=getattr(self._settings, "web_fetch_advanced_max", 3),
+        )
 
     def _dimension_evidence_snippet(self, text: str, dimension: str, fallback: str) -> str:
         collapsed = re.sub(r"\s+", " ", text).strip()
@@ -1352,12 +1335,15 @@ class CollectorAgentMixin:
             for source in detail.raw_sources
         ):
             return None
-        fetched = (
-            await self._trace_fetch(record, "collector", dimension, result.url, context)
+        fetch_result = (
+            await capture_candidate(
+                source_candidate,
+                lambda url: self._trace_fetch(record, "collector", dimension, url, context),
+            )
             if record is not None
-            else await fetch_evidence_page(result.url)
+            else await capture_candidate(source_candidate, fetch_evidence_page)
         )
-        verified = fetched is not None and fetched.ok
+        verified = fetch_result.status == "ok"
         if not verified and self._requires_verified_web_evidence(detail, dimension):
             self._trace_rejected_source_candidate(
                 record,
@@ -1366,12 +1352,16 @@ class CollectorAgentMixin:
                 dimension=dimension,
                 title=result.title,
                 url=result.url,
-                reason=self._fetch_rejection_reason(fetched),
+                reason=self._fetch_rejection_reason(fetch_result),
                 candidate=source_candidate,
             )
             return None
         snippet = (
-            self._dimension_evidence_snippet(fetched.text, dimension, fetched.snippet)
+            self._dimension_evidence_snippet(
+                fetch_result.text,
+                dimension,
+                fetch_result.snippet,
+            )
             if verified
             else result.snippet
         )
@@ -1380,92 +1370,23 @@ class CollectorAgentMixin:
                 detail,
                 competitor,
                 dimension,
-                fetched.url,
+                fetch_result.final_url,
                 snippet,
             )
-            if verified and fetched is not None
+            if verified
             else 0.68
         )
-        provisional = RawSource(
-            id=compute_raw_source_id(
-                source_type="webpage_verified" if verified else "web_search_result",
-                competitor=competitor,
-                dimension=dimension,
-                url=fetched.url if verified else result.url,
-                content_hash=(
-                    fetched.content_hash
-                    if fetched is not None
-                    else hashlib.sha256(
-                        (snippet or result.title or result.url).encode()
-                    ).hexdigest()[:16]
-                ),
-                title=fetched.title if verified and fetched.title else result.title,
-                snippet=snippet,
-                run_id=detail.id,
-            ),
-            competitor=competitor,
-            dimension=dimension,
-            source_type="webpage_verified" if verified else "web_search_result",
-            title=(fetched.title if verified and fetched.title else result.title),
-            url=(fetched.url if verified else result.url),
-            snippet=snippet,
-            content_hash=(
-                fetched.content_hash
-                if fetched is not None
-                else hashlib.sha256((snippet or result.title or result.url).encode()).hexdigest()[
-                    :16
-                ]
-            ),
+        source = raw_source_from_capture(
+            self._research_brief(detail, competitor, dimension),
+            source_candidate,
+            fetch_result,
             confidence=confidence,
-            candidate_origin=source_candidate.origin,
-            candidate_rank=source_candidate.rank,
-            candidate_confidence=source_candidate.confidence,
-            fetch_method=getattr(fetched, "fetch_method", "") if fetched is not None else "",
-            quality_score=float(getattr(fetched, "quality_score", 0.0) or 0.0)
-            if fetched is not None
-            else 0.0,
-            failure_reason=getattr(fetched, "failure_reason", None)
-            if fetched is not None
-            else None,
+            source_type="webpage_verified" if verified else "web_search_result",
+            snippet=snippet,
         )
-        if not self._source_is_usable(provisional):
+        if not self._source_is_usable(source):
             return None
-        content_basis = snippet or result.title or result.url
-        content_hash = (
-            fetched.content_hash
-            if fetched is not None
-            else hashlib.sha256(content_basis.encode()).hexdigest()[:16]
-        )
-        return RawSource(
-            id=compute_raw_source_id(
-                source_type="webpage_verified" if verified else "web_search_result",
-                competitor=competitor,
-                dimension=dimension,
-                url=fetched.url if verified else result.url,
-                content_hash=content_hash,
-                title=fetched.title if verified and fetched.title else result.title,
-                snippet=snippet,
-                run_id=detail.id,
-            ),
-            competitor=competitor,
-            dimension=dimension,
-            source_type="webpage_verified" if verified else "web_search_result",
-            title=(fetched.title if verified and fetched.title else result.title),
-            url=(fetched.url if verified else result.url),
-            snippet=snippet,
-            content_hash=content_hash,
-            confidence=confidence,
-            candidate_origin=source_candidate.origin,
-            candidate_rank=source_candidate.rank,
-            candidate_confidence=source_candidate.confidence,
-            fetch_method=getattr(fetched, "fetch_method", "") if fetched is not None else "",
-            quality_score=float(getattr(fetched, "quality_score", 0.0) or 0.0)
-            if fetched is not None
-            else 0.0,
-            failure_reason=getattr(fetched, "failure_reason", None)
-            if fetched is not None
-            else None,
-        )
+        return source
 
     def _requires_verified_web_evidence(self, detail: RunDetail, dimension: str) -> bool:
         return detail.execution_mode == "real" and dimension in detail.plan.dimensions

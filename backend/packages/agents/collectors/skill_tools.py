@@ -4,11 +4,12 @@ import json
 
 from packages.agents import SubagentContext
 from packages.identity import compute_raw_source_id
+from packages.research.discovery import homepage_candidates, trusted_registry_candidates
+from packages.research.models import ResearchBrief
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import RawSource
 from packages.search import SearchResult
-from packages.tools import find_official_docs, search_review_site_queries, survey_simulator
-from packages.tools.source_discovery import SourceCandidate
+from packages.tools import search_review_site_queries, survey_simulator
 
 
 async def collect_competitor_with_skill_tools(
@@ -26,11 +27,15 @@ async def collect_competitor_with_skill_tools(
     sources: list[RawSource] = []
 
     if "find_official_docs" in allowlist:
-        candidates = find_official_docs(
+        brief = ResearchBrief(
+            run_id=detail.id,
+            topic=detail.topic,
             competitor=competitor,
             dimension=dimension,
             homepage_hint=detail.plan.homepage_hints.get(competitor),
+            execution_mode=detail.execution_mode,
         )
+        candidates = [*trusted_registry_candidates(brief), *homepage_candidates(brief)]
         service._trace_local_tool(
             record,
             agent="collector",
@@ -45,7 +50,8 @@ async def collect_competitor_with_skill_tools(
                 ensure_ascii=False,
             ),
             output_text=json.dumps(
-                [candidate.__dict__ for candidate in candidates], ensure_ascii=False
+                [candidate.model_dump(mode="json") for candidate in candidates],
+                ensure_ascii=False,
             ),
             context=context,
             metadata={"candidate_count": len(candidates)},
@@ -55,19 +61,10 @@ async def collect_competitor_with_skill_tools(
                 detail,
                 competitor,
                 dimension,
-                SearchResult(title=candidate.title, url=candidate.url, snippet=candidate.rationale),
+                SearchResult(title=candidate.title, url=candidate.url, snippet=candidate.snippet),
                 record,
                 context,
-                candidate=SourceCandidate(
-                    title=candidate.title,
-                    url=candidate.url,
-                    snippet=candidate.rationale,
-                    origin=candidate.origin,
-                    competitor=competitor,
-                    dimension=dimension,
-                    rank=candidate.rank,
-                    confidence=candidate.confidence,
-                ),
+                candidate=candidate,
             )
             if source is not None:
                 sources.append(source)
