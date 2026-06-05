@@ -66,7 +66,7 @@ Validation:
 
 ## 2026-06-06 - Step 3: Extraction, Evaluation, And Repair Tasks
 
-Commit: `refactor(research): add extract evaluate repair stages`
+Commit: `83b8aeb refactor(research): add extract evaluate repair stages`
 
 Scope:
 
@@ -99,7 +99,7 @@ Validation:
 
 ## 2026-06-06 - Step 4: Collector Adapter Integration
 
-Commit: pending
+Commit: `57a95d6 refactor(collector): route collection through research pipeline`
 
 Scope:
 
@@ -133,7 +133,7 @@ Validation:
 
 ## 2026-06-06 - Step 6: Release Gate Repair Bridge
 
-Commit: pending
+Commit: `fde00b5 feat(research): bridge release gate gaps to redo tasks`
 
 Scope:
 
@@ -158,7 +158,7 @@ Validation:
 
 ## 2026-06-06 - Step 10: Closed Loop Documentation
 
-Commit: pending
+Commit: `893efb8 docs(research): summarize closed loop implementation`
 
 Scope:
 
@@ -184,7 +184,7 @@ Validation:
 
 ## 2026-06-06 - Step 9: Research Assembly Output
 
-Commit: pending
+Commit: `4b95ffc feat(research): assemble branch evidence summaries`
 
 Scope:
 
@@ -211,7 +211,7 @@ Validation:
 
 ## 2026-06-06 - Step 7: Release Gate To Auto-Redo Integration
 
-Commit: pending
+Commit: `60567ff feat(orchestrator): auto redo blocked release gates`
 
 Scope:
 
@@ -240,7 +240,7 @@ Validation:
 
 ## 2026-06-06 - Step 8: Field Admission And Capture Cache
 
-Commit: pending
+Commit: `c7de5f8 feat(research): add field admission and capture cache`
 
 Scope:
 
@@ -268,7 +268,7 @@ Validation:
 
 ## 2026-06-06 - Step 5: Pipeline Entry Point And Refactor Documentation
 
-Commit: pending
+Commit: `ab7e46d docs(research): document clean pipeline refactor`
 
 Scope:
 
