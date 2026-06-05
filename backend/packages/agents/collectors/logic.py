@@ -17,6 +17,7 @@ from packages.business_intel.entity_resolver import (
     search_qualifier_for_competitor,
 )
 from packages.identity import compute_raw_source_id
+from packages.research.evidence import source_quality_problem
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     RawSource,
@@ -1078,54 +1079,7 @@ class CollectorAgentMixin:
         return self._source_quality_problem(source) is None
 
     def _source_quality_problem(self, source: RawSource) -> str | None:
-        text = f"{source.title}\n{source.snippet}".strip()
-        normalized = text.casefold()
-        snippet_normalized = source.snippet.casefold()
-        if len(source.snippet.strip()) < 24 and not self._has_concrete_source_signal(
-            source.dimension, normalized
-        ):
-            return (
-                f"Source {source.id} snippet is too short to support a reliable "
-                f"{source.dimension} claim."
-            )
-        if self._looks_like_binary_or_pdf(source.snippet):
-            return (
-                f"Source {source.id} looks like unreadable binary/PDF text, "
-                "not usable extracted evidence."
-            )
-        if self._looks_like_soft_404(source):
-            return f"Source {source.id} appears to be a soft 404 or not-found page."
-        if self._looks_like_navigation_only(
-            snippet_normalized
-        ) and not self._has_dimension_specific_fact(source.dimension, snippet_normalized):
-            return f"Source {source.id} appears to contain mostly navigation or boilerplate text."
-        if (
-            source.source_type == "webpage_verified"
-            and source.confidence <= 0.88
-            and not self._has_dimension_specific_fact(source.dimension, snippet_normalized)
-        ):
-            return (
-                f"Source {source.id} has low confidence ({source.confidence:.2f}) "
-                "and does not expose "
-                f"a concrete {source.dimension} fact in the fetched snippet."
-            )
-        if source.url and self._is_low_value_url(str(source.url)):
-            return (
-                f"Source {source.id} points to a low-value page for structured evidence extraction."
-            )
-        if source.url and self._is_dimension_mismatch_url(source.dimension, str(source.url)):
-            return (
-                f"Source {source.id} points to a page whose URL is mismatched for "
-                f"{source.dimension} evidence."
-            )
-        if identity_problem := self._competitor_identity_problem(source):
-            return identity_problem
-        if not self._dimension_terms_present(source.dimension, normalized):
-            return (
-                f"Source {source.id} does not contain enough {source.dimension} "
-                "terminology for this dimension."
-            )
-        return None
+        return source_quality_problem(source)
 
     def _has_concrete_source_signal(self, dimension: str, normalized_text: str) -> bool:
         dimension_key = dimension.casefold()

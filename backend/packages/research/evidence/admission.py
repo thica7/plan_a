@@ -1,0 +1,360 @@
+from __future__ import annotations
+
+import hashlib
+import re
+
+from packages.business_intel.entity_resolver import (
+    confusion_terms_for_competitor,
+    identity_terms_for_competitor,
+    normalize_competitor_key,
+)
+from packages.identity import compute_raw_source_id
+from packages.research.models import CapturedPage, ResearchBrief, SourceCandidate
+from packages.schema.models import RawSource
+
+USER_RESEARCH_SOURCE_TYPES = {
+    "survey_simulated",
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+    "manual_note",
+    "manual",
+}
+
+
+def raw_source_from_capture(
+    brief: ResearchBrief,
+    candidate: SourceCandidate,
+    capture: CapturedPage,
+    *,
+    confidence: float,
+    source_type: str = "webpage_verified",
+    snippet: str | None = None,
+) -> RawSource:
+    evidence_snippet = snippet or capture.snippet or candidate.snippet
+    content_hash = capture.content_hash or _content_hash(evidence_snippet or candidate.title)
+    return RawSource(
+        id=compute_raw_source_id(
+            source_type=source_type,
+            competitor=brief.competitor,
+            dimension=brief.dimension,
+            url=capture.final_url,
+            content_hash=content_hash,
+            title=capture.title or candidate.title,
+            snippet=evidence_snippet,
+            run_id=brief.run_id,
+        ),
+        competitor=brief.competitor,
+        dimension=brief.dimension,
+        source_type=source_type,
+        title=capture.title or candidate.title,
+        url=capture.final_url,
+        snippet=evidence_snippet,
+        content_hash=content_hash,
+        confidence=confidence,
+        candidate_origin=candidate.origin,
+        candidate_rank=candidate.rank,
+        candidate_confidence=candidate.confidence,
+        fetch_method=capture.fetch_method,
+        quality_score=capture.quality_score,
+        failure_reason=capture.failure_reason,
+    )
+
+
+def source_quality_problem(source: RawSource) -> str | None:
+    text = f"{source.title}\n{source.snippet}".strip()
+    normalized = text.casefold()
+    snippet_normalized = source.snippet.casefold()
+    if len(source.snippet.strip()) < 24 and not has_concrete_source_signal(
+        source.dimension, normalized
+    ):
+        return (
+            f"Source {source.id} snippet is too short to support a reliable "
+            f"{source.dimension} claim."
+        )
+    if looks_like_binary_or_pdf(source.snippet):
+        return (
+            f"Source {source.id} looks like unreadable binary/PDF text, "
+            "not usable extracted evidence."
+        )
+    if looks_like_soft_404(source):
+        return f"Source {source.id} appears to be a soft 404 or not-found page."
+    if looks_like_navigation_only(snippet_normalized) and not has_dimension_specific_fact(
+        source.dimension, snippet_normalized
+    ):
+        return f"Source {source.id} appears to contain mostly navigation or boilerplate text."
+    if (
+        source.source_type == "webpage_verified"
+        and source.confidence <= 0.88
+        and not has_dimension_specific_fact(source.dimension, snippet_normalized)
+    ):
+        return (
+            f"Source {source.id} has low confidence ({source.confidence:.2f}) "
+            f"and does not expose a concrete {source.dimension} fact in the fetched snippet."
+        )
+    if source.url and is_low_value_url(str(source.url)):
+        return f"Source {source.id} points to a low-value page for structured evidence extraction."
+    if source.url and is_dimension_mismatch_url(source.dimension, str(source.url)):
+        return (
+            f"Source {source.id} points to a page whose URL is mismatched for "
+            f"{source.dimension} evidence."
+        )
+    if identity_problem := competitor_identity_problem(source):
+        return identity_problem
+    if not dimension_terms_present(source.dimension, normalized):
+        return (
+            f"Source {source.id} does not contain enough {source.dimension} "
+            "terminology for this dimension."
+        )
+    return None
+
+
+def has_concrete_source_signal(dimension: str, normalized_text: str) -> bool:
+    dimension_key = dimension.casefold()
+    if "pricing" in dimension_key:
+        return bool(
+            re.search(
+                r"(?:\$|usd|rmb|cny|eur|\d+\s*(?:/|per)\s*(?:token|seat|month|year))",
+                normalized_text,
+            )
+        )
+    if "persona" in dimension_key or "user" in dimension_key:
+        return any(
+            term in normalized_text
+            for term in ("developer", "customer", "enterprise", "team", "user")
+        )
+    return any(
+        term in normalized_text for term in ("model", "api", "feature", "coding", "reasoning")
+    )
+
+
+def looks_like_binary_or_pdf(text: str) -> bool:
+    if "%pdf" in text[:80].casefold() or " endobj" in text.casefold():
+        return True
+    if not text:
+        return True
+    replacement_ratio = text.count("\ufffd") / max(1, len(text))
+    control_ratio = sum(1 for char in text if ord(char) < 32 and char not in "\n\r\t") / max(
+        1, len(text)
+    )
+    return replacement_ratio > 0.02 or control_ratio > 0.01
+
+
+def looks_like_soft_404(source: RawSource) -> bool:
+    normalized = f"{source.title}\n{source.snippet}".casefold()
+    title = source.title.casefold().strip()
+    if title in {"404", "not found", "404: this page could not be found"}:
+        return True
+    markers = (
+        "page not found",
+        "404 not found",
+        "this page could not be found",
+        "this page does not exist",
+        "this page doesn't exist",
+        "we couldn't find that page",
+        "we could not find that page",
+    )
+    if any(marker in normalized for marker in markers):
+        return True
+    return bool(re.search(r"(?:^|\s)404(?:\s|:|-)", normalized) and "not found" in normalized)
+
+
+def looks_like_navigation_only(normalized_text: str) -> bool:
+    nav_markers = [
+        "skip to main content",
+        "open menu",
+        "toggle theme",
+        "sign in",
+        "sign up",
+        "log in",
+        "language",
+        "cookie",
+        "this browser is no longer supported",
+        "download microsoft edge",
+        "search docs",
+        "search...",
+        "navigation",
+        "home page",
+        "resources",
+        "back to blog",
+    ]
+    marker_count = sum(1 for marker in nav_markers if marker in normalized_text)
+    return marker_count >= 3 and not has_dimension_specific_fact("generic", normalized_text)
+
+
+def has_dimension_specific_fact(dimension: str, normalized_text: str) -> bool:
+    if not normalized_text.strip():
+        return False
+    dimension_key = dimension.casefold()
+    if "pricing" in dimension_key:
+        return bool(
+            re.search(
+                r"(?:\$|usd|cny|rmb|eur|free|per\s+(?:user|seat|month|year|token)|\bplan\b|\btier\b)",
+                normalized_text,
+            )
+        )
+    if "persona" in dimension_key or "user" in dimension_key:
+        return bool(
+            re.search(
+                r"(?:target(?:ed)?\s+(?:user|customer|persona)|for\s+(?:developers|teams|enterprises|"
+                r"engineering|marketing|sales)|case stud(?:y|ies)|customer|"
+                r"enterprise|adoption|use case)",
+                normalized_text,
+            )
+        )
+    if "review" in dimension_key or "feedback" in dimension_key:
+        return bool(
+            re.search(
+                r"(?:review|feedback|rating|complaint|praise|customer|user|adoption|"
+                r"switching|pain point)",
+                normalized_text,
+            )
+        )
+    if "generic" in dimension_key:
+        return bool(
+            re.search(
+                r"(?:\$\d+|\d+\s*(?:k|m|%|tokens?|users?|seats?)|supports|provides|includes|"
+                r"offers|built for|used by|target(?:ed)?)",
+                normalized_text,
+            )
+        )
+    return bool(
+        re.search(
+            r"(?:supports|provides|includes|offers|can\s+(?:write|generate|explain|run)|"
+            r"context window|context awareness|tool calls?|code completion|"
+            r"pull requests?|api|benchmark|cascade|autocomplete|supercomplete|"
+            r"write/chat modes?|auto-execution|model context protocol|mcp|"
+            r"jetbrains plugin|command|tab)",
+            normalized_text,
+        )
+    )
+
+
+def is_low_value_url(url: str) -> bool:
+    lowered = url.casefold()
+    return any(
+        host in lowered
+        for host in (
+            "youtube.com",
+            "youtu.be",
+            "google.com/search",
+            "accounts.google",
+        )
+    )
+
+
+def is_dimension_mismatch_url(dimension: str, url: str) -> bool:
+    lowered = url.casefold()
+    dimension_key = dimension.casefold()
+    if "persona" in dimension_key or "user" in dimension_key:
+        return any(
+            token in lowered
+            for token in (
+                "/pricing",
+                "/plans",
+                "/billing",
+                "/accounts/usage",
+                "/subscription",
+                "/manage-plan",
+            )
+        )
+    return False
+
+
+def competitor_identity_problem(source: RawSource) -> str | None:
+    if source.source_type in USER_RESEARCH_SOURCE_TYPES:
+        return None
+    key = normalize_competitor_key(source.competitor)
+    if not key or key.startswith("crossmodel"):
+        return None
+    haystack = f"{source.title}\n{source.url or ''}\n{source.snippet}".casefold()
+    for term in confusion_terms_for_competitor(source.competitor):
+        if (
+            key == "windsurf"
+            and term == "devin.ai"
+            and is_windsurf_docs_redirect_source(source, haystack)
+        ):
+            continue
+        if term in haystack:
+            return (
+                f"Source {source.id} appears to describe `{term}` rather than "
+                f"{source.competitor}."
+            )
+    hints = identity_terms_for_competitor(source.competitor)
+    if hints and not any(term in haystack for term in hints):
+        return (
+            f"Source {source.id} does not expose a recognizable {source.competitor} "
+            "product identity signal."
+        )
+    return None
+
+
+def is_windsurf_docs_redirect_source(source: RawSource, haystack: str) -> bool:
+    url = str(source.url or "").casefold()
+    return (
+        any(path in url for path in ("docs.devin.ai/desktop", "docs.devin.ai/windsurf"))
+        and "windsurf" in haystack
+        and "devin desktop" not in haystack
+        and "cognition devin" not in haystack
+    )
+
+
+def dimension_terms_present(dimension: str, normalized_text: str) -> bool:
+    dimension_key = dimension.casefold()
+    if "pricing" in dimension_key:
+        terms = (
+            "pricing",
+            "price",
+            "cost",
+            "billing",
+            "token",
+            "tier",
+            "free",
+            "enterprise",
+            "plan",
+            "$",
+        )
+    elif "persona" in dimension_key or "user" in dimension_key:
+        terms = (
+            "customer",
+            "user",
+            "developer",
+            "enterprise",
+            "team",
+            "persona",
+            "target",
+            "use case",
+            "case study",
+            "organization",
+        )
+    elif "review" in dimension_key or "feedback" in dimension_key:
+        terms = (
+            "review",
+            "feedback",
+            "rating",
+            "complaint",
+            "praise",
+            "customer",
+            "user",
+            "adoption",
+            "switching",
+            "pain point",
+        )
+    else:
+        terms = (
+            "feature",
+            "capability",
+            "model",
+            "context",
+            "multimodal",
+            "coding",
+            "reasoning",
+            "benchmark",
+            "api",
+            "tool",
+        )
+    return any(term in normalized_text for term in terms)
+
+
+def _content_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()[:16]
