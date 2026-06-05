@@ -185,6 +185,34 @@ Validation:
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_run_service.py -q`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_enterprise_store.py::test_run_service_records_release_gate_notification_for_weak_report -q`
 
+## 2026-06-06 - Step 8: Field Admission And Capture Cache
+
+Commit: pending
+
+Scope:
+
+- Moved field-level `EvidenceItem` assembly into
+  `research.evidence.evidence_items_from_extractions()`.
+- Added confidence-based field admission status and rejection reasons.
+- Added `CaptureCache` to reuse captured pages by canonical URL while rebinding
+  candidate lineage IDs.
+- Added pipeline metrics for accepted evidence items, capture cache hits,
+  fetch count, and source saturation.
+- Added tests for low-confidence field rejection, cache reuse with lineage
+  rebinding, and the updated pipeline metrics path.
+
+Why:
+
+- Finishes the field-level evidence admission part of the clean pipeline.
+- Keeps repeated fetch control in the capture layer instead of scattering URL
+  caches through collectors.
+- Makes source saturation observable at the pipeline boundary.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/tests/unit/test_research_pipeline.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py -q`
+
 ## 2026-06-06 - Step 5: Pipeline Entry Point And Refactor Documentation
 
 Commit: pending

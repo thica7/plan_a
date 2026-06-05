@@ -1,6 +1,6 @@
 import pytest
 
-from packages.research.capture import capture_candidate
+from packages.research.capture import CaptureCache, capture_candidate
 from packages.research.discovery import (
     homepage_candidates,
     rank_and_dedupe_candidates,
@@ -8,7 +8,11 @@ from packages.research.discovery import (
 )
 from packages.research.evaluation import quality_gaps_from_extractions
 from packages.research.evaluation.release_gate import quality_gaps_from_release_gate
-from packages.research.evidence import raw_source_from_capture, source_quality_problem
+from packages.research.evidence import (
+    evidence_items_from_extractions,
+    raw_source_from_capture,
+    source_quality_problem,
+)
 from packages.research.extraction import (
     extract_feature_slots,
     extract_page,
@@ -291,6 +295,77 @@ def test_extract_page_dispatches_by_dimension() -> None:
     extraction = extract_page(pricing_brief, page)
 
     assert extraction.extractor_name == "pricing_model"
+
+
+def test_field_level_evidence_admission_rejects_low_confidence_fields() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="LLM APIs",
+        competitor="OpenAI",
+        dimension="pricing",
+    )
+    page = CapturedPage(
+        candidate_id="candidate-openai-pricing",
+        requested_url="https://platform.openai.com/docs/pricing",
+        final_url="https://platform.openai.com/docs/pricing",
+        status="ok",
+        title="OpenAI pricing",
+        text="Pricing page mentions API token pricing.",
+        content_hash="hash-low-confidence-pricing",
+        status_code=200,
+        fetch_method="basic_httpx",
+        quality_score=0.1,
+    )
+    extraction = extract_pricing_model(brief, page).model_copy(update={"confidence": 0.2})
+
+    items = evidence_items_from_extractions([extraction], min_accept_confidence=0.35)
+
+    assert items
+    assert {item.status for item in items} == {"rejected"}
+    assert all(item.rejection_reason for item in items)
+
+
+@pytest.mark.asyncio
+async def test_capture_cache_reuses_page_while_rebinding_candidate_lineage() -> None:
+    cache = CaptureCache()
+    calls = 0
+    first = SourceCandidate(
+        title="OpenAI pricing",
+        url="https://platform.openai.com/docs/pricing",
+        origin="trusted_registry",
+        competitor="OpenAI",
+        dimension="pricing",
+    )
+    second = SourceCandidate(
+        title="OpenAI API pricing",
+        url="https://platform.openai.com/docs/pricing",
+        origin="perplexity",
+        competitor="OpenAI",
+        dimension="pricing",
+    )
+
+    async def fake_fetch(url: str) -> EvidenceFetchResult:
+        nonlocal calls
+        calls += 1
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="OpenAI pricing",
+            text="OpenAI API pricing uses token based billing.",
+            content_hash="hash-openai-cache",
+            status_code=200,
+            fetch_method="basic_httpx",
+            quality_score=0.9,
+        )
+
+    first_page = await capture_candidate(first, fake_fetch)
+    cache.put(first, first_page)
+    second_page = cache.get(second)
+
+    assert calls == 1
+    assert second_page is not None
+    assert second_page.candidate_id == second.id
+    assert second_page.id != first_page.id
 
 
 @pytest.mark.asyncio
