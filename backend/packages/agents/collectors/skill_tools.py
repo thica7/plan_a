@@ -63,6 +63,8 @@ async def collect_competitor_with_skill_tools(
                     url=candidate.url,
                     snippet=candidate.rationale,
                     origin=candidate.origin,
+                    competitor=competitor,
+                    dimension=dimension,
                     rank=candidate.rank,
                     confidence=candidate.confidence,
                 ),

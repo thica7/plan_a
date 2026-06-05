@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
+from packages.research.models import SourceCandidate
 from packages.search import SearchResult
 
 SOURCE_ORIGIN_PRIORITY: dict[str, int] = {
@@ -13,33 +12,15 @@ SOURCE_ORIGIN_PRIORITY: dict[str, int] = {
 }
 
 
-@dataclass(frozen=True)
-class SourceCandidate:
-    title: str
-    url: str
-    snippet: str
-    origin: str
-    rank: int = 0
-    confidence: float = 0.5
-    date: str | None = None
-    last_updated: str | None = None
-
-    def to_search_result(self) -> SearchResult:
-        return SearchResult(
-            title=self.title,
-            url=self.url,
-            snippet=self.snippet,
-            date=self.date,
-            last_updated=self.last_updated,
-        )
-
-
 def source_candidate_from_search_result(
     result: SearchResult,
     *,
     origin: str,
     rank: int,
     confidence: float,
+    competitor: str = "",
+    dimension: str = "",
+    query: str | None = None,
 ) -> SourceCandidate:
     return SourceCandidate(
         title=result.title,
@@ -48,13 +29,16 @@ def source_candidate_from_search_result(
         origin=origin,
         rank=rank,
         confidence=confidence,
+        competitor=competitor,
+        dimension=dimension,
+        query=query,
         date=result.date,
         last_updated=result.last_updated,
     )
 
 
 def canonical_candidate_url(url: str) -> str:
-    return url.strip().rstrip("/")
+    return str(url).strip().rstrip("/")
 
 
 def dedupe_source_candidates(candidates: list[SourceCandidate]) -> list[SourceCandidate]:
@@ -72,5 +56,5 @@ def _candidate_sort_key(candidate: SourceCandidate) -> tuple[int, float, int, st
         SOURCE_ORIGIN_PRIORITY.get(candidate.origin, 0),
         candidate.confidence,
         -candidate.rank,
-        candidate.url,
+        str(candidate.url),
     )

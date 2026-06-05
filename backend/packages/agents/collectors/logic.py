@@ -680,6 +680,8 @@ class CollectorAgentMixin:
                     url=candidate.url,
                     snippet=candidate.rationale,
                     origin=candidate.origin,
+                    competitor=competitor,
+                    dimension=dimension,
                     rank=candidate.rank,
                     confidence=candidate.confidence,
                 )
@@ -942,6 +944,8 @@ class CollectorAgentMixin:
                 origin=origin,
                 rank=rank,
                 confidence=self._search_candidate_confidence(competitor, result),
+                competitor=competitor,
+                dimension=dimension,
             )
             for rank, result in enumerate(
                 self._rank_search_results(detail, competitor, dimension, results)
@@ -1383,6 +1387,8 @@ class CollectorAgentMixin:
             origin=self._settings.web_search_provider or "web_search",
             rank=0,
             confidence=0.68,
+            competitor=competitor,
+            dimension=dimension,
         )
         if any(
             source.url
