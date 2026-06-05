@@ -10,6 +10,7 @@ from packages.research.models import (
     ResearchResult,
     SourceCandidate,
 )
+from packages.research.pipeline import run_research_pipeline
 
 __all__ = [
     "CandidateOrigin",
@@ -22,4 +23,5 @@ __all__ = [
     "ResearchBrief",
     "ResearchResult",
     "SourceCandidate",
+    "run_research_pipeline",
 ]

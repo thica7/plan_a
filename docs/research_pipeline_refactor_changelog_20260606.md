@@ -130,3 +130,32 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/agents/collectors backend/packages/research backend/tests/unit/test_research_pipeline.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
+
+## 2026-06-06 - Step 5: Pipeline Entry Point And Refactor Documentation
+
+Commit: pending
+
+Scope:
+
+- Added `research.pipeline.run_research_pipeline()` as the explicit branch-level
+  composition of discover, capture, extract, evidence item assembly, evaluate,
+  and repair stages.
+- Exported `run_research_pipeline()` from `packages.research`.
+- Added an end-to-end unit test with fake search and fetch providers.
+- Added `docs/research_pipeline_refactor_summary_20260606.md` to record module
+  boundaries, data contracts, ID conventions, collector integration, and the
+  QA-warning/GAP-driven repair flow.
+
+Why:
+
+- Makes the clean architecture readable from one entry point instead of only
+  scattered modules.
+- Preserves a written interface contract for future collector, release-gate,
+  and redo integration.
+- Documents that pipeline lineage IDs and canonical report citation IDs have
+  different responsibilities.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/agents/collectors backend/packages/research backend/tests/unit/test_research_pipeline.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`

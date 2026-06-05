@@ -15,8 +15,10 @@ from packages.research.extraction import (
     extract_pricing_model,
 )
 from packages.research.models import CapturedPage, ResearchBrief, SourceCandidate
+from packages.research.pipeline import run_research_pipeline
 from packages.research.repair import repair_tasks_from_gaps
 from packages.schema.models import RawSource
+from packages.search import SearchResult
 from packages.tools.evidence_fetch import EvidenceFetchResult
 
 
@@ -281,3 +283,51 @@ def test_extract_page_dispatches_by_dimension() -> None:
     extraction = extract_page(pricing_brief, page)
 
     assert extraction.extractor_name == "pricing_model"
+
+
+@pytest.mark.asyncio
+async def test_run_research_pipeline_connects_discover_capture_extract_repair() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agents",
+        competitor="Claude Code",
+        dimension="feature",
+        homepage_hint="https://www.anthropic.com",
+        max_search_queries=1,
+        max_candidates=4,
+        max_fetches=2,
+    )
+
+    async def fake_search(query: str, max_results: int) -> list[SearchResult]:
+        assert "Claude Code" in query
+        return [
+            SearchResult(
+                title="Claude Code overview",
+                url="https://docs.anthropic.com/en/docs/claude-code/overview",
+                snippet="Claude Code coding agent documentation",
+            )
+        ][:max_results]
+
+    async def fake_fetch(url: str) -> EvidenceFetchResult:
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="Claude Code overview",
+            text=(
+                "Claude Code is an agentic coding assistant. It supports repository "
+                "context, codebase tasks, tool use, and developer workflows."
+            ),
+            content_hash="hash-claude-code-pipeline",
+            status_code=200,
+            fetch_method="webfetch_v2",
+            quality_score=0.9,
+        )
+
+    result = await run_research_pipeline(brief, fetch=fake_fetch, search=fake_search)
+
+    assert result.candidates
+    assert result.captured_pages
+    assert result.extractions
+    assert result.evidence_items
+    assert result.metrics["verified_capture_rate"] == 1.0
+    assert result.metrics["evidence_item_count"] == len(result.evidence_items)
