@@ -3,13 +3,13 @@ import type { EvidenceRecord } from "../../api/types";
 import { buildReportSourceBundle } from "./sourceBundle";
 
 describe("buildReportSourceBundle", () => {
-  it("uses EvidenceRecord ids as canonical report source ids", () => {
+  it("uses RawSource ids as canonical report source ids", () => {
     const bundle = buildReportSourceBundle([evidenceRecord()]);
 
     expect(bundle.sources).toHaveLength(1);
-    expect(bundle.sources[0].id).toBe("evidence-001");
-    expect(bundle.aliases["raw-pricing-001"]).toBe("evidence-001");
-    expect(bundle.aliases["legacy-pricing"]).toBe("evidence-001");
+    expect(bundle.sources[0].id).toBe("raw-pricing-001");
+    expect(bundle.aliases["evidence-001"]).toBe("raw-pricing-001");
+    expect(bundle.aliases["legacy-pricing"]).toBe("raw-pricing-001");
   });
 
   it("filters to scoped report evidence ids", () => {
@@ -24,7 +24,7 @@ describe("buildReportSourceBundle", () => {
       scopedEvidenceIds: ["evidence-001"],
     });
 
-    expect(bundle.sources.map((source) => source.id)).toEqual(["evidence-001"]);
+    expect(bundle.sources.map((source) => source.id)).toEqual(["raw-pricing-001"]);
     expect(bundle.aliases["raw-feature-002"]).toBeUndefined();
   });
 });

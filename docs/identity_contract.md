@@ -50,9 +50,16 @@ Source-like objects have one source of truth:
 - `EvidenceRecord.id` identifies the enterprise evidence projection and is used
   for `ReportVersion.evidence_ids`, claim links, artifacts, RAG chunks, and
   release-gate scope.
-- report `[source:...]` tokens are resolved against Evidence IDs, RawSource IDs,
+- report `[source:...]` tokens are resolved against RawSource IDs, Evidence IDs,
   chunk suffixes, and aliases at the backend boundary, then normalized back to
   canonical `RawSource.id` tokens before saving report markdown.
+- frontend report anchors and source cards expose `RawSource.id`. `EvidenceRecord.id`
+  may be accepted only as a backwards-compatible alias that resolves to the
+  matching `RawSource.id`; it must not become the public report citation token.
+- report release gates and report views read evidence/claim scope from
+  `ReportVersion.evidence_ids` and `ReportVersion.claim_ids`. Project-level
+  evidence or claim listing must include records linked through report versions,
+  even if lifecycle dedupe preserved the record's original `project_id`.
 
 ## Allowed Non-ID Hashes
 

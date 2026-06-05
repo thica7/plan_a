@@ -380,6 +380,12 @@ class EnterpriseMemoryStore:
                     "scenario_id": detail.plan.scenario_id,
                 },
             )
+            current_competitor_ids = set(competitor_ids)
+            self.project_competitors = {
+                key: link
+                for key, link in self.project_competitors.items()
+                if key[0] != project_id or key[1] in current_competitor_ids
+            }
             for name, competitor_id in zip(detail.plan.competitors, competitor_ids, strict=False):
                 competitor = self.competitors.get(competitor_id)
                 if competitor is None:
@@ -789,7 +795,12 @@ class EnterpriseMemoryStore:
         with self._lock:
             records = list(self.evidence_records.values())
             if project_id:
-                records = [item for item in records if item.project_id == project_id]
+                linked_ids = self._report_linked_evidence_ids_locked(project_id)
+                records = [
+                    item
+                    for item in records
+                    if item.project_id == project_id or item.id in linked_ids
+                ]
             return sorted(records, key=lambda item: item.captured_at, reverse=True)
 
     def upsert_evidence(self, evidence: EvidenceRecord) -> EvidenceRecord:
@@ -986,7 +997,12 @@ class EnterpriseMemoryStore:
         with self._lock:
             records = list(self.claim_records.values())
             if project_id:
-                records = [item for item in records if item.project_id == project_id]
+                linked_ids = self._report_linked_claim_ids_locked(project_id)
+                records = [
+                    item
+                    for item in records
+                    if item.project_id == project_id or item.id in linked_ids
+                ]
             return sorted(records, key=lambda item: item.created_at, reverse=True)
 
     def list_report_versions(self, project_id: str | None = None) -> list[ReportVersionRecord]:
@@ -1002,12 +1018,10 @@ class EnterpriseMemoryStore:
 
     def upsert_report_version(self, version: ReportVersionRecord) -> ReportVersionRecord:
         with self._lock:
-            project_evidence = [
-                item
-                for item in self.evidence_records.values()
-                if item.project_id == version.project_id
-            ]
-            version = normalize_report_version_sources(version, project_evidence)
+            version = normalize_report_version_sources(
+                version,
+                self._report_scope_evidence_locked(version),
+            )
             before_record = self.report_versions.get(version.id)
             self.report_versions[version.id] = version
             self._append_audit(
@@ -1034,6 +1048,33 @@ class EnterpriseMemoryStore:
                     },
                 )
             return version
+
+    def _report_linked_evidence_ids_locked(self, project_id: str) -> set[str]:
+        return {
+            evidence_id
+            for version in self.report_versions.values()
+            if version.project_id == project_id
+            for evidence_id in version.evidence_ids
+        }
+
+    def _report_linked_claim_ids_locked(self, project_id: str) -> set[str]:
+        return {
+            claim_id
+            for version in self.report_versions.values()
+            if version.project_id == project_id
+            for claim_id in version.claim_ids
+        }
+
+    def _report_scope_evidence_locked(
+        self,
+        version: ReportVersionRecord,
+    ) -> list[EvidenceRecord]:
+        scoped_ids = set(version.evidence_ids)
+        return [
+            item
+            for item in self.evidence_records.values()
+            if item.project_id == version.project_id or item.id in scoped_ids
+        ]
 
     def get_previous_report_version(
         self,

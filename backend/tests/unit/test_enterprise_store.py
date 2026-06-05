@@ -12,6 +12,7 @@ from app.routers.enterprise import (
     _pydantic_ai_runtime_summary_suffix,
     _pydantic_ai_runtime_warn_count,
     _quality_agent_pydantic_ai_metadata,
+    _report_release_gate_scope,
     _with_gap_fill_release_gate_delta,
     _with_pydantic_ai_execution_metadata,
 )
@@ -159,6 +160,31 @@ def test_enterprise_store_bootstraps_context_and_deduplicates_audit() -> None:
     assert store.get_project(first.project_id) is not None
     assert [item.name for item in store.list_competitors(project_id=first.project_id)] == ["Cursor"]
     assert store.get_workspace_member(first.workspace_id, "system-user").role == "owner"
+
+
+def test_enterprise_store_replaces_reused_project_competitor_scope() -> None:
+    store = EnterpriseMemoryStore()
+    first = _detail()
+    first_context = store.start_run(first, project_id="project-reused")
+    second = _detail().model_copy(
+        deep=True,
+        update={
+            "id": "run-2",
+            "project_id": first_context.project_id,
+            "plan": first.plan.model_copy(
+                update={
+                    "competitors": ["GitHub Copilot"],
+                    "homepage_hints": {"GitHub Copilot": "https://github.com/features/copilot"},
+                }
+            ),
+        },
+    )
+
+    store.start_run(second, project_id=first_context.project_id)
+
+    assert [item.name for item in store.list_competitors(project_id=first_context.project_id)] == [
+        "GitHub Copilot"
+    ]
 
 
 def test_enterprise_store_upserts_workspace_members() -> None:
@@ -327,6 +353,67 @@ def test_enterprise_store_round_trips_projection() -> None:
         "report_version.upserted",
         "run.projected",
     }
+
+
+def test_enterprise_store_project_lists_include_report_version_links() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    evidence = projection.evidence_records[0]
+    claim = projection.claim_records[0]
+    store.evidence_records[evidence.id] = evidence.model_copy(
+        update={"project_id": "project-other"}
+    )
+    store.claim_records[claim.id] = claim.model_copy(update={"project_id": "project-other"})
+
+    assert [item.id for item in store.list_evidence(project_id=context.project_id)] == [evidence.id]
+    assert [item.id for item in store.list_claims(project_id=context.project_id)] == [claim.id]
+
+
+def test_report_release_gate_scope_uses_version_competitors_not_stale_project_links() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail, project_id="project-reused")
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    stale_detail = _detail().model_copy(
+        deep=True,
+        update={
+            "id": "run-stale",
+            "project_id": context.project_id,
+            "plan": detail.plan.model_copy(
+                update={
+                    "competitors": ["Gemini"],
+                    "homepage_hints": {"Gemini": "https://gemini.google.com"},
+                }
+            ),
+        },
+    )
+    store.start_run(stale_detail, project_id=context.project_id)
+    project = store.get_project(context.project_id)
+
+    assert project is not None
+    competitors, evidence, claims = _report_release_gate_scope(
+        projection.report_version,
+        project=project,
+        store=store,
+    )
+
+    assert [item.name for item in competitors] == ["Cursor"]
+    assert [item.id for item in evidence] == projection.report_version.evidence_ids
+    assert [item.id for item in claims] == projection.report_version.claim_ids
 
 
 def test_enterprise_store_tracks_evidence_lifecycle_across_runs() -> None:

@@ -25,12 +25,12 @@ export function buildReportSourceBundle(
     if (scopedEvidenceIds && !scopedEvidenceIds.has(item.id)) continue;
     const competitorName =
       options.competitorById?.get(item.competitor_id)?.name ?? item.competitor_id;
-    aliases[item.raw_source_id] = item.id;
+    aliases[item.id] = item.raw_source_id;
     for (const alias of evidenceRawSourceAliases(item)) {
-      aliases[alias] = item.id;
+      aliases[alias] = item.raw_source_id;
     }
     sources.push({
-      id: item.id,
+      id: item.raw_source_id,
       competitor: competitorName,
       covered_competitors: [competitorName],
       dimension: item.dimension,

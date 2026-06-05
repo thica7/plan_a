@@ -205,11 +205,15 @@ def _build_report_version(
         report_md=normalized_report.report_md,
         claim_ids=[claim.id for claim in claim_records],
         evidence_ids=normalized_report.evidence_ids,
-        quality_metadata=_build_quality_metadata(
-            detail,
-            evidence_records,
-            source_reconciliation=normalized_report.reconciliation(evidence_records),
-        ),
+        quality_metadata={
+            **_build_quality_metadata(
+                detail,
+                evidence_records,
+                source_reconciliation=normalized_report.reconciliation(evidence_records),
+            ),
+            "report_competitors": list(detail.plan.competitors),
+            "report_competitor_ids": competitor_ids,
+        },
         created_at=_parse_datetime(detail.updated_at),
     )
 

@@ -79,7 +79,7 @@ def test_source_normalizer_rewrites_source_tokens_to_raw_source_tokens() -> None
 
     assert normalized.report_md == "Known [source:pricing-raw] and [source:pricing-raw]."
     assert normalized.evidence_ids == ["evidence-1"]
-    assert [item.status for item in normalized.resolutions] == ["alias", "resolved"]
+    assert [item.status for item in normalized.resolutions] == ["alias", "alias"]
     reconciliation = normalized.reconciliation([evidence])
     assert reconciliation["canonical_report_md_changed"] is True
     assert reconciliation["canonical_report_source_tokens"] == ["pricing-raw"]
@@ -132,7 +132,7 @@ def test_source_normalizer_without_scope_uses_all_evidence() -> None:
 
     assert normalized.report_md == "Cursor pricing. [source:pricing-raw]"
     assert normalized.evidence_ids == ["evidence-1"]
-    assert normalized.resolutions[0].status == "alias"
+    assert normalized.resolutions[0].status == "resolved"
 
 
 def test_report_version_normalizer_preserves_empty_explicit_scope() -> None:
@@ -260,9 +260,9 @@ def test_source_token_alias_map_unifies_raw_and_evidence_tokens() -> None:
 
     aliases = source_token_alias_map(raw_sources=[raw_source], evidence=[evidence])
 
-    assert aliases["evidence-1"] == "evidence-1"
-    assert aliases["pricing-raw"] == "evidence-1"
-    assert aliases["pricing-old"] == "evidence-1"
+    assert aliases["evidence-1"] == "pricing-raw"
+    assert aliases["pricing-raw"] == "pricing-raw"
+    assert aliases["pricing-old"] == "pricing-raw"
 
 
 def test_run_qa_resolves_enterprise_evidence_tokens() -> None:

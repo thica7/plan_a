@@ -208,6 +208,7 @@ class EnterprisePostgresStore:
                         "scenario_id": detail.plan.scenario_id,
                     },
                 )
+                self._remove_stale_project_competitors(cur, project_id, competitor_ids)
                 for name, competitor_id in zip(
                     detail.plan.competitors,
                     competitor_ids,
@@ -845,8 +846,19 @@ class EnterprisePostgresStore:
     def list_evidence(self, project_id: str | None = None) -> list[EvidenceRecord]:
         if project_id:
             return self._list_models(
-                "SELECT * FROM evidence_records WHERE project_id = %s ORDER BY captured_at DESC",
-                (project_id,),
+                """
+                SELECT *
+                FROM evidence_records e
+                WHERE e.project_id = %s
+                   OR EXISTS (
+                       SELECT 1
+                       FROM report_version_evidence rve
+                       WHERE rve.evidence_id = e.id
+                         AND rve.project_id = %s
+                   )
+                ORDER BY e.captured_at DESC
+                """,
+                (project_id, project_id),
                 EvidenceRecord,
             )
         return self._list_models(
@@ -1168,8 +1180,19 @@ class EnterprisePostgresStore:
     def list_claims(self, project_id: str | None = None) -> list[ClaimRecord]:
         if project_id:
             return self._list_models(
-                "SELECT * FROM knowledge_claims WHERE project_id = %s ORDER BY created_at DESC",
-                (project_id,),
+                """
+                SELECT *
+                FROM knowledge_claims c
+                WHERE c.project_id = %s
+                   OR EXISTS (
+                       SELECT 1
+                       FROM report_version_claims rvc
+                       WHERE rvc.claim_id = c.id
+                         AND rvc.project_id = %s
+                   )
+                ORDER BY c.created_at DESC
+                """,
+                (project_id, project_id),
                 ClaimRecord,
             )
         return self._list_models(
@@ -1210,7 +1233,7 @@ class EnterprisePostgresStore:
     def upsert_report_version(self, version: ReportVersionRecord) -> ReportVersionRecord:
         version = normalize_report_version_sources(
             version,
-            self.list_evidence(project_id=version.project_id),
+            self._report_scope_evidence(version),
         )
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
             with conn.cursor() as cur:
@@ -1249,6 +1272,23 @@ class EnterprisePostgresStore:
                     )
             conn.commit()
         return version
+
+    def _report_scope_evidence(self, version: ReportVersionRecord) -> list[EvidenceRecord]:
+        if not version.evidence_ids:
+            return self.list_evidence(project_id=version.project_id)
+        placeholders = ", ".join(["%s"] * len(version.evidence_ids))
+        params = [version.project_id, *version.evidence_ids]
+        return self._list_models(
+            f"""
+            SELECT *
+            FROM evidence_records
+            WHERE project_id = %s
+               OR id IN ({placeholders})
+            ORDER BY captured_at DESC
+            """,
+            tuple(params),
+            EvidenceRecord,
+        )
 
     def get_previous_report_version(
         self,
@@ -1502,6 +1542,27 @@ class EnterprisePostgresStore:
             ON CONFLICT (project_id, competitor_id) DO NOTHING
             """,
             (project_id, competitor_id),
+        )
+
+    def _remove_stale_project_competitors(
+        self,
+        cur: Any,
+        project_id: str,
+        competitor_ids: list[str],
+    ) -> None:
+        if not competitor_ids:
+            cur.execute(
+                "DELETE FROM project_competitors WHERE project_id = %s",
+                (project_id,),
+            )
+            return
+        cur.execute(
+            """
+            DELETE FROM project_competitors
+            WHERE project_id = %s
+              AND NOT (competitor_id = ANY(%s))
+            """,
+            (project_id, competitor_ids),
         )
 
     def _upsert_run(

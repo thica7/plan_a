@@ -15,7 +15,7 @@ or older aliases. Before a `ReportVersionRecord` is saved, the backend must call
 
 That boundary does three things:
 
-1. Resolve Evidence IDs, RawSource IDs, chunk suffixes, and aliases through
+1. Resolve RawSource IDs, Evidence IDs, chunk suffixes, and aliases through
    `SourceResolutionIndex`.
 2. Rewrite known source tokens in `report_md` to canonical `RawSource.id`
    tokens.
@@ -24,10 +24,11 @@ That boundary does three things:
 
 `ReportVersion.evidence_ids` remains an enterprise-storage scope made of
 `EvidenceRecord.id` values. Report markdown remains a user-facing citation
-surface made of `RawSource.id` values. Frontend report views should resolve
-`[source:...]` tokens through `EvidenceRecord.raw_source_id` and
-`metadata.raw_source_aliases`, with backend source reconciliation metadata as
-the source of truth for missing or alias tokens.
+surface made of `RawSource.id` values. Frontend report views should render
+source cards and anchors with `RawSource.id`; `EvidenceRecord.id` is an internal
+storage key and backwards-compatible alias only. Backend release-gate checks
+must evaluate the specific report version's evidence/claim scope, not every
+record attached to the current project.
 
 ## Candidate And Evidence Boundary
 

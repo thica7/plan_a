@@ -9,7 +9,7 @@ import {
 } from "./ReportView";
 
 const source: RawSource = {
-  id: "evidence-001",
+  id: "raw-pricing-001",
   competitor: "Cursor",
   covered_competitors: ["Cursor"],
   dimension: "pricing",
@@ -27,46 +27,48 @@ describe("ReportView source token parsing", () => {
 
   it("links direct, aliased, and missing source tokens to trace targets", () => {
     const markdown = [
-      "Direct [source:evidence-001].",
-      "Alias [source:S1].",
+      "Direct [source:raw-pricing-001].",
+      "Alias [source:evidence-001].",
       "Missing [source:ghost].",
     ].join("\n");
 
-    expect(linkSourceTokens(markdown, sourceMap, { S1: "evidence-001" })).toContain(
-      "[[source:evidence-001]](#source-evidence-001)",
+    expect(linkSourceTokens(markdown, sourceMap, { "evidence-001": "raw-pricing-001" })).toContain(
+      "[[source:raw-pricing-001]](#source-raw-pricing-001)",
     );
-    expect(linkSourceTokens(markdown, sourceMap, { S1: "evidence-001" })).toContain(
-      "[[source:S1]](#source-evidence-001)",
+    expect(linkSourceTokens(markdown, sourceMap, { "evidence-001": "raw-pricing-001" })).toContain(
+      "[[source:evidence-001]](#source-raw-pricing-001)",
     );
-    expect(linkSourceTokens(markdown, sourceMap, { S1: "evidence-001" })).toContain(
+    expect(linkSourceTokens(markdown, sourceMap, { "evidence-001": "raw-pricing-001" })).toContain(
       "[[source:ghost]](#missing-source-ghost)",
     );
   });
 
-  it("groups repeated aliases and suffixed source tokens by resolved evidence id", () => {
+  it("groups repeated aliases and suffixed source tokens by resolved raw source id", () => {
     const groups = collectSourceTokenGroups(
-      "Claim [source:S1] and quote [source:evidence-001#pricing] plus [source:ghost].",
+      "Claim [source:evidence-001] and quote [source:raw-pricing-001#pricing] plus [source:ghost].",
       sourceMap,
-      { S1: "evidence-001" },
+      { "evidence-001": "raw-pricing-001" },
     );
 
-    const resolved = groups.find((group) => group.sourceId === "evidence-001");
+    const resolved = groups.find((group) => group.sourceId === "raw-pricing-001");
     const missing = groups.find((group) => group.sourceId === "ghost");
 
     expect(resolved?.count).toBe(2);
-    expect(resolved?.tokens).toEqual(["S1", "evidence-001#pricing"]);
+    expect(resolved?.tokens).toEqual(["evidence-001", "raw-pricing-001#pricing"]);
     expect(resolved?.source?.title).toBe("Cursor pricing");
     expect(missing?.count).toBe(1);
     expect(missing?.source).toBeUndefined();
   });
 
   it("extracts and resolves normalized source ids", () => {
-    expect(extractSourceTokens("A [source:evidence-001#quote] B [source:S1]")).toEqual([
-      "evidence-001#quote",
-      "S1",
+    expect(extractSourceTokens("A [source:raw-pricing-001#quote] B [source:evidence-001]")).toEqual([
+      "raw-pricing-001#quote",
+      "evidence-001",
     ]);
-    expect(resolveSourceId("evidence-001#quote", sourceMap, {})).toBe("evidence-001");
-    expect(resolveSourceId("S1", sourceMap, { S1: "evidence-001" })).toBe("evidence-001");
+    expect(resolveSourceId("raw-pricing-001#quote", sourceMap, {})).toBe("raw-pricing-001");
+    expect(resolveSourceId("evidence-001", sourceMap, { "evidence-001": "raw-pricing-001" })).toBe(
+      "raw-pricing-001",
+    );
   });
 
   it("labels manual research source types as research evidence", () => {

@@ -296,6 +296,41 @@ Validation:
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/tests/unit/test_research_pipeline.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py -q`
 
+## 2026-06-06 - Step 9: Report Source Identity And Scope Contract
+
+Commit: this commit
+
+Scope:
+
+- Kept report markdown, report source cards, and frontend anchors on canonical
+  `RawSource.id` values.
+- Treated `EvidenceRecord.id` as an enterprise-storage ID and
+  backwards-compatible source-token alias, not a public report citation.
+- Changed source-token alias resolution to return the canonical RawSource token.
+- Made project evidence/claim listing include records linked through
+  `ReportVersion.evidence_ids` and `ReportVersion.claim_ids`, even when
+  lifecycle dedupe preserved a record from an earlier project.
+- Made report release gate evaluation use the exact report-version
+  evidence/claim scope and report competitor IDs, avoiding stale project
+  competitor links from older runs.
+
+Why:
+
+- Fixes the class of bugs where Reports or RunDetail showed missing sources
+  after evidence dedupe/projection because one layer displayed RawSource tokens
+  and another layer scoped by EvidenceRecord IDs or project ownership.
+- Preserves a clean split: RawSource is the explainable citation contract;
+  EvidenceRecord is the enterprise governance and dedupe contract.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/app/routers/enterprise.py backend/packages/enterprise/projection.py backend/packages/enterprise/store.py backend/packages/enterprise/postgres.py backend/packages/orchestrator/service.py backend/packages/sources/references.py backend/tests/unit/test_enterprise_store.py backend/tests/unit/test_source_reconciliation.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_source_reconciliation.py backend/tests/unit/test_enterprise_store.py::test_enterprise_store_replaces_reused_project_competitor_scope backend/tests/unit/test_enterprise_store.py::test_enterprise_store_project_lists_include_report_version_links backend/tests/unit/test_enterprise_store.py::test_report_release_gate_scope_uses_version_competitors_not_stale_project_links -q`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_enterprise_store.py -q`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_business_intel.py -q`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_run_service.py::test_release_gate_sync_creates_scoped_qa_repair_issue backend/tests/unit/test_run_service.py::test_release_gate_auto_redo_uses_existing_scoped_redo_for_real_runs backend/tests/unit/test_run_service.py::test_release_gate_auto_redo_is_disabled_for_demo_runs -q`
+- `pnpm.cmd --dir frontend test -- src/features/report/sourceBundle.test.ts src/features/report/ReportView.test.ts`
+
 ## 2026-06-06 - Step 5: Pipeline Entry Point And Refactor Documentation
 
 Commit: `ab7e46d docs(research): document clean pipeline refactor`

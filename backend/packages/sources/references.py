@@ -319,7 +319,7 @@ def source_token_alias_map(
     evidence: Iterable[EvidenceRecord] = (),
     scoped_evidence_ids: Iterable[str] | None = None,
 ) -> dict[str, str]:
-    """Return every accepted report token mapped to one canonical source identity."""
+    """Return every accepted report token mapped to canonical RawSource identity."""
 
     aliases: dict[str, str] = {}
     for source in raw_sources:
@@ -330,7 +330,7 @@ def source_token_alias_map(
         evidence,
         scoped_evidence_ids=scoped_evidence_ids,
     ).evidence_by_token().items():
-        aliases[token] = item.id
+        aliases[token] = _canonical_report_token(item)
     return aliases
 
 
@@ -402,14 +402,15 @@ def _resolution_for(
     normalized: str,
     evidence: EvidenceRecord,
 ) -> SourceResolution:
-    status: SourceResolutionStatus = "resolved" if normalized == evidence.id else "alias"
+    canonical_token = _canonical_report_token(evidence)
+    status: SourceResolutionStatus = "resolved" if normalized == canonical_token else "alias"
     return SourceResolution(
         token=token,
         normalized_token=normalized,
         status=status,
         evidence_id=evidence.id,
         raw_source_id=evidence.raw_source_id,
-        canonical_token=_canonical_report_token(evidence),
+        canonical_token=canonical_token,
         reason="Token resolved directly."
         if status == "resolved"
         else "Token resolved through alias.",
