@@ -156,6 +156,32 @@ Validation:
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/tests/unit/test_research_pipeline.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py -q`
 
+## 2026-06-06 - Step 10: Closed Loop Documentation
+
+Commit: pending
+
+Scope:
+
+- Added `docs/research_pipeline_closed_loop_summary_20260606.md`.
+- Updated the earlier refactor summary follow-up list to reflect the completed
+  release-gate repair bridge, field-level admission, cache metrics, and
+  assembly output.
+- Recorded the final validation commands and closed-loop commit sequence.
+
+Why:
+
+- Preserves the implementation contract for future development and deployment.
+- Makes clear which layers were completed and which existing layers were
+  intentionally not rewritten.
+- Provides the requested human-readable change explanation after code
+  completion.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/agents/collectors backend/packages/orchestrator/service.py backend/packages/research backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_enterprise_store.py::test_run_service_records_release_gate_notification_for_weak_report -q`
+
 ## 2026-06-06 - Step 9: Research Assembly Output
 
 Commit: pending

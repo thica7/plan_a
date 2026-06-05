@@ -133,10 +133,9 @@ All checks passed.
 
 ## Follow-Up Integration Points
 
-- Feed final QA/release-gate blockers into `QualityGap` instead of ad hoc text
-  warnings.
-- Let automatic redo consume `RepairTask` objects directly.
-- Add field-level admission for pricing tiers, persona segments, and feature
-  slots after analyst normalization.
-- Add pipeline-level cache and source saturation metrics when repeated fetches
-  become the next bottleneck.
+- Continue migrating analyst/comparator/writer internals to consume
+  `ResearchResult.assembly` directly where useful.
+- Add persistent capture cache storage if repeated network fetches become a
+  production cost bottleneck.
+- Extend extractors with model-backed Pydantic-AI extraction when deterministic
+  extraction produces low-confidence field admissions.
