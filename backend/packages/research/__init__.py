@@ -10,7 +10,14 @@ from packages.research.models import (
     ResearchResult,
     SourceCandidate,
 )
-from packages.research.pipeline import run_research_pipeline
+
+
+def __getattr__(name: str):
+    if name == "run_research_pipeline":
+        from packages.research.pipeline import run_research_pipeline
+
+        return run_research_pipeline
+    raise AttributeError(name)
 
 __all__ = [
     "CandidateOrigin",

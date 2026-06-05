@@ -3,8 +3,8 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from packages.business_intel.entity_resolver import is_trusted_url_for_competitor
+from packages.research.discovery.constants import SOURCE_ORIGIN_PRIORITY
 from packages.research.models import SourceCandidate
-from packages.tools.source_discovery import SOURCE_ORIGIN_PRIORITY
 
 
 def rank_and_dedupe_candidates(

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 
 from packages.business_intel.entity_resolver import trusted_source_candidates
-from packages.tools.source_discovery import SOURCE_ORIGIN_PRIORITY
+from packages.research.discovery.constants import SOURCE_ORIGIN_PRIORITY
 
 
 @dataclass(frozen=True)

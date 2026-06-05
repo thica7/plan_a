@@ -131,6 +131,36 @@ Validation:
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/agents/collectors backend/packages/research backend/tests/unit/test_research_pipeline.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
 
+## 2026-06-06 - Step 11: Canonical Report Source Identity
+
+Scope:
+
+- Fixed the enterprise source reconciliation boundary that rewrote writer
+  `RawSource.id` report citations into `EvidenceRecord.id` hash citations.
+- Kept report markdown canonicalized to `RawSource.id` while preserving
+  `ReportVersion.evidence_ids` as enterprise `EvidenceRecord.id` storage scope.
+- Updated source reconciliation metadata so EvidenceRecord IDs are treated as
+  accepted aliases, not the preferred report token.
+- Moved source-origin priority constants into `research.discovery.constants` and
+  made research package exports lazy to remove the discovery import cycle.
+- Updated source reconciliation, enterprise projection, and RAG gap-fill tests
+  around the RawSource citation contract.
+
+Why:
+
+- The report/source UI, release gate, gap fill, and enterprise projection now
+  share one citation contract: reports cite RawSource IDs; storage links use
+  EvidenceRecord IDs.
+- Prevents 64-character enterprise hash IDs from leaking into report markdown
+  and causing missing-source cards when the UI expects RawSource citations.
+- Keeps the fix at the generation/projection boundary instead of adding
+  frontend-only token rewriting.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_source_reconciliation.py backend/tests/unit/test_enterprise_projection.py backend/tests/unit/test_business_intel.py backend/tests/unit/test_report_quality.py backend/tests/unit/test_gap_retrieval.py -q`
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/sources/references.py backend/packages/research backend/packages/tools/source_discovery.py backend/packages/tools/official_docs.py backend/tests/unit/test_source_reconciliation.py backend/tests/unit/test_enterprise_projection.py backend/tests/unit/test_gap_retrieval.py`
+
 ## 2026-06-06 - Step 6: Release Gate Repair Bridge
 
 Commit: `fde00b5 feat(research): bridge release gate gaps to redo tasks`

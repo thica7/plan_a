@@ -17,13 +17,17 @@ That boundary does three things:
 
 1. Resolve Evidence IDs, RawSource IDs, chunk suffixes, and aliases through
    `SourceResolutionIndex`.
-2. Rewrite known source tokens in `report_md` to canonical `EvidenceRecord.id`
+2. Rewrite known source tokens in `report_md` to canonical `RawSource.id`
    tokens.
 3. Ensure `ReportVersion.evidence_ids` contains every evidence item cited by
    the normalized report.
 
-Frontend report views may still show RawSource-shaped cards for readability, but
-they should treat backend source reconciliation metadata as the source of truth.
+`ReportVersion.evidence_ids` remains an enterprise-storage scope made of
+`EvidenceRecord.id` values. Report markdown remains a user-facing citation
+surface made of `RawSource.id` values. Frontend report views should resolve
+`[source:...]` tokens through `EvidenceRecord.raw_source_id` and
+`metadata.raw_source_aliases`, with backend source reconciliation metadata as
+the source of truth for missing or alias tokens.
 
 ## Candidate And Evidence Boundary
 

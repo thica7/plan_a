@@ -35,18 +35,24 @@ dedupe or integrity checks, but they must not hand-roll persistent IDs with
 evidence, online gap fill, seed corpus, and snapshots generate it with
 `compute_raw_source_id`.
 
-`EvidenceRecord.id` remains the enterprise-stable evidence identity generated
-from canonical URL, content hash, competitor ID, and dimension. Reports should
-prefer EvidenceRecord IDs for durable citations; RawSource IDs are preserved as
-aliases through `source_reconciliation`.
+`EvidenceRecord.id` remains the enterprise-stable storage identity generated
+from canonical URL, content hash, competitor ID, and dimension. Report markdown
+must not expose that storage ID as the preferred citation token. Reports cite
+the collection material with `RawSource.id`; enterprise evidence records keep
+the bridge through `EvidenceRecord.raw_source_id` and
+`metadata.raw_source_aliases`.
 
 Source-like objects have one source of truth:
 
-- `RawSource.id` identifies collection-stage material.
+- `RawSource.id` identifies collection-stage material and is the canonical
+  `[source:...]` token in reports.
 - `EvidenceRecord.raw_source_id` references the matching `RawSource.id`.
-- `EvidenceRecord.id` identifies the enterprise evidence projection.
-- report `[source:...]` tokens are reconciled against both Evidence IDs and
-  RawSource aliases before display, release gates, and gap fill.
+- `EvidenceRecord.id` identifies the enterprise evidence projection and is used
+  for `ReportVersion.evidence_ids`, claim links, artifacts, RAG chunks, and
+  release-gate scope.
+- report `[source:...]` tokens are resolved against Evidence IDs, RawSource IDs,
+  chunk suffixes, and aliases at the backend boundary, then normalized back to
+  canonical `RawSource.id` tokens before saving report markdown.
 
 ## Allowed Non-ID Hashes
 

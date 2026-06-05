@@ -75,19 +75,17 @@ def test_build_enterprise_projection_links_evidence_claims_and_report() -> None:
     assert projection.claim_records[0].evidence_ids == [projection.evidence_records[0].id]
     assert projection.report_version.claim_ids == [projection.claim_records[0].id]
     assert projection.report_version.evidence_ids == [projection.evidence_records[0].id]
-    assert projection.report_version.report_md == (
-        f"Cursor has published pricing. [source:{projection.evidence_records[0].id}]"
-    )
+    assert projection.report_version.report_md == "Cursor has published pricing. [source:pricing-1]"
     assert projection.report_version.version_number == 2
     assert projection.report_version.competitor_layer == "L1"
     assert projection.report_version.quality_metadata["run_id"] == "run-1"
     assert evidence.metadata["raw_source_aliases"] == ["pricing-1"]
     reconciliation = projection.report_version.quality_metadata["source_reconciliation"]
-    assert reconciliation["report_source_tokens"] == [evidence.id]
-    assert reconciliation["canonical_report_source_tokens"] == [evidence.id]
-    assert reconciliation["canonical_report_md_changed"] is True
+    assert reconciliation["report_source_tokens"] == ["pricing-1"]
+    assert reconciliation["canonical_report_source_tokens"] == ["pricing-1"]
+    assert reconciliation["canonical_report_md_changed"] is False
     assert reconciliation["unresolved_report_source_tokens"] == []
-    assert reconciliation["evidence_source_aliases"][evidence.id] == ["pricing-1"]
+    assert reconciliation["evidence_source_aliases"][evidence.id] == [evidence.id]
 
 
 def test_projection_carries_run_quality_metadata() -> None:

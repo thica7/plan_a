@@ -98,7 +98,7 @@ class SourceResolutionIndex:
                 status="out_of_scope",
                 evidence_id=unscoped.id,
                 raw_source_id=unscoped.raw_source_id,
-                canonical_token=unscoped.id,
+                canonical_token=_canonical_report_token(unscoped),
                 reason="Token resolves to evidence outside the scoped report version.",
             )
         return SourceResolution(
@@ -171,7 +171,9 @@ def normalize_report_source_tokens(
                 status="alias",
                 evidence_id=resolution.evidence_id,
                 raw_source_id=resolution.raw_source_id,
-                canonical_token=resolution.evidence_id,
+                canonical_token=resolution.canonical_token
+                or resolution.raw_source_id
+                or resolution.evidence_id,
                 reason=(
                     "Token resolved outside the initial report scope and was added "
                     "to the normalized report evidence scope."
@@ -180,7 +182,12 @@ def normalize_report_source_tokens(
         resolutions.append(resolution)
         if resolution.resolved and resolution.evidence_id:
             canonical_ids.append(resolution.evidence_id)
-            replacement = f"[source:{resolution.evidence_id}]"
+            report_token = (
+                resolution.canonical_token
+                or resolution.raw_source_id
+                or resolution.evidence_id
+            )
+            replacement = f"[source:{report_token}]"
             if replacement != match.group(0):
                 changed = True
             return replacement
@@ -273,7 +280,8 @@ def build_source_reconciliation(
     for item in scoped_evidence:
         tokens = evidence_source_tokens(item)
         scoped_tokens.update(tokens)
-        aliases = sorted(token for token in tokens if token != item.id)
+        canonical_token = _canonical_report_token(item)
+        aliases = sorted(token for token in tokens if token != canonical_token)
         if aliases:
             evidence_aliases[item.id] = aliases
 
@@ -401,11 +409,15 @@ def _resolution_for(
         status=status,
         evidence_id=evidence.id,
         raw_source_id=evidence.raw_source_id,
-        canonical_token=evidence.id,
+        canonical_token=_canonical_report_token(evidence),
         reason="Token resolved directly."
         if status == "resolved"
         else "Token resolved through alias.",
     )
+
+
+def _canonical_report_token(evidence: EvidenceRecord) -> str:
+    return normalize_source_token(evidence.raw_source_id) or normalize_source_token(evidence.id)
 
 
 def _merge_ids(primary: Iterable[str], secondary: Iterable[str]) -> list[str]:

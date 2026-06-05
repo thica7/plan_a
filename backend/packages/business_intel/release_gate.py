@@ -574,7 +574,7 @@ def _missing_report_citation_issues(
                 ),
                 recommendation=(
                     "Remove malformed [source:...] markers or replace them with canonical "
-                    "EvidenceRecord ids/raw source ids."
+                    "RawSource ids."
                 ),
             )
         )
@@ -590,7 +590,7 @@ def _missing_report_citation_issues(
             ),
             recommendation=(
                 "Attach the cited evidence to this report version, replace the token with a "
-                "canonical EvidenceRecord/raw source id, or remove the unsupported sentence."
+                "canonical RawSource id, or remove the unsupported sentence."
             ),
         )
     )

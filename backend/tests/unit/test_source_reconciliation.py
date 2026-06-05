@@ -51,11 +51,11 @@ def test_source_reconciliation_resolves_ids_raw_sources_aliases_and_chunks() -> 
     assert reconciliation["report_source_tokens"] == ["pricing-current", "ghost"]
     assert reconciliation["unresolved_report_source_tokens"] == ["ghost"]
     assert reconciliation["evidence_source_aliases"] == {
-        "evidence-1": ["pricing-current", "pricing-old"]
+        "evidence-1": ["evidence-1", "pricing-current"]
     }
 
 
-def test_source_normalizer_rewrites_raw_source_tokens_to_evidence_tokens() -> None:
+def test_source_normalizer_rewrites_source_tokens_to_raw_source_tokens() -> None:
     evidence = EvidenceRecord(
         id="evidence-1",
         workspace_id="workspace-1",
@@ -72,17 +72,17 @@ def test_source_normalizer_rewrites_raw_source_tokens_to_evidence_tokens() -> No
     )
 
     normalized = normalize_report_source_tokens(
-        "Known [source:pricing-old#chunk:0] and [source:pricing-raw].",
+        "Known [source:pricing-old#chunk:0] and [source:evidence-1].",
         [evidence],
         scoped_evidence_ids=["evidence-1"],
     )
 
-    assert normalized.report_md == "Known [source:evidence-1] and [source:evidence-1]."
+    assert normalized.report_md == "Known [source:pricing-raw] and [source:pricing-raw]."
     assert normalized.evidence_ids == ["evidence-1"]
-    assert [item.status for item in normalized.resolutions] == ["alias", "alias"]
+    assert [item.status for item in normalized.resolutions] == ["alias", "resolved"]
     reconciliation = normalized.reconciliation([evidence])
     assert reconciliation["canonical_report_md_changed"] is True
-    assert reconciliation["canonical_report_source_tokens"] == ["evidence-1"]
+    assert reconciliation["canonical_report_source_tokens"] == ["pricing-raw"]
     assert reconciliation["unresolved_report_source_tokens"] == []
 
 
@@ -130,7 +130,7 @@ def test_source_normalizer_without_scope_uses_all_evidence() -> None:
         [evidence],
     )
 
-    assert normalized.report_md == "Cursor pricing. [source:evidence-1]"
+    assert normalized.report_md == "Cursor pricing. [source:pricing-raw]"
     assert normalized.evidence_ids == ["evidence-1"]
     assert normalized.resolutions[0].status == "alias"
 
@@ -195,7 +195,7 @@ def test_source_normalizer_adds_known_out_of_scope_evidence_to_report_scope() ->
 
     normalized = normalize_report_version_sources(version, [evidence])
 
-    assert normalized.report_md == "Cursor pricing. [source:evidence-1]"
+    assert normalized.report_md == "Cursor pricing. [source:pricing-raw]"
     assert normalized.evidence_ids == ["evidence-1"]
     reconciliation = normalized.quality_metadata["source_reconciliation"]
     assert reconciliation["unresolved_report_source_tokens"] == []
@@ -222,7 +222,7 @@ def test_source_normalizer_removes_malformed_report_tokens() -> None:
         [evidence],
     )
 
-    assert normalized.report_md == "Valid [source:evidence-1]. Invalid ."
+    assert normalized.report_md == "Valid [source:pricing-raw]. Invalid ."
     assert malformed_source_tokens("Invalid [source: all persona cells].") == [
         "all persona cells"
     ]

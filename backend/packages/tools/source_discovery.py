@@ -1,15 +1,8 @@
 from __future__ import annotations
 
+from packages.research.discovery.constants import SOURCE_ORIGIN_PRIORITY
 from packages.research.models import SourceCandidate
 from packages.search import SearchResult
-
-SOURCE_ORIGIN_PRIORITY: dict[str, int] = {
-    "trusted_registry": 400,
-    "perplexity": 300,
-    "web_search": 280,
-    "homepage_derived": 120,
-    "llm_fallback": 40,
-}
 
 
 def source_candidate_from_search_result(

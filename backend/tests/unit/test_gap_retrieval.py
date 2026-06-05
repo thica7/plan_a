@@ -339,9 +339,11 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
     ]["gap_evidence_links"] == {"gap-security": ["evidence-trust-1"]}
     reconciliation = result.updated_report_version.quality_metadata["source_reconciliation"]
     assert reconciliation["unresolved_report_source_tokens"] == []
-    assert reconciliation["evidence_source_aliases"] == {"evidence-trust-1": ["trust-1"]}
+    assert reconciliation["evidence_source_aliases"] == {
+        "evidence-trust-1": ["evidence-trust-1"]
+    }
     assert "## RAG Gap Fill" in result.updated_report_version.report_md
-    assert "[source:evidence-trust-1]" in result.updated_report_version.report_md
+    assert "[source:trust-1]" in result.updated_report_version.report_md
     assert store.get_report_version(result.updated_report_version.id) is not None
 
 
@@ -542,8 +544,8 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version(tmp_p
     assert result.updated_report_version.evidence_ids == [evidence.id]
     reconciliation = result.updated_report_version.quality_metadata["source_reconciliation"]
     assert reconciliation["unresolved_report_source_tokens"] == []
-    assert reconciliation["evidence_source_aliases"][evidence.id] == [evidence.raw_source_id]
-    assert f"[source:{evidence.id}]" in result.updated_report_version.report_md
+    assert reconciliation["evidence_source_aliases"][evidence.id] == [evidence.id]
+    assert f"[source:{evidence.raw_source_id}]" in result.updated_report_version.report_md
 
     snapshotted = capture_gap_fill_source_snapshots(
         result,
