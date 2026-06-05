@@ -13,7 +13,15 @@ from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
-from packages.schema.enterprise import ModelRouteCandidate, ModelRouteDecision, UserFeedbackRecord
+from packages.schema.enterprise import (
+    BusinessQAEvaluation,
+    BusinessQAFinding,
+    ModelRouteCandidate,
+    ModelRouteDecision,
+    ProjectReadinessScore,
+    ReportReleaseGate,
+    UserFeedbackRecord,
+)
 from packages.schema.models import (
     AnalysisPlan,
     ComparisonCell,
@@ -56,6 +64,48 @@ def _collector_issue(issue_id: str, subagent: str, competitor: str) -> QCIssue:
             target_competitor=competitor,
             rationale=f"Collect verified {subagent} evidence for {competitor}.",
         ),
+    )
+
+
+def _blocked_release_gate() -> ReportReleaseGate:
+    return ReportReleaseGate(
+        report_version_id="report-version-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        allowed=False,
+        status="blocked",
+        readiness=ProjectReadinessScore(
+            project_id="project-1",
+            score=70,
+            risk_level="blocked",
+            evidence_score=60,
+            claim_score=70,
+            coverage_score=70,
+            qa_score=60,
+            summary="Blocked by release gate.",
+        ),
+        qa_evaluation=BusinessQAEvaluation(
+            project_id="project-1",
+            scenario_id="l1_pricing_pack",
+            competitor_layer="L1",
+        ),
+        issue_count=1,
+        blocker_count=1,
+        warn_count=0,
+        issues=[
+            BusinessQAFinding(
+                id="release-issue-1",
+                rule_id="claim_uses_low_confidence_evidence",
+                rule_name="Claim evidence confidence",
+                severity="blocker",
+                competitor_name="Claude",
+                dimension="pricing",
+                message="Pricing claim depends on weak evidence.",
+                evidence_ids=["evidence-1"],
+                claim_ids=["claim-1"],
+                recommendation="Collect verified pricing evidence.",
+            )
+        ],
     )
 
 
@@ -4381,6 +4431,105 @@ async def test_real_pipeline_auto_runs_scoped_redo_for_qa_findings() -> None:
         )
     finally:
         await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_release_gate_sync_creates_scoped_qa_repair_issue() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Release gate repair sync",
+            competitors=["Claude"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    issues = service._sync_release_gate_repair_issues(record, _blocked_release_gate())
+
+    assert len(issues) == 1
+    assert issues[0].field_path.startswith("release_gate.")
+    assert issues[0].redo_scope.kind == "collector"
+    assert issues[0].redo_scope.target_subagent == "pricing"
+    assert issues[0].redo_scope.target_competitor == "Claude"
+    assert record.detail.qa_findings == issues
+
+
+@pytest.mark.asyncio
+async def test_release_gate_auto_redo_uses_existing_scoped_redo_for_real_runs() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Release gate auto redo",
+            competitors=["Claude"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    service._sync_release_gate_repair_issues(record, _blocked_release_gate())
+    calls: list[tuple[str, bool]] = []
+
+    async def fake_scoped_redo(run_id: str, *, auto_continue: bool = False) -> None:
+        calls.append((run_id, auto_continue))
+
+    service.run_scoped_redo = fake_scoped_redo  # type: ignore[method-assign]
+
+    triggered = await service._maybe_run_release_gate_auto_redo(
+        record,
+        _blocked_release_gate(),
+    )
+
+    assert triggered is True
+    assert calls == [(detail.id, True)]
+
+
+@pytest.mark.asyncio
+async def test_release_gate_auto_redo_is_disabled_for_demo_runs() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Release gate demo",
+            competitors=["Claude"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+    service._sync_release_gate_repair_issues(record, _blocked_release_gate())
+
+    assert await service._maybe_run_release_gate_auto_redo(record, _blocked_release_gate()) is False
 
 
 @pytest.mark.asyncio

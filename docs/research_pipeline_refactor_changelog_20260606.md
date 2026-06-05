@@ -156,6 +156,35 @@ Validation:
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/tests/unit/test_research_pipeline.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py -q`
 
+## 2026-06-06 - Step 7: Release Gate To Auto-Redo Integration
+
+Commit: pending
+
+Scope:
+
+- Synced blocked release-gate issues into `RunDetail.qa_findings` as
+  `release_gate.*` QCIssue records.
+- Reused existing scoped redo selection and `_maybe_run_auto_redo()` instead of
+  creating a second redo mechanism.
+- Limited release-gate-triggered auto redo to real runs; demo runs still surface
+  `completed_with_blockers` for review and presentation.
+- Added service-level tests for release-gate repair issue sync, real-run auto
+  redo dispatch, and demo-mode non-dispatch.
+
+Why:
+
+- Completes the core control loop from final release gate blocker back to typed
+  scoped redo.
+- Keeps HITL/manual review behavior intact because existing auto-redo policy and
+  redo limits still apply.
+- Avoids hidden demo behavior changes while enabling real-run self-repair.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/orchestrator/service.py backend/tests/unit/test_run_service.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_run_service.py -q`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_enterprise_store.py::test_run_service_records_release_gate_notification_for_weak_report -q`
+
 ## 2026-06-06 - Step 5: Pipeline Entry Point And Refactor Documentation
 
 Commit: pending

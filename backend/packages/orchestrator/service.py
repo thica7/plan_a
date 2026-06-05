@@ -63,6 +63,8 @@ from packages.orchestrator.graph import (
     build_scoped_redo_graph,
 )
 from packages.refs import normalize_dimension_refs
+from packages.research.evaluation import quality_gaps_from_release_gate
+from packages.research.repair import repair_task_to_redo_scope, repair_tasks_from_gaps
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail, RunSummary
 from packages.schema.enterprise import (
     ClaimValidationReport,
@@ -976,6 +978,8 @@ class RunService(
         record.detail.updated_at = datetime.utcnow()
         projection = self._sync_enterprise_projection(record, notify_release_gate=True)
         gate = self._apply_release_gate_run_status(record, projection)
+        if await self._maybe_run_release_gate_auto_redo(record, gate):
+            return
         await self._emit_quality_decision_events(record, projection, gate)
         await self.emit(
             record.detail.id,
@@ -999,6 +1003,8 @@ class RunService(
             return
         projection = self._sync_enterprise_projection(record, notify_release_gate=True)
         gate = self._apply_release_gate_run_status(record, projection)
+        if await self._maybe_run_release_gate_auto_redo(record, gate):
+            return
         await self._emit_quality_decision_events(record, projection, gate)
         await self.emit(
             detail.id,
@@ -1024,6 +1030,8 @@ class RunService(
         record.detail.updated_at = datetime.utcnow()
         projection = self._sync_enterprise_projection(record, notify_release_gate=True)
         gate = self._apply_release_gate_run_status(record, projection)
+        if await self._maybe_run_release_gate_auto_redo(record, gate):
+            return
         await self._emit_quality_decision_events(record, projection, gate)
         await self.emit(
             record.detail.id,
@@ -1293,6 +1301,17 @@ class RunService(
         )
         await self.run_scoped_redo(detail.id, auto_continue=True)
         return True
+
+    async def _maybe_run_release_gate_auto_redo(
+        self,
+        record: RunRecord,
+        gate: ReportReleaseGate | None,
+    ) -> bool:
+        if gate is None or gate.allowed:
+            return False
+        if record.detail.execution_mode != "real":
+            return False
+        return await self._maybe_run_auto_redo(record)
 
     async def _get_real_graph(self):
         if self._real_graph is None:
@@ -2115,11 +2134,78 @@ class RunService(
         if projection is None or record.detail.status != "completed":
             return None
         gate = self._evaluate_report_release_gate(projection)
+        self._sync_release_gate_repair_issues(record, gate)
         if gate is None or gate.allowed:
             return gate
         record.detail.status = "completed_with_blockers"
         record.detail.updated_at = datetime.utcnow()
         return gate
+
+    def _sync_release_gate_repair_issues(
+        self,
+        record: RunRecord,
+        gate: ReportReleaseGate | None,
+    ) -> list[QCIssue]:
+        detail = record.detail
+        retained = [
+            issue
+            for issue in detail.qa_findings
+            if not issue.field_path.startswith("release_gate.")
+        ]
+        if gate is None or gate.allowed:
+            if len(retained) != len(detail.qa_findings):
+                detail.qa_findings = retained
+                detail.updated_at = datetime.utcnow()
+            return []
+
+        gaps = quality_gaps_from_release_gate(gate)
+        tasks = repair_tasks_from_gaps(gaps)
+        gap_by_id = {gap.id: gap for gap in gaps}
+        release_issues: list[QCIssue] = []
+        for task in tasks:
+            gap = gap_by_id.get(task.gap_id)
+            if gap is None:
+                continue
+            scope = repair_task_to_redo_scope(task)
+            release_issues.append(
+                QCIssue(
+                    id=stable_prefixed_id(
+                        "qc-release-gate",
+                        detail.id,
+                        task.id,
+                        length=16,
+                    ),
+                    severity=gap.severity,
+                    detected_by=self._release_gate_detected_by(scope),
+                    target_agent=self._redo_target_agent(scope),
+                    target_subagent=scope.target_subagent,
+                    target_competitor=scope.target_competitor,
+                    field_path=f"release_gate.{gap.metadata.get('rule_id', 'unknown')}",
+                    problem=gap.reason,
+                    redo_scope=scope,
+                    self_found=True,
+                )
+            )
+
+        detail.qa_findings = [*retained, *release_issues]
+        detail.updated_at = datetime.utcnow()
+        return release_issues
+
+    def _release_gate_detected_by(self, scope: RedoScope) -> str:
+        if scope.kind == "writer_only":
+            return "citation"
+        if scope.kind == "comparator":
+            return "consistency"
+        if scope.kind == "analyst":
+            return "schema"
+        return "coverage"
+
+    def _redo_target_agent(self, scope: RedoScope) -> str:
+        if scope.kind == "writer_only":
+            return "writer"
+        if scope.kind in {"collector", "analyst", "comparator"}:
+            return scope.kind
+        return "orchestrator"
 
     def _run_completed_message(self, status: str, base_message: str) -> str:
         if status == "completed_with_blockers":
