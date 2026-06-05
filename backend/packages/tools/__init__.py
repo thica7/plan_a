@@ -9,6 +9,7 @@ from packages.tools.fetch_page import FetchPageResult, fetch_page
 from packages.tools.official_docs import OfficialDocCandidate, find_official_docs
 from packages.tools.review_site import ReviewSearchPlan, search_review_site_queries
 from packages.tools.robots import RobotsCheckResult, robots_check
+from packages.tools.source_discovery import SourceCandidate
 from packages.tools.survey_simulator import InterviewRecord, survey_simulator
 from packages.tools.web_search import WebSearchRequest, web_search
 
@@ -22,6 +23,7 @@ __all__ = [
     "OfficialDocCandidate",
     "ReviewSearchPlan",
     "RobotsCheckResult",
+    "SourceCandidate",
     "WebSearchRequest",
     "extract_facts",
     "advanced_fetch_page",

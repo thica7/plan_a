@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 
 from packages.business_intel.entity_resolver import trusted_source_candidates
+from packages.tools.source_discovery import SOURCE_ORIGIN_PRIORITY
 
 
 @dataclass(frozen=True)
@@ -11,6 +12,9 @@ class OfficialDocCandidate:
     title: str
     url: str
     rationale: str
+    origin: str = "trusted_registry"
+    rank: int = 0
+    confidence: float = 0.95
 
 
 def find_official_docs(
@@ -19,14 +23,18 @@ def find_official_docs(
     dimension: str,
     homepage_hint: str | None,
 ) -> list[OfficialDocCandidate]:
-    candidates: list[OfficialDocCandidate] = [
-        OfficialDocCandidate(
-            title=candidate.title,
-            url=candidate.url,
-            rationale=candidate.rationale,
+    candidates: list[OfficialDocCandidate] = []
+    for rank, candidate in enumerate(trusted_source_candidates(competitor, dimension)):
+        candidates.append(
+            OfficialDocCandidate(
+                title=candidate.title,
+                url=candidate.url,
+                rationale=candidate.rationale,
+                origin="trusted_registry",
+                rank=rank,
+                confidence=0.98,
+            )
         )
-        for candidate in trusted_source_candidates(competitor, dimension)
-    ]
     if not homepage_hint:
         return candidates
     parsed = urlparse(homepage_hint)
@@ -34,12 +42,17 @@ def find_official_docs(
         return candidates
     base = f"{parsed.scheme}://{parsed.netloc}"
     paths = _dimension_paths(dimension)
-    for path in paths:
+    derived_confidence = 0.45 if candidates else 0.62
+    base_rank = len(candidates)
+    for offset, path in enumerate(paths):
         candidates.append(
             OfficialDocCandidate(
                 title=f"{competitor} official {dimension} page",
                 url=urljoin(base, path),
                 rationale=f"Derived from planner homepage_hint and {dimension} skill.",
+                origin="homepage_derived",
+                rank=base_rank + offset,
+                confidence=derived_confidence,
             )
         )
     return _dedupe_candidates(candidates)
@@ -85,12 +98,19 @@ def _dimension_paths(dimension: str) -> list[str]:
 
 
 def _dedupe_candidates(candidates: list[OfficialDocCandidate]) -> list[OfficialDocCandidate]:
-    seen: set[str] = set()
-    deduped: list[OfficialDocCandidate] = []
+    best_by_url: dict[str, OfficialDocCandidate] = {}
     for candidate in candidates:
         key = candidate.url.rstrip("/")
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(candidate)
-    return deduped
+        existing = best_by_url.get(key)
+        if existing is None or _candidate_key(candidate) > _candidate_key(existing):
+            best_by_url[key] = candidate
+    return sorted(best_by_url.values(), key=_candidate_key, reverse=True)
+
+
+def _candidate_key(candidate: OfficialDocCandidate) -> tuple[int, float, int, str]:
+    return (
+        SOURCE_ORIGIN_PRIORITY.get(candidate.origin, 0),
+        candidate.confidence,
+        -candidate.rank,
+        candidate.url,
+    )

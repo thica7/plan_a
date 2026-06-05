@@ -29,6 +29,11 @@ from packages.tools import (
     search_review_site_queries,
     survey_simulator,
 )
+from packages.tools.source_discovery import (
+    SourceCandidate,
+    dedupe_source_candidates,
+    source_candidate_from_search_result,
+)
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
 
@@ -499,96 +504,20 @@ class CollectorAgentMixin:
         context: SubagentContext,
     ) -> int:
         detail = record.detail
-        skill = self._skill_registry.get(dimension)
         added = 0
         for competitor in detail.plan.competitors:
-            target_source_count = self._collector_target_source_count(detail, dimension)
-            query = self._web_search_query(detail, competitor, dimension)
-            competitor_added = 0
-            competitor_sources: list[RawSource] = []
-            if self._should_collect_official_first(dimension):
-                official_sources = await self._collect_official_sources(
-                    record,
-                    detail,
-                    dimension,
-                    competitor,
-                    context,
-                )
-                for source in official_sources:
-                    if len(competitor_sources) >= target_source_count:
-                        break
-                    detail.raw_sources.append(source)
-                    competitor_sources.append(source)
-                    added += 1
-                    competitor_added += 1
-            results = await self._trace_search(
+            competitor_sources = await self._collect_competitor_with_web_search(
                 record,
-                agent="collector",
-                subagent=dimension,
-                query=query,
-                max_results=self._collector_search_max_results(),
-                context=context,
+                dimension,
+                competitor,
+                context,
+                include_official=True,
             )
-            for result in self._rank_search_results(detail, competitor, dimension, results):
-                if len(competitor_sources) >= target_source_count:
-                    break
-                if self._candidate_already_collected(
-                    detail,
-                    competitor_sources,
-                    competitor=competitor,
-                    dimension=dimension,
-                    url=result.url,
-                ):
-                    continue
-                source = await self._source_from_search_result(
-                    detail,
-                    competitor,
-                    dimension,
-                    result,
-                    record,
-                    context,
-                )
-                if source is None:
+            for source in competitor_sources:
+                if self._source_already_in_batch(source, detail.raw_sources):
                     continue
                 detail.raw_sources.append(source)
-                competitor_sources.append(source)
                 added += 1
-                competitor_added += 1
-            if len(competitor_sources) < target_source_count and skill is not None:
-                fallback_query = f"{competitor} {skill.description}"
-                results = await self._trace_search(
-                    record,
-                    agent="collector",
-                    subagent=dimension,
-                    query=fallback_query,
-                    max_results=self._collector_search_max_results(),
-                    context=context,
-                )
-                for result in self._rank_search_results(detail, competitor, dimension, results):
-                    if len(competitor_sources) >= target_source_count:
-                        break
-                    if self._candidate_already_collected(
-                        detail,
-                        competitor_sources,
-                        competitor=competitor,
-                        dimension=dimension,
-                        url=result.url,
-                    ):
-                        continue
-                    source = await self._source_from_search_result(
-                        detail,
-                        competitor,
-                        dimension,
-                        result,
-                        record,
-                        context,
-                    )
-                    if source is None:
-                        continue
-                    detail.raw_sources.append(source)
-                    competitor_sources.append(source)
-                    added += 1
-                    competitor_added += 1
         return added
 
     async def _collect_competitor_with_web_search(
@@ -606,19 +535,14 @@ class CollectorAgentMixin:
         target_source_count = self._collector_target_source_count(detail, dimension)
         sources = list(seed_sources or [])
         if include_official and self._should_collect_official_first(dimension):
-            official_sources = await self._collect_official_sources(
+            trusted_sources = await self._collect_official_sources(
                 record,
                 detail,
                 dimension,
                 competitor,
                 context,
             )
-            for source in official_sources:
-                if len(sources) >= target_source_count:
-                    break
-                if self._source_already_in_batch(source, sources):
-                    continue
-                sources.append(source)
+            self._extend_source_batch(sources, trusted_sources, target_source_count)
         if len(sources) >= target_source_count:
             return sources
         queries = [self._web_search_query(detail, competitor, dimension)]
@@ -633,27 +557,31 @@ class CollectorAgentMixin:
                 max_results=self._collector_search_max_results(),
                 context=context,
             )
-            for result in self._rank_search_results(detail, competitor, dimension, results):
-                if len(sources) >= target_source_count:
-                    return sources
-                if self._candidate_already_collected(
-                    detail,
-                    sources,
-                    competitor=competitor,
-                    dimension=dimension,
-                    url=result.url,
-                ):
-                    continue
-                source = await self._source_from_search_result(
-                    detail,
-                    competitor,
-                    dimension,
-                    result,
-                    record,
-                    context,
-                )
-                if source is not None:
-                    sources.append(source)
+            candidates = self._search_source_candidates(detail, competitor, dimension, results)
+            added = await self._collect_from_source_candidates(
+                record,
+                detail,
+                dimension,
+                competitor,
+                context,
+                candidates,
+                batch_sources=sources,
+                target_source_count=target_source_count,
+            )
+            self._extend_source_batch(sources, added, target_source_count)
+            if len(sources) >= target_source_count:
+                return sources
+        if include_official and len(sources) < target_source_count:
+            fallback_sources = await self._collect_homepage_fallback_sources(
+                record,
+                detail,
+                dimension,
+                competitor,
+                context,
+                batch_sources=sources,
+                target_source_count=target_source_count,
+            )
+            self._extend_source_batch(sources, fallback_sources, target_source_count)
         return sources
 
     async def _collect_official_sources(
@@ -664,37 +592,24 @@ class CollectorAgentMixin:
         competitor: str,
         context: SubagentContext,
     ) -> list[RawSource]:
-        sources: list[RawSource] = []
         candidates = self._official_source_candidates(detail, competitor, dimension)
         target_source_count = self._collector_target_source_count(detail, dimension)
-        for candidate in candidates:
-            if len(sources) >= target_source_count:
-                break
-            if self._candidate_already_collected(
-                detail,
-                sources,
-                competitor=competitor,
-                dimension=dimension,
-                url=candidate.url,
-            ):
-                continue
-            source = await self._source_from_search_result(
-                detail,
-                competitor,
-                dimension,
-                candidate,
-                record,
-                context,
-            )
-            if source is None:
-                continue
-            sources.append(source)
+        sources = await self._collect_from_source_candidates(
+            record,
+            detail,
+            dimension,
+            competitor,
+            context,
+            candidates,
+            batch_sources=[],
+            target_source_count=target_source_count,
+        )
         if sources:
             self._trace_local_tool(
                 record,
                 agent="collector",
                 subagent=context.subagent,
-                name="official_source_registry",
+                name="source_discovery_trusted_registry",
                 input_text=json.dumps(
                     {
                         "competitor": competitor,
@@ -712,6 +627,9 @@ class CollectorAgentMixin:
                     "source_count": len(sources),
                     "target_source_count": target_source_count,
                     "candidate_count": len(candidates),
+                    "candidate_origins": ",".join(
+                        sorted({candidate.origin for candidate in candidates})
+                    ),
                 },
             )
         return sources
@@ -721,24 +639,173 @@ class CollectorAgentMixin:
         detail: RunDetail,
         competitor: str,
         dimension: str,
-    ) -> list[SearchResult]:
-        raw_candidates: list[tuple[str, str, str]] = []
+    ) -> list[SourceCandidate]:
+        candidates = self._official_doc_candidates(detail, competitor, dimension)
+        trusted = [candidate for candidate in candidates if candidate.origin == "trusted_registry"]
+        if trusted:
+            return dedupe_source_candidates(trusted)
+        return dedupe_source_candidates(
+            [candidate for candidate in candidates if candidate.origin == "homepage_derived"]
+        )
+
+    def _homepage_source_candidates(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+    ) -> list[SourceCandidate]:
+        return dedupe_source_candidates(
+            [
+                candidate
+                for candidate in self._official_doc_candidates(detail, competitor, dimension)
+                if candidate.origin == "homepage_derived"
+            ]
+        )
+
+    def _official_doc_candidates(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+    ) -> list[SourceCandidate]:
+        candidates: list[SourceCandidate] = []
         for candidate in find_official_docs(
             competitor=competitor,
             dimension=dimension,
             homepage_hint=detail.plan.homepage_hints.get(competitor),
         ):
-            raw_candidates.append((candidate.title, candidate.url, candidate.rationale))
+            candidates.append(
+                SourceCandidate(
+                    title=candidate.title,
+                    url=candidate.url,
+                    snippet=candidate.rationale,
+                    origin=candidate.origin,
+                    rank=candidate.rank,
+                    confidence=candidate.confidence,
+                )
+            )
+        return dedupe_source_candidates(candidates)
 
-        results: list[SearchResult] = []
-        seen_urls: set[str] = set()
-        for title, url, snippet in raw_candidates:
-            normalized_url = url.rstrip("/")
-            if normalized_url in seen_urls:
+    async def _collect_homepage_fallback_sources(
+        self,
+        record: RunRecord,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+        context: SubagentContext,
+        *,
+        batch_sources: list[RawSource],
+        target_source_count: int,
+    ) -> list[RawSource]:
+        candidates = self._homepage_source_candidates(detail, competitor, dimension)
+        if not candidates:
+            return []
+        sources = await self._collect_from_source_candidates(
+            record,
+            detail,
+            dimension,
+            competitor,
+            context,
+            candidates,
+            batch_sources=batch_sources,
+            target_source_count=target_source_count,
+        )
+        if sources:
+            self._trace_local_tool(
+                record,
+                agent="collector",
+                subagent=context.subagent,
+                name="source_discovery_homepage_fallback",
+                input_text=json.dumps(
+                    {
+                        "competitor": competitor,
+                        "dimension": dimension,
+                        "homepage_hint": detail.plan.homepage_hints.get(competitor),
+                    },
+                    ensure_ascii=False,
+                ),
+                output_text=json.dumps(
+                    [source.model_dump(mode="json") for source in sources],
+                    ensure_ascii=False,
+                ),
+                context=context,
+                metadata={
+                    "source_count": len(sources),
+                    "target_source_count": target_source_count,
+                    "candidate_count": len(candidates),
+                    "candidate_origins": "homepage_derived",
+                },
+            )
+        return sources
+
+    async def _collect_from_source_candidates(
+        self,
+        record: RunRecord,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+        context: SubagentContext,
+        candidates: list[SourceCandidate],
+        *,
+        batch_sources: list[RawSource],
+        target_source_count: int,
+    ) -> list[RawSource]:
+        sources: list[RawSource] = []
+        for candidate in candidates:
+            if len(batch_sources) + len(sources) >= target_source_count:
+                break
+            if self._candidate_already_collected(
+                detail,
+                [*batch_sources, *sources],
+                competitor=competitor,
+                dimension=dimension,
+                url=candidate.url,
+            ):
                 continue
-            seen_urls.add(normalized_url)
-            results.append(SearchResult(title=title, url=url, snippet=snippet))
-        return results
+            source = await self._source_from_candidate(
+                detail,
+                competitor,
+                dimension,
+                candidate,
+                record,
+                context,
+            )
+            if source is None:
+                continue
+            sources.append(source)
+        return sources
+
+    async def _source_from_candidate(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        candidate: SourceCandidate,
+        record: RunRecord | None = None,
+        context: SubagentContext | None = None,
+    ) -> RawSource | None:
+        return await self._source_from_search_result(
+            detail,
+            competitor,
+            dimension,
+            candidate.to_search_result(),
+            record,
+            context,
+            candidate=candidate,
+        )
+
+    def _extend_source_batch(
+        self,
+        target: list[RawSource],
+        additions: list[RawSource],
+        target_source_count: int,
+    ) -> None:
+        for source in additions:
+            if len(target) >= target_source_count:
+                break
+            if self._source_already_in_batch(source, target):
+                continue
+            target.append(source)
 
     def _should_collect_official_first(self, dimension: str) -> bool:
         key = dimension.casefold()
@@ -860,6 +927,35 @@ class CollectorAgentMixin:
             return (value, result.url)
 
         return sorted(results, key=score, reverse=True)
+
+    def _search_source_candidates(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        results: list[SearchResult],
+    ) -> list[SourceCandidate]:
+        origin = self._settings.web_search_provider or "web_search"
+        candidates = [
+            source_candidate_from_search_result(
+                result,
+                origin=origin,
+                rank=rank,
+                confidence=self._search_candidate_confidence(competitor, result),
+            )
+            for rank, result in enumerate(
+                self._rank_search_results(detail, competitor, dimension, results)
+            )
+        ]
+        return dedupe_source_candidates(candidates)
+
+    def _search_candidate_confidence(self, competitor: str, result: SearchResult) -> float:
+        if is_trusted_url_for_competitor(competitor, result.url):
+            return 0.9
+        host = self._host(result.url)
+        if any(token in host for token in ("docs.", "developer.", "help.", "support.")):
+            return 0.78
+        return 0.68
 
     def _dimension_source_terms(self, dimension: str) -> list[str]:
         normalized = dimension.casefold()
@@ -1279,7 +1375,15 @@ class CollectorAgentMixin:
         result: SearchResult,
         record: RunRecord | None = None,
         context: SubagentContext | None = None,
+        *,
+        candidate: SourceCandidate | None = None,
     ) -> RawSource | None:
+        source_candidate = candidate or source_candidate_from_search_result(
+            result,
+            origin=self._settings.web_search_provider or "web_search",
+            rank=0,
+            confidence=0.68,
+        )
         if any(
             source.url
             and str(source.url) == result.url
@@ -1303,6 +1407,7 @@ class CollectorAgentMixin:
                 title=result.title,
                 url=result.url,
                 reason=self._fetch_rejection_reason(fetched),
+                candidate=source_candidate,
             )
             return None
         snippet = (
@@ -1352,6 +1457,16 @@ class CollectorAgentMixin:
                 ]
             ),
             confidence=confidence,
+            candidate_origin=source_candidate.origin,
+            candidate_rank=source_candidate.rank,
+            candidate_confidence=source_candidate.confidence,
+            fetch_method=getattr(fetched, "fetch_method", "") if fetched is not None else "",
+            quality_score=float(getattr(fetched, "quality_score", 0.0) or 0.0)
+            if fetched is not None
+            else 0.0,
+            failure_reason=getattr(fetched, "failure_reason", None)
+            if fetched is not None
+            else None,
         )
         if not self._source_is_usable(provisional):
             return None
@@ -1380,6 +1495,16 @@ class CollectorAgentMixin:
             snippet=snippet,
             content_hash=content_hash,
             confidence=confidence,
+            candidate_origin=source_candidate.origin,
+            candidate_rank=source_candidate.rank,
+            candidate_confidence=source_candidate.confidence,
+            fetch_method=getattr(fetched, "fetch_method", "") if fetched is not None else "",
+            quality_score=float(getattr(fetched, "quality_score", 0.0) or 0.0)
+            if fetched is not None
+            else 0.0,
+            failure_reason=getattr(fetched, "failure_reason", None)
+            if fetched is not None
+            else None,
         )
 
     def _requires_verified_web_evidence(self, detail: RunDetail, dimension: str) -> bool:
@@ -1411,6 +1536,7 @@ class CollectorAgentMixin:
         title: str,
         url: str | None,
         reason: str,
+        candidate: SourceCandidate | None = None,
     ) -> None:
         if record is None:
             return
@@ -1425,6 +1551,11 @@ class CollectorAgentMixin:
                     "dimension": dimension,
                     "title": title,
                     "url": url,
+                    "candidate_origin": candidate.origin if candidate is not None else None,
+                    "candidate_rank": candidate.rank if candidate is not None else None,
+                    "candidate_confidence": (
+                        candidate.confidence if candidate is not None else None
+                    ),
                 },
                 ensure_ascii=False,
             ),
@@ -1435,6 +1566,8 @@ class CollectorAgentMixin:
                 "dimension": dimension,
                 "has_url": bool(url),
                 "reason": reason[:180],
+                "candidate_origin": candidate.origin if candidate is not None else "unknown",
+                "candidate_rank": candidate.rank if candidate is not None else None,
             },
         )
 

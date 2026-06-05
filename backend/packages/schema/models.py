@@ -97,6 +97,12 @@ class RawSource(BaseModel):
     snippet: str = ""
     content_hash: str
     confidence: float = Field(ge=0.0, le=1.0)
+    candidate_origin: str = "unknown"
+    candidate_rank: int | None = None
+    candidate_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    fetch_method: str = ""
+    quality_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    failure_reason: str | None = None
     extracted_at: datetime = Field(default_factory=datetime.utcnow)
 
 

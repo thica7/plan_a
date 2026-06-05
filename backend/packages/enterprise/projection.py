@@ -301,7 +301,15 @@ def _quality_label(source: RawSource) -> str:
 def _source_metadata(source: RawSource) -> dict[str, object]:
     return raw_source_alias_metadata(
         source.id,
-        {"source_competitor": source.competitor},
+        {
+            "source_competitor": source.competitor,
+            "candidate_origin": source.candidate_origin,
+            "candidate_rank": source.candidate_rank,
+            "candidate_confidence": source.candidate_confidence,
+            "fetch_method": source.fetch_method,
+            "quality_score": source.quality_score,
+            "failure_reason": source.failure_reason,
+        },
     )
 
 

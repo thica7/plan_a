@@ -30,11 +30,16 @@ Module: `backend/packages/tools/official_docs.py`
 
 `find_official_docs(competitor, dimension, homepage_hint)` returns:
 
-1. Resolver-backed trusted source seeds for known entities.
-2. Homepage-derived generic paths only when a verified homepage hint exists.
+1. Resolver-backed trusted source seeds for known entities with
+   `origin=trusted_registry`.
+2. Homepage-derived generic paths only when a verified homepage hint exists, with
+   `origin=homepage_derived`.
 3. Deduplicated URLs in stable priority order.
 
-Collector, ReAct skill tools, and official-first collection all use this same function.
+Collector, ReAct skill tools, and official-first collection all use this same function,
+but they do not treat every origin as equal. Known competitors use trusted registry
+candidates first; homepage-derived paths are a final fallback after search-based
+discovery has had a chance to find canonical pages.
 
 Real collector branches target multiple verified sources instead of stopping at
 the first successful page. The default target is 3 fetched `webpage_verified`
@@ -43,9 +48,34 @@ sources per competitor/dimension branch and can be tuned with:
 - `COLLECTOR_TARGET_VERIFIED_SOURCES_PER_BRANCH` (default `3`, range `1..5`)
 - `COLLECTOR_SEARCH_MAX_RESULTS` (default `6`, range `3..10`)
 
-Official candidates are tried first. If they do not meet the target, the
-collector uses search fallback candidates until the target is reached or the
-candidate set is exhausted.
+Source discovery order:
+
+1. `trusted_registry`: curated official docs, product, pricing, security, changelog,
+   model-card, and enterprise pages from `entity_resolver.py`.
+2. `perplexity` / `web_search`: search-discovered candidates, reranked by trusted
+   domain, dimension relevance, and source quality signals.
+3. `homepage_derived`: generic paths such as `/pricing`, `/docs`, `/features`, and
+   `/customers`, used only after registry and search candidates are insufficient.
+4. `llm_fallback`: reserved for future model-generated candidates and must not be
+   accepted without fetch and quality validation.
+
+The generic homepage-derived stage is intentionally low priority. It is useful for
+unknown SaaS sites, but it must not outrank curated registry or search-discovered
+canonical URLs for complex sites such as Anthropic, OpenAI, GitHub, Google, or
+Microsoft.
+
+Every accepted `RawSource` records:
+
+- `candidate_origin`
+- `candidate_rank`
+- `candidate_confidence`
+- `fetch_method`
+- `quality_score`
+- `failure_reason`
+
+These fields preserve source lineage through run detail, enterprise projection, and
+report review. The source ID remains the canonical RawSource identity; candidate
+metadata explains how the URL was discovered and fetched.
 
 ## Evidence Fetching
 

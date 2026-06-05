@@ -3368,6 +3368,49 @@ def test_collector_official_source_candidates_include_persona_product_pages() ->
     assert any("anthropic.com/product/claude-code" in item.url for item in claude_candidates)
 
 
+def test_collector_source_discovery_keeps_homepage_derived_after_trusted_registry() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="AI coding agent comparison",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding agent comparison",
+            competitors=["Claude Code"],
+            dimensions=["feature"],
+            homepage_hints={"Claude Code": "https://www.anthropic.com"},
+        ),
+    )
+
+    trusted = service._official_source_candidates(detail, "Claude Code", "feature")
+    homepage_fallback = service._homepage_source_candidates(detail, "Claude Code", "feature")
+
+    assert trusted
+    assert all(candidate.origin == "trusted_registry" for candidate in trusted)
+    assert not any(
+        candidate.url.rstrip("/") == "https://www.anthropic.com/features"
+        for candidate in trusted
+    )
+    assert any(
+        candidate.url.rstrip("/") == "https://www.anthropic.com/features"
+        for candidate in homepage_fallback
+    )
+    assert all(candidate.origin == "homepage_derived" for candidate in homepage_fallback)
+
+
 def test_collector_official_source_candidates_use_current_windsurf_urls() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -3519,10 +3562,105 @@ async def test_collector_official_source_collection_collects_configured_target()
     assert all(source.source_type == "webpage_verified" for source in sources)
     assert len({source.url for source in sources}) == 3
     registry_span = next(
-        span for span in record.detail.trace_spans if span.name == "official_source_registry"
+        span
+        for span in record.detail.trace_spans
+        if span.name == "source_discovery_trusted_registry"
     )
     assert registry_span.metadata["source_count"] == 3
     assert registry_span.metadata["target_source_count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_collector_uses_search_candidates_before_homepage_derived_fallback() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            collector_target_verified_sources_per_branch=1,
+            collector_search_max_results=3,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding agent",
+            competitors=["Claude Code"],
+            dimensions=["feature"],
+            execution_mode="real",
+        )
+    )
+    detail.plan.homepage_hints["Claude Code"] = "https://www.anthropic.com"
+    record = service._runs[detail.id]
+    context = SubagentContext(run_id=detail.id, agent="collector", subagent="feature::Claude Code")
+    fetch_calls: list[str] = []
+    search_queries: list[str] = []
+
+    async def fake_trace_search(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        query,
+        max_results,
+        context=None,
+    ) -> list[SearchResult]:
+        search_queries.append(query)
+        return [
+            SearchResult(
+                title="Claude Code docs overview",
+                url="https://code.claude.com/docs/en/overview",
+                snippet="Claude Code feature documentation for coding agent workflows.",
+            )
+        ]
+
+    async def fake_trace_fetch(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        url,
+        context=None,
+    ) -> EvidenceFetchResult:
+        fetch_calls.append(url)
+        ok = url == "https://code.claude.com/docs/en/overview"
+        return EvidenceFetchResult(
+            url=url,
+            ok=ok,
+            title="Claude Code overview" if ok else "not found",
+            text=(
+                "Claude Code is an agentic coding tool for developer workflows, "
+                "repository changes, command execution, and coding tasks."
+                if ok
+                else ""
+            ),
+            content_hash="hash-search" if ok else "hash-failed",
+            status_code=200 if ok else 404,
+            error=None if ok else "not found",
+            fetch_method="test_search_fetch" if ok else "test_failed_fetch",
+            quality_score=0.95 if ok else 0.0,
+            text_length=180 if ok else 0,
+            failure_reason=None if ok else "http_404",
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._trace_fetch = fake_trace_fetch  # type: ignore[method-assign]
+
+    sources = await service._collect_competitor_with_web_search(
+        record,
+        "feature",
+        "Claude Code",
+        context,
+    )
+
+    assert search_queries
+    assert len(sources) == 1
+    assert sources[0].candidate_origin == "perplexity"
+    assert sources[0].fetch_method == "test_search_fetch"
+    assert str(sources[0].url) == "https://code.claude.com/docs/en/overview"
+    assert "https://www.anthropic.com/features" not in fetch_calls
 
 
 def test_collector_search_query_adds_product_qualifier_for_ambiguous_names() -> None:

@@ -8,6 +8,7 @@ from packages.schema.api_dto import RunDetail
 from packages.schema.models import RawSource
 from packages.search import SearchResult
 from packages.tools import find_official_docs, search_review_site_queries, survey_simulator
+from packages.tools.source_discovery import SourceCandidate
 
 
 async def collect_competitor_with_skill_tools(
@@ -57,6 +58,14 @@ async def collect_competitor_with_skill_tools(
                 SearchResult(title=candidate.title, url=candidate.url, snippet=candidate.rationale),
                 record,
                 context,
+                candidate=SourceCandidate(
+                    title=candidate.title,
+                    url=candidate.url,
+                    snippet=candidate.rationale,
+                    origin=candidate.origin,
+                    rank=candidate.rank,
+                    confidence=candidate.confidence,
+                ),
             )
             if source is not None:
                 sources.append(source)
