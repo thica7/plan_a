@@ -131,6 +131,31 @@ Validation:
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/agents/collectors backend/packages/research backend/tests/unit/test_research_pipeline.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
 
+## 2026-06-06 - Step 6: Release Gate Repair Bridge
+
+Commit: pending
+
+Scope:
+
+- Added `quality_gaps_from_release_gate()` to map `ReportReleaseGate.issues`
+  into typed `QualityGap` objects.
+- Added `repair_task_to_redo_scope()` and `repair_tasks_to_redo_scopes()` to
+  convert pipeline repair tasks into scoped LangGraph redo requests.
+- Added coverage proving release-gate blocker issues can flow through
+  `QualityGap -> RepairTask -> RedoScope`.
+
+Why:
+
+- Turns release gate from a terminal blocker into a typed repair signal.
+- Keeps the mapping deterministic and testable instead of parsing blocked
+  report text in the collector or writer.
+- Gives the next integration step a clean bridge into existing scoped redo.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/tests/unit/test_research_pipeline.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py -q`
+
 ## 2026-06-06 - Step 5: Pipeline Entry Point And Refactor Documentation
 
 Commit: pending

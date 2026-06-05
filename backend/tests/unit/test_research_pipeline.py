@@ -7,6 +7,7 @@ from packages.research.discovery import (
     trusted_registry_candidates,
 )
 from packages.research.evaluation import quality_gaps_from_extractions
+from packages.research.evaluation.release_gate import quality_gaps_from_release_gate
 from packages.research.evidence import raw_source_from_capture, source_quality_problem
 from packages.research.extraction import (
     extract_feature_slots,
@@ -17,6 +18,13 @@ from packages.research.extraction import (
 from packages.research.models import CapturedPage, ResearchBrief, SourceCandidate
 from packages.research.pipeline import run_research_pipeline
 from packages.research.repair import repair_tasks_from_gaps
+from packages.research.repair.redos import repair_tasks_to_redo_scopes
+from packages.schema.enterprise import (
+    BusinessQAEvaluation,
+    BusinessQAFinding,
+    ProjectReadinessScore,
+    ReportReleaseGate,
+)
 from packages.schema.models import RawSource
 from packages.search import SearchResult
 from packages.tools.evidence_fetch import EvidenceFetchResult
@@ -331,3 +339,67 @@ async def test_run_research_pipeline_connects_discover_capture_extract_repair() 
     assert result.evidence_items
     assert result.metrics["verified_capture_rate"] == 1.0
     assert result.metrics["evidence_item_count"] == len(result.evidence_items)
+
+
+def test_release_gate_issues_become_repair_tasks_and_redo_scopes() -> None:
+    gate = ReportReleaseGate(
+        report_version_id="report-version-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        allowed=False,
+        status="blocked",
+        readiness=ProjectReadinessScore(
+            project_id="project-1",
+            score=72,
+            risk_level="blocked",
+            evidence_score=60,
+            claim_score=70,
+            coverage_score=70,
+            qa_score=60,
+            summary="Blocked by evidence quality.",
+        ),
+        qa_evaluation=BusinessQAEvaluation(
+            project_id="project-1",
+            scenario_id="l1_pricing_pack",
+            competitor_layer="L1",
+        ),
+        issue_count=2,
+        blocker_count=2,
+        warn_count=0,
+        issues=[
+            BusinessQAFinding(
+                id="release-issue-1",
+                rule_id="claim_uses_low_confidence_evidence",
+                rule_name="Claim evidence confidence",
+                severity="blocker",
+                competitor_name="Claude",
+                dimension="pricing",
+                message="Pricing claim depends on weak evidence.",
+                evidence_ids=["evidence-1"],
+                claim_ids=["claim-1"],
+                recommendation="Collect verified pricing evidence.",
+            ),
+            BusinessQAFinding(
+                id="release-issue-2",
+                rule_id="report_citation_resolves",
+                rule_name="Report citations resolve",
+                severity="blocker",
+                message="Report has unresolved source token.",
+                recommendation="Replace unresolved source token.",
+            ),
+        ],
+    )
+
+    gaps = quality_gaps_from_release_gate(gate)
+    tasks = repair_tasks_from_gaps(gaps)
+    scopes = repair_tasks_to_redo_scopes(tasks)
+
+    assert [gap.suggested_action for gap in gaps] == [
+        "pricing_model_repair",
+        "human_review",
+    ]
+    assert tasks[0].competitor == "Claude"
+    assert tasks[0].dimension == "pricing"
+    assert [scope.kind for scope in scopes] == ["collector", "writer_only"]
+    assert scopes[0].target_subagent == "pricing"
+    assert scopes[0].target_competitor == "Claude"
