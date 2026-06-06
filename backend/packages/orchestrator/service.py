@@ -25,6 +25,9 @@ from packages.business_intel import (
     validate_project_claims,
 )
 from packages.business_intel.homepage import verify_homepages
+from packages.business_intel.release_repair import (
+    apply_release_gate_warning_report_repair,
+)
 from packages.compliance import compliance_policy_from_settings, redact_text
 from packages.config import Settings
 from packages.enterprise import (
@@ -2148,20 +2151,49 @@ class RunService(
         if gate is None:
             return False
         metadata = dict(projection.report_version.quality_metadata)
-        gaps = quality_gaps_from_release_gate(gate)
+        initial_gaps = quality_gaps_from_release_gate(gate)
+        initial_tasks = repair_tasks_from_gaps(initial_gaps)
+        report_repair = apply_release_gate_warning_report_repair(
+            projection.report_version.report_md,
+            gate=gate,
+            tasks=initial_tasks,
+        )
+        gate_for_metadata = gate
+        if report_repair.changed:
+            projection.report_version = projection.report_version.model_copy(
+                update={"report_md": report_repair.report_md}
+            )
+            after_gate = self._evaluate_report_release_gate(projection)
+            if after_gate is not None:
+                gate_for_metadata = after_gate
+                report_repair = apply_release_gate_warning_report_repair(
+                    projection.report_version.report_md,
+                    gate=gate,
+                    tasks=initial_tasks,
+                    after_gate=after_gate,
+                )
+                if report_repair.changed:
+                    projection.report_version = projection.report_version.model_copy(
+                        update={"report_md": report_repair.report_md}
+                    )
+        gaps = quality_gaps_from_release_gate(gate_for_metadata)
         tasks = repair_tasks_from_gaps(gaps)
         release_gate_metadata = {
-            "allowed": gate.allowed,
-            "status": gate.status,
-            "readiness_score": gate.readiness.score,
-            "readiness_risk_level": gate.readiness.risk_level,
-            "qa_blocker_count": gate.qa_evaluation.blocker_count,
-            "qa_warn_count": gate.qa_evaluation.warn_count,
-            "blocker_count": gate.blocker_count,
-            "warn_count": gate.warn_count,
-            "issue_count": gate.issue_count,
+            "allowed": gate_for_metadata.allowed,
+            "status": gate_for_metadata.status,
+            "readiness_score": gate_for_metadata.readiness.score,
+            "readiness_risk_level": gate_for_metadata.readiness.risk_level,
+            "qa_blocker_count": gate_for_metadata.qa_evaluation.blocker_count,
+            "qa_warn_count": gate_for_metadata.qa_evaluation.warn_count,
+            "blocker_count": gate_for_metadata.blocker_count,
+            "warn_count": gate_for_metadata.warn_count,
+            "issue_count": gate_for_metadata.issue_count,
             "followup_issue_count": len(
-                [issue for issue in gate.issues if issue.severity != "blocker"]
+                [
+                    issue
+                    for issue in gate_for_metadata.issues
+                    if issue.severity != "blocker"
+                ]
             ),
             "issues": [
                 {
@@ -2176,9 +2208,10 @@ class RunService(
                     "claim_ids": issue.claim_ids,
                     "evidence_ids": issue.evidence_ids,
                 }
-                for issue in gate.issues
+                for issue in gate_for_metadata.issues
             ],
             "repair_tasks": [task.model_dump(mode="json") for task in tasks],
+            "warning_repair": report_repair.metadata(),
             "redo_scopes": [
                 scope.model_dump(mode="json")
                 for scope in repair_tasks_to_redo_scopes(tasks)

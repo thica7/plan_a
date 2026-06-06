@@ -4719,7 +4719,14 @@ def test_release_gate_quality_metadata_records_followup_tasks() -> None:
     assert metadata["followup_issue_count"] == 1
     assert metadata["issues"][0]["severity"] == "warn"
     assert metadata["repair_tasks"][0]["required_action"] == "add_evidence"
+    assert metadata["warning_repair"]["changed"] is True
+    assert metadata["warning_repair"]["before_warn_count"] == 1
+    assert metadata["warning_repair"]["target_count"] == 1
+    assert metadata["warning_repair"]["targets"][0]["target_section"] == "Pricing Analysis"
     assert metadata["redo_scopes"][0]["target_subagent"] == "pricing"
+    assert "## Release Gate Follow-up Repairs" in projection.report_version.report_md
+    assert projection.report_version.report_md.count("## Release Gate Follow-up Repairs") == 1
+    assert "Collect a second independent pricing source." in projection.report_version.report_md
 
 
 @pytest.mark.asyncio

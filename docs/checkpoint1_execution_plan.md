@@ -94,7 +94,7 @@ Acceptance:
 
 ### 3. `feat(release): apply warning repair to report sections`
 
-Status: next.
+Status: completed by `feat(release): apply warning repair to report sections`.
 
 Required behavior:
 
@@ -106,13 +106,13 @@ Required behavior:
 Acceptance:
 
 - Unit tests cover warning -> repair task -> report section rewrite.
-- Warning count decreases or the remaining warning is explicitly retained with
-  rationale.
+- Warning repair records before/after warning counts and explicitly retains
+  unresolved warnings with rationale.
 - No recursive release-gate warning loop.
 
 ### 4. `fix(writer): align pass-with-warnings report status`
 
-Status: mostly completed by `fda6d9a`, but must be verified in a fresh run.
+Status: ready for fresh-run verification.
 
 Required behavior:
 

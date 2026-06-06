@@ -705,3 +705,34 @@ Validation:
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/research backend/packages/schema/models.py backend/packages/agents/writer/logic.py backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_research_pipeline.py -q`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py -q`
+
+## 2026-06-07 - Step 23: Release Gate Warning Repair Section
+
+Commit: this commit
+
+Scope:
+
+- Added a release repair module that converts non-blocking Release Gate
+  findings and RepairTasks into explicit report-section targets.
+- Added deterministic report-section replacement for
+  `## Release Gate Follow-up Repairs`, inserted before Final QA when present.
+- Recorded warning repair metadata on ReportVersion quality metadata:
+  before/after warning counts, target section, action, rationale, claim IDs,
+  evidence IDs, and acceptance rule.
+- Re-evaluated Release Gate after a warning-repair section rewrite when an
+  enterprise store is available, then saved current issues/tasks/redo scopes.
+
+Why:
+
+- Release Gate warnings already produced follow-up tasks, but the report body
+  did not explain why a warning was retained or what exact section/action would
+  close it.
+- Checkpoint 1 requires warning/follow-up findings to drive a targeted repair
+  artifact instead of being hidden in metadata or generic QA warnings.
+- The section replacement is idempotent, so repeated projection syncs do not
+  append duplicate repair sections or create a warning loop.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/business_intel/release_repair.py backend/packages/orchestrator/service.py backend/tests/unit/test_run_service.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py -q -k "release_gate"`
