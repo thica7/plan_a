@@ -17,13 +17,11 @@ from packages.business_intel.entity_resolver import (
     search_qualifier_for_competitor,
 )
 from packages.identity import compute_raw_source_id
-from packages.research.capture import capture_candidate
 from packages.research.discovery import (
     homepage_candidates,
     trusted_registry_candidates,
 )
 from packages.research.evidence import (
-    raw_source_from_capture,
     raw_sources_from_research_result,
     source_quality_problem,
 )
@@ -1331,18 +1329,57 @@ class CollectorAgentMixin:
             and source.dimension == dimension
             and self._source_matches_competitor(source, competitor)
             for source in detail.raw_sources
-        ):
+            ):
             return None
-        fetch_result = (
-            await capture_candidate(
-                source_candidate,
-                lambda url: self._trace_fetch(record, "collector", dimension, url, context),
-            )
-            if record is not None
-            else await capture_candidate(source_candidate, fetch_evidence_page)
+
+        brief = self._research_brief(detail, competitor, dimension).model_copy(
+            update={
+                "target_source_count": 1,
+                "max_search_queries": 0,
+                "max_candidates": 1,
+                "max_fetches": 1,
+                "max_repair_rounds": 0,
+                "metadata": {
+                    "collector_adapter": "single_source_search_result",
+                    "seed_candidate_id": source_candidate.id,
+                },
+            }
         )
-        verified = fetch_result.status == "ok"
-        if not verified and self._requires_verified_web_evidence(detail, dimension):
+
+        async def fetch(url: str):
+            if record is not None:
+                return await self._trace_fetch(record, "collector", dimension, url, context)
+            return await fetch_evidence_page(url)
+
+        result_obj = await run_research_pipeline(
+            brief,
+            fetch=fetch,
+            search=None,
+            seed_candidates=[source_candidate],
+        )
+        sources = self._raw_sources_from_research_result(
+            detail,
+            brief,
+            result_obj,
+            batch_sources=[],
+            target_source_count=1,
+        )
+        if not sources and not self._requires_verified_web_evidence(detail, dimension):
+            source = self._demo_search_result_source(
+                detail,
+                competitor,
+                dimension,
+                result,
+                source_candidate,
+            )
+            return source if self._source_is_usable(source) else None
+        if not sources and self._requires_verified_web_evidence(detail, dimension):
+            page = result_obj.captured_pages[0] if result_obj.captured_pages else None
+            reason = (
+                self._fetch_rejection_reason(page)
+                if page is not None and page.status != "ok"
+                else "research_pipeline_no_accepted_evidence"
+            )
             self._trace_rejected_source_candidate(
                 record,
                 context=context,
@@ -1350,41 +1387,48 @@ class CollectorAgentMixin:
                 dimension=dimension,
                 title=result.title,
                 url=result.url,
-                reason=self._fetch_rejection_reason(fetch_result),
+                reason=reason,
                 candidate=source_candidate,
             )
             return None
-        snippet = (
-            self._dimension_evidence_snippet(
-                fetch_result.text,
-                dimension,
-                fetch_result.snippet,
-            )
-            if verified
-            else result.snippet
-        )
-        confidence = (
-            self._verified_source_confidence(
-                detail,
-                competitor,
-                dimension,
-                fetch_result.final_url,
-                snippet,
-            )
-            if verified
-            else 0.68
-        )
-        source = raw_source_from_capture(
-            self._research_brief(detail, competitor, dimension),
-            source_candidate,
-            fetch_result,
-            confidence=confidence,
-            source_type="webpage_verified" if verified else "web_search_result",
+        return sources[0] if sources else None
+
+    def _demo_search_result_source(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        result: SearchResult,
+        candidate: SourceCandidate,
+    ) -> RawSource:
+        snippet = result.snippet or result.title
+        content_hash = hashlib.sha256(snippet.encode("utf-8", errors="ignore")).hexdigest()[:16]
+        return RawSource(
+            id=compute_raw_source_id(
+                source_type="web_search_result",
+                competitor=competitor,
+                dimension=dimension,
+                url=result.url,
+                content_hash=content_hash,
+                title=result.title,
+                snippet=snippet,
+                run_id=detail.id,
+            ),
+            competitor=competitor,
+            dimension=dimension,
+            source_type="web_search_result",
+            title=result.title,
+            url=result.url,
             snippet=snippet,
+            content_hash=content_hash,
+            confidence=min(0.72, candidate.confidence),
+            candidate_origin=candidate.origin,
+            candidate_rank=candidate.rank,
+            candidate_confidence=candidate.confidence,
+            fetch_method="not_fetched_demo",
+            quality_score=0.0,
+            failure_reason="demo_unverified_search_result",
         )
-        if not self._source_is_usable(source):
-            return None
-        return source
 
     def _requires_verified_web_evidence(self, detail: RunDetail, dimension: str) -> bool:
         return detail.execution_mode == "real" and dimension in detail.plan.dimensions

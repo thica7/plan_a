@@ -423,3 +423,32 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/agents/collectors backend/packages/research backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
+
+## 2026-06-07 - Step 14: Single Search Result Adapter Unification
+
+Commit: this commit
+
+Scope:
+
+- Changed `_source_from_search_result()` from a direct capture/RawSource builder
+  into a single-candidate `run_research_pipeline()` adapter.
+- Kept real-run behavior strict: a search result must pass capture, extraction,
+  field admission, and RawSource quality checks before becoming verified
+  evidence.
+- Preserved demo-mode compatibility with an explicit
+  `web_search_result` fallback when verified web evidence is not required.
+- Removed the last collector-local direct use of `capture_candidate()` and
+  `raw_source_from_capture()` from search-result collection.
+
+Why:
+
+- Ensures skill-tool fallback, cross-competitor fallback, and main collector
+  paths share the same discovery/capture/extract/admit boundary.
+- Prevents future drift where one collector path accepts a page that the Clean
+  Research Pipeline would reject.
+- Keeps demo behavior intentionally separate from real evidence admission.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/agents/collectors backend/packages/research backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
