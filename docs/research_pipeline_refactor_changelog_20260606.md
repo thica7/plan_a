@@ -452,3 +452,29 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/agents/collectors backend/packages/research backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
+
+## 2026-06-07 - Step 15: Research Quality Metrics
+
+Commit: this commit
+
+Scope:
+
+- Added pipeline metrics for rejected captures, failed captures, rejected
+  evidence items, accepted evidence rate, field support rate, repairable gaps,
+  and blocking gaps.
+- Kept metrics inside `research.pipeline` so downstream collectors and release
+  layers can observe data quality without duplicating evaluation logic.
+- Added unit assertions that end-to-end research runs expose accepted evidence
+  and field-support metrics.
+
+Why:
+
+- Makes Clean Research Pipeline measurable against the plan's success criteria:
+  field support, capture health, gap pressure, and repair readiness.
+- Gives future real-run review a data-side explanation before inspecting writer
+  or release-gate behavior.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/tests/unit/test_research_pipeline.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py -q`

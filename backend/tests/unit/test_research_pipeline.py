@@ -659,6 +659,10 @@ async def test_run_research_pipeline_connects_discover_capture_extract_repair() 
     assert result.assembly["fields"]
     assert result.metrics["verified_capture_rate"] == 1.0
     assert result.metrics["evidence_item_count"] == len(result.evidence_items)
+    assert result.metrics["accepted_evidence_rate"] > 0
+    assert result.metrics["field_support_rate"] > 0
+    assert result.metrics["captured_failed_count"] == 0
+    assert result.metrics["captured_rejected_count"] == 0
 
 
 @pytest.mark.asyncio
@@ -727,6 +731,8 @@ async def test_run_research_pipeline_executes_gap_driven_repair_round() -> None:
     assert result.metrics["initial_gap_count"] > result.metrics["remaining_gap_count"]
     assert result.metrics["repair_round_count"] == 1
     assert result.metrics["gap_resolution_rate"] > 0
+    assert result.metrics["repairable_gap_count"] == result.metrics["remaining_gap_count"]
+    assert result.metrics["accepted_evidence_rate"] > 0
     assert any("official pricing plans billing" in query.casefold() for query in search_queries)
     assert any(
         item.field == "price_points" and item.status == "accepted"

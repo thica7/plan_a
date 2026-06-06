@@ -313,27 +313,71 @@ def _gap_resolution_rate(initial_gap_count: int, remaining_gap_count: int) -> fl
 def _metrics(
     candidates: list[SourceCandidate],
     pages: list[CapturedPage],
-    extractions: list[object],
-    evidence_items: list[object],
-    gaps: list[object],
+    extractions: list[ExtractionResult],
+    evidence_items: list[EvidenceItem],
+    gaps: list[QualityGap],
     brief: ResearchBrief,
 ) -> dict[str, Any]:
     ok_pages = [page for page in pages if page.status == "ok"]
+    rejected_pages = [page for page in pages if page.status == "rejected"]
+    failed_pages = [page for page in pages if page.status == "failed"]
     accepted_items = [
         item
         for item in evidence_items
-        if getattr(item, "status", None) == "accepted"
+        if item.status == "accepted"
     ]
+    rejected_items = [item for item in evidence_items if item.status == "rejected"]
+    expected_fields = _expected_field_count(brief, extractions)
+    accepted_fields = {
+        item.field
+        for item in accepted_items
+        if item.competitor == brief.competitor and item.dimension == brief.dimension
+    }
+    repairable_gap_count = sum(1 for gap in gaps if gap.severity in {"warn", "blocker"})
+    blocking_gap_count = sum(1 for gap in gaps if gap.severity == "blocker")
     return {
         "candidate_count": len(candidates),
         "captured_page_count": len(pages),
         "captured_ok_count": len(ok_pages),
+        "captured_rejected_count": len(rejected_pages),
+        "captured_failed_count": len(failed_pages),
         "extraction_count": len(extractions),
         "evidence_item_count": len(evidence_items),
         "accepted_evidence_item_count": len(accepted_items),
+        "rejected_evidence_item_count": len(rejected_items),
         "gap_count": len(gaps),
+        "repairable_gap_count": repairable_gap_count,
+        "blocking_gap_count": blocking_gap_count,
         "verified_capture_rate": len(ok_pages) / max(1, len(pages)),
+        "accepted_evidence_rate": len(accepted_items) / max(1, len(evidence_items)),
+        "field_support_rate": len(accepted_fields) / max(1, expected_fields),
         "source_saturation_reached": (
             len(ok_pages) >= brief.target_source_count and len(gaps) == 0
         ),
     }
+
+
+def _expected_field_count(brief: ResearchBrief, extractions: list[ExtractionResult]) -> int:
+    fields = set(brief.required_fields)
+    for extraction in extractions:
+        if extraction.competitor != brief.competitor or extraction.dimension != brief.dimension:
+            continue
+        for field, value in extraction.fields.items():
+            if field == "confidence_reason":
+                continue
+            if _empty_metric_value(value):
+                continue
+            if isinstance(value, dict) and value.get("status") == "not_found_in_source":
+                continue
+            fields.add(field)
+    return len(fields)
+
+
+def _empty_metric_value(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    if isinstance(value, list | tuple | set | dict):
+        return len(value) == 0
+    return False
