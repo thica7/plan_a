@@ -2,11 +2,17 @@
 
 Last updated: 2026-06-07
 
+## Relationship To Master Plan
+
+This file is the tactical execution plan for Checkpoint 1 only. The complete
+route lives in `docs/enterprise_execution_master_plan.md`.
+
 ## Read-First Protocol
 
 Before every Checkpoint 1 implementation turn, read this file and the following
 authoritative plan files:
 
+- `docs/enterprise_execution_master_plan.md`
 - `dev_plan_final/dev_plan_final/01_EXECUTION_ROADMAP_5_PHASES.md`
 - `dev_plan_final/dev_plan_final/10_HIGH_SCORE_FUSION_BACKLOG.md`
 - `D:/codex_workspace/websearch_v2/clean_research_pipeline_rewrite_plan.md`
