@@ -4,13 +4,6 @@ from collections import defaultdict
 from collections.abc import Mapping
 from datetime import datetime
 
-from packages.business_intel.claim_release import (
-    append_claim_release_section,
-    apply_claim_release_decisions,
-    claim_release_summary,
-    plan_claim_release_decisions,
-    publishable_claim_ids,
-)
 from packages.identity import (
     compute_claim_id,
     compute_competitor_set_hash,
@@ -24,7 +17,6 @@ from packages.refs import normalize_competitor_key
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     ClaimRecord,
-    ClaimReleaseDecision,
     EnterpriseRunProjection,
     EvidenceRecord,
     ReportVersionRecord,
@@ -66,12 +58,6 @@ def build_enterprise_projection(
         evidence_by_source,
         competitor_id_map,
     )
-    claim_release_decisions = plan_claim_release_decisions(
-        project_id=resolved_project_id,
-        claims=claim_records,
-        evidence=evidence_records,
-    )
-    claim_records = apply_claim_release_decisions(claim_records, claim_release_decisions)
     report_version = _build_report_version(
         detail,
         workspace_id,
@@ -80,7 +66,6 @@ def build_enterprise_projection(
         competitor_layer,
         claim_records,
         evidence_records,
-        claim_release_decisions,
         competitor_id_map,
     )
     return EnterpriseRunProjection(
@@ -192,25 +177,16 @@ def _build_report_version(
     competitor_layer: str,
     claim_records: list[ClaimRecord],
     evidence_records: list[EvidenceRecord],
-    claim_release_decisions: list[ClaimReleaseDecision],
     competitor_id_map: Mapping[str, str] | None,
 ) -> ReportVersionRecord:
     competitor_ids = [_competitor_id_for(c, competitor_id_map) for c in detail.plan.competitors]
     competitor_set_hash = compute_competitor_set_hash(competitor_ids)
     topic_normalized = compute_topic_normalized(detail.topic)
     evidence_ids = [evidence.id for evidence in evidence_records]
-    release_report_md = append_claim_release_section(
-        detail.report_md,
-        claim_release_decisions,
-    )
     normalized_report = normalize_report_source_tokens(
-        release_report_md,
+        detail.report_md,
         evidence_records,
         scoped_evidence_ids=evidence_ids,
-    )
-    scoped_claim_ids = publishable_claim_ids(
-        claim_records,
-        claim_release_decisions,
     )
     return ReportVersionRecord(
         id=compute_report_version_id(
@@ -227,21 +203,16 @@ def _build_report_version(
         competitor_layer=competitor_layer,
         competitor_set_hash=competitor_set_hash,
         report_md=normalized_report.report_md,
-        claim_ids=scoped_claim_ids,
+        claim_ids=[claim.id for claim in claim_records],
         evidence_ids=normalized_report.evidence_ids,
         quality_metadata={
             **_build_quality_metadata(
                 detail,
                 evidence_records,
                 source_reconciliation=normalized_report.reconciliation(evidence_records),
-                claim_release=claim_release_summary(claim_release_decisions),
             ),
             "report_competitors": list(detail.plan.competitors),
             "report_competitor_ids": competitor_ids,
-            "all_claim_ids": [claim.id for claim in claim_records],
-            "withheld_claim_ids": [
-                claim.id for claim in claim_records if claim.id not in set(scoped_claim_ids)
-            ],
         },
         created_at=_parse_datetime(detail.updated_at),
     )
@@ -351,7 +322,6 @@ def _build_quality_metadata(
     evidence_records: list[EvidenceRecord],
     *,
     source_reconciliation: dict[str, object],
-    claim_release: dict[str, object],
 ) -> dict[str, object]:
     low_confidence_source_ids = [
         source.id for source in detail.raw_sources if source.confidence < 0.75
@@ -363,7 +333,6 @@ def _build_quality_metadata(
         source.id for source in detail.raw_sources if source.source_type == "llm_public_knowledge"
     ]
     research_source_ids = _classify_user_research_sources(detail.raw_sources)
-    run_qa_resolution = _run_qa_resolution(detail, claim_release=claim_release)
     return {
         "run_id": detail.id,
         "schema_pass_rate": detail.metrics.schema_pass_rate,
@@ -394,7 +363,6 @@ def _build_quality_metadata(
             }
             for issue in detail.qa_findings
         ],
-        "run_qa_findings_resolution": run_qa_resolution,
         "run_qa_warning_count": sum(1 for issue in detail.qa_findings if issue.severity == "warn"),
         "run_qa_blocker_count": sum(
             1 for issue in detail.qa_findings if issue.severity == "blocker"
@@ -404,7 +372,6 @@ def _build_quality_metadata(
         "llm_public_knowledge_source_ids": llm_public_knowledge_source_ids,
         **research_source_ids,
         "source_reconciliation": source_reconciliation,
-        "claim_release": claim_release,
         "reflection_gaps": [
             {
                 "coverage_gaps": reflection.coverage_gaps,
@@ -413,35 +380,6 @@ def _build_quality_metadata(
             }
             for reflection in detail.reflections[-1:]
         ],
-    }
-
-
-def _run_qa_resolution(
-    detail: RunDetail,
-    *,
-    claim_release: dict[str, object],
-) -> dict[str, object]:
-    blocker_ids = [issue.id for issue in detail.qa_findings if issue.severity == "blocker"]
-    warning_ids = [issue.id for issue in detail.qa_findings if issue.severity == "warn"]
-    withheld_count = int(claim_release.get("withheld_claim_count") or 0)
-    if blocker_ids:
-        status = "unresolved_blockers"
-        mitigated_warning_ids: list[str] = []
-    elif warning_ids and withheld_count > 0:
-        status = "mitigated_by_release_controls"
-        mitigated_warning_ids = warning_ids
-    elif warning_ids:
-        status = "unresolved_warnings"
-        mitigated_warning_ids = []
-    else:
-        status = "clean"
-        mitigated_warning_ids = []
-    return {
-        "status": status,
-        "blocker_ids": blocker_ids,
-        "warning_ids": warning_ids,
-        "mitigated_warning_ids": mitigated_warning_ids,
-        "withheld_claim_count": withheld_count,
     }
 
 

@@ -22,8 +22,6 @@ def repair_task_to_redo_scope(task: RepairTask) -> RedoScope:
 
 
 def _redo_kind(task: RepairTask) -> str:
-    if task.metadata.get("required_action") in {"delete", "downgrade", "rewrite_report_section"}:
-        return "writer_only"
     if task.strategy in {
         "targeted_discovery",
         "pricing_model_repair",
