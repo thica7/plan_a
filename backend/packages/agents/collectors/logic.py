@@ -20,7 +20,6 @@ from packages.identity import compute_raw_source_id
 from packages.research.capture import capture_candidate
 from packages.research.discovery import (
     homepage_candidates,
-    search_result_candidates,
     trusted_registry_candidates,
 )
 from packages.research.evidence import (
@@ -573,9 +572,12 @@ class CollectorAgentMixin:
         batch_sources: list[RawSource],
         target_source_count: int,
         include_official: bool,
+        seed_candidates: list[SourceCandidate] | None = None,
+        enable_search: bool = True,
+        enable_repair: bool = True,
     ) -> list[RawSource]:
         max_repair_rounds = (
-            1 if self._requires_verified_web_evidence(detail, dimension) else 0
+            1 if enable_repair and self._requires_verified_web_evidence(detail, dimension) else 0
         )
         brief = self._research_brief(detail, competitor, dimension).model_copy(
             update={
@@ -584,6 +586,9 @@ class CollectorAgentMixin:
                 "metadata": {
                     "collector_adapter": "clean_research_pipeline",
                     "include_official": include_official,
+                    "seed_candidate_count": len(seed_candidates or []),
+                    "search_enabled": enable_search and self._search.is_enabled,
+                    "repair_enabled": enable_repair,
                 },
             }
         )
@@ -606,7 +611,8 @@ class CollectorAgentMixin:
         result = await run_research_pipeline(
             brief,
             fetch=fetch,
-            search=search if self._search.is_enabled else None,
+            search=search if enable_search and self._search.is_enabled else None,
+            seed_candidates=seed_candidates,
         )
         sources = self._raw_sources_from_research_result(
             detail,
@@ -703,15 +709,18 @@ class CollectorAgentMixin:
     ) -> list[RawSource]:
         candidates = self._official_source_candidates(detail, competitor, dimension)
         target_source_count = self._collector_target_source_count(detail, dimension)
-        sources = await self._collect_from_source_candidates(
+        sources = await self._collect_competitor_with_research_pipeline(
             record,
             detail,
             dimension,
             competitor,
             context,
-            candidates,
             batch_sources=[],
             target_source_count=target_source_count,
+            include_official=True,
+            seed_candidates=candidates,
+            enable_search=False,
+            enable_repair=False,
         )
         if sources:
             self._trace_local_tool(
@@ -775,15 +784,18 @@ class CollectorAgentMixin:
         candidates = self._homepage_source_candidates(detail, competitor, dimension)
         if not candidates:
             return []
-        sources = await self._collect_from_source_candidates(
+        sources = await self._collect_competitor_with_research_pipeline(
             record,
             detail,
             dimension,
             competitor,
             context,
-            candidates,
             batch_sources=batch_sources,
             target_source_count=target_source_count,
+            include_official=True,
+            seed_candidates=candidates,
+            enable_search=False,
+            enable_repair=False,
         )
         if sources:
             self._trace_local_tool(
@@ -812,62 +824,6 @@ class CollectorAgentMixin:
                 },
             )
         return sources
-
-    async def _collect_from_source_candidates(
-        self,
-        record: RunRecord,
-        detail: RunDetail,
-        dimension: str,
-        competitor: str,
-        context: SubagentContext,
-        candidates: list[SourceCandidate],
-        *,
-        batch_sources: list[RawSource],
-        target_source_count: int,
-    ) -> list[RawSource]:
-        sources: list[RawSource] = []
-        for candidate in candidates:
-            if len(batch_sources) + len(sources) >= target_source_count:
-                break
-            if self._candidate_already_collected(
-                detail,
-                [*batch_sources, *sources],
-                competitor=competitor,
-                dimension=dimension,
-                url=candidate.url,
-            ):
-                continue
-            source = await self._source_from_candidate(
-                detail,
-                competitor,
-                dimension,
-                candidate,
-                record,
-                context,
-            )
-            if source is None:
-                continue
-            sources.append(source)
-        return sources
-
-    async def _source_from_candidate(
-        self,
-        detail: RunDetail,
-        competitor: str,
-        dimension: str,
-        candidate: SourceCandidate,
-        record: RunRecord | None = None,
-        context: SubagentContext | None = None,
-    ) -> RawSource | None:
-        return await self._source_from_search_result(
-            detail,
-            competitor,
-            dimension,
-            candidate.to_search_result(),
-            record,
-            context,
-            candidate=candidate,
-        )
 
     def _extend_source_batch(
         self,
@@ -966,64 +922,6 @@ class CollectorAgentMixin:
         if qualifier and qualifier.casefold() not in query.casefold():
             query = f"{query} {qualifier}"
         return f"{query} {detail.topic} official source"
-
-    def _rank_search_results(
-        self,
-        detail: RunDetail,
-        competitor: str,
-        dimension: str,
-        results: list[SearchResult],
-    ) -> list[SearchResult]:
-        homepage_host = self._host(detail.plan.homepage_hints.get(competitor, ""))
-        competitor_terms = [
-            term for term in re.split(r"[^a-z0-9]+", competitor.casefold()) if len(term) >= 3
-        ]
-        dimension_terms = self._dimension_source_terms(dimension)
-
-        def score(result: SearchResult) -> tuple[int, str]:
-            url = result.url.casefold()
-            host = self._host(result.url)
-            haystack = f"{result.title} {result.url} {result.snippet}".casefold()
-            value = 0
-            if is_trusted_url_for_competitor(competitor, result.url):
-                value += 110
-            if homepage_host and (host == homepage_host or host.endswith(f".{homepage_host}")):
-                value += 100
-            if any(term in host for term in competitor_terms):
-                value += 35
-            if any(term in haystack for term in dimension_terms):
-                value += 20
-            if any(token in host for token in ("docs.", "developer.", "help.", "trust.")):
-                value += 12
-            if any(token in url for token in ("/pricing", "/security", "/trust", "/docs")):
-                value += 12
-            if host in {"medium.com", "www.medium.com", "reddit.com", "www.reddit.com"}:
-                value -= 25
-            return (value, result.url)
-
-        return sorted(results, key=score, reverse=True)
-
-    def _search_source_candidates(
-        self,
-        detail: RunDetail,
-        competitor: str,
-        dimension: str,
-        results: list[SearchResult],
-    ) -> list[SourceCandidate]:
-        origin = self._settings.web_search_provider or "web_search"
-        return search_result_candidates(
-            self._research_brief(detail, competitor, dimension),
-            self._rank_search_results(detail, competitor, dimension, results),
-            origin=origin,
-        )
-
-    def _search_candidate_confidence(self, competitor: str, result: SearchResult) -> float:
-        if is_trusted_url_for_competitor(competitor, result.url):
-            return 0.9
-        host = self._host(result.url)
-        if any(token in host for token in ("docs.", "developer.", "help.", "support.")):
-            return 0.78
-        return 0.68
 
     def _dimension_source_terms(self, dimension: str) -> list[str]:
         normalized = dimension.casefold()

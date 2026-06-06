@@ -391,3 +391,35 @@ Why:
 Validation:
 
 - `pytest backend/tests/unit/test_research_pipeline.py -q`
+
+## 2026-06-07 - Step 13: Collector Adapter Narrowing
+
+Commit: this commit
+
+Scope:
+
+- Routed `_collect_official_sources()` and homepage fallback collection through
+  `run_research_pipeline()` with seed candidates instead of maintaining a
+  second hand-written candidate/fetch/source loop in collector logic.
+- Added explicit search and repair switches to the collector research-pipeline
+  adapter so compatibility entry points can stay seed-only while the main
+  collector branch keeps gap-driven repair.
+- Removed unused collector-local search-result ranking and candidate-to-source
+  helpers that duplicated `research.discovery` and `research.capture`.
+- Kept `_source_from_search_result()` as a compatibility adapter for skill-tool
+  and cross-competitor fallback paths that still need a single-result bridge.
+
+Why:
+
+- Moves collector closer to the intended Clean Research Pipeline role: build a
+  `ResearchBrief`, call the pipeline, and translate accepted results into the
+  existing `RawSource` run contract.
+- Avoids two parallel discovery/capture implementations that could drift in
+  candidate ranking, source identity, or fetch quality handling.
+- Preserves existing unit-test behavior for official-source collection without
+  triggering an unexpected repair round.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/agents/collectors backend/packages/research backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
