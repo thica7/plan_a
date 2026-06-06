@@ -24,7 +24,8 @@ from packages.research.discovery import (
     trusted_registry_candidates,
 )
 from packages.research.evidence import raw_source_from_capture, source_quality_problem
-from packages.research.models import ResearchBrief
+from packages.research.models import EvidenceItem, ResearchBrief, ResearchResult
+from packages.research.pipeline import run_research_pipeline
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     RawSource,
@@ -540,58 +541,206 @@ class CollectorAgentMixin:
         include_official: bool = True,
     ) -> list[RawSource]:
         detail = record.detail
-        skill = self._skill_registry.get(dimension)
         target_source_count = self._collector_target_source_count(detail, dimension)
         sources = list(seed_sources or [])
-        if include_official and self._should_collect_official_first(dimension):
-            trusted_sources = await self._collect_official_sources(
-                record,
-                detail,
-                dimension,
-                competitor,
-                context,
-            )
-            self._extend_source_batch(sources, trusted_sources, target_source_count)
         if len(sources) >= target_source_count:
             return sources
-        queries = [self._web_search_query(detail, competitor, dimension)]
-        if skill is not None:
-            queries.append(f"{competitor} {skill.description}")
-        for query in queries:
-            results = await self._trace_search(
+        pipeline_sources = await self._collect_competitor_with_research_pipeline(
+            record,
+            detail,
+            dimension,
+            competitor,
+            context,
+            batch_sources=sources,
+            target_source_count=target_source_count,
+            include_official=include_official,
+        )
+        self._extend_source_batch(sources, pipeline_sources, target_source_count)
+        return sources
+
+    async def _collect_competitor_with_research_pipeline(
+        self,
+        record: RunRecord,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+        context: SubagentContext,
+        *,
+        batch_sources: list[RawSource],
+        target_source_count: int,
+        include_official: bool,
+    ) -> list[RawSource]:
+        max_repair_rounds = (
+            1 if self._requires_verified_web_evidence(detail, dimension) else 0
+        )
+        brief = self._research_brief(detail, competitor, dimension).model_copy(
+            update={
+                "target_source_count": target_source_count,
+                "max_repair_rounds": max_repair_rounds,
+                "metadata": {
+                    "collector_adapter": "clean_research_pipeline",
+                    "include_official": include_official,
+                },
+            }
+        )
+
+        async def search(query: str, max_results: int) -> list[SearchResult]:
+            if not self._search.is_enabled:
+                return []
+            return await self._trace_search(
                 record,
                 agent="collector",
                 subagent=context.subagent,
                 query=query,
-                max_results=self._collector_search_max_results(),
+                max_results=max_results,
                 context=context,
             )
-            candidates = self._search_source_candidates(detail, competitor, dimension, results)
-            added = await self._collect_from_source_candidates(
-                record,
-                detail,
-                dimension,
-                competitor,
-                context,
-                candidates,
-                batch_sources=sources,
-                target_source_count=target_source_count,
-            )
-            self._extend_source_batch(sources, added, target_source_count)
-            if len(sources) >= target_source_count:
-                return sources
-        if include_official and len(sources) < target_source_count:
-            fallback_sources = await self._collect_homepage_fallback_sources(
-                record,
-                detail,
-                dimension,
-                competitor,
-                context,
-                batch_sources=sources,
-                target_source_count=target_source_count,
-            )
-            self._extend_source_batch(sources, fallback_sources, target_source_count)
+
+        async def fetch(url: str):
+            return await self._trace_fetch(record, "collector", dimension, url, context)
+
+        result = await run_research_pipeline(
+            brief,
+            fetch=fetch,
+            search=search if self._search.is_enabled else None,
+        )
+        sources = self._raw_sources_from_research_result(
+            detail,
+            brief,
+            result,
+            batch_sources=batch_sources,
+            target_source_count=target_source_count,
+        )
+        self._trace_local_tool(
+            record,
+            agent="collector",
+            subagent=context.subagent,
+            name="clean_research_pipeline",
+            input_text=json.dumps(
+                {
+                    "competitor": competitor,
+                    "dimension": dimension,
+                    "homepage_hint": detail.plan.homepage_hints.get(competitor),
+                    "target_source_count": target_source_count,
+                },
+                ensure_ascii=False,
+            ),
+            output_text=json.dumps(
+                {
+                    "source_ids": [source.id for source in sources],
+                    "gap_ids": [gap.id for gap in result.gaps],
+                    "repair_task_ids": [task.id for task in result.repair_tasks],
+                    "metrics": result.metrics,
+                },
+                ensure_ascii=False,
+            ),
+            context=context,
+            metadata={
+                "source_count": len(sources),
+                "candidate_count": len(result.candidates),
+                "captured_ok_count": result.metrics.get("captured_ok_count", 0),
+                "gap_count": len(result.gaps),
+                "repair_round_count": result.metrics.get("repair_round_count", 0),
+            },
+        )
         return sources
+
+    def _raw_sources_from_research_result(
+        self,
+        detail: RunDetail,
+        brief: ResearchBrief,
+        result: ResearchResult,
+        *,
+        batch_sources: list[RawSource],
+        target_source_count: int,
+    ) -> list[RawSource]:
+        candidate_by_id = {candidate.id: candidate for candidate in result.candidates}
+        accepted_by_page: dict[str, list[EvidenceItem]] = {}
+        for item in result.evidence_items:
+            if item.status != "accepted":
+                continue
+            accepted_by_page.setdefault(item.captured_page_id, []).append(item)
+
+        sources: list[RawSource] = []
+        for page in sorted(
+            result.captured_pages,
+            key=lambda item: self._research_page_score(item, accepted_by_page),
+            reverse=True,
+        ):
+            if len(batch_sources) + len(sources) >= target_source_count:
+                break
+            candidate = candidate_by_id.get(page.candidate_id)
+            if candidate is None:
+                continue
+            if page.status != "ok":
+                continue
+            page_items = accepted_by_page.get(page.id, [])
+            if self._requires_verified_web_evidence(detail, brief.dimension) and not page_items:
+                continue
+            if self._candidate_already_collected(
+                detail,
+                [*batch_sources, *sources],
+                competitor=brief.competitor,
+                dimension=brief.dimension,
+                url=page.final_url,
+            ):
+                continue
+            snippet = self._research_source_snippet(brief, page, page_items)
+            confidence = max(
+                self._verified_source_confidence(
+                    detail,
+                    brief.competitor,
+                    brief.dimension,
+                    page.final_url,
+                    snippet,
+                ),
+                max((item.confidence for item in page_items), default=0.0),
+                min(0.96, candidate.confidence + 0.03),
+            )
+            source = raw_source_from_capture(
+                brief,
+                candidate,
+                page,
+                confidence=confidence,
+                source_type="webpage_verified",
+                snippet=snippet,
+            )
+            if not self._source_is_usable(source):
+                continue
+            sources.append(source)
+        return sources
+
+    def _research_page_score(
+        self,
+        page,
+        accepted_by_page: dict[str, list[EvidenceItem]],
+    ) -> tuple[int, float, float, int]:
+        items = accepted_by_page.get(page.id, [])
+        return (
+            1 if items else 0,
+            max((item.confidence for item in items), default=0.0),
+            page.quality_score,
+            page.text_length,
+        )
+
+    def _research_source_snippet(
+        self,
+        brief: ResearchBrief,
+        page,
+        evidence_items: list[EvidenceItem],
+    ) -> str:
+        quotes = [
+            " ".join(item.quote.split())
+            for item in sorted(evidence_items, key=lambda value: value.confidence, reverse=True)
+            if item.quote
+        ]
+        if quotes:
+            return " ".join(quotes)[:900]
+        return self._dimension_evidence_snippet(
+            page.text or page.markdown,
+            brief.dimension,
+            page.snippet,
+        )
 
     async def _collect_official_sources(
         self,
@@ -1793,20 +1942,20 @@ class CollectorAgentMixin:
             **task_metadata,
         }
         memory_official_first = self._memory_prefers_official_sources(detail.plan)
-        if self._should_collect_official_first(dimension) or memory_official_first:
-            try:
-                sources = await self._collect_official_sources(
-                    record,
-                    detail,
-                    dimension,
-                    competitor,
-                    context,
-                )
-                collect_payload["official_added"] = len(sources)
-                collect_payload["memory_official_first"] = memory_official_first
-            except Exception as exc:  # noqa: BLE001 - official-first should degrade to search.
-                collect_payload["official_error"] = str(exc)
-                collect_payload["memory_official_first"] = memory_official_first
+        try:
+            sources = await self._collect_competitor_with_web_search(
+                record,
+                dimension,
+                competitor,
+                context,
+                seed_sources=sources,
+                include_official=True,
+            )
+            collect_payload["research_pipeline_source_count"] = len(sources)
+            collect_payload["memory_official_first"] = memory_official_first
+        except Exception as exc:  # noqa: BLE001 - deterministic fallbacks continue.
+            collect_payload["research_pipeline_error"] = str(exc)
+            collect_payload["memory_official_first"] = memory_official_first
         if (
             len(sources) < target_source_count
             and self._settings.collector_react_enabled
@@ -1825,19 +1974,6 @@ class CollectorAgentMixin:
                 collect_payload["react_added"] = len(react_sources)
             except Exception as exc:  # noqa: BLE001 - deterministic fallback continues.
                 collect_payload["react_error"] = str(exc)
-        if len(sources) < target_source_count and self._search.is_enabled:
-            try:
-                sources = await self._collect_competitor_with_web_search(
-                    record,
-                    dimension,
-                    competitor,
-                    context,
-                    seed_sources=sources,
-                    include_official=False,
-                )
-                collect_payload["post_search_source_count"] = len(sources)
-            except Exception as exc:  # noqa: BLE001 - LLM fallback continues.
-                collect_payload["error"] = str(exc)
         if not sources:
             try:
                 sources = await self._collect_competitor_with_skill_tools(

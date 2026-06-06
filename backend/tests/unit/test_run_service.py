@@ -612,16 +612,20 @@ async def test_memory_policy_drives_collector_and_strict_source_qa() -> None:
         ),
         preference_memory=memory,
     )
-    official_calls: list[tuple[str, str]] = []
+    pipeline_calls: list[tuple[str, str, bool]] = []
 
-    async def fake_official_sources(  # noqa: ANN001
+    async def fake_research_pipeline(  # noqa: ANN001
         record,
         detail,
         dimension,
         competitor,
         context,
+        *,
+        batch_sources,
+        target_source_count,
+        include_official,
     ) -> list[RawSource]:
-        official_calls.append((dimension, competitor))
+        pipeline_calls.append((dimension, competitor, include_official))
         return [
             RawSource(
                 id="source-feature-official",
@@ -636,7 +640,7 @@ async def test_memory_policy_drives_collector_and_strict_source_qa() -> None:
             )
         ]
 
-    service._collect_official_sources = fake_official_sources  # type: ignore[method-assign]
+    service._collect_competitor_with_research_pipeline = fake_research_pipeline  # type: ignore[method-assign]
     detail = await service.create_run(
         RunCreateRequest(
             topic="AI coding assistant feature review",
@@ -671,7 +675,7 @@ async def test_memory_policy_drives_collector_and_strict_source_qa() -> None:
 
     assert service._memory_prefers_official_sources(record.detail.plan) is True
     assert service._memory_enforces_strict_source_qa(record.detail.plan) is True
-    assert official_calls == [("feature", "Cursor")]
+    assert pipeline_calls == [("feature", "Cursor", True)]
     assert collector_done.payload["collect"]["memory_official_first"] is True
     assert collector_done.payload["source_ids"] == ["source-feature-official"]
     assert issues[0].severity == "blocker"
@@ -4088,12 +4092,16 @@ async def test_real_collector_replay_links_rag_event_to_source_ids() -> None:
         ),
     )
 
-    async def fake_official_sources(  # noqa: ANN001
+    async def fake_research_pipeline(  # noqa: ANN001
         record,
         detail,
         dimension,
         competitor,
         context,
+        *,
+        batch_sources,
+        target_source_count,
+        include_official,
     ) -> list[RawSource]:
         return [
             RawSource(
@@ -4109,7 +4117,7 @@ async def test_real_collector_replay_links_rag_event_to_source_ids() -> None:
             )
         ]
 
-    service._collect_official_sources = fake_official_sources  # type: ignore[method-assign]
+    service._collect_competitor_with_research_pipeline = fake_research_pipeline  # type: ignore[method-assign]
 
     detail = await service.create_run(
         RunCreateRequest(

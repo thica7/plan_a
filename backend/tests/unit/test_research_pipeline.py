@@ -489,6 +489,79 @@ async def test_run_research_pipeline_connects_discover_capture_extract_repair() 
     assert result.metrics["evidence_item_count"] == len(result.evidence_items)
 
 
+@pytest.mark.asyncio
+async def test_run_research_pipeline_executes_gap_driven_repair_round() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="LLM APIs",
+        competitor="AcmeAI",
+        dimension="pricing",
+        max_search_queries=1,
+        max_candidates=2,
+        max_fetches=1,
+        max_repair_rounds=1,
+    )
+    search_queries: list[str] = []
+
+    async def fake_search(query: str, max_results: int) -> list[SearchResult]:
+        search_queries.append(query)
+        if "official pricing plans billing" in query.casefold():
+            return [
+                SearchResult(
+                    title="AcmeAI API pricing",
+                    url="https://acme.example/docs/pricing",
+                    snippet="AcmeAI API pricing has token costs and enterprise options.",
+                )
+            ][:max_results]
+        return [
+            SearchResult(
+                title="AcmeAI product overview",
+                url="https://acme.example/business/",
+                snippet="AcmeAI helps teams build with AI.",
+            )
+        ][:max_results]
+
+    async def fake_fetch(url: str) -> EvidenceFetchResult:
+        if "docs/pricing" in url:
+            return EvidenceFetchResult(
+                url=url,
+                ok=True,
+                title="AcmeAI API pricing",
+                text=(
+                    "AcmeAI API pricing uses input and output token pricing. "
+                    "Free, Pro, Team, and Enterprise plans are available. "
+                    "GPT models include prices such as $1.25 per 1M input tokens "
+                    "and $10 per 1M output tokens, with 100000 tokens included "
+                    "per token billing examples. Enterprise customers can contact sales."
+                ),
+                content_hash="hash-acme-pricing-repair",
+                status_code=200,
+                fetch_method="webfetch_v2",
+                quality_score=0.94,
+            )
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="AcmeAI business overview",
+            text="AcmeAI helps organizations adopt AI products and business workflows.",
+            content_hash="hash-acme-overview",
+            status_code=200,
+            fetch_method="basic_httpx",
+            quality_score=0.76,
+        )
+
+    result = await run_research_pipeline(brief, fetch=fake_fetch, search=fake_search)
+
+    assert result.metrics["initial_gap_count"] > result.metrics["remaining_gap_count"]
+    assert result.metrics["repair_round_count"] == 1
+    assert result.metrics["gap_resolution_rate"] > 0
+    assert any("official pricing plans billing" in query.casefold() for query in search_queries)
+    assert any(
+        item.field == "price_points" and item.status == "accepted"
+        for item in result.evidence_items
+    )
+
+
 def test_release_gate_issues_become_repair_tasks_and_redo_scopes() -> None:
     gate = ReportReleaseGate(
         report_version_id="report-version-1",

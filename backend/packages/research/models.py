@@ -46,6 +46,7 @@ class ResearchBrief(ResearchBaseModel):
     max_candidates: int = Field(default=12, ge=1, le=50)
     max_fetches: int = Field(default=6, ge=1, le=30)
     max_advanced_fetches: int = Field(default=3, ge=0, le=20)
+    max_repair_rounds: int = Field(default=1, ge=0, le=3)
     gap_ids: list[str] = Field(default_factory=list)
     required_fields: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
