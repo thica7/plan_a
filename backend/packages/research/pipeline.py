@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any
 
 from packages.research.assembly import assemble_research_summary
 from packages.research.capture import CaptureCache, capture_candidate, select_capture_candidates
@@ -13,8 +13,8 @@ from packages.research.discovery import (
     search_result_candidates,
     trusted_registry_candidates,
 )
-from packages.research.evaluation import quality_gaps_from_extractions
-from packages.research.evidence import evidence_items_from_extractions
+from packages.research.evaluation import evaluate_research_quality
+from packages.research.evidence import dedupe_by_id, evidence_items_from_extractions
 from packages.research.extraction import extract_page
 from packages.research.models import (
     CapturedPage,
@@ -31,7 +31,6 @@ from packages.search import SearchResult
 
 FetchCallable = Callable[[str], Awaitable[Any]]
 SearchCallable = Callable[[str, int], Awaitable[list[SearchResult]]]
-T = TypeVar("T")
 
 
 @dataclass
@@ -88,11 +87,11 @@ async def run_research_pipeline(
             repair_tasks=active_repairs,
             capture_cache=cache,
         )
-        candidates = _dedupe_by_id([*candidates, *repair_pass.candidates])
-        captured_pages = _dedupe_by_id([*captured_pages, *repair_pass.captured_pages])
-        extractions = _dedupe_by_id([*extractions, *repair_pass.extractions])
+        candidates = dedupe_by_id([*candidates, *repair_pass.candidates])
+        captured_pages = dedupe_by_id([*captured_pages, *repair_pass.captured_pages])
+        extractions = dedupe_by_id([*extractions, *repair_pass.extractions])
         evidence_items = evidence_items_from_extractions(extractions)
-        gaps = quality_gaps_from_extractions(brief, extractions)
+        gaps = evaluate_research_quality(brief, extractions)
         planned_repairs = repair_tasks_from_gaps(gaps)
         repair_round_count += 1
         repair_candidate_count += len(repair_pass.candidates)
@@ -157,7 +156,7 @@ async def _run_research_pass(
         if page.status == "ok" and (page.text or page.markdown or page.snippet)
     ]
     evidence_items = evidence_items_from_extractions(extractions)
-    gaps = quality_gaps_from_extractions(brief, extractions)
+    gaps = evaluate_research_quality(brief, extractions)
     return ResearchPass(
         candidates=candidates,
         captured_pages=captured_pages,
@@ -268,19 +267,6 @@ def _same_branch_repairs(brief: ResearchBrief, repair_tasks: list[RepairTask]) -
         for task in repair_tasks
         if task.dimension == brief.dimension and task.competitor in {None, brief.competitor}
     ]
-
-
-def _dedupe_by_id(items: list[T]) -> list[T]:
-    seen: set[str] = set()
-    deduped: list[T] = []
-    for item in items:
-        item_id = str(getattr(item, "id", "") or "")
-        if item_id and item_id in seen:
-            continue
-        if item_id:
-            seen.add(item_id)
-        deduped.append(item)
-    return deduped
 
 
 def _dedupe_strings(values: list[str]) -> list[str]:

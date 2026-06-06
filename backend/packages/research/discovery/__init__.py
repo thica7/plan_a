@@ -5,12 +5,15 @@ def __getattr__(name: str):
         return build_search_queries
     if name in {
         "homepage_candidates",
-        "search_result_candidates",
         "trusted_registry_candidates",
     }:
-        from packages.research.discovery import providers
+        from packages.research.discovery import trusted_registry
 
-        return getattr(providers, name)
+        return getattr(trusted_registry, name)
+    if name == "search_result_candidates":
+        from packages.research.discovery.providers import search_result_candidates
+
+        return search_result_candidates
     if name == "rank_and_dedupe_candidates":
         from packages.research.discovery.ranking import rank_and_dedupe_candidates
 

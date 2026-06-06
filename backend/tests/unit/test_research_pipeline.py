@@ -1,6 +1,11 @@
 import pytest
 
+from packages.research.assembly import (
+    assemble_research_report,
+    field_matrix_from_evidence_items,
+)
 from packages.research.capture import CaptureCache, capture_candidate, select_capture_candidates
+from packages.research.capture.policy import capture_failure_reason, invalid_candidate_reason
 from packages.research.discovery import (
     homepage_candidates,
     rank_and_dedupe_candidates,
@@ -10,8 +15,10 @@ from packages.research.discovery import (
 from packages.research.evaluation import quality_gaps_from_extractions
 from packages.research.evaluation.release_gate import quality_gaps_from_release_gate
 from packages.research.evidence import (
+    citation_refs_from_evidence_items,
     evidence_items_from_extractions,
     raw_source_from_capture,
+    snippet_from_evidence_items,
     source_quality_problem,
 )
 from packages.research.extraction import (
@@ -20,10 +27,17 @@ from packages.research.extraction import (
     extract_persona_schema,
     extract_pricing_model,
 )
-from packages.research.models import CapturedPage, ResearchBrief, SourceCandidate
+from packages.research.models import (
+    CapturedPage,
+    EvidenceItem,
+    QualityGap,
+    ResearchBrief,
+    SourceCandidate,
+)
 from packages.research.pipeline import run_research_pipeline
 from packages.research.repair import repair_tasks_from_gaps
 from packages.research.repair.redos import repair_tasks_to_redo_scopes
+from packages.research.repair.strategies import repair_task_from_gap
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
@@ -154,6 +168,57 @@ def test_capture_selection_defers_low_confidence_homepage_candidates() -> None:
         "https://docs.anthropic.com/en/docs/claude-code/sdk",
     ]
     assert selection.skipped_reasons[guessed.id] == "deferred_low_confidence_homepage_derived"
+
+
+def test_clean_research_pipeline_boundary_modules_are_real_contracts() -> None:
+    invalid = SourceCandidate(
+        title="Local debug page",
+        url="http://localhost:5173",
+        origin="manual",
+        competitor="AcmeAI",
+        dimension="feature",
+    )
+    evidence = EvidenceItem(
+        competitor="AcmeAI",
+        dimension="feature",
+        field="agentic_workflow",
+        value={"status": "supported"},
+        source_candidate_id="candidate-1",
+        captured_page_id="page-1",
+        source_url="https://acme.example/docs",
+        quote="AcmeAI supports agentic workflow automation for developers.",
+        confidence=0.91,
+        status="accepted",
+    )
+    gap = QualityGap(
+        severity="warn",
+        dimension="feature",
+        competitor="AcmeAI",
+        field="repository_context",
+        reason="Feature slot matrix is missing repository context evidence.",
+        suggested_action="feature_slot_repair",
+        acceptance_rule="Collect verified docs for repository context.",
+    )
+
+    matrix = field_matrix_from_evidence_items([evidence])
+    report = assemble_research_report(
+        ResearchBrief(
+            run_id="run-1",
+            topic="AI coding agents",
+            competitor="AcmeAI",
+            dimension="feature",
+        ),
+        fields=matrix,
+        gaps=[gap],
+        repair_tasks=[repair_task_from_gap(gap)],
+    )
+
+    assert invalid_candidate_reason(invalid) == "local_url_not_allowed"
+    assert capture_failure_reason(None) == "fetch_returned_none"
+    assert citation_refs_from_evidence_items([evidence])[0]["ref"] == "S1"
+    assert "agentic workflow" in snippet_from_evidence_items([evidence])
+    assert matrix[0]["citations"][0]["evidence_item_id"] == evidence.id
+    assert report["status"] == "needs_repair"
 
 
 @pytest.mark.asyncio

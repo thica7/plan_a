@@ -23,8 +23,12 @@ from packages.research.discovery import (
     search_result_candidates,
     trusted_registry_candidates,
 )
-from packages.research.evidence import raw_source_from_capture, source_quality_problem
-from packages.research.models import EvidenceItem, ResearchBrief, ResearchResult
+from packages.research.evidence import (
+    raw_source_from_capture,
+    raw_sources_from_research_result,
+    source_quality_problem,
+)
+from packages.research.models import ResearchBrief
 from packages.research.pipeline import run_research_pipeline
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
@@ -649,44 +653,28 @@ class CollectorAgentMixin:
         self,
         detail: RunDetail,
         brief: ResearchBrief,
-        result: ResearchResult,
+        result,
         *,
         batch_sources: list[RawSource],
         target_source_count: int,
     ) -> list[RawSource]:
-        candidate_by_id = {candidate.id: candidate for candidate in result.candidates}
-        accepted_by_page: dict[str, list[EvidenceItem]] = {}
-        for item in result.evidence_items:
-            if item.status != "accepted":
-                continue
-            accepted_by_page.setdefault(item.captured_page_id, []).append(item)
-
-        sources: list[RawSource] = []
-        for page in sorted(
-            result.captured_pages,
-            key=lambda item: self._research_page_score(item, accepted_by_page),
-            reverse=True,
-        ):
-            if len(batch_sources) + len(sources) >= target_source_count:
-                break
-            candidate = candidate_by_id.get(page.candidate_id)
-            if candidate is None:
-                continue
-            if page.status != "ok":
-                continue
-            page_items = accepted_by_page.get(page.id, [])
-            if self._requires_verified_web_evidence(detail, brief.dimension) and not page_items:
-                continue
-            if self._candidate_already_collected(
+        return raw_sources_from_research_result(
+            brief,
+            result,
+            batch_sources=batch_sources,
+            target_source_count=target_source_count,
+            requires_accepted_evidence=self._requires_verified_web_evidence(
                 detail,
-                [*batch_sources, *sources],
+                brief.dimension,
+            ),
+            source_exists=lambda url, current_sources: self._candidate_already_collected(
+                detail,
+                current_sources,
                 competitor=brief.competitor,
                 dimension=brief.dimension,
-                url=page.final_url,
-            ):
-                continue
-            snippet = self._research_source_snippet(brief, page, page_items)
-            confidence = max(
+                url=url,
+            ),
+            confidence_for_source=lambda candidate, page, snippet, items: max(
                 self._verified_source_confidence(
                     detail,
                     brief.competitor,
@@ -694,52 +682,15 @@ class CollectorAgentMixin:
                     page.final_url,
                     snippet,
                 ),
-                max((item.confidence for item in page_items), default=0.0),
+                max((item.confidence for item in items), default=0.0),
                 min(0.96, candidate.confidence + 0.03),
-            )
-            source = raw_source_from_capture(
-                brief,
-                candidate,
-                page,
-                confidence=confidence,
-                source_type="webpage_verified",
-                snippet=snippet,
-            )
-            if not self._source_is_usable(source):
-                continue
-            sources.append(source)
-        return sources
-
-    def _research_page_score(
-        self,
-        page,
-        accepted_by_page: dict[str, list[EvidenceItem]],
-    ) -> tuple[int, float, float, int]:
-        items = accepted_by_page.get(page.id, [])
-        return (
-            1 if items else 0,
-            max((item.confidence for item in items), default=0.0),
-            page.quality_score,
-            page.text_length,
-        )
-
-    def _research_source_snippet(
-        self,
-        brief: ResearchBrief,
-        page,
-        evidence_items: list[EvidenceItem],
-    ) -> str:
-        quotes = [
-            " ".join(item.quote.split())
-            for item in sorted(evidence_items, key=lambda value: value.confidence, reverse=True)
-            if item.quote
-        ]
-        if quotes:
-            return " ".join(quotes)[:900]
-        return self._dimension_evidence_snippet(
-            page.text or page.markdown,
-            brief.dimension,
-            page.snippet,
+            ),
+            fallback_snippet=lambda page: self._dimension_evidence_snippet(
+                page.text or page.markdown,
+                brief.dimension,
+                page.snippet,
+            ),
+            source_is_usable=self._source_is_usable,
         )
 
     async def _collect_official_sources(

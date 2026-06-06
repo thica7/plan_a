@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable
 
 from packages.business_intel.entity_resolver import (
     confusion_terms_for_competitor,
@@ -9,8 +10,21 @@ from packages.business_intel.entity_resolver import (
     normalize_competitor_key,
 )
 from packages.identity import compute_raw_source_id
-from packages.research.models import CapturedPage, ResearchBrief, SourceCandidate
+from packages.research.evidence.citations import snippet_from_evidence_items
+from packages.research.evidence.store import accepted_evidence_by_page
+from packages.research.models import (
+    CapturedPage,
+    EvidenceItem,
+    ResearchBrief,
+    ResearchResult,
+    SourceCandidate,
+)
 from packages.schema.models import RawSource
+
+SourceExistsCallable = Callable[[str, list[RawSource]], bool]
+SourceConfidenceCallable = Callable[[SourceCandidate, CapturedPage, str, list[EvidenceItem]], float]
+FallbackSnippetCallable = Callable[[CapturedPage], str]
+SourceUsableCallable = Callable[[RawSource], bool]
 
 USER_RESEARCH_SOURCE_TYPES = {
     "survey_simulated",
@@ -58,6 +72,66 @@ def raw_source_from_capture(
         fetch_method=capture.fetch_method,
         quality_score=capture.quality_score,
         failure_reason=capture.failure_reason,
+    )
+
+
+def raw_sources_from_research_result(
+    brief: ResearchBrief,
+    result: ResearchResult,
+    *,
+    batch_sources: list[RawSource],
+    target_source_count: int,
+    requires_accepted_evidence: bool,
+    source_exists: SourceExistsCallable,
+    confidence_for_source: SourceConfidenceCallable,
+    fallback_snippet: FallbackSnippetCallable,
+    source_is_usable: SourceUsableCallable = lambda source: source_quality_problem(source) is None,
+) -> list[RawSource]:
+    candidate_by_id = {candidate.id: candidate for candidate in result.candidates}
+    accepted_by_page = accepted_evidence_by_page(result.evidence_items)
+    sources: list[RawSource] = []
+
+    for page in sorted(
+        result.captured_pages,
+        key=lambda item: _research_page_score(item, accepted_by_page),
+        reverse=True,
+    ):
+        if len(batch_sources) + len(sources) >= target_source_count:
+            break
+        candidate = candidate_by_id.get(page.candidate_id)
+        if candidate is None or page.status != "ok":
+            continue
+        page_items = accepted_by_page.get(page.id, [])
+        if requires_accepted_evidence and not page_items:
+            continue
+        if source_exists(page.final_url, [*batch_sources, *sources]):
+            continue
+        fallback = fallback_snippet(page)
+        snippet = snippet_from_evidence_items(page_items, fallback=fallback)
+        source = raw_source_from_capture(
+            brief,
+            candidate,
+            page,
+            confidence=confidence_for_source(candidate, page, snippet, page_items),
+            source_type="webpage_verified",
+            snippet=snippet,
+        )
+        if not source_is_usable(source):
+            continue
+        sources.append(source)
+    return sources
+
+
+def _research_page_score(
+    page: CapturedPage,
+    accepted_by_page: dict[str, list[EvidenceItem]],
+) -> tuple[int, float, float, int]:
+    items = accepted_by_page.get(page.id, [])
+    return (
+        1 if items else 0,
+        max((item.confidence for item in items), default=0.0),
+        page.quality_score,
+        page.text_length,
     )
 
 
