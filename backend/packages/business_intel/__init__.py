@@ -1,3 +1,10 @@
+from packages.business_intel.claim_release import (
+    append_claim_release_section,
+    apply_claim_release_decisions,
+    claim_release_summary,
+    plan_claim_release_decisions,
+    publishable_claim_ids,
+)
 from packages.business_intel.claim_validator import validate_project_claims
 from packages.business_intel.evaluator import evaluate_business_qa
 from packages.business_intel.evidence_gaps import analyze_evidence_gaps, build_evidence_gap_agent
@@ -28,6 +35,9 @@ __all__ = [
     "build_red_team_agent",
     "business_findings_to_redo_scopes",
     "claim_validation_issues_to_redo_scopes",
+    "append_claim_release_section",
+    "apply_claim_release_decisions",
+    "claim_release_summary",
     "compare_run_quality",
     "evidence_gaps_to_redo_scopes",
     "evaluate_business_qa",
@@ -36,6 +46,8 @@ __all__ = [
     "get_scenario_pack",
     "list_business_qa_rules",
     "list_scenario_packs",
+    "plan_claim_release_decisions",
+    "publishable_claim_ids",
     "recommend_scenario_pack",
     "red_team_findings_to_redo_scopes",
     "score_competitors",

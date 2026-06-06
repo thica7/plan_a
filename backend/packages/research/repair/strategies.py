@@ -13,7 +13,7 @@ def repair_task_from_gap(gap: QualityGap) -> RepairTask:
         target_fields=target_fields,
         query_hints=query_hints_for_gap(gap, target_fields),
         acceptance_rule=gap.acceptance_rule,
-        metadata={"gap_reason": gap.reason, "severity": gap.severity},
+        metadata={"gap_reason": gap.reason, "severity": gap.severity, **gap.metadata},
     )
 
 
@@ -21,6 +21,12 @@ def query_hints_for_gap(gap: QualityGap, fields: list[str]) -> list[str]:
     competitor = gap.competitor or ""
     field_phrase = " ".join(fields).replace("_", " ").strip()
     dimension_phrase = gap.dimension.replace("_", " ")
+    required_action = str(gap.metadata.get("required_action") or "")
+    claim_ids = [str(item) for item in gap.metadata.get("claim_ids", []) if str(item)]
+    if required_action == "delete":
+        return _dedupe([f"remove unsupported claim {' '.join(claim_ids)}".strip()])
+    if required_action in {"downgrade", "rewrite_report_section"}:
+        return _dedupe([f"rewrite caveat claim {' '.join(claim_ids)}".strip()])
     if gap.suggested_action == "pricing_model_repair":
         intents = [
             "official pricing plans billing",
@@ -45,7 +51,19 @@ def query_hints_for_gap(gap: QualityGap, fields: list[str]) -> list[str]:
             "self hosted open weight license official",
         ]
     else:
-        intents = [f"official {dimension_phrase} {field_phrase}".strip()]
+        issue_metadata = gap.metadata.get("issue_metadata")
+        issue_types: list[str] = []
+        if isinstance(issue_metadata, dict):
+            issue_types = [
+                str(item).replace("_", " ")
+                for item in issue_metadata.get("claim_validation_issue_types", [])
+                if str(item)
+            ]
+        issue_phrase = " ".join(issue_types)
+        intents = [
+            f"official {dimension_phrase} {field_phrase} {issue_phrase}".strip(),
+            f"verified evidence {dimension_phrase} {field_phrase}".strip(),
+        ]
     return _dedupe(
         [
             " ".join(part for part in (competitor, intent, field_phrase) if part).strip()

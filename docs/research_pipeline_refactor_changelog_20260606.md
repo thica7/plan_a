@@ -131,6 +131,46 @@ Validation:
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/agents/collectors backend/packages/research backend/tests/unit/test_research_pipeline.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
 
+## 2026-06-07 - Step 12: Claim Release Scope And Gate Repair Actions
+
+Commit: this commit
+
+Scope:
+
+- Added typed `ClaimReleaseDecision` records and a `business_intel.claim_release`
+  module that converts claim-validation output into explicit release actions:
+  `keep`, `add_evidence`, `downgrade`, `delete`, or `human_review`.
+- Kept all projected `ClaimRecord` rows for enterprise memory while limiting
+  `ReportVersion.claim_ids` to claims that are publishable after
+  self-consistency validation.
+- Added a deterministic `Claim Release Controls` report section so withheld
+  claims are visible in the release artifact and linked back to source tokens.
+- Added structured release-gate metadata for claim-validation status, issue
+  types, failed checks, scores, competitor, and dimension.
+- Propagated release-gate metadata through `QualityGap -> RepairTask ->
+  RedoScope`, routing `add_evidence` to collector and
+  `downgrade/delete/rewrite` to writer-only repair.
+- Added run-QA mitigation metadata so warnings that are explicitly handled by
+  release controls remain visible as warnings instead of being treated as
+  unresolved blockers.
+
+Why:
+
+- Moves the blocked-run closure point from "gate reports a blocker" to "gate
+  produces executable repair or release-control actions."
+- Prevents weak or unsupported claims from staying in the publishable report
+  scope while still preserving them as enterprise memory and audit records.
+- Keeps release quality strict: the gate still evaluates the frozen report
+  scope, but the scope is now cleaned before approval instead of relying on a
+  looser gate.
+
+Validation:
+
+- `D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend/tests/unit/test_claim_release.py backend/tests/unit/test_research_pipeline.py::test_release_gate_issues_become_repair_tasks_and_redo_scopes backend/tests/unit/test_run_service.py::test_release_gate_sync_creates_scoped_qa_repair_issue -q`
+- `D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend/tests/unit/test_enterprise_store.py::test_report_release_gate_scope_uses_version_competitors_not_stale_project_links backend/tests/unit/test_enterprise_store.py::test_writer_node_persists_enterprise_report_version_draft backend/tests/unit/test_enterprise_store.py::test_gap_fill_result_carries_release_gate_improvement_delta backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_report_approval_status_when_gate_fails -q`
+- `D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend/tests/unit/test_enterprise_store.py::test_run_service_writes_enterprise_projection_on_completion backend/tests/unit/test_enterprise_store.py::test_run_service_records_release_gate_notification_for_weak_report backend/tests/unit/test_run_service.py::test_release_gate_auto_redo_uses_existing_scoped_redo_for_real_runs backend/tests/unit/test_run_service.py::test_release_gate_auto_redo_is_disabled_for_demo_runs -q`
+- `D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend/tests/unit -q`
+
 ## 2026-06-06 - Step 11: Canonical Report Source Identity
 
 Scope:

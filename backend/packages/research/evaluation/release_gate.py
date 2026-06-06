@@ -13,7 +13,7 @@ def _quality_gap_from_release_issue(issue: BusinessQAFinding) -> QualityGap:
     return QualityGap(
         severity=_severity(issue),
         dimension=dimension,
-        competitor=issue.competitor_name,
+        competitor=issue.competitor_name or issue.competitor_id,
         field=_field_from_issue(issue),
         reason=f"{issue.rule_id}: {issue.message}",
         suggested_action=_repair_strategy(issue.rule_id, dimension),
@@ -25,6 +25,8 @@ def _quality_gap_from_release_issue(issue: BusinessQAFinding) -> QualityGap:
             "rule_id": issue.rule_id,
             "rule_name": issue.rule_name,
             "claim_ids": issue.claim_ids,
+            "required_action": _required_action(issue),
+            "issue_metadata": issue.metadata,
         },
     )
 
@@ -71,6 +73,8 @@ def _field_from_issue(issue: BusinessQAFinding) -> str | None:
 
 
 def _repair_strategy(rule_id: str, dimension: str) -> str:
+    # Claim validation issues first try targeted discovery; the release layer
+    # can still downgrade/delete claims when stronger evidence cannot be found.
     if rule_id in {
         "report_citation_resolves",
         "report_citation_token_format",
@@ -98,6 +102,32 @@ def _repair_strategy(rule_id: str, dimension: str) -> str:
     }:
         return "targeted_discovery"
     return "human_review"
+
+
+def _required_action(issue: BusinessQAFinding) -> str:
+    if issue.rule_id == "claim_self_consistency_required":
+        issue_types = {
+            str(item)
+            for item in issue.metadata.get("claim_validation_issue_types", [])
+            if str(item)
+        }
+        status = str(issue.metadata.get("claim_validation_status") or "")
+        if status in {"blocked", "unsupported"}:
+            return "delete"
+        if "single_source_support" in issue_types or "low_evidence_quality" in issue_types:
+            return "add_evidence"
+        if issue_types & {"weak_text_support", "low_self_consistency", "low_confidence"}:
+            return "downgrade"
+        return "human_review"
+    if issue.rule_id in {"report_citation_resolves", "report_citation_token_format"}:
+        return "rewrite_report_section"
+    if issue.rule_id == "strong_conclusion_uses_weak_source":
+        return "downgrade"
+    if issue.rule_id in {"verified_evidence_rate", "source_policy_review_required"}:
+        return "add_evidence"
+    if issue.rule_id == "run_qa_findings_mitigated":
+        return "human_review"
+    return "add_evidence" if issue.evidence_ids or issue.claim_ids else "human_review"
 
 
 def _default_acceptance_rule(rule_id: str) -> str:

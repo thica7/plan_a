@@ -741,6 +741,7 @@ class BusinessQAFinding(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     claim_ids: list[str] = Field(default_factory=list)
     recommendation: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class BusinessQAEvaluation(BaseModel):
@@ -907,6 +908,33 @@ class ClaimValidationReport(BaseModel):
     results: list[ClaimValidationResult] = Field(default_factory=list)
     issues: list[ClaimValidationIssue] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+ClaimReleaseAction = Literal[
+    "keep",
+    "add_evidence",
+    "downgrade",
+    "delete",
+    "human_review",
+]
+
+
+class ClaimReleaseDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str
+    action: ClaimReleaseAction
+    publishable: bool
+    competitor_id: str
+    dimension: str
+    reason: str
+    issue_types: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
+    support_score: int = Field(default=0, ge=0, le=100)
+    text_support_score: int = Field(default=0, ge=0, le=100)
+    evidence_quality_score: int = Field(default=0, ge=0, le=100)
+    triangulation_score: int = Field(default=0, ge=0, le=100)
+    acceptance_rule: str
 
 
 class QualityAgentMatrixEntry(BaseModel):

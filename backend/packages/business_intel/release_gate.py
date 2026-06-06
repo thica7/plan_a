@@ -470,11 +470,13 @@ def _claim_validation_issues(
         return []
     project_id = claims[0].project_id
     validation = validate_project_claims(project_id=project_id, claims=claims, evidence=evidence)
+    claims_by_id = {claim.id: claim for claim in claims}
     validation_issues_by_id = {issue.id: issue for issue in validation.issues}
     issues: list[BusinessQAFinding] = []
     for result in validation.results:
         if result.status == "supported":
             continue
+        claim = claims_by_id.get(result.claim_id)
         severity = "blocker" if result.status in {"blocked", "unsupported"} else "warn"
         claim_issue_types = [
             issue.issue_type
@@ -499,12 +501,24 @@ def _claim_validation_issues(
                     f"{issue_summary}{checker_summary}."
                 ),
                 severity=severity,
+                competitor_id=claim.competitor_id if claim is not None else None,
+                dimension=claim.claim_type if claim is not None else None,
                 claim_ids=[result.claim_id],
                 evidence_ids=result.usable_evidence_ids,
                 recommendation=(
                     "Collect stronger independent evidence, resolve the listed claim-validation "
                     "issue types, or downgrade the claim before release."
                 ),
+                metadata={
+                    "claim_validation_status": result.status,
+                    "claim_validation_issue_types": claim_issue_types,
+                    "failed_checkers": failed_checkers,
+                    "support_score": result.support_score,
+                    "text_support_score": result.text_support_score,
+                    "evidence_quality_score": result.evidence_quality_score,
+                    "triangulation_score": result.triangulation_score,
+                    "self_consistency_score": result.self_consistency_score,
+                },
             )
         )
     return issues
@@ -656,6 +670,35 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
         return issues
     blocker_count = sum(1 for item in findings if _mapping_value(item, "severity") == "blocker")
     warn_count = sum(1 for item in findings if _mapping_value(item, "severity") == "warn")
+    resolution = report_version.quality_metadata.get("run_qa_findings_resolution")
+    if (
+        blocker_count == 0
+        and isinstance(resolution, dict)
+        and resolution.get("status") == "mitigated_by_release_controls"
+    ):
+        issues.append(
+            _gate_issue(
+                "run_qa_findings_mitigated",
+                "Run QA findings mitigated",
+                (
+                    "Run-level QA warnings were converted into release controls; "
+                    f"{warn_count} warning(s) remain visible for reviewer awareness."
+                ),
+                severity="warn",
+                recommendation=(
+                    "Review the Claim Release Controls section and execute queued repair "
+                    "tasks before treating withheld claims as publishable."
+                ),
+                metadata={
+                    "resolution_status": resolution.get("status"),
+                    "mitigated_warning_ids": _string_list(
+                        resolution.get("mitigated_warning_ids")
+                    ),
+                    "withheld_claim_count": resolution.get("withheld_claim_count"),
+                },
+            )
+        )
+        return issues
     top_problems = [
         str(_mapping_value(item, "problem") or _mapping_value(item, "id") or "quality issue")
         for item in findings[:3]
@@ -719,18 +762,26 @@ def _gate_issue(
     *,
     evidence_ids: list[str] | None = None,
     claim_ids: list[str] | None = None,
+    competitor_id: str | None = None,
+    competitor_name: str | None = None,
+    dimension: str | None = None,
     severity: str = "blocker",
     recommendation: str,
+    metadata: dict[str, object] | None = None,
 ) -> BusinessQAFinding:
     return BusinessQAFinding(
         id=compute_release_gate_issue_id(rule_id, message, evidence_ids, claim_ids),
         rule_id=rule_id,
         rule_name=rule_name,
         severity=severity,  # type: ignore[arg-type]
+        competitor_id=competitor_id,
+        competitor_name=competitor_name,
+        dimension=dimension,
         message=message,
         evidence_ids=evidence_ids or [],
         claim_ids=claim_ids or [],
         recommendation=recommendation,
+        metadata=metadata or {},
     )
 
 
