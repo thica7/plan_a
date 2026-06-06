@@ -30,6 +30,7 @@ from packages.schema.models import (
     ComparisonMatrix,
     CompetitorKB,
     CompetitorKnowledge,
+    KnowledgeClaim,
     QCIssue,
     RawSource,
     RedoScope,
@@ -1463,6 +1464,84 @@ def test_qa_marks_phantom_citation_as_writer_only_blocker() -> None:
     assert len(phantom) == 1
     assert phantom[0].severity == "blocker"
     assert phantom[0].redo_scope.kind == "writer_only"
+
+
+def test_qa_flags_report_text_noise_as_writer_only_blocker() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        report_md=(
+            "# Report\n\n"
+            "Skip to content Navigation Menu Sign in Cookie Privacy policy "
+            "Pricing Plans Billing Enterprise [source:pricing-1]"
+        ),
+    )
+
+    issues = service._build_report_text_quality_issues(detail)
+
+    assert len(issues) == 1
+    assert issues[0].severity == "blocker"
+    assert issues[0].detected_by == "text_quality"
+    assert issues[0].target_agent == "writer"
+    assert issues[0].redo_scope.kind == "writer_only"
+
+
+def test_qa_flags_structured_claim_text_noise_as_analyst_blocker() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    knowledge = CompetitorKnowledge(competitor="A")
+    knowledge.pricing_model.notes = [
+        KnowledgeClaim(
+            claim="mpletions Published 2023 API token pricing and billing details.",
+            source_ids=["pricing-1"],
+            confidence=0.8,
+        )
+    ]
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        competitor_knowledge={"A": knowledge},
+    )
+
+    issues = service._build_claim_text_quality_issues(detail)
+
+    assert len(issues) == 1
+    assert issues[0].severity == "blocker"
+    assert issues[0].detected_by == "text_quality"
+    assert issues[0].target_agent == "analyst"
+    assert issues[0].target_subagent == "pricing"
+    assert issues[0].target_competitor == "A"
+    assert issues[0].redo_scope.kind == "analyst"
 
 
 def test_qa_surfaces_latest_reflector_findings() -> None:

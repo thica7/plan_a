@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Literal
 
 from packages.identity import stable_prefixed_id
 from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
+from packages.research.evidence import publishable_text_noise_problem
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     CompetitorKnowledge,
@@ -345,6 +346,7 @@ class QualityAgentMixin:
         issues = self._build_collect_qa_issues(detail)
         issues.extend(self._build_analyst_qa_issues(detail, missing_dimensions))
         issues.extend(self._build_phantom_citation_issues(detail))
+        issues.extend(self._build_text_quality_issues(detail))
         issues.extend(self._build_matrix_consistency_issues(detail))
         issues.extend(self._build_reflector_qa_issues(detail))
         return issues
@@ -978,6 +980,103 @@ class QualityAgentMixin:
             )
             issue.redo_scope = assign_redo_scope(issue)
             issues.append(issue)
+        return issues
+
+    def _build_text_quality_issues(self, detail: RunDetail) -> list[QCIssue]:
+        issues: list[QCIssue] = []
+        issues.extend(self._build_report_text_quality_issues(detail))
+        issues.extend(self._build_claim_text_quality_issues(detail))
+        return issues
+
+    def _build_report_text_quality_issues(self, detail: RunDetail) -> list[QCIssue]:
+        issues: list[QCIssue] = []
+        for line_number, line in enumerate(detail.report_md.splitlines(), start=1):
+            problem_key = publishable_text_noise_problem(line)
+            if not problem_key:
+                continue
+            field_path = f"report_md.line[{line_number}]"
+            problem = (
+                f"Report line {line_number} contains non-publishable text noise "
+                f"({problem_key})."
+            )
+            issue = QCIssue(
+                id=stable_prefixed_id(
+                    "qc-issue",
+                    "report-text-noise",
+                    detail.id,
+                    line_number,
+                    problem_key,
+                    length=16,
+                ),
+                severity="blocker",
+                detected_by="text_quality",
+                target_agent="writer",
+                field_path=field_path,
+                problem=problem,
+                redo_scope=self._initial_redo_scope(
+                    detected_by="text_quality",
+                    target_agent="writer",
+                    field_path=field_path,
+                    problem=problem,
+                ),
+                self_found=False,
+            )
+            issue.redo_scope = assign_redo_scope(issue)
+            issues.append(issue)
+            if len(issues) >= 5:
+                break
+        return issues
+
+    def _build_claim_text_quality_issues(self, detail: RunDetail) -> list[QCIssue]:
+        issues: list[QCIssue] = []
+        for competitor in detail.plan.competitors:
+            knowledge = detail.competitor_knowledge.get(competitor)
+            for dimension in detail.plan.dimensions:
+                for index, claim in enumerate(
+                    self._structured_claims_for_dimension(knowledge, dimension)
+                ):
+                    problem_key = publishable_text_noise_problem(claim.claim)
+                    if not problem_key:
+                        continue
+                    field_path = (
+                        f"competitor_knowledge[{competitor}].{dimension}"
+                        f".claims[{index}].claim"
+                    )
+                    problem = (
+                        f"{competitor} {dimension} claim contains non-publishable "
+                        f"text noise ({problem_key})."
+                    )
+                    issue = QCIssue(
+                        id=stable_prefixed_id(
+                            "qc-issue",
+                            "claim-text-noise",
+                            competitor,
+                            dimension,
+                            index,
+                            problem_key,
+                            length=16,
+                        ),
+                        severity="blocker",
+                        detected_by="text_quality",
+                        target_agent="analyst",
+                        target_subagent=dimension,
+                        target_competitor=competitor,
+                        field_path=field_path,
+                        problem=problem,
+                        redo_scope=self._initial_redo_scope(
+                            detected_by="text_quality",
+                            target_agent="analyst",
+                            target_subagent=dimension,
+                            target_competitor=competitor,
+                            field_path=field_path,
+                            problem=problem,
+                        ),
+                        self_found=False,
+                    )
+                    issue.redo_scope = assign_redo_scope(issue)
+                    issues.append(issue)
+                    if len(issues) >= 8:
+                        return issues
         return issues
 
     def _refresh_report_source_qa_findings(self, detail: RunDetail) -> bool:

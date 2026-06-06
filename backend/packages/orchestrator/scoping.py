@@ -12,6 +12,8 @@ def build_redo_scope(
 ) -> RedoScope:
     if detected_by == "citation" and target_agent == "writer":
         return RedoScope(kind="writer_only", rationale="phantom citation only")
+    if target_agent == "writer":
+        return RedoScope(kind="writer_only", rationale=problem)
     if detected_by == "consistency" and "matrix" in field_path:
         return RedoScope(
             kind="comparator",

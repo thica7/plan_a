@@ -6,6 +6,7 @@ from typing import Any
 from packages.research.extraction.quality import (
     clean_evidence_quote,
     quote_quality_problem,
+    text_noise_problem,
 )
 
 
@@ -47,6 +48,10 @@ def deterministic_claim_text_from_source(
         f"{competitor} has collected {dimension} evidence, but the source needs "
         "cleaner extracted text before publishable use."
     )
+
+
+def publishable_text_noise_problem(text: str) -> str | None:
+    return text_noise_problem(text)
 
 
 def _source_field(source: object, field: str) -> str:

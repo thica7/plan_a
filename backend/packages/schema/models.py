@@ -21,7 +21,14 @@ class QCIssue(BaseModel):
 
     id: str
     severity: Literal["info", "warn", "blocker"]
-    detected_by: Literal["citation", "consistency", "coverage", "schema", "reflector"]
+    detected_by: Literal[
+        "citation",
+        "consistency",
+        "coverage",
+        "schema",
+        "reflector",
+        "text_quality",
+    ]
     target_agent: str
     target_subagent: str | None = None
     target_competitor: str | None = None

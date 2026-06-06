@@ -645,3 +645,32 @@ Validation:
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/research/evidence/text.py backend/packages/research/evidence/__init__.py backend/packages/agents/analysts/logic.py backend/packages/agents/writer/logic.py backend/tests/unit/test_run_service.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py -q -k "deterministic_structured_knowledge_payload or deterministic_payload_does_not_claim_from_noisy_snippet or writer_source_digest_omits_noisy_snippet or deterministic_feature_payload or deterministic_pricing_payload or structured_pricing_payload or structured_feature_payload"`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_research_pipeline.py -q`
+
+## 2026-06-07 - Step 21: Text Quality QA Gate
+
+Commit: this commit
+
+Scope:
+
+- Split explicit text-noise detection from strict source quote validation so
+  report and claim text can be checked without requiring dimension keywords.
+- Added `text_quality` as a first-class `QCIssue.detected_by` category.
+- Added final QA checks for noisy report lines and noisy structured claim text.
+- Routed report text quality failures to `writer_only` redo and structured
+  claim text failures to targeted `analyst` redo.
+
+Why:
+
+- Cleaner source snippets and deterministic claim helpers reduce noise, but the
+  enterprise QA layer still needs to catch any remaining navigation chrome,
+  install-command fragments, encoding artifacts, or truncated webpage text that
+  leaks into publishable report or claim text.
+- Making this a QA category keeps it visible in trace/replay/release review
+  instead of hiding it under generic schema or citation failures.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/research/extraction/quality.py backend/packages/research/evidence/text.py backend/packages/research/evidence/__init__.py backend/packages/schema/models.py backend/packages/orchestrator/scoping.py backend/packages/agents/qa/logic.py backend/tests/unit/test_run_service.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py -q -k "qa_ or final_qa or phantom_citation or text_noise"`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_research_pipeline.py -q`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_graph_send.py -q`

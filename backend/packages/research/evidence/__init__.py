@@ -17,6 +17,7 @@ from packages.research.evidence.store import (
 )
 from packages.research.evidence.text import (
     deterministic_claim_text_from_source,
+    publishable_text_noise_problem,
     source_business_snippet,
 )
 
@@ -28,6 +29,7 @@ __all__ = [
     "dedupe_by_id",
     "deterministic_claim_text_from_source",
     "evidence_items_from_extractions",
+    "publishable_text_noise_problem",
     "rejected_evidence_items",
     "raw_source_from_capture",
     "raw_sources_from_research_result",

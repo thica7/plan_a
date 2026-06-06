@@ -116,21 +116,31 @@ def quote_quality_problem(text: str, *, dimension: str = "") -> str | None:
     quote = _normalize_whitespace(text)
     if len(quote) < 32:
         return "quote_too_short"
-    if _encoding_noise_ratio(quote) > 0.015:
-        return "quote_encoding_noise"
+    if noise_problem := text_noise_problem(quote):
+        return noise_problem.replace("text_", "quote_", 1)
     normalized = quote.casefold()
-    marker_count = sum(1 for marker in _NAVIGATION_MARKERS if marker in normalized)
     has_signal = _has_dimension_signal(dimension, normalized)
-    if marker_count >= 4:
-        return "quote_navigation_boilerplate"
-    if marker_count >= 2 and not has_signal:
-        return "quote_navigation_boilerplate"
-    if _looks_like_install_or_code_noise(normalized) and not has_signal:
-        return "quote_code_or_install_noise"
     if not has_signal:
         return "quote_missing_dimension_signal"
+    return None
+
+
+def text_noise_problem(text: str) -> str | None:
+    quote = _normalize_whitespace(text)
+    if not quote:
+        return None
+    if _encoding_noise_ratio(quote) > 0.015:
+        return "text_encoding_noise"
+    normalized = quote.casefold()
+    marker_count = sum(1 for marker in _NAVIGATION_MARKERS if marker in normalized)
+    if marker_count >= 4:
+        return "text_navigation_boilerplate"
+    if marker_count >= 2 and not _looks_like_business_sentence(normalized):
+        return "text_navigation_boilerplate"
+    if _looks_like_install_or_code_noise(normalized):
+        return "text_code_or_install_noise"
     if _looks_like_truncated_fragment(quote):
-        return "quote_truncated_fragment"
+        return "text_truncated_fragment"
     return None
 
 
@@ -196,6 +206,14 @@ def _encoding_noise_ratio(text: str) -> float:
 def _looks_like_install_or_code_noise(normalized_text: str) -> bool:
     markers = ("curl ", "install.cmd", "npm install", "pip install", "copy code")
     return sum(1 for marker in markers if marker in normalized_text) >= 2
+
+
+def _looks_like_business_sentence(normalized_text: str) -> bool:
+    return any(
+        signal in normalized_text
+        for signals in _DIMENSION_SIGNALS.values()
+        for signal in signals
+    )
 
 
 def _looks_like_truncated_fragment(text: str) -> bool:
