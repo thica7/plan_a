@@ -225,6 +225,10 @@ def _build_report_version(
             ),
             "report_competitors": list(detail.plan.competitors),
             "report_competitor_ids": competitor_ids,
+            "report_competitor_homepages": _report_competitor_homepage_metadata(
+                detail,
+                competitor_ids,
+            ),
         },
         created_at=_parse_datetime(detail.updated_at),
     )
@@ -306,6 +310,21 @@ def _release_claim_admission_metadata(
         "excluded_claim_count": len(excluded),
         "excluded_claims": excluded,
     }
+
+
+def _report_competitor_homepage_metadata(
+    detail: RunDetail,
+    competitor_ids: list[str],
+) -> list[dict[str, object]]:
+    return [
+        {
+            "competitor_id": competitor_id,
+            "competitor_name": name,
+            "homepage_url": detail.plan.homepage_hints.get(name),
+            "homepage_verified": detail.plan.homepage_verified.get(name, False),
+        }
+        for name, competitor_id in zip(detail.plan.competitors, competitor_ids, strict=False)
+    ]
 
 
 def _claims_for_dimension(

@@ -542,6 +542,62 @@ def test_report_release_gate_blocks_pending_source_policy_review() -> None:
     assert "source_policy_review_required" in {issue.rule_id for issue in gate.issues}
 
 
+def test_report_release_gate_uses_report_homepage_snapshot_for_competitors() -> None:
+    competitor = _competitor().model_copy(update={"homepage_url": None, "metadata": {}})
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        quality_metadata={
+            "report_competitor_homepages": [
+                {
+                    "competitor_id": competitor.id,
+                    "competitor_name": competitor.name,
+                    "homepage_url": "https://cursor.com/",
+                    "homepage_verified": True,
+                }
+            ]
+        }
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert gate.allowed is True
+    assert "homepage_verified" not in {issue.rule_id for issue in gate.issues}
+
+
 def test_report_release_gate_uses_source_registry_review_status() -> None:
     competitor = _competitor()
     evidence = [
@@ -909,7 +965,7 @@ def test_report_release_gate_warns_on_high_risk_single_source_claim() -> None:
     assert "listed claim-validation issue types" in consistency_issues[0].recommendation
 
 
-def test_report_release_gate_blocks_unresolved_run_qa_metadata() -> None:
+def test_report_release_gate_warns_on_unresolved_run_qa_metadata() -> None:
     competitor = _competitor()
     evidence = [
         EvidenceRecord(
@@ -970,11 +1026,71 @@ def test_report_release_gate_blocks_unresolved_run_qa_metadata() -> None:
         claims=claims,
     )
 
-    assert gate.allowed is False
+    assert gate.allowed is True
     issue = next(issue for issue in gate.issues if issue.rule_id == "run_qa_findings_unresolved")
+    assert issue.severity == "warn"
     assert issue.competitor_name == "Cursor"
     assert issue.dimension == "pricing"
     assert issue.recommendation == "Collect verified pricing tier evidence."
+
+
+def test_report_release_gate_blocks_blocker_run_qa_metadata() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        quality_metadata={
+            "run_qa_findings": [
+                {
+                    "id": "qa-blocker-1",
+                    "severity": "blocker",
+                    "target_subagent": "pricing",
+                    "target_competitor": "Cursor",
+                    "problem": "Pricing source is missing.",
+                }
+            ]
+        }
+    )
+    project = _project()
+
+    gate = evaluate_report_release_gate(
+        project=project,
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    issue = next(issue for issue in gate.issues if issue.rule_id == "run_qa_findings_unresolved")
+    assert gate.allowed is False
+    assert issue.severity == "blocker"
 
 
 def test_report_release_gate_separates_malformed_source_tokens_from_missing_sources() -> None:

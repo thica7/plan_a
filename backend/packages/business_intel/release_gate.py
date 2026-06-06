@@ -52,6 +52,7 @@ def evaluate_report_release_gate(
 ) -> ReportReleaseGate:
     """Strict enterprise gate for approving or publishing a report version."""
 
+    scoped_competitors = _apply_report_competitor_metadata(report_version, competitors)
     report_scoped_evidence = _scope_evidence(report_version, evidence)
     scoped_evidence = _apply_source_registry_policy(
         report_scoped_evidence, source_registry or []
@@ -64,7 +65,7 @@ def evaluate_report_release_gate(
     ]
     plan = build_business_intel_plan(
         topic=project.topic,
-        competitors=[item.name for item in competitors],
+        competitors=[item.name for item in scoped_competitors],
         dimensions=dimensions,
         requested_layer=project.competitor_layer if project.competitor_layer != "unknown" else None,
         requested_scenario_id=project.scenario_id,
@@ -72,16 +73,16 @@ def evaluate_report_release_gate(
     qa_evaluation = evaluate_business_qa(
         project_id=project.id,
         plan=plan,
-        competitors=competitors,
+        competitors=scoped_competitors,
         evidence=scoped_evidence,
         claims=scoped_claims,
     )
-    competitor_names_by_id = {item.id: item.name for item in competitors}
+    competitor_names_by_id = {item.id: item.name for item in scoped_competitors}
     readiness = score_project_readiness(
         project_id=project.id,
         plan=plan,
         qa_evaluation=qa_evaluation,
-        competitors=competitors,
+        competitors=scoped_competitors,
         evidence=scoped_evidence,
         claims=scoped_claims,
     )
@@ -101,7 +102,7 @@ def evaluate_report_release_gate(
     ]
     blocker_count = len([item for item in issues if item.severity == "blocker"])
     warn_count = len([item for item in issues if item.severity == "warn"])
-    allowed = blocker_count == 0 and qa_evaluation.finding_count == 0
+    allowed = blocker_count == 0 and qa_evaluation.blocker_count == 0
     return ReportReleaseGate(
         report_version_id=report_version.id,
         workspace_id=report_version.workspace_id,
@@ -171,6 +172,48 @@ def _scope_claims(
 ) -> list[ClaimRecord]:
     allowed_ids = set(report_version.claim_ids)
     return [item for item in claims if item.id in allowed_ids]
+
+
+def _apply_report_competitor_metadata(
+    report_version: ReportVersionRecord,
+    competitors: list[CompetitorRecord],
+) -> list[CompetitorRecord]:
+    homepage_metadata = report_version.quality_metadata.get("report_competitor_homepages")
+    if not isinstance(homepage_metadata, list):
+        return competitors
+    by_id: dict[str, dict[str, object]] = {}
+    by_name: dict[str, dict[str, object]] = {}
+    for item in homepage_metadata:
+        if not isinstance(item, dict):
+            continue
+        competitor_id = str(item.get("competitor_id") or "").strip()
+        competitor_name = str(item.get("competitor_name") or "").strip().casefold()
+        if competitor_id:
+            by_id[competitor_id] = item
+        if competitor_name:
+            by_name[competitor_name] = item
+    enriched: list[CompetitorRecord] = []
+    for competitor in competitors:
+        metadata = by_id.get(competitor.id) or by_name.get(competitor.name.casefold())
+        if metadata is None:
+            enriched.append(competitor)
+            continue
+        homepage_url = metadata.get("homepage_url")
+        homepage_verified = bool(metadata.get("homepage_verified"))
+        merged_metadata = dict(competitor.metadata)
+        if homepage_verified:
+            merged_metadata["homepage_verified"] = True
+        elif "homepage_verified" not in merged_metadata:
+            merged_metadata["homepage_verified"] = False
+        enriched.append(
+            competitor.model_copy(
+                update={
+                    "homepage_url": homepage_url or competitor.homepage_url,
+                    "metadata": merged_metadata,
+                }
+            )
+        )
+    return enriched
 
 
 def _report_status_issues(report_version: ReportVersionRecord) -> list[BusinessQAFinding]:
@@ -703,6 +746,7 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
                 ),
                 competitor_name=_run_qa_competitor(item),
                 dimension=_run_qa_dimension(item),
+                severity="blocker" if original_severity == "blocker" else "warn",
                 recommendation=recommendation,
             )
         )
@@ -763,15 +807,43 @@ def _strict_qa_issues(findings: list[BusinessQAFinding]) -> list[BusinessQAFindi
         return []
     warn_count = len([item for item in findings if item.severity == "warn"])
     blocker_count = len([item for item in findings if item.severity == "blocker"])
+    if blocker_count:
+        return [
+            _gate_issue(
+                "business_qa_clean_required",
+                "Business QA blockers must be clean",
+                (
+                    "Report approval requires zero blocker Business QA findings; "
+                    f"current evaluation has {blocker_count} blocker(s) and "
+                    f"{warn_count} warning(s)."
+                ),
+                severity="blocker",
+                recommendation="Resolve blocker Business QA findings or keep the report in draft.",
+            )
+        ]
+    if warn_count:
+        return [
+            _gate_issue(
+                "business_qa_warnings_present",
+                "Business QA warnings present",
+                (
+                    "Report has non-blocking Business QA warning(s); "
+                    f"current evaluation has {warn_count} warning(s)."
+                ),
+                severity="warn",
+                recommendation="Carry the warning(s) into caveats or schedule follow-up repair.",
+            )
+        ]
     return [
         _gate_issue(
-            "business_qa_clean_required",
-            "Business QA must be clean",
+            "business_qa_info_present",
+            "Business QA informational findings present",
             (
-                "Report approval requires zero business QA findings; "
-                f"current evaluation has {blocker_count} blocker(s) and {warn_count} warning(s)."
+                "Report has informational Business QA finding(s); review them before final "
+                "external publication."
             ),
-            recommendation="Resolve all Business QA findings or keep the report in draft.",
+            severity="info",
+            recommendation="Review informational Business QA findings.",
         )
     ]
 

@@ -80,6 +80,14 @@ def test_build_enterprise_projection_links_evidence_claims_and_report() -> None:
     assert projection.report_version.version_number == 2
     assert projection.report_version.competitor_layer == "L1"
     assert projection.report_version.quality_metadata["run_id"] == "run-1"
+    assert projection.report_version.quality_metadata["report_competitor_homepages"] == [
+        {
+            "competitor_id": "cursor",
+            "competitor_name": "Cursor",
+            "homepage_url": None,
+            "homepage_verified": False,
+        }
+    ]
     assert evidence.metadata["raw_source_aliases"] == ["pricing-1"]
     reconciliation = projection.report_version.quality_metadata["source_reconciliation"]
     assert reconciliation["report_source_tokens"] == ["pricing-1"]

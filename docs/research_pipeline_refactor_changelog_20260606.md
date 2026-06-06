@@ -520,3 +520,41 @@ Validation:
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/packages/business_intel/release_gate.py backend/packages/enterprise/projection.py backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_enterprise_projection.py backend/tests/unit/test_business_intel.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_enterprise_projection.py backend/tests/unit/test_business_intel.py -q`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_run_service.py -q -k "release_gate"`
+
+## 2026-06-07 - Step 17: Release Gate Severity Semantics And Homepage Scope
+
+Commit: this commit
+
+Scope:
+
+- Changed Release Gate publish semantics so only blocker findings block release;
+  warning-level run QA and BusinessQA findings remain visible as repair/caveat
+  signals without forcing `completed_with_blockers`.
+- Preserved original run-level QA severity when projecting
+  `run_qa_findings_unresolved` into release-gate issues.
+- Split BusinessQA summary issues into blocker, warning, and info variants so
+  warning rules have a useful non-blocking meaning.
+- Added report-version homepage verification snapshots to enterprise projection.
+- Made Release Gate enrich scoped competitors from the report-version homepage
+  snapshot before running BusinessQA, so homepage verification is evaluated
+  against the frozen run/report scope instead of only mutable project records.
+
+Why:
+
+- Aligns the gate with the intended enterprise semantics: blockers require
+  repair or human review; warnings become caveats, downgrade signals, or
+  follow-up repair tasks.
+- Removes false `homepage_verified` blockers when the run plan already verified
+  competitor homepages but the scoped competitor records do not carry that
+  metadata in a replay/test path.
+- Allows a real run with clean source identity, verified evidence, and no hard
+  QA blockers to pass while still exposing weak/single-source claims as
+  actionable warnings.
+
+Validation:
+
+- Replayed `run-ab672db7a58e8e2a5d25a4f20650d124` through the new projection and
+  release-gate logic: `status=pass`, `gate_blockers=0`, `gate_warns=16`,
+  `excluded_claim_count=2`.
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/business_intel/release_gate.py backend/packages/enterprise/projection.py backend/tests/unit/test_business_intel.py backend/tests/unit/test_enterprise_projection.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_business_intel.py backend/tests/unit/test_enterprise_projection.py -q`
