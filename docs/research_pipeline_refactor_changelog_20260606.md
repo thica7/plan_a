@@ -763,3 +763,37 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/agents/comparator/logic.py backend/tests/unit/test_run_service.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py -q -k "comparison_matrix"`
+
+## 2026-06-07 - Step 25: Checkpoint 1 Final Real-Run Audit
+
+Commit: this commit
+
+Scope:
+
+- Ran a final fresh real quality audit with auto warning redo enabled.
+- Preserved the final generated audit card under `docs/reports/`.
+- Added a strict Checkpoint 1 acceptance report mapping the run metrics to the
+  Checkpoint 1 acceptance checklist.
+- Updated the master plan so the next active work is Checkpoint 2.
+
+Fresh run:
+
+- `run-ad9d5ddc52517a6005739ffc404df17f`
+- Quality verdict: pass.
+- Regression gate: pass.
+- Raw sources: 32.
+- Enterprise evidence: 32.
+- Enterprise claims: 26.
+- Verified source rate: 1.0.
+- Citation validity rate: 1.0.
+- QA blocker count: 0.
+
+Remaining warnings:
+
+- Persona evidence depth and field completeness.
+- Pricing billing-cycle/usage-limit completeness.
+- Feature source coverage for Cursor IDE/tool slots.
+
+These are retained as non-blocking quality follow-ups and mapped to
+Checkpoint 2 H3/H4/H6/H7 rather than treated as unfinished Checkpoint 1
+source-identity or report-status work.

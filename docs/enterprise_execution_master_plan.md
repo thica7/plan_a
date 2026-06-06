@@ -140,8 +140,13 @@ not complete the full Checkpoint 1.
 Do next:
 
 ```text
-Run one fresh real run and audit against Checkpoint 1 acceptance.
+Move to Checkpoint 2: High-Score Backlog Core.
 ```
+
+Checkpoint 1 final audit:
+
+- `docs/reports/checkpoint1_acceptance_report_20260607.md`
+- `docs/reports/checkpoint1_real_run_audit_final_20260607_045503.md`
 
 ## Work Discipline
 
