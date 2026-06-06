@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.rag.grounded_prompt import build_run_grounding_prompt
+from packages.research.evidence.text import source_business_snippet
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import FeatureNode, KnowledgeClaim, QCIssue, RawSource
 
@@ -555,8 +556,10 @@ class WriterAgentMixin:
         }
 
     def _writer_source_digest(self, sources: list[RawSource]) -> list[dict[str, object]]:
-        return [
-            {
+        digests: list[dict[str, object]] = []
+        for source in sources[:24]:
+            snippet = source_business_snippet(source, dimension=source.dimension, limit=240)
+            digest = {
                 "id": source.id,
                 "competitor": source.competitor,
                 "covered_competitors": source.covered_competitors,
@@ -564,11 +567,13 @@ class WriterAgentMixin:
                 "source_type": source.source_type,
                 "title": self._trim_sentence(source.title, 120),
                 "url": str(source.url) if source.url else None,
-                "snippet": self._trim_sentence(source.snippet, 240),
+                "snippet": self._trim_sentence(snippet, 240),
                 "confidence": round(source.confidence, 3),
             }
-            for source in sources[:24]
-        ]
+            if not snippet:
+                digest["snippet_quality"] = "omitted_no_clean_business_snippet"
+            digests.append(digest)
+        return digests
 
     def _writer_competitor_digest(self, detail: RunDetail, competitor: str) -> dict[str, object]:
         kb = detail.competitor_kbs.get(competitor)

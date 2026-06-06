@@ -11,6 +11,10 @@ from packages.agents import SubagentContext
 from packages.agents.analysts.citation_tools import inspect_sources, validate_source_ids
 from packages.memory import KBCacheEntry
 from packages.refs import merge_ordered_refs
+from packages.research.evidence.text import (
+    deterministic_claim_text_from_source,
+    source_business_snippet,
+)
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     CompetitorKB,
@@ -761,10 +765,15 @@ class AnalystAgentMixin:
             source
             for source in dimension_sources
             if str(source.get("id") or "").strip()
+            and source_business_snippet(source, dimension=dimension)
         ][:3]
         claims = [
             {
-                "claim": self._deterministic_claim_text(competitor, dimension, source),
+                "claim": deterministic_claim_text_from_source(
+                    competitor=competitor,
+                    dimension=dimension,
+                    source=source,
+                ),
                 "source_ids": [str(source.get("id"))],
                 "confidence": float(source.get("confidence") or 0.65),
             }
@@ -780,12 +789,12 @@ class AnalystAgentMixin:
             ]
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
-            claim_text = " ".join(str(claim.get("claim") or "") for claim in claims)
             claim_models = [
                 KnowledgeClaim.model_validate(claim)
                 for claim in claims
                 if claim.get("source_ids")
             ]
+            claim_text = " ".join(claim.claim for claim in claim_models)
             return {
                 "pricing_model": {
                     "tiers": [
@@ -793,17 +802,19 @@ class AnalystAgentMixin:
                         for tier in self._pricing_tiers_from_text(
                             claim_text, claim_models
                         )
-                    ],
+                    ]
+                    if claim_models
+                    else [],
                     "notes": claims,
                 }
             }
         if "persona" in dimension_key or "user" in dimension_key:
-            claim_text = " ".join(str(claim.get("claim") or "") for claim in claims)
             claim_models = [
                 KnowledgeClaim.model_validate(claim)
                 for claim in claims
                 if claim.get("source_ids")
             ]
+            claim_text = " ".join(claim.claim for claim in claim_models)
             return {
                 "user_personas": {
                     "segments": [
@@ -812,24 +823,27 @@ class AnalystAgentMixin:
                             claim_text, competitor, claim_models
                         )
                     ]
-                    if claims
+                    if claim_models
                     else [],
                     "summary_claims": claims,
                 }
             }
+        claim_models = [
+            KnowledgeClaim.model_validate(claim)
+            for claim in claims
+            if claim.get("source_ids")
+        ]
         return {
             "feature_tree": {
                 "nodes": [
                     node.model_dump(mode="json")
                     for node in self._feature_nodes_from_text(
-                        " ".join(str(claim.get("claim") or "") for claim in claims),
-                        [
-                            KnowledgeClaim.model_validate(claim)
-                            for claim in claims
-                            if claim.get("source_ids")
-                        ],
+                        " ".join(claim.claim for claim in claim_models),
+                        claim_models,
                     )
-                ],
+                ]
+                if claim_models
+                else [],
                 "summary_claims": claims,
             }
         }
@@ -840,10 +854,11 @@ class AnalystAgentMixin:
         dimension: str,
         source: dict[str, Any],
     ) -> str:
-        snippet = " ".join(str(source.get("snippet") or "").split())
-        title = " ".join(str(source.get("title") or "").split())
-        evidence_text = snippet or title or "has collected evidence"
-        return f"{competitor} {dimension}: {evidence_text[:240]}"
+        return deterministic_claim_text_from_source(
+            competitor=competitor,
+            dimension=dimension,
+            source=source,
+        )
 
     async def _real_analyst_step(self, record: RunRecord, dimension: str) -> None:
         detail = record.detail

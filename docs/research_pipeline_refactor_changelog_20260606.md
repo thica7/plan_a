@@ -616,3 +616,32 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/research/extraction/quality.py backend/packages/research/extraction/pricing.py backend/packages/research/extraction/feature.py backend/packages/research/extraction/persona.py backend/packages/research/evidence/admission.py backend/packages/agents/qa/logic.py backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py::test_final_qa_sync_replaces_stale_clean_report_claim backend/tests/unit/test_run_service.py::test_final_qa_sync_adds_rag_gap_fill_for_collector_warnings -q`
+
+## 2026-06-07 - Step 20: Source Text To Claim Boundary
+
+Commit: this commit
+
+Scope:
+
+- Added a shared `research.evidence.text` helper for source business snippets
+  and deterministic claim text.
+- Routed deterministic analyst fallback claims through the shared helper.
+- Stopped no-clean-snippet sources from generating structured pricing,
+  feature, or persona claims with source IDs.
+- Routed writer source digests through the same helper and marked omitted
+  snippets with `snippet_quality=omitted_no_clean_business_snippet`.
+
+Why:
+
+- After quote admission was tightened, downstream analyst and writer paths still
+  had direct access to raw `RawSource.snippet` text.
+- This made it possible for noisy page chrome to survive into deterministic
+  claims or writer context even when extraction/admission had a cleaner policy.
+- The new boundary keeps source text handling consistent across collection,
+  claim fallback, and report generation.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/research/evidence/text.py backend/packages/research/evidence/__init__.py backend/packages/agents/analysts/logic.py backend/packages/agents/writer/logic.py backend/tests/unit/test_run_service.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py -q -k "deterministic_structured_knowledge_payload or deterministic_payload_does_not_claim_from_noisy_snippet or writer_source_digest_omits_noisy_snippet or deterministic_feature_payload or deterministic_pricing_payload or structured_pricing_payload or structured_feature_payload"`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_research_pipeline.py -q`

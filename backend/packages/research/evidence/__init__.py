@@ -15,6 +15,10 @@ from packages.research.evidence.store import (
     dedupe_by_id,
     rejected_evidence_items,
 )
+from packages.research.evidence.text import (
+    deterministic_claim_text_from_source,
+    source_business_snippet,
+)
 
 __all__ = [
     "accepted_evidence_by_page",
@@ -22,10 +26,12 @@ __all__ = [
     "admit_evidence_items",
     "citation_refs_from_evidence_items",
     "dedupe_by_id",
+    "deterministic_claim_text_from_source",
     "evidence_items_from_extractions",
     "rejected_evidence_items",
     "raw_source_from_capture",
     "raw_sources_from_research_result",
     "snippet_from_evidence_items",
+    "source_business_snippet",
     "source_quality_problem",
 ]

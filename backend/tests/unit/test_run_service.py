@@ -5394,12 +5394,66 @@ def test_deterministic_structured_knowledge_payload_matches_schema_shape() -> No
             llm_temperature=0.2,
         ),
     )
-    sources = [
+    pricing_sources = [
         {
             "id": "pricing-a",
             "title": "A pricing",
             "snippet": "A publishes a $10 per month plan with 2,000 completions per month.",
             "confidence": 0.87,
+        }
+    ]
+    persona_sources = [
+        {
+            "id": "persona-a",
+            "title": "A customer stories",
+            "snippet": (
+                "A helps developer teams and enterprise engineering organizations "
+                "automate coding workflows and improve productivity."
+            ),
+            "confidence": 0.86,
+        }
+    ]
+
+    pricing = service._deterministic_structured_knowledge_payload(
+        competitor="A",
+        dimension="pricing",
+        dimension_sources=pricing_sources,
+    )
+    persona = service._deterministic_structured_knowledge_payload(
+        competitor="A",
+        dimension="persona",
+        dimension_sources=persona_sources,
+    )
+
+    assert pricing["pricing_model"]["tiers"][0]["claims"][0]["source_ids"] == ["pricing-a"]
+    assert pricing["pricing_model"]["tiers"][0]["price"] == "$10 per month"
+    assert pricing["pricing_model"]["tiers"][0]["billing_cycle"] == "monthly"
+    assert pricing["pricing_model"]["tiers"][0]["limits"] == ["2,000 completions per month"]
+    assert persona["user_personas"]["segments"][0]["claims"][0]["source_ids"] == ["persona-a"]
+    assert persona["user_personas"]["segments"][0]["use_cases"]
+
+
+def test_deterministic_payload_does_not_claim_from_noisy_snippet() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    sources = [
+        {
+            "id": "pricing-nav",
+            "title": "A pricing",
+            "snippet": (
+                "Skip to content Navigation Menu Sign in Cookie Privacy policy "
+                "Pricing Plans Billing Enterprise"
+            ),
+            "confidence": 0.9,
         }
     ]
 
@@ -5408,18 +5462,43 @@ def test_deterministic_structured_knowledge_payload_matches_schema_shape() -> No
         dimension="pricing",
         dimension_sources=sources,
     )
-    persona = service._deterministic_structured_knowledge_payload(
+
+    assert pricing["pricing_model"]["tiers"] == []
+    assert pricing["pricing_model"]["notes"][0]["source_ids"] == []
+    assert "no usable pricing source" in pricing["pricing_model"]["notes"][0]["claim"]
+
+
+def test_writer_source_digest_omits_noisy_snippet() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    source = RawSource(
+        id="pricing-nav",
         competitor="A",
-        dimension="persona",
-        dimension_sources=sources,
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="A pricing",
+        url="https://a.example/pricing",
+        snippet=(
+            "Skip to content Navigation Menu Sign in Cookie Privacy policy "
+            "Pricing Plans Billing Enterprise"
+        ),
+        content_hash="pricing-nav-hash",
+        confidence=0.9,
     )
 
-    assert pricing["pricing_model"]["tiers"][0]["claims"][0]["source_ids"] == ["pricing-a"]
-    assert pricing["pricing_model"]["tiers"][0]["price"] == "$10 per month"
-    assert pricing["pricing_model"]["tiers"][0]["billing_cycle"] == "monthly"
-    assert pricing["pricing_model"]["tiers"][0]["limits"] == ["2,000 completions per month"]
-    assert persona["user_personas"]["segments"][0]["claims"][0]["source_ids"] == ["pricing-a"]
-    assert persona["user_personas"]["segments"][0]["use_cases"]
+    digest = service._writer_source_digest([source])
+
+    assert digest[0]["snippet"] == ""
+    assert digest[0]["snippet_quality"] == "omitted_no_clean_business_snippet"
 
 
 def test_deterministic_feature_payload_uses_shared_taxonomy() -> None:
