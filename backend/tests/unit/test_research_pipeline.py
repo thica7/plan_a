@@ -5,7 +5,11 @@ from packages.research.assembly import (
     field_matrix_from_evidence_items,
 )
 from packages.research.capture import CaptureCache, capture_candidate, select_capture_candidates
-from packages.research.capture.policy import capture_failure_reason, invalid_candidate_reason
+from packages.research.capture.policy import (
+    capture_failure_reason,
+    capture_rejection_reason,
+    invalid_candidate_reason,
+)
 from packages.research.discovery import (
     homepage_candidates,
     rank_and_dedupe_candidates,
@@ -15,6 +19,7 @@ from packages.research.discovery import (
 from packages.research.evaluation import quality_gaps_from_extractions
 from packages.research.evaluation.release_gate import quality_gaps_from_release_gate
 from packages.research.evidence import (
+    admit_evidence_items,
     citation_refs_from_evidence_items,
     evidence_items_from_extractions,
     raw_source_from_capture,
@@ -30,6 +35,8 @@ from packages.research.extraction import (
 from packages.research.models import (
     CapturedPage,
     EvidenceItem,
+    EvidenceQuote,
+    ExtractionResult,
     QualityGap,
     ResearchBrief,
     SourceCandidate,
@@ -252,6 +259,45 @@ async def test_capture_candidate_returns_typed_page() -> None:
     assert captured.fetch_method == "basic_httpx"
 
 
+@pytest.mark.asyncio
+async def test_capture_candidate_rejects_soft_404_before_extraction() -> None:
+    candidate = SourceCandidate(
+        title="Anthropic features",
+        url="https://www.anthropic.com/features",
+        origin="homepage_derived",
+        competitor="Claude",
+        dimension="feature",
+        confidence=0.45,
+    )
+
+    async def fake_fetch(url: str) -> EvidenceFetchResult:
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="404: This page could not be found",
+            text="404 not found. This page does not exist.",
+            content_hash="hash-soft-404",
+            status_code=200,
+            fetch_method="webfetch_v2",
+            quality_score=0.8,
+        )
+
+    captured = await capture_candidate(candidate, fake_fetch)
+
+    assert captured.status == "rejected"
+    assert captured.failure_reason == "captured_soft_404"
+    assert captured.quality_score == 0.2
+    assert (
+        capture_rejection_reason(
+            ok=True,
+            title=captured.title,
+            text=captured.text,
+            markdown=captured.markdown,
+        )
+        == "captured_soft_404"
+    )
+
+
 def test_raw_source_from_capture_preserves_candidate_and_fetch_lineage() -> None:
     brief = ResearchBrief(
         run_id="run-1",
@@ -458,6 +504,67 @@ def test_field_level_evidence_admission_rejects_low_confidence_fields() -> None:
     assert items
     assert {item.status for item in items} == {"rejected"}
     assert all(item.rejection_reason for item in items)
+
+
+def test_admit_evidence_items_requires_ok_capture_and_field_quote() -> None:
+    extraction = ExtractionResult(
+        competitor="OpenAI",
+        dimension="pricing",
+        source_candidate_id="candidate-openai-pricing",
+        captured_page_id="page-openai-pricing",
+        fields={"pricing_model_type": "api_usage_based"},
+        quotes=[],
+        confidence=0.9,
+        extractor_name="pricing_model",
+    )
+    page = CapturedPage(
+        id="page-openai-pricing",
+        candidate_id="candidate-openai-pricing",
+        requested_url="https://platform.openai.com/docs/pricing",
+        final_url="https://platform.openai.com/docs/pricing",
+        status="ok",
+        title="OpenAI pricing",
+        text="OpenAI API pricing uses token billing.",
+        content_hash="hash-openai-admission",
+        fetch_method="webfetch_v2",
+        quality_score=0.9,
+    )
+    candidate = SourceCandidate(
+        id="candidate-openai-pricing",
+        title="OpenAI pricing",
+        url=page.final_url,
+        origin="trusted_registry",
+        competitor="OpenAI",
+        dimension="pricing",
+    )
+
+    rejected = admit_evidence_items(
+        [extraction],
+        captured_pages=[page],
+        candidates=[candidate],
+    )
+    accepted = admit_evidence_items(
+        [
+            extraction.model_copy(
+                update={
+                    "quotes": [
+                        EvidenceQuote(
+                            field="pricing_model_type",
+                            source_url=page.final_url,
+                            text="OpenAI API pricing uses token billing for input and output.",
+                        )
+                    ]
+                }
+            )
+        ],
+        captured_pages=[page],
+        candidates=[candidate],
+    )
+
+    assert rejected[0].status == "rejected"
+    assert "field_quote_missing_or_too_short" in (rejected[0].rejection_reason or "")
+    assert accepted[0].status == "accepted"
+    assert accepted[0].metadata["candidate_origin"] == "trusted_registry"
 
 
 @pytest.mark.asyncio

@@ -150,10 +150,37 @@ def _quotes(page: CapturedPage, fields: dict[str, object]) -> list[EvidenceQuote
     for field, value in fields.items():
         if not value:
             continue
-        snippet = _window_for_value(text, value)
+        snippet = _window_for_field(text, field, value)
         if snippet:
             quotes.append(EvidenceQuote(text=snippet, source_url=page.final_url, field=field))
     return quotes[:6]
+
+
+def _window_for_field(text: str, field: str, value: object) -> str:
+    if field == "pricing_model_type":
+        model_type = str(value)
+        if model_type == "api_usage_based":
+            return _window_for_terms(text, ("token", "input", "output", "api", "mtok"))
+        if model_type == "subscription_saas":
+            return _window_for_terms(text, ("per user", "per seat", "monthly", "annually"))
+        if model_type == "enterprise_contract":
+            return _window_for_terms(text, ("enterprise", "contact sales", "contact us"))
+        if model_type in {"open_weight_self_hosted", "license_based"}:
+            return _window_for_terms(text, ("open weight", "open-weight", "license", "self-host"))
+        if model_type == "not_disclosed":
+            return _window_for_terms(text, ("pricing", "plans", "billing", "enterprise"))
+    if field == "enterprise_condition":
+        return _window_for_terms(text, ("enterprise", "contact sales", "contact us"))
+    return _window_for_value(text, value)
+
+
+def _window_for_terms(text: str, terms: tuple[str, ...]) -> str:
+    lowered = text.casefold()
+    for term in terms:
+        idx = lowered.find(term.casefold())
+        if idx >= 0:
+            return text[max(0, idx - 120) : idx + 260].strip()
+    return text[:360].strip()
 
 
 def _window_for_value(text: str, value: object) -> str:

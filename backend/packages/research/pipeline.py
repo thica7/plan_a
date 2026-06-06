@@ -14,7 +14,7 @@ from packages.research.discovery import (
     trusted_registry_candidates,
 )
 from packages.research.evaluation import evaluate_research_quality
-from packages.research.evidence import dedupe_by_id, evidence_items_from_extractions
+from packages.research.evidence import admit_evidence_items, dedupe_by_id
 from packages.research.extraction import extract_page
 from packages.research.models import (
     CapturedPage,
@@ -90,8 +90,12 @@ async def run_research_pipeline(
         candidates = dedupe_by_id([*candidates, *repair_pass.candidates])
         captured_pages = dedupe_by_id([*captured_pages, *repair_pass.captured_pages])
         extractions = dedupe_by_id([*extractions, *repair_pass.extractions])
-        evidence_items = evidence_items_from_extractions(extractions)
-        gaps = evaluate_research_quality(brief, extractions)
+        evidence_items = admit_evidence_items(
+            extractions,
+            captured_pages=captured_pages,
+            candidates=candidates,
+        )
+        gaps = evaluate_research_quality(brief, extractions, evidence_items)
         planned_repairs = repair_tasks_from_gaps(gaps)
         repair_round_count += 1
         repair_candidate_count += len(repair_pass.candidates)
@@ -155,8 +159,12 @@ async def _run_research_pass(
         for page in captured_pages
         if page.status == "ok" and (page.text or page.markdown or page.snippet)
     ]
-    evidence_items = evidence_items_from_extractions(extractions)
-    gaps = evaluate_research_quality(brief, extractions)
+    evidence_items = admit_evidence_items(
+        extractions,
+        captured_pages=captured_pages,
+        candidates=candidates,
+    )
+    gaps = evaluate_research_quality(brief, extractions, evidence_items)
     return ResearchPass(
         candidates=candidates,
         captured_pages=captured_pages,

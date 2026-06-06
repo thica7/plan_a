@@ -1,4 +1,5 @@
 from packages.research.evidence.admission import (
+    admit_evidence_items,
     raw_source_from_capture,
     raw_sources_from_research_result,
     source_quality_problem,
@@ -18,6 +19,7 @@ from packages.research.evidence.store import (
 __all__ = [
     "accepted_evidence_by_page",
     "accepted_evidence_items",
+    "admit_evidence_items",
     "citation_refs_from_evidence_items",
     "dedupe_by_id",
     "evidence_items_from_extractions",

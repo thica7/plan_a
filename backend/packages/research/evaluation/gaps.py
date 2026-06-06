@@ -3,7 +3,7 @@ from __future__ import annotations
 from packages.research.extraction.feature import FEATURE_SLOTS
 from packages.research.extraction.persona import PERSONA_FIELDS
 from packages.research.extraction.pricing import PRICING_FIELDS
-from packages.research.models import ExtractionResult, QualityGap, ResearchBrief
+from packages.research.models import EvidenceItem, ExtractionResult, QualityGap, ResearchBrief
 
 _OPTIONAL_PRICING_FIELDS_FOR_OPEN_WEIGHT = {
     "tier_names",
@@ -45,6 +45,74 @@ def quality_gaps_from_extractions(
     else:
         gaps = _feature_gaps(brief, merged_fields, relevant)
     return _dedupe_gaps(gaps)
+
+
+def quality_gaps_from_admitted_evidence(
+    brief: ResearchBrief,
+    extractions: list[ExtractionResult],
+    evidence_items: list[EvidenceItem],
+) -> list[QualityGap]:
+    relevant_items = [
+        item
+        for item in evidence_items
+        if item.competitor == brief.competitor and item.dimension == brief.dimension
+    ]
+    accepted = [item for item in relevant_items if item.status == "accepted"]
+    rejected = [item for item in relevant_items if item.status == "rejected"]
+    if not relevant_items:
+        return []
+    if not accepted:
+        return [
+            QualityGap(
+                severity="blocker",
+                dimension=brief.dimension,
+                competitor=brief.competitor,
+                reason=(
+                    "Extraction produced fields, but no field-level evidence passed "
+                    "admission."
+                ),
+                suggested_action=_repair_strategy_for_dimension(brief.dimension),
+                acceptance_rule=(
+                    "At least one extracted field must have accepted evidence from "
+                    "an ok captured page and a field-level quote."
+                ),
+                source_ids=[item.captured_page_id for item in rejected],
+                metadata={
+                    "source": "evidence_admission",
+                    "rejected_evidence_item_ids": [item.id for item in rejected],
+                },
+            )
+        ]
+
+    expected_fields = _evidence_expected_fields(extractions, brief)
+    accepted_fields = {item.field for item in accepted}
+    missing_accepted_fields = sorted(expected_fields - accepted_fields)
+    if not missing_accepted_fields:
+        return []
+    severity = "blocker" if _dimension_requires_field_support(brief.dimension) else "warn"
+    return [
+        QualityGap(
+            severity=severity,
+            dimension=brief.dimension,
+            competitor=brief.competitor,
+            field=",".join(missing_accepted_fields),
+            reason=(
+                "Field-level evidence admission rejected or could not bind accepted "
+                f"support for: {', '.join(missing_accepted_fields)}."
+            ),
+            suggested_action=_repair_strategy_for_dimension(brief.dimension),
+            acceptance_rule=(
+                "Every extracted required field must either have accepted evidence "
+                "or be explicitly marked not applicable."
+            ),
+            source_ids=[item.captured_page_id for item in rejected],
+            metadata={
+                "source": "evidence_admission",
+                "accepted_evidence_item_ids": [item.id for item in accepted],
+                "rejected_evidence_item_ids": [item.id for item in rejected],
+            },
+        )
+    ]
 
 
 def _pricing_gaps(
@@ -200,3 +268,35 @@ def _dedupe_gaps(gaps: list[QualityGap]) -> list[QualityGap]:
         seen.add(key)
         deduped.append(gap)
     return deduped
+
+
+def _evidence_expected_fields(
+    extractions: list[ExtractionResult],
+    brief: ResearchBrief,
+) -> set[str]:
+    expected: set[str] = set(brief.required_fields)
+    for extraction in extractions:
+        if extraction.competitor != brief.competitor or extraction.dimension != brief.dimension:
+            continue
+        for field, value in extraction.fields.items():
+            if field == "confidence_reason":
+                continue
+            if _empty(value):
+                continue
+            if isinstance(value, dict) and value.get("status") in {"not_found_in_source"}:
+                continue
+            expected.add(field)
+    return expected
+
+
+def _repair_strategy_for_dimension(dimension: str) -> str:
+    key = dimension.casefold()
+    if "pricing" in key:
+        return "pricing_model_repair"
+    if "persona" in key or "user" in key or "buyer" in key:
+        return "persona_schema_repair"
+    return "feature_slot_repair"
+
+
+def _dimension_requires_field_support(dimension: str) -> bool:
+    return "pricing" in dimension.casefold()

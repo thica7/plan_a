@@ -15,6 +15,8 @@ from packages.research.evidence.store import accepted_evidence_by_page
 from packages.research.models import (
     CapturedPage,
     EvidenceItem,
+    EvidenceQuote,
+    ExtractionResult,
     ResearchBrief,
     ResearchResult,
     SourceCandidate,
@@ -34,6 +36,128 @@ USER_RESEARCH_SOURCE_TYPES = {
     "manual_note",
     "manual",
 }
+
+
+def admit_evidence_items(
+    extractions: list[ExtractionResult],
+    *,
+    captured_pages: list[CapturedPage] | None = None,
+    candidates: list[SourceCandidate] | None = None,
+    min_accept_confidence: float = 0.35,
+    min_page_quality: float = 0.25,
+) -> list[EvidenceItem]:
+    page_by_id = {page.id: page for page in captured_pages or []}
+    candidate_by_id = {candidate.id: candidate for candidate in candidates or []}
+    items: list[EvidenceItem] = []
+    for extraction in extractions:
+        page = page_by_id.get(extraction.captured_page_id)
+        candidate = candidate_by_id.get(extraction.source_candidate_id)
+        quote_by_field = _quote_by_field(extraction.quotes)
+        for field, value in extraction.fields.items():
+            if _empty_evidence_value(value):
+                continue
+            quote = quote_by_field.get(field)
+            rejection_reasons = _admission_rejection_reasons(
+                extraction,
+                field=field,
+                value=value,
+                quote=quote,
+                page=page,
+                min_accept_confidence=min_accept_confidence,
+                min_page_quality=min_page_quality,
+            )
+            status = "rejected" if rejection_reasons else "accepted"
+            items.append(
+                EvidenceItem(
+                    competitor=extraction.competitor,
+                    dimension=extraction.dimension,
+                    field=field,
+                    value=value,
+                    source_candidate_id=extraction.source_candidate_id,
+                    captured_page_id=extraction.captured_page_id,
+                    source_url=(quote.source_url if quote is not None else None)
+                    or (page.final_url if page is not None else None),
+                    quote=quote.text if quote is not None else "",
+                    confidence=extraction.confidence,
+                    status=status,
+                    rejection_reason="; ".join(rejection_reasons) if rejection_reasons else None,
+                    metadata={
+                        "extraction_id": extraction.id,
+                        "extractor_name": extraction.extractor_name,
+                        "capture_status": page.status if page is not None else None,
+                        "capture_failure_reason": page.failure_reason if page is not None else None,
+                        "page_quality_score": page.quality_score if page is not None else None,
+                        "candidate_origin": candidate.origin if candidate is not None else None,
+                        "candidate_confidence": (
+                            candidate.confidence if candidate is not None else None
+                        ),
+                    },
+                )
+            )
+    return items
+
+
+def _admission_rejection_reasons(
+    extraction: ExtractionResult,
+    *,
+    field: str,
+    value: object,
+    quote: EvidenceQuote | None,
+    page: CapturedPage | None,
+    min_accept_confidence: float,
+    min_page_quality: float,
+) -> list[str]:
+    reasons: list[str] = []
+    if extraction.confidence < min_accept_confidence:
+        reasons.append(
+            f"extraction_confidence_below_{min_accept_confidence:.2f}"
+        )
+    if page is None:
+        reasons.append("captured_page_missing")
+    elif page.status != "ok":
+        reasons.append(f"capture_status_{page.status}")
+    elif page.quality_score < min_page_quality:
+        reasons.append(f"page_quality_below_{min_page_quality:.2f}")
+    if _requires_field_quote(extraction, field, value) and (
+        quote is None or len(quote.text.strip()) < 24
+    ):
+        reasons.append("field_quote_missing_or_too_short")
+    return reasons
+
+
+def _quote_by_field(quotes: list[EvidenceQuote]) -> dict[str, EvidenceQuote]:
+    return {
+        quote.field: quote
+        for quote in quotes
+        if quote.field and quote.text and quote.field not in {"confidence_reason"}
+    }
+
+
+def _requires_field_quote(extraction: ExtractionResult, field: str, value: object) -> bool:
+    if field == "confidence_reason":
+        return False
+    if extraction.status == "not_applicable" and field in {
+        "pricing_model_type",
+        "not_applicable_reason",
+    }:
+        return False
+    if isinstance(value, dict) and value.get("status") in {"not_applicable", "unsupported"}:
+        return False
+    return True
+
+
+def _empty_evidence_value(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    if isinstance(value, list | tuple | set):
+        return len(value) == 0
+    if isinstance(value, dict):
+        if not value:
+            return True
+        return value.get("status") == "not_found_in_source"
+    return False
 
 
 def raw_source_from_capture(

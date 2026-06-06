@@ -359,3 +359,35 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/agents/collectors backend/packages/research backend/tests/unit/test_research_pipeline.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py -q`
+
+## 2026-06-07 - Step 12: Capture And Evidence Admission Hardening
+
+Commit: this commit
+
+Scope:
+
+- Added generic capture-level rejection reasons for soft 404, unreadable text,
+  short empty captures, and navigation-only pages.
+- Made `CapturedPage.status` use `rejected` for fetches that technically
+  returned but are not usable research material.
+- Added `admit_evidence_items()` as the explicit field-level evidence admission
+  boundary, using capture status, page quality, field quotes, and extraction
+  confidence before accepting an `EvidenceItem`.
+- Changed `run_research_pipeline()` so evaluation and repair are driven by
+  admitted evidence, not only by extractor output.
+- Improved pricing extractor quotes for derived `pricing_model_type` fields so
+  semantic labels like `api_usage_based` bind back to real page text.
+- Added tests for soft-404 capture rejection and field quote admission.
+
+Why:
+
+- Keeps Clean Research Pipeline focused on data quality before writer/release
+  layers consume the result.
+- Prevents pages that fetch successfully but contain no usable source material
+  from becoming accepted evidence.
+- Makes QA/GAP-driven repair respond to typed evidence admission failures
+  instead of loose natural-language warnings.
+
+Validation:
+
+- `pytest backend/tests/unit/test_research_pipeline.py -q`
