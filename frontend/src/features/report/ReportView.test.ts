@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RawSource } from "../../api/types";
 import {
+  buildCitationLabels,
   collectSourceTokenGroups,
   extractSourceTokens,
   linkSourceTokens,
@@ -31,15 +32,18 @@ describe("ReportView source token parsing", () => {
       "Alias [source:evidence-001].",
       "Missing [source:ghost].",
     ].join("\n");
+    const labels = buildCitationLabels(
+      collectSourceTokenGroups(markdown, sourceMap, { "evidence-001": "raw-pricing-001" }),
+    );
 
-    expect(linkSourceTokens(markdown, sourceMap, { "evidence-001": "raw-pricing-001" })).toContain(
-      "[[source:raw-pricing-001]](#source-raw-pricing-001)",
+    expect(linkSourceTokens(markdown, sourceMap, { "evidence-001": "raw-pricing-001" }, labels)).toContain(
+      "[S1](#source-raw-pricing-001)",
     );
-    expect(linkSourceTokens(markdown, sourceMap, { "evidence-001": "raw-pricing-001" })).toContain(
-      "[[source:evidence-001]](#source-raw-pricing-001)",
+    expect(linkSourceTokens(markdown, sourceMap, { "evidence-001": "raw-pricing-001" }, labels)).toContain(
+      "[S1](#source-raw-pricing-001)",
     );
-    expect(linkSourceTokens(markdown, sourceMap, { "evidence-001": "raw-pricing-001" })).toContain(
-      "[[source:ghost]](#missing-source-ghost)",
+    expect(linkSourceTokens(markdown, sourceMap, { "evidence-001": "raw-pricing-001" }, labels)).toContain(
+      "[missing 1](#missing-source-ghost)",
     );
   });
 
@@ -58,6 +62,8 @@ describe("ReportView source token parsing", () => {
     expect(resolved?.source?.title).toBe("Cursor pricing");
     expect(missing?.count).toBe(1);
     expect(missing?.source).toBeUndefined();
+    expect(buildCitationLabels(groups).get("raw-pricing-001")).toBe("S1");
+    expect(buildCitationLabels(groups).get("ghost")).toBe("missing 1");
   });
 
   it("extracts and resolves normalized source ids", () => {

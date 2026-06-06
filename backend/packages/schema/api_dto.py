@@ -224,6 +224,9 @@ class RunQualityMetric(BaseModel):
     target_value: float
     baseline_value: float | None = None
     delta: float | None = None
+    target_normalized_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    baseline_normalized_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    normalized_score_delta: float | None = None
     weight: float = Field(default=0.0, ge=0.0, le=1.0)
     direction: Literal["higher_is_better", "lower_is_better"] = "higher_is_better"
     status: Literal["improved", "regressed", "unchanged", "baseline_missing"]

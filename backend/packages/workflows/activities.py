@@ -8,7 +8,7 @@ from typing import Literal, cast
 from temporalio import activity
 
 from packages.business_intel import evaluate_report_release_gate
-from packages.enterprise import EnterpriseStore
+from packages.enterprise import EnterpriseStore, report_release_gate_scope
 from packages.identity import (
     compute_monitor_anomaly_id,
     compute_notification_id,
@@ -620,12 +620,17 @@ class ReportApprovalActivities:
         project = self._store.get_project(version.project_id)
         if project is None:
             raise RuntimeError(f"Project not found for report version: {version.project_id}")
+        competitors, evidence, claims = report_release_gate_scope(
+            version,
+            project=project,
+            store=self._store,
+        )
         return evaluate_report_release_gate(
             project=project,
             report_version=version,
-            competitors=self._store.list_competitors(project_id=project.id),
-            evidence=self._store.list_evidence(project_id=project.id),
-            claims=self._store.list_claims(project_id=project.id),
+            competitors=competitors,
+            evidence=evidence,
+            claims=claims,
             source_registry=self._store.list_source_registry(workspace_id=project.workspace_id),
         )
 

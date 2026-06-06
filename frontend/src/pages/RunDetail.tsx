@@ -615,7 +615,8 @@ function RunQualityPanel({
         }));
   const failedSignalChecks = signalChecks.filter((check) => !check.passed);
   const highlightedMetrics = comparison.metrics
-    .filter((metric) => metric.status === "regressed" || metric.status === "baseline_missing")
+    .filter((metric) => metric.status === "regressed" || metric.target_normalized_score < 0.999)
+    .sort((left, right) => metricWeightedLoss(right) - metricWeightedLoss(left))
     .slice(0, 5);
 
   return (
@@ -693,12 +694,17 @@ function RunQualityPanel({
       ) : null}
       {highlightedMetrics.length > 0 ? (
         <div className="reflection-review">
-          <h3>Watch metrics</h3>
+          <h3>Score drivers</h3>
           {highlightedMetrics.map((metric) => (
             <article className="issue-row reflection-row" key={metric.name}>
-              <strong>{metric.status.replace(/_/g, " ")}</strong>
+              <strong>
+                {Math.round(metric.target_normalized_score * 100)}/100
+              </strong>
               <span>
-                {metric.name}: {formatQualityValue(metric.target_value)}
+                {metric.name}: raw {formatQualityValue(metric.target_value)}
+                {metricWeightedLoss(metric) > 0
+                  ? ` / weighted loss ${metricWeightedLoss(metric).toFixed(1)} pts`
+                  : ""}
                 {metric.baseline_value !== null && metric.baseline_value !== undefined
                   ? ` / baseline ${formatQualityValue(metric.baseline_value)}`
                   : ""}
@@ -735,6 +741,10 @@ function MetricValue({ label, value }: { label: string; value: string }) {
 function formatQualityValue(value: number) {
   if (Number.isInteger(value)) return String(value);
   return Math.abs(value) < 1 ? value.toFixed(2) : value.toFixed(1);
+}
+
+function metricWeightedLoss(metric: RunQualityComparison["metrics"][number]) {
+  return Math.max(0, 1 - metric.target_normalized_score) * metric.weight * 100;
 }
 
 function flattenReflection(reflection: ReflectionRecord) {

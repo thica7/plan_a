@@ -1,9 +1,10 @@
 import pytest
 
-from packages.research.capture import CaptureCache, capture_candidate
+from packages.research.capture import CaptureCache, capture_candidate, select_capture_candidates
 from packages.research.discovery import (
     homepage_candidates,
     rank_and_dedupe_candidates,
+    search_result_candidates,
     trusted_registry_candidates,
 )
 from packages.research.evaluation import quality_gaps_from_extractions
@@ -84,6 +85,75 @@ def test_research_candidate_ranking_prefers_trusted_origin() -> None:
     )
 
     assert ranked[0].url == "https://docs.anthropic.com/en/docs/claude-code/overview"
+
+
+def test_search_candidate_confidence_requires_competitor_relevance() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agent",
+        competitor="Claude Code",
+        dimension="feature",
+    )
+
+    candidates = search_result_candidates(
+        brief,
+        [
+            SearchResult(
+                title="Random automation article",
+                url="https://cloud34221.autos/random-post",
+                snippet="Unrelated content about automation.",
+            )
+        ],
+        origin="perplexity",
+        query="Claude Code official product capabilities",
+    )
+
+    assert candidates[0].confidence < 0.5
+
+
+def test_capture_selection_defers_low_confidence_homepage_candidates() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agent",
+        competitor="Claude Code",
+        dimension="feature",
+        target_source_count=2,
+        max_fetches=4,
+    )
+    preferred = [
+        SourceCandidate(
+            title="Claude Code docs",
+            url="https://docs.anthropic.com/en/docs/claude-code/overview",
+            origin="trusted_registry",
+            competitor="Claude Code",
+            dimension="feature",
+            confidence=0.98,
+        ),
+        SourceCandidate(
+            title="Claude Code SDK docs",
+            url="https://docs.anthropic.com/en/docs/claude-code/sdk",
+            origin="perplexity",
+            competitor="Claude Code",
+            dimension="feature",
+            confidence=0.82,
+        ),
+    ]
+    guessed = SourceCandidate(
+        title="Claude Code guessed features page",
+        url="https://www.anthropic.com/features",
+        origin="homepage_derived",
+        competitor="Claude Code",
+        dimension="feature",
+        confidence=0.45,
+    )
+
+    selection = select_capture_candidates(brief, [*preferred, guessed])
+
+    assert [candidate.url for candidate in selection.selected] == [
+        "https://docs.anthropic.com/en/docs/claude-code/overview",
+        "https://docs.anthropic.com/en/docs/claude-code/sdk",
+    ]
+    assert selection.skipped_reasons[guessed.id] == "deferred_low_confidence_homepage_derived"
 
 
 @pytest.mark.asyncio

@@ -31,6 +31,7 @@ from packages.enterprise import (
     EnterpriseStore,
     WorkspaceQuotaExceededError,
     build_enterprise_projection,
+    report_release_gate_scope,
 )
 from packages.governance import build_model_policy_report, model_policy_block_message
 from packages.identity import (
@@ -68,7 +69,6 @@ from packages.research.repair import repair_task_to_redo_scope, repair_tasks_fro
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail, RunSummary
 from packages.schema.enterprise import (
     ClaimValidationReport,
-    CompetitorRecord,
     EnterpriseRunProjection,
     NotificationRecord,
     ReportReleaseGate,
@@ -2091,36 +2091,21 @@ class RunService(
         project = self._enterprise_store.get_project(projection.project_id)
         if project is None:
             return None
-        competitors = self._report_scope_competitors(project.id, projection)
+        competitors, evidence, claims = report_release_gate_scope(
+            projection.report_version,
+            project=project,
+            store=self._enterprise_store,
+        )
         return evaluate_report_release_gate(
             project=project,
             report_version=projection.report_version,
             competitors=competitors,
-            evidence=projection.evidence_records,
-            claims=projection.claim_records,
+            evidence=evidence,
+            claims=claims,
             source_registry=self._enterprise_store.list_source_registry(
                 workspace_id=project.workspace_id
             ),
         )
-
-    def _report_scope_competitors(
-        self,
-        project_id: str,
-        projection: EnterpriseRunProjection,
-    ) -> list[CompetitorRecord]:
-        if self._enterprise_store is None:
-            return []
-        scoped_ids = _report_competitor_ids(projection)
-        competitors = self._enterprise_store.list_competitors(project_id=project_id)
-        if not scoped_ids:
-            return competitors
-        competitors_by_id = {item.id: item for item in competitors}
-        if any(item not in competitors_by_id for item in scoped_ids):
-            workspace_competitors = self._enterprise_store.list_competitors(
-                workspace_id=projection.workspace_id
-            )
-            competitors_by_id.update({item.id: item for item in workspace_competitors})
-        return [competitors_by_id[item] for item in scoped_ids if item in competitors_by_id]
 
     def _release_gate_payload(self, projection: EnterpriseRunProjection) -> dict[str, Any]:
         gate = self._evaluate_report_release_gate(projection)
@@ -3710,31 +3695,6 @@ def _hitl_review_messages(detail: RunDetail) -> list[AgentMessage]:
         for message in detail.agent_messages
         if message.message_type == "hitl_memory_feedback_captured"
     ]
-
-
-def _report_competitor_ids(projection: EnterpriseRunProjection) -> list[str]:
-    metadata_ids = projection.report_version.quality_metadata.get("report_competitor_ids")
-    if isinstance(metadata_ids, list):
-        ids = [str(item) for item in metadata_ids if str(item).strip()]
-        if ids:
-            return _dedupe_ordered(ids)
-    return _dedupe_ordered(
-        [
-            *[item.competitor_id for item in projection.evidence_records],
-            *[item.competitor_id for item in projection.claim_records],
-        ]
-    )
-
-
-def _dedupe_ordered(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        result.append(value)
-    return result
 
 
 def _memory_context_label(item: str) -> str:

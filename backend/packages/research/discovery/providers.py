@@ -33,7 +33,7 @@ def search_result_candidates(
             competitor=brief.competitor,
             dimension=brief.dimension,
             rank=index,
-            confidence=_search_confidence(candidate_origin, result),
+            confidence=_search_confidence(candidate_origin, result, competitor=brief.competitor),
             query=query,
             date=result.date,
             last_updated=result.last_updated,
@@ -93,7 +93,12 @@ def _candidate_origin(origin: str) -> CandidateOrigin:
     return "web_search"
 
 
-def _search_confidence(origin: CandidateOrigin, result: SearchResult) -> float:
+def _search_confidence(
+    origin: CandidateOrigin,
+    result: SearchResult,
+    *,
+    competitor: str,
+) -> float:
     url = result.url.casefold()
     if origin == "perplexity":
         base = 0.72
@@ -104,5 +109,19 @@ def _search_confidence(origin: CandidateOrigin, result: SearchResult) -> float:
     if any(token in url for token in ("docs.", "developer", "cloud.google", "help.")):
         return min(0.9, base + 0.16)
     if any(token in url for token in ("medium.com", "youtube.com", "reddit.com", "wikipedia")):
-        return max(0.35, base - 0.18)
+        base = max(0.35, base - 0.18)
+    if not _mentions_competitor(result, competitor):
+        base = max(0.35, base - 0.24)
     return base
+
+
+def _mentions_competitor(result: SearchResult, competitor: str) -> bool:
+    tokens = [
+        token
+        for token in competitor.casefold().replace("(", " ").replace(")", " ").split()
+        if len(token) >= 4
+    ]
+    if not tokens:
+        return True
+    haystack = f"{result.title} {result.url} {result.snippet}".casefold()
+    return any(token in haystack for token in tokens)

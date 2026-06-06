@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from packages.research.assembly import assemble_research_summary
-from packages.research.capture import CaptureCache, capture_candidate
+from packages.research.capture import CaptureCache, capture_candidate, select_capture_candidates
 from packages.research.discovery import (
     build_search_queries,
     homepage_candidates,
@@ -120,8 +120,15 @@ async def _capture_candidates(
 ) -> tuple[list[CapturedPage], dict[str, Any]]:
     pages: list[CapturedPage] = []
     cache = CaptureCache()
-    stats = {"capture_cache_hits": 0, "capture_fetch_count": 0}
-    for candidate in candidates[: brief.max_fetches]:
+    selection = select_capture_candidates(brief, candidates)
+    stats = {
+        "capture_cache_hits": 0,
+        "capture_fetch_count": 0,
+        "capture_selected_candidate_count": len(selection.selected),
+        "capture_skipped_candidate_count": len(selection.skipped_reasons),
+        "capture_skipped_reasons": selection.skipped_reasons,
+    }
+    for candidate in selection.selected:
         cached = (capture_cache or cache).get(candidate)
         if cached is not None:
             stats["capture_cache_hits"] += 1

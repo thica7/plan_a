@@ -742,6 +742,9 @@ export interface RunQualityMetric {
   target_value: number;
   baseline_value?: number | null;
   delta?: number | null;
+  target_normalized_score: number;
+  baseline_normalized_score?: number | null;
+  normalized_score_delta?: number | null;
   weight: number;
   direction: "higher_is_better" | "lower_is_better";
   status: "improved" | "regressed" | "unchanged" | "baseline_missing";

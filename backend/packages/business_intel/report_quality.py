@@ -52,6 +52,7 @@ USER_RESEARCH_DIMENSION_HINTS = {
 class _QualitySnapshot:
     score: int
     values: dict[str, float]
+    normalized_values: dict[str, float]
     real_collection_signal: bool
     real_llm_signal: bool
     report_quality_signal: bool
@@ -71,6 +72,10 @@ def compare_run_quality(
             name=name,
             target_value=target_snapshot.values[name],
             baseline_value=baseline_snapshot.values[name] if baseline_snapshot else None,
+            target_normalized_score=target_snapshot.normalized_values[name],
+            baseline_normalized_score=(
+                baseline_snapshot.normalized_values[name] if baseline_snapshot else None
+            ),
             weight=weight,
             direction=direction,
         )
@@ -112,6 +117,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         return _QualitySnapshot(
             score=0,
             values={name: 0.0 for name, _, _ in _metric_specs()},
+            normalized_values={name: 0.0 for name, _, _ in _metric_specs()},
             real_collection_signal=False,
             real_llm_signal=False,
             report_quality_signal=False,
@@ -192,6 +198,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
     return _QualitySnapshot(
         score=max(0, min(100, score)),
         values=values,
+        normalized_values=normalized,
         real_collection_signal=real_collection_signal,
         real_llm_signal=real_llm_signal,
         report_quality_signal=report_quality_signal,
@@ -223,10 +230,17 @@ def _metric(
     name: str,
     target_value: float,
     baseline_value: float | None,
+    target_normalized_score: float,
+    baseline_normalized_score: float | None,
     weight: float,
     direction: Literal["higher_is_better", "lower_is_better"],
 ) -> RunQualityMetric:
     delta = target_value - baseline_value if baseline_value is not None else None
+    normalized_delta = (
+        target_normalized_score - baseline_normalized_score
+        if baseline_normalized_score is not None
+        else None
+    )
     status: Literal["improved", "regressed", "unchanged", "baseline_missing"]
     if delta is None:
         status = "baseline_missing"
@@ -243,6 +257,13 @@ def _metric(
         target_value=round(target_value, 4),
         baseline_value=round(baseline_value, 4) if baseline_value is not None else None,
         delta=round(delta, 4) if delta is not None else None,
+        target_normalized_score=round(target_normalized_score, 4),
+        baseline_normalized_score=(
+            round(baseline_normalized_score, 4)
+            if baseline_normalized_score is not None
+            else None
+        ),
+        normalized_score_delta=round(normalized_delta, 4) if normalized_delta is not None else None,
         weight=weight,
         direction=direction,
         status=status,

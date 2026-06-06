@@ -877,6 +877,52 @@ Already valid. [source:source-0]
     assert "Already valid. [source:source-0]" in report
 
 
+def test_compare_run_quality_exposes_normalized_metric_score_for_deductions() -> None:
+    detail = _run_detail(
+        run_id="quality-blocker-run",
+        execution_mode="real",
+        source_count=4,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+    detail.qa_findings.append(
+        QCIssue(
+            id="release-gate-blocker",
+            severity="blocker",
+            detected_by="coverage",
+            target_agent="collector",
+            field_path="release_gate",
+            problem="Release gate blocker.",
+            redo_scope=RedoScope(kind="collector", rationale="Collect stronger evidence."),
+        )
+    )
+
+    comparison = compare_run_quality(detail)
+    qa_metric = next(metric for metric in comparison.metrics if metric.name == "qa_blocker_count")
+
+    assert comparison.target_score < 100
+    assert qa_metric.target_value == 1.0
+    assert qa_metric.target_normalized_score == 0.6667
+    assert qa_metric.direction == "lower_is_better"
+
+
 def _structured_report_md() -> str:
     return """
 # Cursor vs Copilot Direct Battlecard

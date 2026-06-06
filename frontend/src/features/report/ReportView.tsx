@@ -24,9 +24,10 @@ export function ReportView({ markdown, sources, sourceAliases = EMPTY_SOURCE_ALI
     () => new Set(citedSourceGroups.map((group) => group.sourceId)),
     [citedSourceGroups],
   );
+  const citationLabels = useMemo(() => buildCitationLabels(sourceGroups), [sourceGroups]);
   const linkedMarkdown = useMemo(
-    () => linkSourceTokens(markdown, sourceMap, sourceAliases),
-    [markdown, sourceAliases, sourceMap],
+    () => linkSourceTokens(markdown, sourceMap, sourceAliases, citationLabels),
+    [citationLabels, markdown, sourceAliases, sourceMap],
   );
   const totalCitationCount = sourceGroups.reduce((total, group) => total + group.count, 0);
 
@@ -57,6 +58,7 @@ export function ReportView({ markdown, sources, sourceAliases = EMPTY_SOURCE_ALI
               const missingSourceLink = href?.startsWith("#missing-source-");
               const sourceId = sourceLink ? href?.slice("#source-".length) : undefined;
               const source = sourceId ? sourceMap.get(sourceId) : undefined;
+              const citationLabel = sourceId ? citationLabels.get(sourceId) : undefined;
               return (
                 <a
                   className={
@@ -73,7 +75,7 @@ export function ReportView({ markdown, sources, sourceAliases = EMPTY_SOURCE_ALI
                     missingSourceLink
                       ? "Missing source token"
                       : source
-                        ? `${source.title} / ${sourceTypeLabel(source.source_type)} / ${Math.round(
+                        ? `${citationLabel ?? source.id}: ${source.title} / ${sourceTypeLabel(source.source_type)} / ${Math.round(
                             source.confidence * 100,
                           )}%`
                         : undefined
@@ -112,6 +114,7 @@ export function ReportView({ markdown, sources, sourceAliases = EMPTY_SOURCE_ALI
             {citedSourceGroups.map((group) => {
               const source = group.source;
               if (!source) return null;
+              const label = citationLabels.get(group.sourceId) ?? "S?";
               return (
                 <a
                   className={`source-trace-chip${activeSourceId === group.sourceId ? " active" : ""}`}
@@ -120,8 +123,10 @@ export function ReportView({ markdown, sources, sourceAliases = EMPTY_SOURCE_ALI
                   onClick={(event) => handleSourceJump(event, `#source-${group.sourceId}`)}
                   title={source.url || source.title}
                 >
-                  <strong>{source.title}</strong>
-                  <span>{group.tokens.map((token) => `[source:${token}]`).join(", ")}</span>
+                  <strong>
+                    {label} · {source.title}
+                  </strong>
+                  <span>{source.url || group.tokens.map((token) => `[source:${token}]`).join(", ")}</span>
                   <em>
                     {source.dimension} / {sourceTypeLabel(source.source_type)} / {group.count} cite
                   </em>
@@ -168,13 +173,15 @@ export function ReportView({ markdown, sources, sourceAliases = EMPTY_SOURCE_ALI
               key={source.id}
             >
               <div>
-                <strong>{source.title}</strong>
+                <strong>
+                  {citationLabels.get(source.id) ?? "uncited"} · {source.title}
+                </strong>
                 <span>
                   {source.covered_competitors.length > 0 ? source.covered_competitors.join(", ") : source.competitor} /{" "}
                   {source.dimension} / {source.source_type}
                 </span>
               </div>
-              <code>{source.id}</code>
+              <code>raw source: {source.id}</code>
               {source.url ? (
                 <a href={source.url} rel="noreferrer" target="_blank">
                   {source.url}
@@ -205,7 +212,7 @@ export function ReportView({ markdown, sources, sourceAliases = EMPTY_SOURCE_ALI
   );
 }
 
-interface SourceTokenGroup {
+export interface SourceTokenGroup {
   sourceId: string;
   tokens: string[];
   count: number;
@@ -243,13 +250,15 @@ export function linkSourceTokens(
   markdown: string,
   sourceMap: Map<string, RawSource>,
   sourceAliases: Record<string, string>,
+  citationLabels: Map<string, string> = new Map(),
 ) {
   return markdown.replace(SOURCE_TOKEN_RE, (token, sourceId: string) => {
     const normalizedSourceId = resolveSourceId(sourceId, sourceMap, sourceAliases);
     const target = sourceMap.has(normalizedSourceId)
       ? `#source-${normalizedSourceId}`
       : `#missing-source-${normalizedSourceId}`;
-    return `[${token}](${target})`;
+    const label = citationLabels.get(normalizedSourceId) ?? token;
+    return `[${label}](${target})`;
   });
 }
 
@@ -285,4 +294,20 @@ export function sourceTypeLabel(sourceType: string) {
   }
   if (sourceType === "web_search_result") return "search";
   return "llm";
+}
+
+export function buildCitationLabels(sourceGroups: SourceTokenGroup[]) {
+  const labels = new Map<string, string>();
+  let citedIndex = 1;
+  let missingIndex = 1;
+  for (const group of sourceGroups) {
+    if (group.source) {
+      labels.set(group.sourceId, `S${citedIndex}`);
+      citedIndex += 1;
+    } else {
+      labels.set(group.sourceId, `missing ${missingIndex}`);
+      missingIndex += 1;
+    }
+  }
+  return labels;
 }

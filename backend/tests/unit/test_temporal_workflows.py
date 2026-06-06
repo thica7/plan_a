@@ -7,7 +7,7 @@ from packages.enterprise import EnterpriseMemoryStore, build_enterprise_projecti
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
-from packages.schema.enterprise import ReportVersionRecord
+from packages.schema.enterprise import CompetitorRecord, ProjectCompetitorLink, ReportVersionRecord
 from packages.schema.models import (
     AnalysisPlan,
     CompetitorKnowledge,
@@ -502,6 +502,37 @@ async def test_report_approval_activities_update_report_version_status() -> None
     assert approved.approver_id == "approver-1"
     assert stored is not None
     assert stored.status == "approved"
+
+
+@pytest.mark.asyncio
+async def test_report_approval_activities_use_report_scope_not_stale_project_competitors() -> None:
+    store = EnterpriseMemoryStore()
+    report_version_id = _seed_valid_report_version(store, "report-version-scoped")
+    version = store.get_report_version(report_version_id)
+    assert version is not None
+    stale_competitor = CompetitorRecord(
+        id="competitor-stale",
+        workspace_id=version.workspace_id,
+        name="Gemini",
+        normalized_name="gemini",
+        layer="L1",
+    )
+    store.competitors[stale_competitor.id] = stale_competitor
+    store.project_competitors[(version.project_id, stale_competitor.id)] = ProjectCompetitorLink(
+        project_id=version.project_id,
+        competitor_id=stale_competitor.id,
+    )
+    activities = ReportApprovalActivities(store)
+
+    approved = await activities.approve_report_version(
+        ReportApprovalDecisionInput(
+            report_version_id=report_version_id,
+            approver_id="approver-1",
+        )
+    )
+
+    assert "Gemini" in {item.name for item in store.list_competitors(project_id=version.project_id)}
+    assert approved.status == "approved"
 
 
 @pytest.mark.asyncio
