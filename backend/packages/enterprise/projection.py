@@ -21,7 +21,7 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     ReportVersionRecord,
 )
-from packages.schema.models import CompetitorKnowledge, KnowledgeClaim, RawSource
+from packages.schema.models import CompetitorKnowledge, KnowledgeClaim, QCIssue, RawSource
 from packages.sources import normalize_report_source_tokens, raw_source_alias_metadata
 
 _SURVEY_SOURCE_TYPES = {"survey_simulated", "survey_response"}
@@ -30,6 +30,7 @@ _MANUAL_RESEARCH_SOURCE_TYPES = {"manual_transcript", "manual_note", "manual"}
 _USER_RESEARCH_SOURCE_TYPES = (
     _SURVEY_SOURCE_TYPES | _INTERVIEW_SOURCE_TYPES | _MANUAL_RESEARCH_SOURCE_TYPES
 )
+_MIN_RELEASE_CLAIM_SOURCE_CONFIDENCE = 0.75
 
 
 def build_enterprise_projection(
@@ -140,7 +141,10 @@ def _build_claim_records(
         competitor_id = _competitor_id_for(competitor, competitor_id_map)
         for dimension in detail.plan.dimensions:
             for claim in _claims_for_dimension(knowledge, dimension):
-                evidence_ids = _evidence_ids_for_claim(claim, competitor_id, evidence_by_source)
+                candidate_evidence = _evidence_for_claim(claim, competitor_id, evidence_by_source)
+                evidence_ids = _release_claim_evidence_ids(candidate_evidence) or [
+                    evidence.id for evidence in candidate_evidence
+                ]
                 if not evidence_ids:
                     continue
                 claim_id = compute_claim_id(
@@ -162,7 +166,9 @@ def _build_claim_records(
                         claim_text=claim.claim,
                         evidence_ids=evidence_ids,
                         confidence=claim.confidence,
-                        status="proposed",
+                        status="proposed"
+                        if _release_claim_evidence_ids(candidate_evidence)
+                        else "deprecated",
                         created_by_agent="analyst",
                     )
                 )
@@ -188,6 +194,7 @@ def _build_report_version(
         evidence_records,
         scoped_evidence_ids=evidence_ids,
     )
+    release_claim_records = _release_claim_records(claim_records)
     return ReportVersionRecord(
         id=compute_report_version_id(
             run_id=detail.id,
@@ -203,13 +210,18 @@ def _build_report_version(
         competitor_layer=competitor_layer,
         competitor_set_hash=competitor_set_hash,
         report_md=normalized_report.report_md,
-        claim_ids=[claim.id for claim in claim_records],
+        claim_ids=[claim.id for claim in release_claim_records],
         evidence_ids=normalized_report.evidence_ids,
         quality_metadata={
             **_build_quality_metadata(
                 detail,
                 evidence_records,
                 source_reconciliation=normalized_report.reconciliation(evidence_records),
+            ),
+            "release_claim_admission": _release_claim_admission_metadata(
+                claim_records,
+                release_claim_records,
+                evidence_records,
             ),
             "report_competitors": list(detail.plan.competitors),
             "report_competitor_ids": competitor_ids,
@@ -228,12 +240,12 @@ def _index_evidence_by_source(
     return index
 
 
-def _evidence_ids_for_claim(
+def _evidence_for_claim(
     claim: KnowledgeClaim,
     competitor_id: str,
     evidence_by_source: dict[tuple[str, str], list[EvidenceRecord]],
-) -> list[str]:
-    evidence_ids: list[str] = []
+) -> list[EvidenceRecord]:
+    evidence_records: list[EvidenceRecord] = []
     seen: set[str] = set()
     for source_id in claim.source_ids:
         candidates = evidence_by_source.get((source_id, competitor_id)) or evidence_by_source.get(
@@ -243,8 +255,57 @@ def _evidence_ids_for_claim(
         for evidence in candidates:
             if evidence.id not in seen:
                 seen.add(evidence.id)
-                evidence_ids.append(evidence.id)
-    return evidence_ids
+                evidence_records.append(evidence)
+    return evidence_records
+
+
+def _release_claim_evidence_ids(evidence: list[EvidenceRecord]) -> list[str]:
+    return [item.id for item in evidence if _is_release_claim_evidence(item)]
+
+
+def _is_release_claim_evidence(evidence: EvidenceRecord) -> bool:
+    return (
+        evidence.source_type == "webpage_verified"
+        and evidence.reliability_score >= _MIN_RELEASE_CLAIM_SOURCE_CONFIDENCE
+        and evidence.quality_label not in {"rejected", "stale"}
+    )
+
+
+def _release_claim_records(claim_records: list[ClaimRecord]) -> list[ClaimRecord]:
+    return [claim for claim in claim_records if claim.status not in {"deprecated", "rejected"}]
+
+
+def _release_claim_admission_metadata(
+    claim_records: list[ClaimRecord],
+    release_claim_records: list[ClaimRecord],
+    evidence_records: list[EvidenceRecord],
+) -> dict[str, object]:
+    release_claim_ids = {claim.id for claim in release_claim_records}
+    evidence_by_id = {item.id: item for item in evidence_records}
+    excluded = [
+        {
+            "claim_id": claim.id,
+            "competitor_id": claim.competitor_id,
+            "dimension": claim.claim_type,
+            "status": claim.status,
+            "evidence_ids": claim.evidence_ids,
+            "source_types": sorted(
+                {
+                    evidence.source_type
+                    for evidence_id in claim.evidence_ids
+                    if (evidence := evidence_by_id.get(evidence_id)) is not None
+                }
+            ),
+            "reason": "release_claim_requires_verified_webpage_evidence",
+        }
+        for claim in claim_records
+        if claim.id not in release_claim_ids
+    ]
+    return {
+        "admitted_claim_count": len(release_claim_records),
+        "excluded_claim_count": len(excluded),
+        "excluded_claims": excluded,
+    }
 
 
 def _claims_for_dimension(
@@ -323,6 +384,7 @@ def _build_quality_metadata(
     *,
     source_reconciliation: dict[str, object],
 ) -> dict[str, object]:
+    run_quality_findings = _run_quality_findings(detail)
     low_confidence_source_ids = [
         source.id for source in detail.raw_sources if source.confidence < 0.75
     ]
@@ -359,13 +421,17 @@ def _build_quality_metadata(
                 "target_agent": issue.target_agent,
                 "target_subagent": issue.target_subagent,
                 "target_competitor": issue.target_competitor,
+                "field_path": issue.field_path,
                 "problem": issue.problem,
+                "redo_scope": issue.redo_scope.model_dump(mode="json"),
             }
-            for issue in detail.qa_findings
+            for issue in run_quality_findings
         ],
-        "run_qa_warning_count": sum(1 for issue in detail.qa_findings if issue.severity == "warn"),
+        "run_qa_warning_count": sum(
+            1 for issue in run_quality_findings if issue.severity == "warn"
+        ),
         "run_qa_blocker_count": sum(
-            1 for issue in detail.qa_findings if issue.severity == "blocker"
+            1 for issue in run_quality_findings if issue.severity == "blocker"
         ),
         "low_confidence_source_ids": low_confidence_source_ids,
         "search_only_source_ids": search_only_source_ids,
@@ -427,19 +493,22 @@ def _build_memory_observations(
                 "user_research_source_ids": user_research_source_ids,
             }
         )
-    if detail.qa_findings:
+    run_quality_findings = _run_quality_findings(detail)
+    if run_quality_findings:
         observations.append(
             {
                 "id": f"{detail.id}:qa-findings",
                 "kind": "quality_pattern",
-                "warn_count": sum(1 for issue in detail.qa_findings if issue.severity == "warn"),
+                "warn_count": sum(
+                    1 for issue in run_quality_findings if issue.severity == "warn"
+                ),
                 "blocker_count": sum(
-                    1 for issue in detail.qa_findings if issue.severity == "blocker"
+                    1 for issue in run_quality_findings if issue.severity == "blocker"
                 ),
                 "target_agents": sorted(
-                    {issue.target_agent for issue in detail.qa_findings if issue.target_agent}
+                    {issue.target_agent for issue in run_quality_findings if issue.target_agent}
                 ),
-                "problems": [issue.problem for issue in detail.qa_findings[:10]],
+                "problems": [issue.problem for issue in run_quality_findings[:10]],
             }
         )
     if detail.reflections:
@@ -480,6 +549,14 @@ def _classify_user_research_sources(raw_sources: list[RawSource]) -> dict[str, l
             if source.source_type.casefold() in _USER_RESEARCH_SOURCE_TYPES
         ],
     }
+
+
+def _run_quality_findings(detail: RunDetail) -> list[QCIssue]:
+    return [
+        issue
+        for issue in detail.qa_findings
+        if not issue.field_path.startswith("release_gate.")
+    ]
 
 
 def _parse_datetime(value: datetime | str) -> datetime:

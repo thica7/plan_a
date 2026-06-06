@@ -35,9 +35,21 @@ def _redo_kind(task: RepairTask) -> str:
 
 
 def _rationale(task: RepairTask) -> str:
+    action = f" action={task.required_action}."
     fields = f" fields={', '.join(task.target_fields)}." if task.target_fields else ""
+    claim_ids = _metadata_list(task, "claim_ids")
+    evidence_ids = _metadata_list(task, "evidence_ids")
+    claims = f" claim_ids={', '.join(claim_ids[:3])}." if claim_ids else ""
+    evidence = f" evidence_ids={', '.join(evidence_ids[:3])}." if evidence_ids else ""
     query_hints = f" query_hints={'; '.join(task.query_hints[:3])}." if task.query_hints else ""
-    return f"{task.acceptance_rule}{fields}{query_hints}".strip()
+    return f"{task.acceptance_rule}{action}{fields}{claims}{evidence}{query_hints}".strip()
+
+
+def _metadata_list(task: RepairTask, key: str) -> list[str]:
+    value = task.metadata.get(key)
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item]
 
 
 def _dedupe(scopes: list[RedoScope]) -> list[RedoScope]:

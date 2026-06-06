@@ -478,3 +478,45 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/tests/unit/test_research_pipeline.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py -q`
+
+## 2026-06-07 - Step 16: Release Gate Repair Contract And Claim Admission
+
+Commit: this commit
+
+Scope:
+
+- Enriched release-gate findings with competitor, dimension, claim, evidence,
+  weakness type, required action, and acceptance rule metadata before they
+  become `QualityGap` records.
+- Added `RepairTask.required_action` so repair tasks can distinguish
+  add-evidence, rewrite-claim, downgrade-claim, delete-claim, rewrite-report,
+  rerun-scope, and human-review paths.
+- Propagated claim/evidence IDs and required action into RedoScope rationale so
+  trace and UI review show exactly what a release-gate repair is trying to fix.
+- Added release-claim admission during enterprise projection: weak or synthetic
+  evidence can remain as evidence/history, but claims without verified webpage
+  support are marked `deprecated` and excluded from the report-version release
+  claim scope.
+- Kept release-gate-generated `release_gate.*` repair issues out of
+  `run_qa_findings` metadata so final gate repair tasks do not recursively
+  become run-level QA blockers on later projections.
+- Changed unresolved run-level QA metadata from one aggregate release-gate
+  blocker into per-finding release-gate issues that preserve original
+  competitor, dimension, field path, redo scope, and rationale.
+- Recorded release-claim admission counts and excluded-claim reasons in
+  `ReportVersion.quality_metadata`.
+
+Why:
+
+- Fixes the gap where Clean Research Pipeline could report no branch gaps while
+  Release Gate still blocked the report with generic claim-level redo scopes.
+- Keeps synthetic survey/interview material available for research context
+  without letting it become a publishable enterprise claim by default.
+- Moves the system from "Release Gate only blocks" toward "Release Gate produces
+  actionable repair or downgrade instructions."
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/research backend/packages/business_intel/release_gate.py backend/packages/enterprise/projection.py backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_enterprise_projection.py backend/tests/unit/test_business_intel.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_enterprise_projection.py backend/tests/unit/test_business_intel.py -q`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_run_service.py -q -k "release_gate"`

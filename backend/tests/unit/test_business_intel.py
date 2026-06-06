@@ -474,6 +474,12 @@ def test_report_release_gate_requires_clean_qa_and_verified_evidence() -> None:
         "business_qa_clean_required",
         "verified_evidence_rate",
     }
+    claim_issue = next(
+        issue for issue in blocked.issues if issue.rule_id == "claim_uses_low_confidence_evidence"
+    )
+    assert claim_issue.competitor_id == competitor.id
+    assert claim_issue.competitor_name == competitor.name
+    assert claim_issue.dimension == "pricing"
 
 
 def test_report_release_gate_blocks_pending_source_policy_review() -> None:
@@ -940,7 +946,16 @@ def test_report_release_gate_blocks_unresolved_run_qa_metadata() -> None:
                 {
                     "id": "qa-1",
                     "severity": "warn",
+                    "target_subagent": "pricing",
+                    "target_competitor": "Cursor",
                     "problem": "No granular pricing comparison.",
+                    "redo_scope": {
+                        "kind": "collector",
+                        "target_subagent": "pricing",
+                        "target_competitor": "Cursor",
+                        "target_competitors": ["Cursor"],
+                        "rationale": "Collect verified pricing tier evidence.",
+                    },
                 }
             ]
         }
@@ -956,7 +971,10 @@ def test_report_release_gate_blocks_unresolved_run_qa_metadata() -> None:
     )
 
     assert gate.allowed is False
-    assert "run_qa_findings_unresolved" in {issue.rule_id for issue in gate.issues}
+    issue = next(issue for issue in gate.issues if issue.rule_id == "run_qa_findings_unresolved")
+    assert issue.competitor_name == "Cursor"
+    assert issue.dimension == "pricing"
+    assert issue.recommendation == "Collect verified pricing tier evidence."
 
 
 def test_report_release_gate_separates_malformed_source_tokens_from_missing_sources() -> None:

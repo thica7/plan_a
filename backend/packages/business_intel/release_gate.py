@@ -76,6 +76,7 @@ def evaluate_report_release_gate(
         evidence=scoped_evidence,
         claims=scoped_claims,
     )
+    competitor_names_by_id = {item.id: item.name for item in competitors}
     readiness = score_project_readiness(
         project_id=project.id,
         plan=plan,
@@ -89,9 +90,9 @@ def evaluate_report_release_gate(
         *_report_integrity_issues(report_version, scoped_evidence, scoped_claims),
         *_report_structure_issues(report_version),
         *_report_depth_issues(report_version),
-        *_source_quality_issues(scoped_evidence),
-        *_claim_evidence_quality_issues(scoped_claims, scoped_evidence),
-        *_claim_validation_issues(scoped_claims, scoped_evidence),
+        *_source_quality_issues(scoped_evidence, competitor_names_by_id),
+        *_claim_evidence_quality_issues(scoped_claims, scoped_evidence, competitor_names_by_id),
+        *_claim_validation_issues(scoped_claims, scoped_evidence, competitor_names_by_id),
         *_missing_report_citation_issues(report_version, report_scoped_evidence),
         *_report_citation_quality_issues(report_version, report_scoped_evidence),
         *_run_quality_issues(report_version),
@@ -236,7 +237,10 @@ def _report_integrity_issues(
     return issues
 
 
-def _source_quality_issues(evidence: list[EvidenceRecord]) -> list[BusinessQAFinding]:
+def _source_quality_issues(
+    evidence: list[EvidenceRecord],
+    competitor_names_by_id: dict[str, str],
+) -> list[BusinessQAFinding]:
     if not evidence:
         return []
     issues: list[BusinessQAFinding] = []
@@ -265,6 +269,7 @@ def _source_quality_issues(evidence: list[EvidenceRecord]) -> list[BusinessQAFin
                     f"robots/source policy review: {'; '.join(statuses)}."
                 ),
                 evidence_ids=[item.id for item in policy_review_evidence],
+                **_issue_scope_from_evidence(policy_review_evidence, competitor_names_by_id),
                 recommendation=(
                     "Resolve the Source Registry review queue or replace these evidence records "
                     "before approval."
@@ -290,6 +295,7 @@ def _source_quality_issues(evidence: list[EvidenceRecord]) -> list[BusinessQAFin
                 f"minimum is {MIN_VERIFIED_EVIDENCE_RATE:.0%}."
             ),
             evidence_ids=[item.id for item in evidence],
+            **_issue_scope_from_evidence(evidence, competitor_names_by_id),
             recommendation=(
                 "Replace weak sources with verified webpages or mark bad evidence stale/rejected."
             ),
@@ -319,9 +325,24 @@ def _source_robots_status(evidence: EvidenceRecord) -> str:
     return "unknown"
 
 
+def _issue_scope_from_evidence(
+    evidence: list[EvidenceRecord],
+    competitor_names_by_id: dict[str, str],
+) -> dict[str, str | None]:
+    competitor_ids = {item.competitor_id for item in evidence if item.competitor_id}
+    dimensions = {item.dimension for item in evidence if item.dimension}
+    competitor_id = next(iter(competitor_ids)) if len(competitor_ids) == 1 else None
+    return {
+        "competitor_id": competitor_id,
+        "competitor_name": competitor_names_by_id.get(competitor_id) if competitor_id else None,
+        "dimension": next(iter(dimensions)) if len(dimensions) == 1 else None,
+    }
+
+
 def _claim_evidence_quality_issues(
     claims: list[ClaimRecord],
     evidence: list[EvidenceRecord],
+    competitor_names_by_id: dict[str, str],
 ) -> list[BusinessQAFinding]:
     evidence_by_id = {item.id: item for item in evidence}
     issues: list[BusinessQAFinding] = []
@@ -349,6 +370,9 @@ def _claim_evidence_quality_issues(
                 ),
                 claim_ids=[claim.id],
                 evidence_ids=[item.id for item in weak],
+                competitor_id=claim.competitor_id,
+                competitor_name=competitor_names_by_id.get(claim.competitor_id),
+                dimension=claim.claim_type,
                 recommendation=(
                     "Redo collection for this claim using official or fetched webpages before "
                     "publishing."
@@ -465,16 +489,19 @@ def _has_heading(markdown: str, needles: tuple[str, ...]) -> bool:
 def _claim_validation_issues(
     claims: list[ClaimRecord],
     evidence: list[EvidenceRecord],
+    competitor_names_by_id: dict[str, str],
 ) -> list[BusinessQAFinding]:
     if not claims:
         return []
     project_id = claims[0].project_id
     validation = validate_project_claims(project_id=project_id, claims=claims, evidence=evidence)
+    claims_by_id = {claim.id: claim for claim in claims}
     validation_issues_by_id = {issue.id: issue for issue in validation.issues}
     issues: list[BusinessQAFinding] = []
     for result in validation.results:
         if result.status == "supported":
             continue
+        claim = claims_by_id.get(result.claim_id)
         severity = "blocker" if result.status in {"blocked", "unsupported"} else "warn"
         claim_issue_types = [
             issue.issue_type
@@ -501,6 +528,13 @@ def _claim_validation_issues(
                 severity=severity,
                 claim_ids=[result.claim_id],
                 evidence_ids=result.usable_evidence_ids,
+                competitor_id=claim.competitor_id if claim is not None else None,
+                competitor_name=(
+                    competitor_names_by_id.get(claim.competitor_id)
+                    if claim is not None
+                    else None
+                ),
+                dimension=claim.claim_type if claim is not None else None,
                 recommendation=(
                     "Collect stronger independent evidence, resolve the listed claim-validation "
                     "issue types, or downgrade the claim before release."
@@ -654,28 +688,58 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
     findings = report_version.quality_metadata.get("run_qa_findings", [])
     if not isinstance(findings, list) or not findings:
         return issues
-    blocker_count = sum(1 for item in findings if _mapping_value(item, "severity") == "blocker")
-    warn_count = sum(1 for item in findings if _mapping_value(item, "severity") == "warn")
-    top_problems = [
-        str(_mapping_value(item, "problem") or _mapping_value(item, "id") or "quality issue")
-        for item in findings[:3]
-    ]
-    issues.append(
-        _gate_issue(
-            "run_qa_findings_unresolved",
-            "Run QA findings unresolved",
-            (
-                "Report release requires a clean run-level QA result; "
-                f"current run has {blocker_count} blocker(s) and {warn_count} warning(s). "
-                f"Top issue(s): {'; '.join(top_problems)}"
-            ),
-            recommendation=(
-                "Run scoped redo for the affected collector/analyst/comparator branches before "
-                "publishing."
-            ),
+    for item in findings:
+        original_severity = str(_mapping_value(item, "severity") or "warn")
+        problem = str(_mapping_value(item, "problem") or _mapping_value(item, "id") or "")
+        issue_id = str(_mapping_value(item, "id") or "unknown")
+        recommendation = _run_qa_recommendation(item)
+        issues.append(
+            _gate_issue(
+                "run_qa_findings_unresolved",
+                "Run QA finding unresolved",
+                (
+                    "Report release requires a clean run-level QA result; "
+                    f"unresolved {original_severity} finding {issue_id}: {problem}"
+                ),
+                competitor_name=_run_qa_competitor(item),
+                dimension=_run_qa_dimension(item),
+                recommendation=recommendation,
+            )
         )
-    )
     return issues
+
+
+def _run_qa_dimension(finding: object) -> str | None:
+    target_subagent = _mapping_value(finding, "target_subagent")
+    if isinstance(target_subagent, str) and target_subagent:
+        return target_subagent
+    redo_scope = _mapping_value(finding, "redo_scope")
+    if isinstance(redo_scope, dict):
+        target_subagent = redo_scope.get("target_subagent")
+        if isinstance(target_subagent, str) and target_subagent:
+            return target_subagent
+    return None
+
+
+def _run_qa_competitor(finding: object) -> str | None:
+    target_competitor = _mapping_value(finding, "target_competitor")
+    if isinstance(target_competitor, str) and target_competitor:
+        return target_competitor
+    redo_scope = _mapping_value(finding, "redo_scope")
+    if isinstance(redo_scope, dict):
+        target_competitor = redo_scope.get("target_competitor")
+        if isinstance(target_competitor, str) and target_competitor:
+            return target_competitor
+    return None
+
+
+def _run_qa_recommendation(finding: object) -> str:
+    redo_scope = _mapping_value(finding, "redo_scope")
+    if isinstance(redo_scope, dict):
+        rationale = redo_scope.get("rationale")
+        if isinstance(rationale, str) and rationale.strip():
+            return rationale.strip()
+    return "Run scoped redo for the affected branch before publishing."
 
 
 def _readiness_issues(readiness: ProjectReadinessScore) -> list[BusinessQAFinding]:
@@ -719,6 +783,9 @@ def _gate_issue(
     *,
     evidence_ids: list[str] | None = None,
     claim_ids: list[str] | None = None,
+    competitor_id: str | None = None,
+    competitor_name: str | None = None,
+    dimension: str | None = None,
     severity: str = "blocker",
     recommendation: str,
 ) -> BusinessQAFinding:
@@ -727,6 +794,9 @@ def _gate_issue(
         rule_id=rule_id,
         rule_name=rule_name,
         severity=severity,  # type: ignore[arg-type]
+        competitor_id=competitor_id,
+        competitor_name=competitor_name,
+        dimension=dimension,
         message=message,
         evidence_ids=evidence_ids or [],
         claim_ids=claim_ids or [],

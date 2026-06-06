@@ -28,6 +28,15 @@ RepairStrategy = Literal[
     "mark_not_applicable",
     "human_review",
 ]
+RepairRequiredAction = Literal[
+    "add_evidence",
+    "rewrite_claim",
+    "downgrade_claim",
+    "delete_claim",
+    "rewrite_report",
+    "human_review",
+    "rerun_scope",
+]
 
 
 class ResearchBaseModel(BaseModel):
@@ -238,6 +247,7 @@ class RepairTask(ResearchBaseModel):
     id: str = ""
     gap_id: str
     strategy: RepairStrategy
+    required_action: RepairRequiredAction = "add_evidence"
     competitor: str | None = None
     dimension: str
     target_fields: list[str] = Field(default_factory=list)
@@ -255,6 +265,7 @@ class RepairTask(ResearchBaseModel):
                 "repair-task",
                 self.gap_id,
                 self.strategy,
+                self.required_action,
                 self.competitor or "",
                 self.dimension,
                 self.target_fields,

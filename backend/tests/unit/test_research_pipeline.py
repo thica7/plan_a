@@ -797,8 +797,15 @@ def test_release_gate_issues_become_repair_tasks_and_redo_scopes() -> None:
         "pricing_model_repair",
         "human_review",
     ]
+    assert gaps[0].metadata["required_action"] == "add_evidence"
+    assert gaps[0].metadata["claim_ids"] == ["claim-1"]
+    assert gaps[0].metadata["evidence_ids"] == ["evidence-1"]
     assert tasks[0].competitor == "Claude"
     assert tasks[0].dimension == "pricing"
+    assert tasks[0].required_action == "add_evidence"
+    assert tasks[0].metadata["weakness_type"] == "low_confidence_evidence"
     assert [scope.kind for scope in scopes] == ["collector", "writer_only"]
     assert scopes[0].target_subagent == "pricing"
     assert scopes[0].target_competitor == "Claude"
+    assert "action=add_evidence" in scopes[0].rationale
+    assert "claim_ids=claim-1" in scopes[0].rationale

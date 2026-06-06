@@ -9,6 +9,7 @@ from packages.schema.models import (
     RawSource,
     RedoScope,
     RunMetrics,
+    UserPersonaModel,
 )
 
 
@@ -132,7 +133,23 @@ def test_projection_carries_run_quality_metadata() -> None:
                     target_competitor="Cursor",
                     rationale="Recollect official security evidence.",
                 ),
-            )
+            ),
+            QCIssue(
+                id="qa-release-gate-1",
+                severity="blocker",
+                detected_by="coverage",
+                target_agent="collector",
+                target_subagent="security",
+                target_competitor="Cursor",
+                field_path="release_gate.run_qa_findings_unresolved",
+                problem="Release gate generated repair issue.",
+                redo_scope=RedoScope(
+                    kind="collector",
+                    target_subagent="security",
+                    target_competitor="Cursor",
+                    rationale="Release gate repair.",
+                ),
+            ),
         ],
     )
 
@@ -140,6 +157,10 @@ def test_projection_carries_run_quality_metadata() -> None:
 
     metadata = projection.report_version.quality_metadata
     assert metadata["run_qa_warning_count"] == 1
+    assert metadata["run_qa_blocker_count"] == 0
+    assert [item["id"] for item in metadata["run_qa_findings"]] == ["qa-1"]
+    assert metadata["run_qa_findings"][0]["field_path"] == "raw_sources[security-1]"
+    assert metadata["run_qa_findings"][0]["redo_scope"]["target_subagent"] == "security"
     assert metadata["schema_pass_rate"] == 0.5
     assert metadata["search_only_source_ids"] == ["security-1"]
     assert metadata["low_confidence_source_ids"] == ["security-1"]
@@ -239,3 +260,59 @@ def test_projection_skips_claims_with_missing_source_ids() -> None:
     assert projection.evidence_records == []
     assert projection.claim_records == []
     assert projection.report_version.claim_ids == []
+
+
+def test_projection_excludes_synthetic_persona_claims_from_release_scope() -> None:
+    detail = RunDetail(
+        id="run-synthetic-persona",
+        topic="AI coding assistant buyer personas",
+        status="completed",
+        execution_mode="real",
+        created_at="2026-05-28T00:00:00",
+        updated_at="2026-05-28T00:05:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant buyer personas",
+            competitors=["Windsurf"],
+            dimensions=["persona"],
+        ),
+        report_md="Windsurf persona research is synthetic. [source:persona-survey-1]",
+        raw_sources=[
+            RawSource(
+                id="persona-survey-1",
+                competitor="Windsurf",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="Windsurf persona survey synthesis",
+                snippet="Synthetic persona survey synthesis.",
+                content_hash="hash-persona",
+                confidence=0.58,
+            )
+        ],
+        competitor_knowledge={
+            "Windsurf": CompetitorKnowledge(
+                competitor="Windsurf",
+                user_personas=UserPersonaModel(
+                    summary_claims=[
+                        KnowledgeClaim(
+                            claim="Windsurf has a synthetic persona signal.",
+                            source_ids=["persona-survey-1"],
+                            confidence=0.58,
+                        )
+                    ]
+                ),
+                source_ids=["persona-survey-1"],
+                confidence=0.58,
+            )
+        },
+    )
+
+    projection = build_enterprise_projection(detail)
+
+    assert len(projection.evidence_records) == 1
+    assert len(projection.claim_records) == 1
+    assert projection.claim_records[0].status == "deprecated"
+    assert projection.report_version.claim_ids == []
+    admission = projection.report_version.quality_metadata["release_claim_admission"]
+    assert admission["admitted_claim_count"] == 0
+    assert admission["excluded_claim_count"] == 1
+    assert admission["excluded_claims"][0]["dimension"] == "persona"
