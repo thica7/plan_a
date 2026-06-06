@@ -32,6 +32,7 @@ from packages.research.extraction import (
     extract_persona_schema,
     extract_pricing_model,
 )
+from packages.research.extraction.quality import quote_quality_problem
 from packages.research.models import (
     CapturedPage,
     EvidenceItem,
@@ -565,6 +566,54 @@ def test_admit_evidence_items_requires_ok_capture_and_field_quote() -> None:
     assert "field_quote_missing_or_too_short" in (rejected[0].rejection_reason or "")
     assert accepted[0].status == "accepted"
     assert accepted[0].metadata["candidate_origin"] == "trusted_registry"
+
+
+def test_admit_evidence_items_rejects_navigation_boilerplate_quotes() -> None:
+    extraction = ExtractionResult(
+        competitor="OpenAI",
+        dimension="pricing",
+        source_candidate_id="candidate-openai-pricing",
+        captured_page_id="page-openai-pricing",
+        fields={"pricing_model_type": "api_usage_based"},
+        quotes=[
+            EvidenceQuote(
+                field="pricing_model_type",
+                source_url="https://platform.openai.com/docs/pricing",
+                text=(
+                    "Skip to content Navigation Menu Sign in Cookie Privacy policy "
+                    "Pricing Plans Billing Enterprise"
+                ),
+            )
+        ],
+        confidence=0.9,
+        extractor_name="pricing_model",
+    )
+    page = CapturedPage(
+        id="page-openai-pricing",
+        candidate_id="candidate-openai-pricing",
+        requested_url="https://platform.openai.com/docs/pricing",
+        final_url="https://platform.openai.com/docs/pricing",
+        status="ok",
+        title="OpenAI pricing",
+        text="OpenAI API pricing uses token billing.",
+        content_hash="hash-openai-boilerplate",
+        fetch_method="webfetch_v2",
+        quality_score=0.9,
+    )
+
+    items = admit_evidence_items([extraction], captured_pages=[page])
+
+    assert items[0].status == "rejected"
+    assert "quote_navigation_boilerplate" in (items[0].rejection_reason or "")
+
+
+def test_quote_quality_rejects_truncated_fragments() -> None:
+    reason = quote_quality_problem(
+        "mpletions Published 2023 API token pricing and billing details.",
+        dimension="pricing",
+    )
+
+    assert reason == "quote_truncated_fragment"
 
 
 @pytest.mark.asyncio

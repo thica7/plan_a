@@ -12,6 +12,7 @@ from packages.business_intel.entity_resolver import (
 from packages.identity import compute_raw_source_id
 from packages.research.evidence.citations import snippet_from_evidence_items
 from packages.research.evidence.store import accepted_evidence_by_page
+from packages.research.extraction.quality import quote_quality_problem
 from packages.research.models import (
     CapturedPage,
     EvidenceItem,
@@ -122,6 +123,10 @@ def _admission_rejection_reasons(
         quote is None or len(quote.text.strip()) < 24
     ):
         reasons.append("field_quote_missing_or_too_short")
+    if quote is not None:
+        quote_problem = quote_quality_problem(quote.text, dimension=extraction.dimension)
+        if quote_problem:
+            reasons.append(quote_problem)
     return reasons
 
 

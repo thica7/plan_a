@@ -288,13 +288,24 @@ class QualityAgentMixin:
                     key=lambda item: {"blocker": 0, "warn": 1, "info": 2}.get(item.severity, 3),
                 )[:8]
             )
+            if severity_counts["blocker"]:
+                status_text = "**Status: blocked for review.**"
+                readiness_text = (
+                    "This report is not ready for enterprise publishing until these issues "
+                    "are resolved or explicitly force-passed by a reviewer."
+                )
+            else:
+                status_text = "**Status: passed with warnings.**"
+                readiness_text = (
+                    "This report is publishable from the deterministic QA perspective, "
+                    "with warnings retained for reviewer attention."
+                )
             section = (
                 "\n\n## Final QA Gate Status\n"
-                "**Status: blocked for review.** "
+                f"{status_text} "
                 f"QA found {severity_counts['blocker']} blocker(s), "
                 f"{severity_counts['warn']} warning(s), and {severity_counts['info']} "
-                "info item(s). This report is not ready for enterprise publishing until "
-                "these issues are resolved or explicitly force-passed by a reviewer.\n\n"
+                f"info item(s). {readiness_text}\n\n"
                 f"{top_issues}"
             )
         else:

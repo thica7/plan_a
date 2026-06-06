@@ -587,3 +587,32 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/orchestrator/service.py backend/tests/unit/test_run_service.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_run_service.py -q -k "release_gate"`
+
+## 2026-06-07 - Step 19: Evidence Quote Quality Boundary
+
+Commit: this commit
+
+Scope:
+
+- Added a shared research extraction quote-quality boundary for pricing,
+  feature, and persona extractors.
+- Removed first-page-text fallback quotes when no reliable business term is
+  found, preventing navigation headers and generic page chrome from becoming
+  EvidenceItems.
+- Reused the same quote quality policy in evidence admission so extracted
+  quotes and accepted evidence have one consistent standard.
+- Changed Final QA report wording so warning-only runs render as
+  `passed with warnings` instead of `blocked for review`.
+
+Why:
+
+- The latest real run had enough verified pages and no missing source tokens,
+  but report quality was pulled down by noisy snippets such as navigation,
+  install commands, and truncated page text.
+- Release Gate and run status could pass with warnings while the report body
+  still said blocked, creating an avoidable reviewer-facing contradiction.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/research/extraction/quality.py backend/packages/research/extraction/pricing.py backend/packages/research/extraction/feature.py backend/packages/research/extraction/persona.py backend/packages/research/evidence/admission.py backend/packages/agents/qa/logic.py backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py::test_final_qa_sync_replaces_stale_clean_report_claim backend/tests/unit/test_run_service.py::test_final_qa_sync_adds_rag_gap_fill_for_collector_warnings -q`

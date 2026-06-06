@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from packages.research.extraction.quality import quote_window_from_match
 from packages.research.models import (
     CapturedPage,
     EvidenceQuote,
@@ -179,8 +180,13 @@ def _window_for_terms(text: str, terms: tuple[str, ...]) -> str:
     for term in terms:
         idx = lowered.find(term.casefold())
         if idx >= 0:
-            return text[max(0, idx - 120) : idx + 260].strip()
-    return text[:360].strip()
+            return quote_window_from_match(
+                text,
+                match_start=idx,
+                match_end=idx + len(term),
+                dimension="pricing",
+            )
+    return ""
 
 
 def _window_for_value(text: str, value: object) -> str:
@@ -191,8 +197,14 @@ def _window_for_value(text: str, value: object) -> str:
             continue
         idx = lowered.find(str(item).casefold())
         if idx >= 0:
-            return text[max(0, idx - 120) : idx + 260].strip()
-    return text[:360].strip()
+            item_text = str(item)
+            return quote_window_from_match(
+                text,
+                match_start=idx,
+                match_end=idx + len(item_text),
+                dimension="pricing",
+            )
+    return ""
 
 
 def _text(page: CapturedPage) -> str:

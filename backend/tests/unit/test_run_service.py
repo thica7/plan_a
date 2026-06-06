@@ -1409,6 +1409,8 @@ def test_final_qa_sync_adds_rag_gap_fill_for_collector_warnings() -> None:
     assert "## RAG Gap Fill" in detail.report_md
     assert "Suggested retrieval query: A pricing Pricing source needs verified" in detail.report_md
     assert "## Final QA Gate Status" in detail.report_md
+    assert "Status: passed with warnings" in detail.report_md
+    assert "Status: blocked for review" not in detail.report_md
 
 
 def test_qa_marks_phantom_citation_as_writer_only_blocker() -> None:

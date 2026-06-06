@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
+from packages.research.extraction.quality import quote_window_from_match
 from packages.research.models import (
     CapturedPage,
     EvidenceQuote,
@@ -126,18 +127,23 @@ def _quote_for_terms(
     terms: list[str],
 ) -> EvidenceQuote | None:
     text = _text(page)
-    lowered = text.casefold()
     for term in terms:
-        match = re.search(re.escape(term), lowered)
+        match = re.search(re.escape(term), text, flags=re.IGNORECASE)
         if match:
-            start = max(0, match.start() - 120)
-            end = min(len(text), match.end() + 260)
+            quote_text = quote_window_from_match(
+                text,
+                match_start=match.start(),
+                match_end=match.end(),
+                dimension="feature",
+            )
+            if not quote_text:
+                continue
             return EvidenceQuote(
-                text=text[start:end].strip(),
+                text=quote_text,
                 source_url=page.final_url,
                 field=field,
-                start_offset=start,
-                end_offset=end,
+                start_offset=match.start(),
+                end_offset=match.end(),
             )
     return None
 
