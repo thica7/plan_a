@@ -65,7 +65,11 @@ from packages.orchestrator.graph import (
 )
 from packages.refs import normalize_dimension_refs
 from packages.research.evaluation import quality_gaps_from_release_gate
-from packages.research.repair import repair_task_to_redo_scope, repair_tasks_from_gaps
+from packages.research.repair import (
+    repair_task_to_redo_scope,
+    repair_tasks_from_gaps,
+    repair_tasks_to_redo_scopes,
+)
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail, RunSummary
 from packages.schema.enterprise import (
     ClaimValidationReport,
@@ -2044,6 +2048,10 @@ class RunService(
         detail.report_md = projection.report_version.report_md
         detail.enterprise_projection = projection
         gate = self._evaluate_report_release_gate(projection)
+        if self._attach_release_gate_quality_metadata(projection, gate):
+            self._enterprise_store.save_projection(projection)
+            detail.report_md = projection.report_version.report_md
+            detail.enterprise_projection = projection
         if notify_release_gate:
             self._record_release_gate_notification(projection, gate)
         self._record_usage_governance_notification(context.workspace_id, detail.id)
@@ -2132,6 +2140,58 @@ class RunService(
             }
         }
 
+    def _attach_release_gate_quality_metadata(
+        self,
+        projection: EnterpriseRunProjection,
+        gate: ReportReleaseGate | None,
+    ) -> bool:
+        if gate is None:
+            return False
+        metadata = dict(projection.report_version.quality_metadata)
+        gaps = quality_gaps_from_release_gate(gate)
+        tasks = repair_tasks_from_gaps(gaps)
+        release_gate_metadata = {
+            "allowed": gate.allowed,
+            "status": gate.status,
+            "readiness_score": gate.readiness.score,
+            "readiness_risk_level": gate.readiness.risk_level,
+            "qa_blocker_count": gate.qa_evaluation.blocker_count,
+            "qa_warn_count": gate.qa_evaluation.warn_count,
+            "blocker_count": gate.blocker_count,
+            "warn_count": gate.warn_count,
+            "issue_count": gate.issue_count,
+            "followup_issue_count": len(
+                [issue for issue in gate.issues if issue.severity != "blocker"]
+            ),
+            "issues": [
+                {
+                    "id": issue.id,
+                    "rule_id": issue.rule_id,
+                    "severity": issue.severity,
+                    "competitor_id": issue.competitor_id,
+                    "competitor_name": issue.competitor_name,
+                    "dimension": issue.dimension,
+                    "message": issue.message,
+                    "recommendation": issue.recommendation,
+                    "claim_ids": issue.claim_ids,
+                    "evidence_ids": issue.evidence_ids,
+                }
+                for issue in gate.issues
+            ],
+            "repair_tasks": [task.model_dump(mode="json") for task in tasks],
+            "redo_scopes": [
+                scope.model_dump(mode="json")
+                for scope in repair_tasks_to_redo_scopes(tasks)
+            ],
+        }
+        if metadata.get("release_gate") == release_gate_metadata:
+            return False
+        metadata["release_gate"] = release_gate_metadata
+        projection.report_version = projection.report_version.model_copy(
+            update={"quality_metadata": metadata}
+        )
+        return True
+
     def _apply_release_gate_run_status(
         self,
         record: RunRecord,
@@ -2158,10 +2218,11 @@ class RunService(
             for issue in detail.qa_findings
             if not issue.field_path.startswith("release_gate.")
         ]
-        if gate is None or gate.allowed:
+        if gate is None:
             if len(retained) != len(detail.qa_findings):
                 detail.qa_findings = retained
                 detail.updated_at = datetime.utcnow()
+                self._refresh_quality_metrics(detail)
             return []
 
         gaps = quality_gaps_from_release_gate(gate)
@@ -2195,6 +2256,7 @@ class RunService(
 
         detail.qa_findings = [*retained, *release_issues]
         detail.updated_at = datetime.utcnow()
+        self._refresh_quality_metrics(detail)
         return release_issues
 
     def _release_gate_detected_by(self, scope: RedoScope) -> str:

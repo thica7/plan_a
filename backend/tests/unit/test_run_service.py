@@ -16,10 +16,12 @@ from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDeta
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
+    EnterpriseRunProjection,
     ModelRouteCandidate,
     ModelRouteDecision,
     ProjectReadinessScore,
     ReportReleaseGate,
+    ReportVersionRecord,
     UserFeedbackRecord,
 )
 from packages.schema.models import (
@@ -104,6 +106,52 @@ def _blocked_release_gate() -> ReportReleaseGate:
                 evidence_ids=["evidence-1"],
                 claim_ids=["claim-1"],
                 recommendation="Collect verified pricing evidence.",
+            )
+        ],
+    )
+
+
+def _warning_release_gate() -> ReportReleaseGate:
+    return ReportReleaseGate(
+        report_version_id="report-version-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        allowed=True,
+        status="pass",
+        readiness=ProjectReadinessScore(
+            project_id="project-1",
+            score=88,
+            risk_level="ready",
+            evidence_score=90,
+            claim_score=80,
+            coverage_score=100,
+            qa_score=90,
+            summary="Pass with follow-up warnings.",
+        ),
+        qa_evaluation=BusinessQAEvaluation(
+            project_id="project-1",
+            scenario_id="l1_pricing_pack",
+            competitor_layer="L1",
+        ),
+        issue_count=1,
+        blocker_count=0,
+        warn_count=1,
+        issues=[
+            BusinessQAFinding(
+                id="release-warning-1",
+                rule_id="claim_self_consistency_required",
+                rule_name="Claim self-consistency",
+                severity="warn",
+                competitor_name="Claude",
+                dimension="pricing",
+                message=(
+                    "Claim claim-1 validation is weak; self-consistency=72, "
+                    "text=70, evidence=100, triangulation=70; "
+                    "issue_types=single_source_support."
+                ),
+                evidence_ids=["evidence-1"],
+                claim_ids=["claim-1"],
+                recommendation="Collect a second independent pricing source.",
             )
         ],
     )
@@ -4511,6 +4559,86 @@ async def test_release_gate_auto_redo_uses_existing_scoped_redo_for_real_runs() 
 
     assert triggered is True
     assert calls == [(detail.id, True)]
+
+
+@pytest.mark.asyncio
+async def test_release_gate_warning_sync_keeps_followups_without_auto_redo() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Release gate warning follow-up",
+            competitors=["Claude"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    issues = service._sync_release_gate_repair_issues(record, _warning_release_gate())
+    triggered = await service._maybe_run_release_gate_auto_redo(record, _warning_release_gate())
+
+    assert len(issues) == 1
+    assert issues[0].severity == "warn"
+    assert issues[0].field_path == "release_gate.claim_self_consistency_required"
+    assert issues[0].redo_scope.kind == "collector"
+    assert issues[0].redo_scope.target_subagent == "pricing"
+    assert issues[0].redo_scope.target_competitor == "Claude"
+    assert record.detail.qa_findings == issues
+    assert record.detail.metrics.qa_issue_count == 1
+    assert triggered is False
+
+
+def test_release_gate_quality_metadata_records_followup_tasks() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    projection = EnterpriseRunProjection(
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-1",
+        report_version=ReportVersionRecord(
+            id="report-version-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id="run-1",
+            version_number=1,
+            topic_normalized="release-gate-warning",
+            competitor_layer="L1",
+            competitor_set_hash="hash",
+            report_md="# Report",
+        ),
+    )
+
+    changed = service._attach_release_gate_quality_metadata(projection, _warning_release_gate())
+    unchanged = service._attach_release_gate_quality_metadata(projection, _warning_release_gate())
+    metadata = projection.report_version.quality_metadata["release_gate"]
+
+    assert changed is True
+    assert unchanged is False
+    assert metadata["allowed"] is True
+    assert metadata["warn_count"] == 1
+    assert metadata["followup_issue_count"] == 1
+    assert metadata["issues"][0]["severity"] == "warn"
+    assert metadata["repair_tasks"][0]["required_action"] == "add_evidence"
+    assert metadata["redo_scopes"][0]["target_subagent"] == "pricing"
 
 
 @pytest.mark.asyncio

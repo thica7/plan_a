@@ -558,3 +558,32 @@ Validation:
   `excluded_claim_count=2`.
 - `conda run -n bd-competiscope-v2 ruff check backend/packages/business_intel/release_gate.py backend/packages/enterprise/projection.py backend/tests/unit/test_business_intel.py backend/tests/unit/test_enterprise_projection.py`
 - `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_business_intel.py backend/tests/unit/test_enterprise_projection.py -q`
+
+## 2026-06-07 - Step 18: Pass-With-Warnings Follow-Up Persistence
+
+Commit: this commit
+
+Scope:
+
+- Kept `release_gate.*` warning findings visible in `RunDetail.qa_findings`
+  even when Release Gate allows the report to pass.
+- Left blocker behavior unchanged: blocker release-gate issues still trigger
+  scoped redo and `completed_with_blockers`.
+- Added `ReportVersion.quality_metadata.release_gate` with release status,
+  readiness, issue summaries, actionable repair tasks, and redo scopes.
+- Stored follow-up tasks for non-blocking warnings without triggering automatic
+  redo when `gate.allowed=True`.
+
+Why:
+
+- After warning semantics were corrected, allowed-with-warnings runs still need
+  visible caveats and follow-up repair tasks.
+- Prevents a pass state from hiding weak/single-source claims that should be
+  reviewed, downgraded, or strengthened later.
+- Gives report history, decision replay, and UI surfaces a stable place to read
+  release-gate follow-up work.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 ruff check backend/packages/orchestrator/service.py backend/tests/unit/test_run_service.py`
+- `conda run -n bd-competiscope-v2 pytest backend/tests/unit/test_run_service.py -q -k "release_gate"`
