@@ -5580,6 +5580,96 @@ def test_writer_source_digest_omits_noisy_snippet() -> None:
     assert digest[0]["snippet_quality"] == "omitted_no_clean_business_snippet"
 
 
+def test_deterministic_payload_uses_normalized_fields_before_noisy_snippet() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    sources = [
+        {
+            "id": "pricing-a",
+            "title": "A pricing",
+            "snippet": "Skip to content Navigation Menu Sign in Cookie Privacy policy",
+            "confidence": 0.9,
+            "metadata": {
+                "normalized_fields": [
+                    {
+                        "kind": "pricing",
+                        "model_type": "subscription_saas",
+                        "tier_name": "Pro",
+                        "price": "$20/month",
+                        "billing_cycle": "monthly",
+                        "usage_limit": "500 premium requests",
+                        "source_quote": "Pro costs $20/month with 500 premium requests.",
+                    }
+                ]
+            },
+        }
+    ]
+
+    pricing = service._deterministic_structured_knowledge_payload(
+        competitor="A",
+        dimension="pricing",
+        dimension_sources=sources,
+    )
+
+    assert pricing["pricing_model"]["tiers"][0]["claims"][0]["source_ids"] == ["pricing-a"]
+    assert pricing["pricing_model"]["tiers"][0]["price"] == "$20/month"
+    assert pricing["pricing_model"]["tiers"][0]["limits"] == ["500 premium requests"]
+
+
+def test_writer_source_digest_exposes_normalized_fields() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    source = RawSource(
+        id="pricing-a",
+        competitor="A",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="A pricing",
+        url="https://a.example/pricing",
+        snippet="Skip to content Navigation Menu Sign in Cookie Privacy policy",
+        content_hash="pricing-a-hash",
+        confidence=0.9,
+        metadata={
+            "normalized_fields": [
+                {
+                    "kind": "pricing",
+                    "model_type": "subscription_saas",
+                    "tier_name": "Pro",
+                    "price": "$20/month",
+                    "billing_cycle": "monthly",
+                    "usage_limit": "500 premium requests",
+                    "source_quote": "Pro costs $20/month with 500 premium requests.",
+                }
+            ]
+        },
+    )
+
+    digest = service._writer_source_digest([source])
+
+    assert digest[0]["snippet"]
+    assert "$20/month" in str(digest[0]["snippet"])
+    assert "normalized_fields" in digest[0]
+    assert "snippet_quality" not in digest[0]
+
+
 def test_deterministic_feature_payload_uses_shared_taxonomy() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

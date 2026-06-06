@@ -274,12 +274,63 @@ class RepairTask(ResearchBaseModel):
         return self
 
 
+class NormalizedPricingField(ResearchBaseModel):
+    kind: Literal["pricing"] = "pricing"
+    dimension: str = "pricing"
+    competitor: str = ""
+    model_type: str = ""
+    tier_name: str = ""
+    price: str = ""
+    billing_cycle: str = ""
+    usage_limit: str = ""
+    enterprise_condition: str = ""
+    source_quote: str = ""
+    evidence_item_ids: list[str] = Field(default_factory=list)
+    source_url: str | None = None
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class NormalizedFeatureField(ResearchBaseModel):
+    kind: Literal["feature"] = "feature"
+    dimension: str = "feature"
+    competitor: str = ""
+    slot: str
+    support_level: str = ""
+    evidence_terms: list[str] = Field(default_factory=list)
+    evidence_quote: str = ""
+    evidence_item_ids: list[str] = Field(default_factory=list)
+    source_url: str | None = None
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class NormalizedPersonaField(ResearchBaseModel):
+    kind: Literal["persona"] = "persona"
+    dimension: str = "persona"
+    competitor: str = ""
+    segment: str = ""
+    role: str = ""
+    company_size: str = ""
+    use_case: str = ""
+    pain_point: str = ""
+    confidence_reason: str = ""
+    evidence_quote: str = ""
+    evidence_item_ids: list[str] = Field(default_factory=list)
+    source_url: str | None = None
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+NormalizedEvidenceField = (
+    NormalizedPricingField | NormalizedFeatureField | NormalizedPersonaField
+)
+
+
 class ResearchResult(ResearchBaseModel):
     brief: ResearchBrief
     candidates: list[SourceCandidate] = Field(default_factory=list)
     captured_pages: list[CapturedPage] = Field(default_factory=list)
     extractions: list[ExtractionResult] = Field(default_factory=list)
     evidence_items: list[EvidenceItem] = Field(default_factory=list)
+    normalized_fields: list[NormalizedEvidenceField] = Field(default_factory=list)
     raw_source_ids: list[str] = Field(default_factory=list)
     gaps: list[QualityGap] = Field(default_factory=list)
     repair_tasks: list[RepairTask] = Field(default_factory=list)

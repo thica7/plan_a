@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.rag.grounded_prompt import build_run_grounding_prompt
+from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import FeatureNode, KnowledgeClaim, QCIssue, RawSource
@@ -572,6 +573,9 @@ class WriterAgentMixin:
             }
             if not snippet:
                 digest["snippet_quality"] = "omitted_no_clean_business_snippet"
+            normalized_fields = normalized_fields_from_source(source)
+            if normalized_fields:
+                digest["normalized_fields"] = normalized_fields
             digests.append(digest)
         return digests
 

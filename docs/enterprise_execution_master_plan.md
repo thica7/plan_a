@@ -129,6 +129,7 @@ Recent commits:
 - `c34d229 fix(research): unify source text for claims`
 - `4bbc052 feat(qa): gate publishable text quality`
 - `e7c9e7f docs(plan): add checkpoint 1 execution plan`
+- `feat(research): normalize pricing feature persona fields`
 
 These cover the anti-garbage foundation and QA text quality gate, but they do
 not complete the full Checkpoint 1.
@@ -136,12 +137,6 @@ not complete the full Checkpoint 1.
 ## Active Next Work
 
 Do next:
-
-```text
-feat(research): normalize pricing feature persona fields
-```
-
-Then:
 
 ```text
 feat(release): apply warning repair to report sections

@@ -22,6 +22,8 @@ from packages.research.evidence import (
     admit_evidence_items,
     citation_refs_from_evidence_items,
     evidence_items_from_extractions,
+    normalized_fields_as_dicts,
+    normalized_fields_from_evidence_items,
     raw_source_from_capture,
     snippet_from_evidence_items,
     source_quality_problem,
@@ -335,6 +337,91 @@ def test_raw_source_from_capture_preserves_candidate_and_fetch_lineage() -> None
     assert source.candidate_origin == "trusted_registry"
     assert source.fetch_method == "basic_httpx"
     assert source_quality_problem(source) is None
+
+
+def test_normalized_fields_are_built_from_accepted_evidence_items() -> None:
+    pricing_model = EvidenceItem(
+        competitor="A",
+        dimension="pricing",
+        field="pricing_model_type",
+        value="subscription_saas",
+        source_candidate_id="candidate-pricing",
+        captured_page_id="page-pricing",
+        source_url="https://a.example/pricing",
+        quote="A offers subscription plans for Free, Pro, Team, and Enterprise.",
+        confidence=0.91,
+        status="accepted",
+    )
+    pricing_price = EvidenceItem(
+        competitor="A",
+        dimension="pricing",
+        field="price_points",
+        value=["$20/month"],
+        source_candidate_id="candidate-pricing",
+        captured_page_id="page-pricing",
+        source_url="https://a.example/pricing",
+        quote="Pro costs $20/month with 500 premium requests.",
+        confidence=0.93,
+        status="accepted",
+    )
+    rejected_price = EvidenceItem(
+        competitor="A",
+        dimension="pricing",
+        field="price_points",
+        value=["Skip to content"],
+        source_candidate_id="candidate-pricing",
+        captured_page_id="page-pricing",
+        quote="Skip to content Navigation Menu",
+        confidence=0.2,
+        status="rejected",
+    )
+    feature = EvidenceItem(
+        competitor="A",
+        dimension="feature",
+        field="agentic_coding",
+        value={"status": "supported", "evidence_terms": ["agentic", "multi-file"]},
+        source_candidate_id="candidate-feature",
+        captured_page_id="page-feature",
+        source_url="https://a.example/features",
+        quote="A supports agentic multi-file edits in IDE workflows.",
+        confidence=0.88,
+        status="accepted",
+    )
+    persona = EvidenceItem(
+        competitor="A",
+        dimension="persona",
+        field="primary_use_case",
+        value="automating coding workflows",
+        source_candidate_id="candidate-persona",
+        captured_page_id="page-persona",
+        source_url="https://a.example/customers",
+        quote="Engineering teams use A to automate coding workflows.",
+        confidence=0.86,
+        status="accepted",
+    )
+
+    fields = normalized_fields_as_dicts(
+        normalized_fields_from_evidence_items(
+            [pricing_model, pricing_price, rejected_price, feature, persona]
+        )
+    )
+
+    pricing = next(field for field in fields if field["kind"] == "pricing")
+    assert pricing["model_type"] == "subscription_saas"
+    assert pricing["price"] == "$20/month"
+    assert pricing["source_quote"] == "Pro costs $20/month with 500 premium requests."
+    assert "Skip to content" not in str(pricing)
+
+    feature_field = next(field for field in fields if field["kind"] == "feature")
+    assert feature_field["slot"] == "agentic_coding"
+    assert feature_field["support_level"] == "supported"
+    assert feature_field["evidence_terms"] == ["agentic", "multi-file"]
+
+    persona_field = next(field for field in fields if field["kind"] == "persona")
+    assert persona_field["use_case"] == "automating coding workflows"
+    assert persona_field["evidence_quote"] == (
+        "Engineering teams use A to automate coding workflows."
+    )
 
 
 def test_source_quality_problem_rejects_soft_404() -> None:
@@ -706,6 +793,7 @@ async def test_run_research_pipeline_connects_discover_capture_extract_repair() 
     assert result.assembly["branch_key"] == brief.branch_key
     assert result.assembly["accepted_evidence_item_count"] > 0
     assert result.assembly["fields"]
+    assert any(field.kind == "feature" for field in result.normalized_fields)
     assert result.metrics["verified_capture_rate"] == 1.0
     assert result.metrics["evidence_item_count"] == len(result.evidence_items)
     assert result.metrics["accepted_evidence_rate"] > 0
@@ -786,6 +874,10 @@ async def test_run_research_pipeline_executes_gap_driven_repair_round() -> None:
     assert any(
         item.field == "price_points" and item.status == "accepted"
         for item in result.evidence_items
+    )
+    assert any(
+        field.kind == "pricing" and field.price
+        for field in result.normalized_fields
     )
 
 

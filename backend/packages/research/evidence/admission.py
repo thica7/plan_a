@@ -11,6 +11,10 @@ from packages.business_intel.entity_resolver import (
 )
 from packages.identity import compute_raw_source_id
 from packages.research.evidence.citations import snippet_from_evidence_items
+from packages.research.evidence.normalization import (
+    normalized_fields_as_dicts,
+    normalized_fields_from_evidence_items,
+)
 from packages.research.evidence.store import accepted_evidence_by_page
 from packages.research.extraction.quality import quote_quality_problem
 from packages.research.models import (
@@ -173,6 +177,7 @@ def raw_source_from_capture(
     confidence: float,
     source_type: str = "webpage_verified",
     snippet: str | None = None,
+    metadata: dict[str, object] | None = None,
 ) -> RawSource:
     evidence_snippet = snippet or capture.snippet or candidate.snippet
     content_hash = capture.content_hash or _content_hash(evidence_snippet or candidate.title)
@@ -201,6 +206,7 @@ def raw_source_from_capture(
         fetch_method=capture.fetch_method,
         quality_score=capture.quality_score,
         failure_reason=capture.failure_reason,
+        metadata=metadata or {},
     )
 
 
@@ -244,6 +250,11 @@ def raw_sources_from_research_result(
             confidence=confidence_for_source(candidate, page, snippet, page_items),
             source_type="webpage_verified",
             snippet=snippet,
+            metadata={
+                "normalized_fields": normalized_fields_as_dicts(
+                    normalized_fields_from_evidence_items(page_items)
+                )
+            },
         )
         if not source_is_usable(source):
             continue

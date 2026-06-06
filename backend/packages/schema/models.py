@@ -110,6 +110,7 @@ class RawSource(BaseModel):
     fetch_method: str = ""
     quality_score: float = Field(default=0.0, ge=0.0, le=1.0)
     failure_reason: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
     extracted_at: datetime = Field(default_factory=datetime.utcnow)
 
 

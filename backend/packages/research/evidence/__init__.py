@@ -9,6 +9,12 @@ from packages.research.evidence.citations import (
     snippet_from_evidence_items,
 )
 from packages.research.evidence.items import evidence_items_from_extractions
+from packages.research.evidence.normalization import (
+    normalized_fields_as_dicts,
+    normalized_fields_from_evidence_items,
+    normalized_fields_from_source,
+    normalized_summary_from_source,
+)
 from packages.research.evidence.store import (
     accepted_evidence_by_page,
     accepted_evidence_items,
@@ -29,6 +35,10 @@ __all__ = [
     "dedupe_by_id",
     "deterministic_claim_text_from_source",
     "evidence_items_from_extractions",
+    "normalized_fields_as_dicts",
+    "normalized_fields_from_evidence_items",
+    "normalized_fields_from_source",
+    "normalized_summary_from_source",
     "publishable_text_noise_problem",
     "rejected_evidence_items",
     "raw_source_from_capture",

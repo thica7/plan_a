@@ -674,3 +674,34 @@ Validation:
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py -q -k "qa_ or final_qa or phantom_citation or text_noise"`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_research_pipeline.py -q`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_graph_send.py -q`
+
+## 2026-06-07 - Step 22: Normalized Business Fields
+
+Commit: this commit
+
+Scope:
+
+- Added typed normalized pricing, feature, and persona field models to the
+  Clean Research Pipeline result contract.
+- Generated normalized business fields only from accepted EvidenceItems.
+- Persisted per-source normalized fields through `RawSource.metadata`, so the
+  source identity path and business-field path stay aligned.
+- Routed analyst deterministic fallback and writer source context through the
+  same normalized source summary boundary before falling back to raw snippets.
+
+Why:
+
+- The prior anti-garbage work removed noisy source text, but pricing, feature,
+  and persona facts still depended on downstream text heuristics.
+- Checkpoint 1 requires business report sections to consume stable fields such
+  as model type, tier, price, feature slot, support level, persona segment, use
+  case, and evidence quote.
+- Keeping normalized fields on `ResearchResult` and `RawSource.metadata`
+  prevents writer-only patching and gives analyst, writer, release review, and
+  UI surfaces one shared source of truth.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/research backend/packages/schema/models.py backend/packages/agents/writer/logic.py backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_research_pipeline.py -q`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py -q`

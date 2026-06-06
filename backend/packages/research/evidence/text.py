@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from packages.research.evidence.normalization import normalized_summary_from_source
 from packages.research.extraction.quality import (
     clean_evidence_quote,
     quote_quality_problem,
@@ -17,6 +18,9 @@ def source_business_snippet(
     limit: int = 260,
 ) -> str:
     source_dimension = dimension or _source_field(source, "dimension")
+    normalized = normalized_summary_from_source(source, dimension=source_dimension, limit=limit)
+    if normalized:
+        return normalized
     snippet = " ".join(_source_field(source, "snippet").split())
     if not snippet:
         return ""

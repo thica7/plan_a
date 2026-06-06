@@ -68,7 +68,7 @@ Remaining acceptance:
 
 ### 2. `feat(research): normalize pricing feature persona fields`
 
-Status: next.
+Status: completed by `feat(research): normalize pricing feature persona fields`.
 
 Required behavior:
 
@@ -87,13 +87,14 @@ Required behavior:
 Acceptance:
 
 - Unit tests prove pricing/feature/persona normalized fields are present.
-- A noisy source is rejected or marked unusable before normalized claim creation.
+- A noisy source is rejected or bypassed by normalized fields before
+  normalized claim creation.
 - Existing tests for research pipeline, analyst deterministic payload, and
-  writer digest still pass.
+  writer digest pass.
 
 ### 3. `feat(release): apply warning repair to report sections`
 
-Status: pending.
+Status: next.
 
 Required behavior:
 

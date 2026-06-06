@@ -14,7 +14,11 @@ from packages.research.discovery import (
     trusted_registry_candidates,
 )
 from packages.research.evaluation import evaluate_research_quality
-from packages.research.evidence import admit_evidence_items, dedupe_by_id
+from packages.research.evidence import (
+    admit_evidence_items,
+    dedupe_by_id,
+    normalized_fields_from_evidence_items,
+)
 from packages.research.extraction import extract_page
 from packages.research.models import (
     CapturedPage,
@@ -104,6 +108,7 @@ async def run_research_pipeline(
         if not gaps:
             break
 
+    normalized_fields = normalized_fields_from_evidence_items(evidence_items)
     assembly = assemble_research_summary(
         brief,
         evidence_items=evidence_items,
@@ -116,6 +121,7 @@ async def run_research_pipeline(
         captured_pages=captured_pages,
         extractions=extractions,
         evidence_items=evidence_items,
+        normalized_fields=normalized_fields,
         gaps=gaps,
         repair_tasks=planned_repairs,
         assembly=assembly,
