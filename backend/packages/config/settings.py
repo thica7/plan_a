@@ -87,3 +87,13 @@ def get_settings() -> Settings:
         analyst_react_enabled=_env_bool("ANALYST_REACT_ENABLED", True),
         analyst_react_max_turns=max(1, min(6, int(os.getenv("ANALYST_REACT_MAX_TURNS", "3")))),
     )
+
+
+if __name__ == "__main__":
+    import sys
+    if "--print-timeout" in sys.argv:
+        settings = get_settings()
+        print(f"llm_timeout_seconds={settings.llm_timeout_seconds}")
+        print(f"hitl_timeout_seconds={settings.hitl_timeout_seconds}")
+        sys.exit(0)
+

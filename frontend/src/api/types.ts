@@ -1,3 +1,5 @@
+// Generated from openapi.json. Run `make sync-openapi` after API schema changes.
+
 export type RunStatus = "queued" | "running" | "interrupted" | "completed" | "failed";
 
 export interface AnalysisPlan {

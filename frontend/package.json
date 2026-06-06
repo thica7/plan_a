@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "node scripts/test-wrapper.js",
     "openapi-typescript": "openapi-typescript"
   },
   "dependencies": {

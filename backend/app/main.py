@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import health, hitl, runtime, runs, skills, stream, trace
+from app.routes import crawl, knowledge
 
 
 def create_app() -> FastAPI:
@@ -20,6 +21,8 @@ def create_app() -> FastAPI:
     app.include_router(skills.router, prefix="/api", tags=["skills"])
     app.include_router(runtime.router, prefix="/api", tags=["runtime"])
     app.include_router(trace.router, prefix="/api", tags=["trace"])
+    app.include_router(knowledge.router, prefix="/api", tags=["knowledge"])
+    app.include_router(crawl.router, prefix="/api", tags=["crawl"])
     return app
 
 

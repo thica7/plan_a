@@ -1,3419 +1,3877 @@
-﻿{
-
+{
   "openapi": "3.1.0",
-
   "info": {
-
     "title": "Competiscope v2 API",
-
     "version": "0.1.0"
-
   },
-
   "paths": {
-
     "/api/runs": {
-
       "get": {
-
         "tags": [
-
           "runs"
-
         ],
-
         "summary": "List Runs",
-
         "operationId": "list_runs_api_runs_get",
-
         "responses": {
-
           "200": {
-
             "description": "Successful Response",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "items": {
-
                     "$ref": "#/components/schemas/RunSummary"
-
                   },
-
                   "type": "array",
-
                   "title": "Response List Runs Api Runs Get"
-
                 }
-
               }
-
             }
-
           }
-
         }
-
       },
-
       "post": {
-
         "tags": [
-
           "runs"
-
         ],
-
         "summary": "Create Run",
-
         "operationId": "create_run_api_runs_post",
-
         "requestBody": {
-
           "content": {
-
             "application/json": {
-
               "schema": {
-
                 "$ref": "#/components/schemas/RunCreateRequest"
-
               }
-
             }
-
           },
-
           "required": true
-
         },
-
         "responses": {
-
           "201": {
-
             "description": "Successful Response",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/RunDetail"
-
                 }
-
               }
-
             }
-
           },
-
           "422": {
-
             "description": "Validation Error",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/HTTPValidationError"
-
                 }
-
               }
-
             }
-
           }
-
         }
-
       }
-
     },
-
     "/api/runs/{run_id}": {
-
       "get": {
-
         "tags": [
-
           "runs"
-
         ],
-
         "summary": "Get Run",
-
         "operationId": "get_run_api_runs__run_id__get",
-
         "parameters": [
-
           {
-
             "name": "run_id",
-
             "in": "path",
-
             "required": true,
-
             "schema": {
-
               "type": "string",
-
               "title": "Run Id"
-
             }
-
           }
-
         ],
-
         "responses": {
-
           "200": {
-
             "description": "Successful Response",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/RunDetail"
-
                 }
-
               }
-
             }
-
           },
-
           "422": {
-
             "description": "Validation Error",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/HTTPValidationError"
-
                 }
-
               }
-
             }
-
           }
-
         }
-
       }
-
     },
-
     "/api/runs/{run_id}/stream": {
-
       "get": {
-
         "tags": [
-
           "stream"
-
         ],
-
         "summary": "Stream Run",
-
         "operationId": "stream_run_api_runs__run_id__stream_get",
-
         "parameters": [
-
           {
-
             "name": "run_id",
-
             "in": "path",
-
             "required": true,
-
             "schema": {
-
               "type": "string",
-
               "title": "Run Id"
-
             }
-
           }
-
         ],
-
         "responses": {
-
           "200": {
-
             "description": "Successful Response",
-
             "content": {
-
               "application/json": {
-
                 "schema": {}
-
               }
-
             }
-
           },
-
           "422": {
-
             "description": "Validation Error",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/HTTPValidationError"
-
                 }
-
               }
-
             }
-
           }
-
         }
-
       }
-
     },
-
     "/api/runs/{run_id}/resume": {
-
       "post": {
-
         "tags": [
-
           "hitl"
-
         ],
-
         "summary": "Resume Run",
-
         "operationId": "resume_run_api_runs__run_id__resume_post",
-
         "parameters": [
-
           {
-
             "name": "run_id",
-
             "in": "path",
-
             "required": true,
-
             "schema": {
-
               "type": "string",
-
               "title": "Run Id"
-
             }
-
           }
-
         ],
-
         "requestBody": {
-
           "required": true,
-
           "content": {
-
             "application/json": {
-
               "schema": {
-
                 "$ref": "#/components/schemas/HitlResumeRequest"
-
               }
-
             }
-
           }
-
         },
-
         "responses": {
-
           "200": {
-
             "description": "Successful Response",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/RunDetail"
-
                 }
-
               }
-
             }
-
           },
-
           "422": {
-
             "description": "Validation Error",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/HTTPValidationError"
-
                 }
-
               }
-
             }
-
           }
-
         }
-
       }
-
     },
-
     "/api/health": {
-
       "get": {
-
         "tags": [
-
           "health"
-
         ],
-
         "summary": "Health",
-
         "operationId": "health_api_health_get",
-
         "responses": {
-
           "200": {
-
             "description": "Successful Response",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/HealthStatus"
-
                 }
-
               }
-
             }
-
           }
-
         }
-
       }
-
     },
-
     "/api/smoke/llm": {
-
       "post": {
-
         "tags": [
-
           "health"
-
         ],
-
         "summary": "Smoke Llm",
-
         "operationId": "smoke_llm_api_smoke_llm_post",
-
         "requestBody": {
-
           "content": {
-
             "application/json": {
-
               "schema": {
-
                 "$ref": "#/components/schemas/LlmSmokeRequest"
-
               }
-
             }
-
           },
-
           "required": true
-
         },
-
         "responses": {
-
           "200": {
-
             "description": "Successful Response",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/SmokeResult"
-
                 }
-
               }
-
             }
-
           },
-
           "422": {
-
             "description": "Validation Error",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/HTTPValidationError"
-
                 }
-
               }
-
             }
-
           }
-
         }
-
       }
-
     },
-
     "/api/smoke/search": {
-
       "post": {
-
         "tags": [
-
           "health"
-
         ],
-
         "summary": "Smoke Search",
-
         "operationId": "smoke_search_api_smoke_search_post",
-
         "requestBody": {
-
           "content": {
-
             "application/json": {
-
               "schema": {
-
                 "$ref": "#/components/schemas/SearchSmokeRequest"
-
               }
-
             }
-
           },
-
           "required": true
-
         },
-
         "responses": {
-
           "200": {
-
             "description": "Successful Response",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/SmokeResult"
-
                 }
-
               }
-
             }
-
           },
-
           "422": {
-
             "description": "Validation Error",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/HTTPValidationError"
-
                 }
-
               }
-
             }
-
           }
-
         }
-
       }
-
     },
-
     "/api/smoke/fetch": {
-
       "post": {
-
         "tags": [
-
           "health"
-
         ],
-
         "summary": "Smoke Fetch",
-
         "operationId": "smoke_fetch_api_smoke_fetch_post",
-
         "requestBody": {
-
           "content": {
-
             "application/json": {
-
               "schema": {
-
                 "$ref": "#/components/schemas/FetchSmokeRequest"
-
               }
-
             }
-
           },
-
           "required": true
-
         },
-
         "responses": {
-
           "200": {
-
             "description": "Successful Response",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/SmokeResult"
-
                 }
-
               }
-
             }
-
           },
-
           "422": {
-
             "description": "Validation Error",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/HTTPValidationError"
-
                 }
-
               }
-
             }
-
           }
-
         }
-
       }
-
     },
-
     "/api/skills": {
-
       "get": {
-
         "tags": [
-
           "skills"
-
         ],
-
         "summary": "List Skills",
-
         "operationId": "list_skills_api_skills_get",
-
         "responses": {
-
           "200": {
-
             "description": "Successful Response",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "items": {
-
                     "$ref": "#/components/schemas/SkillSpec"
-
                   },
-
                   "type": "array",
-
                   "title": "Response List Skills Api Skills Get"
-
                 }
-
               }
-
             }
-
           }
-
         }
-
       }
-
     },
-
     "/api/runtime": {
-
       "get": {
-
         "tags": [
-
           "runtime"
-
         ],
-
         "summary": "Get Runtime",
-
         "operationId": "get_runtime_api_runtime_get",
-
         "responses": {
-
           "200": {
-
             "description": "Successful Response",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/RuntimeConfig"
-
                 }
-
               }
-
             }
-
           }
-
         }
-
       }
-
     },
-
     "/api/runs/{run_id}/trace": {
-
       "get": {
-
         "tags": [
-
           "trace"
-
         ],
-
         "summary": "Get Trace",
-
         "operationId": "get_trace_api_runs__run_id__trace_get",
-
         "parameters": [
-
           {
-
             "name": "run_id",
-
             "in": "path",
-
             "required": true,
-
             "schema": {
-
               "type": "string",
-
               "title": "Run Id"
-
             }
-
           }
-
         ],
-
         "responses": {
-
           "200": {
-
             "description": "Successful Response",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "type": "array",
-
                   "items": {
-
                     "$ref": "#/components/schemas/RunEvent"
-
                   },
-
                   "title": "Response Get Trace Api Runs  Run Id  Trace Get"
-
                 }
-
               }
-
             }
-
           },
-
           "422": {
-
             "description": "Validation Error",
-
             "content": {
-
               "application/json": {
-
                 "schema": {
-
                   "$ref": "#/components/schemas/HTTPValidationError"
-
                 }
-
               }
-
             }
-
           }
-
         }
-
       }
-
-    }
-
-  },
-
-  "components": {
-
-    "schemas": {
-
-      "AnalysisPlan": {
-
-        "properties": {
-
-          "topic": {
-
-            "type": "string",
-
-            "title": "Topic"
-
-          },
-
-          "competitors": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Competitors"
-
-          },
-
-          "dimensions": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Dimensions"
-
-          },
-
-          "complexity": {
-
-            "type": "string",
-
-            "enum": [
-
-              "low",
-
-              "medium",
-
-              "high"
-
-            ],
-
-            "title": "Complexity",
-
-            "default": "medium"
-
-          },
-
-          "homepage_hints": {
-
-            "additionalProperties": {
-
-              "type": "string"
-
-            },
-
-            "type": "object",
-
-            "title": "Homepage Hints"
-
-          },
-
-          "created_at": {
-
-            "type": "string",
-
-            "format": "date-time",
-
-            "title": "Created At"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "topic",
-
-          "competitors",
-
-          "dimensions"
-
+    },
+    "/api/knowledge/documents": {
+      "get": {
+        "tags": [
+          "knowledge"
         ],
-
-        "title": "AnalysisPlan"
-
-      },
-
-      "ComparisonCell": {
-
-        "properties": {
-
-          "competitor": {
-
-            "type": "string",
-
-            "title": "Competitor"
-
-          },
-
-          "dimension": {
-
-            "type": "string",
-
-            "title": "Dimension"
-
-          },
-
-          "value": {
-
-            "type": "string",
-
-            "title": "Value"
-
-          },
-
-          "source_ids": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Source Ids"
-
-          },
-
-          "confidence": {
-
-            "type": "number",
-
-            "maximum": 1.0,
-
-            "minimum": 0.0,
-
-            "title": "Confidence",
-
-            "default": 0.0
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "competitor",
-
-          "dimension",
-
-          "value"
-
-        ],
-
-        "title": "ComparisonCell"
-
-      },
-
-      "ComparisonMatrix": {
-
-        "properties": {
-
-          "competitors": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Competitors"
-
-          },
-
-          "dimensions": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Dimensions"
-
-          },
-
-          "cells": {
-
-            "items": {
-
-              "$ref": "#/components/schemas/ComparisonCell"
-
-            },
-
-            "type": "array",
-
-            "title": "Cells"
-
-          },
-
-          "winner_by_dimension": {
-
-            "additionalProperties": {
-
-              "type": "string"
-
-            },
-
-            "type": "object",
-
-            "title": "Winner By Dimension"
-
-          },
-
-          "summary": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Summary"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "competitors",
-
-          "dimensions"
-
-        ],
-
-        "title": "ComparisonMatrix"
-
-      },
-
-      "CompetitorCandidate": {
-
-        "properties": {
-
-          "name": {
-
-            "type": "string",
-
-            "title": "Name"
-
-          },
-
-          "rank": {
-
-            "type": "integer",
-
-            "title": "Rank"
-
-          },
-
-          "selected": {
-
-            "type": "boolean",
-
-            "title": "Selected",
-
-            "default": false
-
-          },
-
-          "rationale": {
-
-            "type": "string",
-
-            "title": "Rationale",
-
-            "default": ""
-
-          },
-
-          "evidence_titles": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Evidence Titles"
-
-          },
-
-          "evidence_urls": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Evidence Urls"
-
-          },
-
-          "confidence": {
-
-            "type": "number",
-
-            "maximum": 1.0,
-
-            "minimum": 0.0,
-
-            "title": "Confidence",
-
-            "default": 0.5
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "name",
-
-          "rank"
-
-        ],
-
-        "title": "CompetitorCandidate"
-
-      },
-
-      "CompetitorDiscovery": {
-
-        "properties": {
-
-          "query": {
-
-            "type": "string",
-
-            "title": "Query"
-
-          },
-
-          "candidates": {
-
-            "items": {
-
-              "$ref": "#/components/schemas/CompetitorCandidate"
-
-            },
-
-            "type": "array",
-
-            "title": "Candidates"
-
-          },
-
-          "selected_competitors": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Selected Competitors"
-
-          },
-
-          "rationale": {
-
-            "type": "string",
-
-            "title": "Rationale",
-
-            "default": ""
-
-          },
-
-          "created_at": {
-
-            "type": "string",
-
-            "format": "date-time",
-
-            "title": "Created At"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "query"
-
-        ],
-
-        "title": "CompetitorDiscovery"
-
-      },
-
-      "CompetitorKB": {
-
-        "properties": {
-
-          "competitor": {
-
-            "type": "string",
-
-            "title": "Competitor"
-
-          },
-
-          "slices": {
-
-            "additionalProperties": {
-
-              "items": {
-
-                "type": "string"
-
-              },
-
-              "type": "array"
-
-            },
-
-            "type": "object",
-
-            "title": "Slices"
-
-          },
-
-          "sources": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Sources"
-
-          },
-
-          "confidence": {
-
-            "type": "number",
-
-            "maximum": 1.0,
-
-            "minimum": 0.0,
-
-            "title": "Confidence",
-
-            "default": 0.0
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "competitor"
-
-        ],
-
-        "title": "CompetitorKB"
-
-      },
-
-      "FetchSmokeRequest": {
-
-        "properties": {
-
-          "url": {
-
-            "type": "string",
-
-            "maxLength": 2083,
-
-            "minLength": 1,
-
-            "format": "uri",
-
-            "title": "Url",
-
-            "default": "https://example.com"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "title": "FetchSmokeRequest"
-
-      },
-
-      "HTTPValidationError": {
-
-        "properties": {
-
-          "detail": {
-
-            "items": {
-
-              "$ref": "#/components/schemas/ValidationError"
-
-            },
-
-            "type": "array",
-
-            "title": "Detail"
-
-          }
-
-        },
-
-        "type": "object",
-
-        "title": "HTTPValidationError"
-
-      },
-
-      "HealthCheck": {
-
-        "properties": {
-
-          "name": {
-
-            "type": "string",
-
-            "title": "Name"
-
-          },
-
-          "status": {
-
-            "type": "string",
-
-            "enum": [
-
-              "ok",
-
-              "warn",
-
-              "error"
-
-            ],
-
-            "title": "Status"
-
-          },
-
-          "detail": {
-
-            "type": "string",
-
-            "title": "Detail",
-
-            "default": ""
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "name",
-
-          "status"
-
-        ],
-
-        "title": "HealthCheck"
-
-      },
-
-      "HealthStatus": {
-
-        "properties": {
-
-          "status": {
-
-            "type": "string",
-
-            "enum": [
-
-              "ok",
-
-              "warn",
-
-              "error"
-
-            ],
-
-            "title": "Status"
-
-          },
-
-          "service": {
-
-            "type": "string",
-
-            "title": "Service"
-
-          },
-
-          "version": {
-
-            "type": "string",
-
-            "title": "Version"
-
-          },
-
-          "checks": {
-
-            "items": {
-
-              "$ref": "#/components/schemas/HealthCheck"
-
-            },
-
-            "type": "array",
-
-            "title": "Checks"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "status",
-
-          "service",
-
-          "version"
-
-        ],
-
-        "title": "HealthStatus"
-
-      },
-
-      "HitlResumeRequest": {
-
-        "properties": {
-
-          "decision": {
-
-            "type": "string",
-
-            "enum": [
-
-              "accept",
-
-              "modify_plan",
-
-              "force_pass",
-
-              "redo"
-
-            ],
-
-            "title": "Decision"
-
-          },
-
-          "note": {
-
-            "anyOf": [
-
-              {
-
-                "type": "string"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ],
-
-            "title": "Note"
-
-          },
-
-          "dimensions": {
-
-            "anyOf": [
-
-              {
-
-                "items": {
-
-                  "type": "string"
-
-                },
-
-                "type": "array"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ],
-
-            "title": "Dimensions"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "decision"
-
-        ],
-
-        "title": "HitlResumeRequest"
-
-      },
-
-      "LlmSmokeRequest": {
-
-        "properties": {
-
-          "prompt": {
-
-            "type": "string",
-
-            "maxLength": 500,
-
-            "minLength": 2,
-
-            "title": "Prompt",
-
-            "default": "Reply with exactly: ok"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "title": "LlmSmokeRequest"
-
-      },
-
-      "QCIssue": {
-
-        "properties": {
-
-          "id": {
-
-            "type": "string",
-
-            "title": "Id"
-
-          },
-
-          "severity": {
-
-            "type": "string",
-
-            "enum": [
-
-              "info",
-
-              "warn",
-
-              "blocker"
-
-            ],
-
-            "title": "Severity"
-
-          },
-
-          "detected_by": {
-
-            "type": "string",
-
-            "enum": [
-
-              "citation",
-
-              "consistency",
-
-              "coverage",
-
-              "schema",
-
-              "reflector"
-
-            ],
-
-            "title": "Detected By"
-
-          },
-
-          "target_agent": {
-
-            "type": "string",
-
-            "title": "Target Agent"
-
-          },
-
-          "target_subagent": {
-
-            "anyOf": [
-
-              {
-
-                "type": "string"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ],
-
-            "title": "Target Subagent"
-
-          },
-
-          "field_path": {
-
-            "type": "string",
-
-            "title": "Field Path"
-
-          },
-
-          "problem": {
-
-            "type": "string",
-
-            "title": "Problem"
-
-          },
-
-          "redo_scope": {
-
-            "$ref": "#/components/schemas/RedoScope"
-
-          },
-
-          "self_found": {
-
-            "type": "boolean",
-
-            "title": "Self Found",
-
-            "default": false
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "id",
-
-          "severity",
-
-          "detected_by",
-
-          "target_agent",
-
-          "field_path",
-
-          "problem",
-
-          "redo_scope"
-
-        ],
-
-        "title": "QCIssue"
-
-      },
-
-      "RawSource": {
-
-        "properties": {
-
-          "id": {
-
-            "type": "string",
-
-            "title": "Id"
-
-          },
-
-          "competitor": {
-
-            "type": "string",
-
-            "title": "Competitor"
-
-          },
-
-          "dimension": {
-
-            "type": "string",
-
-            "title": "Dimension"
-
-          },
-
-          "source_type": {
-
-            "type": "string",
-
-            "title": "Source Type"
-
-          },
-
-          "title": {
-
-            "type": "string",
-
-            "title": "Title"
-
-          },
-
-          "url": {
-
-            "anyOf": [
-
-              {
-
-                "type": "string",
-
-                "maxLength": 2083,
-
-                "minLength": 1,
-
-                "format": "uri"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ],
-
-            "title": "Url"
-
-          },
-
-          "snippet": {
-
-            "type": "string",
-
-            "title": "Snippet",
-
-            "default": ""
-
-          },
-
-          "content_hash": {
-
-            "type": "string",
-
-            "title": "Content Hash"
-
-          },
-
-          "confidence": {
-
-            "type": "number",
-
-            "maximum": 1.0,
-
-            "minimum": 0.0,
-
-            "title": "Confidence"
-
-          },
-
-          "extracted_at": {
-
-            "type": "string",
-
-            "format": "date-time",
-
-            "title": "Extracted At"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "id",
-
-          "competitor",
-
-          "dimension",
-
-          "source_type",
-
-          "title",
-
-          "content_hash",
-
-          "confidence"
-
-        ],
-
-        "title": "RawSource"
-
-      },
-
-      "RedoScope": {
-
-        "properties": {
-
-          "kind": {
-
-            "type": "string",
-
-            "enum": [
-
-              "writer_only",
-
-              "comparator",
-
-              "analyst",
-
-              "collector",
-
-              "full"
-
-            ],
-
-            "title": "Kind"
-
-          },
-
-          "target_subagent": {
-
-            "anyOf": [
-
-              {
-
-                "type": "string"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ],
-
-            "title": "Target Subagent"
-
-          },
-
-          "target_competitor": {
-
-            "anyOf": [
-
-              {
-
-                "type": "string"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ],
-
-            "title": "Target Competitor"
-
-          },
-
-          "rationale": {
-
-            "type": "string",
-
-            "title": "Rationale"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "kind",
-
-          "rationale"
-
-        ],
-
-        "title": "RedoScope"
-
-      },
-
-      "ReflectionRecord": {
-
-        "properties": {
-
-          "iteration": {
-
-            "type": "integer",
-
-            "title": "Iteration"
-
-          },
-
-          "coverage_gaps": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Coverage Gaps"
-
-          },
-
-          "confidence_outliers": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Confidence Outliers"
-
-          },
-
-          "cross_competitor_gaps": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Cross Competitor Gaps"
-
-          },
-
-          "suggested_redos": {
-
-            "items": {
-
-              "$ref": "#/components/schemas/RedoScope"
-
-            },
-
-            "type": "array",
-
-            "title": "Suggested Redos"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "iteration"
-
-        ],
-
-        "title": "ReflectionRecord"
-
-      },
-
-      "RevisionRecord": {
-
-        "properties": {
-
-          "id": {
-
-            "type": "string",
-
-            "title": "Id"
-
-          },
-
-          "iteration": {
-
-            "type": "integer",
-
-            "title": "Iteration"
-
-          },
-
-          "stage": {
-
-            "type": "string",
-
-            "title": "Stage"
-
-          },
-
-          "before_md": {
-
-            "type": "string",
-
-            "title": "Before Md",
-
-            "default": ""
-
-          },
-
-          "after_md": {
-
-            "type": "string",
-
-            "title": "After Md",
-
-            "default": ""
-
-          },
-
-          "issue_ids": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Issue Ids"
-
-          },
-
-          "issue_count_before": {
-
-            "type": "integer",
-
-            "title": "Issue Count Before",
-
-            "default": 0
-
-          },
-
-          "issue_count_after": {
-
-            "type": "integer",
-
-            "title": "Issue Count After",
-
-            "default": 0
-
-          },
-
-          "convergence_ratio": {
-
-            "type": "number",
-
-            "minimum": 0.0,
-
-            "title": "Convergence Ratio",
-
-            "default": 1.0
-
-          },
-
-          "created_at": {
-
-            "type": "string",
-
-            "format": "date-time",
-
-            "title": "Created At"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "id",
-
-          "iteration",
-
-          "stage"
-
-        ],
-
-        "title": "RevisionRecord"
-
-      },
-
-      "RunCreateRequest": {
-
-        "properties": {
-
-          "topic": {
-
-            "type": "string",
-
-            "maxLength": 200,
-
-            "minLength": 2,
-
-            "title": "Topic"
-
-          },
-
-          "competitors": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "maxItems": 8,
-
-            "title": "Competitors"
-
-          },
-
-          "dimensions": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "maxItems": 8,
-
-            "minItems": 1,
-
-            "title": "Dimensions"
-
-          },
-
-          "execution_mode": {
-
-            "type": "string",
-
-            "enum": [
-
-              "auto",
-
-              "demo",
-
-              "real"
-
-            ],
-
-            "title": "Execution Mode",
-
-            "default": "auto"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "topic",
-
-          "dimensions"
-
-        ],
-
-        "title": "RunCreateRequest"
-
-      },
-
-      "RunDetail": {
-
-        "properties": {
-
-          "id": {
-
-            "type": "string",
-
-            "title": "Id"
-
-          },
-
-          "topic": {
-
-            "type": "string",
-
-            "title": "Topic"
-
-          },
-
-          "status": {
-
-            "type": "string",
-
-            "enum": [
-
-              "queued",
-
-              "running",
-
-              "interrupted",
-
-              "completed",
-
-              "failed"
-
-            ],
-
-            "title": "Status"
-
-          },
-
-          "execution_mode": {
-
-            "type": "string",
-
-            "enum": [
-
-              "demo",
-
-              "real"
-
-            ],
-
-            "title": "Execution Mode"
-
-          },
-
-          "created_at": {
-
-            "type": "string",
-
-            "format": "date-time",
-
-            "title": "Created At"
-
-          },
-
-          "updated_at": {
-
-            "type": "string",
-
-            "format": "date-time",
-
-            "title": "Updated At"
-
-          },
-
-          "plan": {
-
-            "$ref": "#/components/schemas/AnalysisPlan"
-
-          },
-
-          "report_md": {
-
-            "type": "string",
-
-            "title": "Report Md",
-
-            "default": ""
-
-          },
-
-          "raw_sources": {
-
-            "items": {
-
-              "$ref": "#/components/schemas/RawSource"
-
-            },
-
-            "type": "array",
-
-            "title": "Raw Sources"
-
-          },
-
-          "competitor_kbs": {
-
-            "additionalProperties": {
-
-              "$ref": "#/components/schemas/CompetitorKB"
-
-            },
-
-            "type": "object",
-
-            "title": "Competitor Kbs"
-
-          },
-
-          "competitor_discovery": {
-
-            "anyOf": [
-
-              {
-
-                "$ref": "#/components/schemas/CompetitorDiscovery"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ]
-
-          },
-
-          "comparison_matrix": {
-
-            "anyOf": [
-
-              {
-
-                "$ref": "#/components/schemas/ComparisonMatrix"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ]
-
-          },
-
-          "qa_findings": {
-
-            "items": {
-
-              "$ref": "#/components/schemas/QCIssue"
-
-            },
-
-            "type": "array",
-
-            "title": "Qa Findings"
-
-          },
-
-          "reflections": {
-
-            "items": {
-
-              "$ref": "#/components/schemas/ReflectionRecord"
-
-            },
-
-            "type": "array",
-
-            "title": "Reflections"
-
-          },
-
-          "revisions": {
-
-            "items": {
-
-              "$ref": "#/components/schemas/RevisionRecord"
-
-            },
-
-            "type": "array",
-
-            "title": "Revisions"
-
-          },
-
-          "current_node": {
-
-            "anyOf": [
-
-              {
-
-                "type": "string"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ],
-
-            "title": "Current Node"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "id",
-
-          "topic",
-
-          "status",
-
-          "execution_mode",
-
-          "created_at",
-
-          "updated_at",
-
-          "plan"
-
-        ],
-
-        "title": "RunDetail"
-
-      },
-
-      "RunEvent": {
-
-        "properties": {
-
-          "id": {
-
-            "type": "integer",
-
-            "title": "Id"
-
-          },
-
-          "run_id": {
-
-            "type": "string",
-
-            "title": "Run Id"
-
-          },
-
-          "type": {
-
-            "type": "string",
-
-            "enum": [
-
-              "run_created",
-
-              "node_started",
-
-              "node_completed",
-
-              "interrupt",
-
-              "qa_issue",
-
-              "report_updated",
-
-              "revision_recorded",
-
-              "run_completed",
-
-              "run_failed"
-
-            ],
-
-            "title": "Type"
-
-          },
-
-          "agent": {
-
-            "anyOf": [
-
-              {
-
-                "type": "string"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ],
-
-            "title": "Agent"
-
-          },
-
-          "subagent": {
-
-            "anyOf": [
-
-              {
-
-                "type": "string"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ],
-
-            "title": "Subagent"
-
-          },
-
-          "swimlane": {
-
-            "anyOf": [
-
-              {
-
-                "type": "string"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ],
-
-            "title": "Swimlane"
-
-          },
-
-          "message": {
-
-            "type": "string",
-
-            "title": "Message"
-
-          },
-
-          "payload": {
-
-            "additionalProperties": true,
-
-            "type": "object",
-
-            "title": "Payload"
-
-          },
-
-          "created_at": {
-
-            "type": "string",
-
-            "format": "date-time",
-
-            "title": "Created At"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "id",
-
-          "run_id",
-
-          "type",
-
-          "message"
-
-        ],
-
-        "title": "RunEvent"
-
-      },
-
-      "RunSummary": {
-
-        "properties": {
-
-          "id": {
-
-            "type": "string",
-
-            "title": "Id"
-
-          },
-
-          "topic": {
-
-            "type": "string",
-
-            "title": "Topic"
-
-          },
-
-          "status": {
-
-            "type": "string",
-
-            "enum": [
-
-              "queued",
-
-              "running",
-
-              "interrupted",
-
-              "completed",
-
-              "failed"
-
-            ],
-
-            "title": "Status"
-
-          },
-
-          "execution_mode": {
-
-            "type": "string",
-
-            "enum": [
-
-              "demo",
-
-              "real"
-
-            ],
-
-            "title": "Execution Mode"
-
-          },
-
-          "created_at": {
-
-            "type": "string",
-
-            "format": "date-time",
-
-            "title": "Created At"
-
-          },
-
-          "updated_at": {
-
-            "type": "string",
-
-            "format": "date-time",
-
-            "title": "Updated At"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "id",
-
-          "topic",
-
-          "status",
-
-          "execution_mode",
-
-          "created_at",
-
-          "updated_at"
-
-        ],
-
-        "title": "RunSummary"
-
-      },
-
-      "RuntimeConfig": {
-
-        "properties": {
-
-          "default_execution_mode": {
-
-            "type": "string",
-
-            "enum": [
-
-              "demo",
-
-              "real"
-
-            ],
-
-            "title": "Default Execution Mode"
-
-          },
-
-          "demo_mode": {
-
-            "type": "boolean",
-
-            "title": "Demo Mode"
-
-          },
-
-          "has_ark_api_key": {
-
-            "type": "boolean",
-
-            "title": "Has Ark Api Key"
-
-          },
-
-          "has_ark_model": {
-
-            "type": "boolean",
-
-            "title": "Has Ark Model"
-
-          },
-
-          "ark_base_url": {
-
-            "type": "string",
-
-            "title": "Ark Base Url"
-
-          },
-
-          "ark_model": {
-
-            "anyOf": [
-
-              {
-
-                "type": "string"
-
-              },
-
-              {
-
-                "type": "null"
-
-              }
-
-            ],
-
-            "title": "Ark Model"
-
-          },
-
-          "web_search_provider": {
-
-            "type": "string",
-
-            "title": "Web Search Provider"
-
-          },
-
-          "has_web_search_key": {
-
-            "type": "boolean",
-
-            "title": "Has Web Search Key"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "default_execution_mode",
-
-          "demo_mode",
-
-          "has_ark_api_key",
-
-          "has_ark_model",
-
-          "ark_base_url",
-
-          "web_search_provider",
-
-          "has_web_search_key"
-
-        ],
-
-        "title": "RuntimeConfig"
-
-      },
-
-      "SearchSmokeRequest": {
-
-        "properties": {
-
-          "query": {
-
-            "type": "string",
-
-            "maxLength": 300,
-
-            "minLength": 2,
-
-            "title": "Query",
-
-            "default": "AI coding assistant competitors"
-
-          },
-
-          "max_results": {
-
-            "type": "integer",
-
-            "maximum": 10.0,
-
-            "minimum": 1.0,
-
-            "title": "Max Results",
-
-            "default": 3
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "title": "SearchSmokeRequest"
-
-      },
-
-      "SkillOutputSpec": {
-
-        "properties": {
-
-          "prefix": {
-
-            "type": "string",
-
-            "title": "Prefix"
-
-          },
-
-          "confidence_default": {
-
-            "type": "number",
-
-            "maximum": 1.0,
-
-            "minimum": 0.0,
-
-            "title": "Confidence Default",
-
-            "default": 0.8
-
-          },
-
-          "confidence_no_url": {
-
-            "type": "number",
-
-            "maximum": 1.0,
-
-            "minimum": 0.0,
-
-            "title": "Confidence No Url",
-
-            "default": 0.5
-
-          },
-
-          "required_dimension": {
-
-            "type": "string",
-
-            "title": "Required Dimension"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "prefix",
-
-          "required_dimension"
-
-        ],
-
-        "title": "SkillOutputSpec"
-
-      },
-
-      "SkillSpec": {
-
-        "properties": {
-
-          "name": {
-
-            "type": "string",
-
-            "title": "Name"
-
-          },
-
-          "subagent_class": {
-
-            "type": "string",
-
-            "title": "Subagent Class",
-
-            "default": "GenericCollector"
-
-          },
-
-          "description": {
-
-            "type": "string",
-
-            "title": "Description"
-
-          },
-
-          "tools_allowlist": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Tools Allowlist"
-
-          },
-
-          "query_templates": {
-
-            "items": {
-
-              "type": "string"
-
-            },
-
-            "type": "array",
-
-            "title": "Query Templates"
-
-          },
-
-          "max_turns": {
-
-            "type": "integer",
-
-            "maximum": 12.0,
-
-            "minimum": 1.0,
-
-            "title": "Max Turns",
-
-            "default": 6
-
-          },
-
-          "source_type": {
-
-            "type": "string",
-
-            "title": "Source Type"
-
-          },
-
-          "output": {
-
-            "$ref": "#/components/schemas/SkillOutputSpec"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "name",
-
-          "description",
-
-          "tools_allowlist",
-
-          "query_templates",
-
-          "source_type",
-
-          "output"
-
-        ],
-
-        "title": "SkillSpec"
-
-      },
-
-      "SmokeResult": {
-
-        "properties": {
-
-          "component": {
-
-            "type": "string",
-
-            "enum": [
-
-              "llm",
-
-              "search",
-
-              "fetch",
-
-              "minimal_run"
-
-            ],
-
-            "title": "Component"
-
-          },
-
-          "ok": {
-
-            "type": "boolean",
-
-            "title": "Ok"
-
-          },
-
-          "message": {
-
-            "type": "string",
-
-            "title": "Message"
-
-          },
-
-          "elapsed_ms": {
-
-            "type": "integer",
-
-            "title": "Elapsed Ms"
-
-          },
-
-          "details": {
-
-            "additionalProperties": true,
-
-            "type": "object",
-
-            "title": "Details"
-
-          }
-
-        },
-
-        "additionalProperties": false,
-
-        "type": "object",
-
-        "required": [
-
-          "component",
-
-          "ok",
-
-          "message",
-
-          "elapsed_ms"
-
-        ],
-
-        "title": "SmokeResult"
-
-      },
-
-      "ValidationError": {
-
-        "properties": {
-
-          "loc": {
-
-            "items": {
-
+        "summary": "List Knowledge Documents",
+        "operationId": "list_knowledge_documents_api_knowledge_documents_get",
+        "parameters": [
+          {
+            "name": "competitor",
+            "in": "query",
+            "required": false,
+            "schema": {
               "anyOf": [
-
                 {
-
                   "type": "string"
-
                 },
-
                 {
-
-                  "type": "integer"
-
+                  "type": "null"
                 }
-
-              ]
-
-            },
-
-            "type": "array",
-
-            "title": "Location"
-
+              ],
+              "title": "Competitor"
+            }
           },
-
-          "msg": {
-
-            "type": "string",
-
-            "title": "Message"
-
+          {
+            "name": "dimension",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dimension"
+            }
           },
-
-          "type": {
-
-            "type": "string",
-
-            "title": "Error Type"
-
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Type"
+            }
           },
-
-          "input": {
-
-            "title": "Input"
-
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
           },
-
-          "ctx": {
-
-            "type": "object",
-
-            "title": "Context"
-
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
           }
-
-        },
-
-        "type": "object",
-
-        "required": [
-
-          "loc",
-
-          "msg",
-
-          "type"
-
         ],
-
-        "title": "ValidationError"
-
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/KnowledgeDocument"
+                  },
+                  "title": "Response List Knowledge Documents Api Knowledge Documents Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
-
+    },
+    "/api/knowledge/documents/{document_id}": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Get Knowledge Document",
+        "operationId": "get_knowledge_document_api_knowledge_documents__document_id__get",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeDocument"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Delete Knowledge Document",
+        "operationId": "delete_knowledge_document_api_knowledge_documents__document_id__delete",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/documents/{document_id}/versions": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Get Knowledge Document Versions",
+        "operationId": "get_knowledge_document_versions_api_knowledge_documents__document_id__versions_get",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/KnowledgeDocument"
+                  },
+                  "title": "Response Get Knowledge Document Versions Api Knowledge Documents  Document Id  Versions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/documents/{document_id}/diff": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Diff Knowledge Document",
+        "operationId": "diff_knowledge_document_api_knowledge_documents__document_id__diff_get",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "against",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Against"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDiffResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/documents/{document_id}/merge": {
+      "post": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Merge Knowledge Document Version",
+        "operationId": "merge_knowledge_document_version_api_knowledge_documents__document_id__merge_post",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentMergeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeDocument"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/search": {
+      "post": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Search Knowledge",
+        "operationId": "search_knowledge_api_knowledge_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetrievalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetrievalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/crawl-jobs": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "List Knowledge Crawl Jobs",
+        "operationId": "list_knowledge_crawl_jobs_api_knowledge_crawl_jobs_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CrawlJob"
+                  },
+                  "title": "Response List Knowledge Crawl Jobs Api Knowledge Crawl Jobs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Create Knowledge Crawl Job",
+        "operationId": "create_knowledge_crawl_job_api_knowledge_crawl_jobs_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrawlJobCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/crawl-jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Get Knowledge Crawl Job",
+        "operationId": "get_knowledge_crawl_job_api_knowledge_crawl_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/batch": {
+      "post": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Create Knowledge Batch",
+        "operationId": "create_knowledge_batch_api_knowledge_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchIngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchIngestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/ingest-jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Get Knowledge Ingest Job",
+        "operationId": "get_knowledge_ingest_job_api_knowledge_ingest_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/ingest-jobs": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "List Knowledge Ingest Jobs",
+        "operationId": "list_knowledge_ingest_jobs_api_knowledge_ingest_jobs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IngestJob"
+                  },
+                  "title": "Response List Knowledge Ingest Jobs Api Knowledge Ingest Jobs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crawl/jobs": {
+      "get": {
+        "tags": [
+          "crawl"
+        ],
+        "summary": "List Crawl Jobs",
+        "operationId": "list_crawl_jobs_api_crawl_jobs_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CrawlJob"
+                  },
+                  "title": "Response List Crawl Jobs Api Crawl Jobs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "crawl"
+        ],
+        "summary": "Create Crawl Job",
+        "operationId": "create_crawl_job_api_crawl_jobs_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrawlJobCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crawl/sources": {
+      "get": {
+        "tags": [
+          "crawl"
+        ],
+        "summary": "List Crawl Sources",
+        "operationId": "list_crawl_sources_api_crawl_sources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CrawlSource"
+                  },
+                  "type": "array",
+                  "title": "Response List Crawl Sources Api Crawl Sources Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "crawl"
+        ],
+        "summary": "Create Crawl Source",
+        "operationId": "create_crawl_source_api_crawl_sources_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrawlSourceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlSourceDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crawl/sources/{source_id}": {
+      "get": {
+        "tags": [
+          "crawl"
+        ],
+        "summary": "Get Crawl Source",
+        "operationId": "get_crawl_source_api_crawl_sources__source_id__get",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlSourceDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "crawl"
+        ],
+        "summary": "Delete Crawl Source",
+        "operationId": "delete_crawl_source_api_crawl_sources__source_id__delete",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crawl/sources/{source_id}/retry": {
+      "post": {
+        "tags": [
+          "crawl"
+        ],
+        "summary": "Retry Crawl Source",
+        "operationId": "retry_crawl_source_api_crawl_sources__source_id__retry_post",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlSourceDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crawl/frontier/stats": {
+      "get": {
+        "tags": [
+          "crawl"
+        ],
+        "summary": "Get Crawl Frontier Stats",
+        "operationId": "get_crawl_frontier_stats_api_crawl_frontier_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlFrontierStats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crawl/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "crawl"
+        ],
+        "summary": "Get Crawl Job",
+        "operationId": "get_crawl_job_api_crawl_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crawl/jobs/{job_id}/stream": {
+      "get": {
+        "tags": [
+          "crawl"
+        ],
+        "summary": "Stream Crawl Job",
+        "operationId": "stream_crawl_job_api_crawl_jobs__job_id__stream_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
-
+  },
+  "components": {
+    "schemas": {
+      "AnalysisPlan": {
+        "properties": {
+          "topic": {
+            "type": "string",
+            "title": "Topic"
+          },
+          "competitors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Competitors"
+          },
+          "dimensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dimensions"
+          },
+          "complexity": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Complexity",
+            "default": "medium"
+          },
+          "homepage_hints": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Homepage Hints"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "topic",
+          "competitors",
+          "dimensions"
+        ],
+        "title": "AnalysisPlan"
+      },
+      "BatchIngestItem": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "url",
+              "text",
+              "base64"
+            ],
+            "title": "Source"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "content_b64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content B64"
+          },
+          "mime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "BatchIngestItem"
+      },
+      "BatchIngestOptions": {
+        "properties": {
+          "max_concurrent": {
+            "type": "integer",
+            "title": "Max Concurrent",
+            "default": 4
+          },
+          "fail_fast": {
+            "type": "boolean",
+            "title": "Fail Fast",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "BatchIngestOptions"
+      },
+      "BatchIngestRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BatchIngestItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "options": {
+            "$ref": "#/components/schemas/BatchIngestOptions",
+            "default": {
+              "max_concurrent": 4,
+              "fail_fast": false
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "BatchIngestRequest"
+      },
+      "BatchIngestResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "accepted": {
+            "type": "integer",
+            "title": "Accepted"
+          },
+          "rejected": {
+            "items": {
+              "$ref": "#/components/schemas/RejectedItem"
+            },
+            "type": "array",
+            "title": "Rejected"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "accepted",
+          "rejected"
+        ],
+        "title": "BatchIngestResponse"
+      },
+      "ComparisonCell": {
+        "properties": {
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "competitor",
+          "dimension",
+          "value"
+        ],
+        "title": "ComparisonCell"
+      },
+      "ComparisonMatrix": {
+        "properties": {
+          "competitors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Competitors"
+          },
+          "dimensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dimensions"
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/ComparisonCell"
+            },
+            "type": "array",
+            "title": "Cells"
+          },
+          "winner_by_dimension": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Winner By Dimension"
+          },
+          "summary": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Summary"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "competitors",
+          "dimensions"
+        ],
+        "title": "ComparisonMatrix"
+      },
+      "CompetitorCandidate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "selected": {
+            "type": "boolean",
+            "title": "Selected",
+            "default": false
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale",
+            "default": ""
+          },
+          "evidence_titles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Titles"
+          },
+          "evidence_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Urls"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.5
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "rank"
+        ],
+        "title": "CompetitorCandidate"
+      },
+      "CompetitorDiscovery": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CompetitorCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "selected_competitors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Selected Competitors"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale",
+            "default": ""
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "CompetitorDiscovery"
+      },
+      "CompetitorKB": {
+        "properties": {
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "slices": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Slices"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "competitor"
+        ],
+        "title": "CompetitorKB"
+      },
+      "CrawlFrontierStats": {
+        "properties": {
+          "queued": {
+            "type": "integer",
+            "title": "Queued",
+            "default": 0
+          },
+          "running": {
+            "type": "integer",
+            "title": "Running",
+            "default": 0
+          },
+          "done": {
+            "type": "integer",
+            "title": "Done",
+            "default": 0
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "default": 0
+          },
+          "cancelled": {
+            "type": "integer",
+            "title": "Cancelled",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "CrawlFrontierStats"
+      },
+      "CrawlJob": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "competitor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competitor"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "attempt_count": {
+            "type": "integer",
+            "title": "Attempt Count"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "result_metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result Metadata",
+            "default": {}
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "status",
+          "attempt_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CrawlJob"
+      },
+      "CrawlJobCreate": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "competitor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competitor"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "CrawlJobCreate"
+      },
+      "CrawlSource": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "sitemap",
+              "rss",
+              "web_search",
+              "manual"
+            ],
+            "title": "Type"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "config",
+          "created_at"
+        ],
+        "title": "CrawlSource"
+      },
+      "CrawlSourceCreate": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "sitemap",
+              "rss",
+              "web_search",
+              "manual"
+            ],
+            "title": "Type"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "config"
+        ],
+        "title": "CrawlSourceCreate"
+      },
+      "CrawlSourceDetail": {
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/CrawlSource"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/CrawlFrontierStats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "progress"
+        ],
+        "title": "CrawlSourceDetail"
+      },
+      "DocumentDiffResponse": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "against": {
+            "type": "string",
+            "title": "Against"
+          },
+          "diff": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Diff"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "against",
+          "diff"
+        ],
+        "title": "DocumentDiffResponse"
+      },
+      "DocumentMergeRequest": {
+        "properties": {
+          "target_document_id": {
+            "type": "string",
+            "title": "Target Document Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_document_id"
+        ],
+        "title": "DocumentMergeRequest"
+      },
+      "FetchSmokeRequest": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Url",
+            "default": "https://example.com"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FetchSmokeRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthCheck": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "HealthCheck"
+      },
+      "HealthStatus": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/HealthCheck"
+            },
+            "type": "array",
+            "title": "Checks"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "service",
+          "version"
+        ],
+        "title": "HealthStatus"
+      },
+      "HitlResumeRequest": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "modify_plan",
+              "force_pass",
+              "redo"
+            ],
+            "title": "Decision"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "dimensions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimensions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "HitlResumeRequest"
+      },
+      "IngestJob": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "total_items": {
+            "type": "integer",
+            "title": "Total Items"
+          },
+          "accepted_items": {
+            "type": "integer",
+            "title": "Accepted Items"
+          },
+          "completed_items": {
+            "type": "integer",
+            "title": "Completed Items"
+          },
+          "failed_items": {
+            "type": "integer",
+            "title": "Failed Items"
+          },
+          "rejected": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Rejected"
+          },
+          "failed": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Failed"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "total_items",
+          "accepted_items",
+          "completed_items",
+          "failed_items",
+          "rejected",
+          "failed",
+          "results",
+          "options",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "IngestJob"
+      },
+      "KnowledgeDocument": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "canonical_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Url"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "competitor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competitor"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "markdown": {
+            "type": "string",
+            "title": "Markdown",
+            "default": ""
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "default": {}
+          },
+          "fetched_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Fetched At"
+          },
+          "indexed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indexed At"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "active"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          },
+          "parent_document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Document Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "source_type",
+          "content_hash",
+          "text",
+          "fetched_at"
+        ],
+        "title": "KnowledgeDocument",
+        "description": "A crawled or ingested document stored in the knowledge base."
+      },
+      "LlmSmokeRequest": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 2,
+            "title": "Prompt",
+            "default": "Reply with exactly: ok"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LlmSmokeRequest"
+      },
+      "QCIssue": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warn",
+              "blocker"
+            ],
+            "title": "Severity"
+          },
+          "detected_by": {
+            "type": "string",
+            "enum": [
+              "citation",
+              "consistency",
+              "coverage",
+              "schema",
+              "reflector"
+            ],
+            "title": "Detected By"
+          },
+          "target_agent": {
+            "type": "string",
+            "title": "Target Agent"
+          },
+          "target_subagent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Subagent"
+          },
+          "field_path": {
+            "type": "string",
+            "title": "Field Path"
+          },
+          "problem": {
+            "type": "string",
+            "title": "Problem"
+          },
+          "redo_scope": {
+            "$ref": "#/components/schemas/RedoScope"
+          },
+          "self_found": {
+            "type": "boolean",
+            "title": "Self Found",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "detected_by",
+          "target_agent",
+          "field_path",
+          "problem",
+          "redo_scope"
+        ],
+        "title": "QCIssue"
+      },
+      "RawSource": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "covered_competitors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Covered Competitors"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet",
+            "default": ""
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "extracted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Extracted At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "competitor",
+          "dimension",
+          "source_type",
+          "title",
+          "content_hash",
+          "confidence"
+        ],
+        "title": "RawSource"
+      },
+      "RedoScope": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "writer_only",
+              "comparator",
+              "analyst",
+              "collector",
+              "full"
+            ],
+            "title": "Kind"
+          },
+          "target_subagent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Subagent"
+          },
+          "target_competitor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Competitor"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "rationale"
+        ],
+        "title": "RedoScope"
+      },
+      "ReflectionRecord": {
+        "properties": {
+          "iteration": {
+            "type": "integer",
+            "title": "Iteration"
+          },
+          "coverage_gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Coverage Gaps"
+          },
+          "confidence_outliers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Confidence Outliers"
+          },
+          "cross_competitor_gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cross Competitor Gaps"
+          },
+          "suggested_redos": {
+            "items": {
+              "$ref": "#/components/schemas/RedoScope"
+            },
+            "type": "array",
+            "title": "Suggested Redos"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "iteration"
+        ],
+        "title": "ReflectionRecord"
+      },
+      "RejectedItem": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "reason"
+        ],
+        "title": "RejectedItem"
+      },
+      "RetrievalHit": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id"
+          },
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "rerank_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank Score"
+          },
+          "rerank_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank Model"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "competitor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competitor"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "default": ""
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "document_id",
+          "text",
+          "score",
+          "title"
+        ],
+        "title": "RetrievalHit",
+        "description": "A single result from hybrid retrieval."
+      },
+      "RetrievalRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "competitors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Competitors",
+            "default": []
+          },
+          "dimensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dimensions",
+            "default": []
+          },
+          "top_k": {
+            "type": "integer",
+            "title": "Top K",
+            "default": 20
+          },
+          "rerank_top_k": {
+            "type": "integer",
+            "title": "Rerank Top K",
+            "default": 8
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "dense",
+              "hybrid"
+            ],
+            "title": "Mode",
+            "default": "hybrid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "RetrievalRequest"
+      },
+      "RetrievalResponse": {
+        "properties": {
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievalHit"
+            },
+            "type": "array",
+            "title": "Hits"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hits",
+          "query",
+          "total"
+        ],
+        "title": "RetrievalResponse"
+      },
+      "RevisionRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "iteration": {
+            "type": "integer",
+            "title": "Iteration"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "before_md": {
+            "type": "string",
+            "title": "Before Md",
+            "default": ""
+          },
+          "after_md": {
+            "type": "string",
+            "title": "After Md",
+            "default": ""
+          },
+          "issue_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issue Ids"
+          },
+          "issue_count_before": {
+            "type": "integer",
+            "title": "Issue Count Before",
+            "default": 0
+          },
+          "issue_count_after": {
+            "type": "integer",
+            "title": "Issue Count After",
+            "default": 0
+          },
+          "convergence_ratio": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Convergence Ratio",
+            "default": 1.0
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "iteration",
+          "stage"
+        ],
+        "title": "RevisionRecord"
+      },
+      "RunCreateRequest": {
+        "properties": {
+          "topic": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 2,
+            "title": "Topic"
+          },
+          "competitors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Competitors"
+          },
+          "dimensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Dimensions"
+          },
+          "execution_mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "demo",
+              "real"
+            ],
+            "title": "Execution Mode",
+            "default": "auto"
+          },
+          "auto_redo_warn_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Redo Warn Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "topic",
+          "dimensions"
+        ],
+        "title": "RunCreateRequest"
+      },
+      "RunDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "topic": {
+            "type": "string",
+            "title": "Topic"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "interrupted",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "execution_mode": {
+            "type": "string",
+            "enum": [
+              "demo",
+              "real"
+            ],
+            "title": "Execution Mode"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/AnalysisPlan"
+          },
+          "max_iterations": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max Iterations",
+            "default": 2
+          },
+          "auto_redo_warn_enabled": {
+            "type": "boolean",
+            "title": "Auto Redo Warn Enabled",
+            "default": false
+          },
+          "report_md": {
+            "type": "string",
+            "title": "Report Md",
+            "default": ""
+          },
+          "raw_sources": {
+            "items": {
+              "$ref": "#/components/schemas/RawSource"
+            },
+            "type": "array",
+            "title": "Raw Sources"
+          },
+          "competitor_kbs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CompetitorKB"
+            },
+            "type": "object",
+            "title": "Competitor Kbs"
+          },
+          "competitor_discovery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompetitorDiscovery"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comparison_matrix": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonMatrix"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "qa_findings": {
+            "items": {
+              "$ref": "#/components/schemas/QCIssue"
+            },
+            "type": "array",
+            "title": "Qa Findings"
+          },
+          "reflections": {
+            "items": {
+              "$ref": "#/components/schemas/ReflectionRecord"
+            },
+            "type": "array",
+            "title": "Reflections"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/RevisionRecord"
+            },
+            "type": "array",
+            "title": "Revisions"
+          },
+          "trace_spans": {
+            "items": {
+              "$ref": "#/components/schemas/TraceSpan"
+            },
+            "type": "array",
+            "title": "Trace Spans"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/RunMetrics"
+          },
+          "current_node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Node"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "topic",
+          "status",
+          "execution_mode",
+          "created_at",
+          "updated_at",
+          "plan"
+        ],
+        "title": "RunDetail"
+      },
+      "RunEvent": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "run_created",
+              "node_started",
+              "node_completed",
+              "interrupt",
+              "qa_issue",
+              "report_updated",
+              "revision_recorded",
+              "run_completed",
+              "run_failed"
+            ],
+            "title": "Type"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "subagent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subagent"
+          },
+          "swimlane": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Swimlane"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "run_id",
+          "type",
+          "message"
+        ],
+        "title": "RunEvent"
+      },
+      "RunMetrics": {
+        "properties": {
+          "total_spans": {
+            "type": "integer",
+            "title": "Total Spans",
+            "default": 0
+          },
+          "total_duration_ms": {
+            "type": "integer",
+            "title": "Total Duration Ms",
+            "default": 0
+          },
+          "llm_calls": {
+            "type": "integer",
+            "title": "Llm Calls",
+            "default": 0
+          },
+          "search_calls": {
+            "type": "integer",
+            "title": "Search Calls",
+            "default": 0
+          },
+          "fetch_calls": {
+            "type": "integer",
+            "title": "Fetch Calls",
+            "default": 0
+          },
+          "input_tokens_estimate": {
+            "type": "integer",
+            "title": "Input Tokens Estimate",
+            "default": 0
+          },
+          "output_tokens_estimate": {
+            "type": "integer",
+            "title": "Output Tokens Estimate",
+            "default": 0
+          },
+          "cost_estimate_usd": {
+            "type": "number",
+            "title": "Cost Estimate Usd",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RunMetrics"
+      },
+      "RunSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "topic": {
+            "type": "string",
+            "title": "Topic"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "interrupted",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "execution_mode": {
+            "type": "string",
+            "enum": [
+              "demo",
+              "real"
+            ],
+            "title": "Execution Mode"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "topic",
+          "status",
+          "execution_mode",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RunSummary"
+      },
+      "RuntimeConfig": {
+        "properties": {
+          "default_execution_mode": {
+            "type": "string",
+            "enum": [
+              "demo",
+              "real"
+            ],
+            "title": "Default Execution Mode"
+          },
+          "demo_mode": {
+            "type": "boolean",
+            "title": "Demo Mode"
+          },
+          "has_ark_api_key": {
+            "type": "boolean",
+            "title": "Has Ark Api Key"
+          },
+          "has_ark_model": {
+            "type": "boolean",
+            "title": "Has Ark Model"
+          },
+          "ark_base_url": {
+            "type": "string",
+            "title": "Ark Base Url"
+          },
+          "ark_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ark Model"
+          },
+          "web_search_provider": {
+            "type": "string",
+            "title": "Web Search Provider"
+          },
+          "has_web_search_key": {
+            "type": "boolean",
+            "title": "Has Web Search Key"
+          },
+          "auto_redo_enabled": {
+            "type": "boolean",
+            "title": "Auto Redo Enabled"
+          },
+          "auto_redo_warn_enabled": {
+            "type": "boolean",
+            "title": "Auto Redo Warn Enabled"
+          },
+          "hitl_enabled": {
+            "type": "boolean",
+            "title": "Hitl Enabled"
+          },
+          "hitl_timeout_seconds": {
+            "type": "number",
+            "title": "Hitl Timeout Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "default_execution_mode",
+          "demo_mode",
+          "has_ark_api_key",
+          "has_ark_model",
+          "ark_base_url",
+          "web_search_provider",
+          "has_web_search_key",
+          "auto_redo_enabled",
+          "auto_redo_warn_enabled",
+          "hitl_enabled",
+          "hitl_timeout_seconds"
+        ],
+        "title": "RuntimeConfig"
+      },
+      "SearchSmokeRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 2,
+            "title": "Query",
+            "default": "AI coding assistant competitors"
+          },
+          "max_results": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "default": 3
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SearchSmokeRequest"
+      },
+      "SkillOutputSpec": {
+        "properties": {
+          "prefix": {
+            "type": "string",
+            "title": "Prefix"
+          },
+          "confidence_default": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence Default",
+            "default": 0.8
+          },
+          "confidence_no_url": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence No Url",
+            "default": 0.5
+          },
+          "required_dimension": {
+            "type": "string",
+            "title": "Required Dimension"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prefix",
+          "required_dimension"
+        ],
+        "title": "SkillOutputSpec"
+      },
+      "SkillSpec": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "subagent_class": {
+            "type": "string",
+            "title": "Subagent Class",
+            "default": "GenericCollector"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "tools_allowlist": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tools Allowlist"
+          },
+          "query_templates": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Query Templates"
+          },
+          "max_turns": {
+            "type": "integer",
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Max Turns",
+            "default": 6
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "output": {
+            "$ref": "#/components/schemas/SkillOutputSpec"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "tools_allowlist",
+          "query_templates",
+          "source_type",
+          "output"
+        ],
+        "title": "SkillSpec"
+      },
+      "SmokeResult": {
+        "properties": {
+          "component": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "search",
+              "fetch",
+              "minimal_run"
+            ],
+            "title": "Component"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "elapsed_ms": {
+            "type": "integer",
+            "title": "Elapsed Ms"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "component",
+          "ok",
+          "message",
+          "elapsed_ms"
+        ],
+        "title": "SmokeResult"
+      },
+      "TraceSpan": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "search",
+              "fetch",
+              "tool"
+            ],
+            "title": "Kind"
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agent"
+          },
+          "subagent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subagent"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Duration Ms"
+          },
+          "input_chars": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Input Chars",
+            "default": 0
+          },
+          "output_chars": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Output Chars",
+            "default": 0
+          },
+          "input_tokens_estimate": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Input Tokens Estimate",
+            "default": 0
+          },
+          "output_tokens_estimate": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Output Tokens Estimate",
+            "default": 0
+          },
+          "cost_estimate_usd": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Cost Estimate Usd",
+            "default": 0.0
+          },
+          "input_preview": {
+            "type": "string",
+            "title": "Input Preview",
+            "default": ""
+          },
+          "output_preview": {
+            "type": "string",
+            "title": "Output Preview",
+            "default": ""
+          },
+          "metadata": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Metadata"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "agent",
+          "name",
+          "status",
+          "duration_ms"
+        ],
+        "title": "TraceSpan"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
   }
-
 }
-
-
