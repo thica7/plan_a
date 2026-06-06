@@ -736,3 +736,30 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/business_intel/release_repair.py backend/packages/orchestrator/service.py backend/tests/unit/test_run_service.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py -q -k "release_gate"`
+
+## 2026-06-07 - Step 24: Matrix Field Truncation Cleanup
+
+Commit: this commit
+
+Scope:
+
+- Changed persona comparison matrix list rendering to include complete
+  use-case and pain-point items instead of truncating inside a field value.
+- Changed generic matrix text compaction to truncate on word boundaries when a
+  hard cap is still required.
+- Added a regression test proving persona matrix cells preserve complete list
+  items without ellipsis for normal-sized standardized fields.
+
+Why:
+
+- The fresh Checkpoint 1 real run passed the quality gate, but remaining warn
+  findings included persona cells that appeared truncated mid-entry.
+- That warning was partly self-inflicted by the comparator's compact display
+  format, not only by source quality.
+- Preserving complete structured fields keeps QA from flagging report/matrix
+  artifacts caused by our own serialization layer.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/agents/comparator/logic.py backend/tests/unit/test_run_service.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py -q -k "comparison_matrix"`

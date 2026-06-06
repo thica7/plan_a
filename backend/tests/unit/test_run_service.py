@@ -2216,6 +2216,69 @@ def test_comparison_matrix_adds_pricing_and_persona_standardization_summary() ->
     assert "use_cases=code generation; pain_points=context switching" in persona_cell.value
 
 
+def test_comparison_matrix_persona_lists_keep_complete_items() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    long_use_case = (
+        "coordinate cross-repository refactors for enterprise engineering teams"
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["persona"]),
+        competitor_knowledge={
+            "A": CompetitorKnowledge(
+                competitor="A",
+                user_personas={
+                    "segments": [
+                        {
+                            "name": "Platform engineers",
+                            "role": "engineering",
+                            "company_size": "enterprise",
+                            "use_cases": [
+                                long_use_case,
+                                "summarize pull requests for reviewers",
+                            ],
+                            "pain_points": [
+                                "context switching across repositories",
+                                "slow code review loops",
+                            ],
+                            "claims": [
+                                {
+                                    "claim": "A targets platform engineers.",
+                                    "source_ids": ["persona-a"],
+                                    "confidence": 0.86,
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+        },
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+    persona_cell = matrix.cells[0]
+
+    assert long_use_case in persona_cell.value
+    assert "summarize pull requests for reviewers" in persona_cell.value
+    assert "slow code review loops" in persona_cell.value
+    assert "..." not in persona_cell.value
+
+
 def test_comparison_matrix_caps_confidence_by_structured_claims() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

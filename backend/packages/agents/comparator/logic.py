@@ -200,8 +200,8 @@ class ComparatorAgentMixin:
                 segment=self._compact_matrix_text(segment.name or "unknown", 36),
                 role=self._compact_matrix_text(segment.role or "unknown", 36),
                 size=self._compact_matrix_text(segment.company_size or "unknown", 32),
-                use_cases=self._compact_list_text(segment.use_cases, 72),
-                pain_points=self._compact_list_text(segment.pain_points, 72),
+                use_cases=self._compact_list_text(segment.use_cases, 180),
+                pain_points=self._compact_list_text(segment.pain_points, 180),
             )
             for segment in personas.segments[:3]
         ]
@@ -242,7 +242,16 @@ class ComparatorAgentMixin:
         cleaned = [value.strip() for value in values if value and value.strip()]
         if not cleaned:
             return "unknown"
-        return self._compact_matrix_text(", ".join(cleaned[:3]), limit)
+        selected: list[str] = []
+        for value in cleaned[:3]:
+            candidate = ", ".join([*selected, value])
+            if len(candidate) <= limit:
+                selected.append(value)
+                continue
+            break
+        if selected:
+            return ", ".join(selected)
+        return self._compact_matrix_text(cleaned[0], limit)
 
     def _compact_pricing_limits_text(self, values: list[str], limit: int) -> str:
         cleaned = [value.strip() for value in values if value and value.strip()]
@@ -406,7 +415,10 @@ class ComparatorAgentMixin:
         text = " ".join(value.split())
         if len(text) <= limit:
             return text
-        return f"{text[: limit - 1].rstrip()}..."
+        truncated = text[: max(0, limit - 1)].rstrip()
+        if " " in truncated:
+            truncated = truncated.rsplit(" ", 1)[0].rstrip()
+        return f"{truncated}..."
 
     def _matrix_cell_confidence(
         self,
