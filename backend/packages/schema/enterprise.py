@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 from packages.schema.models import RedoScope, SkillSpec
+from packages.schema.quality import QualityFinding
 from packages.schema.rag import RetrievalRecord
 
 CompetitorLayer = Literal["L1", "L2", "L3", "unknown"]
@@ -923,6 +924,8 @@ class QualityAgentMatrixEntry(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     claim_ids: list[str] = Field(default_factory=list)
     suggested_redos: list[RedoScope] = Field(default_factory=list)
+    finding_ids: list[str] = Field(default_factory=list)
+    findings: list[QualityFinding] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -933,6 +936,7 @@ class QualityAgentMatrix(BaseModel):
     status: QualityAgentStatus
     overall_score: int = Field(ge=0, le=100)
     entries: list[QualityAgentMatrixEntry] = Field(default_factory=list)
+    findings: list[QualityFinding] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 

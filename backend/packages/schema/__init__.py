@@ -42,6 +42,8 @@ from packages.schema.enterprise import (
     ProjectCompetitorLink,
     ProjectReadinessScore,
     ProjectRecord,
+    QualityAgentMatrix,
+    QualityAgentMatrixEntry,
     RedTeamFinding,
     RedTeamReport,
     ReportVersionRecord,
@@ -91,6 +93,7 @@ from packages.schema.models import (
     UserPersonaModel,
     UserPersonaSegment,
 )
+from packages.schema.quality import QualityFinding, QualityFindingBundle
 from packages.schema.rag import GapRetrievalContext, RetrievalChunk, RetrievalRecord
 from packages.schema.survey import (
     InterviewSynthesis,
@@ -151,6 +154,10 @@ __all__ = [
     "ProjectCompetitorLink",
     "ProjectRecord",
     "ProjectReadinessScore",
+    "QualityAgentMatrix",
+    "QualityAgentMatrixEntry",
+    "QualityFinding",
+    "QualityFindingBundle",
     "QCIssue",
     "RawSource",
     "RedoScope",

@@ -1523,9 +1523,11 @@ def test_enterprise_router_exposes_projection() -> None:
     assert red_team.json()["pydantic_ai_output_schema_hash"]
     assert red_team.json()["pydantic_ai_runtime_prompt_chars"] > 0
     assert quality_matrix.status_code == 200
+    assert isinstance(quality_matrix.json()["findings"], list)
     assert all(
         isinstance(item["suggested_redos"], list) for item in quality_matrix.json()["entries"]
     )
+    assert all(isinstance(item["findings"], list) for item in quality_matrix.json()["entries"])
     assert {item["agent_name"] for item in quality_matrix.json()["entries"]} >= {
         "BusinessQA",
         "ClaimValidator",
@@ -1603,6 +1605,8 @@ def test_enterprise_router_exposes_projection() -> None:
     assert release_matrix["status"] == "pass"
     assert projection.report_version.id in release_matrix["summary"]
     assert release_matrix["metadata"]["peer_review_mode"] == "deterministic_cross_agent_matrix"
+    assert release_matrix["metadata"]["quality_finding_schema"] == "QualityFinding"
+    assert isinstance(release_matrix["metadata"]["quality_finding_ids"], list)
     assert set(release_matrix["metadata"]["peer_reviewed_by"]) >= {
         "BusinessQA",
         "ClaimValidator",

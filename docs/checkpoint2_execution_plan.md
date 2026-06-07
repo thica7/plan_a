@@ -96,7 +96,7 @@ H6/H7 contracts in the foundation so the route stays aligned.
 
 ### 1. `docs(plan): add checkpoint 2 execution plan`
 
-Status: active.
+Status: completed by `7f323bc docs(plan): add checkpoint 2 execution plan`.
 
 Required behavior:
 
@@ -111,6 +111,8 @@ Acceptance:
 - No unrelated dirty files are staged.
 
 ### 2. `feat(quality): add unified quality finding contract`
+
+Status: completed by `feat(quality): add unified quality finding contract`.
 
 Backlog: H6 + H7 foundation.
 
@@ -130,7 +132,19 @@ Acceptance:
   placeholders.
 - Existing run/report behavior remains compatible.
 
+Completed behavior:
+
+- Added a shared `QualityFinding` contract and adapters for RuntimeQA,
+  BusinessQA, EvidenceGap, RedTeam, ClaimValidator, ReleaseGate, Research
+  `QualityGap`, and EvalOps regression issues.
+- Extended the existing `QualityAgentMatrix` response with per-entry
+  `findings`, `finding_ids`, and an aggregate matrix-level `findings` list
+  while preserving existing score/summary/redo fields.
+- Kept conversion deterministic and typed; no report-text parsing is required.
+
 ### 3. `feat(rag): close online gap fill loop`
+
+Status: next.
 
 Backlog: H4.
 

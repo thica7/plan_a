@@ -797,3 +797,38 @@ Remaining warnings:
 These are retained as non-blocking quality follow-ups and mapped to
 Checkpoint 2 H3/H4/H6/H7 rather than treated as unfinished Checkpoint 1
 source-identity or report-status work.
+
+## 2026-06-07 - Step 26: Unified Quality Finding Contract
+
+Commit: this commit
+
+Scope:
+
+- Added `QualityFinding` and `QualityFindingBundle` as the shared quality issue
+  contract for Checkpoint 2.
+- Added adapters for RuntimeQA `QCIssue`, BusinessQA/ReleaseGate
+  `BusinessQAFinding`, EvidenceGap, RedTeam, ClaimValidator, Research
+  `QualityGap`, and EvalOps regression-gate issues.
+- Extended the enterprise `QualityAgentMatrix` and `QualityAgentMatrixEntry`
+  schema with `findings` and `finding_ids` while preserving existing matrix
+  scores, summaries, metadata, and `suggested_redos`.
+- Wired `/enterprise/projects/{project_id}/quality-matrix` so BusinessQA,
+  ClaimValidator, EvidenceGap, RedTeam, and ReleaseGate entries expose the same
+  typed finding shape.
+
+Why:
+
+- Checkpoint 2 requires QA, RedTeam, EvidenceGap, ReleaseGate, ClaimValidator,
+  and EvalOps to speak one issue language before Gap Fill, claim validation, and
+  the quality matrix can close loops cleanly.
+- The previous matrix showed agent-level counts, but not a unified per-finding
+  contract with competitor, dimension, field path, evidence ids, claim ids,
+  required action, acceptance rule, and redo scope.
+- Keeping this as an adapter layer avoids forcing `QCIssue`, `QualityGap`, or
+  ReleaseGate schemas to absorb each other's responsibilities.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/schema/quality.py backend/packages/quality backend/packages/schema/enterprise.py backend/packages/schema/__init__.py backend/app/routers/enterprise.py backend/tests/unit/test_quality_findings.py backend/tests/unit/test_enterprise_store.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_quality_findings.py -q`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection -q`

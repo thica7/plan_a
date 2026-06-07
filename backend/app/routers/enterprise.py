@@ -66,6 +66,13 @@ from packages.governance import (
 )
 from packages.identity import compute_content_hash, stable_prefixed_id
 from packages.memory import PreferenceMemoryStore
+from packages.quality import (
+    quality_findings_from_business_qa,
+    quality_findings_from_claim_validation,
+    quality_findings_from_evidence_gaps,
+    quality_findings_from_red_team,
+    quality_findings_from_release_gate,
+)
 from packages.rag import (
     decorate_evidence_gap_report_with_retrieval,
     fill_evidence_gaps,
@@ -847,6 +854,11 @@ async def get_project_quality_matrix(
     )
     evidence_gap_runtime_warn_count = _pydantic_ai_runtime_warn_count(evidence_gaps)
     red_team_runtime_warn_count = _pydantic_ai_runtime_warn_count(red_team)
+    business_quality_findings = quality_findings_from_business_qa(qa_evaluation.findings)
+    claim_quality_findings = quality_findings_from_claim_validation(claim_validation)
+    evidence_gap_quality_findings = quality_findings_from_evidence_gaps(evidence_gaps)
+    red_team_quality_findings = quality_findings_from_red_team(red_team)
+    release_gate_quality_findings = quality_findings_from_release_gate(latest_release_gate)
 
     entries = [
         QualityAgentMatrixEntry(
@@ -867,6 +879,8 @@ async def get_project_quality_matrix(
                 claim_id for finding in qa_evaluation.findings for claim_id in finding.claim_ids
             ),
             suggested_redos=business_findings_to_redo_scopes(qa_evaluation.findings)[:3],
+            finding_ids=[finding.id for finding in business_quality_findings],
+            findings=business_quality_findings,
         ),
         QualityAgentMatrixEntry(
             agent_name="ClaimValidator",
@@ -914,6 +928,8 @@ async def get_project_quality_matrix(
                 ][:12],
             },
             suggested_redos=claim_validation_issues_to_redo_scopes(claim_validation.issues)[:3],
+            finding_ids=[finding.id for finding in claim_quality_findings],
+            findings=claim_quality_findings,
         ),
         QualityAgentMatrixEntry(
             agent_name="EvidenceGap",
@@ -947,6 +963,8 @@ async def get_project_quality_matrix(
                 claim_id for gap in evidence_gaps.gaps for claim_id in gap.claim_ids
             ),
             suggested_redos=evidence_gaps_to_redo_scopes(evidence_gaps.gaps)[:3],
+            finding_ids=[finding.id for finding in evidence_gap_quality_findings],
+            findings=evidence_gap_quality_findings,
             metadata=_quality_agent_pydantic_ai_metadata(evidence_gaps),
         ),
         QualityAgentMatrixEntry(
@@ -976,6 +994,8 @@ async def get_project_quality_matrix(
                 claim_id for finding in red_team.findings for claim_id in finding.claim_ids
             ),
             suggested_redos=red_team_findings_to_redo_scopes(red_team.findings)[:3],
+            finding_ids=[finding.id for finding in red_team_quality_findings],
+            findings=red_team_quality_findings,
             metadata=_quality_agent_pydantic_ai_metadata(red_team),
         ),
         _benchmark_quality_matrix_entry(
@@ -1015,6 +1035,8 @@ async def get_project_quality_matrix(
                     claim_id for issue in latest_release_gate.issues for claim_id in issue.claim_ids
                 ),
                 suggested_redos=business_findings_to_redo_scopes(latest_release_gate.issues)[:3],
+                finding_ids=[finding.id for finding in release_gate_quality_findings],
+                findings=release_gate_quality_findings,
             )
             if latest_release_gate is not None
             else QualityAgentMatrixEntry(
@@ -1025,6 +1047,8 @@ async def get_project_quality_matrix(
                 warn_count=1,
                 finding_count=1,
                 summary="No ReportVersion exists yet; release readiness cannot be evaluated.",
+                finding_ids=[finding.id for finding in release_gate_quality_findings],
+                findings=release_gate_quality_findings,
             )
         ),
         QualityAgentMatrixEntry(
@@ -1047,6 +1071,7 @@ async def get_project_quality_matrix(
         ),
     ]
     entries = _with_quality_peer_review_metadata(entries)
+    findings = [finding for entry in entries for finding in entry.findings]
     blocker_count = sum(item.blocker_count for item in entries)
     warn_count = sum(item.warn_count for item in entries)
     overall_score = round(sum(item.score for item in entries) / max(len(entries), 1))
@@ -1055,6 +1080,7 @@ async def get_project_quality_matrix(
         status=_matrix_status(blocker_count, warn_count),
         overall_score=overall_score,
         entries=entries,
+        findings=findings,
     )
 
 
@@ -1170,31 +1196,38 @@ def _with_quality_peer_review_metadata(
         for target in targets:
             if target in available_agents:
                 reviewed_by.setdefault(target, []).append(reviewer)
-    return [
-        entry.model_copy(
-            update={
-                "metadata": {
-                    **entry.metadata,
-                    "peer_review_mode": "deterministic_cross_agent_matrix",
-                    "quality_finding_keys": quality_entry_keys(
-                        agent_name=entry.agent_name,
-                        blocker_count=entry.blocker_count,
-                        warn_count=entry.warn_count,
-                        evidence_ids=entry.evidence_ids,
-                        claim_ids=entry.claim_ids,
-                        summary=entry.summary,
-                    ),
-                    "peer_reviewed_by": sorted(reviewed_by.get(entry.agent_name, [])),
-                    "review_targets": sorted(
-                        target
-                        for target in review_targets.get(entry.agent_name, [])
-                        if target in available_agents
-                    ),
-                }
-            }
+    enriched: list[QualityAgentMatrixEntry] = []
+    for entry in entries:
+        finding_ids = [finding.id for finding in entry.findings]
+        fallback_keys = quality_entry_keys(
+            agent_name=entry.agent_name,
+            blocker_count=entry.blocker_count,
+            warn_count=entry.warn_count,
+            evidence_ids=entry.evidence_ids,
+            claim_ids=entry.claim_ids,
+            summary=entry.summary,
         )
-        for entry in entries
-    ]
+        enriched.append(
+            entry.model_copy(
+                update={
+                    "finding_ids": finding_ids,
+                    "metadata": {
+                        **entry.metadata,
+                        "peer_review_mode": "deterministic_cross_agent_matrix",
+                        "quality_finding_schema": "QualityFinding",
+                        "quality_finding_ids": finding_ids,
+                        "quality_finding_keys": finding_ids or fallback_keys,
+                        "peer_reviewed_by": sorted(reviewed_by.get(entry.agent_name, [])),
+                        "review_targets": sorted(
+                            target
+                            for target in review_targets.get(entry.agent_name, [])
+                            if target in available_agents
+                        ),
+                    },
+                }
+            )
+        )
+    return enriched
 
 
 def _pydantic_ai_context(settings: Settings) -> dict[str, str]:
