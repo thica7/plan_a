@@ -1,3 +1,4 @@
+import asyncio
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -52,6 +53,11 @@ from packages.schema.models import (
 )
 from packages.schema.quality import QualityFinding
 from packages.skills.registry import SkillRegistry
+from packages.workflows.activities import ReportApprovalActivities
+from packages.workflows.models import (
+    ReportApprovalDecisionInput,
+    ReportApprovalWorkflowInput,
+)
 
 
 def test_quality_finding_groups_cover_h7_axes() -> None:
@@ -1441,12 +1447,25 @@ def test_enterprise_router_exposes_projection() -> None:
     draft_publish = client.post(
         f"/api/enterprise/report-versions/{projection.report_version.id}/publish"
     )
-    approval_upsert = client.post(
-        "/api/enterprise/report-versions",
-        json=projection.report_version.model_copy(update={"status": "approved"}).model_dump(
-            mode="json"
-        ),
+    approval_requested = asyncio.run(
+        ReportApprovalActivities(store).request_report_approval(
+            ReportApprovalWorkflowInput(
+                report_version_id=projection.report_version.id,
+                requested_by="workbench-approver",
+                approver_ids=["workbench-approver"],
+            )
+        )
     )
+    approval_decision = asyncio.run(
+        ReportApprovalActivities(store).approve_report_version(
+            ReportApprovalDecisionInput(
+                report_version_id=projection.report_version.id,
+                approver_id="workbench-approver",
+                note="Approved in router smoke test.",
+            )
+        )
+    )
+    approval_upsert = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}")
     publish = client.post(f"/api/enterprise/report-versions/{projection.report_version.id}/publish")
     quality = client.patch(
         f"/api/enterprise/evidence/{projection.evidence_records[0].id}/quality",
@@ -1688,10 +1707,14 @@ def test_enterprise_router_exposes_projection() -> None:
     assert release_gate.json()["allowed"] is True
     assert draft_publish.status_code == 409
     assert draft_publish.json()["detail"]["reason"] == "report_approval_required"
+    assert approval_requested.status == "in_review"
+    assert approval_decision.status == "approved"
     assert approval_upsert.status_code == 200
     assert approval_upsert.json()["status"] == "approved"
+    assert approval_upsert.json()["quality_metadata"]["approval_workflow"]["decision"] == "approved"
     assert publish.status_code == 200
     assert publish.json()["status"] == "published"
+    assert publish.json()["quality_metadata"]["publication"]["status"] == "published"
     assert quality.status_code == 200
     assert quality.json()["evidence"]["quality_label"] == "stale"
     assert any(
@@ -1703,8 +1726,9 @@ def test_enterprise_router_exposes_projection() -> None:
         candidate.metadata["target_id"] == projection.evidence_records[0].id
         for candidate in quality_memory_recall.candidates
     )
-    assert report_upsert.status_code == 200
-    assert report_upsert.json()["id"] == projection.report_version.id
+    assert report_upsert.status_code == 409
+    assert report_upsert.json()["detail"]["reason"] == "report_lifecycle_transition_forbidden"
+    assert report_upsert.json()["detail"]["report_version_id"] == projection.report_version.id
     assert manual_revision.status_code == 200
     assert manual_revision.json()["parent_version_id"] == projection.report_version.id
     assert manual_revision.json()["version_number"] == 2
@@ -1771,7 +1795,29 @@ def test_enterprise_router_blocks_report_approval_status_when_gate_fails() -> No
 
     assert response.status_code == 409
     assert response.json()["detail"]["status"] == "blocked"
-    assert response.json()["detail"]["allowed"] is False
+    assert response.json()["detail"]["reason"] == "report_approval_workflow_required"
+
+    requested = asyncio.run(
+        ReportApprovalActivities(store).request_report_approval(
+            ReportApprovalWorkflowInput(
+                report_version_id=projection.report_version.id,
+                requested_by="approver-1",
+                approver_ids=["approver-1"],
+            )
+        )
+    )
+
+    assert requested.status == "in_review"
+    with pytest.raises(RuntimeError, match="release gate blocked"):
+        asyncio.run(
+            ReportApprovalActivities(store).approve_report_version(
+                ReportApprovalDecisionInput(
+                    report_version_id=projection.report_version.id,
+                    approver_id="approver-1",
+                    note="Weak report should be blocked.",
+                )
+            )
+        )
 
 
 def test_enterprise_router_requires_reviewer_for_source_policy_review() -> None:
@@ -1841,25 +1887,62 @@ def test_enterprise_router_blocks_direct_publish_status_without_approval() -> No
             mode="json"
         ),
     )
-    approved = client.post(
+    direct_review = client.post(
+        "/api/enterprise/report-versions",
+        json=projection.report_version.model_copy(update={"status": "in_review"}).model_dump(
+            mode="json"
+        ),
+    )
+    direct_approved = client.post(
         "/api/enterprise/report-versions",
         json=projection.report_version.model_copy(update={"status": "approved"}).model_dump(
             mode="json"
         ),
     )
-    approved_publish = client.post(
-        "/api/enterprise/report-versions",
-        json=projection.report_version.model_copy(update={"status": "published"}).model_dump(
-            mode="json"
-        ),
+    draft_publish = client.post(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/publish"
     )
+    requested = asyncio.run(
+        ReportApprovalActivities(store).request_report_approval(
+            ReportApprovalWorkflowInput(
+                report_version_id=projection.report_version.id,
+                requested_by="approver-1",
+                approver_ids=["approver-1"],
+            )
+        )
+    )
+    approved = asyncio.run(
+        ReportApprovalActivities(store).approve_report_version(
+            ReportApprovalDecisionInput(
+                report_version_id=projection.report_version.id,
+                approver_id="approver-1",
+                note="Ready to publish.",
+            )
+        )
+    )
+    approved_publish = client.post(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/publish"
+    )
+    logs = store.list_audit_logs(workspace_id=projection.workspace_id)
 
     assert direct_publish.status_code == 409
-    assert direct_publish.json()["detail"]["reason"] == "report_approval_required"
-    assert approved.status_code == 200
-    assert approved.json()["status"] == "approved"
+    assert direct_publish.json()["detail"]["reason"] == "report_publish_endpoint_required"
+    assert direct_review.status_code == 409
+    assert direct_review.json()["detail"]["reason"] == "report_approval_workflow_required"
+    assert direct_approved.status_code == 409
+    assert direct_approved.json()["detail"]["reason"] == "report_approval_workflow_required"
+    assert draft_publish.status_code == 409
+    assert draft_publish.json()["detail"]["reason"] == "report_approval_required"
+    assert requested.status == "in_review"
+    assert approved.status == "approved"
     assert approved_publish.status_code == 200
     assert approved_publish.json()["status"] == "published"
+    assert (
+        approved_publish.json()["quality_metadata"]["approval_workflow"]["decision"] == "approved"
+    )
+    assert approved_publish.json()["quality_metadata"]["publication"]["status"] == "published"
+    assert any(log.action == "report_version.approved" for log in logs)
+    assert any(log.action == "report_version.published" for log in store.list_audit_logs())
 
 
 def test_gap_fill_result_carries_release_gate_improvement_delta() -> None:

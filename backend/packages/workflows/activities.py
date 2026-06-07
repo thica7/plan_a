@@ -9,6 +9,11 @@ from temporalio import activity
 
 from packages.business_intel import evaluate_report_release_gate
 from packages.enterprise import EnterpriseStore, report_release_gate_scope
+from packages.enterprise.report_lifecycle import (
+    mark_report_approval_decision,
+    mark_report_approval_requested,
+    report_release_gate_snapshot,
+)
 from packages.identity import (
     compute_monitor_anomaly_id,
     compute_notification_id,
@@ -573,8 +578,27 @@ class ReportApprovalActivities:
         request: ReportApprovalWorkflowInput,
     ) -> ReportApprovalState:
         version = self._require_report_version(request.report_version_id)
-        updated = version.model_copy(update={"status": "in_review"})
-        return _approval_state(self._store.upsert_report_version(updated))
+        if version.status in {"published", "archived"}:
+            raise RuntimeError(
+                f"Report version {version.id} cannot enter approval from {version.status}."
+            )
+        updated = mark_report_approval_requested(
+            version,
+            requested_by=request.requested_by,
+            approver_ids=request.approver_ids,
+        )
+        stored = self._store.upsert_report_version(updated)
+        self._store.audit_report_version_transition(
+            stored,
+            action="report_version.approval_requested",
+            actor_id=request.requested_by,
+            before_status=version.status,
+            metadata={
+                "approver_ids": request.approver_ids,
+                "approval_workflow": stored.quality_metadata.get("approval_workflow", {}),
+            },
+        )
+        return _approval_state(stored)
 
     @activity.defn(name=APPROVE_REPORT_VERSION_ACTIVITY)
     async def approve_report_version(
@@ -582,10 +606,32 @@ class ReportApprovalActivities:
         decision: ReportApprovalDecisionInput,
     ) -> ReportApprovalState:
         version = self._require_report_version(decision.report_version_id)
-        self._enforce_release_gate(version)
-        updated = version.model_copy(update={"status": "approved"})
+        if version.status != "in_review":
+            raise RuntimeError(
+                f"Report approval requires in_review status, got {version.status}."
+            )
+        gate = self._enforce_release_gate(version)
+        updated = mark_report_approval_decision(
+            version,
+            decision="approved",
+            approver_id=decision.approver_id,
+            note=decision.note,
+            gate=gate,
+        )
+        stored = self._store.upsert_report_version(updated)
+        self._store.audit_report_version_transition(
+            stored,
+            action="report_version.approved",
+            actor_id=decision.approver_id,
+            before_status=version.status,
+            note=decision.note,
+            metadata={
+                "approval_workflow": stored.quality_metadata.get("approval_workflow", {}),
+                "release_gate": report_release_gate_snapshot(gate),
+            },
+        )
         return _approval_state(
-            self._store.upsert_report_version(updated),
+            stored,
             approver_id=decision.approver_id,
             note=decision.note,
         )
@@ -596,9 +642,29 @@ class ReportApprovalActivities:
         decision: ReportApprovalDecisionInput,
     ) -> ReportApprovalState:
         version = self._require_report_version(decision.report_version_id)
-        updated = version.model_copy(update={"status": "rejected"})
+        if version.status != "in_review":
+            raise RuntimeError(
+                f"Report rejection requires in_review status, got {version.status}."
+            )
+        updated = mark_report_approval_decision(
+            version,
+            decision="rejected",
+            approver_id=decision.approver_id,
+            note=decision.note,
+        )
+        stored = self._store.upsert_report_version(updated)
+        self._store.audit_report_version_transition(
+            stored,
+            action="report_version.rejected",
+            actor_id=decision.approver_id,
+            before_status=version.status,
+            note=decision.note,
+            metadata={
+                "approval_workflow": stored.quality_metadata.get("approval_workflow", {}),
+            },
+        )
         return _approval_state(
-            self._store.upsert_report_version(updated),
+            stored,
             approver_id=decision.approver_id,
             note=decision.note,
         )
@@ -609,10 +675,10 @@ class ReportApprovalActivities:
             raise RuntimeError(f"Report version not found: {report_version_id}")
         return version
 
-    def _enforce_release_gate(self, version: ReportVersionRecord) -> None:
+    def _enforce_release_gate(self, version: ReportVersionRecord) -> ReportReleaseGate:
         gate = self._release_gate(version)
         if gate.allowed:
-            return
+            return gate
         reasons = "; ".join(item.message for item in gate.issues[:3])
         raise RuntimeError(f"Report release gate blocked approval: {reasons}")
 

@@ -1091,3 +1091,37 @@ Final accepted run:
 Validation:
 
 - `conda run -n bd-competiscope-v2 python backend/scripts/compare_real_run_quality.py --topic "AI coding assistant enterprise buying comparison" --competitors Cursor "GitHub Copilot" --dimensions pricing feature persona --execution-mode real --format markdown --timeout-seconds 600 --output docs/reports/checkpoint2_real_run_acceptance_20260607.md`
+
+## 2026-06-07 - Step 35: Approval-Gated Report Publishing
+
+Commit: this commit
+
+Scope:
+
+- Added a report lifecycle helper that owns approval request, approval/rejection
+  decision, publish metadata, ReleaseGate snapshots, and transition audit shape.
+- Blocked plain report upsert from moving report versions into `in_review`,
+  `approved`, `rejected`, or `published`; review decisions now go through the
+  approval activity/workflow and publication goes through the publish endpoint.
+- Required approval activities to move reports through `in_review` before
+  approval or rejection, and kept ReleaseGate enforcement on approval and
+  publish.
+- Added approval/publish audit records with actor, status transition,
+  approval workflow metadata, publication metadata, and ReleaseGate snapshot.
+- Updated router and Temporal workflow tests so the enterprise path is
+  draft -> in_review -> approved/rejected -> published instead of direct
+  status mutation.
+
+Why:
+
+- Checkpoint 3 needs enterprise workflow control, not arbitrary status writes.
+- Approval and publishing must be explainable during audit: who requested
+  review, who approved or rejected, what gate result was used, and when the
+  report was published.
+- Blocking direct upsert keeps the product boundary clean and prevents bypassing
+  ReleaseGate or human approval.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/enterprise/report_lifecycle.py backend/packages/enterprise/store.py backend/packages/enterprise/postgres.py backend/packages/workflows/activities.py backend/packages/workflows/report_approval.py backend/app/routers/enterprise.py backend/tests/unit/test_enterprise_store.py backend/tests/unit/test_temporal_workflows.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_report_approval_status_when_gate_fails backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_direct_publish_status_without_approval backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_update_report_version_status backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_use_report_scope_not_stale_project_competitors backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_block_weak_report_version backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_can_reject_report_version -q`

@@ -524,6 +524,9 @@ async def test_report_approval_activities_use_report_scope_not_stale_project_com
     )
     activities = ReportApprovalActivities(store)
 
+    await activities.request_report_approval(
+        ReportApprovalWorkflowInput(report_version_id=report_version_id)
+    )
     approved = await activities.approve_report_version(
         ReportApprovalDecisionInput(
             report_version_id=report_version_id,
@@ -543,6 +546,9 @@ async def test_report_approval_activities_block_weak_report_version() -> None:
     assert version is not None
     store.upsert_report_version(version.model_copy(update={"claim_ids": []}))
     activities = ReportApprovalActivities(store)
+    await activities.request_report_approval(
+        ReportApprovalWorkflowInput(report_version_id=report_version_id)
+    )
 
     with pytest.raises(RuntimeError, match="release gate blocked"):
         await activities.approve_report_version(

@@ -81,23 +81,29 @@ Existing enterprise product surface:
 - RBAC exists as application-layer role policy, but production isolation is not
   yet complete.
 
-Strict gaps:
+Closed in Checkpoint 3 step 2:
 
-- Plain report upsert can still be used to move a report into approved status,
-  which weakens the approval workflow boundary.
-- Approval metadata is not yet consistently attached to the report version.
-- Publishing is gated by status and ReleaseGate, but the audit/review trail is
-  not yet strong enough to explain who approved what and why.
+- Plain report upsert can no longer move a report into review, approval,
+  rejection, or published states.
+- Approval metadata is attached to report versions by the approval activity.
+- Publishing records publication metadata, ReleaseGate snapshot, and audit trail.
+
+Remaining strict gaps:
+
 - ArtifactStore exists, but source snapshots and imported research materials
   are not yet uniformly promoted into artifact records.
 - RBAC is application-level only; database RLS and cross-workspace negative
   tests need hardening.
+- Manual report correction exists, but the rejection/approval-to-draft revision
+  loop needs stronger tests and product-facing review evidence.
+- Observability exists, but approval, publish, manual revision, artifact, and
+  regression signals need to be easier to inspect as one product review surface.
 
 ## Implementation Order
 
 ### 1. `docs(plan): start checkpoint 3 execution plan`
 
-Status: in progress.
+Status: completed by `bd132e8`.
 
 Required behavior:
 
@@ -112,6 +118,8 @@ Acceptance:
 - No unrelated dirty files are staged.
 
 ### 2. `feat(reports): enforce approval-gated publishing`
+
+Status: completed in the current implementation step.
 
 Backlog: Phase 5A enterprise governance.
 
@@ -134,6 +142,11 @@ Acceptance:
   ReleaseGate passes.
 - Publish moves an approved report to `published` and records audit metadata.
 - Tests prove the bypass is blocked.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/enterprise/report_lifecycle.py backend/packages/enterprise/store.py backend/packages/enterprise/postgres.py backend/packages/workflows/activities.py backend/packages/workflows/report_approval.py backend/app/routers/enterprise.py backend/tests/unit/test_enterprise_store.py backend/tests/unit/test_temporal_workflows.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_report_approval_status_when_gate_fails backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_direct_publish_status_without_approval backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_update_report_version_status backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_use_report_scope_not_stale_project_competitors backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_block_weak_report_version backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_can_reject_report_version -q`
 
 ### 3. `feat(reports): expose human correction review loop`
 

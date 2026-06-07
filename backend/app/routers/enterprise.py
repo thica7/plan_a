@@ -58,6 +58,10 @@ from packages.enterprise import (
 from packages.enterprise import (
     report_release_gate_scope as _report_release_gate_scope,
 )
+from packages.enterprise.report_lifecycle import (
+    mark_report_published,
+    report_release_gate_snapshot,
+)
 from packages.governance import (
     ModelPolicyReport,
     build_model_policy_report,
@@ -1754,10 +1758,7 @@ def upsert_report_version(
     user: EnterpriseUserDep,
 ) -> ReportVersionRecord:
     _require_workspace_access(user, version.workspace_id, "report:write")
-    if version.status == "published":
-        _enforce_report_publish_status(version, store)
-    if version.status in {"approved", "published"}:
-        _enforce_report_release_gate(version, store, user)
+    _enforce_report_upsert_lifecycle(version, store)
     return store.upsert_report_version(version)
 
 
@@ -1908,9 +1909,20 @@ def publish_report_version(
                 "current_status": version.status,
             },
         )
-    _enforce_report_release_gate(version, store, user)
-    updated = version.model_copy(update={"status": "published", "published_at": datetime.utcnow()})
-    return store.upsert_report_version(updated)
+    gate = _enforce_report_release_gate(version, store, user)
+    updated = mark_report_published(version, actor_id=user.user_id, gate=gate)
+    stored = store.upsert_report_version(updated)
+    store.audit_report_version_transition(
+        stored,
+        action="report_version.published",
+        actor_id=user.user_id,
+        before_status=version.status,
+        metadata={
+            "publication": stored.quality_metadata.get("publication", {}),
+            "release_gate": report_release_gate_snapshot(gate),
+        },
+    )
+    return stored
 
 
 @router.get("/enterprise/runs/{run_id}/projection", response_model=EnterpriseRunProjection)
@@ -2393,11 +2405,62 @@ def _enforce_report_release_gate(
     version: ReportVersionRecord,
     store: EnterpriseStore,
     user: EnterpriseUserContext,
-) -> None:
+) -> ReportReleaseGate:
     gate = _report_release_gate_for_version(version, store, user, "report:write")
     if gate.allowed:
-        return
+        return gate
     raise HTTPException(status_code=409, detail=jsonable_encoder(gate))
+
+
+def _enforce_report_upsert_lifecycle(
+    version: ReportVersionRecord,
+    store: EnterpriseStore,
+) -> None:
+    current = store.get_report_version(version.id)
+    current_status = current.status if current is not None else "missing"
+    if version.status in {"in_review", "approved", "rejected"}:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "status": "blocked",
+                "reason": "report_approval_workflow_required",
+                "message": (
+                    "Report version review, approval, and rejection must go through "
+                    "the approval workflow or approval activity."
+                ),
+                "report_version_id": version.id,
+                "current_status": current_status,
+                "requested_status": version.status,
+            },
+        )
+    if version.status == "published":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "status": "blocked",
+                "reason": "report_publish_endpoint_required",
+                "message": "Report version publishing must use the publish endpoint.",
+                "report_version_id": version.id,
+                "current_status": current_status,
+                "requested_status": version.status,
+            },
+        )
+    if current_status in {"approved", "published"} and version.status != current_status:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "status": "blocked",
+                "reason": "report_lifecycle_transition_forbidden",
+                "message": (
+                    "Approved or published report versions cannot be overwritten by "
+                    "plain upsert; create a manual revision instead."
+                ),
+                "report_version_id": version.id,
+                "current_status": current_status,
+                "requested_status": version.status,
+            },
+        )
+    return
 
 
 def _enforce_report_publish_status(

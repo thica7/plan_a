@@ -12,6 +12,7 @@ from packages.enterprise.embedding_index import (
     cosine_similarity,
     deterministic_embedding,
 )
+from packages.enterprise.report_lifecycle import report_transition_audit_after
 from packages.enterprise.usage import (
     build_quota_decision,
     build_workspace_usage_summary,
@@ -235,6 +236,17 @@ class EnterpriseStore(Protocol):
     ) -> ReportVersionRecord | None: ...
 
     def list_audit_logs(self, workspace_id: str | None = None) -> list[AuditLogRecord]: ...
+
+    def audit_report_version_transition(
+        self,
+        version: ReportVersionRecord,
+        *,
+        action: str,
+        actor_id: str | None = None,
+        before_status: str | None = None,
+        note: str = "",
+        metadata: dict[str, object] | None = None,
+    ) -> None: ...
 
     def record_memory_feedback_audit(
         self,
@@ -1048,6 +1060,36 @@ class EnterpriseMemoryStore:
                     },
                 )
             return version
+
+    def audit_report_version_transition(
+        self,
+        version: ReportVersionRecord,
+        *,
+        action: str,
+        actor_id: str | None = None,
+        before_status: str | None = None,
+        note: str = "",
+        metadata: dict[str, object] | None = None,
+    ) -> None:
+        with self._lock:
+            after = report_transition_audit_after(
+                version,
+                transition=action,
+                actor_id=actor_id,
+                note=note,
+                gate=None,
+            )
+            if metadata:
+                after.update(metadata)
+            self._append_audit(
+                workspace_id=version.workspace_id,
+                actor_id=actor_id or DEFAULT_USER_ID,
+                action=action,
+                resource_type="report_version",
+                resource_id=version.id,
+                before={"status": before_status} if before_status else None,
+                after=after,
+            )
 
     def _report_linked_evidence_ids_locked(self, project_id: str) -> set[str]:
         return {

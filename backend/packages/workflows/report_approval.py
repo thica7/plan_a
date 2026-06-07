@@ -183,6 +183,6 @@ def _optional_text(value: object) -> str | None:
 
 
 def _report_status(value: object) -> ReportVersionWorkflowStatus:
-    if value in {"draft", "in_review", "approved", "published", "archived"}:
+    if value in {"draft", "in_review", "approved", "rejected", "published", "archived"}:
         return cast(ReportVersionWorkflowStatus, value)
     raise ValueError("Temporal approval payload status field is invalid.")

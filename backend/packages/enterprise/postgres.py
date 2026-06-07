@@ -14,6 +14,7 @@ from packages.enterprise.embedding_index import (
     vector_literal,
 )
 from packages.enterprise.postgres_sanitizer import sanitize_postgres_text, sanitize_postgres_value
+from packages.enterprise.report_lifecycle import report_transition_audit_after
 from packages.enterprise.store import (
     DEFAULT_USER_ID,
     DEFAULT_WORKSPACE_ID,
@@ -1329,6 +1330,39 @@ class EnterprisePostgresStore:
             (),
             AuditLogRecord,
         )
+
+    def audit_report_version_transition(
+        self,
+        version: ReportVersionRecord,
+        *,
+        action: str,
+        actor_id: str | None = None,
+        before_status: str | None = None,
+        note: str = "",
+        metadata: dict[str, object] | None = None,
+    ) -> None:
+        after = report_transition_audit_after(
+            version,
+            transition=action,
+            actor_id=actor_id,
+            note=note,
+            gate=None,
+        )
+        if metadata:
+            after.update(metadata)
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._append_audit(
+                    cur,
+                    workspace_id=version.workspace_id,
+                    actor_id=actor_id or DEFAULT_USER_ID,
+                    action=action,
+                    resource_type="report_version",
+                    resource_id=version.id,
+                    before={"status": before_status} if before_status else None,
+                    after=after,
+                )
+            conn.commit()
 
     def record_memory_feedback_audit(
         self,
