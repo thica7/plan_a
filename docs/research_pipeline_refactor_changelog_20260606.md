@@ -966,3 +966,32 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/app/routers/enterprise.py backend/packages/schema/enterprise.py backend/packages/schema/__init__.py backend/tests/unit/test_enterprise_store.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_quality_finding_groups_cover_h7_axes backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection -q`
+
+## 2026-06-07 - Step 31: Checkpoint 2 Quality Metrics
+
+Commit: this commit
+
+Scope:
+
+- Extended run quality comparison with Checkpoint 2 H9 metrics:
+  `gap_resolution_rate`, `field_support_rate`, `validated_claim_rate`, and
+  `warning_count`.
+- Kept `/runs/{run_id}/quality-comparison` and `/evals/enterprise` as the
+  regression-gate surfaces instead of adding a duplicate EvalOps endpoint.
+- Updated regression detection to use normalized score deltas, which correctly
+  handles lower-is-better metrics such as QA blockers and warnings.
+- Added field-support regression coverage to complement existing citation
+  validity and blocker-count gate tests.
+
+Why:
+
+- Checkpoint 2 needs baseline/current numbers for the evidence repair loop,
+  field coverage, claim validation, and warning count, not only source/citation
+  metrics.
+- Exposing these as ordinary `RunQualityMetric` records keeps backend,
+  frontend, scripts, and EvalOps consumers on the same schema.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/business_intel/report_quality.py backend/tests/unit/test_report_quality.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_report_quality.py backend/tests/unit/test_evalops.py -q`

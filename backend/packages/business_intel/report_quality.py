@@ -139,6 +139,9 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "citation_validity_rate": _citation_validity_rate(detail),
         "report_source_token_count": float(_report_source_token_count(detail.report_md)),
         "real_source_rate": _real_source_rate(detail.raw_sources),
+        "gap_resolution_rate": _gap_resolution_rate(detail),
+        "field_support_rate": _field_support_rate(detail),
+        "validated_claim_rate": _validated_claim_rate(detail),
         "llm_call_signal": min(float(detail.metrics.llm_calls) / 3.0, 1.0),
         "report_length_score": min(len(detail.report_md) / 2500.0, 1.0),
         "report_structure_score": _report_structure_score(detail),
@@ -152,6 +155,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "qa_blocker_count": float(
             len([finding for finding in detail.qa_findings if finding.severity == "blocker"])
         ),
+        "warning_count": float(_warning_count(detail)),
     }
     normalized = {
         "evidence_count": min(values["evidence_count"] / 8.0, 1.0),
@@ -160,6 +164,9 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "claim_citation_rate": values["claim_citation_rate"],
         "citation_validity_rate": values["citation_validity_rate"],
         "real_source_rate": values["real_source_rate"],
+        "gap_resolution_rate": values["gap_resolution_rate"],
+        "field_support_rate": values["field_support_rate"],
+        "validated_claim_rate": values["validated_claim_rate"],
         "llm_call_signal": values["llm_call_signal"],
         "report_length_score": values["report_length_score"],
         "report_structure_score": values["report_structure_score"],
@@ -169,6 +176,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "user_research_section_score": values["user_research_section_score"],
         "rag_gap_fill_section_score": values["rag_gap_fill_section_score"],
         "qa_blocker_count": max(0.0, 1.0 - min(values["qa_blocker_count"] / 3.0, 1.0)),
+        "warning_count": max(0.0, 1.0 - min(values["warning_count"] / 12.0, 1.0)),
     }
     score = round(
         sum(normalized[name] * weight for name, weight, _ in _metric_specs()) * 100
@@ -207,21 +215,25 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
 
 def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower_is_better"]]]:
     return [
-        ("evidence_count", 0.08, "higher_is_better"),
-        ("source_coverage_rate", 0.10, "higher_is_better"),
+        ("evidence_count", 0.06, "higher_is_better"),
+        ("source_coverage_rate", 0.08, "higher_is_better"),
         ("verified_source_rate", 0.10, "higher_is_better"),
         ("claim_citation_rate", 0.09, "higher_is_better"),
         ("citation_validity_rate", 0.09, "higher_is_better"),
         ("real_source_rate", 0.10, "higher_is_better"),
-        ("llm_call_signal", 0.09, "higher_is_better"),
-        ("report_length_score", 0.03, "higher_is_better"),
+        ("gap_resolution_rate", 0.03, "higher_is_better"),
+        ("field_support_rate", 0.04, "higher_is_better"),
+        ("validated_claim_rate", 0.03, "higher_is_better"),
+        ("llm_call_signal", 0.07, "higher_is_better"),
+        ("report_length_score", 0.02, "higher_is_better"),
         ("report_structure_score", 0.07, "higher_is_better"),
-        ("claim_risk_section_score", 0.06, "higher_is_better"),
-        ("scenario_checklist_section_score", 0.04, "higher_is_better"),
-        ("memory_context_section_score", 0.03, "higher_is_better"),
-        ("user_research_section_score", 0.03, "higher_is_better"),
-        ("rag_gap_fill_section_score", 0.03, "higher_is_better"),
+        ("claim_risk_section_score", 0.05, "higher_is_better"),
+        ("scenario_checklist_section_score", 0.03, "higher_is_better"),
+        ("memory_context_section_score", 0.02, "higher_is_better"),
+        ("user_research_section_score", 0.02, "higher_is_better"),
+        ("rag_gap_fill_section_score", 0.02, "higher_is_better"),
         ("qa_blocker_count", 0.06, "lower_is_better"),
+        ("warning_count", 0.02, "lower_is_better"),
     ]
 
 
@@ -444,6 +456,84 @@ def _real_source_rate(sources: list[RawSource]) -> float:
     return len(real_sources) / len(factual_sources)
 
 
+def _gap_resolution_rate(detail: RunDetail) -> float:
+    rag_gap_fill = _quality_metadata(detail).get("rag_gap_fill")
+    if isinstance(rag_gap_fill, dict):
+        direct_value = rag_gap_fill.get("gap_resolution_rate")
+        if isinstance(direct_value, int | float):
+            return max(0.0, min(1.0, float(direct_value)))
+        before_gap_count = rag_gap_fill.get("before_gap_count")
+        after_gap_count = rag_gap_fill.get("after_gap_count")
+        if isinstance(before_gap_count, int | float) and isinstance(after_gap_count, int | float):
+            if before_gap_count <= 0:
+                return 1.0 if after_gap_count <= 0 else 0.0
+            return max(0.0, min(1.0, (before_gap_count - after_gap_count) / before_gap_count))
+        status = rag_gap_fill.get("gap_resolution_status")
+        if isinstance(status, dict) and status:
+            resolved = len([value for value in status.values() if value == "resolved"])
+            return resolved / len(status)
+    return 1.0 if not _needs_rag_gap_fill_section(detail) else 0.0
+
+
+def _field_support_rate(detail: RunDetail) -> float:
+    competitors = detail.plan.competitors or sorted(detail.competitor_knowledge)
+    dimensions = detail.plan.dimensions
+    if not competitors or not dimensions:
+        return 1.0
+    expected_fields = [
+        (competitor, dimension) for competitor in competitors for dimension in dimensions
+    ]
+    supported = [
+        (competitor, dimension)
+        for competitor, dimension in expected_fields
+        if any(
+            source.dimension == dimension
+            and _source_matches_competitor_name(source, competitor)
+            and source.confidence >= 0.75
+            for source in detail.raw_sources
+        )
+    ]
+    return len(supported) / max(1, len(expected_fields))
+
+
+def _validated_claim_rate(detail: RunDetail) -> float:
+    projection = detail.enterprise_projection
+    if projection is None or not projection.claim_records:
+        return 1.0 if _claim_citation_rate(detail) >= 1.0 else 0.0
+    evidence_ids = {item.id for item in projection.evidence_records}
+    validated_claims = [
+        claim
+        for claim in projection.claim_records
+        if claim.evidence_ids
+        and all(evidence_id in evidence_ids for evidence_id in claim.evidence_ids)
+    ]
+    return len(validated_claims) / len(projection.claim_records)
+
+
+def _warning_count(detail: RunDetail) -> int:
+    qa_warning_count = len(
+        [finding for finding in detail.qa_findings if finding.severity == "warn"]
+    )
+    release_gate = _quality_metadata(detail).get("release_gate")
+    release_warning_count = 0
+    if isinstance(release_gate, dict) and isinstance(release_gate.get("warn_count"), int):
+        release_warning_count = int(release_gate["warn_count"])
+    return qa_warning_count + release_warning_count
+
+
+def _quality_metadata(detail: RunDetail) -> dict[str, object]:
+    projection = detail.enterprise_projection
+    if projection is None:
+        return {}
+    return dict(projection.report_version.quality_metadata)
+
+
+def _source_matches_competitor_name(source: RawSource, competitor: str) -> bool:
+    if source.covered_competitors:
+        return competitor in source.covered_competitors
+    return source.competitor == competitor
+
+
 def _factual_sources(sources: list[RawSource]) -> list[RawSource]:
     return [
         source
@@ -591,10 +681,14 @@ def _regression_gate(
             "claim_citation_rate",
             "citation_validity_rate",
             "real_source_rate",
+            "gap_resolution_rate",
+            "field_support_rate",
+            "validated_claim_rate",
             "report_structure_score",
+            "qa_blocker_count",
         }
-        and metric.delta is not None
-        and metric.delta <= -0.15
+        and metric.normalized_score_delta is not None
+        and metric.normalized_score_delta <= -0.15
     ]
     if core_regressions:
         reasons.append(

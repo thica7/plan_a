@@ -299,6 +299,8 @@ Completed behavior:
 
 ### 7. `feat(eval): add real-run baseline regression gate`
 
+Status: completed by `feat(eval): add checkpoint 2 quality metrics`.
+
 Backlog: H9.
 
 Required behavior:
@@ -316,6 +318,17 @@ Acceptance:
 - A regression in citation validity, blocker count, or field support is
   detected by tests.
 - Final Checkpoint 2 audit includes baseline/current numbers.
+
+Completed behavior:
+
+- Extended run quality comparison metrics with `gap_resolution_rate`,
+  `field_support_rate`, `validated_claim_rate`, and `warning_count`.
+- Kept the same `/runs/{run_id}/quality-comparison` and `/evals/enterprise`
+  surfaces so consumers do not need a second regression gate.
+- Updated regression detection to use normalized metric deltas, so both
+  higher-is-better and lower-is-better metrics can fail correctly.
+- Added a field-support regression test in addition to existing citation and
+  blocker regression coverage.
 
 ## Final Checkpoint 2 Real-Run Acceptance
 

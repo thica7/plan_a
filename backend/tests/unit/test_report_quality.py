@@ -100,6 +100,10 @@ def test_compare_run_quality_scores_real_run_against_baseline() -> None:
     }
     assert {metric.name for metric in comparison.metrics} >= {
         "real_source_rate",
+        "gap_resolution_rate",
+        "field_support_rate",
+        "validated_claim_rate",
+        "warning_count",
         "llm_call_signal",
         "claim_citation_rate",
         "citation_validity_rate",
@@ -111,6 +115,12 @@ def test_compare_run_quality_scores_real_run_against_baseline() -> None:
     }
     assert next(
         metric for metric in comparison.metrics if metric.name == "citation_validity_rate"
+    ).target_value == 1.0
+    assert next(
+        metric for metric in comparison.metrics if metric.name == "gap_resolution_rate"
+    ).target_value == 1.0
+    assert next(
+        metric for metric in comparison.metrics if metric.name == "validated_claim_rate"
     ).target_value == 1.0
 
 
@@ -164,6 +174,59 @@ def test_compare_run_quality_regression_gate_fails_on_core_metric_drop() -> None
     assert comparison.regression_gate_status == "fail"
     assert comparison.regression_gate_passed is False
     assert any("core metric regression" in reason for reason in comparison.regression_gate_reasons)
+
+
+def test_compare_run_quality_regression_gate_fails_on_field_support_drop() -> None:
+    baseline = _run_detail(
+        run_id="baseline-field-support",
+        execution_mode="real",
+        source_count=2,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+    baseline.plan.dimensions = ["pricing", "feature"]
+    baseline.raw_sources[1].dimension = "feature"
+    target = _run_detail(
+        run_id="target-field-support-regressed",
+        execution_mode="real",
+        source_count=1,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=baseline.trace_spans,
+    )
+    target.plan.dimensions = ["pricing", "feature"]
+
+    comparison = compare_run_quality(target, baseline=baseline)
+    field_support = next(
+        metric for metric in comparison.metrics if metric.name == "field_support_rate"
+    )
+
+    assert field_support.baseline_value == 0.5
+    assert field_support.target_value == 0.25
+    assert comparison.regression_gate_status == "fail"
+    assert any("field_support_rate" in reason for reason in comparison.regression_gate_reasons)
 
 
 def test_compare_run_quality_flags_unresolved_report_source_tokens() -> None:
