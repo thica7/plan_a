@@ -45,6 +45,7 @@ def quality_findings_from_qc_issues(
             competitor_name=issue.target_competitor,
             dimension=issue.target_subagent,
             field_path=issue.field_path,
+            report_section=_report_section_for_finding(issue.detected_by, issue.target_subagent),
             message=issue.problem,
             recommendation=issue.redo_scope.rationale,
             required_action=_required_action_from_redo(issue.redo_scope),
@@ -80,6 +81,7 @@ def quality_findings_from_business_qa(
                 competitor_name=finding.competitor_name,
                 dimension=finding.dimension,
                 field_path=finding.rule_id,
+                report_section=_report_section_for_finding(finding.rule_id, finding.dimension),
                 claim_ids=finding.claim_ids,
                 evidence_ids=finding.evidence_ids,
                 message=finding.message,
@@ -105,6 +107,7 @@ def quality_findings_from_release_gate(gate: ReportReleaseGate | None) -> list[Q
                 source_id="release_gate.missing_report",
                 severity="warn",
                 issue_type="missing_report_version",
+                report_section="Report Lifecycle",
                 message="No ReportVersion exists yet; release readiness cannot be evaluated.",
                 recommendation="Generate a report version after evidence and claims are projected.",
                 required_action="rewrite_report",
@@ -153,6 +156,7 @@ def quality_findings_from_evidence_gaps(
                 competitor_name=gap.competitor_name,
                 dimension=gap.dimension,
                 field_path=gap.source_type_required,
+                report_section=_report_section_for_finding(gap.gap_type, gap.dimension),
                 claim_ids=gap.claim_ids,
                 evidence_ids=gap.evidence_ids,
                 message=gap.message,
@@ -196,6 +200,10 @@ def quality_findings_from_red_team(
                 competitor_id=finding.competitor_id,
                 competitor_name=finding.competitor_name,
                 dimension=finding.dimension,
+                report_section=_report_section_for_finding(
+                    finding.finding_type,
+                    finding.dimension,
+                ),
                 claim_ids=finding.claim_ids,
                 evidence_ids=finding.evidence_ids,
                 message=finding.message,
@@ -231,6 +239,7 @@ def quality_findings_from_claim_validation(
                 severity=issue.severity,
                 issue_type=issue.issue_type,
                 field_path=f"claim.{issue.claim_id}.{issue.issue_type}",
+                report_section=_report_section_for_finding(issue.issue_type, None),
                 claim_ids=[issue.claim_id],
                 evidence_ids=issue.evidence_ids,
                 message=issue.message,
@@ -263,6 +272,10 @@ def quality_findings_from_quality_gaps(
                 competitor_name=gap.competitor,
                 dimension=gap.dimension,
                 field_path=gap.field,
+                report_section=_report_section_for_finding(
+                    str(gap.suggested_action),
+                    gap.dimension,
+                ),
                 evidence_ids=gap.source_ids,
                 message=gap.reason,
                 recommendation=str(gap.suggested_action),
@@ -283,6 +296,7 @@ def quality_findings_from_evalops(report: EvalOpsReport) -> list[QualityFinding]
             severity=_severity_from_eval_status(issue.status),
             status="resolved" if issue.status == "pass" else "open",
             issue_type=issue.kind,
+            report_section=_report_section_for_finding(issue.kind, None),
             message=issue.summary or issue.id,
             recommendation="Investigate the regression gate issue before publishing.",
             required_action="human_review" if issue.status != "pass" else "none",
@@ -455,6 +469,26 @@ def _claim_validation_metadata(
             sample.model_dump(mode="json") for sample in validation.validation_samples
         ],
     }
+
+
+def _report_section_for_finding(issue_type: str, dimension: str | None) -> str:
+    dimension_key = (dimension or "").casefold()
+    issue_key = issue_type.casefold()
+    if "pricing" in dimension_key:
+        return "Pricing Analysis"
+    if "feature" in dimension_key:
+        return "Feature Matrix"
+    if "persona" in dimension_key or "user" in dimension_key:
+        return "Persona And Buyer Signals"
+    if "citation" in issue_key or "source" in issue_key or "evidence" in issue_key:
+        return "Evidence Appendix"
+    if "claim" in issue_key or "consistency" in issue_key or "support" in issue_key:
+        return "Claim Validation"
+    if "report" in issue_key or "structure" in issue_key:
+        return "Report Structure"
+    if "regression" in issue_key or "metric" in issue_key:
+        return "EvalOps"
+    return "General Review"
 
 
 def _acceptance_rule_for_action(action: QualityFindingRequiredAction) -> str:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from packages.quality import (
     quality_findings_from_claim_validation,
+    quality_findings_from_evalops,
     quality_findings_from_evidence_gaps,
     quality_findings_from_qc_issues,
     quality_findings_from_red_team,
@@ -18,6 +19,7 @@ from packages.schema.enterprise import (
     RedTeamFinding,
     ReportReleaseGate,
 )
+from packages.schema.evals import EvalOpsRegressionGateIssue, EvalOpsReport
 from packages.schema.models import QCIssue, RedoScope
 
 
@@ -50,7 +52,9 @@ def test_qc_issue_becomes_unified_quality_finding() -> None:
     assert finding.competitor_name == "Cursor"
     assert finding.dimension == "pricing"
     assert finding.field_path == "raw_sources[pricing]"
+    assert finding.report_section == "Pricing Analysis"
     assert finding.required_action == "add_evidence"
+    assert finding.repairable is True
     assert finding.redo_scope == issue.redo_scope
 
 
@@ -104,7 +108,9 @@ def test_release_gate_finding_preserves_claim_evidence_and_action() -> None:
     assert finding.issue_type == "claim_self_consistency_required"
     assert finding.claim_ids == ["claim-1"]
     assert finding.evidence_ids == ["evidence-1"]
+    assert finding.report_section == "Pricing Analysis"
     assert finding.required_action == "add_evidence"
+    assert finding.repairable is True
     assert finding.redo_scope is not None
 
 
@@ -138,11 +144,15 @@ def test_evidence_gap_and_red_team_findings_share_contract() -> None:
 
     assert gap_finding.source_agent == "EvidenceGap"
     assert gap_finding.severity == "warn"
+    assert gap_finding.report_section == "Feature Matrix"
     assert gap_finding.required_action == "add_evidence"
+    assert gap_finding.repairable is True
     assert gap_finding.redo_scope is not None
     assert red_finding.source_agent == "RedTeam"
     assert red_finding.severity == "blocker"
+    assert red_finding.report_section == "Feature Matrix"
     assert red_finding.required_action == "rewrite_claim"
+    assert red_finding.repairable is True
     assert red_finding.claim_ids == ["claim-1"]
 
 
@@ -190,6 +200,8 @@ def test_claim_validation_finding_carries_scores_and_samples() -> None:
     finding = findings[0]
     assert finding.source_agent == "ClaimValidator"
     assert finding.required_action == "rewrite_claim"
+    assert finding.repairable is True
+    assert finding.report_section == "Claim Validation"
     assert finding.claim_ids == ["claim-1"]
     assert finding.evidence_ids == ["evidence-1"]
     assert finding.metadata["validation_status"] == "weak"
@@ -197,3 +209,50 @@ def test_claim_validation_finding_carries_scores_and_samples() -> None:
     assert finding.metadata["high_risk"] is True
     assert finding.metadata["recommended_action"] == "downgrade_claim"
     assert finding.metadata["text_support_score"] == 38
+
+
+def test_evalops_regression_issue_uses_quality_finding_contract() -> None:
+    report = EvalOpsReport(
+        run_count=1,
+        evaluated_run_ids=["run-1"],
+        real_run_count=1,
+        demo_run_count=0,
+        real_run_ratio=1.0,
+        real_quality_chain_rate=0.8,
+        regressed_run_count=1,
+        hitl_enabled_run_rate=0.0,
+        human_correction_rate=0.0,
+        redo_iteration_count=0,
+        redo_convergence_ratio=1.0,
+        golden_set_size=30,
+        golden_set_pass_rate=0.9,
+        report_quality_score=88,
+        source_recall=0.8,
+        manual_baseline_hours_per_report=6.0,
+        manual_baseline_hours=6.0,
+        automation_runtime_hours=0.2,
+        manual_time_saved_hours=5.8,
+        task_time_saved_hours=5.8,
+        time_savings_rate=0.96,
+        cost_per_report_usd=1.2,
+        regression_gate_status="warn",
+        regression_gate_reason="Report quality regressed against baseline.",
+        regression_gate_issues=[
+            EvalOpsRegressionGateIssue(
+                kind="metric",
+                id="report_quality_score",
+                status="warn",
+                summary="Report quality score dropped below target.",
+            )
+        ],
+    )
+
+    finding = quality_findings_from_evalops(report)[0]
+
+    assert finding.source_agent == "EvalOps"
+    assert finding.severity == "warn"
+    assert finding.status == "open"
+    assert finding.report_section == "EvalOps"
+    assert finding.required_action == "human_review"
+    assert finding.repairable is False
+    assert finding.metadata["regression_gate_status"] == "warn"

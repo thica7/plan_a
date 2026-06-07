@@ -37,11 +37,13 @@ class QualityFinding(BaseModel):
     competitor_name: str | None = None
     dimension: str | None = None
     field_path: str | None = None
+    report_section: str | None = None
     claim_ids: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
     message: str
     recommendation: str = ""
     required_action: QualityFindingRequiredAction = "human_review"
+    repairable: bool = False
     acceptance_rule: str = ""
     redo_scope: RedoScope | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -64,6 +66,19 @@ class QualityFinding(BaseModel):
                 self.message,
                 length=20,
             )
+        self.repairable = (
+            self.repairable
+            or self.redo_scope is not None
+            or self.required_action
+            in {
+                "add_evidence",
+                "rewrite_claim",
+                "downgrade_claim",
+                "delete_claim",
+                "rewrite_report",
+                "rerun_scope",
+            }
+        )
         return self
 
 

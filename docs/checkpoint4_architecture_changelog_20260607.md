@@ -75,3 +75,30 @@ Validation:
 - Passed:
   - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/agents/collectors/logic.py backend/packages/research backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py`
   - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py::test_collector_react_runner_searches_fetches_and_finishes backend/tests/unit/test_run_service.py::test_collector_react_finish_fetches_uninspected_urls -q`
+
+## 2026-06-07 - Step 3: Quality Finding Matrix Contract
+
+Scope:
+
+- Added `report_section` and `repairable` to the unified `QualityFinding`
+  schema.
+- Made `repairable` deterministic from `redo_scope` or actionable
+  `required_action` values.
+- Updated adapters for RuntimeQA, BusinessQA/ReleaseGate, EvidenceGap, RedTeam,
+  ClaimValidator, ResearchPipeline `QualityGap`, and EvalOps to populate a
+  reviewable report section.
+- Added tests proving the main quality agents share one display/repair contract
+  without collapsing their native schemas.
+
+Why:
+
+- C4.4 requires one product surface for quality review while keeping each agent's
+  native finding semantics.
+- Frontend quality matrix and release review can now rely on typed fields for
+  section targeting and repairability instead of parsing finding messages.
+
+Validation:
+
+- Passed:
+  - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/schema/quality.py backend/packages/quality backend/tests/unit/test_quality_findings.py`
+  - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_quality_findings.py backend/tests/unit/test_enterprise_store.py::test_quality_finding_groups_cover_h7_axes -q`
