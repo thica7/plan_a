@@ -31,7 +31,7 @@ Phase 5 enterprise productization:
   Checkpoint 1 report quality closure complete
   Checkpoint 2 high-score backlog core complete
   Checkpoint 3 enterprise product hardening core complete
-  Checkpoint 4 architecture contract consolidation active
+  Checkpoint 4 architecture contract implementation complete; runtime smoke pending
 ```
 
 Strict status:
@@ -48,8 +48,9 @@ Strict status:
   continue only through targeted quality gates.
 - Clean Research Pipeline: structure complete and accepted for Checkpoint 2;
   continue through enterprise artifact/source governance.
-- Checkpoint 4 architecture consolidation: active; focus on identity, scope,
-  quality, HITL, orchestration, and observability contracts.
+- Checkpoint 4 architecture consolidation: contract implementation complete for
+  identity, scope, research boundary, quality, HITL, orchestration, and
+  observability. Runtime smoke validation remains before demo acceptance.
 - Architecture-first execution: use
   `docs/architecture_first_execution_plan_20260607.md` when the next request is
   about architecture rather than run-specific report quality.
@@ -57,7 +58,8 @@ Strict status:
 ## Full Route
 
 The route has four checkpoints. Checkpoint 1, Checkpoint 2, and Checkpoint 3
-core are complete. Checkpoint 4 is active.
+core are complete. Checkpoint 4 contract implementation is complete; runtime
+smoke validation remains.
 
 ### Checkpoint 1: Report Quality Closure
 
@@ -179,6 +181,10 @@ Active detailed plan:
 - `docs/checkpoint4_architecture_contract_consolidation_plan.md`
 - `docs/architecture_first_execution_plan_20260607.md`
 
+Completion audit:
+
+- `docs/reports/checkpoint4_architecture_contract_audit_20260607.md`
+
 ## Already Completed On Checkpoint 1
 
 Recent commits:
@@ -198,10 +204,9 @@ business fields, warning repair artifacts, and the final real-run acceptance.
 Do next:
 
 ```text
-Checkpoint 4: consolidate architecture contracts before adding more broad
-features. Start with identity/resolver and report-version scope, then proceed
-through research pipeline, quality, HITL, orchestration, and observability
-contracts.
+Checkpoint 4 runtime smoke: validate one Temporal automated run and one
+HITL-enabled lifecycle run, then move to Checkpoint 5 enterprise runtime
+planning.
 ```
 
 Checkpoint 2 final audit:
