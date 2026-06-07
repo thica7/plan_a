@@ -12,7 +12,7 @@ Before each implementation turn, read:
 
 - `docs/enterprise_execution_master_plan.md`
 - The active checkpoint plan, currently:
-  `docs/checkpoint1_execution_plan.md`
+  `docs/checkpoint2_execution_plan.md`
 - `dev_plan_final/dev_plan_final/01_EXECUTION_ROADMAP_5_PHASES.md`
 - `dev_plan_final/dev_plan_final/10_HIGH_SCORE_FUSION_BACKLOG.md`
 - `D:/codex_workspace/websearch_v2/clean_research_pipeline_rewrite_plan.md`
@@ -45,8 +45,8 @@ Strict status:
 
 ## Full Route
 
-The route has three checkpoints. Checkpoint 1 is active now; Checkpoints 2 and
-3 must not be forgotten.
+The route has three checkpoints. Checkpoint 1 is complete, Checkpoint 2 is
+active now, and Checkpoint 3 must not be forgotten.
 
 ### Checkpoint 1: Report Quality Closure
 
@@ -69,6 +69,11 @@ Required work:
 Active detailed plan:
 
 - `docs/checkpoint1_execution_plan.md`
+
+Final acceptance:
+
+- `docs/reports/checkpoint1_acceptance_report_20260607.md`
+- `docs/reports/checkpoint1_real_run_audit_final_20260607_045503.md`
 
 ### Checkpoint 2: High-Score Backlog Core
 
@@ -95,6 +100,10 @@ Expected acceptance:
   RedoScope.
 - EvalOps exposes baseline vs current system metrics and regression gate
   signals.
+
+Active detailed plan:
+
+- `docs/checkpoint2_execution_plan.md`
 
 ### Checkpoint 3: Enterprise Product Hardening
 
@@ -132,15 +141,15 @@ Recent commits:
 - `feat(research): normalize pricing feature persona fields`
 - `feat(release): apply warning repair to report sections`
 
-These cover the anti-garbage foundation and QA text quality gate, but they do
-not complete the full Checkpoint 1.
+These cover the anti-garbage foundation, QA text quality gate, normalized
+business fields, warning repair artifacts, and the final real-run acceptance.
 
 ## Active Next Work
 
 Do next:
 
 ```text
-Move to Checkpoint 2: High-Score Backlog Core.
+Execute Checkpoint 2: High-Score Backlog Core.
 ```
 
 Checkpoint 1 final audit:
