@@ -293,6 +293,66 @@ def test_decision_replay_maps_trace_into_audit_timeline() -> None:
     assert any(event.evidence_ids == ["source-1"] for event in replay.events)
 
 
+def test_decision_replay_preserves_hitl_lifecycle_payload() -> None:
+    detail = RunDetail(
+        id="run-hitl-lifecycle",
+        topic="Decision replay HITL lifecycle",
+        status="interrupted",
+        execution_mode="real",
+        created_at="2026-06-07T00:00:00Z",
+        updated_at="2026-06-07T00:01:00Z",
+        plan=AnalysisPlan(
+            topic="Decision replay HITL lifecycle",
+            competitors=["A"],
+            dimensions=["pricing"],
+        ),
+    )
+    events = [
+        RunEvent(
+            id=1,
+            run_id=detail.id,
+            type="hitl.reviewed",
+            agent="hitl",
+            subagent="planner",
+            message="HITL lifecycle requested: planner decision=pending.",
+            payload={
+                "hitl_lifecycle": {
+                    "id": "hitl-life-1",
+                    "lifecycle_stage": "requested",
+                    "review_kind": "planner_review",
+                    "stage": "planner",
+                    "decision": "pending",
+                    "actor_id": "system",
+                    "target_type": "run",
+                    "target_id": detail.id,
+                    "run_id": detail.id,
+                    "report_version_id": None,
+                    "redo_scope": None,
+                    "audit_log_id": None,
+                    "decision_replay_event_id": None,
+                    "result_action": "await_reviewer_resume",
+                    "note": "",
+                    "metadata": {"interrupt_node": "planner_hitl"},
+                    "created_at": "2026-06-07T00:00:30Z",
+                }
+            },
+            created_at="2026-06-07T00:00:30Z",
+        )
+    ]
+
+    replay = build_decision_replay(detail, events)
+
+    hitl_event = next(
+        event
+        for event in replay.events
+        if event.event_type == "hitl.reviewed" and "hitl_lifecycle" in event.payload
+    )
+    lifecycle = hitl_event.payload["hitl_lifecycle"]
+    assert lifecycle["lifecycle_stage"] == "requested"
+    assert lifecycle["review_kind"] == "planner_review"
+    assert lifecycle["result_action"] == "await_reviewer_resume"
+
+
 def test_decision_replay_prefers_real_claim_validation_events() -> None:
     detail = RunDetail(
         id="run-claim-validation",

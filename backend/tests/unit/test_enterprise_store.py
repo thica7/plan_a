@@ -2013,6 +2013,11 @@ def test_manual_report_revision_after_rejection_creates_audited_draft() -> None:
     assert manual_revision.status_code == 200
     assert manual_revision.json()["status"] == "draft"
     assert manual_revision.json()["parent_version_id"] == projection.report_version.id
+    manual_lifecycle = manual_revision.json()["quality_metadata"]["hitl_lifecycle"][-1]
+    assert manual_lifecycle["lifecycle_stage"] == "revision_created"
+    assert manual_lifecycle["review_kind"] == "manual_report_revision"
+    assert manual_lifecycle["target_id"] == revision_id
+    assert manual_lifecycle["report_version_id"] == revision_id
     assert (
         manual_revision.json()["quality_metadata"]["manual_revision"]["edited_by"]
         == "system-user"
@@ -2026,7 +2031,12 @@ def test_manual_report_revision_after_rejection_creates_audited_draft() -> None:
     assert diff.json()["target_version"]["id"] == revision_id
     assert diff.json()["added_lines"] >= 1
     assert any(log.action == "report_version.rejected" for log in logs)
-    assert any(log.action == "report_version.manual_revision_created" for log in logs)
+    revision_logs = [
+        log for log in logs if log.action == "report_version.manual_revision_created"
+    ]
+    assert revision_logs
+    assert revision_logs[0].after is not None
+    assert revision_logs[0].after["hitl_lifecycle"][-1]["target_id"] == revision_id
     assert any(
         log.action == "memory.feedback_captured"
         and log.after["target_id"] == revision_id

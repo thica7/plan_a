@@ -39,6 +39,14 @@ from packages.enterprise import (
     report_scope_metadata,
 )
 from packages.governance import build_model_policy_report, model_policy_block_message
+from packages.hitl import (
+    HitlLifecycleEvent,
+    HitlLifecycleStage,
+    HitlReviewKind,
+    build_hitl_lifecycle_event,
+    lifecycle_stage_for_resume_decision,
+    review_kind_for_stage,
+)
 from packages.identity import (
     compute_competitor_set_hash,
     compute_content_hash,
@@ -704,6 +712,12 @@ class RunService(
         if record is None:
             return None
         if record.pending_interrupts:
+            stage = next(iter(record.pending_interrupts))
+            hitl_actor_id = (
+                "system"
+                if (request.note or "").startswith("Auto-accepted after HITL timeout")
+                else "hitl-reviewer"
+            )
             self._cancel_hitl_timeout(record)
             if request.dimensions:
                 record.detail.plan.dimensions = self._normalize_requested_dimensions(
@@ -714,9 +728,41 @@ class RunService(
             memory_feedback_payload = self._capture_hitl_memory_feedback(record, request)
             if memory_feedback_payload is not None:
                 self._refresh_quality_metrics(record.detail)
+            await self._record_hitl_lifecycle_event(
+                record,
+                lifecycle_stage=lifecycle_stage_for_resume_decision(
+                    request.decision,
+                    note=request.note,
+                ),
+                review_kind=review_kind_for_stage(stage),
+                stage=stage,
+                decision=request.decision,
+                actor_id=hitl_actor_id,
+                target_type="run",
+                target_id=run_id,
+                result_action="resume_langgraph",
+                note=request.note or "",
+                metadata={
+                    "dimensions": request.dimensions or [],
+                    "pending_interrupt": record.pending_interrupts.get(stage, {}),
+                },
+            )
             record.detail.status = "running"
             record.detail.updated_at = datetime.utcnow()
             self._persist_run(run_id)
+            await self._record_hitl_lifecycle_event(
+                record,
+                lifecycle_stage="resumed",
+                review_kind=review_kind_for_stage(stage),
+                stage=stage,
+                decision=request.decision,
+                actor_id=hitl_actor_id,
+                target_type="run",
+                target_id=run_id,
+                result_action="graph_resume_scheduled",
+                note=request.note or "",
+                metadata={"dimensions": request.dimensions or []},
+            )
             await self.emit(
                 run_id,
                 "node_completed",
@@ -737,6 +783,18 @@ class RunService(
             asyncio.create_task(self._resume_interrupted_graph(run_id, request))
             return record.detail
         if request.decision == "redo" and not record.detail.qa_findings:
+            await self._record_hitl_lifecycle_event(
+                record,
+                lifecycle_stage="redo_requested",
+                review_kind="manual_redo",
+                stage="manual_redo",
+                decision=request.decision,
+                actor_id="hitl-reviewer",
+                target_type="run",
+                target_id=run_id,
+                result_action="no_qa_findings_to_redo",
+                note=request.note or "",
+            )
             record.detail.status = "completed"
             record.detail.current_node = None
             record.detail.updated_at = datetime.utcnow()
@@ -744,6 +802,18 @@ class RunService(
             await self.emit(run_id, "node_completed", "hitl", None, "No QA findings to redo.")
             return record.detail
         if request.decision == "redo" and self._redo_limit_reached(record.detail):
+            await self._record_hitl_lifecycle_event(
+                record,
+                lifecycle_stage="redo_requested",
+                review_kind="manual_redo",
+                stage="manual_redo",
+                decision=request.decision,
+                actor_id="hitl-reviewer",
+                target_type="run",
+                target_id=run_id,
+                result_action="redo_limit_reached",
+                note=request.note or "",
+            )
             record.detail.status = "completed"
             record.detail.current_node = None
             record.detail.updated_at = datetime.utcnow()
@@ -766,6 +836,20 @@ class RunService(
         memory_feedback_payload = self._capture_hitl_memory_feedback(record, request)
         if memory_feedback_payload is not None:
             self._refresh_quality_metrics(record.detail)
+        if request.decision == "redo":
+            await self._record_hitl_lifecycle_event(
+                record,
+                lifecycle_stage="redo_requested",
+                review_kind="manual_redo",
+                stage="manual_redo",
+                decision=request.decision,
+                actor_id="hitl-reviewer",
+                target_type="run",
+                target_id=run_id,
+                result_action="run_scoped_redo",
+                note=request.note or "",
+                metadata={"dimensions": request.dimensions or []},
+            )
         record.detail.status = "running"
         record.detail.updated_at = datetime.utcnow()
         self._persist_run(run_id)
@@ -1441,6 +1525,23 @@ class RunService(
                 "interrupt_node": interrupt_node,
             }
             self._persist_run(detail.id)
+            await self._record_hitl_lifecycle_event(
+                record,
+                lifecycle_stage="requested",
+                review_kind=review_kind_for_stage(stage),
+                stage=stage,
+                decision="pending",
+                actor_id="system",
+                target_type="run",
+                target_id=detail.id,
+                result_action="await_reviewer_resume",
+                metadata={
+                    **payload,
+                    "interrupt_node": interrupt_node,
+                    "interrupt_protocol": "langgraph_interrupt_command_resume",
+                    "timeout_seconds": self._settings.hitl_timeout_seconds,
+                },
+            )
             await self.emit(
                 detail.id,
                 "interrupt",
@@ -1694,6 +1795,61 @@ class RunService(
             "collect_qa_attempts": 0,
             "analyst_qa_attempts": 0,
         }
+
+    async def _record_hitl_lifecycle_event(
+        self,
+        record: RunRecord,
+        *,
+        lifecycle_stage: HitlLifecycleStage,
+        review_kind: HitlReviewKind,
+        stage: str | None,
+        decision: str,
+        actor_id: str | None,
+        target_type: str,
+        target_id: str,
+        result_action: str,
+        note: str = "",
+        redo_scope: dict[str, Any] | None = None,
+        report_version_id: str | None = None,
+        audit_log_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> HitlLifecycleEvent:
+        detail = record.detail
+        event = build_hitl_lifecycle_event(
+            lifecycle_stage=lifecycle_stage,
+            review_kind=review_kind,
+            stage=stage,
+            decision=decision,
+            actor_id=actor_id,
+            target_type=target_type,
+            target_id=target_id,
+            run_id=detail.id,
+            report_version_id=report_version_id,
+            redo_scope=redo_scope,
+            audit_log_id=audit_log_id,
+            result_action=result_action,
+            note=note,
+            metadata=metadata,
+            sequence=len(detail.agent_messages) + len(record.events) + 1,
+        )
+        payload = {"hitl_lifecycle": event.model_dump(mode="json")}
+        self._append_agent_message(
+            record,
+            from_agent="hitl",
+            to_agent="orchestrator",
+            message_type="hitl_lifecycle",
+            payload_schema="HitlLifecyclePayload",
+            payload=payload,
+        )
+        await self.emit(
+            detail.id,
+            "hitl.reviewed",
+            "hitl",
+            stage,
+            _hitl_lifecycle_message(event),
+            payload,
+        )
+        return event
 
     async def emit(
         self,
@@ -3880,6 +4036,13 @@ def _hitl_review_messages(detail: RunDetail) -> list[AgentMessage]:
         for message in detail.agent_messages
         if message.message_type == "hitl_memory_feedback_captured"
     ]
+
+
+def _hitl_lifecycle_message(event: HitlLifecycleEvent) -> str:
+    stage = event.stage or event.review_kind
+    decision = event.decision or event.lifecycle_stage
+    action = f"; action={event.result_action}" if event.result_action else ""
+    return f"HITL lifecycle {event.lifecycle_stage}: {stage} decision={decision}{action}."
 
 
 def _memory_context_label(item: str) -> str:

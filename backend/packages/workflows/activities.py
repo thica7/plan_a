@@ -596,6 +596,7 @@ class ReportApprovalActivities:
             metadata={
                 "approver_ids": request.approver_ids,
                 "approval_workflow": stored.quality_metadata.get("approval_workflow", {}),
+                "hitl_lifecycle": stored.quality_metadata.get("hitl_lifecycle", []),
             },
         )
         return _approval_state(stored)
@@ -627,6 +628,7 @@ class ReportApprovalActivities:
             note=decision.note,
             metadata={
                 "approval_workflow": stored.quality_metadata.get("approval_workflow", {}),
+                "hitl_lifecycle": stored.quality_metadata.get("hitl_lifecycle", []),
                 "release_gate": report_release_gate_snapshot(gate),
             },
         )
@@ -661,6 +663,7 @@ class ReportApprovalActivities:
             note=decision.note,
             metadata={
                 "approval_workflow": stored.quality_metadata.get("approval_workflow", {}),
+                "hitl_lifecycle": stored.quality_metadata.get("hitl_lifecycle", []),
             },
         )
         return _approval_state(

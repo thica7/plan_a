@@ -502,6 +502,15 @@ async def test_report_approval_activities_update_report_version_status() -> None
     assert approved.approver_id == "approver-1"
     assert stored is not None
     assert stored.status == "approved"
+    lifecycle = stored.quality_metadata["hitl_lifecycle"]
+    assert [event["lifecycle_stage"] for event in lifecycle] == ["requested", "approved"]
+    assert all(event["review_kind"] == "report_approval" for event in lifecycle)
+    approval_logs = [
+        log for log in store.list_audit_logs() if log.action == "report_version.approved"
+    ]
+    assert approval_logs
+    assert approval_logs[0].after is not None
+    assert approval_logs[0].after["hitl_lifecycle"][-1]["lifecycle_stage"] == "approved"
 
 
 @pytest.mark.asyncio
@@ -581,6 +590,8 @@ async def test_report_approval_activities_can_reject_report_version() -> None:
     assert rejected.note == "needs revision"
     assert stored is not None
     assert stored.status == "rejected"
+    assert stored.quality_metadata["hitl_lifecycle"][-1]["lifecycle_stage"] == "rejected"
+    assert stored.quality_metadata["hitl_lifecycle"][-1]["note"] == "needs revision"
 
 
 def test_report_approval_payloads_can_cross_json_converter_boundary() -> None:

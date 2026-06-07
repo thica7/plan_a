@@ -102,3 +102,42 @@ Validation:
 - Passed:
   - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/schema/quality.py backend/packages/quality backend/tests/unit/test_quality_findings.py`
   - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_quality_findings.py backend/tests/unit/test_enterprise_store.py::test_quality_finding_groups_cover_h7_axes -q`
+
+## 2026-06-07 - Step 4: HITL Lifecycle Contract
+
+Scope:
+
+- Added `backend/packages/hitl/lifecycle.py` as the canonical typed contract for
+  human intervention lifecycle events.
+- Added the unified `HitlLifecycleEvent` states required by Checkpoint 4:
+  `requested`, `accepted`, `modified`, `rejected`, `timed_out`, `resumed`,
+  `redo_requested`, `revision_created`, `approved`, and `published`.
+- Added `HitlLifecyclePayload` validation for agent messages so lifecycle
+  records are traceable through the same message/trace channel as other agent
+  contracts.
+- Wired planner/QA HITL interrupts, reviewer resume decisions, auto-timeout
+  acceptance, and manual redo requests through the lifecycle helper in
+  `RunService`.
+- Wired report approval request/approve/reject/publish transitions into the
+  same lifecycle history while keeping the existing `report_lifecycle`,
+  `approval_workflow`, and `publication` metadata for compatibility.
+- Wired manual report revision to emit `revision_created` lifecycle metadata
+  on the new draft report version, not the source version.
+- Carried `hitl_lifecycle` through report transition audit metadata and
+  decision replay payloads.
+
+Why:
+
+- HITL is now an architecture boundary instead of a set of isolated UI/API
+  actions.
+- Human review, redo, report revision, approval, and publication can be audited
+  and replayed through one event shape.
+- Memory feedback remains narrower than lifecycle: it is still captured only
+  when the decision carries durable note/dimension/correction value.
+
+Validation:
+
+- Passed:
+  - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/hitl backend/packages/schema/messages.py backend/packages/orchestrator/service.py backend/packages/enterprise/report_lifecycle.py backend/packages/workflows/activities.py backend/app/routers/enterprise.py backend/packages/observability/decision_replay.py backend/tests/unit/test_run_service.py backend/tests/unit/test_temporal_workflows.py backend/tests/unit/test_enterprise_store.py backend/tests/unit/test_observability.py`
+  - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py::test_hitl_uses_langgraph_command_resume_and_updates_plan backend/tests/unit/test_run_service.py::test_hitl_resume_creates_reviewable_memory_candidate backend/tests/unit/test_run_service.py::test_hitl_timeout_auto_accepts_interrupt -q`
+  - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_update_report_version_status backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_can_reject_report_version backend/tests/unit/test_enterprise_store.py::test_manual_report_revision_after_rejection_creates_audited_draft backend/tests/unit/test_observability.py::test_decision_replay_preserves_hitl_lifecycle_payload -q`

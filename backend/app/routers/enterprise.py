@@ -68,6 +68,7 @@ from packages.governance import (
     build_model_route_decision,
     build_tool_registry_report,
 )
+from packages.hitl import append_hitl_lifecycle, build_hitl_lifecycle_event, hitl_lifecycle_history
 from packages.identity import compute_content_hash, stable_prefixed_id
 from packages.memory import PreferenceMemoryStore
 from packages.quality import (
@@ -1824,6 +1825,7 @@ def create_manual_report_revision(
         competitor_layer=source.competitor_layer,
         competitor_set_hash=source.competitor_set_hash,
     )
+    revision_id = _manual_report_revision_id(source, next_version, request.report_md)
     metadata = dict(source.quality_metadata)
     metadata["manual_revision"] = {
         "source_report_version_id": source.id,
@@ -1831,9 +1833,31 @@ def create_manual_report_revision(
         "note": request.note,
         "created_at": datetime.utcnow().isoformat(),
     }
+    metadata = append_hitl_lifecycle(
+        metadata,
+        build_hitl_lifecycle_event(
+            lifecycle_stage="revision_created",
+            review_kind="manual_report_revision",
+            stage="manual_report_revision",
+            decision="manual_revision",
+            actor_id=user.user_id,
+            target_type="report_version",
+            target_id=revision_id,
+            run_id=source.run_id,
+            report_version_id=revision_id,
+            result_action="create_draft_report_version",
+            note=request.note,
+            metadata={
+                "source_report_version_id": source.id,
+                "source_status": source.status,
+                "next_version_number": next_version,
+            },
+            sequence=len(hitl_lifecycle_history(metadata)) + 1,
+        ),
+    )
     revision = source.model_copy(
         update={
-            "id": _manual_report_revision_id(source, next_version, request.report_md),
+            "id": revision_id,
             "parent_version_id": source.id,
             "version_number": next_version,
             "status": "draft",
@@ -1853,6 +1877,7 @@ def create_manual_report_revision(
         note=request.note,
         metadata={
             "manual_revision": updated.quality_metadata.get("manual_revision", {}),
+            "hitl_lifecycle": updated.quality_metadata.get("hitl_lifecycle", []),
             "source_report_version_id": source.id,
             "source_status": source.status,
             "diff": {
@@ -1991,6 +2016,7 @@ def publish_report_version(
         before_status=version.status,
         metadata={
             "publication": stored.quality_metadata.get("publication", {}),
+            "hitl_lifecycle": stored.quality_metadata.get("hitl_lifecycle", []),
             "release_gate": report_release_gate_snapshot(gate),
         },
     )

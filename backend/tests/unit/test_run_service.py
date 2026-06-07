@@ -6925,6 +6925,23 @@ async def test_hitl_uses_langgraph_command_resume_and_updates_plan() -> None:
         assert record.detail.status == "completed"
         assert service.has_pending_interrupt(detail.id) is False
         assert any(event.type == "interrupt" for event in service.get_trace(detail.id) or [])
+        lifecycle_messages = [
+            message
+            for message in record.detail.agent_messages
+            if message.message_type == "hitl_lifecycle"
+        ]
+        lifecycle_stages = [
+            message.payload["hitl_lifecycle"]["lifecycle_stage"]
+            for message in lifecycle_messages
+        ]
+        assert lifecycle_stages[:3] == ["requested", "modified", "resumed"]
+        assert lifecycle_messages[0].payload["hitl_lifecycle"]["review_kind"] == "planner_review"
+        assert lifecycle_messages[1].payload["hitl_lifecycle"]["decision"] == "modify_plan"
+        assert any(
+            event.type == "hitl.reviewed"
+            and event.payload["hitl_lifecycle"]["lifecycle_stage"] == "resumed"
+            for event in service.get_trace(detail.id) or []
+        )
     finally:
         await service._graph_checkpointer.aclose()
 
@@ -7018,6 +7035,18 @@ async def test_hitl_resume_creates_reviewable_memory_candidate() -> None:
         ]
         assert hitl_messages
         assert hitl_messages[0].payload["has_note"] is True
+        lifecycle_messages = [
+            message
+            for message in updated.agent_messages
+            if message.message_type == "hitl_lifecycle"
+        ]
+        lifecycle_stages = [
+            item.payload["hitl_lifecycle"]["lifecycle_stage"] for item in lifecycle_messages
+        ]
+        assert lifecycle_stages == ["modified", "resumed"]
+        assert lifecycle_messages[0].payload["hitl_lifecycle"]["metadata"]["dimensions"] == [
+            "feature"
+        ]
     finally:
         await service._graph_checkpointer.aclose()
 
@@ -7088,5 +7117,11 @@ async def test_hitl_timeout_auto_accepts_interrupt() -> None:
         assert record.detail.status == "completed"
         assert service.has_pending_interrupt(detail.id) is False
         assert any("auto-accepted" in event.message for event in service.get_trace(detail.id) or [])
+        lifecycle_stages = [
+            message.payload["hitl_lifecycle"]["lifecycle_stage"]
+            for message in record.detail.agent_messages
+            if message.message_type == "hitl_lifecycle"
+        ]
+        assert lifecycle_stages[:3] == ["requested", "timed_out", "resumed"]
     finally:
         await service._graph_checkpointer.aclose()

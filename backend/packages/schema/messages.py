@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from packages.hitl import HitlLifecycleEvent
 from packages.schema.models import (
     AgentMessage,
     AnalysisPlan,
@@ -154,6 +155,10 @@ class HitlMemoryFeedbackMessagePayload(_MessagePayload):
     candidate_count: int = Field(ge=0)
 
 
+class HitlLifecycleMessagePayload(_MessagePayload):
+    hitl_lifecycle: HitlLifecycleEvent
+
+
 class SurveyEvidenceBundleCollectionMessagePayload(_MessagePayload):
     bundles: list[SurveyEvidenceBundle] = Field(default_factory=list)
     reason: str | None = None
@@ -171,6 +176,7 @@ AGENT_MESSAGE_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "CompetitorKBDigest": CompetitorKBDigestMessagePayload,
     "CompetitorKnowledge": CompetitorKnowledgeMessagePayload,
     "ComparisonMatrix": ComparisonMatrixMessagePayload,
+    "HitlLifecyclePayload": HitlLifecycleMessagePayload,
     "HitlMemoryFeedbackPayload": HitlMemoryFeedbackMessagePayload,
     "KBCacheEntry": KBCacheEntryMessagePayload,
     "MarkdownReport": MarkdownReportMessagePayload,
