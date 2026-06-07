@@ -293,6 +293,10 @@ Purpose:
 
 Prevent orchestration responsibilities from blending together.
 
+Detailed contract:
+
+- `docs/orchestration_ownership_contract_20260607.md`
+
 Implementation direction:
 
 - Temporal owns workflow lifecycle:
@@ -461,4 +465,3 @@ After Checkpoint 4, future work should feel simpler:
   scope.
 - Fixing a bad claim should happen through extraction/admission/quality
   contracts, not report text patching.
-

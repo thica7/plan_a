@@ -141,3 +141,33 @@ Validation:
   - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/hitl backend/packages/schema/messages.py backend/packages/orchestrator/service.py backend/packages/enterprise/report_lifecycle.py backend/packages/workflows/activities.py backend/app/routers/enterprise.py backend/packages/observability/decision_replay.py backend/tests/unit/test_run_service.py backend/tests/unit/test_temporal_workflows.py backend/tests/unit/test_enterprise_store.py backend/tests/unit/test_observability.py`
   - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py::test_hitl_uses_langgraph_command_resume_and_updates_plan backend/tests/unit/test_run_service.py::test_hitl_resume_creates_reviewable_memory_candidate backend/tests/unit/test_run_service.py::test_hitl_timeout_auto_accepts_interrupt -q`
   - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_update_report_version_status backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_can_reject_report_version backend/tests/unit/test_enterprise_store.py::test_manual_report_revision_after_rejection_creates_audited_draft backend/tests/unit/test_observability.py::test_decision_replay_preserves_hitl_lifecycle_payload -q`
+
+## 2026-06-07 - Step 5: Orchestration Ownership Boundary
+
+Scope:
+
+- Added `docs/orchestration_ownership_contract_20260607.md` as the C4.6
+  ownership contract.
+- Linked the contract from
+  `docs/checkpoint4_architecture_contract_consolidation_plan.md`.
+- Added architecture boundary tests in
+  `backend/tests/unit/test_architecture_boundaries.py`.
+- Guarded the intended layer split:
+  - Temporal is the outer workflow lifecycle shell.
+  - LangGraph is the inner Agent DAG.
+  - Research Pipeline owns discovery/capture/extraction/admission.
+  - Enterprise Store owns durable report/evidence/claim/artifact/audit state.
+  - RunService coordinates but should not own publication or source-admission
+    rules.
+
+Why:
+
+- C4.6 is about preventing drift. Static ownership tests make it harder for
+  future work to accidentally move approval/publication into LangGraph or
+  report-version state into the research pipeline.
+
+Validation:
+
+- Passed:
+  - `conda run -n bd-competiscope-v2 python -m ruff check backend/tests/unit/test_architecture_boundaries.py`
+  - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_architecture_boundaries.py -q`
