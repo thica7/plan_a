@@ -104,6 +104,13 @@ def test_runtime_reports_hitl_and_pydantic_ai_readiness() -> None:
     assert isinstance(body["pydantic_ai_available"], bool)
     assert body["pydantic_ai_model_backed_ready"] is body["pydantic_ai_available"]
     assert "Pydantic-AI" in body["pydantic_ai_model_backed_reason"]
+    assert body["telemetry"]["local_trace"]["enabled"] is True
+    assert body["telemetry"]["local_trace"]["baseline"] is True
+    assert body["telemetry"]["decision_replay"]["enabled"] is True
+    assert body["telemetry"]["audit"]["enabled"] is True
+    assert body["telemetry"]["langfuse"]["enabled"] is False
+    assert body["telemetry"]["langfuse"]["disabled_reason"] == "not_configured"
+    assert "hitl_lifecycle_event" in body["telemetry"]["event_types"]
 
 
 def test_health_marks_incomplete_temporal_cutover_as_error() -> None:

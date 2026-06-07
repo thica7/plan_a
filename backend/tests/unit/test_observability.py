@@ -12,6 +12,7 @@ from packages.observability import (
     build_decision_replay,
     build_otel_trace_export,
     build_run_event,
+    build_telemetry_contract,
     evaluate_trace_observability,
     otel_span_id_for_span,
     sanitize_for_trace,
@@ -141,6 +142,45 @@ def test_observability_report_flags_missing_trace_context() -> None:
     assert report.status == "fail"
     assert report.otel_export_ready is False
     assert {issue.field for issue in report.issues} >= {"trace_id", "otel_span_id"}
+
+
+def test_telemetry_contract_separates_local_baseline_from_hosted_exporters() -> None:
+    local_only = build_telemetry_contract(
+        Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    hosted = build_telemetry_contract(
+        Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            langfuse_public_key="pk",
+            langfuse_secret_key="sk",
+            otel_export_endpoint="http://otel-collector:4318",
+        )
+    )
+
+    assert local_only.local_trace.enabled is True
+    assert local_only.local_trace.baseline is True
+    assert local_only.decision_replay.enabled is True
+    assert local_only.audit.enabled is True
+    assert local_only.langfuse.enabled is False
+    assert local_only.langfuse.disabled_reason == "not_configured"
+    assert local_only.otel.enabled is False
+    assert local_only.otel.disabled_reason == "not_configured"
+    assert hosted.langfuse.enabled is True
+    assert hosted.otel.enabled is True
+    assert hosted.hosted_exporters_configured is True
+    assert "hitl_lifecycle_event" in local_only.event_types
 
 
 def test_decision_replay_maps_trace_into_audit_timeline() -> None:

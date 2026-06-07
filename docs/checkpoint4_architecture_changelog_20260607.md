@@ -171,3 +171,35 @@ Validation:
 - Passed:
   - `conda run -n bd-competiscope-v2 python -m ruff check backend/tests/unit/test_architecture_boundaries.py`
   - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_architecture_boundaries.py -q`
+
+## 2026-06-07 - Step 6: Observability And Governance Contract
+
+Scope:
+
+- Added `backend/packages/observability/telemetry_contract.py` as the C4.7
+  telemetry contract builder.
+- Added canonical telemetry event types:
+  `trace_span`, `tool_call`, `model_call`, `token_cost`, `quality_finding`,
+  `decision_event`, `audit_event`, `compliance_event`,
+  `hitl_lifecycle_event`, and `workflow_event`.
+- Added `TelemetryChannelStatus` and `TelemetryRuntimeContract` DTOs to runtime
+  API schema.
+- Extended `/api/runtime` with a `telemetry` object that explains local trace,
+  decision replay, audit, compliance redaction, Langfuse, and OTel status.
+- Added `OTEL_EXPORTER_OTLP_ENDPOINT` settings support.
+- Added `docs/observability_governance_contract_20260607.md` and linked it
+  from the Checkpoint 4 plan.
+
+Why:
+
+- Local observability is now explicitly the baseline.
+- Langfuse and OTel are represented as optional hosted exporters rather than
+  requirements for local review.
+- Runtime status can explain why Langfuse/OTel are disabled while trace,
+  decision replay, audit, and compliance remain enabled.
+
+Validation:
+
+- Passed:
+  - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/observability backend/app/routers/runtime.py backend/packages/schema/api_dto.py backend/packages/config/settings.py backend/tests/unit/test_observability.py backend/tests/unit/test_health_router.py`
+  - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_observability.py::test_telemetry_contract_separates_local_baseline_from_hosted_exporters backend/tests/unit/test_health_router.py::test_runtime_reports_hitl_and_pydantic_ai_readiness -q`

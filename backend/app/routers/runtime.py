@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from app.deps import get_app_settings
 from packages.agents.pydantic_ai_adapter import pydantic_ai_available
 from packages.config import Settings
+from packages.observability import build_telemetry_contract
 from packages.schema.api_dto import RuntimeConfig
 from packages.workflows.service import temporal_cutover_status
 
@@ -73,6 +74,7 @@ def get_runtime(settings: SettingsDep) -> RuntimeConfig:
         artifact_storage_root=settings.artifact_storage_root,
         auth_policy_engine=settings.auth_policy_engine,
         auth_policy_external_configured=bool(settings.auth_policy_url),
+        telemetry=build_telemetry_contract(settings),
     )
 
 

@@ -344,6 +344,10 @@ Purpose:
 
 Make observability stable with or without hosted Langfuse.
 
+Detailed contract:
+
+- `docs/observability_governance_contract_20260607.md`
+
 Implementation direction:
 
 - Define one telemetry contract for:

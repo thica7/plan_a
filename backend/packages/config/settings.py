@@ -119,6 +119,7 @@ class Settings:
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
+    otel_export_endpoint: str | None = None
     enterprise_store_backend: str = "postgres"
     enterprise_database_url: str | None = DEFAULT_ENTERPRISE_DATABASE_URL
     run_orchestration_backend: Literal["langgraph", "temporal"] = "temporal"
@@ -258,6 +259,7 @@ def get_settings() -> Settings:
         langfuse_public_key=os.getenv("LANGFUSE_PUBLIC_KEY") or None,
         langfuse_secret_key=os.getenv("LANGFUSE_SECRET_KEY") or None,
         langfuse_host=os.getenv("LANGFUSE_HOST") or None,
+        otel_export_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT") or None,
         enterprise_store_backend=enterprise_backend,
         enterprise_database_url=enterprise_database_url,
         run_orchestration_backend=cast(

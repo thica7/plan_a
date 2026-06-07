@@ -265,6 +265,31 @@ class RunQualityComparison(BaseModel):
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class TelemetryChannelStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    enabled: bool
+    configured: bool
+    baseline: bool = False
+    adapter: str = "local"
+    disabled_reason: str = ""
+    event_types: list[str] = Field(default_factory=list)
+
+
+class TelemetryRuntimeContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    local_trace: TelemetryChannelStatus
+    decision_replay: TelemetryChannelStatus
+    audit: TelemetryChannelStatus
+    compliance_redaction: TelemetryChannelStatus
+    langfuse: TelemetryChannelStatus
+    otel: TelemetryChannelStatus
+    event_types: list[str] = Field(default_factory=list)
+    hosted_exporters_configured: bool = False
+
+
 class RuntimeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -311,6 +336,7 @@ class RuntimeConfig(BaseModel):
     artifact_storage_root: str
     auth_policy_engine: str
     auth_policy_external_configured: bool
+    telemetry: TelemetryRuntimeContract
 
 
 class HealthCheck(BaseModel):
