@@ -57,6 +57,23 @@ def test_summarize_run_detail_payload_extracts_quality_shape() -> None:
                         "rationale": "Collect stronger public persona evidence.",
                     },
                     "self_found": True,
+                },
+                {
+                    "id": "release-gate-run-qa-persona-1",
+                    "severity": "warn",
+                    "detected_by": "coverage",
+                    "target_agent": "collector",
+                    "target_subagent": "persona",
+                    "target_competitor": "Cursor",
+                    "field_path": "release_gate.run_qa_findings_unresolved",
+                    "problem": "The same runtime QA warning is still unresolved.",
+                    "redo_scope": {
+                        "kind": "collector",
+                        "target_subagent": "persona",
+                        "target_competitor": "Cursor",
+                        "rationale": "Run scoped redo for the original warning.",
+                    },
+                    "self_found": True,
                 }
             ],
             "agent_messages": [
@@ -88,6 +105,7 @@ def test_summarize_run_detail_payload_extracts_quality_shape() -> None:
         summary["retained_warning_actions"][0]["acceptance_rule"]
         == "Accepted verified evidence supports the affected field or claim."
     )
+    assert len(summary["retained_warning_actions"]) == 1
     assert summary["trace_spans"] == 1
     assert summary["source_types"] == {"webpage_verified": 1}
     assert summary["by_competitor"] == {"Cursor": 1}

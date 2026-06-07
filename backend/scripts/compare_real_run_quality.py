@@ -543,6 +543,9 @@ def _retained_warning_actions(issues: list[Any]) -> list[dict[str, object]]:
     for issue in issues:
         if not isinstance(issue, dict) or issue.get("severity") != "warn":
             continue
+        field_path = _text(issue.get("field_path"))
+        if field_path.startswith("release_gate.run_qa_findings_unresolved"):
+            continue
         try:
             parsed_issues.append(QCIssue.model_validate(issue))
         except Exception:

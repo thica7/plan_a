@@ -1030,7 +1030,23 @@ def test_compare_run_quality_deduplicates_release_gate_warning_count() -> None:
                 ),
             ),
             QCIssue(
-                id="release-gate-warning",
+                id="release-gate-run-qa-warning",
+                severity="warn",
+                detected_by="coverage",
+                target_agent="collector",
+                target_subagent="persona",
+                target_competitor="Cursor",
+                field_path="release_gate.run_qa_findings_unresolved",
+                problem="Original QA finding is unresolved.",
+                redo_scope=RedoScope(
+                    kind="collector",
+                    target_subagent="persona",
+                    target_competitor="Cursor",
+                    rationale="Run scoped redo for the original QA finding.",
+                ),
+            ),
+            QCIssue(
+                id="release-gate-claim-warning",
                 severity="warn",
                 detected_by="schema",
                 target_agent="analyst",
@@ -1066,8 +1082,19 @@ def test_compare_run_quality_deduplicates_release_gate_warning_count() -> None:
             evidence_ids=[],
             quality_metadata={
                 "release_gate": {
-                    "warn_count": 1,
-                    "issues": [{"id": "release-gate-warning"}],
+                    "warn_count": 2,
+                    "issues": [
+                        {
+                            "id": "release-gate-run-qa-warning",
+                            "severity": "warn",
+                            "rule_id": "run_qa_findings_unresolved",
+                        },
+                        {
+                            "id": "release-gate-claim-warning",
+                            "severity": "warn",
+                            "rule_id": "claim_self_consistency_required",
+                        },
+                    ],
                 }
             },
         ),

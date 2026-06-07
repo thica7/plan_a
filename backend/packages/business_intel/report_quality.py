@@ -521,6 +521,18 @@ def _warning_count(detail: RunDetail) -> int:
                 if not finding.field_path.startswith("release_gate.")
             ]
         )
+        release_issues = release_gate.get("issues")
+        if isinstance(release_issues, list):
+            release_warning_count = len(
+                [
+                    issue
+                    for issue in release_issues
+                    if isinstance(issue, dict)
+                    and issue.get("severity") == "warn"
+                    and issue.get("rule_id") != "run_qa_findings_unresolved"
+                ]
+            )
+            return non_release_qa_warning_count + release_warning_count
         return non_release_qa_warning_count + int(release_gate["warn_count"])
     return len(qa_warnings)
 
