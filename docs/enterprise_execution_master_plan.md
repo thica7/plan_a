@@ -3,7 +3,7 @@
 Last updated: 2026-06-07
 
 This is the top-level execution anchor for `plan_a`. It must be read before
-continuing implementation, together with the active checkpoint plan and the
+continuing implementation, together with the latest checkpoint plan and the
 source plan files listed below.
 
 ## Read-First Protocol
@@ -11,7 +11,7 @@ source plan files listed below.
 Before each implementation turn, read:
 
 - `docs/enterprise_execution_master_plan.md`
-- The active checkpoint plan, currently:
+- The latest checkpoint plan:
   `docs/checkpoint3_execution_plan.md`
 - `dev_plan_final/dev_plan_final/01_EXECUTION_ROADMAP_5_PHASES.md`
 - `dev_plan_final/dev_plan_final/10_HIGH_SCORE_FUSION_BACKLOG.md`
@@ -25,9 +25,10 @@ Do not rely on conversation memory alone.
 The project is past the skeleton stage and is in:
 
 ```text
-Phase 5 early stage:
-  real-run report quality closure
-  plus enterprise productization hardening
+Phase 5 enterprise productization:
+  Checkpoint 1 report quality closure complete
+  Checkpoint 2 high-score backlog core complete
+  Checkpoint 3 enterprise product hardening core complete
 ```
 
 Strict status:
@@ -38,7 +39,8 @@ Strict status:
 - Phase 3 agent capability and workbench: mostly complete, above 80%.
 - Phase 4 Temporal shell and approval prototype: mostly complete for the
   planned "Temporal shell + LangGraph core" architecture, not full production.
-- Phase 5A enterprise governance: active in Checkpoint 3.
+- Phase 5A enterprise governance: Checkpoint 3 core complete; live Postgres RLS,
+  SSO, and hosted observability remain later production hardening.
 - Phase 5B high-score quality enhancement: Checkpoint 2 core is complete;
   continue only through targeted quality gates.
 - Clean Research Pipeline: structure complete and accepted for Checkpoint 2;
@@ -46,8 +48,8 @@ Strict status:
 
 ## Full Route
 
-The route has three checkpoints. Checkpoint 1 and Checkpoint 2 are complete.
-Checkpoint 3 is active now.
+The route has three checkpoints. Checkpoint 1, Checkpoint 2, and Checkpoint 3
+core are complete.
 
 ### Checkpoint 1: Report Quality Closure
 
@@ -139,6 +141,10 @@ Active detailed plan:
 
 - `docs/checkpoint3_execution_plan.md`
 
+Final acceptance:
+
+- `docs/reports/checkpoint3_product_flow_verification_20260607.md`
+
 ## Already Completed On Checkpoint 1
 
 Recent commits:
@@ -158,21 +164,27 @@ business fields, warning repair artifacts, and the final real-run acceptance.
 Do next:
 
 ```text
-Execute Checkpoint 3: Enterprise Product Hardening.
+Post-Checkpoint 3: run a fresh real product test when ready, then choose the
+next hardening track: live Postgres RLS verification, SSO/OIDC/SAML, hosted
+observability dashboards, or frontend review-polish.
 ```
 
 Checkpoint 2 final audit:
 
 - `docs/reports/checkpoint2_real_run_acceptance_20260607.md`
 
+Checkpoint 3 final product-flow verification:
+
+- `docs/reports/checkpoint3_product_flow_verification_20260607.md`
+
 ## Work Discipline
 
-- Keep one master plan and one active checkpoint plan.
-- Update the active checkpoint plan when the status changes.
+- Keep one master plan and one current checkpoint or hardening plan.
+- Update the current plan when the status changes.
 - Update the changelog after each completed implementation step.
 - Do not stage unrelated dirty files.
 - Use commit names aligned with the checkpoint item whenever possible.
 - Verify with ruff and targeted tests before commit.
-- Do not mark Checkpoint 3 complete until report approval/publish, artifacts,
-  isolation, and observability have targeted tests and at least one fresh
-  product-flow verification.
+- Checkpoint 3 core is complete only for the local enterprise product-flow
+  boundary. Do not claim live production readiness until Postgres RLS, SSO, and
+  hosted observability are verified in deployment-like environments.

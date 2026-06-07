@@ -1219,7 +1219,7 @@ Validation:
 
 ## 2026-06-07 - Step 39: Enterprise Decision Replay Lifecycle Events
 
-Commit: this commit
+Commit: `3440efa feat(observability): replay enterprise lifecycle events`
 
 Scope:
 
@@ -1246,3 +1246,21 @@ Validation:
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/observability/decision_replay.py backend/tests/unit/test_observability.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_observability.py::test_decision_replay_includes_enterprise_audit_governance_events -q`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_observability.py -q`
+
+## 2026-06-07 - Step 40: Checkpoint 3 Product-Flow Verification
+
+Commit: this commit
+
+Scope:
+
+- Ran the Checkpoint 3 product-flow acceptance set covering approval-gated
+  publishing, rejected-report manual revision, RBAC/workspace isolation,
+  artifact/source governance routes, and enterprise decision replay.
+- Recorded the acceptance result in
+  `docs/reports/checkpoint3_product_flow_verification_20260607.md`.
+- Updated `docs/enterprise_execution_master_plan.md` so Checkpoint 3 core is
+  marked complete without overstating live production readiness.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_direct_publish_status_without_approval backend/tests/unit/test_enterprise_store.py::test_manual_report_revision_after_rejection_creates_audited_draft backend/tests/unit/test_enterprise_store.py::test_enterprise_router_enforces_rbac_workspace_scope backend/tests/unit/test_h10_governance.py::test_h10_enterprise_routes_are_callable backend/tests/unit/test_observability.py::test_decision_replay_includes_enterprise_audit_governance_events -q`

@@ -15,6 +15,10 @@ core and was accepted by:
 Checkpoint 3 now moves `plan_a` from a strong prototype toward an enterprise
 business product.
 
+Final acceptance:
+
+- `docs/reports/checkpoint3_product_flow_verification_20260607.md`
+
 ## Read-First Protocol
 
 Before every Checkpoint 3 implementation turn, read this file and the following
