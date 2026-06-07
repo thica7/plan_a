@@ -3,9 +3,9 @@ import { Activity, BookOpen, History, Radar, Search, Workflow } from "lucide-rea
 import { NewRun } from "./pages/NewRun";
 import { RunDetail } from "./pages/RunDetail";
 import { HistoryPage } from "./pages/History";
-import { KnowledgePage } from "./pages/KnowledgePage";
-import { SearchPage } from "./pages/SearchPage";
-import { CrawlPage } from "./pages/CrawlPage";
+import KnowledgePage from "./pages/KnowledgePage";
+import SearchPage from "./pages/SearchPage";
+import CrawlPage from "./pages/CrawlPage";
 
 export function App() {
   return (

@@ -66,6 +66,8 @@ class BatchIngestItem(BaseModel):
     source: Literal["url", "text", "base64"]
     url: str | None = None
     crawl_run_id: str | None = None
+    competitor: str | None = None
+    dimension: str | None = None
     text: str | None = None
     title: str | None = None
     content_b64: str | None = None
@@ -577,10 +579,20 @@ def _row_to_crawl_job(row: aiosqlite.Row) -> CrawlJob:
         status=row["status"],
         attempt_count=row["attempt_count"],
         error=row["error"],
-        result_metadata=json.loads(row["result_metadata_json"]),
+        result_metadata=_load_result_metadata(row["result_metadata_json"]),
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
     )
+
+
+def _load_result_metadata(raw: str | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def _row_to_ingest_job(row: aiosqlite.Row) -> IngestJob:
@@ -726,8 +738,10 @@ async def _ingest_batch_item(
             repo,
             parsed,
             source_type="manual",
-            source_url=None,
-            canonical_url=None,
+            source_url=item.url,
+            canonical_url=item.url,
+            competitor=item.competitor,
+            dimension=item.dimension,
             embedding_provider=embedding_provider,
             crawl_run_id=item.crawl_run_id,
         )
@@ -741,8 +755,10 @@ async def _ingest_batch_item(
         repo,
         parsed,
         source_type="manual",
-        source_url=None,
-        canonical_url=item.filename,
+        source_url=item.url,
+        canonical_url=item.url or item.filename,
+        competitor=item.competitor,
+        dimension=item.dimension,
         embedding_provider=embedding_provider,
         crawl_run_id=item.crawl_run_id,
     )
@@ -761,6 +777,8 @@ async def _ingest_url_batch_item(
         result = await scheduler.crawl_sync(CrawlRequest(
             url=item.url or "",
             run_id=item.crawl_run_id,
+            competitor=item.competitor,
+            dimension=item.dimension,
         ))
         if not result.success or result.page is None:
             raise ValueError(result.error or "crawl failed")
@@ -779,6 +797,8 @@ async def _ingest_parsed_document(
     source_type: str,
     source_url: str | None,
     canonical_url: str | None,
+    competitor: str | None,
+    dimension: str | None,
     embedding_provider: EmbeddingProvider | None,
     crawl_run_id: str | None = None,
 ) -> str:
@@ -799,6 +819,8 @@ async def _ingest_parsed_document(
         canonical_url=canonical_url,
         title=parsed.title or canonical_url or source_url or "Untitled",
         source_type=source_type,
+        competitor=competitor,
+        dimension=dimension,
         text=parsed.text,
         markdown=metadata.get("markdown", ""),
         metadata=metadata,

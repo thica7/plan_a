@@ -38,6 +38,15 @@ SOURCE_TYPES = [
     "changelog",
 ]
 
+SOURCE_DIMENSIONS = {
+    "web_search": "overview",
+    "sitemap": "docs",
+    "rss": "changelog",
+    "pricing": "pricing",
+    "official_docs": "docs",
+    "changelog": "changelog",
+}
+
 COMPETITOR_DOMAINS = {
     "Anytype": "anytype.io",
     "Canva": "canva.com",
@@ -103,6 +112,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-eval", action="store_true")
     parser.add_argument("--api-base", default="http://localhost:8000")
     parser.add_argument("--ingest-mode", choices=["web", "api"], default="api")
+    parser.add_argument(
+        "--allow-synthetic-fallback",
+        action="store_true",
+        help="Generate deterministic fallback text when a crawl job has no parsed text.",
+    )
     return parser.parse_args()
 
 
@@ -175,8 +189,13 @@ def seed_url_for(competitor: str, source_type: str) -> str:
     return home
 
 
+def dimension_for_source_type(source_type: str) -> str:
+    return SOURCE_DIMENSIONS.get(source_type, "docs")
+
+
 def source_payload(topic_entry: dict[str, Any], source_type: str, competitor: str) -> dict[str, Any]:
     topic = str(topic_entry["topic"])
+    dimension = dimension_for_source_type(source_type)
     host = host_for(competitor)
     domains = [host_for(item) for item in topic_entry["competitors"]]
     base_config: dict[str, Any] = {
@@ -220,7 +239,7 @@ def source_payload(topic_entry: dict[str, Any], source_type: str, competitor: st
     return {
         "type": source_type,
         "competitor": competitor,
-        "dimension": topic,
+        "dimension": dimension,
         "priority": 100,
         "config": config,
     }
@@ -234,11 +253,16 @@ def list_sources(client: httpx.Client) -> tuple[list[dict[str, Any]], bool]:
 def find_existing_source(
     sources: list[dict[str, Any]],
     *,
-    topic: str,
+    competitor: str,
+    dimension: str,
     source_type: str,
 ) -> dict[str, Any] | None:
     for source in sources:
-        if source.get("dimension") == topic and source.get("type") == source_type:
+        if (
+            source.get("competitor") == competitor
+            and source.get("dimension") == dimension
+            and source.get("type") == source_type
+        ):
             return source
     return None
 
@@ -251,7 +275,13 @@ def create_or_reuse_source(
     competitor: str,
 ) -> tuple[dict[str, Any] | None, bool, bool]:
     topic = str(topic_entry["topic"])
-    existing = find_existing_source(sources, topic=topic, source_type=source_type)
+    dimension = dimension_for_source_type(source_type)
+    existing = find_existing_source(
+        sources,
+        competitor=competitor,
+        dimension=dimension,
+        source_type=source_type,
+    )
     if existing:
         log(f"[{topic}] reuse source {source_type}: {existing.get('id')}")
         return existing, True, True
@@ -327,7 +357,7 @@ def create_or_reuse_job(
         "url": url,
         "run_id": source_id,
         "competitor": competitor,
-        "dimension": topic,
+        "dimension": dimension_for_source_type(source_type),
     }
     log(f"[{topic}] create crawl job {source_type}: {url}")
     data, ok = request_json(client, "POST", "/api/crawl/jobs", json_payload=payload)
@@ -366,6 +396,7 @@ def batch_ingest_from_jobs(
     *,
     jobs: list[dict[str, Any]],
     topic: str,
+    allow_synthetic_fallback: bool,
 ) -> tuple[dict[str, Any], bool]:
     items: list[dict[str, Any]] = []
     for job in jobs:
@@ -376,16 +407,19 @@ def batch_ingest_from_jobs(
         if not isinstance(page, dict):
             page = {}
         text = page.get("text") or metadata.get("text")
-        if not isinstance(text, str) or not text.strip():
+        if (not isinstance(text, str) or not text.strip()) and allow_synthetic_fallback:
             text = fallback_text_for_job(job, topic=topic)
         if not isinstance(text, str) or not text.strip():
             continue
         title = page.get("title") or job.get("url") or f"{topic} crawl result"
         items.append({
             "source": "text",
+            "url": job.get("url"),
             "text": text,
             "title": str(title),
             "crawl_run_id": job.get("run_id"),
+            "competitor": job.get("competitor"),
+            "dimension": job.get("dimension"),
         })
 
     if not items:
@@ -507,6 +541,7 @@ def process_topic(
     *,
     source_types: list[str],
     wait_seconds: int,
+    allow_synthetic_fallback: bool,
 ) -> tuple[dict[str, Any], bool]:
     topic = str(topic_entry["topic"])
     competitors = list(topic_entry["competitors"])
@@ -567,7 +602,12 @@ def process_topic(
     topic_summary["job_statuses"] = {
         str(job.get("id")): job.get("status") for job in final_jobs if job.get("id")
     }
-    batch_summary, ok = batch_ingest_from_jobs(client, jobs=final_jobs, topic=topic)
+    batch_summary, ok = batch_ingest_from_jobs(
+        client,
+        jobs=final_jobs,
+        topic=topic,
+        allow_synthetic_fallback=allow_synthetic_fallback,
+    )
     topic_summary["batch_ingest"] = batch_summary
     partial_failure = partial_failure or not ok
     topic_summary["ingested_document_ids"] = [
@@ -601,6 +641,7 @@ def main() -> int:
                 topic_entry,
                 source_types=source_types,
                 wait_seconds=args.wait_seconds,
+                allow_synthetic_fallback=args.allow_synthetic_fallback,
             )
             topic_summaries.append(summary)
             partial_failure = partial_failure or failed

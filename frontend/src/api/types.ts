@@ -919,6 +919,16 @@ export interface components {
         CrawlSourceDetail: {
             source: components["schemas"]["CrawlSource"];
             progress: components["schemas"]["CrawlFrontierStats"];
+            /**
+             * Discovered Count
+             * @default 0
+             */
+            discovered_count: number;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
         };
         /** DocumentDiffResponse */
         DocumentDiffResponse: {
@@ -3028,3 +3038,45 @@ export interface operations {
         };
     };
 }
+
+export type RunCreateRequest = components["schemas"]["RunCreateRequest"];
+export type RunDetail = components["schemas"]["RunDetail"] & {
+    raw_sources: RawSource[];
+    competitor_kbs: Record<string, CompetitorKB>;
+    competitor_discovery?: CompetitorDiscovery | null;
+    comparison_matrix?: ComparisonMatrix | null;
+    qa_findings: QCIssue[];
+    reflections: components["schemas"]["ReflectionRecord"][];
+    revisions: RevisionRecord[];
+    trace_spans: TraceSpan[];
+    metrics: RunMetrics;
+};
+export type RunSummary = components["schemas"]["RunSummary"];
+export type RunStatus = components["schemas"]["RunDetail"]["status"];
+export type RuntimeConfig = components["schemas"]["RuntimeConfig"];
+export type SkillSpec = components["schemas"]["SkillSpec"];
+export type QCIssue = components["schemas"]["QCIssue"];
+export type RawSource = components["schemas"]["RawSource"] & {
+    covered_competitors: string[];
+};
+export type RevisionRecord = components["schemas"]["RevisionRecord"];
+export type RunMetrics = components["schemas"]["RunMetrics"];
+export type TraceSpan = components["schemas"]["TraceSpan"] & {
+    metadata: Record<string, unknown>;
+};
+export type CompetitorDiscovery = components["schemas"]["CompetitorDiscovery"] & {
+    selected_competitors: string[];
+    candidates: Array<components["schemas"]["CompetitorCandidate"] & {
+        evidence_urls: string[];
+        evidence_titles: string[];
+    }>;
+};
+export type ComparisonMatrix = components["schemas"]["ComparisonMatrix"] & {
+    dimensions: string[];
+    cells: components["schemas"]["ComparisonCell"][];
+    summary: Record<string, string[]>;
+};
+export type CompetitorKB = components["schemas"]["CompetitorKB"] & {
+    slices: Record<string, string[]>;
+    sources: string[];
+};

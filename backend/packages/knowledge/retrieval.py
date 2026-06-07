@@ -298,12 +298,14 @@ class RetrievalService:
             for query in queries
         ]
         fused = _rrf_fuse_ranked_lists(ranked_lists)
+        fused = _filter_hits_by_request(fused, request)
         fused = self._filter_by_score_threshold(fused)
         top = await self._post_process(request.query, fused, request)
         return RetrievalResponse(hits=top, query=request.query, total=len(fused))
 
     async def _retrieve_without_rewrites(self, request: RetrievalRequest) -> RetrievalResponse:
         fused = await self._search_once(request.query, request)
+        fused = _filter_hits_by_request(fused, request)
         fused = self._filter_by_score_threshold(fused)
         top = await self._post_process(request.query, fused, request)
         return RetrievalResponse(hits=top, query=request.query, total=len(fused))
@@ -328,7 +330,12 @@ class RetrievalService:
             self._dense_hits += len(dense_hits)
 
         if request.mode == "hybrid":
-            sparse_hits = await self._sparse_search(query, request.top_k)
+            sparse_hits = await self._sparse_search(
+                query,
+                request.top_k,
+                competitors=request.competitors or None,
+                dimensions=request.dimensions or None,
+            )
             self._sparse_hits += len(sparse_hits)
 
         if request.mode == "hybrid" and dense_hits and sparse_hits:
@@ -342,8 +349,20 @@ class RetrievalService:
             return dense_hits
         return sparse_hits
 
-    async def _sparse_search(self, query: str, top_k: int) -> list[RetrievalHit]:
-        keyword_docs = await self._repo.search_documents(query, limit=top_k)
+    async def _sparse_search(
+        self,
+        query: str,
+        top_k: int,
+        *,
+        competitors: list[str] | None = None,
+        dimensions: list[str] | None = None,
+    ) -> list[RetrievalHit]:
+        keyword_docs = await self._repo.search_documents(
+            query,
+            limit=top_k,
+            competitors=competitors,
+            dimensions=dimensions,
+        )
         sparse_hits: list[RetrievalHit] = []
         chunks_by_doc = await self._repo.get_chunks_for_documents([doc.id for doc in keyword_docs])
         for doc_rank, doc in enumerate(keyword_docs, 1):
@@ -390,7 +409,7 @@ class RetrievalService:
         if request.mmr_lambda > 0:
             hits = await self._mmr_rerank(query, hits, request)
 
-        return hits[: request.final_top_k]
+        return _prefer_document_diversity(hits, final_top_k=request.final_top_k)
 
     async def _mmr_rerank(
         self,
@@ -510,6 +529,46 @@ def _cosine(left: list[float], right: list[float]) -> float:
     if left_norm == 0 or right_norm == 0:
         return 0.0
     return numerator / (left_norm * right_norm)
+
+
+def _prefer_document_diversity(hits: list[RetrievalHit], *, final_top_k: int) -> list[RetrievalHit]:
+    if final_top_k <= 0:
+        return []
+
+    selected: list[RetrievalHit] = []
+    overflow: list[RetrievalHit] = []
+    seen_documents: set[str] = set()
+    for hit in hits:
+        document_key = hit.document_id or hit.chunk_id
+        if document_key in seen_documents:
+            overflow.append(hit)
+            continue
+        selected.append(hit)
+        seen_documents.add(document_key)
+        if len(selected) >= final_top_k:
+            return selected
+
+    selected.extend(overflow[: final_top_k - len(selected)])
+    return selected[:final_top_k]
+
+
+def _filter_hits_by_request(
+    hits: list[RetrievalHit],
+    request: RetrievalRequest,
+) -> list[RetrievalHit]:
+    competitors = {item.casefold() for item in request.competitors if item.strip()}
+    dimensions = {item.casefold() for item in request.dimensions if item.strip()}
+    if not competitors and not dimensions:
+        return hits
+
+    filtered: list[RetrievalHit] = []
+    for hit in hits:
+        if competitors and (hit.competitor or "").casefold() not in competitors:
+            continue
+        if dimensions and (hit.dimension or "").casefold() not in dimensions:
+            continue
+        filtered.append(hit)
+    return filtered
 
 
 async def _maybe_await(value: Any) -> Any:

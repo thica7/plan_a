@@ -199,6 +199,24 @@ def test_new_source_type_and_config_schema_validation() -> None:
         PricingSourceConfig.model_validate({"include_patterns": ["["]})
 
 
+def test_crawl_job_row_tolerates_invalid_result_metadata() -> None:
+    row = {
+        "id": "job-1",
+        "run_id": "run-1",
+        "url": "https://example.com",
+        "competitor": "Acme",
+        "dimension": "docs",
+        "status": "failed",
+        "attempt_count": 1,
+        "error": "boom",
+        "result_metadata_json": "{bad json",
+        "created_at": "2026-06-07T00:00:00+00:00",
+        "updated_at": "2026-06-07T00:00:01+00:00",
+    }
+
+    assert crawl_route._row_to_crawl_job(row).result_metadata == {}
+
+
 @pytest.mark.asyncio
 async def test_crawl_route_persists_source_metadata_and_frontier_source_id(
     tmp_path,
@@ -252,6 +270,55 @@ async def test_crawl_route_persists_source_metadata_and_frontier_source_id(
     assert frontier[0].competitor == "Acme"
     assert frontier[0].dimension == "pricing"
     assert frontier[0].priority == 7
+
+
+@pytest.mark.asyncio
+async def test_crawl_route_reports_empty_source_expansion_without_scheduler(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = str(tmp_path / "crawler-empty.db")
+
+    async def open_repo() -> CrawlerRepository:
+        repo = CrawlerRepository(db_path)
+        await repo.initialise()
+        return repo
+
+    class EmptyProcessor:
+        async def expand(self, source: CrawlSource) -> list[str]:
+            assert source.type == "pricing"
+            return []
+
+    def fail_create_task(coro):
+        coro.close()
+        raise AssertionError("empty source expansion should not start scheduler")
+
+    monkeypatch.setattr(crawl_route, "_open_crawler_repository", open_repo)
+    monkeypatch.setattr(crawl_route, "processor_for", lambda source_type: EmptyProcessor())
+    monkeypatch.setattr(crawl_route.asyncio, "create_task", fail_create_task)
+
+    detail = await crawl_route.create_crawl_source(
+        CrawlSourceCreate(
+            source_type="pricing",
+            config={"competitor": "Acme", "max_urls": 5},
+            dimension="pricing",
+        )
+    )
+
+    repo = CrawlerRepository(db_path)
+    await repo.initialise()
+    try:
+        frontier = await repo.list_frontier(source_id=detail.source.id)
+    finally:
+        await repo.close()
+
+    assert detail.discovered_count == 0
+    assert detail.progress.queued == 0
+    assert detail.warnings == [
+        "source expanded to 0 URLs; check PPLX_API_KEY, query, include_domains, "
+        "and url_patterns"
+    ]
+    assert frontier == []
 
 
 def _sitemap_client(urls: list[str]) -> httpx.AsyncClient:

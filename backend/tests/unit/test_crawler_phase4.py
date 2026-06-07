@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 import httpx
@@ -9,6 +10,21 @@ from packages.crawler.models import CrawlSource
 from packages.crawler.policy import SSRFError, SSRFGuard
 from packages.crawler.repository import CrawlerRepository
 from packages.crawler.sources import RssProcessor, SitemapProcessor
+
+
+@pytest.mark.asyncio
+async def test_crawler_repository_uses_env_db_path_by_default(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "env-crawler.db"
+    monkeypatch.setenv("KB_DB_PATH", str(db_path))
+
+    repo = CrawlerRepository()
+    await repo.initialise()
+    try:
+        await repo.create_source("manual", {"urls": ["https://example.com/a"]})
+    finally:
+        await repo.close()
+
+    assert db_path.exists()
 
 
 def _resolver_for(*addresses: str):
@@ -171,3 +187,59 @@ async def test_frontier_persists_dedupes_and_tracks_status(tmp_path) -> None:
         assert stats.done == 1
     finally:
         await restarted.close()
+
+
+@pytest.mark.asyncio
+async def test_frontier_claims_are_serialized_across_connections(tmp_path) -> None:
+    db_path = str(tmp_path / "crawler.db")
+    setup_repo = CrawlerRepository(db_path)
+    await setup_repo.initialise()
+    try:
+        urls = [f"https://example.com/page-{index}" for index in range(20)]
+        added = await setup_repo.add_frontier_items(
+            urls,
+            source_type="manual",
+            run_id="run-1",
+        )
+        assert added == 20
+    finally:
+        await setup_repo.close()
+
+    async def claim_batch() -> list[str]:
+        repo = CrawlerRepository(db_path)
+        await repo.initialise()
+        try:
+            items = await repo.claim_pending(limit=5)
+            return [item.id for item in items]
+        finally:
+            await repo.close()
+
+    claimed_batches = await asyncio.gather(*(claim_batch() for _ in range(4)))
+    claimed_ids = [item_id for batch in claimed_batches for item_id in batch]
+
+    verify_repo = CrawlerRepository(db_path)
+    await verify_repo.initialise()
+    try:
+        stats = await verify_repo.stats()
+        assert len(claimed_ids) == 20
+        assert len(set(claimed_ids)) == 20
+        assert stats.queued == 0
+        assert stats.running == 20
+    finally:
+        await verify_repo.close()
+
+
+@pytest.mark.asyncio
+async def test_crawler_repository_recovers_stale_transaction_before_write(tmp_path) -> None:
+    repo = CrawlerRepository(str(tmp_path / "crawler.db"))
+    await repo.initialise()
+    try:
+        await repo._connection.execute("BEGIN")
+        assert repo._connection.in_transaction is True
+
+        source = await repo.create_source("manual", {"urls": ["https://example.com/a"]})
+
+        assert source.config == {"urls": ["https://example.com/a"]}
+        assert repo._connection.in_transaction is False
+    finally:
+        await repo.close()

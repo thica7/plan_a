@@ -32,9 +32,18 @@ class FixedVectorStore:
 class SparseRepo:
     def __init__(self) -> None:
         self.limits: list[int] = []
+        self.filters: list[dict[str, list[str] | None]] = []
 
-    async def search_documents(self, query: str, limit: int = 20):
+    async def search_documents(
+        self,
+        query: str,
+        limit: int = 20,
+        *,
+        competitors: list[str] | None = None,
+        dimensions: list[str] | None = None,
+    ):
         self.limits.append(limit)
+        self.filters.append({"competitors": competitors, "dimensions": dimensions})
         return [
             SimpleNamespace(
                 id="sparse-doc",
@@ -60,6 +69,60 @@ class SparseRepo:
 
     def get_document_weight(self, document) -> float:
         return 1.0
+
+
+class DuplicateDocumentVectorStore:
+    async def search(self, query_vector, **kwargs):
+        return [
+            RetrievalHit(
+                chunk_id="chunk-a1",
+                document_id="doc-a",
+                text="first A",
+                score=1.0,
+            ),
+            RetrievalHit(
+                chunk_id="chunk-a2",
+                document_id="doc-a",
+                text="second A",
+                score=0.9,
+            ),
+            RetrievalHit(
+                chunk_id="chunk-b1",
+                document_id="doc-b",
+                text="first B",
+                score=0.8,
+            ),
+        ]
+
+
+class LeakyVectorStore:
+    async def search(self, query_vector, **kwargs):
+        return [
+            RetrievalHit(
+                chunk_id="allowed",
+                document_id="allowed-doc",
+                text="allowed text",
+                score=1.0,
+                competitor="OpenAI Codex",
+                dimension="docs",
+            ),
+            RetrievalHit(
+                chunk_id="wrong-competitor",
+                document_id="wrong-competitor-doc",
+                text="wrong competitor text",
+                score=0.95,
+                competitor="GitHub Copilot",
+                dimension="docs",
+            ),
+            RetrievalHit(
+                chunk_id="wrong-dimension",
+                document_id="wrong-dimension-doc",
+                text="wrong dimension text",
+                score=0.9,
+                competitor="OpenAI Codex",
+                dimension="pricing",
+            ),
+        ]
 
 
 def embed(texts: list[str]) -> list[list[float]]:
@@ -175,3 +238,70 @@ async def test_preset_parameters_flow_into_retrieval() -> None:
     assert vector_store.calls[0]["top_k"] == 5
     assert repo.limits == [5]
     assert len(response.hits) <= 5
+
+
+@pytest.mark.asyncio
+async def test_retrieval_filters_flow_into_dense_and_sparse_search() -> None:
+    repo = SparseRepo()
+    vector_store = FixedVectorStore()
+    service = RetrievalService(
+        repo=repo,
+        vector_store=vector_store,
+        embed_fn=embed,
+    )
+
+    await service.retrieve(
+        RetrievalRequest(
+            query="security",
+            competitors=["Netlify"],
+            dimensions=["security"],
+            enable_query_rewrite=False,
+        )
+    )
+
+    assert vector_store.calls[0]["competitors"] == ["Netlify"]
+    assert vector_store.calls[0]["dimensions"] == ["security"]
+    assert repo.filters == [{"competitors": ["Netlify"], "dimensions": ["security"]}]
+
+
+@pytest.mark.asyncio
+async def test_retrieval_prefers_document_diversity_in_final_hits() -> None:
+    service = RetrievalService(
+        repo=SparseRepo(),
+        vector_store=DuplicateDocumentVectorStore(),
+        embed_fn=embed,
+    )
+
+    response = await service.retrieve(
+        RetrievalRequest(
+            query="pricing",
+            mode="dense",
+            enable_query_rewrite=False,
+            final_top_k=3,
+        )
+    )
+
+    assert [hit.chunk_id for hit in response.hits] == ["chunk-a1", "chunk-b1", "chunk-a2"]
+
+
+@pytest.mark.asyncio
+async def test_retrieval_filters_final_hits_as_a_safety_net() -> None:
+    service = RetrievalService(
+        repo=SparseRepo(),
+        vector_store=LeakyVectorStore(),
+        embed_fn=embed,
+    )
+
+    response = await service.retrieve(
+        RetrievalRequest(
+            query="codex docs",
+            mode="dense",
+            competitors=["OpenAI Codex"],
+            dimensions=["docs"],
+            enable_query_rewrite=False,
+            final_top_k=5,
+        )
+    )
+
+    assert [hit.chunk_id for hit in response.hits] == ["allowed"]
+    assert response.total == 1

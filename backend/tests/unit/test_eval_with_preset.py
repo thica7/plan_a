@@ -31,7 +31,7 @@ class EvalVectorStore:
 
 
 class EmptyRepo:
-    async def search_documents(self, query: str, limit: int = 20):
+    async def search_documents(self, query: str, limit: int = 20, **kwargs):
         return []
 
     async def get_chunks_for_documents(self, doc_ids: list[str]):

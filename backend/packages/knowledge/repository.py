@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import aiosqlite
+
+from packages.sqlite_locks import (
+    apply_sqlite_pragmas,
+    begin_immediate_transaction,
+    commit_sqlite_transaction,
+    write_lock_for,
+)
 
 from .models import (
     DocumentCreate,
@@ -191,8 +200,8 @@ Migration = tuple[int, str, Callable[["KnowledgeRepository"], Awaitable[None]]]
 class KnowledgeRepository:
     """Async SQLite repository for knowledge base metadata."""
 
-    def __init__(self, db_path: str = "runs/knowledge.db") -> None:
-        self._db_path = db_path
+    def __init__(self, db_path: str | None = None) -> None:
+        self._db_path = db_path or os.getenv("KB_DB_PATH", "runs/knowledge.db")
         self._db: aiosqlite.Connection | None = None
 
     @property
@@ -203,20 +212,21 @@ class KnowledgeRepository:
         if self._db is not None:
             return
 
-        self._db = await aiosqlite.connect(self._db_path)
+        self._db = await aiosqlite.connect(
+            self._db_path,
+            isolation_level=None,
+            uri=self._db_path.startswith("file:"),
+        )
         self._db.row_factory = aiosqlite.Row
         try:
-            await self._apply_pragmas()
-            await self._db.executescript(_BASE_SCHEMA)
-            await self._ensure_migration_table()
-            await self._migrate_schema()
-            await self._deduplicate_active_documents()
-            await self._db.executescript(_POST_MIGRATION_SCHEMA)
-            await self._db.execute(
-                "INSERT INTO documents_fts(documents_fts) VALUES ('rebuild')"
-            )
-            await self._db.execute("INSERT INTO chunks_fts(chunks_fts) VALUES ('rebuild')")
-            await self._db.commit()
+            async with write_lock_for(self._db_path):
+                await self._apply_pragmas()
+                await self._db.executescript(_BASE_SCHEMA)
+                await self._ensure_migration_table()
+                await self._migrate_schema()
+                await self._deduplicate_active_documents()
+                await self._db.executescript(_POST_MIGRATION_SCHEMA)
+                await self._db.commit()
         except Exception:
             await self.close()
             raise
@@ -239,18 +249,29 @@ class KnowledgeRepository:
             raise RuntimeError("KnowledgeRepository.initialise() must be called before use")
         return self._db
 
+    @asynccontextmanager
+    async def _write_transaction(self):
+        db = self._connection
+        async with write_lock_for(self._db_path):
+            await begin_immediate_transaction(db)
+            try:
+                yield db
+            except Exception:
+                await db.rollback()
+                raise
+            else:
+                await commit_sqlite_transaction(db)
+
     # -- Documents ----------------------------------------------------------
 
     async def upsert_document(self, doc: DocumentCreate, content_hash: str) -> KnowledgeDocument:
         now = datetime.now(UTC).isoformat()
         doc_id = str(uuid.uuid4())
-        db = self._connection
         canonical_url = doc.canonical_url or doc.url
         version = 1
         parent_document_id: str | None = None
 
-        await db.execute("BEGIN")
-        try:
+        async with self._write_transaction() as db:
             if canonical_url:
                 async with db.execute(
                     """
@@ -301,10 +322,6 @@ class KnowledgeRepository:
                     json.dumps(doc.metadata),
                 ),
             )
-            await db.commit()
-        except Exception:
-            await db.rollback()
-            raise
 
         return KnowledgeDocument(
             id=doc_id,
@@ -396,27 +413,25 @@ class KnowledgeRepository:
             return int(row["total"]) if row else 0
 
     async def delete_document(self, doc_id: str) -> bool:
-        db = self._connection
-        async with db.execute("SELECT 1 FROM documents WHERE id = ?", (doc_id,)) as cur:
-            exists = await cur.fetchone()
-        if not exists:
-            return False
-        await db.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
-        await db.commit()
+        async with self._write_transaction() as db:
+            async with db.execute("SELECT 1 FROM documents WHERE id = ?", (doc_id,)) as cur:
+                exists = await cur.fetchone()
+            if not exists:
+                return False
+            await db.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
         return True
 
     async def soft_delete(self, document_id: str) -> bool:
         now = datetime.now(UTC).isoformat()
-        db = self._connection
-        cursor = await db.execute(
-            """
-            UPDATE documents
-            SET is_active = 0, status = 'deleted', indexed_at = ?
-            WHERE id = ?
-            """,
-            (now, document_id),
-        )
-        await db.commit()
+        async with self._write_transaction() as db:
+            cursor = await db.execute(
+                """
+                UPDATE documents
+                SET is_active = 0, status = 'deleted', indexed_at = ?
+                WHERE id = ?
+                """,
+                (now, document_id),
+            )
         return cursor.rowcount > 0
 
     async def archive_old_documents(self, before_timestamp: str | datetime) -> int:
@@ -426,33 +441,31 @@ class KnowledgeRepository:
             else before_timestamp
         )
         now = datetime.now(UTC).isoformat()
-        db = self._connection
-        cursor = await db.execute(
-            """
-            UPDATE documents
-            SET is_active = 0, status = 'archived', indexed_at = ?
-            WHERE fetched_at < ? AND is_active = 1
-            """,
-            (now, before),
-        )
-        await db.commit()
+        async with self._write_transaction() as db:
+            cursor = await db.execute(
+                """
+                UPDATE documents
+                SET is_active = 0, status = 'archived', indexed_at = ?
+                WHERE fetched_at < ? AND is_active = 1
+                """,
+                (now, before),
+            )
         return cursor.rowcount
 
     async def mark_stale_documents(self, before_days: int = 30) -> int:
         cutoff = (datetime.now(UTC) - timedelta(days=max(0, before_days))).isoformat()
         now = datetime.now(UTC).isoformat()
-        db = self._connection
-        cursor = await db.execute(
-            """
-            UPDATE documents
-            SET status = 'stale', indexed_at = ?
-            WHERE is_active = 1
-              AND status = 'active'
-              AND COALESCE(last_seen_at, fetched_at) < ?
-            """,
-            (now, cutoff),
-        )
-        await db.commit()
+        async with self._write_transaction() as db:
+            cursor = await db.execute(
+                """
+                UPDATE documents
+                SET status = 'stale', indexed_at = ?
+                WHERE is_active = 1
+                  AND status = 'active'
+                  AND COALESCE(last_seen_at, fetched_at) < ?
+                """,
+                (now, cutoff),
+            )
         return cursor.rowcount
 
     def get_document_weight(self, document: KnowledgeDocument | dict[str, Any]) -> float:
@@ -463,24 +476,44 @@ class KnowledgeRepository:
         )
         return 0.5 if status == "stale" else 1.0
 
-    async def search_documents(self, query: str, limit: int = 20) -> list[KnowledgeDocument]:
+    async def search_documents(
+        self,
+        query: str,
+        limit: int = 20,
+        *,
+        competitors: list[str] | None = None,
+        dimensions: list[str] | None = None,
+    ) -> list[KnowledgeDocument]:
         """Full-text keyword search via SQLite FTS5."""
         db = self._connection
         match_query = self._to_fts_query(query)
         if not match_query:
             return []
+        clauses = [
+            "documents_fts MATCH ?",
+            "d.status IN ('active', 'stale')",
+            "d.is_active = 1",
+        ]
+        params: list[Any] = [match_query]
+        if competitors:
+            placeholders = ", ".join("?" for _ in competitors)
+            clauses.append(f"d.competitor IN ({placeholders})")
+            params.extend(competitors)
+        if dimensions:
+            placeholders = ", ".join("?" for _ in dimensions)
+            clauses.append(f"d.dimension IN ({placeholders})")
+            params.extend(dimensions)
+        params.append(limit)
         async with db.execute(
-            """
+            f"""
             SELECT d.*
             FROM documents_fts
             JOIN documents d ON d.rowid = documents_fts.rowid
-            WHERE documents_fts MATCH ?
-              AND d.status IN ('active', 'stale')
-              AND d.is_active = 1
+            WHERE {" AND ".join(clauses)}
             ORDER BY bm25(documents_fts)
             LIMIT ?
             """,
-            (match_query, limit),
+            params,
         ) as cur:
             rows = await cur.fetchall()
             return [self._row_to_document(r) for r in rows]
@@ -528,10 +561,8 @@ class KnowledgeRepository:
             return None
 
         now = datetime.now(UTC).isoformat()
-        db = self._connection
         root_id = next((doc.parent_document_id or doc.id for doc in versions), document_id)
-        await db.execute("BEGIN")
-        try:
+        async with self._write_transaction() as db:
             await db.execute(
                 """
                 UPDATE documents
@@ -548,30 +579,27 @@ class KnowledgeRepository:
                 """,
                 (now, target_document_id),
             )
-            await db.commit()
-        except Exception:
-            await db.rollback()
-            raise
         return await self.get_document(target_document_id)
 
     # -- Chunks -------------------------------------------------------------
 
     async def insert_chunks(self, chunks: list[KnowledgeChunk]) -> None:
-        db = self._connection
-        await db.executemany(
-            """
-            INSERT OR REPLACE INTO chunks
-                (id, document_id, chunk_index, text, token_count, embedding_model,
-                 content_hash, crawl_run_id, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (c.id, c.document_id, c.chunk_index, c.text, c.token_count,
-                 c.embedding_model, c.content_hash, c.crawl_run_id, json.dumps(c.metadata))
-                for c in chunks
-            ],
-        )
-        await db.commit()
+        if not chunks:
+            return
+        async with self._write_transaction() as db:
+            await db.executemany(
+                """
+                INSERT OR REPLACE INTO chunks
+                    (id, document_id, chunk_index, text, token_count, embedding_model,
+                     content_hash, crawl_run_id, metadata_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (c.id, c.document_id, c.chunk_index, c.text, c.token_count,
+                     c.embedding_model, c.content_hash, c.crawl_run_id, json.dumps(c.metadata))
+                    for c in chunks
+                ],
+            )
 
     async def get_chunks_for_document(self, doc_id: str) -> list[KnowledgeChunk]:
         db = self._connection
@@ -621,14 +649,13 @@ class KnowledgeRepository:
     ) -> str:
         now = datetime.now(UTC).isoformat()
         job_id = str(uuid.uuid4())
-        db = self._connection
-        await db.execute(
-            "INSERT INTO crawl_jobs"
-            " (id, run_id, url, competitor, dimension, status, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
-            (job_id, run_id, url, competitor, dimension, now, now),
-        )
-        await db.commit()
+        async with self._write_transaction() as db:
+            await db.execute(
+                "INSERT INTO crawl_jobs"
+                " (id, run_id, url, competitor, dimension, status, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
+                (job_id, run_id, url, competitor, dimension, now, now),
+            )
         return job_id
 
     async def update_crawl_job(
@@ -640,20 +667,19 @@ class KnowledgeRepository:
         result_metadata: dict[str, Any] | None = None,
     ) -> None:
         now = datetime.now(UTC).isoformat()
-        db = self._connection
-        if result_metadata is None:
-            await db.execute(
-                "UPDATE crawl_jobs SET status = ?, error = ?, updated_at = ?,"
-                " attempt_count = attempt_count + 1 WHERE id = ?",
-                (status, error, now, job_id),
-            )
-        else:
-            await db.execute(
-                "UPDATE crawl_jobs SET status = ?, error = ?, result_metadata_json = ?,"
-                " updated_at = ?, attempt_count = attempt_count + 1 WHERE id = ?",
-                (status, error, json.dumps(result_metadata), now, job_id),
-            )
-        await db.commit()
+        async with self._write_transaction() as db:
+            if result_metadata is None:
+                await db.execute(
+                    "UPDATE crawl_jobs SET status = ?, error = ?, updated_at = ?,"
+                    " attempt_count = attempt_count + 1 WHERE id = ?",
+                    (status, error, now, job_id),
+                )
+            else:
+                await db.execute(
+                    "UPDATE crawl_jobs SET status = ?, error = ?, result_metadata_json = ?,"
+                    " updated_at = ?, attempt_count = attempt_count + 1 WHERE id = ?",
+                    (status, error, json.dumps(result_metadata), now, job_id),
+                )
 
     async def get_crawl_job(self, job_id: str) -> aiosqlite.Row | None:
         db = self._connection
@@ -747,35 +773,33 @@ class KnowledgeRepository:
         options: dict[str, Any],
     ) -> None:
         now = datetime.now(UTC).isoformat()
-        db = self._connection
-        await db.execute(
-            """
-            INSERT INTO ingest_jobs
-                (id, status, total_items, accepted_items, completed_items,
-                 failed_items, rejected_items_json, failed_items_json,
-                 result_items_json, options_json, created_at, updated_at)
-            VALUES (?, 'pending', ?, ?, 0, 0, ?, '[]', '[]', ?, ?, ?)
-            """,
-            (
-                job_id,
-                total_items,
-                accepted_items,
-                json.dumps(rejected_items),
-                json.dumps(options),
-                now,
-                now,
-            ),
-        )
-        await db.commit()
+        async with self._write_transaction() as db:
+            await db.execute(
+                """
+                INSERT INTO ingest_jobs
+                    (id, status, total_items, accepted_items, completed_items,
+                     failed_items, rejected_items_json, failed_items_json,
+                     result_items_json, options_json, created_at, updated_at)
+                VALUES (?, 'pending', ?, ?, 0, 0, ?, '[]', '[]', ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    total_items,
+                    accepted_items,
+                    json.dumps(rejected_items),
+                    json.dumps(options),
+                    now,
+                    now,
+                ),
+            )
 
     async def update_ingest_job_status(self, job_id: str, status: str) -> None:
         now = datetime.now(UTC).isoformat()
-        db = self._connection
-        await db.execute(
-            "UPDATE ingest_jobs SET status = ?, updated_at = ? WHERE id = ?",
-            (status, now, job_id),
-        )
-        await db.commit()
+        async with self._write_transaction() as db:
+            await db.execute(
+                "UPDATE ingest_jobs SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now, job_id),
+            )
 
     async def record_ingest_job_success(
         self,
@@ -784,18 +808,20 @@ class KnowledgeRepository:
         index: int,
         document_id: str,
     ) -> None:
-        row = await self.get_ingest_job(job_id)
-        if row is None:
-            return
-        results = json.loads(row["result_items_json"])
-        results.append({"index": index, "document_id": document_id})
-        await self._update_ingest_job_payload(
-            job_id,
-            completed_delta=1,
-            failed_delta=0,
-            result_items=results,
-            failed_items=json.loads(row["failed_items_json"]),
-        )
+        async with self._write_transaction() as db:
+            row = await self._get_ingest_job_in_transaction(db, job_id)
+            if row is None:
+                return
+            results = json.loads(row["result_items_json"])
+            results.append({"index": index, "document_id": document_id})
+            await self._update_ingest_job_payload_in_transaction(
+                db,
+                job_id,
+                completed_delta=1,
+                failed_delta=0,
+                result_items=results,
+                failed_items=json.loads(row["failed_items_json"]),
+            )
 
     async def record_ingest_job_failure(
         self,
@@ -804,18 +830,20 @@ class KnowledgeRepository:
         index: int,
         reason: str,
     ) -> None:
-        row = await self.get_ingest_job(job_id)
-        if row is None:
-            return
-        failed = json.loads(row["failed_items_json"])
-        failed.append({"index": index, "reason": reason})
-        await self._update_ingest_job_payload(
-            job_id,
-            completed_delta=1,
-            failed_delta=1,
-            result_items=json.loads(row["result_items_json"]),
-            failed_items=failed,
-        )
+        async with self._write_transaction() as db:
+            row = await self._get_ingest_job_in_transaction(db, job_id)
+            if row is None:
+                return
+            failed = json.loads(row["failed_items_json"])
+            failed.append({"index": index, "reason": reason})
+            await self._update_ingest_job_payload_in_transaction(
+                db,
+                job_id,
+                completed_delta=1,
+                failed_delta=1,
+                result_items=json.loads(row["result_items_json"]),
+                failed_items=failed,
+            )
 
     async def get_ingest_job(self, job_id: str) -> aiosqlite.Row | None:
         db = self._connection
@@ -830,8 +858,17 @@ class KnowledgeRepository:
         ) as cur:
             return await cur.fetchall()
 
-    async def _update_ingest_job_payload(
+    async def _get_ingest_job_in_transaction(
         self,
+        db: aiosqlite.Connection,
+        job_id: str,
+    ) -> aiosqlite.Row | None:
+        async with db.execute("SELECT * FROM ingest_jobs WHERE id = ?", (job_id,)) as cur:
+            return await cur.fetchone()
+
+    async def _update_ingest_job_payload_in_transaction(
+        self,
+        db: aiosqlite.Connection,
         job_id: str,
         *,
         completed_delta: int,
@@ -840,7 +877,6 @@ class KnowledgeRepository:
         failed_items: list[dict[str, Any]],
     ) -> None:
         now = datetime.now(UTC).isoformat()
-        db = self._connection
         await db.execute(
             """
             UPDATE ingest_jobs
@@ -860,7 +896,6 @@ class KnowledgeRepository:
                 job_id,
             ),
         )
-        await db.commit()
 
     # -- Evaluation --------------------------------------------------------
 
@@ -874,22 +909,22 @@ class KnowledgeRepository:
         results: list[dict[str, Any]],
     ) -> None:
         now = datetime.now(UTC).isoformat()
-        await self._connection.execute(
-            """
-            INSERT INTO eval_runs
-                (id, created_at, top_k, metrics_json, labels_json, results_json)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                run_id,
-                now,
-                top_k,
-                json.dumps(metrics),
-                json.dumps(labels),
-                json.dumps(results),
-            ),
-        )
-        await self._connection.commit()
+        async with self._write_transaction() as db:
+            await db.execute(
+                """
+                INSERT INTO eval_runs
+                    (id, created_at, top_k, metrics_json, labels_json, results_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    now,
+                    top_k,
+                    json.dumps(metrics),
+                    json.dumps(labels),
+                    json.dumps(results),
+                ),
+            )
 
     async def list_eval_runs(self, *, limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
         async with self._connection.execute(
@@ -937,33 +972,33 @@ class KnowledgeRepository:
             if hasattr(record, "model_dump")
             else dict(record)
         )
-        await self._connection.execute(
-            """
-            INSERT INTO retrieval_traces
-                (id, created_at, query, preset_used, dense_hits, sparse_hits,
-                 reranked_hits, latency_ms, cache_hit, crawl_run_id, competitor,
-                 dimension, source_type, retrieval_preset, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                trace_id,
-                now,
-                payload.get("query", ""),
-                payload.get("preset_used"),
-                int(payload.get("dense_hits", 0)),
-                int(payload.get("sparse_hits", 0)),
-                int(payload.get("reranked_hits", 0)),
-                float(payload.get("latency_ms", 0.0)),
-                1 if payload.get("cache_hit") else 0,
-                payload.get("crawl_run_id"),
-                payload.get("competitor"),
-                payload.get("dimension"),
-                payload.get("source_type"),
-                payload.get("retrieval_preset"),
-                json.dumps(payload.get("metadata", {})),
-            ),
-        )
-        await self._connection.commit()
+        async with self._write_transaction() as db:
+            await db.execute(
+                """
+                INSERT INTO retrieval_traces
+                    (id, created_at, query, preset_used, dense_hits, sparse_hits,
+                     reranked_hits, latency_ms, cache_hit, crawl_run_id, competitor,
+                     dimension, source_type, retrieval_preset, metadata_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    trace_id,
+                    now,
+                    payload.get("query", ""),
+                    payload.get("preset_used"),
+                    int(payload.get("dense_hits", 0)),
+                    int(payload.get("sparse_hits", 0)),
+                    int(payload.get("reranked_hits", 0)),
+                    float(payload.get("latency_ms", 0.0)),
+                    1 if payload.get("cache_hit") else 0,
+                    payload.get("crawl_run_id"),
+                    payload.get("competitor"),
+                    payload.get("dimension"),
+                    payload.get("source_type"),
+                    payload.get("retrieval_preset"),
+                    json.dumps(payload.get("metadata", {})),
+                ),
+            )
         return trace_id
 
     # -- Stats -------------------------------------------------------------
@@ -1034,13 +1069,7 @@ class KnowledgeRepository:
     # -- Helpers ------------------------------------------------------------
 
     async def _apply_pragmas(self) -> None:
-        db = self._connection
-        await db.execute("PRAGMA journal_mode = WAL")
-        await db.execute("PRAGMA busy_timeout = 5000")
-        await db.execute("PRAGMA synchronous = NORMAL")
-        await db.execute("PRAGMA temp_store = MEMORY")
-        await db.execute("PRAGMA cache_size = -20000")
-        await db.execute("PRAGMA foreign_keys = ON")
+        await apply_sqlite_pragmas(self._connection)
 
     async def _ensure_migration_table(self) -> None:
         await self._connection.execute(

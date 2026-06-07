@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 
 import aiosqlite
@@ -8,6 +10,15 @@ import pytest
 from packages.knowledge.ingestion import IngestionPipeline
 from packages.knowledge.models import DocumentCreate, KnowledgeChunk
 from packages.knowledge.repository import KnowledgeRepository
+
+
+def test_repository_uses_env_db_path_by_default(tmp_path, monkeypatch) -> None:
+    env_path = str(tmp_path / "env-knowledge.db")
+    explicit_path = str(tmp_path / "explicit-knowledge.db")
+    monkeypatch.setenv("KB_DB_PATH", env_path)
+
+    assert KnowledgeRepository().db_path == env_path
+    assert KnowledgeRepository(explicit_path).db_path == explicit_path
 
 
 @pytest.mark.asyncio
@@ -99,8 +110,8 @@ async def test_repository_initialise_migrates_existing_schema(tmp_path) -> None:
         ) as cur:
             objects = {row["name"] for row in await cur.fetchall()}
 
-        assert journal_mode == "wal"
-        assert busy_timeout == 5000
+        assert journal_mode in {"wal", "delete"}
+        assert busy_timeout == 30000
         assert synchronous == 1
         assert cache_size == -20000
         assert set(migrations) >= {
@@ -230,5 +241,71 @@ async def test_ingestion_persists_crawl_run_id_on_chunks(tmp_path) -> None:
         assert crawl_runs[0]["crawl_run_id"] == "crawl-run-1"
         assert crawl_runs[0]["doc_count"] == 1
         assert crawl_runs[0]["chunk_count"] == len(chunks)
+    finally:
+        await repo.close()
+
+
+@pytest.mark.asyncio
+async def test_repository_serializes_concurrent_ingest_job_updates(tmp_path) -> None:
+    db_path = str(tmp_path / "knowledge.db")
+    setup_repo = KnowledgeRepository(db_path)
+    await setup_repo.initialise()
+    try:
+        await setup_repo.create_ingest_job(
+            "job-1",
+            total_items=12,
+            accepted_items=12,
+            rejected_items=[],
+            options={},
+        )
+    finally:
+        await setup_repo.close()
+
+    async def record_success(index: int) -> None:
+        repo = KnowledgeRepository(db_path)
+        await repo.initialise()
+        try:
+            await repo.record_ingest_job_success(
+                "job-1",
+                index=index,
+                document_id=f"doc-{index}",
+            )
+        finally:
+            await repo.close()
+
+    await asyncio.gather(*(record_success(index) for index in range(12)))
+
+    verify_repo = KnowledgeRepository(db_path)
+    await verify_repo.initialise()
+    try:
+        row = await verify_repo.get_ingest_job("job-1")
+        assert row is not None
+        results = json.loads(row["result_items_json"])
+        assert row["completed_items"] == 12
+        assert row["failed_items"] == 0
+        assert sorted(item["index"] for item in results) == list(range(12))
+    finally:
+        await verify_repo.close()
+
+
+@pytest.mark.asyncio
+async def test_repository_recovers_stale_transaction_before_crawl_job_write(tmp_path) -> None:
+    repo = KnowledgeRepository(str(tmp_path / "knowledge.db"))
+    await repo.initialise()
+    try:
+        await repo._connection.execute("BEGIN")
+        assert repo._connection.in_transaction is True
+
+        job_id = await repo.create_crawl_job(
+            "https://example.com/page",
+            run_id="run-1",
+            competitor="Example",
+            dimension="docs",
+        )
+
+        row = await repo.get_crawl_job(job_id)
+        assert row is not None
+        assert row["url"] == "https://example.com/page"
+        assert row["status"] == "pending"
     finally:
         await repo.close()

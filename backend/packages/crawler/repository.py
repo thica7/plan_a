@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urldefrag, urlparse, urlunparse
 
 import aiosqlite
+
+from packages.sqlite_locks import (
+    apply_sqlite_pragmas,
+    begin_immediate_transaction,
+    commit_sqlite_transaction,
+    write_lock_for,
+)
 
 from .models import CrawlFrontierItem, CrawlFrontierStats, CrawlSource, CrawlSourceType
 
@@ -55,8 +64,8 @@ ON crawl_frontier(canonical_url);
 class CrawlerRepository:
     """Async SQLite repository for crawl sources and frontier rows."""
 
-    def __init__(self, db_path: str = "runs/knowledge.db") -> None:
-        self._db_path = db_path
+    def __init__(self, db_path: str | None = None) -> None:
+        self._db_path = db_path or os.getenv("KB_DB_PATH", "runs/knowledge.db")
         self._db: aiosqlite.Connection | None = None
 
     async def initialise(self) -> None:
@@ -64,14 +73,16 @@ class CrawlerRepository:
             return
         self._db = await aiosqlite.connect(
             self._db_path,
+            isolation_level=None,
             uri=self._db_path.startswith("file:"),
         )
         self._db.row_factory = aiosqlite.Row
         try:
-            await self._apply_pragmas()
-            await self._db.executescript(_SCHEMA)
-            await self._migrate_schema()
-            await self._db.commit()
+            async with write_lock_for(self._db_path):
+                await self._apply_pragmas()
+                await self._db.executescript(_SCHEMA)
+                await self._migrate_schema()
+                await self._db.commit()
         except Exception:
             await self.close()
             raise
@@ -94,6 +105,19 @@ class CrawlerRepository:
             raise RuntimeError("CrawlerRepository.initialise() must be called before use")
         return self._db
 
+    @asynccontextmanager
+    async def _write_transaction(self):
+        db = self._connection
+        async with write_lock_for(self._db_path):
+            await begin_immediate_transaction(db)
+            try:
+                yield db
+            except Exception:
+                await db.rollback()
+                raise
+            else:
+                await commit_sqlite_transaction(db)
+
     async def create_source(
         self,
         source_type: CrawlSourceType,
@@ -105,15 +129,15 @@ class CrawlerRepository:
     ) -> CrawlSource:
         now = datetime.now(UTC).isoformat()
         source_id = str(uuid.uuid4())
-        await self._connection.execute(
-            """
-            INSERT INTO crawl_source
-                (id, type, competitor, dimension, priority, config_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (source_id, source_type, competitor, dimension, priority, json.dumps(config), now),
-        )
-        await self._connection.commit()
+        async with self._write_transaction() as db:
+            await db.execute(
+                """
+                INSERT INTO crawl_source
+                    (id, type, competitor, dimension, priority, config_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (source_id, source_type, competitor, dimension, priority, json.dumps(config), now),
+            )
         return CrawlSource(
             id=source_id,
             type=source_type,
@@ -140,15 +164,15 @@ class CrawlerRepository:
         return self._row_to_source(row) if row else None
 
     async def delete_source(self, source_id: str) -> bool:
-        cursor = await self._connection.execute(
-            "DELETE FROM crawl_source WHERE id = ?",
-            (source_id,),
-        )
-        await self._connection.execute(
-            "UPDATE crawl_frontier SET status = 'cancelled' WHERE source_id = ? OR run_id = ?",
-            (source_id, source_id),
-        )
-        await self._connection.commit()
+        async with self._write_transaction() as db:
+            cursor = await db.execute(
+                "DELETE FROM crawl_source WHERE id = ?",
+                (source_id,),
+            )
+            await db.execute(
+                "UPDATE crawl_frontier SET status = 'cancelled' WHERE source_id = ? OR run_id = ?",
+                (source_id, source_id),
+            )
         return cursor.rowcount > 0
 
     async def add_frontier_items(
@@ -195,49 +219,49 @@ class CrawlerRepository:
         if not rows:
             return 0
 
-        before = self._connection.total_changes
-        await self._connection.executemany(
-            """
-            INSERT OR IGNORE INTO crawl_frontier
-                (id, source_id, source_type, url, canonical_url, competitor, dimension, priority,
-                 depth, status, attempts, next_run_at, last_error, parent_id,
-                 discovered_at, run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            rows,
-        )
-        await self._connection.commit()
-        return self._connection.total_changes - before
+        async with self._write_transaction() as db:
+            before = db.total_changes
+            await db.executemany(
+                """
+                INSERT OR IGNORE INTO crawl_frontier
+                    (id, source_id, source_type, url, canonical_url, competitor, dimension,
+                     priority, depth, status, attempts, next_run_at, last_error, parent_id,
+                     discovered_at, run_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+            return db.total_changes - before
 
     async def claim_pending(self, *, limit: int = 10) -> list[CrawlFrontierItem]:
         now = datetime.now(UTC).isoformat()
-        async with self._connection.execute(
-            """
-            UPDATE crawl_frontier
-            SET status = 'running',
-                attempts = attempts + 1,
-                last_error = NULL
-            WHERE id IN (
-                SELECT id
-                FROM crawl_frontier
-                WHERE status = 'pending' AND next_run_at <= ?
-                ORDER BY priority ASC, discovered_at ASC
-                LIMIT ?
-            )
-            RETURNING *
-            """,
-            (now, limit),
-        ) as cur:
-            rows = await cur.fetchall()
-        await self._connection.commit()
+        async with self._write_transaction() as db:
+            async with db.execute(
+                """
+                UPDATE crawl_frontier
+                SET status = 'running',
+                    attempts = attempts + 1,
+                    last_error = NULL
+                WHERE id IN (
+                    SELECT id
+                    FROM crawl_frontier
+                    WHERE status = 'pending' AND next_run_at <= ?
+                    ORDER BY priority ASC, discovered_at ASC
+                    LIMIT ?
+                )
+                RETURNING *
+                """,
+                (now, limit),
+            ) as cur:
+                rows = await cur.fetchall()
         return [self._row_to_frontier_item(row) for row in rows]
 
     async def mark_done(self, item_id: str) -> None:
-        await self._connection.execute(
-            "UPDATE crawl_frontier SET status = 'done', last_error = NULL WHERE id = ?",
-            (item_id,),
-        )
-        await self._connection.commit()
+        async with self._write_transaction() as db:
+            await db.execute(
+                "UPDATE crawl_frontier SET status = 'done', last_error = NULL WHERE id = ?",
+                (item_id,),
+            )
 
     async def mark_failed(
         self,
@@ -247,44 +271,46 @@ class CrawlerRepository:
         retry: bool = False,
         retry_after_seconds: float = 60.0,
     ) -> None:
-        if retry:
-            next_run_at = (datetime.now(UTC) + timedelta(seconds=retry_after_seconds)).isoformat()
-            await self._connection.execute(
-                """
-                UPDATE crawl_frontier
-                SET status = 'pending', next_run_at = ?, last_error = ?
-                WHERE id = ?
-                """,
-                (next_run_at, error, item_id),
-            )
-        else:
-            await self._connection.execute(
-                "UPDATE crawl_frontier SET status = 'failed', last_error = ? WHERE id = ?",
-                (error, item_id),
-            )
-        await self._connection.commit()
+        async with self._write_transaction() as db:
+            if retry:
+                next_run_at = (
+                    datetime.now(UTC) + timedelta(seconds=retry_after_seconds)
+                ).isoformat()
+                await db.execute(
+                    """
+                    UPDATE crawl_frontier
+                    SET status = 'pending', next_run_at = ?, last_error = ?
+                    WHERE id = ?
+                    """,
+                    (next_run_at, error, item_id),
+                )
+            else:
+                await db.execute(
+                    "UPDATE crawl_frontier SET status = 'failed', last_error = ? WHERE id = ?",
+                    (error, item_id),
+                )
 
     async def retry_failed(self, source_id: str | None = None) -> int:
         now = datetime.now(UTC).isoformat()
-        if source_id:
-            cursor = await self._connection.execute(
-                """
-                UPDATE crawl_frontier
-                SET status = 'pending', next_run_at = ?, last_error = NULL
-                WHERE status = 'failed' AND (source_id = ? OR run_id = ?)
-                """,
-                (now, source_id, source_id),
-            )
-        else:
-            cursor = await self._connection.execute(
-                """
-                UPDATE crawl_frontier
-                SET status = 'pending', next_run_at = ?, last_error = NULL
-                WHERE status = 'failed'
-                """,
-                (now,),
-            )
-        await self._connection.commit()
+        async with self._write_transaction() as db:
+            if source_id:
+                cursor = await db.execute(
+                    """
+                    UPDATE crawl_frontier
+                    SET status = 'pending', next_run_at = ?, last_error = NULL
+                    WHERE status = 'failed' AND (source_id = ? OR run_id = ?)
+                    """,
+                    (now, source_id, source_id),
+                )
+            else:
+                cursor = await db.execute(
+                    """
+                    UPDATE crawl_frontier
+                    SET status = 'pending', next_run_at = ?, last_error = NULL
+                    WHERE status = 'failed'
+                    """,
+                    (now,),
+                )
         return cursor.rowcount
 
     async def stats(self, *, source_id: str | None = None) -> CrawlFrontierStats:
@@ -344,12 +370,7 @@ class CrawlerRepository:
         return [self._row_to_frontier_item(row) for row in rows]
 
     async def _apply_pragmas(self) -> None:
-        await self._connection.execute("PRAGMA journal_mode = WAL")
-        await self._connection.execute("PRAGMA busy_timeout = 5000")
-        await self._connection.execute("PRAGMA synchronous = NORMAL")
-        await self._connection.execute("PRAGMA temp_store = MEMORY")
-        await self._connection.execute("PRAGMA cache_size = -20000")
-        await self._connection.execute("PRAGMA foreign_keys = ON")
+        await apply_sqlite_pragmas(self._connection)
 
     async def _migrate_schema(self) -> None:
         await self._ensure_column("crawl_source", "competitor", "TEXT")

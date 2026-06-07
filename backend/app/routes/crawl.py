@@ -10,13 +10,14 @@ from typing import Any
 
 import aiosqlite
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from app.routes.knowledge import get_embedding_provider, ingest_crawl_result
 from packages.crawler.models import (
     CrawlFrontierStats,
     CrawlRequest,
+    CrawlResult,
     CrawlSource,
     CrawlSourceCreate,
 )
@@ -51,6 +52,8 @@ class CrawlJob(BaseModel):
 class CrawlSourceDetail(BaseModel):
     source: CrawlSource
     progress: CrawlFrontierStats
+    discovered_count: int = 0
+    warnings: list[str] = Field(default_factory=list)
 
 
 async def _open_repository() -> KnowledgeRepository:
@@ -98,10 +101,20 @@ def _row_to_crawl_job(row: aiosqlite.Row) -> CrawlJob:
         status=row["status"],
         attempt_count=row["attempt_count"],
         error=row["error"],
-        result_metadata=json.loads(row["result_metadata_json"]),
+        result_metadata=_load_result_metadata(row["result_metadata_json"]),
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
     )
+
+
+def _load_result_metadata(raw: str | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 @router.get("/crawl/jobs", response_model=list[CrawlJob])
@@ -133,22 +146,30 @@ async def create_crawl_source(request: CrawlSourceCreate) -> CrawlSourceDetail:
             priority=priority,
         )
         urls = await processor_for(source.type).expand(source)
-        await repo.add_frontier_items(
-            urls,
-            source_type=source.type,
-            source_id=source.id,
-            competitor=source.competitor,
-            dimension=source.dimension,
-            priority=source.priority,
-            run_id=source.id,
-            max_urls=int(config.get("max_urls") or len(urls) or 1),
-        )
+        warnings = _crawl_source_warnings(source.type, urls)
+        if urls:
+            await repo.add_frontier_items(
+                urls,
+                source_type=source.type,
+                source_id=source.id,
+                competitor=source.competitor,
+                dimension=source.dimension,
+                priority=source.priority,
+                run_id=source.id,
+                max_urls=int(config.get("max_urls") or len(urls) or 1),
+            )
         progress = await repo.stats(source_id=source.id)
     finally:
         await repo.close()
 
-    asyncio.create_task(_run_frontier_until_idle())
-    return CrawlSourceDetail(source=source, progress=progress)
+    if urls:
+        asyncio.create_task(_run_frontier_until_idle())
+    return CrawlSourceDetail(
+        source=source,
+        progress=progress,
+        discovered_count=len(urls),
+        warnings=warnings,
+    )
 
 
 @router.get("/crawl/sources", response_model=list[CrawlSource])
@@ -198,6 +219,17 @@ async def retry_crawl_source(source_id: str) -> CrawlSourceDetail:
 
     asyncio.create_task(_run_frontier_until_idle())
     return CrawlSourceDetail(source=source, progress=progress)
+
+
+def _crawl_source_warnings(source_type: str, urls: list[str]) -> list[str]:
+    if urls:
+        return []
+    if source_type in {"web_search", "pricing", "official_docs", "changelog", "review_site"}:
+        return [
+            "source expanded to 0 URLs; check PPLX_API_KEY, query, include_domains, "
+            "and url_patterns"
+        ]
+    return ["source expanded to 0 URLs"]
 
 
 @router.get("/crawl/frontier/stats", response_model=CrawlFrontierStats)
@@ -325,7 +357,11 @@ async def _run_crawl_job(job_id: str) -> CrawlJob:
 async def _run_frontier_until_idle() -> None:
     from packages.crawler.scheduler import CrawlerScheduler
 
-    scheduler = CrawlerScheduler()
+    scheduler = CrawlerScheduler(
+        max_concurrent=2,
+        pending_batch_size=4,
+        on_result=_ingest_frontier_result,
+    )
     await scheduler.start()
     try:
         for _ in range(300):
@@ -339,3 +375,17 @@ async def _run_frontier_until_idle() -> None:
             await asyncio.sleep(1.0)
     finally:
         await scheduler.stop()
+
+
+async def _ingest_frontier_result(result: CrawlResult) -> None:
+    if not result.success:
+        return
+    repo = await _open_repository()
+    try:
+        await ingest_crawl_result(
+            repo,
+            result,
+            embedding_provider=get_embedding_provider(),
+        )
+    finally:
+        await repo.close()

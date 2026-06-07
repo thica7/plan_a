@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import re
 import time
 from datetime import UTC, datetime
 from urllib.parse import urljoin
@@ -111,7 +112,7 @@ class PageFetcher:
             # Size limit
             byte_limit = min(request.max_bytes, request.max_total_bytes)
             content = resp.content[:byte_limit]
-            text = content.decode(resp.encoding or "utf-8", errors="replace")
+            text = _decode_response_content(resp, content)
             if _render_mode_allows(request.render_js):
                 rendered = await self._render_with_playwright(str(resp.url), request)
                 if rendered:
@@ -243,3 +244,22 @@ def _render_mode_allows(render_js: bool) -> bool:
     if mode == "always":
         return True
     return render_js
+
+
+def _decode_response_content(response: httpx.Response, content: bytes) -> str:
+    charset = _charset_from_content_type(response.headers.get("content-type", ""))
+    if charset:
+        return content.decode(charset, errors="replace")
+
+    guessed = (response.encoding or "").lower()
+    if guessed in {"", "ascii", "latin-1", "iso-8859-1", "windows-1252", "cp1252"}:
+        try:
+            return content.decode("utf-8")
+        except UnicodeDecodeError:
+            pass
+    return content.decode(response.encoding or "utf-8", errors="replace")
+
+
+def _charset_from_content_type(content_type: str) -> str | None:
+    match = re.search(r"charset\s*=\s*['\"]?([^;'\"]+)", content_type, flags=re.IGNORECASE)
+    return match.group(1).strip() if match else None
