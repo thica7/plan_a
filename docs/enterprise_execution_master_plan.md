@@ -17,6 +17,8 @@ Before each implementation turn, read:
 - `dev_plan_final/dev_plan_final/10_HIGH_SCORE_FUSION_BACKLOG.md`
 - `D:/codex_workspace/websearch_v2/clean_research_pipeline_rewrite_plan.md`
 - `docs/architecture_first_execution_plan_20260607.md`
+- `docs/checkpoint5_enterprise_runtime_plan.md` when continuing architecture
+  runtime work after Checkpoint 4.
 - `docs/research_pipeline_refactor_changelog_20260606.md`
 - `docs/checkpoint4_architecture_changelog_20260607.md`
 
@@ -32,6 +34,7 @@ Phase 5 enterprise productization:
   Checkpoint 2 high-score backlog core complete
   Checkpoint 3 enterprise product hardening core complete
   Checkpoint 4 architecture contract implementation complete; runtime smoke pending
+  Checkpoint 5 enterprise runtime plan created; implementation not started
 ```
 
 Strict status:
@@ -54,12 +57,15 @@ Strict status:
 - Architecture-first execution: use
   `docs/architecture_first_execution_plan_20260607.md` when the next request is
   about architecture rather than run-specific report quality.
+- Checkpoint 5 enterprise runtime: use
+  `docs/checkpoint5_enterprise_runtime_plan.md` after the Checkpoint 4 smoke
+  gate to continue architecture-level implementation.
 
 ## Full Route
 
-The route has four checkpoints. Checkpoint 1, Checkpoint 2, and Checkpoint 3
-core are complete. Checkpoint 4 contract implementation is complete; runtime
-smoke validation remains.
+The route now has five checkpoints. Checkpoint 1, Checkpoint 2, and Checkpoint
+3 core are complete. Checkpoint 4 contract implementation is complete; runtime
+smoke validation remains. Checkpoint 5 has a plan but no implementation yet.
 
 ### Checkpoint 1: Report Quality Closure
 
@@ -185,6 +191,31 @@ Completion audit:
 
 - `docs/reports/checkpoint4_architecture_contract_audit_20260607.md`
 
+### Checkpoint 5: Enterprise Runtime Architecture
+
+Goal:
+
+- Turn the existing enterprise features into an operable runtime architecture.
+- Add one command boundary for review, approval, publish, redo, correction, and
+  monitor actions.
+- Govern artifacts, tenant isolation, advisory memory/RAG context, EvalOps,
+  cost/model/tool policy, and scheduled scans through explicit contracts.
+
+Priority:
+
+1. Runtime smoke gate.
+2. Runtime command layer.
+3. Cost/model/tool policy runtime.
+4. Tenant governance boundary.
+5. Artifact and source material lifecycle.
+6. Memory/RAG advisory context governance.
+7. EvalOps release contract.
+8. Monitor operations.
+
+Active detailed plan:
+
+- `docs/checkpoint5_enterprise_runtime_plan.md`
+
 ## Already Completed On Checkpoint 1
 
 Recent commits:
@@ -204,9 +235,8 @@ business fields, warning repair artifacts, and the final real-run acceptance.
 Do next:
 
 ```text
-Checkpoint 4 runtime smoke: validate one Temporal automated run and one
-HITL-enabled lifecycle run, then move to Checkpoint 5 enterprise runtime
-planning.
+Checkpoint 4 runtime smoke, then execute Checkpoint 5 from:
+docs/checkpoint5_enterprise_runtime_plan.md
 ```
 
 Checkpoint 2 final audit:
