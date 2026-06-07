@@ -8,7 +8,13 @@ from packages.enterprise.knowledge_graph import build_project_knowledge_graph_re
 from packages.enterprise.postgres import EnterprisePostgresStore
 from packages.enterprise.projection import build_enterprise_projection
 from packages.enterprise.report_diff import build_report_version_diff
-from packages.enterprise.report_scope import report_release_gate_scope, report_scope_competitors
+from packages.enterprise.report_scope import (
+    ReportScope,
+    build_report_scope,
+    report_release_gate_scope,
+    report_scope_competitors,
+    report_scope_metadata,
+)
 from packages.enterprise.source_snapshots import capture_source_snapshot
 from packages.enterprise.store import (
     EnterpriseMemoryStore,
@@ -28,11 +34,14 @@ __all__ = [
     "WorkspaceQuotaExceededError",
     "build_enterprise_projection",
     "build_project_knowledge_graph_read_model",
+    "build_report_scope",
     "build_report_version_diff",
     "capture_gap_fill_source_snapshots",
     "capture_source_snapshot",
     "deterministic_embedding",
+    "ReportScope",
     "report_release_gate_scope",
     "report_scope_competitors",
+    "report_scope_metadata",
     "source_registry_from_evidence",
 ]

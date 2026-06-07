@@ -64,6 +64,11 @@ def test_source_snapshot_assets_external_s3_pointer_and_source_registry() -> Non
     assert result.artifact.metadata["snapshot_warnings"] == result.warnings
     assert result.artifact.metadata["source_registry_id"] == result.source.id
     assert result.artifact.metadata["source_domain"] == "cursor.sh"
+    assert result.artifact.metadata["evidence_id"] == evidence.id
+    assert result.artifact.metadata["raw_source_id"] == evidence.raw_source_id
+    assert evidence.id in result.artifact.metadata["source_tokens"]
+    assert evidence.raw_source_id in result.artifact.metadata["source_tokens"]
+    assert result.source.metadata["raw_source_id"] == evidence.raw_source_id
     assert store.get_artifact(result.artifact.id) == result.artifact
     assert any(item.id == result.source.id for item in store.list_source_registry())
 
@@ -129,6 +134,9 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
     assert evidence.metadata["manual_research_ingest"] is True
     assert evidence.metadata["artifact_id"] == result.artifact.id
     assert evidence.metadata["report_version_id"] == report.id
+    assert result.artifact.metadata["evidence_id"] == evidence.id
+    assert result.artifact.metadata["raw_source_id"] == evidence.raw_source_id
+    assert evidence.raw_source_id in result.artifact.metadata["source_tokens"]
     assert "workflow fit" in evidence.snippet
     assert "buyer@example.com" not in evidence.snippet
     assert "sk-or-v1-redacted" not in evidence.snippet

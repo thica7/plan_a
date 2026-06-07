@@ -25,6 +25,7 @@ from packages.enterprise import (
     EnterpriseMemoryStore,
     WorkspaceQuotaExceededError,
     build_enterprise_projection,
+    build_report_scope,
     build_report_version_diff,
 )
 from packages.memory import PreferenceMemoryStore
@@ -449,7 +450,7 @@ def test_report_release_gate_scope_uses_version_competitors_not_stale_project_li
             ),
         },
     )
-    store.start_run(stale_detail, project_id=context.project_id)
+    stale_context = store.start_run(stale_detail, project_id=context.project_id)
     project = store.get_project(context.project_id)
 
     assert project is not None
@@ -458,10 +459,20 @@ def test_report_release_gate_scope_uses_version_competitors_not_stale_project_li
         project=project,
         store=store,
     )
+    scope = build_report_scope(projection.report_version, project=project, store=store)
 
     assert [item.name for item in competitors] == ["Cursor"]
     assert [item.id for item in evidence] == projection.report_version.evidence_ids
     assert [item.id for item in claims] == projection.report_version.claim_ids
+    assert scope.metadata["scope_policy"] == "report_version_scope_only"
+    assert scope.metadata["history_policy"] == "project_history_and_memory_are_advisory_context"
+    assert scope.metadata["scope_source"] == "run_projection"
+    assert stale_context.competitor_id_map["Gemini"] in scope.metadata[
+        "excluded_project_competitor_ids"
+    ]
+    assert stale_context.competitor_id_map["Gemini"] not in scope.metadata[
+        "scoped_competitor_ids"
+    ]
 
 
 def test_enterprise_store_tracks_evidence_lifecycle_across_runs() -> None:

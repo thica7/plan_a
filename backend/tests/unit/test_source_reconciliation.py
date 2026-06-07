@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from packages.agents.qa.logic import QualityAgentMixin
-from packages.business_intel.source_reconciliation import (
+from packages.identity import (
     build_source_reconciliation,
     evidence_by_source_token,
     malformed_source_tokens,

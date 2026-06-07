@@ -36,6 +36,7 @@ from packages.enterprise import (
     WorkspaceQuotaExceededError,
     build_enterprise_projection,
     report_release_gate_scope,
+    report_scope_metadata,
 )
 from packages.governance import build_model_policy_report, model_policy_block_message
 from packages.identity import (
@@ -2298,6 +2299,14 @@ class RunService(
                 for scope in repair_tasks_to_redo_scopes(tasks)
             ],
         }
+        if self._enterprise_store is not None:
+            project = self._enterprise_store.get_project(projection.project_id)
+            if project is not None:
+                release_gate_metadata["report_scope"] = report_scope_metadata(
+                    projection.report_version,
+                    project=project,
+                    store=self._enterprise_store,
+                )
         if metadata.get("release_gate") == release_gate_metadata:
             return False
         metadata["release_gate"] = release_gate_metadata

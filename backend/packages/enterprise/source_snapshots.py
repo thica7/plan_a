@@ -7,7 +7,12 @@ from urllib.parse import urlparse
 from packages.artifacts import ArtifactStorage
 from packages.compliance import redact_text
 from packages.enterprise.store import EnterpriseStore, source_registry_id
-from packages.identity import compute_evidence_id, compute_raw_source_id, normalize_dimension_key
+from packages.identity import (
+    compute_evidence_id,
+    compute_raw_source_id,
+    evidence_source_tokens,
+    normalize_dimension_key,
+)
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
     EvidenceRecord,
@@ -26,7 +31,12 @@ def capture_source_snapshot(
 ) -> SourceSnapshotResult:
     request, redaction_counts = _redacted_research_snapshot_request(request)
     source_type = _snapshot_source_type(request)
+    linked_evidence = _linked_evidence(request, store=store)
     source = _source_from_snapshot(request)
+    if linked_evidence is not None:
+        source = source.model_copy(
+            update={"metadata": {**source.metadata, **_source_identity_metadata(linked_evidence)}}
+        )
     score, warnings = _snapshot_quality(request)
     artifact = artifact_storage.store(
         ArtifactCreateRequest(
@@ -52,6 +62,7 @@ def capture_source_snapshot(
                 "source_domain": source.domain,
                 "snapshot_quality_score": score,
                 "snapshot_warnings": warnings,
+                **_source_identity_metadata(linked_evidence),
                 **_snapshot_redaction_metadata(redaction_counts),
             },
         ),
@@ -65,7 +76,15 @@ def capture_source_snapshot(
     )
     if evidence is not None:
         evidence = store.upsert_evidence(evidence)
-        artifact = artifact.model_copy(update={"evidence_id": evidence.id})
+        artifact = artifact.model_copy(
+            update={
+                "evidence_id": evidence.id,
+                "metadata": {
+                    **artifact.metadata,
+                    **_source_identity_metadata(evidence),
+                },
+            }
+        )
     stored_artifact = store.upsert_artifact(artifact)
     return SourceSnapshotResult(
         artifact=stored_artifact,
@@ -74,6 +93,29 @@ def capture_source_snapshot(
         snapshot_quality_score=score,
         warnings=warnings,
     )
+
+
+def _linked_evidence(
+    request: SourceSnapshotCreateRequest,
+    *,
+    store: EnterpriseStore,
+) -> EvidenceRecord | None:
+    if not request.evidence_id:
+        return None
+    for evidence in store.list_evidence(project_id=request.project_id):
+        if evidence.id == request.evidence_id:
+            return evidence
+    return None
+
+
+def _source_identity_metadata(evidence: EvidenceRecord | None) -> dict[str, object]:
+    if evidence is None:
+        return {}
+    return {
+        "evidence_id": evidence.id,
+        "raw_source_id": evidence.raw_source_id,
+        "source_tokens": sorted(evidence_source_tokens(evidence)),
+    }
 
 
 def _source_from_snapshot(request: SourceSnapshotCreateRequest) -> SourceRegistryRecord:

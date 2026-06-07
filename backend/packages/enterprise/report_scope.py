@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import TypeVar
+from dataclasses import dataclass, field
+from typing import Any, TypeVar
 
 from packages.enterprise.store import EnterpriseStore
 from packages.schema.enterprise import (
@@ -13,6 +14,27 @@ from packages.schema.enterprise import (
 )
 
 RecordWithIdT = TypeVar("RecordWithIdT", bound=CompetitorRecord | EvidenceRecord | ClaimRecord)
+
+
+@dataclass(frozen=True)
+class ReportScope:
+    """Frozen publication scope for one report version.
+
+    The enterprise project can hold history, memory, and stale competitors. This
+    object describes the exact records used for release decisions and keeps
+    historical context advisory unless it is explicitly linked to the report
+    version.
+    """
+
+    competitors: list[CompetitorRecord]
+    evidence: list[EvidenceRecord]
+    claims: list[ClaimRecord]
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def as_release_gate_tuple(
+        self,
+    ) -> tuple[list[CompetitorRecord], list[EvidenceRecord], list[ClaimRecord]]:
+        return self.competitors, self.evidence, self.claims
 
 
 def report_release_gate_scope(
@@ -28,10 +50,21 @@ def report_release_gate_scope(
     evidence, and claims that the report actually cites.
     """
 
+    return build_report_scope(version, project=project, store=store).as_release_gate_tuple()
+
+
+def build_report_scope(
+    version: ReportVersionRecord,
+    *,
+    project: ProjectRecord,
+    store: EnterpriseStore,
+) -> ReportScope:
     projection = store.get_run_projection(version.run_id) if version.run_id else None
+    scope_source = "report_version_ids"
     if projection is not None and projection.report_version.id == version.id:
         evidence = projection.evidence_records
         claims = projection.claim_records
+        scope_source = "run_projection"
     else:
         evidence = _records_in_id_order(
             store.list_evidence(project_id=project.id),
@@ -48,7 +81,29 @@ def report_release_gate_scope(
         evidence=evidence,
         claims=claims,
     )
-    return competitors, evidence, claims
+    return ReportScope(
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+        metadata=_report_scope_metadata(
+            version,
+            project=project,
+            store=store,
+            competitors=competitors,
+            evidence=evidence,
+            claims=claims,
+            scope_source=scope_source,
+        ),
+    )
+
+
+def report_scope_metadata(
+    version: ReportVersionRecord,
+    *,
+    project: ProjectRecord,
+    store: EnterpriseStore,
+) -> dict[str, Any]:
+    return build_report_scope(version, project=project, store=store).metadata
 
 
 def report_scope_competitors(
@@ -107,3 +162,38 @@ def _dedupe_ordered_strings(values: Iterable[object]) -> list[str]:
         seen.add(item)
         result.append(item)
     return result
+
+
+def _report_scope_metadata(
+    version: ReportVersionRecord,
+    *,
+    project: ProjectRecord,
+    store: EnterpriseStore,
+    competitors: list[CompetitorRecord],
+    evidence: list[EvidenceRecord],
+    claims: list[ClaimRecord],
+    scope_source: str,
+) -> dict[str, Any]:
+    project_competitors = store.list_competitors(project_id=project.id)
+    project_evidence = store.list_evidence(project_id=project.id)
+    project_claims = store.list_claims(project_id=project.id)
+    scoped_competitor_ids = [item.id for item in competitors]
+    memory_used = version.quality_metadata.get("memory_used")
+    return {
+        "scope_policy": "report_version_scope_only",
+        "history_policy": "project_history_and_memory_are_advisory_context",
+        "scope_source": scope_source,
+        "report_version_id": version.id,
+        "run_id": version.run_id,
+        "project_id": project.id,
+        "scoped_competitor_ids": scoped_competitor_ids,
+        "scoped_evidence_ids": [item.id for item in evidence],
+        "scoped_claim_ids": [item.id for item in claims],
+        "project_competitor_count": len(project_competitors),
+        "project_evidence_count": len(project_evidence),
+        "project_claim_count": len(project_claims),
+        "excluded_project_competitor_ids": [
+            item.id for item in project_competitors if item.id not in scoped_competitor_ids
+        ],
+        "advisory_memory": memory_used if isinstance(memory_used, dict) else {},
+    }

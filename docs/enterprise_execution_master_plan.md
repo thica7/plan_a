@@ -12,11 +12,12 @@ Before each implementation turn, read:
 
 - `docs/enterprise_execution_master_plan.md`
 - The latest checkpoint plan:
-  `docs/checkpoint3_execution_plan.md`
+  `docs/checkpoint4_architecture_contract_consolidation_plan.md`
 - `dev_plan_final/dev_plan_final/01_EXECUTION_ROADMAP_5_PHASES.md`
 - `dev_plan_final/dev_plan_final/10_HIGH_SCORE_FUSION_BACKLOG.md`
 - `D:/codex_workspace/websearch_v2/clean_research_pipeline_rewrite_plan.md`
 - `docs/research_pipeline_refactor_changelog_20260606.md`
+- `docs/checkpoint4_architecture_changelog_20260607.md`
 
 Do not rely on conversation memory alone.
 
@@ -29,6 +30,7 @@ Phase 5 enterprise productization:
   Checkpoint 1 report quality closure complete
   Checkpoint 2 high-score backlog core complete
   Checkpoint 3 enterprise product hardening core complete
+  Checkpoint 4 architecture contract consolidation active
 ```
 
 Strict status:
@@ -45,11 +47,13 @@ Strict status:
   continue only through targeted quality gates.
 - Clean Research Pipeline: structure complete and accepted for Checkpoint 2;
   continue through enterprise artifact/source governance.
+- Checkpoint 4 architecture consolidation: active; focus on identity, scope,
+  quality, HITL, orchestration, and observability contracts.
 
 ## Full Route
 
-The route has three checkpoints. Checkpoint 1, Checkpoint 2, and Checkpoint 3
-core are complete.
+The route has four checkpoints. Checkpoint 1, Checkpoint 2, and Checkpoint 3
+core are complete. Checkpoint 4 is active.
 
 ### Checkpoint 1: Report Quality Closure
 
@@ -145,6 +149,31 @@ Final acceptance:
 
 - `docs/reports/checkpoint3_product_flow_verification_20260607.md`
 
+### Checkpoint 4: Architecture Contract Consolidation
+
+Goal:
+
+- Keep the Phase 5 enterprise architecture clean as more capabilities are
+  added.
+- Consolidate identity, report scope, research pipeline, quality findings,
+  HITL lifecycle, orchestration ownership, and observability contracts.
+- Prevent future features from reintroducing ad hoc source IDs, scope drift,
+  duplicated QA logic, or hidden orchestration ownership.
+
+Priority:
+
+1. Identity and resolver contract.
+2. Report scope and enterprise read-model contract.
+3. Clean Research Pipeline boundary hardening.
+4. Quality finding matrix contract.
+5. HITL lifecycle contract.
+6. Temporal, LangGraph, Research Pipeline, and Enterprise Store ownership.
+7. Observability and governance contract.
+
+Active detailed plan:
+
+- `docs/checkpoint4_architecture_contract_consolidation_plan.md`
+
 ## Already Completed On Checkpoint 1
 
 Recent commits:
@@ -164,9 +193,10 @@ business fields, warning repair artifacts, and the final real-run acceptance.
 Do next:
 
 ```text
-Post-Checkpoint 3: run a fresh real product test when ready, then choose the
-next hardening track: live Postgres RLS verification, SSO/OIDC/SAML, hosted
-observability dashboards, or frontend review-polish.
+Checkpoint 4: consolidate architecture contracts before adding more broad
+features. Start with identity/resolver and report-version scope, then proceed
+through research pipeline, quality, HITL, orchestration, and observability
+contracts.
 ```
 
 Checkpoint 2 final audit:
