@@ -1945,6 +1945,91 @@ def test_enterprise_router_blocks_direct_publish_status_without_approval() -> No
     assert any(log.action == "report_version.published" for log in store.list_audit_logs())
 
 
+def test_manual_report_revision_after_rejection_creates_audited_draft() -> None:
+    store = EnterpriseMemoryStore()
+    memory = PreferenceMemoryStore.in_memory()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    app.dependency_overrides[get_preference_memory] = lambda: memory
+    client = TestClient(app)
+
+    requested = asyncio.run(
+        ReportApprovalActivities(store).request_report_approval(
+            ReportApprovalWorkflowInput(
+                report_version_id=projection.report_version.id,
+                requested_by="approver-1",
+                approver_ids=["approver-1"],
+            )
+        )
+    )
+    rejected = asyncio.run(
+        ReportApprovalActivities(store).reject_report_version(
+            ReportApprovalDecisionInput(
+                report_version_id=projection.report_version.id,
+                approver_id="approver-1",
+                note="Needs stronger evidence before publish.",
+            )
+        )
+    )
+    manual_revision = client.post(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/manual-revision",
+        json={
+            "report_md": f"{projection.report_version.report_md}\n\nReviewer correction.",
+            "note": "Added stronger evidence caveat after rejection.",
+        },
+    )
+    revision_id = manual_revision.json()["id"]
+    direct_approve = client.post(
+        "/api/enterprise/report-versions",
+        json=manual_revision.json() | {"status": "approved"},
+    )
+    draft_publish = client.post(f"/api/enterprise/report-versions/{revision_id}/publish")
+    diff = client.get(f"/api/enterprise/report-versions/{revision_id}/diff")
+    logs = store.list_audit_logs(workspace_id=projection.workspace_id)
+    feedback = memory.list_feedback(project_id=projection.project_id)
+
+    assert requested.status == "in_review"
+    assert rejected.status == "rejected"
+    assert manual_revision.status_code == 200
+    assert manual_revision.json()["status"] == "draft"
+    assert manual_revision.json()["parent_version_id"] == projection.report_version.id
+    assert (
+        manual_revision.json()["quality_metadata"]["manual_revision"]["edited_by"]
+        == "system-user"
+    )
+    assert direct_approve.status_code == 409
+    assert direct_approve.json()["detail"]["reason"] == "report_approval_workflow_required"
+    assert draft_publish.status_code == 409
+    assert draft_publish.json()["detail"]["reason"] == "report_approval_required"
+    assert diff.status_code == 200
+    assert diff.json()["base_version"]["id"] == projection.report_version.id
+    assert diff.json()["target_version"]["id"] == revision_id
+    assert diff.json()["added_lines"] >= 1
+    assert any(log.action == "report_version.rejected" for log in logs)
+    assert any(log.action == "report_version.manual_revision_created" for log in logs)
+    assert any(
+        log.action == "memory.feedback_captured"
+        and log.after["target_id"] == revision_id
+        and log.after["report_version_id"] == revision_id
+        for log in logs
+    )
+    assert any(
+        item.target_id == revision_id
+        and item.report_version_id == revision_id
+        and item.metadata["source"] == "manual_report_revision"
+        for item in feedback
+    )
+
+
 def test_gap_fill_result_carries_release_gate_improvement_delta() -> None:
     store = EnterpriseMemoryStore()
     detail = _detail()

@@ -87,6 +87,8 @@ Closed in Checkpoint 3 step 2:
   rejection, or published states.
 - Approval metadata is attached to report versions by the approval activity.
 - Publishing records publication metadata, ReleaseGate snapshot, and audit trail.
+- Manual report correction after rejection or approval creates a new draft
+  version, records diff/audit evidence, and captures MemoryAgent feedback.
 
 Remaining strict gaps:
 
@@ -94,8 +96,6 @@ Remaining strict gaps:
   are not yet uniformly promoted into artifact records.
 - RBAC is application-level only; database RLS and cross-workspace negative
   tests need hardening.
-- Manual report correction exists, but the rejection/approval-to-draft revision
-  loop needs stronger tests and product-facing review evidence.
 - Observability exists, but approval, publish, manual revision, artifact, and
   regression signals need to be easier to inspect as one product review surface.
 
@@ -150,6 +150,8 @@ Validation:
 
 ### 3. `feat(reports): expose human correction review loop`
 
+Status: completed in the current implementation step.
+
 Backlog: HITL enterprise product loop.
 
 Required behavior:
@@ -167,6 +169,11 @@ Acceptance:
 - The new version is not publishable until approval.
 - Audit log shows who edited it and why.
 - Memory feedback stores correction context.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/app/routers/enterprise.py backend/tests/unit/test_enterprise_store.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_report_approval_status_when_gate_fails backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_direct_publish_status_without_approval backend/tests/unit/test_enterprise_store.py::test_manual_report_revision_after_rejection_creates_audited_draft backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_update_report_version_status backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_use_report_scope_not_stale_project_competitors backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_block_weak_report_version backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_can_reject_report_version -q`
 
 ### 4. `feat(artifacts): promote source snapshots and research materials`
 

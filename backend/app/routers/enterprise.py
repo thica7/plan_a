@@ -1814,7 +1814,26 @@ def create_manual_report_revision(
         }
     )
     updated = store.upsert_report_version(revision)
-    _capture_manual_report_revision_memory(source, updated, request, user, settings, memory)
+    diff = build_report_version_diff(updated, base_version=source)
+    store.audit_report_version_transition(
+        updated,
+        action="report_version.manual_revision_created",
+        actor_id=user.user_id,
+        before_status=source.status,
+        note=request.note,
+        metadata={
+            "manual_revision": updated.quality_metadata.get("manual_revision", {}),
+            "source_report_version_id": source.id,
+            "source_status": source.status,
+            "diff": {
+                "base_version_id": source.id,
+                "added_lines": diff.added_lines,
+                "removed_lines": diff.removed_lines,
+                "unchanged_lines": diff.unchanged_lines,
+            },
+        },
+    )
+    _capture_manual_report_revision_memory(source, updated, request, user, settings, memory, store)
     return updated
 
 
@@ -2057,6 +2076,7 @@ def _capture_manual_report_revision_memory(
     user: EnterpriseUserContext,
     settings: Settings,
     memory: PreferenceMemoryStore,
+    store: EnterpriseStore,
 ) -> None:
     note = request.note.strip()
     message_parts = [
@@ -2098,8 +2118,10 @@ def _capture_manual_report_revision_memory(
         ),
         policy=compliance_policy_from_settings(settings),
     )
-    for candidate in memory.extract_candidates(feedback):
+    candidates = [candidate for candidate in memory.extract_candidates(feedback)]
+    for candidate in candidates:
         memory.upsert_candidate(candidate)
+    store.record_memory_feedback_audit(feedback, candidates, actor_id=user.user_id)
 
 
 def _project_or_404(

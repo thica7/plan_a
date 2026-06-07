@@ -1094,7 +1094,7 @@ Validation:
 
 ## 2026-06-07 - Step 35: Approval-Gated Report Publishing
 
-Commit: this commit
+Commit: `0f80127 feat(reports): enforce approval gated publishing`
 
 Scope:
 
@@ -1125,3 +1125,33 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/enterprise/report_lifecycle.py backend/packages/enterprise/store.py backend/packages/enterprise/postgres.py backend/packages/workflows/activities.py backend/packages/workflows/report_approval.py backend/app/routers/enterprise.py backend/tests/unit/test_enterprise_store.py backend/tests/unit/test_temporal_workflows.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_report_approval_status_when_gate_fails backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_direct_publish_status_without_approval backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_update_report_version_status backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_use_report_scope_not_stale_project_competitors backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_block_weak_report_version backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_can_reject_report_version -q`
+
+## 2026-06-07 - Step 36: Audited Manual Report Revision Loop
+
+Commit: this commit
+
+Scope:
+
+- Added a report-version audit event for manual report revisions with source
+  version, source status, editor, note, and line-diff summary.
+- Captured manual report revision MemoryAgent feedback through the existing
+  memory audit path so reviewer corrections are visible as audit-grade product
+  events.
+- Added a focused router test proving rejected reports can be revised into a
+  new draft without overwriting the rejected version.
+- Verified the revised draft cannot be directly approved or published; it must
+  return through the approval workflow.
+- Verified report diff uses the rejected source version as the base for the
+  manual revision.
+
+Why:
+
+- Human correction is only enterprise-grade when it leaves a review trail:
+  previous version, new draft, reviewer note, memory feedback, and audit log.
+- The corrected draft should not weaken governance by becoming publishable
+  without a fresh approval pass.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/app/routers/enterprise.py backend/tests/unit/test_enterprise_store.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_report_approval_status_when_gate_fails backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_direct_publish_status_without_approval backend/tests/unit/test_enterprise_store.py::test_manual_report_revision_after_rejection_creates_audited_draft backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_update_report_version_status backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_use_report_scope_not_stale_project_competitors backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_block_weak_report_version backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_can_reject_report_version -q`
