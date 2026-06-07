@@ -19,7 +19,9 @@ from packages.memory import KBCache, RunJournal
 from packages.observability import TraceStore
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
+from packages.quality.findings import quality_findings_from_qc_issues
 from packages.schema.api_dto import RunCreateRequest, RunDetail
+from packages.schema.models import QCIssue
 from packages.skills.registry import SkillRegistry
 
 DEFAULT_OLD_RUN_ID = "411d3a19-7049-4a7e-aa9f-c5b63e74a69e"
@@ -60,6 +62,7 @@ def summarize_run_detail_payload(detail: dict[str, Any]) -> dict[str, object]:
         "claims": len(_list_value(detail.get("knowledge_claims"))),
         "qa_findings": len(qa_findings),
         "qa_issue_diagnostics": _qa_issue_diagnostics(qa_findings),
+        "retained_warning_actions": _retained_warning_actions(qa_findings),
         "agent_messages": len(agent_messages),
         "tool_call_messages": len(tool_call_messages),
         "last_agent_messages": _agent_message_diagnostics(agent_messages),
@@ -358,7 +361,7 @@ def render_compare_markdown(payload: dict[str, object]) -> str:
             "|---|---:|---:|---:|---|",
         ]
     )
-    for metric in _list_of_dicts(quality.get("metrics"))[:16]:
+    for metric in _list_of_dicts(quality.get("metrics")):
         lines.append(
             "| {name} | {target} | {baseline} | {delta_value} | {status} |".format(
                 name=_escape_table(_text(metric.get("name"))),
@@ -371,6 +374,7 @@ def render_compare_markdown(payload: dict[str, object]) -> str:
 
     last_messages = _list_of_dicts(current.get("last_agent_messages"))
     qa_diagnostics = _list_of_dicts(current.get("qa_issue_diagnostics"))
+    retained_warning_actions = _list_of_dicts(current.get("retained_warning_actions"))
     if qa_diagnostics:
         lines.extend(
             [
@@ -391,6 +395,33 @@ def render_compare_markdown(payload: dict[str, object]) -> str:
                     dimension=_escape_table(_text(issue.get("target_subagent"))),
                     competitor=_escape_table(_text(issue.get("target_competitor"))),
                     problem=_escape_table(_text(issue.get("problem")))[:240],
+                )
+            )
+
+    if retained_warning_actions:
+        lines.extend(
+            [
+                "",
+                "## Retained Warning Actions",
+                "",
+                (
+                    "Every retained warning below has a typed unresolved reason, "
+                    "a typed required action, and an acceptance rule."
+                ),
+                "",
+                "| ID | Reason code | Action | Acceptance rule | Next action |",
+                "|---|---|---|---|---|",
+            ]
+        )
+        for warning in retained_warning_actions:
+            lines.append(
+                "| {id} | {reason_code} | {required_action} | {acceptance_rule} | "
+                "{next_action} |".format(
+                    id=_escape_table(_text(warning.get("id"))),
+                    reason_code=_escape_table(_text(warning.get("reason_code"))),
+                    required_action=_escape_table(_text(warning.get("required_action"))),
+                    acceptance_rule=_escape_table(_text(warning.get("acceptance_rule")))[:220],
+                    next_action=_escape_table(_text(warning.get("next_action")))[:220],
                 )
             )
 
@@ -505,6 +536,70 @@ def _qa_issue_diagnostics(issues: list[Any]) -> list[dict[str, object]]:
             }
         )
     return diagnostics
+
+
+def _retained_warning_actions(issues: list[Any]) -> list[dict[str, object]]:
+    parsed_issues: list[QCIssue] = []
+    for issue in issues:
+        if not isinstance(issue, dict) or issue.get("severity") != "warn":
+            continue
+        try:
+            parsed_issues.append(QCIssue.model_validate(issue))
+        except Exception:
+            continue
+
+    actions: list[dict[str, object]] = []
+    for finding in quality_findings_from_qc_issues(parsed_issues):
+        actions.append(
+            {
+                "id": finding.id,
+                "source_id": finding.source_id,
+                "reason_code": _warning_reason_code(finding),
+                "source_agent": finding.source_agent,
+                "dimension": finding.dimension,
+                "competitor": finding.competitor_name,
+                "required_action": finding.required_action,
+                "acceptance_rule": finding.acceptance_rule,
+                "next_action": finding.recommendation
+                or _next_action_for_required_action(finding.required_action),
+                "message": finding.message,
+            }
+        )
+    return actions
+
+
+def _warning_reason_code(finding: object) -> str:
+    field_path = _text(getattr(finding, "field_path", ""))
+    issue_type = _text(getattr(finding, "issue_type", ""))
+    message = _text(getattr(finding, "message", "")).casefold()
+    dimension = _text(getattr(finding, "dimension", "")).casefold()
+    if field_path.startswith("release_gate."):
+        if "claim_self_consistency" in message or "validation is weak" in message:
+            return "claim_validation_followup"
+        return "release_gate_followup"
+    if dimension == "persona":
+        if "truncated" in message or "incomplete" in message:
+            return "persona_field_incomplete"
+        return "persona_evidence_depth"
+    if "timeout" in message:
+        return "agent_timeout_followup"
+    if "confidence" in message:
+        return "confidence_outlier"
+    return issue_type or "quality_warning"
+
+
+def _next_action_for_required_action(action: str) -> str:
+    return {
+        "none": "No follow-up action is required.",
+        "add_evidence": "Collect accepted evidence for the affected field or claim.",
+        "rewrite_claim": "Rewrite the claim so it directly matches cited evidence.",
+        "downgrade_claim": "Mark the claim as weak, caveated, or non-decisive.",
+        "delete_claim": "Remove the unsupported claim from release scope.",
+        "rewrite_report": "Regenerate the affected report section and re-check citations.",
+        "rerun_scope": "Run scoped redo and confirm the warning no longer appears.",
+        "human_review": "Record a reviewer decision or follow-up before publication.",
+        "monitor": "Track the warning without blocking publication.",
+    }.get(action, "Review this warning before publication.")
 
 
 def _summarize_payload_value(value: object) -> str:

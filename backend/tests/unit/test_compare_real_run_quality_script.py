@@ -40,7 +40,25 @@ def test_summarize_run_detail_payload_extracts_quality_shape() -> None:
                 }
             ],
             "knowledge_claims": [{"id": "claim-1"}],
-            "qa_findings": [],
+            "qa_findings": [
+                {
+                    "id": "qa-persona-1",
+                    "severity": "warn",
+                    "detected_by": "coverage",
+                    "target_agent": "collector",
+                    "target_subagent": "persona",
+                    "target_competitor": "Cursor",
+                    "field_path": "raw_sources[persona]",
+                    "problem": "Cursor persona cell value is truncated and incomplete.",
+                    "redo_scope": {
+                        "kind": "collector",
+                        "target_subagent": "persona",
+                        "target_competitor": "Cursor",
+                        "rationale": "Collect stronger public persona evidence.",
+                    },
+                    "self_found": True,
+                }
+            ],
             "agent_messages": [
                 {
                     "from_agent": "writer",
@@ -62,6 +80,14 @@ def test_summarize_run_detail_payload_extracts_quality_shape() -> None:
     assert summary["agent_messages"] == 1
     assert summary["tool_call_messages"] == 1
     assert summary["last_agent_messages"][0]["detail"] == "writer_mode=real LLM call"
+    assert summary["retained_warning_actions"][0]["reason_code"] == (
+        "persona_field_incomplete"
+    )
+    assert summary["retained_warning_actions"][0]["required_action"] == "add_evidence"
+    assert (
+        summary["retained_warning_actions"][0]["acceptance_rule"]
+        == "Accepted verified evidence supports the affected field or claim."
+    )
     assert summary["trace_spans"] == 1
     assert summary["source_types"] == {"webpage_verified": 1}
     assert summary["by_competitor"] == {"Cursor": 1}
@@ -191,6 +217,15 @@ def test_render_compare_markdown_summarizes_quality_gate() -> None:
                         "problem": "A has sources for pricing, but no structured claims.",
                     }
                 ],
+                "retained_warning_actions": [
+                    {
+                        "id": "quality-finding-a",
+                        "reason_code": "claim_validation_followup",
+                        "required_action": "rewrite_claim",
+                        "acceptance_rule": "The claim text is rewritten to match cited evidence.",
+                        "next_action": "Rewrite the weak claim before publication.",
+                    }
+                ],
                 "last_agent_messages": [
                     {
                         "from_agent": "writer",
@@ -240,6 +275,9 @@ def test_render_compare_markdown_summarizes_quality_gate() -> None:
     assert "| report_length_score | 1 | 0.4 | +0.6 | improved |" in markdown
     assert "## QA Issue Diagnostics" in markdown
     assert "schema-missing-pricing-a" in markdown
+    assert "## Retained Warning Actions" in markdown
+    assert "claim_validation_followup" in markdown
+    assert "The claim text is rewritten to match cited evidence." in markdown
     assert "Keep source snapshots attached" in markdown
 
 

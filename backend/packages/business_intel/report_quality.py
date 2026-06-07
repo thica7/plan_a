@@ -511,14 +511,18 @@ def _validated_claim_rate(detail: RunDetail) -> float:
 
 
 def _warning_count(detail: RunDetail) -> int:
-    qa_warning_count = len(
-        [finding for finding in detail.qa_findings if finding.severity == "warn"]
-    )
+    qa_warnings = [finding for finding in detail.qa_findings if finding.severity == "warn"]
     release_gate = _quality_metadata(detail).get("release_gate")
-    release_warning_count = 0
     if isinstance(release_gate, dict) and isinstance(release_gate.get("warn_count"), int):
-        release_warning_count = int(release_gate["warn_count"])
-    return qa_warning_count + release_warning_count
+        non_release_qa_warning_count = len(
+            [
+                finding
+                for finding in qa_warnings
+                if not finding.field_path.startswith("release_gate.")
+            ]
+        )
+        return non_release_qa_warning_count + int(release_gate["warn_count"])
+    return len(qa_warnings)
 
 
 def _quality_metadata(detail: RunDetail) -> dict[str, object]:

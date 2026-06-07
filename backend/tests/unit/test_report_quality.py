@@ -986,6 +986,101 @@ def test_compare_run_quality_exposes_normalized_metric_score_for_deductions() ->
     assert qa_metric.direction == "lower_is_better"
 
 
+def test_compare_run_quality_deduplicates_release_gate_warning_count() -> None:
+    detail = _run_detail(
+        run_id="quality-warning-run",
+        execution_mode="real",
+        source_count=4,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+    detail.qa_findings.extend(
+        [
+            QCIssue(
+                id="collector-warning",
+                severity="warn",
+                detected_by="coverage",
+                target_agent="collector",
+                target_subagent="persona",
+                target_competitor="Cursor",
+                field_path="raw_sources[0]",
+                problem="Persona evidence is incomplete.",
+                redo_scope=RedoScope(
+                    kind="collector",
+                    target_subagent="persona",
+                    target_competitor="Cursor",
+                    rationale="Collect stronger persona evidence.",
+                ),
+            ),
+            QCIssue(
+                id="release-gate-warning",
+                severity="warn",
+                detected_by="schema",
+                target_agent="analyst",
+                target_subagent="feature",
+                target_competitor="Cursor",
+                field_path="release_gate.claim_self_consistency_required",
+                problem="Claim validation is weak.",
+                redo_scope=RedoScope(
+                    kind="analyst",
+                    target_subagent="feature",
+                    target_competitor="Cursor",
+                    rationale="Rewrite weak claim.",
+                ),
+            ),
+        ]
+    )
+    detail.enterprise_projection = EnterpriseRunProjection(
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id=detail.id,
+        evidence_records=[],
+        claim_records=[],
+        report_version=ReportVersionRecord(
+            id="report-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id=detail.id,
+            version_number=1,
+            topic_normalized="cursor-pricing",
+            competitor_layer="L1",
+            competitor_set_hash="set",
+            report_md=detail.report_md,
+            evidence_ids=[],
+            quality_metadata={
+                "release_gate": {
+                    "warn_count": 1,
+                    "issues": [{"id": "release-gate-warning"}],
+                }
+            },
+        ),
+    )
+
+    comparison = compare_run_quality(detail)
+    warning_metric = next(
+        metric for metric in comparison.metrics if metric.name == "warning_count"
+    )
+
+    assert warning_metric.target_value == 2.0
+
+
 def _structured_report_md() -> str:
     return """
 # Cursor vs Copilot Direct Battlecard
