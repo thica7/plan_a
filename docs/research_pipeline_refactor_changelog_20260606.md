@@ -995,3 +995,72 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/business_intel/report_quality.py backend/tests/unit/test_report_quality.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_report_quality.py backend/tests/unit/test_evalops.py -q`
+
+## 2026-06-07 - Step 32: Checkpoint 2 Warning Action Closure
+
+Commit: `6417811 fix(eval): explain checkpoint warning actions`
+
+Scope:
+
+- Fixed `warning_count` so release-gate warnings synchronized into
+  `qa_findings` are not counted a second time from release-gate quality
+  metadata.
+- Updated the real-run comparison card to render all quality metrics instead
+  of hiding later Checkpoint 2 metrics behind a 16-row limit.
+- Added a Retained Warning Actions section to the comparison report. Each
+  retained warning is converted through the unified `QualityFinding` adapter
+  and shown with a typed reason code, typed required action, acceptance rule,
+  and next action.
+- Added tests for release-gate warning de-duplication and retained warning
+  action rendering.
+
+Why:
+
+- The final Checkpoint 2 acceptance rule allows retained warnings only when
+  every warning has an explicit typed unresolved reason and next action.
+- The previous comparison card showed natural-language QA diagnostics but did
+  not prove that the warnings were connected to the unified H7 quality schema.
+- The previous warning metric double-counted release-gate warnings after they
+  were synchronized into `qa_findings`, making the final comparison look worse
+  than the actual retained-warning set.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/business_intel/report_quality.py backend/scripts/compare_real_run_quality.py backend/tests/unit/test_report_quality.py backend/tests/unit/test_compare_real_run_quality_script.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_report_quality.py backend/tests/unit/test_compare_real_run_quality_script.py -q`
+
+## 2026-06-07 - Step 33: Checkpoint 2 Final Real-Run Acceptance
+
+Commit: this commit
+
+Scope:
+
+- Ran a fresh real-mode acceptance comparison after the Checkpoint 2 H3/H4/H6/H7/H9
+  implementation steps.
+- Recorded the result in
+  `docs/reports/checkpoint2_real_run_acceptance_20260607.md`.
+- Updated `docs/checkpoint2_execution_plan.md` with the final run id, score,
+  gate result, metrics, warning-count branch, and verification commands.
+
+Final accepted run:
+
+- Run ID: `run-d7e3e0f28b9d416ea0b0f11a7552ef17`
+- Status: `completed`
+- Quality verdict: `pass`
+- Regression gate: `pass`
+- Target score: 95
+- Baseline score: 76
+- Delta score: +19
+- Citation validity rate: 1.0
+- Verified source rate: 1.0
+- Real source rate: 1.0
+- Field support rate: 1.0
+- Validated claim rate: 1.0
+- QA blocker count: 0
+- Warning count: 21 versus baseline 18; accepted through the alternate
+  retained-warning branch because every retained warning is listed with a
+  typed reason code, typed required action, and acceptance rule.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python backend/scripts/compare_real_run_quality.py --topic "AI coding assistant enterprise buying comparison" --competitors Cursor "GitHub Copilot" --dimensions pricing feature persona --execution-mode real --format markdown --timeout-seconds 600 --output docs/reports/checkpoint2_real_run_acceptance_20260607.md`

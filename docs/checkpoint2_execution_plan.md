@@ -332,7 +332,28 @@ Completed behavior:
 
 ## Final Checkpoint 2 Real-Run Acceptance
 
-Run one fresh real run after items 2-7 are complete.
+Status: completed by `docs/reports/checkpoint2_real_run_acceptance_20260607.md`.
+
+Final accepted run:
+
+- Run ID: `run-d7e3e0f28b9d416ea0b0f11a7552ef17`
+- Baseline run: `411d3a19-7049-4a7e-aa9f-c5b63e74a69e`
+- Terminal status: `completed`
+- Quality verdict: `pass`
+- Regression gate: `pass`
+- Target score: 95
+- Baseline score: 76
+- Delta score: +19
+- Citation validity rate: 1.0
+- Verified source rate: 1.0
+- Real source rate: 1.0
+- Field support rate: 1.0
+- Validated claim rate: 1.0
+- QA blocker count: 0
+- Warning count: 21 versus baseline 18. This does not satisfy the
+  lower-warning branch, so acceptance is via the alternate branch: every
+  retained warning is listed in the final report with a typed reason code,
+  typed required action, and acceptance rule.
 
 Required final checks:
 
@@ -349,6 +370,12 @@ Required final checks:
   not only simulated survey material.
 - Quality findings are visible through one unified schema.
 - EvalOps report records baseline/current comparison.
+
+Final verification:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/business_intel/report_quality.py backend/scripts/compare_real_run_quality.py backend/tests/unit/test_report_quality.py backend/tests/unit/test_compare_real_run_quality_script.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_report_quality.py backend/tests/unit/test_compare_real_run_quality_script.py -q`
+- `conda run -n bd-competiscope-v2 python backend/scripts/compare_real_run_quality.py --topic "AI coding assistant enterprise buying comparison" --competitors Cursor "GitHub Copilot" --dimensions pricing feature persona --execution-mode real --format markdown --timeout-seconds 600 --output docs/reports/checkpoint2_real_run_acceptance_20260607.md`
 
 ## Work Discipline
 
