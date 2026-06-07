@@ -12,7 +12,7 @@ Before each implementation turn, read:
 
 - `docs/enterprise_execution_master_plan.md`
 - The active checkpoint plan, currently:
-  `docs/checkpoint2_execution_plan.md`
+  `docs/checkpoint3_execution_plan.md`
 - `dev_plan_final/dev_plan_final/01_EXECUTION_ROADMAP_5_PHASES.md`
 - `dev_plan_final/dev_plan_final/10_HIGH_SCORE_FUSION_BACKLOG.md`
 - `D:/codex_workspace/websearch_v2/clean_research_pipeline_rewrite_plan.md`
@@ -38,15 +38,16 @@ Strict status:
 - Phase 3 agent capability and workbench: mostly complete, above 80%.
 - Phase 4 Temporal shell and approval prototype: mostly complete for the
   planned "Temporal shell + LangGraph core" architecture, not full production.
-- Phase 5A enterprise governance: partial.
-- Phase 5B high-score quality enhancement: in progress.
-- Clean Research Pipeline: structure complete, real business quality still
-  needs closure.
+- Phase 5A enterprise governance: active in Checkpoint 3.
+- Phase 5B high-score quality enhancement: Checkpoint 2 core is complete;
+  continue only through targeted quality gates.
+- Clean Research Pipeline: structure complete and accepted for Checkpoint 2;
+  continue through enterprise artifact/source governance.
 
 ## Full Route
 
-The route has three checkpoints. Checkpoint 1 is complete, Checkpoint 2 is
-active now, and Checkpoint 3 must not be forgotten.
+The route has three checkpoints. Checkpoint 1 and Checkpoint 2 are complete.
+Checkpoint 3 is active now.
 
 ### Checkpoint 1: Report Quality Closure
 
@@ -105,6 +106,10 @@ Active detailed plan:
 
 - `docs/checkpoint2_execution_plan.md`
 
+Final acceptance:
+
+- `docs/reports/checkpoint2_real_run_acceptance_20260607.md`
+
 ### Checkpoint 3: Enterprise Product Hardening
 
 Goal:
@@ -113,12 +118,12 @@ Goal:
 
 Priority:
 
-1. RBAC/RLS/workspace isolation hardening.
-2. Report publish workflow + approval UI.
-3. ArtifactStore for webpage snapshots, PDFs, screenshots, and interview
+1. Report publish workflow + approval/HITL correction loop.
+2. ArtifactStore for webpage snapshots, PDFs, screenshots, and interview
    materials.
-4. OTel/Langfuse dashboards + regression gate.
-5. SSO/OIDC/SAML last, after quality closure and core product loop.
+3. RBAC/RLS/workspace isolation hardening.
+4. OTel/Langfuse dashboards + regression gate productization.
+5. SSO/OIDC/SAML last, after approval, artifacts, and isolation are stable.
 
 Expected acceptance:
 
@@ -129,6 +134,10 @@ Expected acceptance:
   linkage.
 - Observability covers traces, prompts, cost, quality, redaction, and regression
   signals.
+
+Active detailed plan:
+
+- `docs/checkpoint3_execution_plan.md`
 
 ## Already Completed On Checkpoint 1
 
@@ -149,13 +158,12 @@ business fields, warning repair artifacts, and the final real-run acceptance.
 Do next:
 
 ```text
-Execute Checkpoint 2: High-Score Backlog Core.
+Execute Checkpoint 3: Enterprise Product Hardening.
 ```
 
-Checkpoint 1 final audit:
+Checkpoint 2 final audit:
 
-- `docs/reports/checkpoint1_acceptance_report_20260607.md`
-- `docs/reports/checkpoint1_real_run_audit_final_20260607_045503.md`
+- `docs/reports/checkpoint2_real_run_acceptance_20260607.md`
 
 ## Work Discipline
 
@@ -165,5 +173,6 @@ Checkpoint 1 final audit:
 - Do not stage unrelated dirty files.
 - Use commit names aligned with the checkpoint item whenever possible.
 - Verify with ruff and targeted tests before commit.
-- Do not mark the full goal complete until Checkpoint 1 is implemented and
-  verified with a fresh real run.
+- Do not mark Checkpoint 3 complete until report approval/publish, artifacts,
+  isolation, and observability have targeted tests and at least one fresh
+  product-flow verification.
