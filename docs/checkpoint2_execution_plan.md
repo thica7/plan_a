@@ -336,7 +336,7 @@ Status: completed by `docs/reports/checkpoint2_real_run_acceptance_20260607.md`.
 
 Final accepted run:
 
-- Run ID: `run-d7e3e0f28b9d416ea0b0f11a7552ef17`
+- Run ID: `run-7b96eddb0b1a7613a9d5074bb5443fb6`
 - Baseline run: `411d3a19-7049-4a7e-aa9f-c5b63e74a69e`
 - Terminal status: `completed`
 - Quality verdict: `pass`
@@ -350,10 +350,9 @@ Final accepted run:
 - Field support rate: 1.0
 - Validated claim rate: 1.0
 - QA blocker count: 0
-- Warning count: 21 versus baseline 18. This does not satisfy the
-  lower-warning branch, so acceptance is via the alternate branch: every
-  retained warning is listed in the final report with a typed reason code,
-  typed required action, and acceptance rule.
+- Warning count: 13 versus baseline 18, satisfying the lower-warning branch.
+  Every retained warning is also listed in the final report with a typed reason
+  code, typed required action, and acceptance rule.
 
 Required final checks:
 

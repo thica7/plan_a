@@ -1029,7 +1029,34 @@ Validation:
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/business_intel/report_quality.py backend/scripts/compare_real_run_quality.py backend/tests/unit/test_report_quality.py backend/tests/unit/test_compare_real_run_quality_script.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_report_quality.py backend/tests/unit/test_compare_real_run_quality_script.py -q`
 
-## 2026-06-07 - Step 33: Checkpoint 2 Final Real-Run Acceptance
+## 2026-06-07 - Step 33: Release-Gate Warning Wrapper De-Dupe
+
+Commit: `a25332d fix(eval): dedupe release gate warning wrappers`
+
+Scope:
+
+- Tightened warning-count semantics so release-gate
+  `run_qa_findings_unresolved` wrappers are not counted as separate warnings
+  when the original runtime QA warning is already retained.
+- Kept release-gate-only findings, especially claim-validation follow-ups, in
+  the retained warning count and action table.
+- Updated the real-run comparison report so Retained Warning Actions does not
+  duplicate release-gate wrappers for the same original QA finding.
+
+Why:
+
+- The final Checkpoint 2 acceptance should measure unique retained quality
+  issues, not both an original runtime warning and the release gate wrapper
+  that reports the same unresolved warning.
+- This lets `warning_count` represent the real follow-up workload while still
+  preserving the stricter release-gate and claim-validation checks.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/business_intel/report_quality.py backend/scripts/compare_real_run_quality.py backend/tests/unit/test_report_quality.py backend/tests/unit/test_compare_real_run_quality_script.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_report_quality.py backend/tests/unit/test_compare_real_run_quality_script.py -q`
+
+## 2026-06-07 - Step 34: Checkpoint 2 Final Real-Run Acceptance
 
 Commit: this commit
 
@@ -1044,7 +1071,7 @@ Scope:
 
 Final accepted run:
 
-- Run ID: `run-d7e3e0f28b9d416ea0b0f11a7552ef17`
+- Run ID: `run-7b96eddb0b1a7613a9d5074bb5443fb6`
 - Status: `completed`
 - Quality verdict: `pass`
 - Regression gate: `pass`
@@ -1057,9 +1084,9 @@ Final accepted run:
 - Field support rate: 1.0
 - Validated claim rate: 1.0
 - QA blocker count: 0
-- Warning count: 21 versus baseline 18; accepted through the alternate
-  retained-warning branch because every retained warning is listed with a
-  typed reason code, typed required action, and acceptance rule.
+- Warning count: 13 versus baseline 18; accepted through the lower-warning
+  branch. Every retained warning is also listed with a typed reason code,
+  typed required action, and acceptance rule.
 
 Validation:
 
