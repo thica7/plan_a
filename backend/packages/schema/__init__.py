@@ -96,10 +96,16 @@ from packages.schema.models import (
 from packages.schema.quality import QualityFinding, QualityFindingBundle
 from packages.schema.rag import GapRetrievalContext, RetrievalChunk, RetrievalRecord
 from packages.schema.survey import (
+    ImportedResearchSourceType,
+    ImportedUserResearchMaterial,
     InterviewSynthesis,
+    ResearchSourceType,
     SurveyEvidenceBundle,
     SurveyQuestion,
     SurveyResponse,
+    UserResearchImportRequest,
+    UserResearchImportResult,
+    UserResearchMaterial,
 )
 
 __all__ = [
@@ -141,6 +147,8 @@ __all__ = [
     "FeatureTree",
     "GapRetrievalContext",
     "HitlResumeRequest",
+    "ImportedResearchSourceType",
+    "ImportedUserResearchMaterial",
     "InterviewSynthesis",
     "KnowledgeGraphEdge",
     "KnowledgeGraphNode",
@@ -160,6 +168,7 @@ __all__ = [
     "QualityFindingBundle",
     "QCIssue",
     "RawSource",
+    "ResearchSourceType",
     "RedoScope",
     "ReflectionRecord",
     "ReportApprovalSignalRequest",
@@ -191,6 +200,9 @@ __all__ = [
     "TraceSpan",
     "UserPersonaModel",
     "UserPersonaSegment",
+    "UserResearchImportRequest",
+    "UserResearchImportResult",
+    "UserResearchMaterial",
     "UserRecord",
     "WorkspaceMemberRecord",
     "WorkspaceQuotaDecision",

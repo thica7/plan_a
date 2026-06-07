@@ -8,7 +8,12 @@ from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.models import AnalysisPlan, QCIssue, RawSource, RedoScope
-from packages.schema.survey import SurveyEvidenceBundle, SurveyResponse
+from packages.schema.survey import (
+    SurveyEvidenceBundle,
+    SurveyResponse,
+    UserResearchImportRequest,
+    UserResearchMaterial,
+)
 from packages.skills.registry import SkillRegistry
 
 
@@ -307,3 +312,91 @@ def test_user_research_schema_accepts_manual_source_types(source_type: str) -> N
 
     assert response.source_type == source_type
     assert bundle.source_type == source_type
+
+
+@pytest.mark.asyncio
+async def test_user_research_import_redacts_and_projects_claim_links() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+        enterprise_store=store,
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant user adoption comparison",
+            competitors=["Acme"],
+            dimensions=["persona"],
+            execution_mode="demo",
+        )
+    )
+
+    result = service.import_user_research_materials(
+        detail.id,
+        UserResearchImportRequest(
+            imported_by="analyst",
+            materials=[
+                UserResearchMaterial(
+                    source_type="manual_transcript",
+                    competitor="Acme",
+                    dimension="persona",
+                    title="Acme buyer interview transcript",
+                    respondent="Jane Buyer jane.buyer@example.com",
+                    role="VP Engineering +1 415 555 0123",
+                    text=(
+                        "Jane Buyer jane.buyer@example.com said enterprise developer teams "
+                        "liked Acme for workflow fit, but onboarding friction and switching "
+                        "risk slowed adoption. Private token OPENROUTER_TEST_KEY_REDACTED "
+                        "was included in the raw note by mistake."
+                    ),
+                    confidence=0.86,
+                )
+            ],
+        ),
+    )
+
+    assert result is not None
+    assert result.imported_count == 1
+    assert result.projection_synced is True
+    assert result.redaction_counts["email"] >= 1
+    assert result.redaction_counts["phone"] >= 1
+    assert result.redaction_counts["api_key"] >= 1
+    source = service.get_run(detail.id).raw_sources[0]  # type: ignore[union-attr]
+    assert source.id == result.source_ids[0]
+    assert source.source_type == "manual_transcript"
+    assert source.metadata["imported_user_research"] is True
+    assert "jane.buyer@example.com" not in source.snippet
+    assert "OPENROUTER_TEST_KEY_REDACTED" not in source.snippet
+    assert "[redacted:email]" in source.snippet
+    assert "[redacted:api_key]" in source.snippet
+    knowledge = service.get_run(detail.id).competitor_knowledge["Acme"]  # type: ignore[union-attr]
+    assert knowledge.user_personas.summary_claims
+    assert knowledge.user_personas.summary_claims[0].source_ids == [source.id]
+    assert knowledge.user_personas.segments[0].claims[0].source_ids == [source.id]
+    projection = service.get_enterprise_projection(detail.id)
+    assert projection is not None
+    evidence = projection.evidence_records[0]
+    assert evidence.raw_source_id == source.id
+    assert evidence.source_type == "manual_transcript"
+    claim = projection.claim_records[0]
+    assert claim.evidence_ids == [evidence.id]
+    assert projection.report_version.quality_metadata["manual_research_source_ids"] == [source.id]
+    assert projection.report_version.quality_metadata["user_research_source_ids"] == [source.id]
+    span = next(
+        span
+        for span in service.get_run(detail.id).trace_spans  # type: ignore[union-attr]
+        if span.name == "user_research_import"
+    )
+    assert span.metadata["research_redacted"] is True
+    assert "jane.buyer@example.com" not in span.full_input
+    assert "OPENROUTER_TEST_KEY_REDACTED" not in span.full_input
+    assert "jane.buyer@example.com" not in span.full_output
+    assert "OPENROUTER_TEST_KEY_REDACTED" not in span.full_output

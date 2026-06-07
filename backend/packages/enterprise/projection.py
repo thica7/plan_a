@@ -268,8 +268,16 @@ def _release_claim_evidence_ids(evidence: list[EvidenceRecord]) -> list[str]:
 
 
 def _is_release_claim_evidence(evidence: EvidenceRecord) -> bool:
-    return (
+    if (
         evidence.source_type == "webpage_verified"
+        and evidence.reliability_score >= _MIN_RELEASE_CLAIM_SOURCE_CONFIDENCE
+        and evidence.quality_label not in {"rejected", "stale"}
+    ):
+        return True
+    return (
+        evidence.source_type
+        in {"survey_response", "interview_record", "manual_transcript", "manual_note", "manual"}
+        and bool(evidence.metadata.get("imported_user_research"))
         and evidence.reliability_score >= _MIN_RELEASE_CLAIM_SOURCE_CONFIDENCE
         and evidence.quality_label not in {"rejected", "stale"}
     )
@@ -386,6 +394,7 @@ def _source_metadata(source: RawSource) -> dict[str, object]:
     return raw_source_alias_metadata(
         source.id,
         {
+            **source.metadata,
             "source_competitor": source.competitor,
             "candidate_origin": source.candidate_origin,
             "candidate_rank": source.candidate_rank,

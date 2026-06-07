@@ -191,7 +191,7 @@ H3/H6/H7/H9 are complete.
 
 ### 4. `feat(survey): import real research materials`
 
-Status: next.
+Status: completed by `feat(survey): import real research materials`.
 
 Backlog: H3.
 
@@ -212,6 +212,23 @@ Acceptance:
 - Persona claims from imported materials carry source ids and source type.
 - Simulated survey evidence remains clearly labeled and cannot masquerade as
   imported real material.
+
+Completed behavior:
+
+- Added a typed `UserResearchImportRequest` contract for survey responses,
+  interview records, manual transcripts, manual notes, and manual research
+  imports.
+- Added a dedicated user-research importer that redacts PII before building
+  `RawSource` and `SurveyEvidenceBundle` records.
+- Added `POST /runs/{run_id}/user-research` and a `RunService` entry point that
+  imports redacted materials into the current run, merges persona claim
+  source_ids, writes trace/agent-message records, and syncs enterprise
+  projection.
+- Preserved `survey_simulated` as synthetic-only evidence; only imported real
+  materials with `imported_user_research=true` can support release-scope persona
+  claims.
+- Preserved `RawSource.metadata` through enterprise projection so Evidence
+  Center can distinguish imported real research from synthetic survey evidence.
 
 ### 5. `feat(claims): validate high-risk claims`
 

@@ -21,6 +21,7 @@ from packages.schema.api_dto import (
     RunSummary,
     WorkflowStartResponse,
 )
+from packages.schema.survey import UserResearchImportRequest, UserResearchImportResult
 from packages.workflows.service import (
     TemporalWorkflowService,
     decide_temporal_cutover,
@@ -136,6 +137,18 @@ async def get_run(
     if detail is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return detail
+
+
+@router.post("/runs/{run_id}/user-research", response_model=UserResearchImportResult)
+async def import_user_research_materials(
+    run_id: str,
+    request: UserResearchImportRequest,
+    service: RunServiceDep,
+) -> UserResearchImportResult:
+    result = service.import_user_research_materials(run_id, request)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return result
 
 
 @router.get("/runs/{run_id}/quality-comparison", response_model=RunQualityComparison)

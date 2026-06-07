@@ -16,6 +16,7 @@ from packages.agents.comparator.logic import ComparatorAgentMixin
 from packages.agents.planner.logic import PlannerAgentMixin
 from packages.agents.qa.logic import QualityAgentMixin
 from packages.agents.reflector.logic import ReflectorAgentMixin
+from packages.agents.survey.importer import build_user_research_import
 from packages.agents.survey.logic import SurveyInterviewAgentMixin
 from packages.agents.writer.logic import WriterAgentMixin
 from packages.business_intel import (
@@ -96,6 +97,7 @@ from packages.schema.models import (
     ToolCallMessage,
     TraceSpan,
 )
+from packages.schema.survey import UserResearchImportRequest, UserResearchImportResult
 from packages.search import PerplexitySearchClient, SearchResult
 from packages.skills.registry import SkillRegistry
 from packages.tools import WebSearchRequest, fetch_evidence_page, robots_check, web_search
@@ -410,6 +412,82 @@ class RunService(
         if record is None:
             return None
         return self._with_enterprise_projection(record.detail)
+
+    def import_user_research_materials(
+        self,
+        run_id: str,
+        request: UserResearchImportRequest,
+    ) -> UserResearchImportResult | None:
+        record = self._load_run_record(run_id)
+        if record is None:
+            return None
+        detail = record.detail
+        sources, bundles, result = build_user_research_import(
+            detail,
+            request,
+            policy=compliance_policy_from_settings(self._settings),
+        )
+        existing_source_ids = {source.id for source in detail.raw_sources}
+        added_source_ids: list[str] = []
+        for source, bundle in zip(sources, bundles, strict=True):
+            if source.id not in existing_source_ids:
+                detail.raw_sources.append(source)
+                existing_source_ids.add(source.id)
+                added_source_ids.append(source.id)
+            self._apply_survey_bundle_to_knowledge(
+                detail,
+                bundle,
+                dimension=source.dimension,
+                competitor=source.competitor,
+                source_ids=[source.id],
+            )
+        result = result.model_copy(update={"source_ids": added_source_ids})
+        self._trace_local_tool(
+            record,
+            agent="survey_interview",
+            subagent="user_research_import",
+            name="user_research_import",
+            input_text=json.dumps(
+                {
+                    "imported_by": request.imported_by,
+                    "materials": [
+                        {
+                            "source_type": material_result.source_type,
+                            "competitor": material_result.competitor,
+                            "dimension": material_result.dimension,
+                            "title": material_result.title,
+                            "text_length": len(request.materials[index].text),
+                        }
+                        for index, material_result in enumerate(result.materials)
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            output_text=result.model_dump_json(),
+            metadata={
+                "imported_count": result.imported_count,
+                "added_source_count": len(added_source_ids),
+                "redaction_count": sum(result.redaction_counts.values()),
+                **self._research_redaction_metadata(result.redaction_counts),
+            },
+        )
+        self._append_agent_message(
+            record,
+            from_agent="user",
+            to_agent="survey_interview",
+            message_type="user_research_imported",
+            payload_schema="SurveyEvidenceBundle[]",
+            payload={
+                "dimensions": sorted({source.dimension for source in sources}),
+                "competitors": sorted({source.competitor for source in sources}),
+                "source_ids": added_source_ids,
+                "bundles": [bundle.model_dump(mode="json") for bundle in bundles],
+            },
+        )
+        detail.updated_at = datetime.utcnow()
+        projection = self._sync_enterprise_projection(record)
+        self._persist_run(run_id)
+        return result.model_copy(update={"projection_synced": projection is not None})
 
     def get_trace(self, run_id: str) -> list[RunEvent] | None:
         record = self._load_run_record(run_id)

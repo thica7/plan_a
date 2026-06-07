@@ -866,3 +866,42 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/rag backend/packages/schema/enterprise.py backend/tests/unit/test_gap_retrieval.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_gap_retrieval.py -q`
+
+## 2026-06-07 - Step 28: User Research Material Import
+
+Commit: this commit
+
+Scope:
+
+- Added typed survey/interview/manual research import contracts:
+  `UserResearchMaterial`, `UserResearchImportRequest`, and
+  `UserResearchImportResult`.
+- Added a dedicated survey importer that redacts imported text before creating
+  `RawSource` and `SurveyEvidenceBundle` records.
+- Added `RunService.import_user_research_materials()` and
+  `POST /runs/{run_id}/user-research` so real research materials can be
+  attached to an existing run without being mixed into collector code.
+- Updated persona knowledge merging so repeated imports merge `source_ids`
+  into existing persona claims and segments instead of duplicating or dropping
+  claims.
+- Preserved `RawSource.metadata` through enterprise projection and marked only
+  imported real user research as release-claim evidence; simulated survey
+  evidence remains synthetic.
+
+Why:
+
+- Checkpoint 2 H3 requires persona evidence to come from imported survey,
+  interview, or transcript material, not only generated `survey_simulated`
+  sources.
+- The import path needs to be auditable and citable: the same source id must
+  appear in `RawSource`, persona `KnowledgeClaim.source_ids`, enterprise
+  `EvidenceRecord.raw_source_id`, report metadata, and trace output.
+- Real imported materials may contain PII, so redaction must happen before
+  source admission and before trace logging.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/schema/survey.py backend/packages/schema/__init__.py backend/packages/agents/survey backend/packages/orchestrator/service.py backend/app/routers/runs.py backend/packages/enterprise/projection.py backend/packages/enterprise/store.py backend/tests/unit/test_survey_interview_agent.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_survey_interview_agent.py -q`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_projection.py backend/tests/unit/test_enterprise_store.py backend/tests/unit/test_source_reconciliation.py -q`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_business_intel.py -q`

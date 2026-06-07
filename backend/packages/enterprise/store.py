@@ -1515,6 +1515,14 @@ def _source_trust_level(evidence: EvidenceRecord) -> str:
     if source_type in {"webpage_verified", "verified_webpage", "verified_document"}:
         return "verified"
     if source_type in {
+        "survey_response",
+        "interview_record",
+        "manual_transcript",
+        "manual_note",
+        "manual",
+    } and bool(evidence.metadata.get("imported_user_research")):
+        return "verified"
+    if source_type in {
         "synthetic",
         "synthesized",
         "survey_simulated",

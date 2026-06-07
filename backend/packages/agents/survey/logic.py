@@ -462,8 +462,15 @@ class SurveyInterviewAgentMixin:
             confidence=min(0.72, max(bundle.confidence, 0.62)),
         )
         existing_summary_claims = knowledge.user_personas.summary_claims
-        if not any(existing.claim == claim.claim for existing in existing_summary_claims):
+        existing_claim = next(
+            (existing for existing in existing_summary_claims if existing.claim == claim.claim),
+            None,
+        )
+        if existing_claim is None:
             knowledge.user_personas.summary_claims.append(claim)
+        else:
+            existing_claim.source_ids = merge_ordered_refs(existing_claim.source_ids, source_ids)
+            existing_claim.confidence = max(existing_claim.confidence, claim.confidence)
 
         segment = UserPersonaSegment(
             name=f"{bundle.dimension.title()} buyer/user proxy",
@@ -479,8 +486,41 @@ class SurveyInterviewAgentMixin:
             or [f"{bundle.topic} evaluation"],
             claims=[claim],
         )
-        if not any(existing.name == segment.name for existing in knowledge.user_personas.segments):
+        existing_segment = next(
+            (
+                existing
+                for existing in knowledge.user_personas.segments
+                if existing.name == segment.name
+            ),
+            None,
+        )
+        if existing_segment is None:
             knowledge.user_personas.segments.append(segment)
+        else:
+            existing_segment.pain_points = merge_ordered_refs(
+                existing_segment.pain_points,
+                segment.pain_points,
+            )
+            existing_segment.use_cases = merge_ordered_refs(
+                existing_segment.use_cases,
+                segment.use_cases,
+            )
+            segment_claim = next(
+                (
+                    existing
+                    for existing in existing_segment.claims
+                    if existing.claim == claim.claim
+                ),
+                None,
+            )
+            if segment_claim is None:
+                existing_segment.claims.append(claim)
+            else:
+                segment_claim.source_ids = merge_ordered_refs(
+                    segment_claim.source_ids,
+                    source_ids,
+                )
+                segment_claim.confidence = max(segment_claim.confidence, claim.confidence)
         knowledge.source_ids = merge_ordered_refs(knowledge.source_ids, source_ids)
         existing_confidence = knowledge.confidence if knowledge.confidence > 0 else claim.confidence
         knowledge.confidence = round((existing_confidence + claim.confidence) / 2, 3)
