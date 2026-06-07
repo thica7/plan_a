@@ -1191,7 +1191,7 @@ Validation:
 
 ## 2026-06-07 - Step 38: RBAC And Workspace Isolation Negative Coverage
 
-Commit: this commit
+Commit: `f1a2ece test(security): expand workspace isolation coverage`
 
 Scope:
 
@@ -1216,3 +1216,33 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/tests/unit/test_enterprise_store.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_enforces_rbac_workspace_scope -q`
+
+## 2026-06-07 - Step 39: Enterprise Decision Replay Lifecycle Events
+
+Commit: this commit
+
+Scope:
+
+- Mapped report lifecycle audit actions into decision replay:
+  approval_requested, approved, rejected, published, and manual_revision_created.
+- Added approval workflow, publication, ReleaseGate snapshot, manual revision,
+  source version/status, and diff payloads to replay events.
+- Enriched artifact replay events with report_version_id, retention_policy, and
+  compliance_metadata.
+- Extended observability tests so enterprise replay now covers source review,
+  report lifecycle, artifact export, memory feedback, and manual revision audit
+  events.
+
+Why:
+
+- Checkpoint 3 requires product reviewers to understand why a report was
+  blocked, approved, published, or manually revised from the same replay
+  surface.
+- Artifact and compliance metadata need to be visible during audit review, not
+  hidden in storage-only records.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/observability/decision_replay.py backend/tests/unit/test_observability.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_observability.py::test_decision_replay_includes_enterprise_audit_governance_events -q`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_observability.py -q`

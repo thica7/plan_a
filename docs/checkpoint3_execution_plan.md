@@ -94,13 +94,17 @@ Closed in Checkpoint 3 step 2:
   imported interview/survey/manual materials share the same artifact boundary.
 - Application-layer RBAC and workspace isolation now have negative tests across
   project, report, evidence, artifact, source registry, memory, and audit routes.
+- Decision replay now surfaces report approval, approval decision, publish,
+  manual revision, artifact retention/compliance, source policy, evidence
+  quality, memory feedback, and gap-fill release-gate events as product review
+  signals.
 
 Remaining strict gaps:
 
 - Database RLS guardrails exist in schema, but live Postgres RLS integration
   verification is still a later production-hardening task.
-- Observability exists, but approval, publish, manual revision, artifact, and
-  regression signals need to be easier to inspect as one product review surface.
+- Full dashboard polish and live Langfuse/OpenTelemetry deployment remain later
+  production-hardening tasks.
 
 ## Implementation Order
 
@@ -235,6 +239,8 @@ Validation:
 
 ### 6. `feat(observability): productize review and regression signals`
 
+Status: completed in the current implementation step.
+
 Backlog: OTel/Langfuse/dashboard/regression gate productization.
 
 Required behavior:
@@ -251,6 +257,12 @@ Acceptance:
 - Approval/publish/manual-revision events can be traced to audit and report
   version metadata.
 - Regression gate result is available beside the report version.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/observability/decision_replay.py backend/tests/unit/test_observability.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_observability.py::test_decision_replay_includes_enterprise_audit_governance_events -q`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_observability.py -q`
 
 ## Work Discipline
 

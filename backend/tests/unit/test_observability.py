@@ -784,6 +784,21 @@ def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
         claim_ids=["claim-1"],
         evidence_ids=["evidence-1"],
     )
+    manual_version = version.model_copy(
+        update={
+            "id": "report-audit-v2",
+            "parent_version_id": "report-audit-v1",
+            "version_number": 2,
+            "status": "draft",
+            "quality_metadata": {
+                "manual_revision": {
+                    "source_report_version_id": "report-audit-v1",
+                    "edited_by": "reviewer-1",
+                    "note": "Clarified risk statement.",
+                }
+            },
+        }
+    )
     audit_logs = [
         AuditLogRecord(
             id="audit-source-review",
@@ -816,6 +831,91 @@ def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
             created_at="2026-05-31T00:03:00Z",
         ),
         AuditLogRecord(
+            id="audit-report-approval-requested",
+            workspace_id="workspace-1",
+            actor_type="system",
+            actor_id="requester-1",
+            action="report_version.approval_requested",
+            resource_type="report_version",
+            resource_id="report-audit-v1",
+            before={"status": "draft"},
+            after={
+                "status": "in_review",
+                "project_id": "project-1",
+                "version_number": 1,
+                "approval_workflow": {
+                    "status": "in_review",
+                    "decision": "pending",
+                    "requested_by": "requester-1",
+                },
+            },
+            created_at="2026-05-31T00:03:10Z",
+        ),
+        AuditLogRecord(
+            id="audit-report-approved",
+            workspace_id="workspace-1",
+            actor_type="system",
+            actor_id="approver-1",
+            action="report_version.approved",
+            resource_type="report_version",
+            resource_id="report-audit-v1",
+            before={"status": "in_review"},
+            after={
+                "status": "approved",
+                "project_id": "project-1",
+                "version_number": 1,
+                "approval_workflow": {
+                    "status": "approved",
+                    "decision": "approved",
+                    "decided_by": "approver-1",
+                },
+                "release_gate": {"allowed": True, "status": "ready", "blocker_count": 0},
+            },
+            created_at="2026-05-31T00:03:20Z",
+        ),
+        AuditLogRecord(
+            id="audit-report-published",
+            workspace_id="workspace-1",
+            actor_type="system",
+            actor_id="publisher-1",
+            action="report_version.published",
+            resource_type="report_version",
+            resource_id="report-audit-v1",
+            before={"status": "approved"},
+            after={
+                "status": "published",
+                "project_id": "project-1",
+                "version_number": 1,
+                "publication": {"status": "published", "published_by": "publisher-1"},
+                "release_gate": {"allowed": True, "status": "ready", "blocker_count": 0},
+            },
+            created_at="2026-05-31T00:03:30Z",
+        ),
+        AuditLogRecord(
+            id="audit-manual-revision",
+            workspace_id="workspace-1",
+            actor_type="system",
+            actor_id="reviewer-1",
+            action="report_version.manual_revision_created",
+            resource_type="report_version",
+            resource_id="report-audit-v2",
+            before={"status": "rejected"},
+            after={
+                "status": "draft",
+                "project_id": "project-1",
+                "version_number": 2,
+                "source_report_version_id": "report-audit-v1",
+                "source_status": "rejected",
+                "manual_revision": {
+                    "source_report_version_id": "report-audit-v1",
+                    "edited_by": "reviewer-1",
+                    "note": "Clarified risk statement.",
+                },
+                "diff": {"added_lines": 2, "removed_lines": 1},
+            },
+            created_at="2026-05-31T00:03:40Z",
+        ),
+        AuditLogRecord(
             id="audit-compliance-export",
             workspace_id="workspace-1",
             actor_type="system",
@@ -825,8 +925,11 @@ def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
             resource_id="artifact-compliance",
             after={
                 "run_id": "run-audit",
+                "report_version_id": "report-audit-v1",
                 "artifact_type": "report_export",
                 "storage_backend": "local",
+                "retention_policy": "workspace_default",
+                "compliance_metadata": {"artifact_scope": "run_compliance_report"},
                 "metadata": {"export_kind": "run_compliance_report"},
             },
             created_at="2026-05-31T00:04:00Z",
@@ -862,7 +965,7 @@ def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
         detail,
         [],
         audit_logs=audit_logs,
-        report_versions=[version],
+        report_versions=[version, manual_version],
     )
     audit_events = {
         event.payload["audit_log_id"]: event
@@ -873,6 +976,10 @@ def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
     assert set(audit_events) == {
         "audit-source-review",
         "audit-report-approval",
+        "audit-report-approval-requested",
+        "audit-report-approved",
+        "audit-report-published",
+        "audit-manual-revision",
         "audit-compliance-export",
         "audit-memory-feedback",
     }
@@ -880,8 +987,29 @@ def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
     assert audit_events["audit-source-review"].event_type == "hitl.reviewed"
     assert audit_events["audit-source-review"].payload["policy_review_status"] == "approved"
     assert audit_events["audit-report-approval"].payload["report_version_status"] == "approved"
+    assert (
+        audit_events["audit-report-approval-requested"].payload["approval_workflow"][
+            "decision"
+        ]
+        == "pending"
+    )
+    assert audit_events["audit-report-approved"].payload["release_gate"]["allowed"] is True
+    assert audit_events["audit-report-published"].event_type == "report.ready"
+    assert audit_events["audit-report-published"].payload["publication"]["status"] == "published"
+    assert audit_events["audit-manual-revision"].payload["source_report_version_id"] == (
+        "report-audit-v1"
+    )
+    assert audit_events["audit-manual-revision"].payload["diff"]["added_lines"] == 2
     assert audit_events["audit-compliance-export"].event_type == "report.ready"
     assert audit_events["audit-compliance-export"].payload["export_kind"] == "run_compliance_report"
+    assert audit_events["audit-compliance-export"].payload["report_version_id"] == "report-audit-v1"
+    assert (
+        audit_events["audit-compliance-export"].payload["retention_policy"]
+        == "workspace_default"
+    )
+    assert audit_events["audit-compliance-export"].payload["compliance_metadata"][
+        "artifact_scope"
+    ] == "run_compliance_report"
     memory_event = audit_events["audit-memory-feedback"]
     assert memory_event.event_type == "memory.feedback_captured"
     assert memory_event.payload["feedback_id"] == "feedback-1"

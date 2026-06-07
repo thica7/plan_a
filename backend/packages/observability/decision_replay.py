@@ -417,6 +417,9 @@ def _audit_log_decision(
     version_ids: set[str],
     raw_source_ids: set[str],
 ) -> DecisionReplayEvent | None:
+    if log.action in _REPORT_LIFECYCLE_AUDIT_ACTIONS and log.resource_id in version_ids:
+        return _report_lifecycle_audit_decision(detail, log)
+
     if log.action == "report_version.status_changed" and log.resource_id in version_ids:
         status = _audit_after_string(log, "status") or "updated"
         event_type: DecisionEventType = "report.ready" if status == "published" else "hitl.reviewed"
@@ -438,6 +441,7 @@ def _audit_log_decision(
         metadata = _audit_metadata(log)
         export_kind = _optional_string(metadata.get("export_kind"))
         artifact_type = _audit_after_string(log, "artifact_type") or "artifact"
+        report_version_id = _audit_after_string(log, "report_version_id")
         label = export_kind or artifact_type
         return _audit_event(
             detail,
@@ -449,6 +453,9 @@ def _audit_log_decision(
                 "artifact_type": artifact_type,
                 "export_kind": export_kind,
                 "storage_backend": _audit_after_string(log, "storage_backend"),
+                "report_version_id": report_version_id,
+                "retention_policy": _audit_after_string(log, "retention_policy"),
+                "compliance_metadata": _audit_after_value(log, "compliance_metadata"),
                 "run_id": detail.id,
             },
         )
@@ -552,6 +559,59 @@ def _audit_log_decision(
         )
 
     return None
+
+
+_REPORT_LIFECYCLE_AUDIT_ACTIONS = {
+    "report_version.approval_requested",
+    "report_version.approved",
+    "report_version.rejected",
+    "report_version.published",
+    "report_version.manual_revision_created",
+}
+
+
+def _report_lifecycle_audit_decision(
+    detail: RunDetail,
+    log: AuditLogRecord,
+) -> DecisionReplayEvent:
+    status = _audit_after_string(log, "status") or _report_status_from_audit_action(log.action)
+    event_type: DecisionEventType = "report.ready" if status == "published" else "hitl.reviewed"
+    action_label = log.action.removeprefix("report_version.")
+    return _audit_event(
+        detail,
+        log,
+        event_type,
+        agent="report_lifecycle",
+        message=f"Report version {log.resource_id} lifecycle event: {action_label}.",
+        payload={
+            "decision": action_label,
+            "report_version_id": log.resource_id,
+            "report_version_status": status,
+            "version_number": _audit_after_value(log, "version_number"),
+            "approval_workflow": _audit_after_value(log, "approval_workflow"),
+            "publication": _audit_after_value(log, "publication"),
+            "release_gate": _audit_after_value(log, "release_gate"),
+            "manual_revision": _audit_after_value(log, "manual_revision"),
+            "source_report_version_id": _audit_after_string(log, "source_report_version_id"),
+            "source_status": _audit_after_string(log, "source_status"),
+            "diff": _audit_after_value(log, "diff"),
+            "note": _audit_after_string(log, "note"),
+        },
+    )
+
+
+def _report_status_from_audit_action(action: str) -> str:
+    if action.endswith(".approval_requested"):
+        return "in_review"
+    if action.endswith(".approved"):
+        return "approved"
+    if action.endswith(".rejected"):
+        return "rejected"
+    if action.endswith(".published"):
+        return "published"
+    if action.endswith(".manual_revision_created"):
+        return "draft"
+    return "updated"
 
 
 def _audit_event(
@@ -733,6 +793,9 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "release_gate_blocker_delta",
         "release_gate_warn_delta",
         "readiness_score_delta",
+        "approval_workflow",
+        "publication",
+        "diff",
         "enterprise_projection",
         "report_version_id",
         "tool",
@@ -815,6 +878,9 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "artifact_type",
         "export_kind",
         "storage_backend",
+        "retention_policy",
+        "compliance_metadata",
+        "source_url",
         "message_excerpt",
         "redaction_count",
         "redaction_counts",
@@ -831,6 +897,7 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "manual_revision",
         "manual_revision_note",
         "edited_by",
+        "source_status",
         "gap_fill_chain_closed",
         "source",
     ):
