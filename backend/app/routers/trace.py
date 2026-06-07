@@ -119,6 +119,13 @@ async def export_run_compliance_report(
         artifact_type="report_export",
         filename=f"compliance-{detail.id}.json",
         media_type="application/json",
+        retention_policy="workspace_default",
+        compliance_metadata={
+            "artifact_scope": "run_compliance_report",
+            "compliance_status": report.status,
+            "finding_count": report.finding_count,
+            "blocker_count": report.blocker_count,
+        },
         content_text=json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2),
         metadata={
             "export_kind": "run_compliance_report",

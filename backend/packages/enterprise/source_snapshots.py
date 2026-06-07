@@ -34,13 +34,16 @@ def capture_source_snapshot(
             project_id=request.project_id,
             evidence_id=request.evidence_id,
             run_id=request.run_id,
-            artifact_type=request.artifact_type,
+            report_version_id=request.report_version_id,
+            artifact_type=_snapshot_artifact_type(request),
             filename=request.filename,
             media_type=request.media_type,
             content_text=request.content_text,
             content_base64=request.content_base64,
             external_uri=request.external_uri,
             source_url=request.source_url,
+            retention_policy=request.retention_policy,
+            compliance_metadata=request.compliance_metadata,
             metadata={
                 **request.metadata,
                 "snapshot_kind": request.snapshot_kind,
@@ -203,6 +206,7 @@ def _research_evidence_from_snapshot(
             "manual_research_ingest": True,
             "snapshot_kind": request.snapshot_kind,
             "artifact_id": str(getattr(artifact, "id", "")),
+            "report_version_id": request.report_version_id,
             "source_registry_id": source_registry.id,
             "source_domain": source_registry.domain,
             **_snapshot_redaction_metadata(_metadata_dict(request.metadata, "redaction_counts")),
@@ -224,6 +228,20 @@ def _snapshot_source_type(request: SourceSnapshotCreateRequest) -> str:
     if request.snapshot_kind in {"interview", "survey", "manual"}:
         return _research_source_type(request)
     return request.source_type
+
+
+def _snapshot_artifact_type(request: SourceSnapshotCreateRequest) -> str:
+    if request.snapshot_kind == "interview":
+        return "interview_record"
+    if request.snapshot_kind == "survey":
+        return "survey_response"
+    if request.snapshot_kind == "manual":
+        return "manual_transcript"
+    if request.snapshot_kind == "pdf":
+        return "pdf"
+    if request.snapshot_kind == "screenshot":
+        return "screenshot"
+    return request.artifact_type
 
 
 def _snapshot_snippet(request: SourceSnapshotCreateRequest) -> str:

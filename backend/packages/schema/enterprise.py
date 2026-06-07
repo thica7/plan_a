@@ -15,7 +15,17 @@ EnterpriseRole = Literal["owner", "admin", "analyst", "reviewer", "viewer"]
 SourceRobotsStatus = Literal["unknown", "allowed", "blocked", "error"]
 SourceTrustLevel = Literal["official", "verified", "community", "synthetic", "unknown"]
 SourcePolicyReviewStatus = Literal["not_required", "pending", "approved", "rejected"]
-ArtifactType = Literal["web_snapshot", "pdf", "screenshot", "raw_text", "report_export", "other"]
+ArtifactType = Literal[
+    "web_snapshot",
+    "pdf",
+    "screenshot",
+    "raw_text",
+    "report_export",
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+    "other",
+]
 ArtifactStorageBackend = Literal["local", "external", "s3", "oss"]
 NotificationChannel = Literal["in_app", "email", "webhook", "feishu"]
 NotificationSeverity = Literal["info", "success", "warning", "critical"]
@@ -330,6 +340,7 @@ class ArtifactRecord(BaseModel):
     project_id: str
     evidence_id: str | None = None
     run_id: str | None = None
+    report_version_id: str | None = None
     artifact_type: ArtifactType = "raw_text"
     filename: str
     media_type: str = "application/octet-stream"
@@ -340,6 +351,8 @@ class ArtifactRecord(BaseModel):
     source_url: HttpUrl | None = None
     created_by: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    retention_policy: str = "workspace_default"
+    compliance_metadata: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -350,6 +363,7 @@ class ArtifactCreateRequest(BaseModel):
     project_id: str
     evidence_id: str | None = None
     run_id: str | None = None
+    report_version_id: str | None = None
     artifact_type: ArtifactType = "raw_text"
     filename: str = Field(min_length=1, max_length=180)
     media_type: str = Field(default="text/plain", min_length=1, max_length=120)
@@ -357,6 +371,8 @@ class ArtifactCreateRequest(BaseModel):
     content_base64: str | None = None
     external_uri: str | None = None
     source_url: HttpUrl | None = None
+    retention_policy: str = "workspace_default"
+    compliance_metadata: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -373,6 +389,7 @@ class SourceSnapshotCreateRequest(BaseModel):
     project_id: str
     evidence_id: str | None = None
     run_id: str | None = None
+    report_version_id: str | None = None
     snapshot_kind: SourceSnapshotKind = "webpage"
     artifact_type: ArtifactType = "web_snapshot"
     filename: str = Field(min_length=1, max_length=180)
@@ -385,6 +402,8 @@ class SourceSnapshotCreateRequest(BaseModel):
     display_name: str = ""
     trust_level: SourceTrustLevel = "verified"
     robots_status: SourceRobotsStatus = "unknown"
+    retention_policy: str = "workspace_default"
+    compliance_metadata: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -195,6 +195,7 @@ class EnterpriseStore(Protocol):
         workspace_id: str | None = None,
         project_id: str | None = None,
         evidence_id: str | None = None,
+        report_version_id: str | None = None,
     ) -> list[ArtifactRecord]: ...
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None: ...
@@ -922,6 +923,7 @@ class EnterpriseMemoryStore:
         workspace_id: str | None = None,
         project_id: str | None = None,
         evidence_id: str | None = None,
+        report_version_id: str | None = None,
     ) -> list[ArtifactRecord]:
         with self._lock:
             records = list(self.artifacts.values())
@@ -931,6 +933,8 @@ class EnterpriseMemoryStore:
                 records = [item for item in records if item.project_id == project_id]
             if evidence_id:
                 records = [item for item in records if item.evidence_id == evidence_id]
+            if report_version_id:
+                records = [item for item in records if item.report_version_id == report_version_id]
             return sorted(records, key=lambda item: item.created_at, reverse=True)
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:

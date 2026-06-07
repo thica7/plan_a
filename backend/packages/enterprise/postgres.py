@@ -1035,6 +1035,7 @@ class EnterprisePostgresStore:
         workspace_id: str | None = None,
         project_id: str | None = None,
         evidence_id: str | None = None,
+        report_version_id: str | None = None,
     ) -> list[ArtifactRecord]:
         sql = "SELECT * FROM artifacts"
         params: list[str] = []
@@ -1048,6 +1049,9 @@ class EnterprisePostgresStore:
         if evidence_id:
             clauses.append("evidence_id = %s")
             params.append(evidence_id)
+        if report_version_id:
+            clauses.append("report_version_id = %s")
+            params.append(report_version_id)
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY created_at DESC"
@@ -1710,12 +1714,18 @@ class EnterprisePostgresStore:
         cur.execute(
             """
             INSERT INTO artifacts (
-                id, workspace_id, project_id, evidence_id, run_id, artifact_type,
+                id, workspace_id, project_id, evidence_id, run_id, report_version_id,
+                artifact_type,
                 filename, media_type, storage_backend, uri, byte_size, content_hash,
-                source_url, created_by, created_at, metadata
+                source_url, created_by, created_at, retention_policy, compliance_metadata,
+                metadata
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s
+            )
             ON CONFLICT (id) DO UPDATE SET
+                report_version_id = EXCLUDED.report_version_id,
                 filename = EXCLUDED.filename,
                 media_type = EXCLUDED.media_type,
                 storage_backend = EXCLUDED.storage_backend,
@@ -1723,6 +1733,8 @@ class EnterprisePostgresStore:
                 byte_size = EXCLUDED.byte_size,
                 content_hash = EXCLUDED.content_hash,
                 source_url = EXCLUDED.source_url,
+                retention_policy = EXCLUDED.retention_policy,
+                compliance_metadata = EXCLUDED.compliance_metadata,
                 metadata = EXCLUDED.metadata
             """,
             (
@@ -1731,6 +1743,7 @@ class EnterprisePostgresStore:
                 artifact.project_id,
                 artifact.evidence_id,
                 artifact.run_id,
+                artifact.report_version_id,
                 self._text(artifact.artifact_type),
                 self._text(artifact.filename),
                 self._text(artifact.media_type),
@@ -1741,6 +1754,8 @@ class EnterprisePostgresStore:
                 self._text(str(artifact.source_url) if artifact.source_url else None),
                 artifact.created_by,
                 artifact.created_at,
+                self._text(artifact.retention_policy),
+                self._json(artifact.compliance_metadata),
                 self._json(artifact.metadata),
             ),
         )

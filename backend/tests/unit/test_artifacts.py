@@ -37,11 +37,14 @@ def test_local_artifact_storage_writes_text_payload_with_stable_metadata(
         workspace_id="workspace-a",
         project_id="project-a",
         evidence_id="evidence-a",
+        report_version_id="report-v1",
         artifact_type="web_snapshot",
         filename="../Cursor Pricing.html",
         media_type="text/html",
         content_text="<html>Cursor pricing</html>",
         source_url="https://cursor.sh/pricing",
+        retention_policy="90d",
+        compliance_metadata={"robots_status": "allowed"},
     )
 
     artifact = storage.store(request, actor_id="analyst-1")
@@ -50,6 +53,9 @@ def test_local_artifact_storage_writes_text_payload_with_stable_metadata(
     assert artifact.id == repeated.id
     assert artifact.filename == "Cursor-Pricing.html"
     assert artifact.storage_backend == "local"
+    assert artifact.report_version_id == "report-v1"
+    assert artifact.retention_policy == "90d"
+    assert artifact.compliance_metadata["robots_status"] == "allowed"
     assert artifact.byte_size == len(b"<html>Cursor pricing</html>")
     assert artifact.uri.startswith("local://workspace-a/")
     assert written_files[
@@ -80,15 +86,21 @@ def test_external_artifact_storage_records_s3_pointer() -> None:
         workspace_id="workspace-a",
         project_id="project-a",
         evidence_id="evidence-a",
+        report_version_id="report-v1",
         artifact_type="web_snapshot",
         filename="cursor-pricing.html",
         external_uri="s3://ci-bucket/workspace-a/cursor-pricing.html",
         source_url="https://cursor.sh/pricing",
+        retention_policy="legal_hold",
+        compliance_metadata={"source_policy": "approved"},
     )
 
     artifact = storage.store(request, actor_id="collector")
 
     assert artifact.storage_backend == "s3"
+    assert artifact.report_version_id == "report-v1"
+    assert artifact.retention_policy == "legal_hold"
+    assert artifact.compliance_metadata["source_policy"] == "approved"
     assert artifact.uri == "s3://ci-bucket/workspace-a/cursor-pricing.html"
     assert artifact.byte_size == 0
     assert artifact.metadata["external_pointer"] is True

@@ -199,9 +199,11 @@ def _add_artifacts(
             byte_size=artifact.byte_size,
             evidence_id=artifact.evidence_id,
             run_id=artifact.run_id,
+            report_version_id=artifact.report_version_id,
             source_url=str(artifact.source_url) if artifact.source_url else "",
             snapshot_kind=artifact.metadata.get("snapshot_kind"),
             export_format=artifact.metadata.get("export_format"),
+            retention_policy=artifact.retention_policy,
         )
         _add_edge(
             edges,
@@ -219,7 +221,10 @@ def _add_artifacts(
                 evidence_ids=[artifact.evidence_id],
                 metadata={"artifact_type": artifact.artifact_type},
             )
-        report_version_id = _metadata_string(artifact, "report_version_id")
+        report_version_id = artifact.report_version_id or _metadata_string(
+            artifact,
+            "report_version_id",
+        )
         if report_version_id and report_version_id in nodes:
             _add_edge(
                 edges,

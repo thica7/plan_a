@@ -1595,21 +1595,33 @@ def list_artifacts(
     workspace_id: str | None = None,
     project_id: str | None = None,
     evidence_id: str | None = None,
+    report_version_id: str | None = None,
 ) -> list[ArtifactRecord]:
     scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "artifact:read")
     if project_id is not None:
         project = _project_or_404(project_id, store, user, "artifact:read")
         scoped_workspace_id = project.workspace_id
+    if report_version_id is not None:
+        version = _report_version_or_404(report_version_id, store, user, "artifact:read")
+        scoped_workspace_id = version.workspace_id
+        if project_id is not None and version.project_id != project_id:
+            raise HTTPException(status_code=400, detail="Report version does not belong to project")
     if evidence_id is not None:
         evidence = _evidence_or_404(evidence_id, store)
         _require_workspace_access(user, evidence.workspace_id, "artifact:read")
         scoped_workspace_id = evidence.workspace_id
         if project_id is not None and evidence.project_id != project_id:
             raise HTTPException(status_code=400, detail="Evidence does not belong to project")
+        if report_version_id is not None and evidence_id not in version.evidence_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="Evidence is not linked to report version",
+            )
     return store.list_artifacts(
         workspace_id=scoped_workspace_id,
         project_id=project_id,
         evidence_id=evidence_id,
+        report_version_id=report_version_id,
     )
 
 
@@ -1631,6 +1643,15 @@ def create_artifact(
             or evidence.project_id != request.project_id
         ):
             raise HTTPException(status_code=400, detail="Artifact evidence scope mismatch")
+    if request.report_version_id is not None:
+        _enforce_artifact_report_scope(
+            request.report_version_id,
+            workspace_id=request.workspace_id,
+            project_id=request.project_id,
+            evidence_id=request.evidence_id,
+            store=store,
+            user=user,
+        )
     try:
         artifact = artifact_storage.store(request, actor_id=user.user_id)
     except ArtifactStorageError as exc:
@@ -1656,6 +1677,15 @@ def create_source_snapshot(
             or evidence.project_id != request.project_id
         ):
             raise HTTPException(status_code=400, detail="Snapshot evidence scope mismatch")
+    if request.report_version_id is not None:
+        _enforce_artifact_report_scope(
+            request.report_version_id,
+            workspace_id=request.workspace_id,
+            project_id=request.project_id,
+            evidence_id=request.evidence_id,
+            store=store,
+            user=user,
+        )
     try:
         return capture_source_snapshot(
             request,
@@ -1855,9 +1885,15 @@ def export_report_version(
         workspace_id=version.workspace_id,
         project_id=version.project_id,
         run_id=version.run_id,
+        report_version_id=version.id,
         artifact_type="report_export",
         filename=filename,
         media_type=media_type,
+        retention_policy="workspace_default",
+        compliance_metadata={
+            "artifact_scope": "report_export",
+            "report_status": version.status,
+        },
         content_text=body,
         metadata={
             "report_version_id": version.id,
@@ -1871,6 +1907,23 @@ def export_report_version(
     except ArtifactStorageError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ArtifactCreateResult(artifact=store.upsert_artifact(artifact))
+
+
+def _enforce_artifact_report_scope(
+    report_version_id: str,
+    *,
+    workspace_id: str,
+    project_id: str,
+    evidence_id: str | None,
+    store: EnterpriseStore,
+    user: EnterpriseUserContext,
+) -> ReportVersionRecord:
+    version = _report_version_or_404(report_version_id, store, user, "artifact:write")
+    if version.workspace_id != workspace_id or version.project_id != project_id:
+        raise HTTPException(status_code=400, detail="Artifact report version scope mismatch")
+    if evidence_id is not None and evidence_id not in version.evidence_ids:
+        raise HTTPException(status_code=400, detail="Artifact evidence is not linked to report")
+    return version
 
 
 @router.get("/enterprise/report-versions/{version_id}/diff", response_model=ReportVersionDiff)

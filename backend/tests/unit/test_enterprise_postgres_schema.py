@@ -112,7 +112,14 @@ def test_phase5_artifact_schema_is_present() -> None:
 
     assert "CREATE TABLE IF NOT EXISTS artifacts" in sql
     assert "artifact_type TEXT NOT NULL DEFAULT 'raw_text'" in sql
+    assert "report_version_id TEXT" in sql
+    assert "'survey_response'" in sql
+    assert "'interview_record'" in sql
+    assert "'manual_transcript'" in sql
     assert "storage_backend TEXT NOT NULL DEFAULT 'local'" in sql
+    assert "CHECK (storage_backend IN ('local', 'external', 's3', 'oss'))" in sql
+    assert "retention_policy TEXT NOT NULL DEFAULT 'workspace_default'" in sql
+    assert "compliance_metadata JSONB NOT NULL DEFAULT '{}'::jsonb" in sql
     assert "idx_artifacts_workspace_project" in sql
     assert "idx_artifacts_evidence" in sql
 

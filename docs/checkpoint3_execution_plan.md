@@ -89,11 +89,12 @@ Closed in Checkpoint 3 step 2:
 - Publishing records publication metadata, ReleaseGate snapshot, and audit trail.
 - Manual report correction after rejection or approval creates a new draft
   version, records diff/audit evidence, and captures MemoryAgent feedback.
+- Artifact contract now carries report_version_id, retention_policy, and
+  compliance_metadata as first-class fields; web snapshots, report exports, and
+  imported interview/survey/manual materials share the same artifact boundary.
 
 Remaining strict gaps:
 
-- ArtifactStore exists, but source snapshots and imported research materials
-  are not yet uniformly promoted into artifact records.
 - RBAC is application-level only; database RLS and cross-workspace negative
   tests need hardening.
 - Observability exists, but approval, publish, manual revision, artifact, and
@@ -177,6 +178,8 @@ Validation:
 
 ### 4. `feat(artifacts): promote source snapshots and research materials`
 
+Status: completed in the current implementation step.
+
 Backlog: ArtifactStore / SourceSnapshot / compliance.
 
 Required behavior:
@@ -195,6 +198,12 @@ Acceptance:
   evidence and artifact metadata.
 - Artifact lookup is workspace-scoped.
 - Compliance report can identify artifact retention and source policy state.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/schema/enterprise.py backend/packages/artifacts/store.py backend/packages/enterprise/source_snapshots.py backend/packages/enterprise/store.py backend/packages/enterprise/postgres.py backend/packages/enterprise/knowledge_graph.py backend/app/routers/enterprise.py backend/app/routers/trace.py backend/tests/unit/test_artifacts.py backend/tests/unit/test_enterprise_schema.py backend/tests/unit/test_enterprise_postgres_schema.py backend/tests/unit/test_h10_governance.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_artifacts.py backend/tests/unit/test_enterprise_schema.py::test_artifact_schema_links_storage_to_evidence backend/tests/unit/test_enterprise_postgres_schema.py::test_phase5_artifact_schema_is_present backend/tests/unit/test_h10_governance.py::test_source_snapshot_assets_external_s3_pointer_and_source_registry backend/tests/unit/test_h10_governance.py::test_manual_survey_snapshot_creates_research_evidence backend/tests/unit/test_h10_governance.py::test_knowledge_graph_read_model_links_sources_claims_and_reports backend/tests/unit/test_h10_governance.py::test_h10_enterprise_routes_are_callable -q`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection -q`
 
 ### 5. `feat(security): harden workspace isolation and RBAC`
 

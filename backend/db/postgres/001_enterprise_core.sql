@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
     project_id TEXT NOT NULL REFERENCES projects(id),
     evidence_id TEXT REFERENCES evidence_records(id) ON DELETE SET NULL,
     run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+    report_version_id TEXT,
     artifact_type TEXT NOT NULL DEFAULT 'raw_text'
         CHECK (
             artifact_type IN (
@@ -161,21 +162,55 @@ CREATE TABLE IF NOT EXISTS artifacts (
                 'screenshot',
                 'raw_text',
                 'report_export',
+                'survey_response',
+                'interview_record',
+                'manual_transcript',
                 'other'
             )
         ),
     filename TEXT NOT NULL,
     media_type TEXT NOT NULL DEFAULT 'application/octet-stream',
     storage_backend TEXT NOT NULL DEFAULT 'local'
-        CHECK (storage_backend IN ('local', 'external')),
+        CHECK (storage_backend IN ('local', 'external', 's3', 'oss')),
     uri TEXT NOT NULL,
     byte_size INTEGER NOT NULL DEFAULT 0 CHECK (byte_size >= 0),
     content_hash TEXT NOT NULL,
     source_url TEXT,
     created_by TEXT REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    retention_policy TEXT NOT NULL DEFAULT 'workspace_default',
+    compliance_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
+
+ALTER TABLE artifacts
+    ADD COLUMN IF NOT EXISTS report_version_id TEXT;
+ALTER TABLE artifacts
+    ADD COLUMN IF NOT EXISTS retention_policy TEXT NOT NULL DEFAULT 'workspace_default';
+ALTER TABLE artifacts
+    ADD COLUMN IF NOT EXISTS compliance_metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE artifacts
+    DROP CONSTRAINT IF EXISTS artifacts_artifact_type_check;
+ALTER TABLE artifacts
+    ADD CONSTRAINT artifacts_artifact_type_check
+    CHECK (
+        artifact_type IN (
+            'web_snapshot',
+            'pdf',
+            'screenshot',
+            'raw_text',
+            'report_export',
+            'survey_response',
+            'interview_record',
+            'manual_transcript',
+            'other'
+        )
+    );
+ALTER TABLE artifacts
+    DROP CONSTRAINT IF EXISTS artifacts_storage_backend_check;
+ALTER TABLE artifacts
+    ADD CONSTRAINT artifacts_storage_backend_check
+    CHECK (storage_backend IN ('local', 'external', 's3', 'oss'));
 
 CREATE TABLE IF NOT EXISTS source_registry (
     id TEXT PRIMARY KEY,

@@ -65,6 +65,7 @@ class LocalArtifactStorage:
             project_id=request.project_id,
             evidence_id=request.evidence_id,
             run_id=request.run_id,
+            report_version_id=request.report_version_id,
             artifact_type=request.artifact_type,
             filename=safe_filename,
             media_type=request.media_type,
@@ -74,6 +75,8 @@ class LocalArtifactStorage:
             content_hash=content_hash,
             source_url=request.source_url,
             created_by=actor_id,
+            retention_policy=request.retention_policy,
+            compliance_metadata=request.compliance_metadata,
             metadata={**request.metadata, "storage_root": str(root_path)},
         )
 
@@ -135,6 +138,7 @@ def external_artifact_record(
         project_id=request.project_id,
         evidence_id=request.evidence_id,
         run_id=request.run_id,
+        report_version_id=request.report_version_id,
         artifact_type=request.artifact_type,
         filename=_safe_filename(request.filename),
         media_type=request.media_type,
@@ -144,6 +148,8 @@ def external_artifact_record(
         content_hash=content_hash,
         source_url=request.source_url,
         created_by=actor_id,
+        retention_policy=request.retention_policy,
+        compliance_metadata=request.compliance_metadata,
         metadata={
             **request.metadata,
             "external_pointer": True,

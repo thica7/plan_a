@@ -211,16 +211,20 @@ def test_artifact_schema_links_storage_to_evidence() -> None:
         workspace_id="workspace-1",
         project_id="project-1",
         evidence_id="evidence-1",
+        report_version_id="report-v1",
         artifact_type="web_snapshot",
         filename="pricing.html",
         media_type="text/html",
         content_text="<html>pricing</html>",
+        retention_policy="90d",
+        compliance_metadata={"robots_status": "allowed"},
     )
     record = ArtifactRecord(
         id="artifact-1",
         workspace_id=request.workspace_id,
         project_id=request.project_id,
         evidence_id=request.evidence_id,
+        report_version_id=request.report_version_id,
         artifact_type=request.artifact_type,
         filename=request.filename,
         media_type=request.media_type,
@@ -228,10 +232,15 @@ def test_artifact_schema_links_storage_to_evidence() -> None:
         uri="local://workspace-1/artifact-1/pricing.html",
         byte_size=20,
         content_hash="hash",
+        retention_policy=request.retention_policy,
+        compliance_metadata=request.compliance_metadata,
     )
 
     assert request.artifact_type == "web_snapshot"
     assert record.evidence_id == "evidence-1"
+    assert record.report_version_id == "report-v1"
+    assert record.retention_policy == "90d"
+    assert record.compliance_metadata["robots_status"] == "allowed"
     assert record.storage_backend == "local"
 
 

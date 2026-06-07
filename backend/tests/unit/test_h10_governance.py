@@ -30,12 +30,14 @@ from packages.schema.models import (
 def test_source_snapshot_assets_external_s3_pointer_and_source_registry() -> None:
     store, context = _projected_store()
     evidence = store.list_evidence(project_id=context.project_id)[0]
+    report = store.list_report_versions(project_id=context.project_id)[0]
     result = capture_source_snapshot(
         SourceSnapshotCreateRequest(
             workspace_id=context.workspace_id,
             project_id=context.project_id,
             evidence_id=evidence.id,
             run_id="run-1",
+            report_version_id=report.id,
             snapshot_kind="webpage",
             filename="Cursor pricing snapshot.html",
             media_type="text/html",
@@ -43,6 +45,8 @@ def test_source_snapshot_assets_external_s3_pointer_and_source_registry() -> Non
             source_url="https://cursor.sh/pricing",
             source_type="webpage_verified",
             robots_status="allowed",
+            retention_policy="90d",
+            compliance_metadata={"robots_status": "allowed", "source_policy": "approved"},
         ),
         store=store,
         artifact_storage=LocalArtifactStorage(Path("backend/.test-artifacts/h10")),
@@ -51,6 +55,9 @@ def test_source_snapshot_assets_external_s3_pointer_and_source_registry() -> Non
 
     assert result.artifact.storage_backend == "s3"
     assert result.artifact.evidence_id == evidence.id
+    assert result.artifact.report_version_id == report.id
+    assert result.artifact.retention_policy == "90d"
+    assert result.artifact.compliance_metadata["source_policy"] == "approved"
     assert result.source.domain == "cursor.sh"
     assert result.snapshot_quality_score >= 80
     assert result.artifact.metadata["snapshot_quality_score"] == result.snapshot_quality_score
@@ -64,11 +71,13 @@ def test_source_snapshot_assets_external_s3_pointer_and_source_registry() -> Non
 def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> None:
     store, context = _projected_store()
     competitor_id = context.competitor_id_map["Cursor"]
+    report = store.list_report_versions(project_id=context.project_id)[0]
     result = capture_source_snapshot(
         SourceSnapshotCreateRequest(
             workspace_id=context.workspace_id,
             project_id=context.project_id,
             run_id="run-1",
+            report_version_id=report.id,
             snapshot_kind="survey",
             filename="enterprise-buyer-survey.md",
             media_type="text/markdown",
@@ -79,6 +88,8 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
             ),
             display_name="Enterprise buyer survey",
             trust_level="verified",
+            retention_policy="180d",
+            compliance_metadata={"research_consent": "imported_public_summary"},
             metadata={
                 "competitor_id": competitor_id,
                 "dimension": "persona",
@@ -106,6 +117,10 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
 
     assert result.evidence_id == evidence.id
     assert result.artifact.evidence_id == evidence.id
+    assert result.artifact.report_version_id == report.id
+    assert result.artifact.artifact_type == "survey_response"
+    assert result.artifact.retention_policy == "180d"
+    assert result.artifact.compliance_metadata["research_consent"] == "imported_public_summary"
     assert result.source.source_type == "survey_response"
     assert result.artifact.metadata["source_type"] == "survey_response"
     assert evidence.source_type == "survey_response"
@@ -113,6 +128,7 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
     assert evidence.dimension == "persona"
     assert evidence.metadata["manual_research_ingest"] is True
     assert evidence.metadata["artifact_id"] == result.artifact.id
+    assert evidence.metadata["report_version_id"] == report.id
     assert "workflow fit" in evidence.snippet
     assert "buyer@example.com" not in evidence.snippet
     assert "sk-or-v1-redacted" not in evidence.snippet
@@ -145,6 +161,7 @@ def test_knowledge_graph_read_model_links_sources_claims_and_reports() -> None:
             project_id=context.project_id,
             evidence_id=evidence.id,
             run_id="run-1",
+            report_version_id=report.id,
             snapshot_kind="webpage",
             filename="Cursor pricing snapshot.html",
             media_type="text/html",
@@ -164,6 +181,7 @@ def test_knowledge_graph_read_model_links_sources_claims_and_reports() -> None:
             workspace_id=context.workspace_id,
             project_id=context.project_id,
             run_id="run-1",
+            report_version_id=report.id,
             artifact_type="report_export",
             filename="report-v1.md",
             media_type="text/markdown",
@@ -171,10 +189,7 @@ def test_knowledge_graph_read_model_links_sources_claims_and_reports() -> None:
             uri="https://example.com/report-v1.md",
             byte_size=0,
             content_hash="report-export-hash",
-            metadata={
-                "report_version_id": report.id,
-                "export_format": "markdown",
-            },
+            metadata={"export_format": "markdown"},
         )
     )
 
@@ -200,6 +215,8 @@ def test_knowledge_graph_read_model_links_sources_claims_and_reports() -> None:
     artifacts = {node.id: node for node in graph.nodes if node.node_type == "artifact"}
     assert snapshot.artifact.id in artifacts
     assert export_artifact.id in artifacts
+    assert artifacts[snapshot.artifact.id].metadata["report_version_id"] == report.id
+    assert artifacts[export_artifact.id].metadata["report_version_id"] == report.id
     assert artifacts[snapshot.artifact.id].metadata["snapshot_kind"] == "webpage"
     assert artifacts[export_artifact.id].metadata["export_format"] == "markdown"
 
@@ -307,12 +324,39 @@ def test_h10_enterprise_routes_are_callable() -> None:
             "project_id": context.project_id,
             "evidence_id": store.list_evidence(project_id=context.project_id)[0].id,
             "run_id": "run-1",
+            "report_version_id": report_version_id,
             "filename": "pricing.html",
             "media_type": "text/html",
             "external_uri": "oss://competiscope/snapshots/pricing.html",
             "source_url": "https://cursor.sh/pricing",
             "robots_status": "allowed",
+            "retention_policy": "90d",
+            "compliance_metadata": {"robots_status": "allowed"},
         },
+    )
+    interview_response = client.post(
+        "/api/enterprise/source-snapshots",
+        json={
+            "workspace_id": context.workspace_id,
+            "project_id": context.project_id,
+            "run_id": "run-1",
+            "report_version_id": report_version_id,
+            "snapshot_kind": "interview",
+            "filename": "buyer-interview.md",
+            "media_type": "text/markdown",
+            "content_text": "Interview: buyer needs security review and workflow fit.",
+            "display_name": "Buyer interview",
+            "retention_policy": "180d",
+            "compliance_metadata": {"research_consent": "public_summary"},
+            "metadata": {
+                "competitor_id": context.competitor_id_map["Cursor"],
+                "dimension": "persona",
+            },
+        },
+    )
+    report_artifacts = client.get(
+        "/api/enterprise/artifacts",
+        params={"workspace_id": context.workspace_id, "report_version_id": report_version_id},
     )
 
     assert route_response.status_code == 200
@@ -323,11 +367,26 @@ def test_h10_enterprise_routes_are_callable() -> None:
     export_artifact = export_response.json()["artifact"]
     assert export_artifact["artifact_type"] == "report_export"
     assert export_artifact["media_type"] == "text/csv"
+    assert export_artifact["report_version_id"] == report_version_id
+    assert export_artifact["compliance_metadata"]["artifact_scope"] == "report_export"
     assert export_artifact["metadata"]["report_version_id"] == report_version_id
     assert store.get_artifact(export_artifact["id"]) is not None
     assert snapshot_response.status_code == 200
     assert snapshot_response.json()["artifact"]["storage_backend"] == "oss"
+    assert snapshot_response.json()["artifact"]["report_version_id"] == report_version_id
+    assert snapshot_response.json()["artifact"]["retention_policy"] == "90d"
     assert snapshot_response.json()["artifact"]["metadata"]["snapshot_quality_score"] >= 80
+    assert interview_response.status_code == 200
+    interview_artifact = interview_response.json()["artifact"]
+    assert interview_artifact["artifact_type"] == "interview_record"
+    assert interview_artifact["report_version_id"] == report_version_id
+    assert interview_response.json()["evidence_id"]
+    assert report_artifacts.status_code == 200
+    assert {item["id"] for item in report_artifacts.json()} >= {
+        export_artifact["id"],
+        snapshot_response.json()["artifact"]["id"],
+        interview_artifact["id"],
+    }
 
 
 def _projected_store() -> tuple[EnterpriseMemoryStore, object]:

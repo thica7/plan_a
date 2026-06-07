@@ -1128,7 +1128,7 @@ Validation:
 
 ## 2026-06-07 - Step 36: Audited Manual Report Revision Loop
 
-Commit: this commit
+Commit: `ce811d4 feat(reports): audit manual report revisions`
 
 Scope:
 
@@ -1155,3 +1155,36 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/app/routers/enterprise.py backend/tests/unit/test_enterprise_store.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_report_approval_status_when_gate_fails backend/tests/unit/test_enterprise_store.py::test_enterprise_router_blocks_direct_publish_status_without_approval backend/tests/unit/test_enterprise_store.py::test_manual_report_revision_after_rejection_creates_audited_draft backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_update_report_version_status backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_use_report_scope_not_stale_project_competitors backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_block_weak_report_version backend/tests/unit/test_temporal_workflows.py::test_report_approval_activities_can_reject_report_version -q`
+
+## 2026-06-07 - Step 37: Unified Artifact Contract For Research Materials
+
+Commit: this commit
+
+Scope:
+
+- Promoted `report_version_id`, `retention_policy`, and
+  `compliance_metadata` to first-class artifact contract fields.
+- Added research artifact types for `survey_response`, `interview_record`, and
+  `manual_transcript` so imported research materials are no longer stored as
+  generic web snapshots.
+- Propagated the new fields through local/external artifact storage,
+  SourceSnapshot capture, EnterpriseStore, Postgres store, Postgres schema, API
+  routes, report export, compliance export, and the project knowledge graph.
+- Added route-level scope checks so artifact report-version linkage cannot
+  cross workspace, project, or evidence boundaries.
+- Extended H10 tests to cover web snapshots, imported survey/interview
+  artifacts, report-version artifact lookup, KnowledgeGraph linkage, retention
+  policy, and compliance metadata.
+
+Why:
+
+- Enterprise review needs artifact records that can be traced directly to the
+  report version, source/evidence, retention rule, and compliance state.
+- Keeping interview/survey/manual materials in the same artifact contract avoids
+  a parallel user-research storage path.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/schema/enterprise.py backend/packages/artifacts/store.py backend/packages/enterprise/source_snapshots.py backend/packages/enterprise/store.py backend/packages/enterprise/postgres.py backend/packages/enterprise/knowledge_graph.py backend/app/routers/enterprise.py backend/app/routers/trace.py backend/tests/unit/test_artifacts.py backend/tests/unit/test_enterprise_schema.py backend/tests/unit/test_enterprise_postgres_schema.py backend/tests/unit/test_h10_governance.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_artifacts.py backend/tests/unit/test_enterprise_schema.py::test_artifact_schema_links_storage_to_evidence backend/tests/unit/test_enterprise_postgres_schema.py::test_phase5_artifact_schema_is_present backend/tests/unit/test_h10_governance.py::test_source_snapshot_assets_external_s3_pointer_and_source_registry backend/tests/unit/test_h10_governance.py::test_manual_survey_snapshot_creates_research_evidence backend/tests/unit/test_h10_governance.py::test_knowledge_graph_read_model_links_sources_claims_and_reports backend/tests/unit/test_h10_governance.py::test_h10_enterprise_routes_are_callable -q`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection -q`
