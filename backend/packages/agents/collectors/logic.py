@@ -33,7 +33,6 @@ from packages.schema.models import (
 )
 from packages.search import SearchResult
 from packages.tools import (
-    extract_facts,
     fetch_evidence_page,
     search_review_site_queries,
     survey_simulator,
@@ -145,16 +144,36 @@ class CollectorAgentMixin:
                 )
                 continue
             if action == "finish":
-                sources = await self._sources_from_react_finish(
-                    record,
+                seed_candidates = self._source_candidates_from_react_finish(
                     detail,
                     dimension,
                     payload,
-                    context,
-                    fetched_by_url,
                 )
-                detail.raw_sources.extend(sources)
-                added += len(sources)
+                for competitor, candidates in self._group_candidates_by_competitor(
+                    seed_candidates,
+                    default_competitor=detail.plan.competitors[0],
+                ).items():
+                    pipeline_sources = await self._collect_competitor_with_research_pipeline(
+                        record,
+                        detail,
+                        dimension,
+                        competitor,
+                        context,
+                        batch_sources=detail.raw_sources,
+                        target_source_count=self._collector_target_source_count(
+                            detail,
+                            dimension,
+                        ),
+                        include_official=False,
+                        seed_candidates=candidates,
+                        enable_search=False,
+                        enable_repair=False,
+                    )
+                    for source in pipeline_sources:
+                        if self._source_already_in_batch(source, detail.raw_sources):
+                            continue
+                        detail.raw_sources.append(source)
+                        added += 1
                 break
             observations.append(
                 {"turn": turn, "action": action or "unknown", "error": "unsupported_action"}
@@ -167,7 +186,7 @@ class CollectorAgentMixin:
         dimension: str,
         competitor: str,
         context: SubagentContext,
-    ) -> list[RawSource]:
+    ) -> list[SourceCandidate]:
         detail = record.detail
         skill = self._skill_registry.get(dimension)
         observations: list[dict[str, object]] = []
@@ -355,8 +374,7 @@ class CollectorAgentMixin:
                 )
                 continue
             if action == "finish":
-                return await self._sources_from_react_finish(
-                    record,
+                return self._source_candidates_from_react_finish(
                     detail,
                     dimension,
                     {
@@ -365,8 +383,7 @@ class CollectorAgentMixin:
                             payload.get("sources"), competitor
                         ),
                     },
-                    context,
-                    fetched_by_url,
+                    default_competitor=competitor,
                 )
             observations.append(
                 {"turn": turn, "action": action or "unknown", "error": "unsupported_action"}
@@ -387,126 +404,61 @@ class CollectorAgentMixin:
             sources.append(normalized)
         return sources
 
-    async def _sources_from_react_finish(
+    def _group_candidates_by_competitor(
         self,
-        record: RunRecord,
+        candidates: list[SourceCandidate],
+        *,
+        default_competitor: str,
+    ) -> dict[str, list[SourceCandidate]]:
+        grouped: dict[str, list[SourceCandidate]] = {}
+        for candidate in candidates:
+            competitor = candidate.competitor or default_competitor
+            grouped.setdefault(competitor, []).append(candidate)
+        return grouped
+
+    def _source_candidates_from_react_finish(
+        self,
         detail: RunDetail,
         dimension: str,
         payload: dict[str, Any],
-        context: SubagentContext,
-        fetched_by_url: dict[str, Any],
-    ) -> list[RawSource]:
+        *,
+        default_competitor: str | None = None,
+    ) -> list[SourceCandidate]:
         raw_sources = payload.get("sources")
         if not isinstance(raw_sources, list):
             return []
-        sources: list[RawSource] = []
-        for item in raw_sources:
+        candidates: list[SourceCandidate] = []
+        for rank, item in enumerate(raw_sources):
             if not isinstance(item, dict):
                 continue
-            competitor = str(item.get("competitor") or detail.plan.competitors[0])
+            competitor = str(
+                item.get("competitor")
+                or default_competitor
+                or detail.plan.competitors[0]
+            )
             title = str(item.get("title") or f"{competitor} {dimension} evidence")
             summary = str(item.get("summary") or title)
             url_value = item.get("url")
             if not isinstance(url_value, str) or not url_value.startswith(("http://", "https://")):
-                url_value = None
-            content_basis = f"{competitor}:{dimension}:{title}:{url_value or ''}:{summary}"
-            fetched = None
-            if url_value:
-                fetched = fetched_by_url.get(url_value)
-                if fetched is None:
-                    fetched = await self._trace_fetch(
-                        record, "collector", context.subagent, url_value, context
-                    )
-                    fetched_by_url[fetched.url] = fetched
-            verified = fetched is not None and fetched.ok
-            if not verified and self._requires_verified_web_evidence(detail, dimension):
-                self._trace_rejected_source_candidate(
-                    record,
-                    context=context,
-                    competitor=competitor,
-                    dimension=dimension,
+                continue
+            candidates.append(
+                SourceCandidate(
                     title=title,
                     url=url_value,
-                    reason=self._fetch_rejection_reason(fetched),
-                )
-                continue
-            extracted_facts = []
-            if verified:
-                extracted_facts = extract_facts(
-                    fetched.text,
-                    dimension=dimension,
-                    source_id=None,
-                    max_facts=3,
-                )
-                self._trace_local_tool(
-                    record,
-                    agent="collector",
-                    subagent=context.subagent,
-                    name="extract_facts",
-                    input_text=json.dumps(
-                        {"dimension": dimension, "url": fetched.url, "text": fetched.snippet},
-                        ensure_ascii=False,
-                    ),
-                    output_text=json.dumps(
-                        [fact.__dict__ for fact in extracted_facts], ensure_ascii=False
-                    ),
-                    context=context,
-                    metadata={"fact_count": len(extracted_facts), "url": fetched.url},
-                )
-            source_type = (
-                "webpage_verified"
-                if verified
-                else "web_search_result"
-                if url_value
-                else "llm_public_knowledge"
-            )
-            source_title = fetched.title if verified and fetched.title else title
-            source_url = fetched.url if fetched is not None else url_value
-            snippet = (
-                (
-                    " ".join(fact.fact for fact in extracted_facts[:2])
-                    if extracted_facts
-                    else fetched.snippet
-                )
-                if verified
-                else summary
-            )
-            content_hash = (
-                fetched.content_hash
-                if fetched is not None
-                else hashlib.sha256(content_basis.encode()).hexdigest()[:16]
-            )
-            sources.append(
-                source := RawSource(
-                    id=compute_raw_source_id(
-                        source_type=source_type,
-                        competitor=competitor,
-                        dimension=dimension,
-                        url=source_url,
-                        content_hash=content_hash,
-                        title=source_title,
-                        snippet=snippet,
-                        run_id=detail.id,
-                    ),
+                    snippet=summary,
+                    origin="llm_fallback",
                     competitor=competitor,
                     dimension=dimension,
-                    source_type=source_type,
-                    title=source_title,
-                    url=source_url,
-                    snippet=snippet,
-                    content_hash=content_hash,
-                    confidence=(
-                        min(
-                            1.0, self._coerce_confidence(item.get("confidence"), default=0.7) + 0.03
-                        )
-                        if verified
-                        else self._coerce_confidence(item.get("confidence"), default=0.7)
-                    ),
+                    rank=rank,
+                    confidence=self._coerce_confidence(item.get("confidence"), default=0.7),
+                    reason="collector_react_finish",
+                    metadata={
+                        "collector_adapter": "react_candidate_proposer",
+                        "react_finish_summary": summary,
+                    },
                 )
             )
-            if not self._source_is_usable(source):
-                sources.pop()
-        return sources
+        return candidates
 
     async def _collect_with_web_search(
         self,
@@ -581,6 +533,8 @@ class CollectorAgentMixin:
             update={
                 "target_source_count": target_source_count,
                 "max_repair_rounds": max_repair_rounds,
+                "include_trusted_sources": include_official,
+                "include_homepage_candidates": include_official,
                 "metadata": {
                     "collector_adapter": "clean_research_pipeline",
                     "include_official": include_official,
@@ -1855,16 +1809,25 @@ class CollectorAgentMixin:
             and self._search.is_enabled
         ):
             try:
-                react_sources = await self._run_collector_competitor_react(
+                react_candidates = await self._run_collector_competitor_react(
                     record, dimension, competitor, context
                 )
-                for source in react_sources:
-                    if len(sources) >= target_source_count:
-                        break
-                    if self._source_already_in_batch(source, sources):
-                        continue
-                    sources.append(source)
-                collect_payload["react_added"] = len(react_sources)
+                react_sources = await self._collect_competitor_with_research_pipeline(
+                    record,
+                    detail,
+                    dimension,
+                    competitor,
+                    context,
+                    batch_sources=sources,
+                    target_source_count=target_source_count,
+                    include_official=False,
+                    seed_candidates=react_candidates,
+                    enable_search=False,
+                    enable_repair=False,
+                )
+                self._extend_source_batch(sources, react_sources, target_source_count)
+                collect_payload["react_candidate_count"] = len(react_candidates)
+                collect_payload["react_pipeline_added"] = len(react_sources)
             except Exception as exc:  # noqa: BLE001 - deterministic fallback continues.
                 collect_payload["react_error"] = str(exc)
         if not sources:
@@ -1907,15 +1870,28 @@ class CollectorAgentMixin:
                 context=context,
             )
             raw_sources = self._force_source_competitor(payload.get("sources"), competitor)
-            sources = await self._sources_from_react_finish(
-                record,
+            seed_candidates = self._source_candidates_from_react_finish(
                 detail,
                 dimension,
                 {"sources": raw_sources},
-                context,
-                {},
+                default_competitor=competitor,
             )
-            collect_payload["llm_added"] = len(sources)
+            llm_sources = await self._collect_competitor_with_research_pipeline(
+                record,
+                detail,
+                dimension,
+                competitor,
+                context,
+                batch_sources=sources,
+                target_source_count=target_source_count,
+                include_official=False,
+                seed_candidates=seed_candidates,
+                enable_search=False,
+                enable_repair=False,
+            )
+            self._extend_source_batch(sources, llm_sources, target_source_count)
+            collect_payload["llm_candidate_count"] = len(seed_candidates)
+            collect_payload["llm_pipeline_added"] = len(llm_sources)
         detail.raw_sources.extend(sources)
         message = self._append_agent_message(
             record,

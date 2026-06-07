@@ -5198,6 +5198,8 @@ async def test_collector_react_runner_searches_fetches_and_finishes(
 
     assert len(record.detail.raw_sources) == 1
     assert record.detail.raw_sources[0].source_type == "webpage_verified"
+    assert record.detail.raw_sources[0].candidate_origin == "llm_fallback"
+    assert record.detail.raw_sources[0].metadata["normalized_fields"]
     assert record.detail.raw_sources[0].snippet == "A pricing starts at $10 per seat."
     traced_action_spans = [
         span for span in record.detail.trace_spans if not span.name.startswith("agent_message:")
@@ -5210,7 +5212,9 @@ async def test_collector_react_runner_searches_fetches_and_finishes(
         "robots_check",
         "fetch_page",
         "pricing_react_turn_3",
-        "extract_facts",
+        "robots_check",
+        "fetch_page",
+        "clean_research_pipeline",
     ]
     finish_span = next(span for span in traced_action_spans if span.name == "pricing_react_turn_3")
     assert finish_span.metadata["tool_call_count"] == 3
@@ -5299,6 +5303,8 @@ async def test_collector_react_finish_fetches_uninspected_urls(
 
     assert record.detail.raw_sources[0].source_type == "webpage_verified"
     assert record.detail.raw_sources[0].content_hash == "finishhash"
+    assert record.detail.raw_sources[0].candidate_origin == "llm_fallback"
+    assert record.detail.raw_sources[0].metadata["normalized_fields"]
     assert [
         span.name
         for span in record.detail.trace_spans
@@ -5307,7 +5313,7 @@ async def test_collector_react_finish_fetches_uninspected_urls(
         "pricing_react_turn_1",
         "robots_check",
         "fetch_page",
-        "extract_facts",
+        "clean_research_pipeline",
     ]
 
 

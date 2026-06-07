@@ -40,3 +40,38 @@ Validation:
 - Passed:
   - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/identity backend/packages/sources backend/packages/enterprise/source_snapshots.py backend/packages/enterprise/report_scope.py backend/packages/orchestrator/service.py backend/tests/unit/test_source_reconciliation.py backend/tests/unit/test_h10_governance.py backend/tests/unit/test_enterprise_store.py`
   - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_source_reconciliation.py backend/tests/unit/test_h10_governance.py::test_source_snapshot_assets_external_s3_pointer_and_source_registry backend/tests/unit/test_h10_governance.py::test_manual_survey_snapshot_creates_research_evidence backend/tests/unit/test_enterprise_store.py::test_report_release_gate_scope_uses_version_competitors_not_stale_project_links -q`
+
+## 2026-06-07 - Step 2: ReAct Collector Uses Research Pipeline Admission
+
+Scope:
+
+- Changed collector ReAct `finish` output from direct `RawSource` creation into
+  `SourceCandidate` proposals.
+- Routed ReAct-proposed URLs through Clean Research Pipeline capture,
+  extraction, field-level admission, and RawSource assembly before they can
+  enter `detail.raw_sources`.
+- Applied the same boundary to the branch-level LLM fallback path: LLM output
+  proposes seed candidates, and the research pipeline decides whether accepted
+  evidence exists.
+- Added explicit `ResearchBrief.include_trusted_sources` and
+  `include_homepage_candidates` flags so seed-only admission really avoids
+  registry/homepage discovery instead of relying on metadata.
+- Removed the legacy `extract_facts` direct-admission trace from the ReAct
+  finish path.
+- Deduplicated evidence quote snippets so accepted field quotes do not produce
+  repeated RawSource snippets when multiple fields cite the same sentence.
+
+Why:
+
+- ReAct can remain a model-driven candidate proposer, but Checkpoint 4 requires
+  source discovery/capture/extraction/admission to stay inside the research
+  pipeline boundary.
+- This prevents a second collector-specific evidence admission path from
+  drifting away from `SourceCandidate -> CapturedPage -> ExtractionResult ->
+  EvidenceItem -> RawSource`.
+
+Validation:
+
+- Passed:
+  - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/agents/collectors/logic.py backend/packages/research backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py`
+  - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_research_pipeline.py backend/tests/unit/test_run_service.py::test_collector_react_runner_searches_fetches_and_finishes backend/tests/unit/test_run_service.py::test_collector_react_finish_fetches_uninspected_urls -q`

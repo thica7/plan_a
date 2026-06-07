@@ -188,10 +188,9 @@ async def _discover_candidates(
     seed_candidates: list[SourceCandidate],
     repair_tasks: list[RepairTask],
 ) -> list[SourceCandidate]:
-    candidates = [
-        *seed_candidates,
-        *trusted_registry_candidates(brief),
-    ]
+    candidates = list(seed_candidates)
+    if brief.include_trusted_sources:
+        candidates.extend(trusted_registry_candidates(brief))
     if search is not None:
         for query in build_search_queries(brief, repair_tasks=repair_tasks):
             results = await search(query, brief.max_candidates)
@@ -203,7 +202,8 @@ async def _discover_candidates(
                     query=query,
                 )
             )
-    candidates.extend(homepage_candidates(brief))
+    if brief.include_homepage_candidates:
+        candidates.extend(homepage_candidates(brief))
     return rank_and_dedupe_candidates(
         candidates,
         competitor=brief.competitor,

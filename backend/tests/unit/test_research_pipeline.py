@@ -180,6 +180,50 @@ def test_capture_selection_defers_low_confidence_homepage_candidates() -> None:
     assert selection.skipped_reasons[guessed.id] == "deferred_low_confidence_homepage_derived"
 
 
+@pytest.mark.asyncio
+async def test_research_pipeline_can_run_seed_only_without_registry_or_homepage() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agents",
+        competitor="Claude Code",
+        dimension="feature",
+        include_trusted_sources=False,
+        include_homepage_candidates=False,
+        max_search_queries=0,
+        max_candidates=5,
+    )
+    seed = SourceCandidate(
+        title="Claude Code overview",
+        url="https://docs.anthropic.com/en/docs/claude-code/overview",
+        origin="llm_fallback",
+        competitor="Claude Code",
+        dimension="feature",
+        snippet="Claude Code supports agentic coding workflows.",
+        confidence=0.86,
+    )
+
+    async def fake_fetch(url: str) -> EvidenceFetchResult:
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="Claude Code overview",
+            text=(
+                "Claude Code is an agentic coding tool for developers. "
+                "It can work with repositories and run codebase tasks."
+            ),
+            content_hash="hash-seed-only-claude-code",
+            status_code=200,
+            fetch_method="basic_httpx",
+            quality_score=0.96,
+        )
+
+    result = await run_research_pipeline(brief, fetch=fake_fetch, seed_candidates=[seed])
+
+    assert [candidate.origin for candidate in result.candidates] == ["llm_fallback"]
+    assert {page.final_url for page in result.captured_pages} == {seed.url}
+    assert result.evidence_items
+
+
 def test_clean_research_pipeline_boundary_modules_are_real_contracts() -> None:
     invalid = SourceCandidate(
         title="Local debug page",

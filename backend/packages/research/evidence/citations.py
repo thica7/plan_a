@@ -26,11 +26,15 @@ def snippet_from_evidence_items(
     fallback: str = "",
     limit: int = 900,
 ) -> str:
-    quotes = [
-        " ".join(item.quote.split())
-        for item in sorted(items, key=lambda value: value.confidence, reverse=True)
-        if item.quote
-    ]
+    quotes: list[str] = []
+    seen: set[str] = set()
+    for item in sorted(items, key=lambda value: value.confidence, reverse=True):
+        quote = " ".join(item.quote.split())
+        key = quote.casefold()
+        if not quote or key in seen:
+            continue
+        seen.add(key)
+        quotes.append(quote)
     if quotes:
         return " ".join(quotes)[:limit]
     return fallback[:limit]
