@@ -832,3 +832,37 @@ Validation:
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/schema/quality.py backend/packages/quality backend/packages/schema/enterprise.py backend/packages/schema/__init__.py backend/app/routers/enterprise.py backend/tests/unit/test_quality_findings.py backend/tests/unit/test_enterprise_store.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_quality_findings.py -q`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection -q`
+
+## 2026-06-07 - Step 27: Quality-Driven Gap Fill Closure
+
+Commit: this commit
+
+Scope:
+
+- Added `QualityFinding -> EvidenceGapReport` and Research
+  `QualityGap -> EvidenceGapReport` conversion helpers.
+- Added `fill_quality_finding_gaps()` as a typed entry point from unified
+  quality findings into existing Gap Fill.
+- Extended Gap Fill result and metadata with retrieval providers, source
+  candidate ids, captured page ids, admitted evidence ids, and per-gap
+  resolved/unresolved status.
+- Added online gap-fill source lineage metadata for source candidate id,
+  captured page id, provider, capture status, and evidence admission status.
+- Preserved the existing local RAG and online gap-fill flow instead of
+  introducing a second repair mechanism.
+
+Why:
+
+- Checkpoint 2 H4 requires gap repair to be driven by typed quality findings
+  and to record enough retrieval/admission detail for trace, decision replay,
+  and release review.
+- The previous Gap Fill path already tracked query, chunks, rerank scores, and
+  draft report creation, but it did not expose a direct unified-finding input
+  or explicit admitted-evidence/resolution metadata.
+- Keeping this inside the existing RAG Gap Fill module avoids scattering
+  repair orchestration back into collector or release-gate code.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/rag backend/packages/schema/enterprise.py backend/tests/unit/test_gap_retrieval.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_gap_retrieval.py -q`

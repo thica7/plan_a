@@ -7,8 +7,10 @@ from packages.rag import (
     chunk_evidence,
     decorate_evidence_gap_report_with_retrieval,
     embed_text,
+    evidence_gap_report_from_quality_findings,
     fill_evidence_gaps,
     fill_evidence_gaps_online,
+    fill_quality_finding_gaps,
     recall_evidence,
     recall_evidence_scores,
     retrieve_gap_candidates,
@@ -19,6 +21,7 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     ReportVersionRecord,
 )
+from packages.schema.quality import QualityFinding
 from packages.search import SearchResult
 from packages.tools import FetchPageResult
 
@@ -295,6 +298,9 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
     assert result.after_gap_count == 0
     assert result.gap_closure_rate == 1.0
     assert result.gap_fill_chain_closed is True
+    assert result.retrieval_providers == ["enterprise_evidence_hybrid"]
+    assert result.admitted_evidence_ids == ["evidence-trust-1"]
+    assert result.gap_resolution_status == {"gap-security": "resolved"}
     assert result.candidate_evidence_ids == ["evidence-trust-1"]
     assert result.gap_evidence_links == {"gap-security": ["evidence-trust-1"]}
     assert [event.event_type for event in result.decision_events] == [
@@ -303,6 +309,9 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
     ]
     rag_payload = result.decision_events[0].payload
     assert rag_payload["gap_closure_rate"] == 1.0
+    assert rag_payload["gap_resolution_status"] == {"gap-security": "resolved"}
+    assert rag_payload["retrieval_providers"] == ["enterprise_evidence_hybrid"]
+    assert rag_payload["admitted_evidence_ids"] == ["evidence-trust-1"]
     assert rag_payload["retrieval_record_count"] == 1
     assert rag_payload["retrieval_queries"] == [
         "Cursor SOC 2 SSO audit logs trust center Cursor security webpage_verified"
@@ -328,6 +337,15 @@ def test_gap_fill_writes_candidates_back_to_report_version() -> None:
     assert result.updated_report_version.quality_metadata["rag_gap_fill"]["gap_evidence_links"] == {
         "gap-security": ["evidence-trust-1"]
     }
+    assert result.updated_report_version.quality_metadata["rag_gap_fill"][
+        "gap_resolution_status"
+    ] == {"gap-security": "resolved"}
+    assert result.updated_report_version.quality_metadata["rag_gap_fill"][
+        "retrieval_providers"
+    ] == ["enterprise_evidence_hybrid"]
+    assert result.updated_report_version.quality_metadata["rag_gap_fill"][
+        "admitted_evidence_ids"
+    ] == ["evidence-trust-1"]
     assert (
         result.updated_report_version.quality_metadata["rag_gap_fill"]["decision_events"][0][
             "event_type"
@@ -420,6 +438,10 @@ def test_gap_fill_chain_stays_open_until_all_gaps_are_filled() -> None:
     assert result.before_gap_count == 2
     assert result.after_gap_count == 1
     assert result.remaining_gap_ids == ["gap-pricing"]
+    assert result.gap_resolution_status == {
+        "gap-security": "resolved",
+        "gap-pricing": "unresolved",
+    }
     assert result.gap_fill_chain_closed is False
     assert result.decision_events[-1].payload["gap_fill_chain_closed"] is False
     assert result.updated_report_version is not None
@@ -427,6 +449,84 @@ def test_gap_fill_chain_stays_open_until_all_gaps_are_filled() -> None:
     assert metadata["gap_fill_chain_closed"] is False
     assert metadata["remaining_gap_ids"] == ["gap-pricing"]
     assert metadata["unfilled_gap_ids"] == ["gap-pricing"]
+    assert metadata["gap_resolution_status"] == {
+        "gap-security": "resolved",
+        "gap-pricing": "unresolved",
+    }
+
+
+def test_quality_findings_drive_gap_fill_without_warning_text_parsing() -> None:
+    store = EnterpriseMemoryStore()
+    store.upsert_evidence(
+        EvidenceRecord(
+            id="evidence-pricing-verified",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-verified-1",
+            competitor_id="cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor official pricing",
+            snippet="Cursor official pricing includes Pro, Teams, and enterprise packaging.",
+            content_hash="verifiedpricinghash",
+            reliability_score=0.95,
+        )
+    )
+    source_version = store.upsert_report_version(
+        ReportVersionRecord(
+            id="report-quality-finding-v1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            version_number=1,
+            topic_normalized="cursor-pricing",
+            competitor_layer="L1",
+            competitor_set_hash="competitors-hash",
+            report_md="# Report\n\nCursor pricing needs stronger evidence.",
+            evidence_ids=[],
+        )
+    )
+    finding = QualityFinding(
+        source_agent="ReleaseGate",
+        framework="enterprise-release-gate",
+        source_id="release-issue-1",
+        severity="warn",
+        issue_type="claim_self_consistency_required",
+        competitor_id="cursor",
+        competitor_name="Cursor",
+        dimension="pricing",
+        claim_ids=["claim-1"],
+        message="Pricing claim has single-source support.",
+        recommendation="Cursor official pricing enterprise packaging",
+        required_action="add_evidence",
+        acceptance_rule="A verified pricing source supports the claim.",
+    )
+
+    report = evidence_gap_report_from_quality_findings(
+        project_id="project-1",
+        scenario_id="checkpoint2_h4",
+        findings=[finding],
+    )
+    result = fill_quality_finding_gaps(
+        [finding],
+        store=store,
+        workspace_id="workspace-1",
+        project_id="project-1",
+        scenario_id="checkpoint2_h4",
+        source_report_version=source_version,
+    )
+
+    assert report.gap_count == 1
+    assert report.gaps[0].source_finding_ids == [finding.id]
+    assert report.gaps[0].required_action == "add_evidence"
+    assert report.gaps[0].acceptance_rule == "A verified pricing source supports the claim."
+    assert result.filled_gap_count == 1
+    assert result.candidate_evidence_ids == ["evidence-pricing-verified"]
+    assert result.admitted_evidence_ids == ["evidence-pricing-verified"]
+    assert result.gap_resolution_status == {report.gaps[0].id: "resolved"}
+    assert result.updated_report_version is not None
+    metadata = result.updated_report_version.quality_metadata["rag_gap_fill"]
+    assert metadata["gap_resolution_status"] == {report.gaps[0].id: "resolved"}
+    assert metadata["admitted_evidence_ids"] == ["evidence-pricing-verified"]
 
 
 @pytest.mark.asyncio
@@ -506,11 +606,20 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version(tmp_p
     assert evidence.source_type == "webpage_verified"
     assert evidence.metadata["online_gap_fill"] is True
     assert evidence.metadata["gap_id"] == "gap-online-security"
+    assert evidence.metadata["retrieval_provider"] == "online_gap_fill"
+    assert evidence.metadata["source_candidate_id"].startswith("source-candidate-")
+    assert evidence.metadata["captured_page_id"].startswith("captured-page-")
+    assert evidence.metadata["admission_status"] == "accepted"
     assert "SOC 2" in evidence.metadata["full_text"]
     assert result.filled_gap_count == 1
     assert result.added_evidence_count == 1
     assert result.online_collected_evidence_count == 1
     assert result.online_failure_count == 0
+    assert result.retrieval_providers == ["enterprise_evidence_hybrid", "online_gap_fill"]
+    assert result.source_candidate_ids == [evidence.metadata["source_candidate_id"]]
+    assert result.captured_page_ids == [evidence.metadata["captured_page_id"]]
+    assert result.admitted_evidence_ids == [evidence.id]
+    assert result.gap_resolution_status == {"gap-online-security": "resolved"}
     assert [event.event_type for event in result.decision_events] == [
         "rag.retrieved",
         "tool.called",
@@ -529,6 +638,10 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version(tmp_p
     assert metadata["gap_closure_rate"] == 1.0
     assert metadata["gap_fill_chain_closed"] is True
     assert metadata["online_collected_evidence_ids"] == [evidence.id]
+    assert metadata["source_candidate_ids"] == [evidence.metadata["source_candidate_id"]]
+    assert metadata["captured_page_ids"] == [evidence.metadata["captured_page_id"]]
+    assert metadata["admitted_evidence_ids"] == [evidence.id]
+    assert metadata["gap_resolution_status"] == {"gap-online-security": "resolved"}
     assert metadata["gap_evidence_links"] == {"gap-online-security": [evidence.id]}
     assert metadata["online_failures"] == []
     assert [event["event_type"] for event in metadata["decision_events"]] == [
@@ -539,6 +652,9 @@ async def test_online_gap_fill_collects_evidence_then_links_report_version(tmp_p
     rag_payload = metadata["decision_events"][0]["payload"]
     assert rag_payload["retrieval_contexts"][0]["gap_id"] == "gap-online-security"
     assert rag_payload["gap_evidence_links"] == {"gap-online-security": [evidence.id]}
+    assert rag_payload["admitted_evidence_ids"] == [evidence.id]
+    assert rag_payload["source_candidate_ids"] == [evidence.metadata["source_candidate_id"]]
+    assert rag_payload["captured_page_ids"] == [evidence.metadata["captured_page_id"]]
     assert rag_payload["chunk_ids"][0].startswith("chunk-")
     assert set(rag_payload["rerank_scores"]) == set(rag_payload["chunk_ids"])
     assert result.updated_report_version.evidence_ids == [evidence.id]

@@ -967,6 +967,9 @@ class EvidenceGapItem(BaseModel):
     retrieval_grounded_context: str = ""
     evidence_ids: list[str] = Field(default_factory=list)
     claim_ids: list[str] = Field(default_factory=list)
+    source_finding_ids: list[str] = Field(default_factory=list)
+    required_action: str = ""
+    acceptance_rule: str = ""
 
 
 class SchemaEvolutionSuggestion(BaseModel):
@@ -1080,6 +1083,11 @@ class EvidenceGapFillResult(BaseModel):
     online_failure_count: int = Field(default=0, ge=0)
     online_failures: list[dict[str, str]] = Field(default_factory=list)
     gap_fill_chain_closed: bool = False
+    retrieval_providers: list[str] = Field(default_factory=list)
+    source_candidate_ids: list[str] = Field(default_factory=list)
+    captured_page_ids: list[str] = Field(default_factory=list)
+    admitted_evidence_ids: list[str] = Field(default_factory=list)
+    gap_resolution_status: dict[str, str] = Field(default_factory=dict)
     candidate_evidence_ids: list[str] = Field(default_factory=list)
     filled_gap_ids: list[str] = Field(default_factory=list)
     gap_evidence_links: dict[str, list[str]] = Field(default_factory=dict)

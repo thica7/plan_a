@@ -144,7 +144,7 @@ Completed behavior:
 
 ### 3. `feat(rag): close online gap fill loop`
 
-Status: next.
+Status: completed by `feat(rag): close quality-driven gap fill loop`.
 
 Backlog: H4.
 
@@ -176,7 +176,22 @@ Acceptance:
 - Fresh real run keeps citation validity at 1.0 and reduces warning count from
   the Checkpoint 1 baseline.
 
+Completed behavior:
+
+- `QualityFinding` and Research `QualityGap` records can be converted into an
+  `EvidenceGapReport` without parsing warning text.
+- Gap Fill results now record retrieval providers, source candidate ids,
+  captured page ids, admitted evidence ids, and per-gap resolved/unresolved
+  status.
+- Local RAG and online gap-fill decision events carry retrieval queries, chunk
+  ids, rerank scores, admitted evidence, and resolution metadata.
+
+Final fresh-run acceptance remains part of the overall Checkpoint 2 audit after
+H3/H6/H7/H9 are complete.
+
 ### 4. `feat(survey): import real research materials`
+
+Status: next.
 
 Backlog: H3.
 

@@ -1,6 +1,12 @@
 from packages.rag.chunker import chunk_corpus, chunk_evidence
 from packages.rag.embedder import HashingRagEmbedder, RagEmbedding, embed_text
-from packages.rag.gap_fill import fill_evidence_gaps, fill_evidence_gaps_online
+from packages.rag.gap_fill import (
+    evidence_gap_report_from_quality_findings,
+    evidence_gap_report_from_quality_gaps,
+    fill_evidence_gaps,
+    fill_evidence_gaps_online,
+    fill_quality_finding_gaps,
+)
 from packages.rag.gap_retrieval import (
     build_gap_retrieval_query,
     decorate_evidence_gap_report_with_retrieval,
@@ -28,8 +34,11 @@ __all__ = [
     "chunk_evidence",
     "decorate_evidence_gap_report_with_retrieval",
     "embed_text",
+    "evidence_gap_report_from_quality_findings",
+    "evidence_gap_report_from_quality_gaps",
     "fill_evidence_gaps",
     "fill_evidence_gaps_online",
+    "fill_quality_finding_gaps",
     "filter_evidence_seed_rows",
     "build_retrieval_grounding_prompt",
     "build_run_grounding_prompt",

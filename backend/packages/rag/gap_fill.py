@@ -15,12 +15,15 @@ from packages.identity import (
     compute_raw_source_id,
     normalize_dimension_key,
     normalize_url,
+    stable_prefixed_id,
 )
+from packages.quality import quality_findings_from_quality_gaps
 from packages.rag.gap_retrieval import (
     EvidenceRetriever,
     build_gap_retrieval_query,
     decorate_evidence_gap_report_with_retrieval,
 )
+from packages.research.models import QualityGap
 from packages.schema.enterprise import (
     EvidenceGapFillDecisionEvent,
     EvidenceGapFillResult,
@@ -29,6 +32,7 @@ from packages.schema.enterprise import (
     EvidenceRecord,
     ReportVersionRecord,
 )
+from packages.schema.quality import QualityFinding
 from packages.schema.rag import RetrievalRecord
 from packages.search import SearchResult
 from packages.tools import FetchPageResult
@@ -44,6 +48,64 @@ class GapFillStore(EvidenceRetriever, Protocol):
 
 OnlineSearch = Callable[[str, int], Awaitable[list[SearchResult]]]
 OnlineFetch = Callable[[str], Awaitable[FetchPageResult]]
+
+
+def evidence_gap_report_from_quality_findings(
+    *,
+    project_id: str,
+    scenario_id: str,
+    findings: list[QualityFinding],
+) -> EvidenceGapReport:
+    gaps = [_gap_from_quality_finding(finding) for finding in findings if _needs_gap_fill(finding)]
+    return EvidenceGapReport(
+        project_id=project_id,
+        scenario_id=scenario_id,
+        gap_count=len(gaps),
+        critical_count=sum(1 for item in gaps if item.severity == "critical"),
+        high_count=sum(1 for item in gaps if item.severity == "high"),
+        medium_count=sum(1 for item in gaps if item.severity == "medium"),
+        low_count=sum(1 for item in gaps if item.severity == "low"),
+        gaps=gaps,
+    )
+
+
+def evidence_gap_report_from_quality_gaps(
+    *,
+    project_id: str,
+    scenario_id: str,
+    gaps: list[QualityGap],
+) -> EvidenceGapReport:
+    findings = quality_findings_from_quality_gaps(gaps)
+    return evidence_gap_report_from_quality_findings(
+        project_id=project_id,
+        scenario_id=scenario_id,
+        findings=findings,
+    )
+
+
+def fill_quality_finding_gaps(
+    findings: list[QualityFinding],
+    *,
+    store: GapFillStore,
+    workspace_id: str,
+    project_id: str,
+    scenario_id: str,
+    source_report_version: ReportVersionRecord | None = None,
+    limit: int = 3,
+) -> EvidenceGapFillResult:
+    report = evidence_gap_report_from_quality_findings(
+        project_id=project_id,
+        scenario_id=scenario_id,
+        findings=findings,
+    )
+    return fill_evidence_gaps(
+        report,
+        store=store,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        source_report_version=source_report_version,
+        limit=limit,
+    )
 
 
 def fill_evidence_gaps(
@@ -84,6 +146,7 @@ async def fill_evidence_gaps_online(
     limit: int = 3,
     max_search_results: int = 3,
     max_fetches_per_gap: int = 2,
+    search_provider: str = "online_gap_fill",
 ) -> EvidenceGapFillResult:
     project_id = project_id or report.project_id
     decorated = decorate_evidence_gap_report_with_retrieval(
@@ -136,6 +199,7 @@ async def fill_evidence_gaps_online(
                 workspace_id=workspace_id,
                 project_id=project_id,
                 query=query,
+                search_provider=search_provider,
             )
             if evidence is None:
                 continue
@@ -177,6 +241,16 @@ def _finalize_gap_fill(
     after_gap_count = len(remaining_gap_ids)
     online_collected_ids = online_collected_evidence_ids or []
     online_failure_items = online_failures or []
+    gap_resolution_status = _gap_resolution_status(updated_gaps, remaining_gap_ids)
+    evidence_metadata = _evidence_metadata_by_id(store, project_id, candidate_ids)
+    source_candidate_ids = _metadata_ids(evidence_metadata, "source_candidate_id")
+    captured_page_ids = _metadata_ids(evidence_metadata, "captured_page_id")
+    retrieval_providers = _retrieval_providers(
+        updated_gaps,
+        evidence_metadata=evidence_metadata,
+        online_collected_evidence_ids=online_collected_ids,
+    )
+    admitted_evidence_ids = list(candidate_ids)
     decision_events = _gap_fill_decision_events(
         updated_report,
         candidate_ids=candidate_ids,
@@ -185,6 +259,11 @@ def _finalize_gap_fill(
         remaining_gap_ids=remaining_gap_ids,
         before_gap_count=before_gap_count,
         after_gap_count=after_gap_count,
+        gap_resolution_status=gap_resolution_status,
+        retrieval_providers=retrieval_providers,
+        source_candidate_ids=source_candidate_ids,
+        captured_page_ids=captured_page_ids,
+        admitted_evidence_ids=admitted_evidence_ids,
         online_collected_evidence_ids=online_collected_ids,
         online_failures=online_failure_items,
         source_report_version=source_report_version,
@@ -200,6 +279,11 @@ def _finalize_gap_fill(
             remaining_gap_ids=remaining_gap_ids,
             online_collected_evidence_ids=online_collected_ids,
             online_failures=online_failure_items,
+            gap_resolution_status=gap_resolution_status,
+            retrieval_providers=retrieval_providers,
+            source_candidate_ids=source_candidate_ids,
+            captured_page_ids=captured_page_ids,
+            admitted_evidence_ids=admitted_evidence_ids,
             decision_events=decision_events,
         )
         if source_report_version is not None
@@ -226,6 +310,11 @@ def _finalize_gap_fill(
         online_failure_count=len(online_failure_items),
         online_failures=online_failure_items,
         gap_fill_chain_closed=gap_fill_chain_closed,
+        retrieval_providers=retrieval_providers,
+        source_candidate_ids=source_candidate_ids,
+        captured_page_ids=captured_page_ids,
+        admitted_evidence_ids=admitted_evidence_ids,
+        gap_resolution_status=gap_resolution_status,
         candidate_evidence_ids=candidate_ids,
         filled_gap_ids=filled_gap_ids,
         gap_evidence_links=gap_evidence_links,
@@ -261,6 +350,7 @@ def _online_evidence_from_gap(
     workspace_id: str,
     project_id: str,
     query: str,
+    search_provider: str,
 ) -> EvidenceRecord | None:
     source_type = "webpage_verified" if fetched.ok else "web_search_result"
     if gap.source_type_required and not _source_type_matches(gap.source_type_required, source_type):
@@ -275,6 +365,21 @@ def _online_evidence_from_gap(
     content_hash = fetched.content_hash if fetched.ok else compute_content_hash(content_basis)[:16]
     competitor_id = (gap.competitor_id or gap.competitor_name or "unknown").strip()
     dimension = normalize_dimension_key(gap.dimension or "general")
+    source_candidate_id = stable_prefixed_id(
+        "source-candidate",
+        search_provider,
+        gap.id,
+        query,
+        result.url,
+        length=20,
+    )
+    captured_page_id = stable_prefixed_id(
+        "captured-page",
+        source_candidate_id,
+        source_url,
+        content_hash,
+        length=20,
+    )
     evidence_id = compute_evidence_id(source_url, content_hash, competitor_id, dimension)
     raw_source_id = compute_raw_source_id(
         source_type=source_type,
@@ -309,6 +414,11 @@ def _online_evidence_from_gap(
                 "online_gap_fill": True,
                 "gap_id": gap.id,
                 "query": query,
+                "retrieval_provider": search_provider,
+                "source_candidate_id": source_candidate_id,
+                "captured_page_id": captured_page_id,
+                "admission_status": "accepted",
+                "captured_page_status": "ok" if fetched.ok else "failed",
                 "recommended_query": gap.recommended_query,
                 "search_title": result.title,
                 "search_snippet": result.snippet,
@@ -376,6 +486,11 @@ def _write_gap_fill_report_version(
     remaining_gap_ids: list[str],
     online_collected_evidence_ids: list[str],
     online_failures: list[dict[str, str]],
+    gap_resolution_status: dict[str, str],
+    retrieval_providers: list[str],
+    source_candidate_ids: list[str],
+    captured_page_ids: list[str],
+    admitted_evidence_ids: list[str],
     decision_events: list[EvidenceGapFillDecisionEvent],
 ) -> ReportVersionRecord:
     evidence_ids = _unique_ids(source.evidence_ids + candidate_ids)
@@ -400,6 +515,11 @@ def _write_gap_fill_report_version(
         "unfilled_gap_ids": remaining_gap_ids,
         "candidate_evidence_ids": candidate_ids,
         "gap_fill_chain_closed": (bool(filled_gap_ids and candidate_ids) and not remaining_gap_ids),
+        "gap_resolution_status": gap_resolution_status,
+        "retrieval_providers": retrieval_providers,
+        "source_candidate_ids": source_candidate_ids,
+        "captured_page_ids": captured_page_ids,
+        "admitted_evidence_ids": admitted_evidence_ids,
         "online_collected_evidence_ids": online_collected_evidence_ids,
         "online_failures": online_failures,
         "retrieval_records": [
@@ -440,6 +560,11 @@ def _gap_fill_decision_events(
     remaining_gap_ids: list[str],
     before_gap_count: int,
     after_gap_count: int,
+    gap_resolution_status: dict[str, str],
+    retrieval_providers: list[str],
+    source_candidate_ids: list[str],
+    captured_page_ids: list[str],
+    admitted_evidence_ids: list[str],
     online_collected_evidence_ids: list[str],
     online_failures: list[dict[str, str]],
     source_report_version: ReportVersionRecord | None,
@@ -480,7 +605,12 @@ def _gap_fill_decision_events(
                 "filled_gap_ids": filled_gap_ids,
                 "gap_evidence_links": gap_evidence_links,
                 "remaining_gap_ids": remaining_gap_ids,
+                "gap_resolution_status": gap_resolution_status,
+                "retrieval_providers": retrieval_providers,
                 "candidate_ids": candidate_ids,
+                "admitted_evidence_ids": admitted_evidence_ids,
+                "source_candidate_ids": source_candidate_ids,
+                "captured_page_ids": captured_page_ids,
                 "retrieval_queries": [
                     context["query"] for context in retrieval_contexts if context["query"]
                 ],
@@ -505,7 +635,10 @@ def _gap_fill_decision_events(
                 evidence_ids=online_collected_evidence_ids,
                 payload={
                     "tool": "online_gap_fill",
+                    "retrieval_providers": retrieval_providers,
                     "online_collected_evidence_ids": online_collected_evidence_ids,
+                    "source_candidate_ids": source_candidate_ids,
+                    "captured_page_ids": captured_page_ids,
                     "online_failure_count": len(online_failures),
                     "online_failures": online_failures,
                 },
@@ -530,6 +663,8 @@ def _gap_fill_decision_events(
                         bool(filled_gap_ids and candidate_ids) and after_gap_count == 0
                     ),
                     "candidate_ids": candidate_ids,
+                    "admitted_evidence_ids": admitted_evidence_ids,
+                    "gap_resolution_status": gap_resolution_status,
                     "gap_evidence_links": gap_evidence_links,
                 },
             )
@@ -569,6 +704,128 @@ def _gap_retrieval_contexts(report: EvidenceGapReport) -> list[dict[str, object]
 
 def _retrieval_record_key(record: RetrievalRecord) -> str:
     return record.chunk_id or f"{record.evidence_id}#chunk:{record.chunk_index}"
+
+
+def _gap_from_quality_finding(finding: QualityFinding) -> EvidenceGapItem:
+    dimension = normalize_dimension_key(finding.dimension or "general")
+    gap_type = _gap_type_from_quality_finding(finding)
+    message = finding.message
+    recommended_query = _gap_query_from_quality_finding(finding)
+    return EvidenceGapItem(
+        id=stable_prefixed_id(
+            "evidence-gap",
+            finding.id,
+            gap_type,
+            finding.competitor_id or finding.competitor_name or "",
+            dimension,
+            finding.claim_ids,
+            finding.evidence_ids,
+            length=20,
+        ),
+        severity=_gap_severity_from_quality_finding(finding),
+        gap_type=gap_type,
+        competitor_id=finding.competitor_id,
+        competitor_name=finding.competitor_name,
+        dimension=dimension,
+        source_type_required="webpage_verified"
+        if finding.required_action == "add_evidence"
+        else "any usable source",
+        message=message,
+        recommended_query=recommended_query,
+        evidence_ids=finding.evidence_ids,
+        claim_ids=finding.claim_ids,
+        source_finding_ids=[finding.id],
+        required_action=finding.required_action,
+        acceptance_rule=finding.acceptance_rule,
+    )
+
+
+def _needs_gap_fill(finding: QualityFinding) -> bool:
+    if finding.required_action == "add_evidence":
+        return True
+    text = f"{finding.issue_type} {finding.message} {finding.recommendation}".casefold()
+    return "evidence" in text or "source" in text or "retrieval" in text
+
+
+def _gap_type_from_quality_finding(finding: QualityFinding) -> str:
+    text = f"{finding.issue_type} {finding.message}".casefold()
+    if finding.claim_ids:
+        return "claim_without_usable_evidence"
+    if "verified" in text or "source" in text:
+        return "missing_verified_source"
+    if "stale" in text or "rejected" in text:
+        return "stale_or_rejected_evidence"
+    return "missing_dimension_coverage"
+
+
+def _gap_severity_from_quality_finding(finding: QualityFinding) -> str:
+    if finding.severity == "blocker":
+        return "critical"
+    if finding.severity == "warn":
+        return "high"
+    return "low"
+
+
+def _gap_query_from_quality_finding(finding: QualityFinding) -> str:
+    parts = [
+        finding.recommendation,
+        finding.competitor_name or finding.competitor_id or "",
+        finding.dimension or "",
+        finding.issue_type,
+    ]
+    query = " ".join(part.strip() for part in parts if part and part.strip())
+    return query or finding.message
+
+
+def _gap_resolution_status(
+    gaps: list[EvidenceGapItem],
+    remaining_gap_ids: list[str],
+) -> dict[str, str]:
+    remaining = set(remaining_gap_ids)
+    return {gap.id: "unresolved" if gap.id in remaining else "resolved" for gap in gaps}
+
+
+def _evidence_metadata_by_id(
+    store: GapFillStore,
+    project_id: str,
+    evidence_ids: list[str],
+) -> dict[str, dict[str, object]]:
+    wanted = set(evidence_ids)
+    if not wanted:
+        return {}
+    return {
+        item.id: item.metadata
+        for item in store.list_evidence(project_id=project_id)
+        if item.id in wanted
+    }
+
+
+def _metadata_ids(
+    evidence_metadata: dict[str, dict[str, object]],
+    key: str,
+) -> list[str]:
+    return _unique_ids(
+        [
+            str(metadata.get(key) or "")
+            for metadata in evidence_metadata.values()
+            if metadata.get(key)
+        ]
+    )
+
+
+def _retrieval_providers(
+    gaps: list[EvidenceGapItem],
+    *,
+    evidence_metadata: dict[str, dict[str, object]],
+    online_collected_evidence_ids: list[str],
+) -> list[str]:
+    providers = ["enterprise_evidence_hybrid"] if any(gap.retrieval_records for gap in gaps) else []
+    providers.extend(
+        str(metadata.get("retrieval_provider") or "")
+        for evidence_id, metadata in evidence_metadata.items()
+        if evidence_id in set(online_collected_evidence_ids) and metadata.get("retrieval_provider")
+    )
+    return _unique_ids(providers)
 
 
 def _append_gap_fill_section(
