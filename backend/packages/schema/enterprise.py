@@ -953,6 +953,25 @@ class QualityAgentMatrixEntry(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class QualityFindingGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    group_by: Literal[
+        "competitor",
+        "dimension",
+        "source_agent",
+        "severity",
+        "required_action",
+    ]
+    key: str
+    label: str
+    finding_ids: list[str] = Field(default_factory=list)
+    count: int = Field(default=0, ge=0)
+    blocker_count: int = Field(default=0, ge=0)
+    warn_count: int = Field(default=0, ge=0)
+    info_count: int = Field(default=0, ge=0)
+
+
 class QualityAgentMatrix(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -961,6 +980,7 @@ class QualityAgentMatrix(BaseModel):
     overall_score: int = Field(ge=0, le=100)
     entries: list[QualityAgentMatrixEntry] = Field(default_factory=list)
     findings: list[QualityFinding] = Field(default_factory=list)
+    groups: list[QualityFindingGroup] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 

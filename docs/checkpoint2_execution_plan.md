@@ -269,6 +269,8 @@ Completed behavior:
 
 ### 6. `feat(quality): expose quality agent matrix`
 
+Status: completed by `feat(quality): group quality matrix findings`.
+
 Backlog: H7.
 
 Required behavior:
@@ -284,6 +286,16 @@ Acceptance:
   the same schema.
 - Findings can link to source evidence, claim, trace, or RedoScope.
 - No duplicate issue taxonomies are introduced.
+
+Completed behavior:
+
+- Added `QualityFindingGroup` and matrix-level `groups` so the quality matrix
+  can be reviewed by competitor, dimension, source agent, severity, and required
+  action.
+- Kept grouping derived from the unified `QualityFinding` schema rather than
+  introducing another issue taxonomy.
+- Preserved source-agent groups for all matrix entries, even when a passing
+  project has no open findings.
 
 ### 7. `feat(eval): add real-run baseline regression gate`
 

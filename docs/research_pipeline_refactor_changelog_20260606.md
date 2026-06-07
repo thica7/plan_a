@@ -939,3 +939,30 @@ Validation:
 
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/schema/enterprise.py backend/packages/business_intel/claim_validator.py backend/packages/business_intel/release_gate.py backend/packages/quality/findings.py backend/packages/orchestrator/service.py backend/tests/unit/test_business_intel.py backend/tests/unit/test_quality_findings.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_business_intel.py backend/tests/unit/test_quality_findings.py -q`
+
+## 2026-06-07 - Step 30: Quality Matrix Finding Groups
+
+Commit: this commit
+
+Scope:
+
+- Added `QualityFindingGroup` to the enterprise schema and exposed matrix-level
+  `groups`.
+- Grouped unified quality findings by competitor, dimension, source agent,
+  severity, and required action.
+- Kept source-agent groups visible for every quality matrix entry so passing
+  projects still show the complete agent review surface.
+- Added tests for H7 grouping axes and the quality matrix router response.
+
+Why:
+
+- Checkpoint 2 H7 requires QA, RedTeam, EvidenceGap, ReleaseGate, and
+  ClaimValidator outputs to be visible through one schema and reviewable by
+  meaningful business axes.
+- Keeping groups derived from `QualityFinding` avoids another parallel issue
+  model and keeps RedoScope/source/claim links intact.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/app/routers/enterprise.py backend/packages/schema/enterprise.py backend/packages/schema/__init__.py backend/tests/unit/test_enterprise_store.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_quality_finding_groups_cover_h7_axes backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection -q`

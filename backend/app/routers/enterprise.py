@@ -115,6 +115,7 @@ from packages.schema.enterprise import (
     QualityAgentMatrix,
     QualityAgentMatrixEntry,
     QualityAgentStatus,
+    QualityFindingGroup,
     RedTeamReport,
     ReportReleaseGate,
     ReportVersionDiff,
@@ -135,6 +136,7 @@ from packages.schema.enterprise import (
     WorkspaceRecord,
     WorkspaceUsageSummary,
 )
+from packages.schema.quality import QualityFinding
 from packages.search import PerplexitySearchClient
 from packages.tools import (
     FetchPageResult,
@@ -1081,6 +1083,7 @@ async def get_project_quality_matrix(
         overall_score=overall_score,
         entries=entries,
         findings=findings,
+        groups=_quality_finding_groups(findings, entries=entries),
     )
 
 
@@ -1228,6 +1231,95 @@ def _with_quality_peer_review_metadata(
             )
         )
     return enriched
+
+
+def _quality_finding_groups(
+    findings: list[QualityFinding],
+    *,
+    entries: list[QualityAgentMatrixEntry] | None = None,
+) -> list[QualityFindingGroup]:
+    group_specs = (
+        ("competitor", _quality_finding_competitor_key),
+        ("dimension", _quality_finding_dimension_key),
+        ("source_agent", lambda finding: finding.source_agent or "unknown"),
+        ("severity", lambda finding: finding.severity),
+        ("required_action", lambda finding: finding.required_action),
+    )
+    grouped: dict[tuple[str, str], list[QualityFinding]] = {}
+    for group_by, key_fn in group_specs:
+        for finding in findings:
+            key = (key_fn(finding) or "unknown").strip() or "unknown"
+            grouped.setdefault((group_by, key), []).append(finding)
+    result: list[QualityFindingGroup] = []
+    for (group_by, key), grouped_findings in sorted(grouped.items()):
+        result.append(
+            QualityFindingGroup(
+                group_by=group_by,  # type: ignore[arg-type]
+                key=key,
+                label=_quality_finding_group_label(group_by, key),
+                finding_ids=[finding.id for finding in grouped_findings],
+                count=len(grouped_findings),
+                blocker_count=sum(
+                    1 for finding in grouped_findings if finding.severity == "blocker"
+                ),
+                warn_count=sum(1 for finding in grouped_findings if finding.severity == "warn"),
+                info_count=sum(1 for finding in grouped_findings if finding.severity == "info"),
+            )
+        )
+    if entries is not None:
+        existing_agent_groups = {key for group_by, key in grouped if group_by == "source_agent"}
+        for entry in entries:
+            if entry.agent_name in existing_agent_groups:
+                continue
+            result.append(
+                QualityFindingGroup(
+                    group_by="source_agent",
+                    key=entry.agent_name,
+                    label=entry.agent_name,
+                    finding_ids=list(entry.finding_ids),
+                    count=entry.finding_count,
+                    blocker_count=entry.blocker_count,
+                    warn_count=entry.warn_count,
+                    info_count=0,
+                )
+            )
+    return result
+
+
+def _quality_finding_competitor_key(finding: QualityFinding) -> str:
+    return (
+        finding.competitor_id
+        or finding.competitor_name
+        or str(finding.metadata.get("competitor_id") or "")
+        or str(finding.metadata.get("competitor_name") or "")
+        or "unknown"
+    )
+
+
+def _quality_finding_dimension_key(finding: QualityFinding) -> str:
+    return (
+        finding.dimension
+        or str(finding.metadata.get("dimension") or "")
+        or _dimension_from_field_path(finding.field_path)
+        or "unknown"
+    )
+
+
+def _dimension_from_field_path(field_path: str | None) -> str:
+    if not field_path:
+        return ""
+    normalized = field_path.replace("[", ".").replace("]", ".")
+    for token in normalized.split("."):
+        token = token.strip().casefold()
+        if token in {"pricing", "feature", "persona", "security", "integration"}:
+            return token
+    return ""
+
+
+def _quality_finding_group_label(group_by: str, key: str) -> str:
+    if key == "unknown":
+        return f"Unknown {group_by.replace('_', ' ')}"
+    return key
 
 
 def _pydantic_ai_context(settings: Settings) -> dict[str, str]:

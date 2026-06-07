@@ -12,6 +12,7 @@ from app.routers.enterprise import (
     _pydantic_ai_runtime_summary_suffix,
     _pydantic_ai_runtime_warn_count,
     _quality_agent_pydantic_ai_metadata,
+    _quality_finding_groups,
     _report_release_gate_scope,
     _with_gap_fill_release_gate_delta,
     _with_pydantic_ai_execution_metadata,
@@ -49,7 +50,48 @@ from packages.schema.models import (
     SkillOutputSpec,
     SkillSpec,
 )
+from packages.schema.quality import QualityFinding
 from packages.skills.registry import SkillRegistry
+
+
+def test_quality_finding_groups_cover_h7_axes() -> None:
+    findings = [
+        QualityFinding(
+            source_agent="ClaimValidator",
+            framework="deterministic-self-consistency",
+            source_id="claim-issue-1",
+            severity="warn",
+            issue_type="weak_text_support",
+            competitor_id="competitor-cursor",
+            dimension="security",
+            claim_ids=["claim-1"],
+            evidence_ids=["evidence-1"],
+            message="Evidence weakly supports a security claim.",
+            required_action="rewrite_claim",
+        ),
+        QualityFinding(
+            source_agent="ReleaseGate",
+            framework="enterprise-release-gate",
+            source_id="release-issue-1",
+            severity="blocker",
+            issue_type="claim_self_consistency_required",
+            competitor_id="competitor-cursor",
+            dimension="security",
+            claim_ids=["claim-1"],
+            evidence_ids=["evidence-1"],
+            message="Release gate blocked the same claim.",
+            required_action="human_review",
+        ),
+    ]
+
+    groups = _quality_finding_groups(findings)
+    group_index = {(group.group_by, group.key): group for group in groups}
+
+    assert group_index[("competitor", "competitor-cursor")].count == 2
+    assert group_index[("dimension", "security")].count == 2
+    assert group_index[("source_agent", "ClaimValidator")].count == 1
+    assert group_index[("severity", "blocker")].blocker_count == 1
+    assert group_index[("required_action", "rewrite_claim")].warn_count == 1
 
 
 def _detail() -> RunDetail:
@@ -1524,6 +1566,11 @@ def test_enterprise_router_exposes_projection() -> None:
     assert red_team.json()["pydantic_ai_runtime_prompt_chars"] > 0
     assert quality_matrix.status_code == 200
     assert isinstance(quality_matrix.json()["findings"], list)
+    assert isinstance(quality_matrix.json()["groups"], list)
+    group_keys = {
+        (item["group_by"], item["key"]) for item in quality_matrix.json()["groups"]
+    }
+    assert ("source_agent", "ClaimValidator") in group_keys
     assert all(
         isinstance(item["suggested_redos"], list) for item in quality_matrix.json()["entries"]
     )
