@@ -907,6 +907,82 @@ def test_claim_validator_cross_checks_evidence_support() -> None:
     assert report.warn_count >= 1
 
 
+def test_claim_validator_marks_high_risk_status_and_conflicts() -> None:
+    competitor = _competitor()
+    supported_security = EvidenceRecord(
+        id="evidence-security",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="security-1",
+        competitor_id=competitor.id,
+        dimension="security",
+        source_type="webpage_verified",
+        title="Cursor enterprise security",
+        url="https://cursor.sh/security",
+        snippet="Cursor enterprise-ready security includes SSO, SAML, SOC 2, and audit logs.",
+        content_hash="hash-security",
+        reliability_score=0.92,
+        quality_label="accepted",
+    )
+    conflicting_security = supported_security.model_copy(
+        update={
+            "id": "evidence-security-conflict",
+            "raw_source_id": "security-conflict",
+            "snippet": "Cursor does not support SSO or SAML for this enterprise plan.",
+            "content_hash": "hash-security-conflict",
+        }
+    )
+    claims = [
+        ClaimRecord(
+            id="claim-single-source-risk",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="security",
+            claim_text="Cursor is enterprise-ready with SSO and SOC 2 controls.",
+            evidence_ids=["evidence-security"],
+            confidence=0.9,
+        ),
+        ClaimRecord(
+            id="claim-conflict",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="security",
+            claim_text="Cursor has SSO and SAML controls.",
+            evidence_ids=["evidence-security-conflict"],
+            confidence=0.9,
+        ),
+    ]
+
+    report = validate_project_claims(
+        project_id="project-1",
+        claims=claims,
+        evidence=[supported_security, conflicting_security],
+    )
+
+    single_source = next(
+        item for item in report.results if item.claim_id == "claim-single-source-risk"
+    )
+    conflict = next(item for item in report.results if item.claim_id == "claim-conflict")
+    assert single_source.high_risk is True
+    assert single_source.validation_status == "weak_support"
+    assert single_source.recommended_action == "downgrade_claim"
+    assert any(reason.startswith("matched:") for reason in single_source.risk_reasons)
+    assert conflict.high_risk is True
+    assert conflict.status == "unsupported"
+    assert conflict.validation_status == "conflicting"
+    assert conflict.recommended_action == "human_review"
+    assert report.high_risk_claim_count == 2
+    assert report.high_risk_validated_count == 2
+    assert report.validation_status_counts["weak_support"] == 1
+    assert report.validation_status_counts["conflicting"] == 1
+    assert {issue.issue_type for issue in report.issues} >= {
+        "single_source_support",
+        "conflicting_evidence",
+    }
+
+
 def test_report_release_gate_warns_on_high_risk_single_source_claim() -> None:
     competitor = _competitor()
     evidence = [

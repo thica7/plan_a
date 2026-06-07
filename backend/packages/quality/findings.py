@@ -440,6 +440,11 @@ def _claim_validation_metadata(
         return {}
     return {
         "validation_status": validation.status,
+        "risk_validation_status": validation.validation_status,
+        "high_risk": validation.high_risk,
+        "risk_reasons": validation.risk_reasons,
+        "recommended_action": validation.recommended_action,
+        "rationale": validation.rationale,
         "support_score": validation.support_score,
         "text_support_score": validation.text_support_score,
         "evidence_quality_score": validation.evidence_quality_score,

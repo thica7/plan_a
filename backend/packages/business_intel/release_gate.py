@@ -562,6 +562,8 @@ def _claim_validation_issues(
                 "Claim self-consistency",
                 (
                     f"Claim {result.claim_id} validation is {result.status}; "
+                    f"risk_status={result.validation_status}; "
+                    f"recommended_action={result.recommended_action}; "
                     f"self-consistency={result.self_consistency_score}, "
                     f"text={result.text_support_score}, "
                     f"evidence={result.evidence_quality_score}, "

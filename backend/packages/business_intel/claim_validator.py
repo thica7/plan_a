@@ -75,6 +75,9 @@ def validate_project_claims(
             triangulation_score=triangulation_score,
         )
         has_blocker = False
+        risk_reasons = _risk_reasons(claim)
+        high_risk = bool(risk_reasons)
+        conflicting_evidence_ids = _conflicting_evidence_ids(claim, usable)
 
         if not claim.evidence_ids or not usable:
             issue = _issue(
@@ -87,6 +90,16 @@ def validate_project_claims(
             issues.append(issue)
             claim_issue_ids.append(issue.id)
             has_blocker = True
+        elif conflicting_evidence_ids:
+            issue = _issue(
+                claim.id,
+                "blocker",
+                "conflicting_evidence",
+                "Usable evidence appears to contradict the claim.",
+                conflicting_evidence_ids,
+            )
+            issues.append(issue)
+            claim_issue_ids.append(issue.id)
         elif text_support_score < 40:
             issue = _issue(
                 claim.id,
@@ -151,17 +164,38 @@ def validate_project_claims(
 
         if has_blocker:
             status = "blocked"
+        elif conflicting_evidence_ids:
+            status = "unsupported"
         elif support_score >= 75 and not claim_issue_ids:
             status = "supported"
         elif support_score >= 55:
             status = "weak"
         else:
             status = "unsupported"
+        validation_status = _validation_status(
+            high_risk=high_risk,
+            status=status,
+            claim_issue_ids=claim_issue_ids,
+            has_conflict=bool(conflicting_evidence_ids),
+        )
 
         results.append(
             ClaimValidationResult(
                 claim_id=claim.id,
                 status=status,
+                validation_status=validation_status,
+                high_risk=high_risk,
+                risk_reasons=risk_reasons,
+                recommended_action=_recommended_action(
+                    validation_status,
+                    issue_ids=claim_issue_ids,
+                ),
+                rationale=_validation_rationale(
+                    validation_status=validation_status,
+                    support_score=support_score,
+                    risk_reasons=risk_reasons,
+                    issue_ids=claim_issue_ids,
+                ),
                 support_score=support_score,
                 text_support_score=text_support_score,
                 evidence_quality_score=evidence_quality_score,
@@ -182,6 +216,16 @@ def validate_project_claims(
     low_consistency_count = len(
         [item for item in results if item.status != "blocked" and item.self_consistency_score < 55]
     )
+    validation_status_counts = {
+        status: len([item for item in results if item.validation_status == status])
+        for status in {
+            "supported",
+            "weak_support",
+            "conflicting",
+            "unsupported",
+            "not_applicable",
+        }
+    }
     return ClaimValidationReport(
         project_id=project_id,
         total_claims=len(claims),
@@ -196,6 +240,13 @@ def validate_project_claims(
             [item.self_consistency_score for item in results if item.status != "blocked"]
         ),
         low_consistency_count=low_consistency_count,
+        high_risk_claim_count=sum(1 for item in results if item.high_risk),
+        high_risk_validated_count=sum(
+            1
+            for item in results
+            if item.high_risk and item.validation_status != "not_applicable"
+        ),
+        validation_status_counts=validation_status_counts,
         results=results,
         issues=issues,
         generated_at=datetime.utcnow(),
@@ -347,6 +398,108 @@ def _consistency_sample(
 
 def _requires_triangulation(claim: ClaimRecord) -> bool:
     return bool(HIGH_RISK_CLAIM_RE.search(f"{claim.claim_text} {claim.claim_type}"))
+
+
+def _risk_reasons(claim: ClaimRecord) -> list[str]:
+    text = f"{claim.claim_text} {claim.claim_type}"
+    matches = sorted({match.group(1).casefold() for match in HIGH_RISK_CLAIM_RE.finditer(text)})
+    reasons = [f"matched:{match}" for match in matches]
+    if claim.confidence < 0.55:
+        reasons.append("low_confidence_claim")
+    return reasons
+
+
+def _conflicting_evidence_ids(
+    claim: ClaimRecord,
+    evidence: list[EvidenceRecord],
+) -> list[str]:
+    claim_text = claim.claim_text.casefold()
+    positive_claim = any(
+        phrase in claim_text
+        for phrase in (
+            " has ",
+            " supports ",
+            " includes ",
+            " provides ",
+            " offers ",
+            " is available",
+            " enterprise-ready",
+            " soc 2",
+            " sso",
+            " saml",
+            " audit log",
+        )
+    )
+    if not positive_claim:
+        return []
+    contradiction_markers = (
+        "does not support",
+        "not supported",
+        "no sso",
+        "no saml",
+        "not available",
+        "not yet available",
+        "removed",
+        "deprecated",
+        "cannot provide",
+        "doesn't include",
+        "does not include",
+    )
+    result: list[str] = []
+    for item in evidence:
+        text = f"{item.title} {item.snippet}".casefold()
+        if any(marker in text for marker in contradiction_markers):
+            result.append(item.id)
+    return result
+
+
+def _validation_status(
+    *,
+    high_risk: bool,
+    status: str,
+    claim_issue_ids: list[str],
+    has_conflict: bool,
+) -> str:
+    if not high_risk:
+        return "not_applicable"
+    if has_conflict:
+        return "conflicting"
+    if status in {"blocked", "unsupported"}:
+        return "unsupported"
+    if claim_issue_ids:
+        return "weak_support"
+    return "supported"
+
+
+def _recommended_action(
+    validation_status: str,
+    *,
+    issue_ids: list[str],
+) -> str:
+    if validation_status in {"not_applicable", "supported"}:
+        return "none"
+    if validation_status == "conflicting":
+        return "human_review"
+    if validation_status == "unsupported":
+        return "collect_evidence" if issue_ids else "delete_claim"
+    return "downgrade_claim"
+
+
+def _validation_rationale(
+    *,
+    validation_status: str,
+    support_score: int,
+    risk_reasons: list[str],
+    issue_ids: list[str],
+) -> str:
+    if validation_status == "not_applicable":
+        return "Claim is not classified as high risk by deterministic risk rules."
+    risk_text = ", ".join(risk_reasons) or "high_risk"
+    issue_text = f"; issues={', '.join(issue_ids)}" if issue_ids else ""
+    return (
+        f"High-risk claim validation status is {validation_status}; "
+        f"support_score={support_score}; risk_reasons={risk_text}{issue_text}."
+    )
 
 
 def _evidence_domain(evidence: EvidenceRecord) -> str:

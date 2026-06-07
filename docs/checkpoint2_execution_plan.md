@@ -232,6 +232,8 @@ Completed behavior:
 
 ### 5. `feat(claims): validate high-risk claims`
 
+Status: completed by `feat(claims): validate high-risk claim status`.
+
 Backlog: H6.
 
 Required behavior:
@@ -250,6 +252,20 @@ Acceptance:
 - All high-risk report claims have validation status.
 - Validation results include evidence ids and rationale.
 - Weak/unsupported validation can trigger scoped redo or report caveat.
+
+Completed behavior:
+
+- Extended claim validation with H6 risk status fields while preserving the
+  existing release-gate-compatible status:
+  `supported`, `weak_support`, `conflicting`, `unsupported`, and
+  `not_applicable`.
+- Added deterministic high-risk classification, risk reasons, recommended
+  action, rationale, and high-risk coverage counters to
+  `ClaimValidationResult` / `ClaimValidationReport`.
+- Added deterministic conflicting-evidence detection for positive high-risk
+  security/compliance claims.
+- Exposed H6 status metadata through unified `QualityFinding` records and
+  quality decision events.
 
 ### 6. `feat(quality): expose quality agent matrix`
 

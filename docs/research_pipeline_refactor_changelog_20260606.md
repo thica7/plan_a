@@ -905,3 +905,37 @@ Validation:
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_survey_interview_agent.py -q`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_projection.py backend/tests/unit/test_enterprise_store.py backend/tests/unit/test_source_reconciliation.py -q`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_business_intel.py -q`
+
+## 2026-06-07 - Step 29: High-Risk Claim Validation Status
+
+Commit: this commit
+
+Scope:
+
+- Extended claim validation results with H6-specific risk fields:
+  `validation_status`, `high_risk`, `risk_reasons`, `recommended_action`, and
+  `rationale`.
+- Added validation status counts and high-risk coverage counters to
+  `ClaimValidationReport`.
+- Added deterministic high-risk classification and conflicting-evidence
+  detection while preserving the existing `status` field for release-gate
+  compatibility.
+- Included the new H6 fields in unified ClaimValidator `QualityFinding`
+  metadata and quality decision events.
+- Updated release-gate claim validation messages to show risk status and
+  recommended action.
+
+Why:
+
+- Checkpoint 2 H6 requires high-risk claims to have explicit validation status,
+  evidence support, rationale, and a route to repair, downgrade, delete, or
+  human review.
+- The previous ClaimValidator already had self-consistency scores and issue
+  routing, but its status vocabulary was too coarse for high-score review.
+- Keeping the legacy `status` avoids destabilizing existing release-gate and
+  quality-matrix behavior while adding the clearer H6 layer.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/schema/enterprise.py backend/packages/business_intel/claim_validator.py backend/packages/business_intel/release_gate.py backend/packages/quality/findings.py backend/packages/orchestrator/service.py backend/tests/unit/test_business_intel.py backend/tests/unit/test_quality_findings.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_business_intel.py backend/tests/unit/test_quality_findings.py -q`

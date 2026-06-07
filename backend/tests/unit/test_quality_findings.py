@@ -166,6 +166,11 @@ def test_claim_validation_finding_carries_scores_and_samples() -> None:
             ClaimValidationResult(
                 claim_id="claim-1",
                 status="weak",
+                validation_status="weak_support",
+                high_risk=True,
+                risk_reasons=["matched:enterprise-ready"],
+                recommended_action="downgrade_claim",
+                rationale="High-risk claim validation status is weak_support.",
                 support_score=52,
                 text_support_score=38,
                 evidence_quality_score=80,
@@ -188,4 +193,7 @@ def test_claim_validation_finding_carries_scores_and_samples() -> None:
     assert finding.claim_ids == ["claim-1"]
     assert finding.evidence_ids == ["evidence-1"]
     assert finding.metadata["validation_status"] == "weak"
+    assert finding.metadata["risk_validation_status"] == "weak_support"
+    assert finding.metadata["high_risk"] is True
+    assert finding.metadata["recommended_action"] == "downgrade_claim"
     assert finding.metadata["text_support_score"] == 38

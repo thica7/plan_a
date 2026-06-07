@@ -32,6 +32,21 @@ NotificationType = Literal[
 QuotaEnforcementMode = Literal["monitor", "block"]
 WorkspaceUsageStatus = Literal["ok", "warn", "exceeded"]
 ClaimValidationStatus = Literal["supported", "weak", "unsupported", "blocked"]
+ClaimRiskValidationStatus = Literal[
+    "supported",
+    "weak_support",
+    "conflicting",
+    "unsupported",
+    "not_applicable",
+]
+ClaimValidationRecommendedAction = Literal[
+    "none",
+    "collect_evidence",
+    "rewrite_claim",
+    "downgrade_claim",
+    "delete_claim",
+    "human_review",
+]
 ClaimValidationSampleChecker = Literal["text_support", "evidence_quality", "triangulation"]
 QualityAgentStatus = Literal["pass", "warn", "blocker"]
 MemoryFeedbackType = Literal["correction", "preference", "approval", "rejection", "note"]
@@ -859,6 +874,7 @@ class ClaimValidationIssue(BaseModel):
         "single_source_support",
         "low_self_consistency",
         "low_confidence",
+        "conflicting_evidence",
     ]
     message: str
     evidence_ids: list[str] = Field(default_factory=list)
@@ -880,6 +896,11 @@ class ClaimValidationResult(BaseModel):
 
     claim_id: str
     status: ClaimValidationStatus
+    validation_status: ClaimRiskValidationStatus = "not_applicable"
+    high_risk: bool = False
+    risk_reasons: list[str] = Field(default_factory=list)
+    recommended_action: ClaimValidationRecommendedAction = "none"
+    rationale: str = ""
     support_score: int = Field(ge=0, le=100)
     text_support_score: int = Field(default=0, ge=0, le=100)
     evidence_quality_score: int = Field(default=0, ge=0, le=100)
@@ -905,6 +926,9 @@ class ClaimValidationReport(BaseModel):
     warn_count: int = Field(default=0, ge=0)
     self_consistency_score: int = Field(default=0, ge=0, le=100)
     low_consistency_count: int = Field(default=0, ge=0)
+    high_risk_claim_count: int = Field(default=0, ge=0)
+    high_risk_validated_count: int = Field(default=0, ge=0)
+    validation_status_counts: dict[str, int] = Field(default_factory=dict)
     results: list[ClaimValidationResult] = Field(default_factory=list)
     issues: list[ClaimValidationIssue] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=datetime.utcnow)
