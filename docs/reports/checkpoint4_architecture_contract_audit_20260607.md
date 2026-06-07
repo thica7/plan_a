@@ -4,8 +4,8 @@ Generated: 2026-06-07
 
 ## Verdict
 
-Checkpoint 4 architecture contract implementation is code-complete for the
-planned contract workstreams:
+Checkpoint 4 architecture contract implementation and runtime smoke validation
+are complete for the planned contract workstreams:
 
 - C4.1/C4.2 identity resolver and report scope.
 - C4.3 Clean Research Pipeline boundary.
@@ -14,8 +14,10 @@ planned contract workstreams:
 - C4.6 orchestration ownership.
 - C4.7 observability/governance telemetry.
 
-Runtime real-run smoke validation should still be performed before treating
-this as a final demo acceptance checkpoint. The code-level contract tests pass.
+Runtime smoke validation passed on 2026-06-07. The code-level contract tests
+pass, and the live stack validated Temporal cutover, source-token resolution,
+Release Gate scope, Quality Finding Matrix, Decision Replay, and local
+telemetry.
 
 ## C4.1/C4.2 Identity Resolver And Report Scope
 
@@ -172,19 +174,73 @@ conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterpr
 
 Result: 41 passed.
 
-## Runtime Smoke Still Recommended
+## Runtime Smoke Validation
 
-Before using this as a live demo checkpoint, run:
+Status: complete.
+
+Full report:
+
+- `docs/reports/checkpoint4_runtime_smoke_report_20260607.md`
+
+Temporal server replay smoke:
 
 ```text
-1. Temporal mode real run with HITL disabled.
-2. HITL_ENABLED=true fixture-backed or real run to verify planner/QA review
-   lifecycle in the UI.
-3. Check /api/runtime telemetry status.
-4. Check report source tokens, release gate scope, quality matrix, and decision
-   replay on the produced run.
+run_id: run-0e68ddcdf73b519d5614320fe0f6b068
+status: completed
+approval_status: approved
+workflow_replay_ok: true
+approval_replay_ok: true
 ```
 
-This is not a code gap in C4.1-C4.7, but it is the final runtime confidence
-step before demo acceptance.
+Live API demo smoke:
 
+```text
+run_id: run-0f8e50e1c5f90e169912bb197252f561
+status: completed
+route: temporal
+source_tokens: 2
+missing_source_tokens: 0
+trace_observability: pass
+decision_replay_events: 31
+quality_matrix_entries: 7
+release_gate_status: pass
+```
+
+Live API real smoke:
+
+```text
+run_id: run-ca789f449227ba3c930c722fe209e1ed
+status: completed
+route: temporal
+execution_mode: real
+source_tokens: 3
+missing_source_tokens: 0
+trace_observability: pass
+decision_replay_events: 164
+quality_matrix_entries: 7
+release_gate_status: pass
+```
+
+HITL fixture-backed smoke:
+
+```text
+5 passed in 2.64s
+```
+
+Covered:
+
+- Temporal mode real run with `HITL_ENABLED=false`.
+- HITL-enabled planner/QA lifecycle through fixture-backed
+  `interrupt -> Command(resume=...)` tests.
+- `/api/runtime` telemetry status with local trace, decision replay, audit,
+  compliance redaction, optional Langfuse, and optional OTel.
+- Report source tokens, report-version release-gate scope, quality matrix, and
+  decision replay on produced runs.
+
+## Checkpoint 4 Closure
+
+Checkpoint 4 is closed. Future architecture work should move to Checkpoint 5:
+
+```text
+docs/checkpoint5_enterprise_runtime_plan.md
+```

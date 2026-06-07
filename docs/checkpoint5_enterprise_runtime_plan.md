@@ -25,8 +25,9 @@ Current baseline:
 - Checkpoint 1 report quality closure is accepted.
 - Checkpoint 2 high-score backlog core is accepted.
 - Checkpoint 3 enterprise product hardening core is accepted.
-- Checkpoint 4 architecture contracts are code-complete.
-- Checkpoint 4 runtime smoke is still required before demo acceptance.
+- Checkpoint 4 architecture contracts are complete.
+- Checkpoint 4 runtime smoke is accepted by
+  `docs/reports/checkpoint4_runtime_smoke_report_20260607.md`.
 
 ## Goal
 
@@ -78,6 +79,14 @@ Checkpoint 5 does not:
 | C5.5 | EvalOps release contract | Turn EvalOps into a release/regression gate, not just metrics | H9 |
 | C5.6 | Cost/model/tool policy runtime | Centralize model routing, tool policy, quotas, and cost decisions | H10, Phase 5A |
 | C5.7 | Monitor operations | Productize scheduled scans and monitor jobs as enterprise operations | Phase 5A |
+
+Current status:
+
+```text
+C5.0 Runtime smoke gate: complete
+C5.1 Runtime command layer: next
+C5.2-C5.7: pending
+```
 
 ## C5.0 Runtime Smoke Gate
 
@@ -475,6 +484,12 @@ Runtime acceptance requires:
 
 ## Immediate Next Step
 
-Start with C5.0. Do not implement C5.1 until the runtime smoke result is
-recorded, because the smoke result may reveal a contract gap that should be
-closed before the command layer is built.
+Start with C5.1. C5.0 is complete and recorded in:
+
+```text
+docs/reports/checkpoint4_runtime_smoke_report_20260607.md
+```
+
+Do not add new enterprise actions directly to routers or `RunService`; route
+new review, redo, approval, publish, and monitor actions through the runtime
+command layer.

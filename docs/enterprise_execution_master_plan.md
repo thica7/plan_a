@@ -33,8 +33,8 @@ Phase 5 enterprise productization:
   Checkpoint 1 report quality closure complete
   Checkpoint 2 high-score backlog core complete
   Checkpoint 3 enterprise product hardening core complete
-  Checkpoint 4 architecture contract implementation complete; runtime smoke pending
-  Checkpoint 5 enterprise runtime plan created; implementation not started
+  Checkpoint 4 architecture contract and runtime smoke complete
+  Checkpoint 5 enterprise runtime plan created; C5.0 smoke gate complete
 ```
 
 Strict status:
@@ -53,19 +53,20 @@ Strict status:
   continue through enterprise artifact/source governance.
 - Checkpoint 4 architecture consolidation: contract implementation complete for
   identity, scope, research boundary, quality, HITL, orchestration, and
-  observability. Runtime smoke validation remains before demo acceptance.
+  observability. Runtime smoke validation is complete.
 - Architecture-first execution: use
   `docs/architecture_first_execution_plan_20260607.md` when the next request is
   about architecture rather than run-specific report quality.
 - Checkpoint 5 enterprise runtime: use
-  `docs/checkpoint5_enterprise_runtime_plan.md` after the Checkpoint 4 smoke
-  gate to continue architecture-level implementation.
+  `docs/checkpoint5_enterprise_runtime_plan.md` for the next architecture-level
+  implementation step.
 
 ## Full Route
 
 The route now has five checkpoints. Checkpoint 1, Checkpoint 2, and Checkpoint
-3 core are complete. Checkpoint 4 contract implementation is complete; runtime
-smoke validation remains. Checkpoint 5 has a plan but no implementation yet.
+3 core are complete. Checkpoint 4 contract implementation and runtime smoke
+validation are complete. Checkpoint 5 has a plan, and C5.0 runtime smoke gate
+is complete.
 
 ### Checkpoint 1: Report Quality Closure
 
@@ -190,6 +191,7 @@ Active detailed plan:
 Completion audit:
 
 - `docs/reports/checkpoint4_architecture_contract_audit_20260607.md`
+- `docs/reports/checkpoint4_runtime_smoke_report_20260607.md`
 
 ### Checkpoint 5: Enterprise Runtime Architecture
 
@@ -235,7 +237,7 @@ business fields, warning repair artifacts, and the final real-run acceptance.
 Do next:
 
 ```text
-Checkpoint 4 runtime smoke, then execute Checkpoint 5 from:
+Checkpoint 5 C5.1 Runtime Command Layer:
 docs/checkpoint5_enterprise_runtime_plan.md
 ```
 

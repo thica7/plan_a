@@ -203,3 +203,47 @@ Validation:
 - Passed:
   - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/observability backend/app/routers/runtime.py backend/packages/schema/api_dto.py backend/packages/config/settings.py backend/tests/unit/test_observability.py backend/tests/unit/test_health_router.py`
   - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_observability.py::test_telemetry_contract_separates_local_baseline_from_hosted_exporters backend/tests/unit/test_health_router.py::test_runtime_reports_hitl_and_pydantic_ai_readiness -q`
+
+## 2026-06-07 - Step 7: Runtime Smoke Closure
+
+Scope:
+
+- Restarted the local stack through `scripts/dev_start.ps1` so runtime checks
+  used the current C4 code.
+- Verified `scripts/dev_status.ps1` showed backend, frontend, Temporal UI,
+  Postgres, and Temporal worker healthy, with no active runs.
+- Ran the strict Temporal server smoke and wrote
+  `docs/reports/checkpoint4_temporal_runtime_smoke_20260607.md`.
+- Ran one live API demo smoke through `/api/runs` and verified Temporal 100%
+  routing, source-token resolution, Release Gate, Quality Finding Matrix,
+  trace observability, and Decision Replay.
+- Ran one live API real smoke through `/api/runs` and verified the same C4
+  runtime contracts on `execution_mode=real`.
+- Ran HITL fixture-backed smoke tests for planner resume, memory feedback,
+  timeout, decision replay payloads, and runtime readiness.
+- Added `docs/reports/checkpoint4_runtime_smoke_report_20260607.md`.
+- Updated the Checkpoint 4 audit and master plan so Checkpoint 4 is closed and
+  Checkpoint 5 C5.1 is the next architecture step.
+
+Why:
+
+- C4.1-C4.7 were already code-complete, but the plan still required runtime
+  validation before demo acceptance.
+- The live smoke proves `/api/runs` uses Temporal, report source tokens resolve
+  through the unified identity contract, Release Gate uses report scope, quality
+  signals reach the unified matrix, and observability works without hosted
+  Langfuse/OTel.
+
+Validation:
+
+- Passed:
+  - `conda run -n bd-competiscope-v2 python backend/scripts/smoke_temporal_server.py --report docs/reports/checkpoint4_temporal_runtime_smoke_20260607.md`
+  - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py::test_hitl_uses_langgraph_command_resume_and_updates_plan backend/tests/unit/test_run_service.py::test_hitl_resume_creates_reviewable_memory_candidate backend/tests/unit/test_run_service.py::test_hitl_timeout_auto_accepts_interrupt backend/tests/unit/test_observability.py::test_decision_replay_preserves_hitl_lifecycle_payload backend/tests/unit/test_health_router.py::test_runtime_reports_hitl_and_pydantic_ai_readiness -q`
+- Live API demo smoke:
+  - `run-0f8e50e1c5f90e169912bb197252f561`
+  - `status=completed`, `missing_source_tokens=0`,
+    `trace_observability=pass`, `release_gate_status=pass`.
+- Live API real smoke:
+  - `run-ca789f449227ba3c930c722fe209e1ed`
+  - `status=completed`, `missing_source_tokens=0`,
+    `trace_observability=pass`, `release_gate_status=pass`.
