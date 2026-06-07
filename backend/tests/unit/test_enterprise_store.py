@@ -2102,6 +2102,7 @@ def test_gap_fill_result_carries_release_gate_improvement_delta() -> None:
 
 def test_enterprise_router_enforces_rbac_workspace_scope() -> None:
     store = EnterpriseMemoryStore()
+    memory = PreferenceMemoryStore.in_memory()
     detail_a = _detail().model_copy(deep=True, update={"id": "run-a"})
     context_a = store.start_run(detail_a, workspace_id="workspace-a")
     projection_a = build_enterprise_projection(
@@ -2120,8 +2121,27 @@ def test_enterprise_router_enforces_rbac_workspace_scope() -> None:
         competitor_id_map=context_b.competitor_id_map,
     )
     store.save_projection(projection_b)
+    artifact_b = store.upsert_artifact(
+        ArtifactRecord(
+            id="artifact-workspace-b",
+            workspace_id=context_b.workspace_id,
+            project_id=context_b.project_id,
+            evidence_id=projection_b.evidence_records[0].id,
+            run_id=detail_b.id,
+            report_version_id=projection_b.report_version.id,
+            artifact_type="web_snapshot",
+            filename="workspace-b-pricing.html",
+            media_type="text/html",
+            storage_backend="external",
+            uri="https://storage.example.test/workspace-b-pricing.html",
+            byte_size=0,
+            content_hash="hash-workspace-b",
+            created_by="analyst-b",
+        )
+    )
     app = create_app()
     app.dependency_overrides[get_enterprise_store] = lambda: store
+    app.dependency_overrides[get_preference_memory] = lambda: memory
     client = TestClient(app)
     viewer_headers = {
         "X-User-Id": "viewer-a",
@@ -2133,16 +2153,102 @@ def test_enterprise_router_enforces_rbac_workspace_scope() -> None:
         "X-User-Role": "reviewer",
         "X-Workspace-Id": "workspace-a",
     }
+    analyst_headers = {
+        "X-User-Id": "analyst-a",
+        "X-User-Role": "analyst",
+        "X-Workspace-Id": "workspace-a",
+    }
+    admin_headers = {
+        "X-User-Id": "admin-a",
+        "X-User-Role": "admin",
+        "X-Workspace-Id": "workspace-a",
+    }
 
     scoped_projects = client.get("/api/enterprise/projects", headers=viewer_headers)
     cross_project = client.get(
         f"/api/enterprise/projects/{context_b.project_id}",
         headers=viewer_headers,
     )
+    cross_report = client.get(
+        f"/api/enterprise/report-versions/{projection_b.report_version.id}",
+        headers=viewer_headers,
+    )
+    cross_evidence = client.get(
+        "/api/enterprise/evidence/search",
+        params={"workspace_id": context_b.workspace_id, "query": "pricing"},
+        headers=viewer_headers,
+    )
+    cross_artifact = client.get(
+        f"/api/enterprise/artifacts/{artifact_b.id}",
+        headers=viewer_headers,
+    )
+    cross_report_artifacts = client.get(
+        "/api/enterprise/artifacts",
+        params={
+            "workspace_id": context_a.workspace_id,
+            "report_version_id": projection_b.report_version.id,
+        },
+        headers=viewer_headers,
+    )
+    cross_sources = client.get(
+        "/api/enterprise/source-registry",
+        params={"workspace_id": context_b.workspace_id},
+        headers=viewer_headers,
+    )
+    cross_memory = client.get(
+        f"/api/enterprise/projects/{context_b.project_id}/memory/feedback",
+        headers=viewer_headers,
+    )
+    cross_audit = client.get(
+        "/api/enterprise/audit-logs",
+        params={"workspace_id": context_b.workspace_id},
+        headers=admin_headers,
+    )
+    viewer_audit = client.get(
+        "/api/enterprise/audit-logs",
+        params={"workspace_id": context_a.workspace_id},
+        headers=viewer_headers,
+    )
     forbidden_write = client.post(
         "/api/enterprise/projects",
         json=store.get_project(context_a.project_id).model_dump(mode="json"),
         headers=viewer_headers,
+    )
+    viewer_artifact_write = client.post(
+        "/api/enterprise/artifacts",
+        json={
+            "workspace_id": context_a.workspace_id,
+            "project_id": context_a.project_id,
+            "evidence_id": projection_a.evidence_records[0].id,
+            "run_id": detail_a.id,
+            "report_version_id": projection_a.report_version.id,
+            "artifact_type": "web_snapshot",
+            "filename": "viewer-upload.html",
+            "external_uri": "https://storage.example.test/viewer-upload.html",
+        },
+        headers=viewer_headers,
+    )
+    analyst_artifact_write = client.post(
+        "/api/enterprise/artifacts",
+        json={
+            "workspace_id": context_a.workspace_id,
+            "project_id": context_a.project_id,
+            "evidence_id": projection_a.evidence_records[0].id,
+            "run_id": detail_a.id,
+            "report_version_id": projection_a.report_version.id,
+            "artifact_type": "web_snapshot",
+            "filename": "analyst-upload.html",
+            "external_uri": "https://storage.example.test/analyst-upload.html",
+        },
+        headers=analyst_headers,
+    )
+    reviewer_report_write = client.post(
+        f"/api/enterprise/report-versions/{projection_a.report_version.id}/manual-revision",
+        json={
+            "report_md": f"{projection_a.report_version.report_md}\n\nReviewer edit.",
+            "note": "Reviewer should not directly edit report.",
+        },
+        headers=reviewer_headers,
     )
     quality = client.patch(
         f"/api/enterprise/evidence/{projection_a.evidence_records[0].id}/quality",
@@ -2153,7 +2259,19 @@ def test_enterprise_router_enforces_rbac_workspace_scope() -> None:
     assert scoped_projects.status_code == 200
     assert [item["workspace_id"] for item in scoped_projects.json()] == ["workspace-a"]
     assert cross_project.status_code == 403
+    assert cross_report.status_code == 403
+    assert cross_evidence.status_code == 403
+    assert cross_artifact.status_code == 403
+    assert cross_report_artifacts.status_code == 403
+    assert cross_sources.status_code == 403
+    assert cross_memory.status_code == 403
+    assert cross_audit.status_code == 403
+    assert viewer_audit.status_code == 403
     assert forbidden_write.status_code == 403
+    assert viewer_artifact_write.status_code == 403
+    assert analyst_artifact_write.status_code == 200
+    assert analyst_artifact_write.json()["artifact"]["created_by"] == "analyst-a"
+    assert reviewer_report_write.status_code == 403
     assert quality.status_code == 200
     assert quality.json()["evidence"]["quality_label"] == "accepted"
 

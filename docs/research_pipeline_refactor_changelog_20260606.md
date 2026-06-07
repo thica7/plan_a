@@ -1158,7 +1158,7 @@ Validation:
 
 ## 2026-06-07 - Step 37: Unified Artifact Contract For Research Materials
 
-Commit: this commit
+Commit: `dabf250 feat(artifacts): unify research artifact contract`
 
 Scope:
 
@@ -1188,3 +1188,31 @@ Validation:
 - `conda run -n bd-competiscope-v2 python -m ruff check backend/packages/schema/enterprise.py backend/packages/artifacts/store.py backend/packages/enterprise/source_snapshots.py backend/packages/enterprise/store.py backend/packages/enterprise/postgres.py backend/packages/enterprise/knowledge_graph.py backend/app/routers/enterprise.py backend/app/routers/trace.py backend/tests/unit/test_artifacts.py backend/tests/unit/test_enterprise_schema.py backend/tests/unit/test_enterprise_postgres_schema.py backend/tests/unit/test_h10_governance.py`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_artifacts.py backend/tests/unit/test_enterprise_schema.py::test_artifact_schema_links_storage_to_evidence backend/tests/unit/test_enterprise_postgres_schema.py::test_phase5_artifact_schema_is_present backend/tests/unit/test_h10_governance.py::test_source_snapshot_assets_external_s3_pointer_and_source_registry backend/tests/unit/test_h10_governance.py::test_manual_survey_snapshot_creates_research_evidence backend/tests/unit/test_h10_governance.py::test_knowledge_graph_read_model_links_sources_claims_and_reports backend/tests/unit/test_h10_governance.py::test_h10_enterprise_routes_are_callable -q`
 - `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection -q`
+
+## 2026-06-07 - Step 38: RBAC And Workspace Isolation Negative Coverage
+
+Commit: this commit
+
+Scope:
+
+- Expanded enterprise router isolation tests from project-only coverage to
+  project, report version, evidence search, artifact read/list/write, source
+  registry, memory feedback, and audit logs.
+- Proved workspace-scoped users from workspace A cannot read workspace B
+  resources even when they know resource ids.
+- Proved viewer cannot write project or artifact resources, reviewer can review
+  evidence quality but cannot directly revise reports, analyst can create
+  artifacts, and admin is still denied cross-workspace audit reads.
+
+Why:
+
+- Checkpoint 3 needs enterprise governance evidence, not just role tables and
+  happy-path permissions.
+- These tests make the current application-layer isolation boundary explicit
+  while leaving live Postgres RLS integration verification as a later hardening
+  step.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/tests/unit/test_enterprise_store.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_enforces_rbac_workspace_scope -q`

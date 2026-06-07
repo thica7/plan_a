@@ -92,11 +92,13 @@ Closed in Checkpoint 3 step 2:
 - Artifact contract now carries report_version_id, retention_policy, and
   compliance_metadata as first-class fields; web snapshots, report exports, and
   imported interview/survey/manual materials share the same artifact boundary.
+- Application-layer RBAC and workspace isolation now have negative tests across
+  project, report, evidence, artifact, source registry, memory, and audit routes.
 
 Remaining strict gaps:
 
-- RBAC is application-level only; database RLS and cross-workspace negative
-  tests need hardening.
+- Database RLS guardrails exist in schema, but live Postgres RLS integration
+  verification is still a later production-hardening task.
 - Observability exists, but approval, publish, manual revision, artifact, and
   regression signals need to be easier to inspect as one product review surface.
 
@@ -207,6 +209,8 @@ Validation:
 
 ### 5. `feat(security): harden workspace isolation and RBAC`
 
+Status: completed in the current implementation step.
+
 Backlog: Phase 5A enterprise governance.
 
 Required behavior:
@@ -223,6 +227,11 @@ Acceptance:
 - A user from workspace A cannot read or mutate workspace B resources through
   API routes.
 - Audit reads are workspace-scoped.
+
+Validation:
+
+- `conda run -n bd-competiscope-v2 python -m ruff check backend/tests/unit/test_enterprise_store.py`
+- `conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_enforces_rbac_workspace_scope -q`
 
 ### 6. `feat(observability): productize review and regression signals`
 
