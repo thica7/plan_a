@@ -16,6 +16,7 @@ Before each implementation turn, read:
 - `dev_plan_final/dev_plan_final/01_EXECUTION_ROADMAP_5_PHASES.md`
 - `dev_plan_final/dev_plan_final/10_HIGH_SCORE_FUSION_BACKLOG.md`
 - `D:/codex_workspace/websearch_v2/clean_research_pipeline_rewrite_plan.md`
+- `docs/architecture_first_execution_plan_20260607.md`
 - `docs/research_pipeline_refactor_changelog_20260606.md`
 - `docs/checkpoint4_architecture_changelog_20260607.md`
 
@@ -49,6 +50,9 @@ Strict status:
   continue through enterprise artifact/source governance.
 - Checkpoint 4 architecture consolidation: active; focus on identity, scope,
   quality, HITL, orchestration, and observability contracts.
+- Architecture-first execution: use
+  `docs/architecture_first_execution_plan_20260607.md` when the next request is
+  about architecture rather than run-specific report quality.
 
 ## Full Route
 
@@ -173,6 +177,7 @@ Priority:
 Active detailed plan:
 
 - `docs/checkpoint4_architecture_contract_consolidation_plan.md`
+- `docs/architecture_first_execution_plan_20260607.md`
 
 ## Already Completed On Checkpoint 1
 
