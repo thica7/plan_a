@@ -16,12 +16,16 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS crawl_source (
     id          TEXT PRIMARY KEY,
     type        TEXT NOT NULL,
+    competitor  TEXT,
+    dimension   TEXT,
+    priority    INTEGER NOT NULL DEFAULT 100,
     config_json TEXT NOT NULL DEFAULT '{}',
     created_at  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS crawl_frontier (
     id            TEXT PRIMARY KEY,
+    source_id     TEXT,
     source_type   TEXT NOT NULL,
     url           TEXT NOT NULL,
     canonical_url TEXT NOT NULL,
@@ -39,6 +43,7 @@ CREATE TABLE IF NOT EXISTS crawl_frontier (
 );
 
 CREATE INDEX IF NOT EXISTS idx_crawl_source_type ON crawl_source(type);
+CREATE INDEX IF NOT EXISTS idx_crawl_frontier_source_id ON crawl_frontier(source_id);
 CREATE INDEX IF NOT EXISTS idx_crawl_frontier_status_next_run
 ON crawl_frontier(status, next_run_at, priority);
 CREATE INDEX IF NOT EXISTS idx_crawl_frontier_run_id ON crawl_frontier(run_id);
@@ -65,6 +70,7 @@ class CrawlerRepository:
         try:
             await self._apply_pragmas()
             await self._db.executescript(_SCHEMA)
+            await self._migrate_schema()
             await self._db.commit()
         except Exception:
             await self.close()
@@ -92,21 +98,29 @@ class CrawlerRepository:
         self,
         source_type: CrawlSourceType,
         config: dict[str, Any],
+        *,
+        competitor: str | None = None,
+        dimension: str | None = None,
+        priority: int = 100,
     ) -> CrawlSource:
         now = datetime.now(UTC).isoformat()
         source_id = str(uuid.uuid4())
         await self._connection.execute(
             """
-            INSERT INTO crawl_source (id, type, config_json, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO crawl_source
+                (id, type, competitor, dimension, priority, config_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (source_id, source_type, json.dumps(config), now),
+            (source_id, source_type, competitor, dimension, priority, json.dumps(config), now),
         )
         await self._connection.commit()
         return CrawlSource(
             id=source_id,
             type=source_type,
             config=config,
+            competitor=competitor,
+            dimension=dimension,
+            priority=priority,
             created_at=datetime.fromisoformat(now),
         )
 
@@ -131,8 +145,8 @@ class CrawlerRepository:
             (source_id,),
         )
         await self._connection.execute(
-            "UPDATE crawl_frontier SET status = 'cancelled' WHERE run_id = ?",
-            (source_id,),
+            "UPDATE crawl_frontier SET status = 'cancelled' WHERE source_id = ? OR run_id = ?",
+            (source_id, source_id),
         )
         await self._connection.commit()
         return cursor.rowcount > 0
@@ -142,6 +156,7 @@ class CrawlerRepository:
         urls: list[str],
         *,
         source_type: CrawlSourceType,
+        source_id: str | None = None,
         competitor: str | None = None,
         dimension: str | None = None,
         priority: int = 100,
@@ -161,6 +176,7 @@ class CrawlerRepository:
                 continue
             rows.append((
                 str(uuid.uuid4()),
+                source_id,
                 source_type,
                 url,
                 canonical_url,
@@ -183,10 +199,10 @@ class CrawlerRepository:
         await self._connection.executemany(
             """
             INSERT OR IGNORE INTO crawl_frontier
-                (id, source_type, url, canonical_url, competitor, dimension, priority,
+                (id, source_id, source_type, url, canonical_url, competitor, dimension, priority,
                  depth, status, attempts, next_run_at, last_error, parent_id,
                  discovered_at, run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )
@@ -255,9 +271,9 @@ class CrawlerRepository:
                 """
                 UPDATE crawl_frontier
                 SET status = 'pending', next_run_at = ?, last_error = NULL
-                WHERE status = 'failed' AND run_id = ?
+                WHERE status = 'failed' AND (source_id = ? OR run_id = ?)
                 """,
-                (now, source_id),
+                (now, source_id, source_id),
             )
         else:
             cursor = await self._connection.execute(
@@ -275,8 +291,8 @@ class CrawlerRepository:
         clauses: list[str] = []
         params: list[Any] = []
         if source_id:
-            clauses.append("run_id = ?")
-            params.append(source_id)
+            clauses.append("(source_id = ? OR run_id = ?)")
+            params.extend([source_id, source_id])
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         async with self._connection.execute(
             f"""
@@ -307,8 +323,8 @@ class CrawlerRepository:
         clauses: list[str] = []
         params: list[Any] = []
         if source_id:
-            clauses.append("run_id = ?")
-            params.append(source_id)
+            clauses.append("(source_id = ? OR run_id = ?)")
+            params.extend([source_id, source_id])
         if status:
             clauses.append("status = ?")
             params.append(status)
@@ -335,12 +351,27 @@ class CrawlerRepository:
         await self._connection.execute("PRAGMA cache_size = -20000")
         await self._connection.execute("PRAGMA foreign_keys = ON")
 
+    async def _migrate_schema(self) -> None:
+        await self._ensure_column("crawl_source", "competitor", "TEXT")
+        await self._ensure_column("crawl_source", "dimension", "TEXT")
+        await self._ensure_column("crawl_source", "priority", "INTEGER NOT NULL DEFAULT 100")
+        await self._ensure_column("crawl_frontier", "source_id", "TEXT")
+
+    async def _ensure_column(self, table: str, column: str, definition: str) -> None:
+        async with self._connection.execute(f"PRAGMA table_info({table})") as cur:
+            rows = await cur.fetchall()
+        if column not in {row["name"] for row in rows}:
+            await self._connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
     @staticmethod
     def _row_to_source(row: aiosqlite.Row) -> CrawlSource:
         return CrawlSource(
             id=row["id"],
             type=row["type"],
             config=json.loads(row["config_json"]),
+            competitor=row["competitor"],
+            dimension=row["dimension"],
+            priority=row["priority"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )
 
@@ -348,6 +379,7 @@ class CrawlerRepository:
     def _row_to_frontier_item(row: aiosqlite.Row) -> CrawlFrontierItem:
         return CrawlFrontierItem(
             id=row["id"],
+            source_id=row["source_id"],
             source_type=row["source_type"],
             url=row["url"],
             canonical_url=row["canonical_url"],

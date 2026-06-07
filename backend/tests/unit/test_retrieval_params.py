@@ -5,11 +5,20 @@ from types import SimpleNamespace
 import pytest
 
 from packages.knowledge.models import RetrievalHit, RetrievalRequest
-from packages.knowledge.retrieval import RetrievalService
+from packages.knowledge.retrieval import (
+    RetrievalPreset,
+    RetrievalService,
+    get_retrieval_preset,
+    get_retrieval_presets,
+)
 
 
 class FixedVectorStore:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
     async def search(self, query_vector, **kwargs):
+        self.calls.append(kwargs)
         return [
             RetrievalHit(
                 chunk_id="dense",
@@ -21,7 +30,11 @@ class FixedVectorStore:
 
 
 class SparseRepo:
+    def __init__(self) -> None:
+        self.limits: list[int] = []
+
     async def search_documents(self, query: str, limit: int = 20):
+        self.limits.append(limit)
         return [
             SimpleNamespace(
                 id="sparse-doc",
@@ -45,6 +58,9 @@ class SparseRepo:
             ]
         }
 
+    def get_document_weight(self, document) -> float:
+        return 1.0
+
 
 def embed(texts: list[str]) -> list[list[float]]:
     vectors: list[list[float]] = []
@@ -56,6 +72,31 @@ def embed(texts: list[str]) -> list[list[float]]:
         else:
             vectors.append([1.0, 0.0])
     return vectors
+
+
+def test_retrieval_presets_validate_builtin_parameters() -> None:
+    presets = {preset.name: preset for preset in get_retrieval_presets()}
+
+    assert set(presets) == {"general", "pricing", "comparison"}
+    assert presets["pricing"].dense_weight == 0.3
+    assert presets["pricing"].sparse_weight == 0.7
+    assert presets["pricing"].query_rewrite_enabled is False
+
+
+def test_retrieval_preset_rejects_invalid_values() -> None:
+    with pytest.raises(ValueError):
+        get_retrieval_preset("missing")
+    with pytest.raises(ValueError):
+        RetrievalPreset(
+            name="bad",
+            description="bad",
+            dense_weight=1.5,
+            sparse_weight=0.0,
+            top_k=1,
+            rerank_top_k=0,
+            mmr_lambda=0.0,
+            query_rewrite_enabled=False,
+        )
 
 
 @pytest.mark.asyncio
@@ -111,3 +152,26 @@ async def test_mmr_diversifies_when_enabled() -> None:
     )
 
     assert [hit.chunk_id for hit in response.hits] == ["dense", "sparse"]
+
+
+@pytest.mark.asyncio
+async def test_preset_parameters_flow_into_retrieval() -> None:
+    repo = SparseRepo()
+    vector_store = FixedVectorStore()
+    service = RetrievalService(
+        repo=repo,
+        vector_store=vector_store,
+        embed_fn=embed,
+    )
+
+    response = await service.retrieve(
+        RetrievalRequest(
+            query="pricing",
+            preset="pricing",
+            final_top_k=20,
+        )
+    )
+
+    assert vector_store.calls[0]["top_k"] == 5
+    assert repo.limits == [5]
+    assert len(response.hits) <= 5

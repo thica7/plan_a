@@ -27,6 +27,7 @@ class KnowledgeDocument(BaseModel):
     metadata: dict[str, Any] = {}
     fetched_at: datetime
     indexed_at: datetime | None = None
+    last_seen_at: datetime | None = None
     status: str = "active"  # active | archived | deleted
     is_active: bool = True
     version: int = 1
@@ -61,6 +62,7 @@ class KnowledgeChunk(BaseModel):
     token_count: int
     embedding_model: str
     content_hash: str
+    crawl_run_id: str | None = None
     metadata: dict[str, Any] = {}
 
 
@@ -87,6 +89,7 @@ class RetrievalHit(BaseModel):
 
 class RetrievalRequest(BaseModel):
     query: str
+    preset: str | None = None
     competitors: list[str] = []
     dimensions: list[str] = []
     top_k: int = 20

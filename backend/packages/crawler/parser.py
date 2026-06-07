@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 
 from trafilatura import extract as trafilatura_extract
@@ -30,12 +31,12 @@ def parse_html(page: ParsedPage) -> ParsedPage:
     # Extract metadata
     try:
         meta = extract_metadata(page.html, default_url=page.url)
-        title = meta.title or page.title or ""
+        title = _normalise_title(meta.title, page)
         description = meta.description or page.meta_description or ""
         keywords = (meta.keywords or "").split(",") if meta.keywords else []
         keywords = [k.strip() for k in keywords if k.strip()]
     except Exception:
-        title = page.title or ""
+        title = page.title or _extract_title_tag(page.html)
         description = page.meta_description or ""
         keywords = []
 
@@ -50,6 +51,38 @@ def parse_html(page: ParsedPage) -> ParsedPage:
         "meta_keywords": keywords,
         "links": links,
     })
+
+
+class _TitleParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.in_title = False
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() == "title":
+            self.in_title = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "title":
+            self.in_title = False
+
+    def handle_data(self, data: str) -> None:
+        if self.in_title:
+            self.parts.append(data)
+
+
+def _extract_title_tag(html: str) -> str:
+    parser = _TitleParser()
+    parser.feed(html)
+    return " ".join("".join(parser.parts).split())
+
+
+def _normalise_title(candidate: str | None, page: ParsedPage) -> str:
+    title = (candidate or "").strip()
+    if title and title != page.url:
+        return title
+    return page.title or _extract_title_tag(page.html)
 
 
 def _extract_links(html: str, base_url: str) -> list[str]:

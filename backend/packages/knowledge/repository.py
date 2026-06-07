@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS documents (
     parent_document_id TEXT REFERENCES documents(id),
     fetched_at         TEXT NOT NULL,
     indexed_at         TEXT,
+    last_seen_at       TEXT,
     metadata_json      TEXT NOT NULL DEFAULT '{}'
 );
 
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     token_count     INTEGER NOT NULL DEFAULT 0,
     embedding_model TEXT NOT NULL DEFAULT '',
     content_hash    TEXT NOT NULL,
+    crawl_run_id    TEXT,
     metadata_json   TEXT NOT NULL DEFAULT '{}'
 );
 
@@ -91,6 +93,24 @@ CREATE TABLE IF NOT EXISTS eval_runs (
     results_json  TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS retrieval_traces (
+    id               TEXT PRIMARY KEY,
+    created_at       TEXT NOT NULL,
+    query            TEXT NOT NULL,
+    preset_used      TEXT,
+    dense_hits       INTEGER NOT NULL DEFAULT 0,
+    sparse_hits      INTEGER NOT NULL DEFAULT 0,
+    reranked_hits    INTEGER NOT NULL DEFAULT 0,
+    latency_ms       REAL NOT NULL DEFAULT 0,
+    cache_hit        INTEGER NOT NULL DEFAULT 0,
+    crawl_run_id     TEXT,
+    competitor       TEXT,
+    dimension        TEXT,
+    source_type      TEXT,
+    retrieval_preset TEXT,
+    metadata_json    TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE INDEX IF NOT EXISTS idx_documents_competitor ON documents(competitor);
 CREATE INDEX IF NOT EXISTS idx_documents_dimension ON documents(dimension);
 CREATE INDEX IF NOT EXISTS idx_documents_content_hash ON documents(content_hash);
@@ -99,6 +119,8 @@ CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
 CREATE INDEX IF NOT EXISTS idx_crawl_jobs_status ON crawl_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_ingest_jobs_status ON ingest_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_eval_runs_created_at ON eval_runs(created_at);
+CREATE INDEX IF NOT EXISTS idx_retrieval_traces_created_at ON retrieval_traces(created_at);
+CREATE INDEX IF NOT EXISTS idx_retrieval_traces_preset ON retrieval_traces(preset_used);
 """
 
 _POST_MIGRATION_SCHEMA = """
@@ -257,8 +279,8 @@ class KnowledgeRepository:
                 INSERT INTO documents
                     (id, url, canonical_url, title, source_type, competitor, dimension,
                      content_hash, text, markdown, status, is_active, version,
-                     parent_document_id, fetched_at, indexed_at, metadata_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?, ?)
+                     parent_document_id, fetched_at, indexed_at, last_seen_at, metadata_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     doc_id,
@@ -273,6 +295,7 @@ class KnowledgeRepository:
                     doc.markdown,
                     version,
                     parent_document_id,
+                    now,
                     now,
                     now,
                     json.dumps(doc.metadata),
@@ -301,6 +324,7 @@ class KnowledgeRepository:
             metadata=doc.metadata,
             fetched_at=datetime.fromisoformat(now),
             indexed_at=datetime.fromisoformat(now),
+            last_seen_at=datetime.fromisoformat(now),
         )
 
     async def get_document(self, doc_id: str) -> KnowledgeDocument | None:
@@ -414,6 +438,31 @@ class KnowledgeRepository:
         await db.commit()
         return cursor.rowcount
 
+    async def mark_stale_documents(self, before_days: int = 30) -> int:
+        cutoff = (datetime.now(UTC) - timedelta(days=max(0, before_days))).isoformat()
+        now = datetime.now(UTC).isoformat()
+        db = self._connection
+        cursor = await db.execute(
+            """
+            UPDATE documents
+            SET status = 'stale', indexed_at = ?
+            WHERE is_active = 1
+              AND status = 'active'
+              AND COALESCE(last_seen_at, fetched_at) < ?
+            """,
+            (now, cutoff),
+        )
+        await db.commit()
+        return cursor.rowcount
+
+    def get_document_weight(self, document: KnowledgeDocument | dict[str, Any]) -> float:
+        status = (
+            document.status
+            if isinstance(document, KnowledgeDocument)
+            else str(document.get("status", "active"))
+        )
+        return 0.5 if status == "stale" else 1.0
+
     async def search_documents(self, query: str, limit: int = 20) -> list[KnowledgeDocument]:
         """Full-text keyword search via SQLite FTS5."""
         db = self._connection
@@ -425,7 +474,9 @@ class KnowledgeRepository:
             SELECT d.*
             FROM documents_fts
             JOIN documents d ON d.rowid = documents_fts.rowid
-            WHERE documents_fts MATCH ? AND d.status = 'active' AND d.is_active = 1
+            WHERE documents_fts MATCH ?
+              AND d.status IN ('active', 'stale')
+              AND d.is_active = 1
             ORDER BY bm25(documents_fts)
             LIMIT ?
             """,
@@ -511,12 +562,12 @@ class KnowledgeRepository:
             """
             INSERT OR REPLACE INTO chunks
                 (id, document_id, chunk_index, text, token_count, embedding_model,
-                 content_hash, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 content_hash, crawl_run_id, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (c.id, c.document_id, c.chunk_index, c.text, c.token_count,
-                 c.embedding_model, c.content_hash, json.dumps(c.metadata))
+                 c.embedding_model, c.content_hash, c.crawl_run_id, json.dumps(c.metadata))
                 for c in chunks
             ],
         )
@@ -641,6 +692,48 @@ class KnowledgeRepository:
         async with db.execute(f"SELECT COUNT(*) AS total FROM crawl_jobs {where}", params) as cur:
             row = await cur.fetchone()
             return int(row["total"]) if row else 0
+
+    async def list_crawl_runs(self) -> list[dict[str, Any]]:
+        db = self._connection
+        async with db.execute(
+            """
+            WITH run_ids AS (
+                SELECT crawl_run_id AS id FROM chunks WHERE crawl_run_id IS NOT NULL
+                UNION
+                SELECT run_id AS id FROM crawl_jobs WHERE run_id IS NOT NULL
+            )
+            SELECT
+                run_ids.id AS crawl_run_id,
+                COUNT(DISTINCT chunks.document_id) AS doc_count,
+                COUNT(chunks.id) AS chunk_count,
+                MIN(crawl_jobs.created_at) AS first_seen_at,
+                MAX(crawl_jobs.updated_at) AS last_seen_at
+            FROM run_ids
+            LEFT JOIN chunks ON chunks.crawl_run_id = run_ids.id
+            LEFT JOIN crawl_jobs ON crawl_jobs.run_id = run_ids.id
+            GROUP BY run_ids.id
+            ORDER BY COALESCE(last_seen_at, first_seen_at, run_ids.id) DESC
+            """
+        ) as cur:
+            rows = await cur.fetchall()
+        return [
+            {
+                "crawl_run_id": row["crawl_run_id"],
+                "doc_count": int(row["doc_count"]),
+                "chunk_count": int(row["chunk_count"]),
+                "first_seen_at": (
+                    datetime.fromisoformat(row["first_seen_at"])
+                    if row["first_seen_at"]
+                    else None
+                ),
+                "last_seen_at": (
+                    datetime.fromisoformat(row["last_seen_at"])
+                    if row["last_seen_at"]
+                    else None
+                ),
+            }
+            for row in rows
+        ]
 
     # -- Ingest Jobs --------------------------------------------------------
 
@@ -836,6 +929,43 @@ class KnowledgeRepository:
             "results": json.loads(row["results_json"]),
         }
 
+    async def record_retrieval_trace(self, record: Any) -> str:
+        trace_id = str(uuid.uuid4())
+        now = datetime.now(UTC).isoformat()
+        payload = (
+            record.model_dump(mode="json")
+            if hasattr(record, "model_dump")
+            else dict(record)
+        )
+        await self._connection.execute(
+            """
+            INSERT INTO retrieval_traces
+                (id, created_at, query, preset_used, dense_hits, sparse_hits,
+                 reranked_hits, latency_ms, cache_hit, crawl_run_id, competitor,
+                 dimension, source_type, retrieval_preset, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                trace_id,
+                now,
+                payload.get("query", ""),
+                payload.get("preset_used"),
+                int(payload.get("dense_hits", 0)),
+                int(payload.get("sparse_hits", 0)),
+                int(payload.get("reranked_hits", 0)),
+                float(payload.get("latency_ms", 0.0)),
+                1 if payload.get("cache_hit") else 0,
+                payload.get("crawl_run_id"),
+                payload.get("competitor"),
+                payload.get("dimension"),
+                payload.get("source_type"),
+                payload.get("retrieval_preset"),
+                json.dumps(payload.get("metadata", {})),
+            ),
+        )
+        await self._connection.commit()
+        return trace_id
+
     # -- Stats -------------------------------------------------------------
 
     async def knowledge_stats(self) -> dict[str, Any]:
@@ -934,6 +1064,9 @@ class KnowledgeRepository:
             (3, "add crawl result metadata", self._migration_003_crawl_result_metadata),
             (4, "add ingest jobs table", self._migration_004_ingest_jobs),
             (5, "add eval runs table", self._migration_005_eval_runs),
+            (6, "add document last seen timestamp", self._migration_006_documents_last_seen),
+            (7, "add chunk crawl run id", self._migration_007_chunks_crawl_run_id),
+            (8, "add retrieval traces table", self._migration_008_retrieval_traces),
         ]
         db = self._connection
         async with db.execute("SELECT id FROM _schema_version") as cur:
@@ -1026,6 +1159,58 @@ class KnowledgeRepository:
             "CREATE INDEX IF NOT EXISTS idx_eval_runs_created_at ON eval_runs(created_at)"
         )
 
+    async def _migration_006_documents_last_seen(self) -> None:
+        await self._add_column_if_missing(
+            "documents",
+            "last_seen_at",
+            "TEXT DEFAULT NULL",
+        )
+        await self._connection.execute(
+            """
+            UPDATE documents
+            SET last_seen_at = fetched_at
+            WHERE last_seen_at IS NULL
+            """
+        )
+
+    async def _migration_007_chunks_crawl_run_id(self) -> None:
+        await self._add_column_if_missing(
+            "chunks",
+            "crawl_run_id",
+            "TEXT DEFAULT NULL",
+        )
+
+    async def _migration_008_retrieval_traces(self) -> None:
+        await self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS retrieval_traces (
+                id               TEXT PRIMARY KEY,
+                created_at       TEXT NOT NULL,
+                query            TEXT NOT NULL,
+                preset_used      TEXT,
+                dense_hits       INTEGER NOT NULL DEFAULT 0,
+                sparse_hits      INTEGER NOT NULL DEFAULT 0,
+                reranked_hits    INTEGER NOT NULL DEFAULT 0,
+                latency_ms       REAL NOT NULL DEFAULT 0,
+                cache_hit        INTEGER NOT NULL DEFAULT 0,
+                crawl_run_id     TEXT,
+                competitor       TEXT,
+                dimension        TEXT,
+                source_type      TEXT,
+                retrieval_preset TEXT,
+                metadata_json    TEXT NOT NULL DEFAULT '{}'
+            )
+            """
+        )
+        await self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_retrieval_traces_created_at "
+            "ON retrieval_traces(created_at)"
+        )
+        await self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_retrieval_traces_preset "
+            "ON retrieval_traces(preset_used)"
+        )
+
     async def _add_column_if_missing(
         self,
         table: str,
@@ -1091,6 +1276,9 @@ class KnowledgeRepository:
             parent_document_id=row["parent_document_id"],
             fetched_at=datetime.fromisoformat(row["fetched_at"]),
             indexed_at=datetime.fromisoformat(row["indexed_at"]) if row["indexed_at"] else None,
+            last_seen_at=(
+                datetime.fromisoformat(row["last_seen_at"]) if row["last_seen_at"] else None
+            ),
             metadata=json.loads(row["metadata_json"]),
         )
 
@@ -1104,6 +1292,7 @@ class KnowledgeRepository:
             token_count=row["token_count"],
             embedding_model=row["embedding_model"],
             content_hash=row["content_hash"],
+            crawl_run_id=row["crawl_run_id"],
             metadata=json.loads(row["metadata_json"]),
         )
 

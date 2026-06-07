@@ -43,6 +43,7 @@ class IngestionPipeline:
         embed_fn: Callable[[list[str]], Any] | None = None,
         embedding_provider: EmbeddingProvider | None = None,
         embedding_model: str = _DEFAULT_EMBEDDING_MODEL,
+        crawl_run_id: str | None = None,
     ) -> str:
         """Ingest a document. Returns the document ID.
 
@@ -64,7 +65,13 @@ class IngestionPipeline:
         stored = await self._repo.upsert_document(doc, content_hash)
 
         # Chunk the text
-        chunks = self._chunk_text(doc.text, stored.id, content_hash, embedding_model)
+        chunks = self._chunk_text(
+            doc.text,
+            stored.id,
+            content_hash,
+            embedding_model,
+            crawl_run_id=crawl_run_id,
+        )
 
         # Store chunk metadata in SQLite
         await self._repo.insert_chunks(chunks)
@@ -84,6 +91,7 @@ class IngestionPipeline:
                     "dimension": doc.dimension or "",
                     "source_type": doc.source_type,
                     "content_hash": c.content_hash,
+                    "crawl_run_id": c.crawl_run_id or "",
                     "text": c.text,
                 }
                 for c in chunks
@@ -98,6 +106,8 @@ class IngestionPipeline:
         document_id: str,
         content_hash: str,
         embedding_model: str = _DEFAULT_EMBEDDING_MODEL,
+        *,
+        crawl_run_id: str | None = None,
     ) -> list[KnowledgeChunk]:
         """Split text into paragraph-aware chunks."""
         if not text:
@@ -120,6 +130,7 @@ class IngestionPipeline:
                     token_count=self._estimate_tokens(chunk_text),
                     embedding_model=embedding_model,
                     content_hash=hashlib.sha256(chunk_text.encode()).hexdigest()[:16],
+                    crawl_run_id=crawl_run_id,
                 ))
                 idx += 1
 

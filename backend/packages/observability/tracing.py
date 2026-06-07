@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from pydantic import BaseModel, Field
+
 from app.events import RunEvent, RunEventType
 
 SENSITIVE_KEY_PARTS = (
@@ -13,6 +15,22 @@ SENSITIVE_KEY_PARTS = (
     "secret",
     "token",
 )
+
+
+class RetrievalObservability(BaseModel):
+    query: str
+    preset_used: str | None = None
+    dense_hits: int = Field(default=0, ge=0)
+    sparse_hits: int = Field(default=0, ge=0)
+    reranked_hits: int = Field(default=0, ge=0)
+    latency_ms: float = Field(default=0.0, ge=0.0)
+    cache_hit: bool = False
+    crawl_run_id: str | None = None
+    competitor: str | None = None
+    dimension: str | None = None
+    source_type: str | None = None
+    retrieval_preset: str | None = None
+    metadata: dict[str, Any] = {}
 
 
 def sanitize_for_trace(value: Any) -> Any:

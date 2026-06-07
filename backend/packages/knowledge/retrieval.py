@@ -11,6 +11,8 @@ from collections.abc import Callable
 from functools import lru_cache
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from packages.config import get_settings
 from packages.llm import DoubaoClient
 
@@ -19,6 +21,77 @@ from .repository import KnowledgeRepository
 
 _DEFAULT_CACHE_TTL_SECONDS = 300.0
 _DEFAULT_CACHE_MAXSIZE = 256
+
+
+class RetrievalPreset(BaseModel):
+    name: str
+    description: str
+    dense_weight: float = Field(ge=0.0, le=1.0)
+    sparse_weight: float = Field(ge=0.0, le=1.0)
+    top_k: int = Field(ge=1)
+    rerank_top_k: int = Field(ge=0)
+    mmr_lambda: float = Field(ge=0.0, le=1.0)
+    query_rewrite_enabled: bool
+
+
+_BUILTIN_PRESETS: tuple[RetrievalPreset, ...] = (
+    RetrievalPreset(
+        name="general",
+        description="Balanced hybrid retrieval for broad competitor analysis.",
+        dense_weight=0.7,
+        sparse_weight=0.3,
+        top_k=10,
+        rerank_top_k=20,
+        mmr_lambda=0.1,
+        query_rewrite_enabled=True,
+    ),
+    RetrievalPreset(
+        name="pricing",
+        description="Keyword-first retrieval for prices, plan names, and numeric facts.",
+        dense_weight=0.3,
+        sparse_weight=0.7,
+        top_k=5,
+        rerank_top_k=15,
+        mmr_lambda=0.0,
+        query_rewrite_enabled=False,
+    ),
+    RetrievalPreset(
+        name="comparison",
+        description="Diverse hybrid retrieval for cross-competitor comparisons.",
+        dense_weight=0.5,
+        sparse_weight=0.5,
+        top_k=15,
+        rerank_top_k=30,
+        mmr_lambda=0.2,
+        query_rewrite_enabled=True,
+    ),
+)
+
+
+def get_retrieval_presets() -> list[RetrievalPreset]:
+    return [preset.model_copy(deep=True) for preset in _BUILTIN_PRESETS]
+
+
+def get_retrieval_preset(name: str) -> RetrievalPreset:
+    for preset in _BUILTIN_PRESETS:
+        if preset.name == name:
+            return preset.model_copy(deep=True)
+    raise ValueError(f"Unknown retrieval preset: {name}")
+
+
+def apply_retrieval_preset(request: RetrievalRequest) -> RetrievalRequest:
+    if not request.preset:
+        return request
+    preset = get_retrieval_preset(request.preset)
+    return request.model_copy(update={
+        "dense_weight": preset.dense_weight,
+        "sparse_weight": preset.sparse_weight,
+        "top_k": preset.top_k,
+        "rerank_top_k": preset.rerank_top_k,
+        "final_top_k": preset.top_k,
+        "mmr_lambda": preset.mmr_lambda,
+        "enable_query_rewrite": preset.query_rewrite_enabled,
+    })
 
 
 class QueryRewriter(ABC):
@@ -187,18 +260,31 @@ class RetrievalService:
         self._score_threshold = score_threshold
         self._embedding_cache = _TTLCache(maxsize=cache_maxsize, ttl_seconds=cache_ttl)
         self._retrieval_cache = _TTLCache(maxsize=cache_maxsize, ttl_seconds=cache_ttl)
+        self._reset_observability_counts()
 
     async def retrieve(self, request: RetrievalRequest) -> RetrievalResponse:
+        request = apply_retrieval_preset(request)
+        self._reset_observability_counts()
+        started_at = time.monotonic()
+        cache_hit = False
+
         if request.enable_query_rewrite and request.num_rewrites > 0:
-            return await self._retrieve_with_rewrites(request)
+            response = await self._retrieve_with_rewrites(request)
+        else:
+            cache_key = self._cache_key(request)
+            cached = self._retrieval_cache.get(cache_key)
+            if cached is not None:
+                cache_hit = True
+                response = cached.model_copy(deep=True)
+            else:
+                response = await self._retrieve_without_rewrites(request)
+                self._retrieval_cache.set(cache_key, response.model_copy(deep=True))
 
-        cache_key = self._cache_key(request)
-        cached = self._retrieval_cache.get(cache_key)
-        if cached is not None:
-            return cached.model_copy(deep=True)
-
-        response = await self._retrieve_without_rewrites(request)
-        self._retrieval_cache.set(cache_key, response.model_copy(deep=True))
+        await self._record_observability(
+            request,
+            latency_ms=(time.monotonic() - started_at) * 1000,
+            cache_hit=cache_hit,
+        )
         return response
 
     async def _retrieve_with_rewrites(self, request: RetrievalRequest) -> RetrievalResponse:
@@ -239,9 +325,11 @@ class RetrievalService:
                 dimensions=request.dimensions or None,
             )
             dense_hits = _normalise_scores(dense_hits)
+            self._dense_hits += len(dense_hits)
 
         if request.mode == "hybrid":
             sparse_hits = await self._sparse_search(query, request.top_k)
+            self._sparse_hits += len(sparse_hits)
 
         if request.mode == "hybrid" and dense_hits and sparse_hits:
             return _rrf_fusion(
@@ -260,12 +348,14 @@ class RetrievalService:
         chunks_by_doc = await self._repo.get_chunks_for_documents([doc.id for doc in keyword_docs])
         for doc_rank, doc in enumerate(keyword_docs, 1):
             chunks = chunks_by_doc.get(doc.id, [])
+            weight_fn = getattr(self._repo, "get_document_weight", None)
+            document_weight = weight_fn(doc) if callable(weight_fn) else 1.0
             for chunk in chunks[:3]:
                 sparse_hits.append(RetrievalHit(
                     chunk_id=chunk.id,
                     document_id=chunk.document_id,
                     text=chunk.text,
-                    score=1.0 / doc_rank,
+                    score=(1.0 / doc_rank) * document_weight,
                     url=doc.url,
                     title=doc.title,
                     competitor=doc.competitor,
@@ -288,6 +378,7 @@ class RetrievalService:
     ) -> list[RetrievalHit]:
         if self._rerank_fn and hits and request.rerank_top_k > 0:
             rerank_count = min(request.rerank_top_k, len(hits))
+            self._reranked_hits += rerank_count
             rerank_hits = hits[:rerank_count]
             scores = await _maybe_await(self._rerank_fn(query, [hit.text for hit in rerank_hits]))
             for hit, score in zip(rerank_hits, scores, strict=False):
@@ -373,6 +464,40 @@ class RetrievalService:
     @staticmethod
     def _cache_key(request: RetrievalRequest) -> str:
         return request.model_dump_json()
+
+    def _reset_observability_counts(self) -> None:
+        self._dense_hits = 0
+        self._sparse_hits = 0
+        self._reranked_hits = 0
+
+    async def _record_observability(
+        self,
+        request: RetrievalRequest,
+        *,
+        latency_ms: float,
+        cache_hit: bool,
+    ) -> None:
+        record_fn = getattr(self._repo, "record_retrieval_trace", None)
+        if not callable(record_fn):
+            return
+        try:
+            from packages.observability import RetrievalObservability
+
+            record = RetrievalObservability(
+                query=request.query,
+                preset_used=request.preset,
+                dense_hits=self._dense_hits,
+                sparse_hits=self._sparse_hits,
+                reranked_hits=self._reranked_hits,
+                latency_ms=latency_ms,
+                cache_hit=cache_hit,
+                competitor=",".join(request.competitors) if request.competitors else None,
+                dimension=",".join(request.dimensions) if request.dimensions else None,
+                retrieval_preset=request.preset,
+            )
+            await record_fn(record)
+        except Exception:
+            return
 
 
 def _cosine(left: list[float], right: list[float]) -> float:

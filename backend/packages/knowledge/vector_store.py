@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Callable
 from typing import Any, TypeVar
 
@@ -31,7 +32,8 @@ class VectorStore:
     """Async-friendly Qdrant adapter. Uses sync client under the hood with
     async wrappers so it integrates cleanly with the FastAPI event loop."""
 
-    def __init__(self, url: str = "http://localhost:6333") -> None:
+    def __init__(self, url: str | None = None) -> None:
+        url = url or os.getenv("QDRANT_URL", "http://localhost:6333")
         self._client = QdrantClient(url=url)
         self._initialised = False
 
@@ -63,6 +65,7 @@ class VectorStore:
         vectors: list[list[float]],
         payloads: list[dict[str, Any]],
     ) -> None:
+        await self.initialise()
         points = [
             PointStruct(id=cid, vector=vec, payload=pl)
             for cid, vec, pl in zip(chunk_ids, vectors, payloads, strict=False)
@@ -86,6 +89,7 @@ class VectorStore:
         competitors: list[str] | None = None,
         dimensions: list[str] | None = None,
     ) -> list[RetrievalHit]:
+        await self.initialise()
         must_conditions: list[FieldCondition] = []
         if competitors:
             must_conditions.append(
@@ -98,15 +102,7 @@ class VectorStore:
 
         search_filter = Filter(must=must_conditions) if must_conditions else None
 
-        results = await self._with_retry(
-            lambda: self._client.search(
-                collection_name=COLLECTION_NAME,
-                query_vector=query_vector,
-                limit=top_k,
-                query_filter=search_filter,
-                search_params=SearchParams(exact=False, hnsw_ef=128),
-            )
-        )
+        results = await self._search_points(query_vector, search_filter, top_k)
 
         hits: list[RetrievalHit] = []
         for r in results:
@@ -125,12 +121,41 @@ class VectorStore:
             ))
         return hits
 
+    async def _search_points(
+        self,
+        query_vector: list[float],
+        search_filter: Filter | None,
+        top_k: int,
+    ) -> list[Any]:
+        search_params = SearchParams(exact=False, hnsw_ef=128)
+        if hasattr(self._client, "search"):
+            return await self._with_retry(
+                lambda: self._client.search(
+                    collection_name=COLLECTION_NAME,
+                    query_vector=query_vector,
+                    limit=top_k,
+                    query_filter=search_filter,
+                    search_params=search_params,
+                )
+            )
+        response = await self._with_retry(
+            lambda: self._client.query_points(
+                collection_name=COLLECTION_NAME,
+                query=query_vector,
+                limit=top_k,
+                query_filter=search_filter,
+                search_params=search_params,
+            )
+        )
+        return list(response.points)
+
     async def delete_by_document(self, document_id: str) -> None:
         await self.delete_by_documents([document_id])
 
     async def delete_by_documents(self, document_ids: list[str]) -> None:
         if not document_ids:
             return
+        await self.initialise()
         match = (
             MatchValue(value=document_ids[0])
             if len(document_ids) == 1
@@ -146,6 +171,7 @@ class VectorStore:
         )
 
     async def collection_info(self) -> dict[str, Any]:
+        await self.initialise()
         info = await self._with_retry(
             lambda: self._client.get_collection(collection_name=COLLECTION_NAME)
         )

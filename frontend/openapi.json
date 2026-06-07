@@ -812,6 +812,195 @@
         }
       }
     },
+    "/api/knowledge/presets": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "List Knowledge Presets",
+        "operationId": "list_knowledge_presets_api_knowledge_presets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RetrievalPreset"
+                  },
+                  "type": "array",
+                  "title": "Response List Knowledge Presets Api Knowledge Presets Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/eval": {
+      "post": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Evaluate Knowledge",
+        "operationId": "evaluate_knowledge_api_knowledge_eval_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalRunDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/eval/runs": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "List Knowledge Eval Runs",
+        "operationId": "list_knowledge_eval_runs_api_knowledge_eval_runs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EvalRunSummary"
+                  },
+                  "title": "Response List Knowledge Eval Runs Api Knowledge Eval Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/eval/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Get Knowledge Eval Run",
+        "operationId": "get_knowledge_eval_run_api_knowledge_eval_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalRunDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/stats": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Get Knowledge Stats",
+        "operationId": "get_knowledge_stats_api_knowledge_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeStatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/knowledge/crawl-jobs": {
       "get": {
         "tags": [
@@ -962,6 +1151,31 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/crawl-runs": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "List Knowledge Crawl Runs",
+        "operationId": "list_knowledge_crawl_runs_api_knowledge_crawl_runs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CrawlRunSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Knowledge Crawl Runs Api Knowledge Crawl Runs Get"
                 }
               }
             }
@@ -1588,6 +1802,17 @@
             ],
             "title": "Url"
           },
+          "crawl_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawl Run Id"
+          },
           "text": {
             "anyOf": [
               {
@@ -2092,6 +2317,53 @@
         ],
         "title": "CrawlJobCreate"
       },
+      "CrawlRunSummary": {
+        "properties": {
+          "crawl_run_id": {
+            "type": "string",
+            "title": "Crawl Run Id"
+          },
+          "doc_count": {
+            "type": "integer",
+            "title": "Doc Count"
+          },
+          "chunk_count": {
+            "type": "integer",
+            "title": "Chunk Count"
+          },
+          "first_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "crawl_run_id",
+          "doc_count",
+          "chunk_count"
+        ],
+        "title": "CrawlRunSummary"
+      },
       "CrawlSource": {
         "properties": {
           "id": {
@@ -2104,7 +2376,11 @@
               "sitemap",
               "rss",
               "web_search",
-              "manual"
+              "manual",
+              "pricing",
+              "official_docs",
+              "changelog",
+              "review_site"
             ],
             "title": "Type"
           },
@@ -2112,6 +2388,33 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Config"
+          },
+          "competitor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competitor"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority",
+            "default": 100
           },
           "created_at": {
             "type": "string",
@@ -2136,7 +2439,11 @@
               "sitemap",
               "rss",
               "web_search",
-              "manual"
+              "manual",
+              "pricing",
+              "official_docs",
+              "changelog",
+              "review_site"
             ],
             "title": "Type"
           },
@@ -2144,12 +2451,45 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Config"
+          },
+          "competitor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competitor"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
           }
         },
         "type": "object",
         "required": [
-          "type",
-          "config"
+          "type"
         ],
         "title": "CrawlSourceCreate"
       },
@@ -2207,6 +2547,145 @@
           "target_document_id"
         ],
         "title": "DocumentMergeRequest"
+      },
+      "EvalLabel": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "relevant_doc_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Relevant Doc Ids",
+            "default": []
+          },
+          "relevant_chunk_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Relevant Chunk Ids",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "EvalLabel"
+      },
+      "EvalRequest": {
+        "properties": {
+          "labels": {
+            "items": {
+              "$ref": "#/components/schemas/EvalLabel"
+            },
+            "type": "array",
+            "title": "Labels"
+          },
+          "top_k": {
+            "type": "integer",
+            "title": "Top K",
+            "default": 10
+          },
+          "preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "labels"
+        ],
+        "title": "EvalRequest"
+      },
+      "EvalRunDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "top_k": {
+            "type": "integer",
+            "title": "Top K"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metrics"
+          },
+          "labels": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Labels"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "top_k",
+          "metrics",
+          "labels",
+          "results"
+        ],
+        "title": "EvalRunDetail"
+      },
+      "EvalRunSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "top_k": {
+            "type": "integer",
+            "title": "Top K"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metrics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "top_k",
+          "metrics"
+        ],
+        "title": "EvalRunSummary"
       },
       "FetchSmokeRequest": {
         "properties": {
@@ -2523,6 +3002,18 @@
             ],
             "title": "Indexed At"
           },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
           "status": {
             "type": "string",
             "title": "Status",
@@ -2561,6 +3052,47 @@
         ],
         "title": "KnowledgeDocument",
         "description": "A crawled or ingested document stored in the knowledge base."
+      },
+      "KnowledgeStatsResponse": {
+        "properties": {
+          "doc_count": {
+            "type": "integer",
+            "title": "Doc Count"
+          },
+          "chunk_count": {
+            "type": "integer",
+            "title": "Chunk Count"
+          },
+          "average_chunk_length": {
+            "type": "number",
+            "title": "Average Chunk Length"
+          },
+          "source_breakdown": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Source Breakdown"
+          },
+          "last_24h_ingest_count": {
+            "type": "integer",
+            "title": "Last 24H Ingest Count"
+          },
+          "fts_size": {
+            "type": "integer",
+            "title": "Fts Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_count",
+          "chunk_count",
+          "average_chunk_length",
+          "source_breakdown",
+          "last_24h_ingest_count",
+          "fts_size"
+        ],
+        "title": "KnowledgeStatsResponse"
       },
       "LlmSmokeRequest": {
         "properties": {
@@ -2884,7 +3416,14 @@
             "title": "Url"
           },
           "title": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Title"
           },
           "competitor": {
@@ -2925,17 +3464,83 @@
           "chunk_id",
           "document_id",
           "text",
-          "score",
-          "title"
+          "score"
         ],
         "title": "RetrievalHit",
         "description": "A single result from hybrid retrieval."
+      },
+      "RetrievalPreset": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "dense_weight": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Dense Weight"
+          },
+          "sparse_weight": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Sparse Weight"
+          },
+          "top_k": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Top K"
+          },
+          "rerank_top_k": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Rerank Top K"
+          },
+          "mmr_lambda": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Mmr Lambda"
+          },
+          "query_rewrite_enabled": {
+            "type": "boolean",
+            "title": "Query Rewrite Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "dense_weight",
+          "sparse_weight",
+          "top_k",
+          "rerank_top_k",
+          "mmr_lambda",
+          "query_rewrite_enabled"
+        ],
+        "title": "RetrievalPreset"
       },
       "RetrievalRequest": {
         "properties": {
           "query": {
             "type": "string",
             "title": "Query"
+          },
+          "preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset"
           },
           "competitors": {
             "items": {
@@ -2962,6 +3567,36 @@
             "type": "integer",
             "title": "Rerank Top K",
             "default": 8
+          },
+          "final_top_k": {
+            "type": "integer",
+            "title": "Final Top K",
+            "default": 8
+          },
+          "dense_weight": {
+            "type": "number",
+            "title": "Dense Weight",
+            "default": 1.0
+          },
+          "sparse_weight": {
+            "type": "number",
+            "title": "Sparse Weight",
+            "default": 1.0
+          },
+          "mmr_lambda": {
+            "type": "number",
+            "title": "Mmr Lambda",
+            "default": 0.0
+          },
+          "enable_query_rewrite": {
+            "type": "boolean",
+            "title": "Enable Query Rewrite",
+            "default": true
+          },
+          "num_rewrites": {
+            "type": "integer",
+            "title": "Num Rewrites",
+            "default": 3
           },
           "mode": {
             "type": "string",

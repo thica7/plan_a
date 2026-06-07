@@ -1,0 +1,30 @@
+{"query":"What are the entry-level prices for the main competitors?","relevant_doc_ids":["11111111-1111-4111-8111-111111111111"],"description":"pricing: entry-level plan prices across competitors"}
+{"query":"Which vendor charges per seat versus per workspace?","relevant_doc_ids":["11111111-1111-4111-8111-111111111112"],"description":"pricing: billing unit comparison"}
+{"query":"Find annual discount details for competitor plans.","relevant_doc_ids":["11111111-1111-4111-8111-111111111113"],"description":"pricing: annual discount details"}
+{"query":"Which plans include usage limits or overage fees?","relevant_doc_ids":["11111111-1111-4111-8111-111111111114"],"description":"pricing: limits and overage fees"}
+{"query":"Summarize enterprise pricing signals from public pages.","relevant_doc_ids":["11111111-1111-4111-8111-111111111115"],"description":"pricing: enterprise public pricing signals"}
+{"query":"Which competitors offer a free plan or free trial?","relevant_doc_ids":["11111111-1111-4111-8111-111111111116"],"description":"pricing: free plans and trials"}
+{"query":"What add-ons are separately priced?","relevant_doc_ids":["11111111-1111-4111-8111-111111111117"],"description":"pricing: add-on pricing"}
+{"query":"Compare price changes mentioned in changelogs or announcements.","relevant_doc_ids":["11111111-1111-4111-8111-111111111118"],"description":"pricing: price change history"}
+{"query":"Which products support SSO and SAML?","relevant_doc_ids":["22222222-2222-4222-8222-222222222221"],"description":"feature: SSO and SAML support"}
+{"query":"Find audit log and compliance feature coverage.","relevant_doc_ids":["22222222-2222-4222-8222-222222222222"],"description":"feature: audit logs and compliance"}
+{"query":"Which competitors provide API access and webhooks?","relevant_doc_ids":["22222222-2222-4222-8222-222222222223"],"description":"feature: API and webhook support"}
+{"query":"Summarize AI automation features by competitor.","relevant_doc_ids":["22222222-2222-4222-8222-222222222224"],"description":"feature: AI automation capabilities"}
+{"query":"What integrations are highlighted for each product?","relevant_doc_ids":["22222222-2222-4222-8222-222222222225"],"description":"feature: integration coverage"}
+{"query":"Which products support role-based access controls?","relevant_doc_ids":["22222222-2222-4222-8222-222222222226"],"description":"feature: RBAC support"}
+{"query":"Find reporting and analytics feature differences.","relevant_doc_ids":["22222222-2222-4222-8222-222222222227"],"description":"feature: reporting and analytics"}
+{"query":"Which vendors mention data residency or regional hosting?","relevant_doc_ids":["22222222-2222-4222-8222-222222222228"],"description":"feature: data residency and hosting"}
+{"query":"What do users complain about in onboarding reviews?","relevant_doc_ids":["33333333-3333-4333-8333-333333333331"],"description":"user_review: onboarding complaints"}
+{"query":"Find reviews mentioning customer support quality.","relevant_doc_ids":["33333333-3333-4333-8333-333333333332"],"description":"user_review: support quality sentiment"}
+{"query":"Which products receive praise for ease of use?","relevant_doc_ids":["33333333-3333-4333-8333-333333333333"],"description":"user_review: ease-of-use praise"}
+{"query":"Summarize negative feedback about reliability or downtime.","relevant_doc_ids":["33333333-3333-4333-8333-333333333334"],"description":"user_review: reliability concerns"}
+{"query":"What review themes mention pricing fairness?","relevant_doc_ids":["33333333-3333-4333-8333-333333333335"],"description":"user_review: pricing fairness sentiment"}
+{"query":"Find user comments about migration difficulty.","relevant_doc_ids":["33333333-3333-4333-8333-333333333336"],"description":"user_review: migration difficulty"}
+{"query":"Which competitors have reviews about missing integrations?","relevant_doc_ids":["33333333-3333-4333-8333-333333333337"],"description":"user_review: missing integrations"}
+{"query":"Compare strengths and weaknesses across all competitors.","relevant_doc_ids":["44444444-4444-4444-8444-444444444441"],"description":"comparison: overall strengths and weaknesses"}
+{"query":"Which competitor is strongest for enterprise security?","relevant_doc_ids":["44444444-4444-4444-8444-444444444442"],"description":"comparison: enterprise security positioning"}
+{"query":"Compare pricing and feature tradeoffs for small teams.","relevant_doc_ids":["44444444-4444-4444-8444-444444444443"],"description":"comparison: small-team pricing and features"}
+{"query":"How do competitors position themselves against incumbents?","relevant_doc_ids":["44444444-4444-4444-8444-444444444444"],"description":"comparison: positioning against incumbents"}
+{"query":"Compare review sentiment across product categories.","relevant_doc_ids":["44444444-4444-4444-8444-444444444445"],"description":"comparison: sentiment across categories"}
+{"query":"Which vendor has the broadest integration ecosystem?","relevant_doc_ids":["44444444-4444-4444-8444-444444444446"],"description":"comparison: integration ecosystem breadth"}
+{"query":"Compare roadmap signals from changelogs and release notes.","relevant_doc_ids":["44444444-4444-4444-8444-444444444447"],"description":"comparison: roadmap and release-note signals"}

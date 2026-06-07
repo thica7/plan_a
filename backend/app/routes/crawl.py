@@ -117,15 +117,29 @@ async def list_crawl_jobs(
 async def create_crawl_source(request: CrawlSourceCreate) -> CrawlSourceDetail:
     repo = await _open_crawler_repository()
     try:
-        source = await repo.create_source(request.type, request.config)
+        config = request.config
+        competitor = (
+            request.competitor if request.competitor is not None else config.get("competitor")
+        )
+        dimension = request.dimension if request.dimension is not None else config.get("dimension")
+        priority = (
+            request.priority if request.priority is not None else int(config.get("priority") or 100)
+        )
+        source = await repo.create_source(
+            request.type,
+            config,
+            competitor=competitor,
+            dimension=dimension,
+            priority=priority,
+        )
         urls = await processor_for(source.type).expand(source)
-        config = source.config
         await repo.add_frontier_items(
             urls,
             source_type=source.type,
-            competitor=config.get("competitor"),
-            dimension=config.get("dimension"),
-            priority=int(config.get("priority") or 100),
+            source_id=source.id,
+            competitor=source.competitor,
+            dimension=source.dimension,
+            priority=source.priority,
             run_id=source.id,
             max_urls=int(config.get("max_urls") or len(urls) or 1),
         )

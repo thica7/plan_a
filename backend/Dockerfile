@@ -2,7 +2,7 @@ FROM python:3.11-slim AS base
 
 WORKDIR /app
 COPY backend/pyproject.toml backend/README.md ./
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -e ".[dev]"
 COPY backend/app ./app
 COPY backend/packages ./packages
 

@@ -29,6 +29,7 @@ _CLOUD_METADATA_IPS = {
     ipaddress.ip_address("169.254.169.254"),
     ipaddress.ip_address("fd00:ec2::254"),
 }
+_DOCKER_DESKTOP_PROXY_NET = ipaddress.ip_network("198.18.0.0/15")
 
 
 class SSRFError(ValueError):
@@ -87,6 +88,12 @@ class SSRFGuard:
         ip = ipaddress.ip_address(address)
         if ip in _CLOUD_METADATA_IPS:
             raise SSRFError(f"Blocked cloud metadata address: {ip}")
+        # Docker Desktop may resolve public egress through its internal proxy in
+        # the RFC 2544 benchmark range. Treat it as public egress for container
+        # based demos while continuing to block loopback, private, link-local,
+        # metadata, multicast, reserved, and unspecified destinations.
+        if ip.version == 4 and ip in _DOCKER_DESKTOP_PROXY_NET:
+            return
         if (
             ip.is_loopback
             or ip.is_private

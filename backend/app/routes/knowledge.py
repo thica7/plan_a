@@ -33,7 +33,7 @@ from packages.knowledge.models import (
 from packages.knowledge.parsers import ParsedDocument, parse_document
 from packages.knowledge.repository import KnowledgeRepository
 from packages.knowledge.reranker import RerankerProvider, get_reranker_provider_from_env
-from packages.knowledge.retrieval import RetrievalService
+from packages.knowledge.retrieval import RetrievalPreset, RetrievalService, get_retrieval_presets
 
 router = APIRouter()
 _repository = KnowledgeRepository()
@@ -65,6 +65,7 @@ class CrawlJob(BaseModel):
 class BatchIngestItem(BaseModel):
     source: Literal["url", "text", "base64"]
     url: str | None = None
+    crawl_run_id: str | None = None
     text: str | None = None
     title: str | None = None
     content_b64: str | None = None
@@ -127,6 +128,7 @@ class EvalLabel(BaseModel):
 class EvalRequest(BaseModel):
     labels: list[EvalLabel]
     top_k: int = 10
+    preset: str | None = None
 
 
 class EvalRunSummary(BaseModel):
@@ -148,6 +150,14 @@ class KnowledgeStatsResponse(BaseModel):
     source_breakdown: dict[str, int]
     last_24h_ingest_count: int
     fts_size: int
+
+
+class CrawlRunSummary(BaseModel):
+    crawl_run_id: str
+    doc_count: int
+    chunk_count: int
+    first_seen_at: datetime | None = None
+    last_seen_at: datetime | None = None
 
 
 async def get_repository() -> KnowledgeRepository:
@@ -299,8 +309,15 @@ async def search_knowledge(
             rerank_model=reranker_provider.model_version if reranker_provider else None,
         )
         return await service.retrieve(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/knowledge/presets", response_model=list[RetrievalPreset])
+async def list_knowledge_presets() -> list[RetrievalPreset]:
+    return get_retrieval_presets()
 
 
 @router.post("/knowledge/eval", response_model=EvalRunDetail)
@@ -326,17 +343,21 @@ async def evaluate_knowledge(
         rerank_fn=reranker_provider.rerank if reranker_provider else None,
         rerank_model=reranker_provider.model_version if reranker_provider else None,
     )
-    responses = [
-        await service.retrieve(
-            RetrievalRequest(
-                query=label.query,
-                top_k=top_k,
-                rerank_top_k=top_k,
-                final_top_k=top_k,
+    try:
+        responses = [
+            await service.retrieve(
+                RetrievalRequest(
+                    query=label.query,
+                    preset=request.preset,
+                    top_k=top_k,
+                    rerank_top_k=top_k,
+                    final_top_k=top_k,
+                )
             )
-        )
-        for label in labels
-    ]
+            for label in labels
+        ]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     hits_by_query = [response.hits for response in responses]
     metrics = evaluate_retrieval(labels, hits_by_query, top_k=top_k)
     run_id = str(uuid.uuid4())
@@ -431,6 +452,12 @@ async def get_knowledge_crawl_job(
     if row is None:
         raise HTTPException(status_code=404, detail="Crawl job not found")
     return _row_to_crawl_job(row)
+
+
+@router.get("/knowledge/crawl-runs", response_model=list[CrawlRunSummary])
+async def list_knowledge_crawl_runs(repo: RepositoryDep) -> list[CrawlRunSummary]:
+    rows = await repo.list_crawl_runs()
+    return [CrawlRunSummary(**row) for row in rows]
 
 
 @router.post("/knowledge/batch", response_model=BatchIngestResponse, status_code=202)
@@ -610,7 +637,11 @@ async def ingest_crawl_result(
         repo=repo,
         vector_store=_vector_store_for_ingest(embedding_provider),
     )
-    document_id = await pipeline.ingest(doc, embedding_provider=embedding_provider)
+    document_id = await pipeline.ingest(
+        doc,
+        embedding_provider=embedding_provider,
+        crawl_run_id=result.request.run_id,
+    )
     return {"ingested": True, "document_id": document_id}
 
 
@@ -626,6 +657,7 @@ async def _process_batch_ingest(
     semaphore = asyncio.Semaphore(options["max_concurrent"])
     failed_fast = asyncio.Event()
     update_lock = asyncio.Lock()
+    init_lock = asyncio.Lock()
 
     async def run_one(index: int, item: BatchIngestItem) -> None:
         if failed_fast.is_set():
@@ -639,7 +671,8 @@ async def _process_batch_ingest(
         async with semaphore:
             item_repo = KnowledgeRepository(repo.db_path)
             try:
-                await item_repo.initialise()
+                async with init_lock:
+                    await item_repo.initialise()
                 document_id = await _ingest_batch_item(
                     item_repo,
                     index,
@@ -696,6 +729,7 @@ async def _ingest_batch_item(
             source_url=None,
             canonical_url=None,
             embedding_provider=embedding_provider,
+            crawl_run_id=item.crawl_run_id,
         )
 
     try:
@@ -710,6 +744,7 @@ async def _ingest_batch_item(
         source_url=None,
         canonical_url=item.filename,
         embedding_provider=embedding_provider,
+        crawl_run_id=item.crawl_run_id,
     )
 
 
@@ -723,7 +758,10 @@ async def _ingest_url_batch_item(
 
     scheduler = CrawlerScheduler()
     try:
-        result = await scheduler.crawl_sync(CrawlRequest(url=item.url or ""))
+        result = await scheduler.crawl_sync(CrawlRequest(
+            url=item.url or "",
+            run_id=item.crawl_run_id,
+        ))
         if not result.success or result.page is None:
             raise ValueError(result.error or "crawl failed")
         metadata = await ingest_crawl_result(repo, result, embedding_provider=embedding_provider)
@@ -742,6 +780,7 @@ async def _ingest_parsed_document(
     source_url: str | None,
     canonical_url: str | None,
     embedding_provider: EmbeddingProvider | None,
+    crawl_run_id: str | None = None,
 ) -> str:
     if not parsed.text.strip():
         raise ValueError("parsed document is empty")
@@ -768,7 +807,11 @@ async def _ingest_parsed_document(
         repo=repo,
         vector_store=_vector_store_for_ingest(embedding_provider),
     )
-    return await pipeline.ingest(doc, embedding_provider=embedding_provider)
+    return await pipeline.ingest(
+        doc,
+        embedding_provider=embedding_provider,
+        crawl_run_id=crawl_run_id,
+    )
 
 
 def _validate_batch_item(item: BatchIngestItem) -> str | None:
