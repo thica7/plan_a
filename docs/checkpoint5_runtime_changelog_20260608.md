@@ -140,11 +140,6 @@ Validation:
 - Focused pytest passed for tenant readiness report and enterprise route
   coverage.
 
-Remaining C5.3 scope:
-
-- Add an opt-in live Postgres RLS smoke test once a real Postgres test instance
-  is configured.
-
 ## 2026-06-08 - C5.3 Runtime Command Isolation Tests
 
 Closed the local negative-isolation coverage for the new command layer.
@@ -167,7 +162,26 @@ Validation:
 - `ruff check backend/tests/unit/test_enterprise_store.py`
 - `pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_enforces_rbac_workspace_scope`
 
-Remaining C5.3 scope:
+## 2026-06-08 - C5.3 Opt-In Postgres RLS Smoke
 
-- Add an opt-in live Postgres RLS smoke test once a real Postgres test instance
-  is configured.
+Closed the Postgres RLS verification hook for C5.3.
+
+Changed:
+
+- Added `backend/tests/integration/test_postgres_rls_smoke.py`.
+- The test is disabled by default and only runs when
+  `ENTERPRISE_RLS_SMOKE_DATABASE_URL` points to a real Postgres test database.
+- The smoke test runs inside a rollback-only transaction, temporarily forces RLS
+  on workspace-scoped tables, inserts two test workspaces, and checks that
+  workspace-scoped visibility is enforced for:
+  - workspaces,
+  - projects,
+  - artifacts,
+  - report versions,
+  - audit logs.
+
+Validation:
+
+- `ruff check backend/tests/integration/test_postgres_rls_smoke.py`
+- `pytest backend/tests/integration/test_postgres_rls_smoke.py` skipped as
+  expected without `ENTERPRISE_RLS_SMOKE_DATABASE_URL`.

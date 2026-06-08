@@ -87,7 +87,7 @@ Current status:
 C5.0 Runtime smoke gate: complete
 C5.1 Runtime command layer: complete
 C5.2 Artifact lifecycle: complete
-C5.3 Tenant governance boundary: in progress
+C5.3 Tenant governance boundary: complete
 C5.4-C5.7: pending
 ```
 
@@ -320,6 +320,10 @@ Progress on 2026-06-08:
 - Extended cross-workspace negative tests to the new runtime command paths:
   tenant readiness, manual report revision, report publish, approval start, and
   approval signal.
+- Added an opt-in live Postgres RLS smoke test gated by
+  `ENTERPRISE_RLS_SMOKE_DATABASE_URL`. It forces RLS inside a rollback-only
+  transaction and verifies workspace filtering across workspaces, projects,
+  artifacts, report versions, and audit logs.
 - The report labels local readiness separately from production SSO/RLS smoke
   requirements.
 
