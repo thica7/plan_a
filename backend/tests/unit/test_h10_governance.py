@@ -15,7 +15,11 @@ from packages.enterprise import (
     build_project_knowledge_graph_read_model,
     capture_source_snapshot,
 )
-from packages.governance import build_model_route_decision, build_tool_registry_report
+from packages.governance import (
+    build_model_route_decision,
+    build_tenant_governance_readiness_report,
+    build_tool_registry_report,
+)
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import ArtifactRecord, SourceSnapshotCreateRequest
 from packages.schema.models import (
@@ -316,6 +320,24 @@ def test_model_router_scores_configured_candidates_by_policy_weights() -> None:
     assert "limited_tool_calling" in demo.risk_flags
 
 
+def test_tenant_governance_readiness_reports_runtime_and_rls_scope() -> None:
+    store, context = _projected_store()
+
+    report = build_tenant_governance_readiness_report(
+        store=store,
+        workspace_id=context.workspace_id,
+    )
+    checks = {item.id: item for item in report.checks}
+
+    assert report.status in {"pass", "warn"}
+    assert report.score >= 80
+    assert checks["rbac.required_actions"].status == "pass"
+    assert checks["tenant.workspace_identity"].status == "pass"
+    assert checks["tenant.audit_filter"].status == "pass"
+    assert checks["tenant.postgres_rls"].status == "pass"
+    assert checks["tenant.postgres_rls"].evidence["uses_current_workspace_setting"] is True
+
+
 def test_h10_enterprise_routes_are_callable() -> None:
     store, context = _projected_store()
     app = create_app()
@@ -333,6 +355,10 @@ def test_h10_enterprise_routes_are_callable() -> None:
     route_response = client.get("/api/enterprise/model-route")
     graph_response = client.get(
         f"/api/enterprise/projects/{context.project_id}/kg-read-model"
+    )
+    tenant_readiness_response = client.get(
+        "/api/enterprise/governance/tenant-readiness",
+        params={"workspace_id": context.workspace_id},
     )
     report_version_id = store.list_report_versions(project_id=context.project_id)[0].id
     export_response = client.post(
@@ -388,6 +414,8 @@ def test_h10_enterprise_routes_are_callable() -> None:
     assert route_response.json()["selected"]["provider_kind"] == "backup"
     assert graph_response.status_code == 200
     assert graph_response.json()["node_count"] >= 5
+    assert tenant_readiness_response.status_code == 200
+    assert tenant_readiness_response.json()["score"] >= 80
     assert export_response.status_code == 200
     export_artifact = export_response.json()["artifact"]
     assert export_artifact["artifact_type"] == "report_export"

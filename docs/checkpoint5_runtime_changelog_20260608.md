@@ -119,3 +119,30 @@ Validation:
   enterprise router, and focused tests.
 - Focused pytest passed for artifact storage, source snapshots, lifecycle route,
   and enterprise audit decision replay.
+
+## 2026-06-08 - C5.3 Tenant Governance Readiness
+
+Implemented the first Tenant Governance Boundary slice.
+
+Changed:
+
+- Added `backend/packages/governance/tenant_readiness.py`.
+- Added `TenantGovernanceReadinessReport` with RBAC, workspace identity, audit
+  filtering, artifact filtering, report publication policy, and Postgres RLS
+  migration checks.
+- Added `/api/enterprise/governance/tenant-readiness`.
+- Reused the existing Phase 5 Postgres tenant isolation guardrail in
+  `backend/db/postgres/001_enterprise_core.sql` as readiness evidence.
+
+Validation:
+
+- `ruff check` passed for governance, enterprise router, and focused tests.
+- Focused pytest passed for tenant readiness report and enterprise route
+  coverage.
+
+Remaining C5.3 scope:
+
+- Add explicit negative cross-workspace tests for runtime commands, artifact
+  reads, audit reads, and report publication paths.
+- Add an opt-in live Postgres RLS smoke test once a real Postgres test instance
+  is configured.

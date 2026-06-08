@@ -87,7 +87,8 @@ Current status:
 C5.0 Runtime smoke gate: complete
 C5.1 Runtime command layer: complete
 C5.2 Artifact lifecycle: complete
-C5.3-C5.7: pending
+C5.3 Tenant governance boundary: in progress
+C5.4-C5.7: pending
 ```
 
 ## CC Recommendation Integration
@@ -309,6 +310,15 @@ Acceptance:
 - A single endpoint or report exposes RBAC/RLS readiness by domain.
 - Negative tests cover cross-workspace read and mutation paths.
 - Production gaps are explicitly labeled as readiness gaps, not claimed as done.
+
+Progress on 2026-06-08:
+
+- Added a tenant governance readiness report with RBAC, durable workspace
+  identity, audit filtering, artifact filtering, report publication policy, and
+  Postgres RLS migration checks.
+- Added `/api/enterprise/governance/tenant-readiness`.
+- The report labels local readiness separately from production SSO/RLS smoke
+  requirements.
 
 Suggested commits:
 

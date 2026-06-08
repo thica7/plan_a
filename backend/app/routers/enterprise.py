@@ -66,8 +66,10 @@ from packages.enterprise import (
 )
 from packages.governance import (
     ModelPolicyReport,
+    TenantGovernanceReadinessReport,
     build_model_policy_report,
     build_model_route_decision,
+    build_tenant_governance_readiness_report,
     build_tool_registry_report,
 )
 from packages.identity import compute_content_hash, stable_prefixed_id
@@ -315,6 +317,22 @@ def evaluate_policy(
         request.action,
         target_type=request.target_type,
         target_id=request.target_id,
+    )
+
+
+@router.get(
+    "/enterprise/governance/tenant-readiness",
+    response_model=TenantGovernanceReadinessReport,
+)
+def get_tenant_governance_readiness(
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    workspace_id: str | None = None,
+) -> TenantGovernanceReadinessReport:
+    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "audit:read")
+    return build_tenant_governance_readiness_report(
+        store=store,
+        workspace_id=scoped_workspace_id,
     )
 
 
