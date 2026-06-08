@@ -9,7 +9,20 @@ export type RunEventType =
   | "report_updated"
   | "revision_recorded"
   | "run_completed"
-  | "run_failed";
+  | "run_failed"
+  | "agent.started"
+  | "agent.finished"
+  | "tool.called"
+  | "rag.retrieved"
+  | "self_consistency.sampled"
+  | "memory.recalled"
+  | "memory.feedback_captured"
+  | "hitl.reviewed"
+  | "claim.validated"
+  | "qa.blocked"
+  | "redo.routed"
+  | "benchmark.scored"
+  | "report.ready";
 
 export interface RunEvent {
   id: number;

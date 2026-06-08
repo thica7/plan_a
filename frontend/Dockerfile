@@ -2,7 +2,7 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
-RUN npm install -g pnpm@9.15.9 && pnpm install --frozen-lockfile
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --frozen-lockfile
 COPY frontend/ ./
 RUN pnpm build
 

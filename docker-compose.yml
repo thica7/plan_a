@@ -1,12 +1,61 @@
 services:
   qdrant:
     image: qdrant/qdrant:latest
+    restart: unless-stopped
     ports:
       - "6333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
 
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-competiscope}
+      POSTGRES_USER: ${POSTGRES_USER:-competiscope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-competiscope}
+    ports:
+      - "${POSTGRES_BIND:-127.0.0.1:55432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-competiscope} -d ${POSTGRES_DB:-competiscope}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  temporal:
+    image: temporalio/auto-setup:1.27.2
+    restart: unless-stopped
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-competiscope}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:-competiscope}
+      POSTGRES_SEEDS: postgres
+    ports:
+      - "${TEMPORAL_BIND:-127.0.0.1:7233}:7233"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  temporal-ui:
+    image: temporalio/ui:2.34.0
+    restart: unless-stopped
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: ${TEMPORAL_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080}
+    ports:
+      - "${TEMPORAL_UI_BIND:-127.0.0.1:8233}:8080"
+    depends_on:
+      - temporal
+
   backend:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -14,14 +63,64 @@ services:
     environment:
       QDRANT_URL: http://qdrant:6333
       KB_DB_PATH: /app/runs/knowledge_docker.db
+      ENTERPRISE_STORE_BACKEND: postgres
+      ENTERPRISE_DATABASE_URL: postgresql://${POSTGRES_USER:-competiscope}:${POSTGRES_PASSWORD:-competiscope}@postgres:5432/${POSTGRES_DB:-competiscope}?connect_timeout=5
+      RUN_ORCHESTRATION_BACKEND: temporal
+      TEMPORAL_TRAFFIC_PERCENT: "100"
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: competitive-intel
+      WEBFETCH_V2_ROOT: /app/third_party/webfetch_v2
+      ARTIFACT_STORAGE_ROOT: /app/data/artifacts
     volumes:
-      - ./runs:/app/runs
+      - run-data:/app/runs
+      - artifact-data:/app/data
     expose:
       - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2).read()\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+
+  temporal-worker:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    command: ["python", "-m", "packages.workflows.worker"]
+    environment:
+      ENTERPRISE_STORE_BACKEND: postgres
+      ENTERPRISE_DATABASE_URL: postgresql://${POSTGRES_USER:-competiscope}:${POSTGRES_PASSWORD:-competiscope}@postgres:5432/${POSTGRES_DB:-competiscope}?connect_timeout=5
+      RUN_ORCHESTRATION_BACKEND: temporal
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: competitive-intel
+      WEBFETCH_V2_ROOT: /app/third_party/webfetch_v2
+      ARTIFACT_STORAGE_ROOT: /app/data/artifacts
+    volumes:
+      - run-data:/app/runs
+      - artifact-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
 
   frontend:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: frontend/Dockerfile
@@ -32,14 +131,18 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
+    restart: unless-stopped
     volumes:
       - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "8080:80"
+      - "${APP_BIND:-8080}:80"
     depends_on:
       - backend
       - frontend
+      - temporal-ui
 
 volumes:
   qdrant_data:
-
+  postgres-data:
+  run-data:
+  artifact-data:

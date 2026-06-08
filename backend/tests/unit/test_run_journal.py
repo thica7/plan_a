@@ -1,6 +1,3 @@
-from pathlib import Path
-from uuid import uuid4
-
 from app.events import RunEvent
 from packages.memory import RunJournal
 from packages.schema.api_dto import RunDetail
@@ -8,8 +5,7 @@ from packages.schema.models import AnalysisPlan
 
 
 def test_run_journal_persists_run_and_events() -> None:
-    db_path = Path("runs") / f"test-run-journal-{uuid4().hex}.db"
-    journal = RunJournal(db_path)
+    journal = RunJournal.in_memory()
     detail = RunDetail(
         id="run-1",
         topic="Test",
@@ -27,14 +23,15 @@ def test_run_journal_persists_run_and_events() -> None:
         message="done",
     )
 
-    try:
-        journal.save_run(detail)
-        journal.append_event(event)
+    journal.save_run(detail)
+    journal.append_event(event)
 
-        loaded_runs = journal.load_runs()
-        loaded_events = journal.load_events("run-1")
+    loaded_runs = journal.load_runs()
+    loaded_run = journal.load_run("run-1")
+    loaded_events = journal.load_events("run-1")
 
-        assert loaded_runs[0].id == "run-1"
-        assert loaded_events[0].type == "run_completed"
-    finally:
-        db_path.unlink(missing_ok=True)
+    assert loaded_runs[0].id == "run-1"
+    assert loaded_run is not None
+    assert loaded_run.id == "run-1"
+    assert journal.load_run("missing") is None
+    assert loaded_events[0].type == "run_completed"

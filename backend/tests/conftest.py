@@ -19,5 +19,3 @@ def pytest_configure(config):
         print(f"llm_timeout_seconds={settings.llm_timeout_seconds}")
         print(f"hitl_timeout_seconds={settings.hitl_timeout_seconds}")
         pytest.exit("Printed timeout settings", returncode=0)
-
-

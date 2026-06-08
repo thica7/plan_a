@@ -15,7 +15,7 @@ export function HistoryPage() {
       <header className="page-header">
         <div>
           <h1>Run history</h1>
-          <p>Local in-memory runs for the current backend process.</p>
+          <p>Runs returned by the active backend store and orchestration layer.</p>
         </div>
       </header>
       <div className="history-list">

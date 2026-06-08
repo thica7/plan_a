@@ -11,10 +11,13 @@ dependencies = [
     "langgraph>=0.2.0",
     "langgraph-checkpoint-sqlite>=2.0.0",
     "pydantic>=2.7.0",
+    "pydantic-ai>=0.8.0",
+    "psycopg[binary]>=3.2.0",
     "pyyaml>=6.0.1",
     "qdrant-client>=1.9.0",
     "sse-starlette>=2.1.0",
     "trafilatura>=1.8.0",
+    "temporalio>=1.27.0",
     "uvicorn[standard]>=0.29.0",
 ]
 
@@ -41,3 +44,6 @@ js-render = [
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
 asyncio_mode = "auto"
+
+[tool.setuptools.packages.find]
+include = ["app*", "packages*"]

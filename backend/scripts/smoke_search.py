@@ -22,7 +22,9 @@ async def main() -> None:
     if not settings.has_web_search_credentials:
         raise SystemExit("PPLX_API_KEY is required for the Perplexity search smoke test.")
 
-    results = await PerplexitySearchClient(settings).search(args.query, max_results=args.max_results)
+    results = await PerplexitySearchClient(settings).search(
+        args.query, max_results=args.max_results
+    )
     print(
         json.dumps(
             {

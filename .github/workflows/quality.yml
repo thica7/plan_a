@@ -1,0 +1,70 @@
+name: Quality Gate
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  backend-quality:
+    name: Backend quality checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend
+        run: python -m pip install -e "backend[dev]"
+
+      - name: Lint focused quality modules
+        run: |
+          python -m ruff check \
+            backend/packages/business_intel/report_quality.py \
+            backend/packages/llm/doubao_client.py \
+            backend/scripts/compare_real_run_quality.py \
+            backend/scripts/scan_secrets.py \
+            backend/tests/unit/test_report_quality.py \
+            backend/tests/unit/test_llm_client.py \
+            backend/tests/unit/test_compare_real_run_quality_script.py \
+            backend/tests/unit/test_secret_scan.py
+
+      - name: Run deterministic quality tests
+        run: |
+          pytest -q \
+            backend/tests/unit/test_secret_scan.py \
+            backend/tests/unit/test_report_quality.py \
+            backend/tests/unit/test_compare_real_run_quality_script.py \
+            backend/tests/unit/test_llm_client.py
+
+      - name: Scan for accidental provider secrets
+        run: python backend/scripts/scan_secrets.py
+
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build

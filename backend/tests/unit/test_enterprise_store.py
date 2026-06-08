@@ -1,0 +1,2387 @@
+import asyncio
+import shutil
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.deps import get_artifact_storage, get_enterprise_store, get_preference_memory
+from app.main import create_app
+from app.routers.enterprise import (
+    _pydantic_ai_runtime_score_penalty,
+    _pydantic_ai_runtime_summary_suffix,
+    _pydantic_ai_runtime_warn_count,
+    _quality_agent_pydantic_ai_metadata,
+    _quality_finding_groups,
+    _report_release_gate_scope,
+    _with_gap_fill_release_gate_delta,
+    _with_pydantic_ai_execution_metadata,
+)
+from packages.agents.executor import AgentExecutionResult
+from packages.artifacts import LocalArtifactStorage
+from packages.config import Settings
+from packages.enterprise import (
+    EnterpriseMemoryStore,
+    WorkspaceQuotaExceededError,
+    build_enterprise_projection,
+    build_report_scope,
+    build_report_version_diff,
+)
+from packages.memory import PreferenceMemoryStore
+from packages.orchestrator.service import RunService
+from packages.refs import audit_relationship_resource_id
+from packages.schema.api_dto import RunCreateRequest, RunDetail
+from packages.schema.enterprise import (
+    ArtifactRecord,
+    EvidenceGapFillResult,
+    EvidenceGapReport,
+    NotificationRecord,
+    SchemaEvolutionSuggestion,
+    UserFeedbackRecord,
+    WorkspaceMemberRecord,
+    WorkspaceQuotaUpdateRequest,
+)
+from packages.schema.models import (
+    AnalysisPlan,
+    CompetitorKnowledge,
+    KnowledgeClaim,
+    PricingModel,
+    RawSource,
+    RunMetrics,
+    SkillOutputSpec,
+    SkillSpec,
+)
+from packages.schema.quality import QualityFinding
+from packages.skills.registry import SkillRegistry
+from packages.workflows.activities import ReportApprovalActivities
+from packages.workflows.models import (
+    ReportApprovalDecisionInput,
+    ReportApprovalWorkflowInput,
+)
+
+
+def test_quality_finding_groups_cover_h7_axes() -> None:
+    findings = [
+        QualityFinding(
+            source_agent="ClaimValidator",
+            framework="deterministic-self-consistency",
+            source_id="claim-issue-1",
+            severity="warn",
+            issue_type="weak_text_support",
+            competitor_id="competitor-cursor",
+            dimension="security",
+            claim_ids=["claim-1"],
+            evidence_ids=["evidence-1"],
+            message="Evidence weakly supports a security claim.",
+            required_action="rewrite_claim",
+        ),
+        QualityFinding(
+            source_agent="ReleaseGate",
+            framework="enterprise-release-gate",
+            source_id="release-issue-1",
+            severity="blocker",
+            issue_type="claim_self_consistency_required",
+            competitor_id="competitor-cursor",
+            dimension="security",
+            claim_ids=["claim-1"],
+            evidence_ids=["evidence-1"],
+            message="Release gate blocked the same claim.",
+            required_action="human_review",
+        ),
+    ]
+
+    groups = _quality_finding_groups(findings)
+    group_index = {(group.group_by, group.key): group for group in groups}
+
+    assert group_index[("competitor", "competitor-cursor")].count == 2
+    assert group_index[("dimension", "security")].count == 2
+    assert group_index[("source_agent", "ClaimValidator")].count == 1
+    assert group_index[("severity", "blocker")].blocker_count == 1
+    assert group_index[("required_action", "rewrite_claim")].warn_count == 1
+
+
+def _detail() -> RunDetail:
+    created_at = datetime.utcnow().replace(microsecond=0)
+    updated_at = created_at + timedelta(minutes=5)
+    return RunDetail(
+        id="run-1",
+        topic="AI coding assistant comparison",
+        status="completed",
+        execution_mode="demo",
+        created_at=created_at,
+        updated_at=updated_at,
+        plan=AnalysisPlan(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            homepage_hints={"Cursor": "https://cursor.sh"},
+        ),
+        report_md=_structured_demo_report(),
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.sh/pricing",
+                snippet="Cursor publishes pricing.",
+                content_hash="hash-1",
+                confidence=0.9,
+            )
+        ],
+        competitor_knowledge={
+            "Cursor": CompetitorKnowledge(
+                competitor="Cursor",
+                pricing_model=PricingModel(
+                    notes=[
+                        KnowledgeClaim(
+                            claim="Cursor publishes pricing.",
+                            source_ids=["pricing-1"],
+                            confidence=0.9,
+                        )
+                    ]
+                ),
+            )
+        },
+    )
+
+
+def _settings() -> Settings:
+    return Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+    )
+
+
+def _structured_demo_report(source_id: str = "pricing-1") -> str:
+    citation = f"[source:{source_id}]"
+    return f"""
+# Cursor Direct Battlecard
+
+## Executive Summary
+Cursor publishes pricing and the claim is scoped to accepted pricing evidence. {citation}
+
+## Source Quality & Coverage
+The report uses verified webpage evidence and keeps broader enterprise claims out of scope.
+{citation}
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor |
+| --- | --- |
+| Pricing | Cursor publishes pricing. {citation} |
+
+## Battlecard
+Use pricing transparency as the direct battlecard point, pending feature and procurement review.
+{citation}
+
+## Claim Validation & Evidence Risk
+The pricing claim is backed by accepted evidence. Wider enterprise claims remain gated until
+additional official sources are attached. {citation}
+
+## Next Collection / Verification Plan
+Collect feature, security, and procurement sources before publishing broader recommendations.
+{citation}
+
+## Evidence Appendix
+- {source_id}: Cursor pricing evidence. {citation}
+""".strip()
+
+
+def test_enterprise_store_bootstraps_context_and_deduplicates_audit() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+
+    first = store.start_run(detail)
+    second = store.start_run(detail)
+
+    assert first.project_id == second.project_id
+    assert detail.id in {log.resource_id for log in store.list_audit_logs()}
+    assert [log.action for log in store.list_audit_logs()].count("run.created") == 1
+    assert store.list_projects()[0].competitor_set_hash
+    assert first.competitor_id_map["Cursor"].startswith("competitor-")
+    assert len(store.project_competitors) == 1
+    assert store.get_project(first.project_id) is not None
+    assert [item.name for item in store.list_competitors(project_id=first.project_id)] == ["Cursor"]
+    assert store.get_workspace_member(first.workspace_id, "system-user").role == "owner"
+
+
+def test_enterprise_store_replaces_reused_project_competitor_scope() -> None:
+    store = EnterpriseMemoryStore()
+    first = _detail()
+    first_context = store.start_run(first, project_id="project-reused")
+    second = _detail().model_copy(
+        deep=True,
+        update={
+            "id": "run-2",
+            "project_id": first_context.project_id,
+            "plan": first.plan.model_copy(
+                update={
+                    "competitors": ["GitHub Copilot"],
+                    "homepage_hints": {"GitHub Copilot": "https://github.com/features/copilot"},
+                }
+            ),
+        },
+    )
+
+    store.start_run(second, project_id=first_context.project_id)
+
+    assert [item.name for item in store.list_competitors(project_id=first_context.project_id)] == [
+        "GitHub Copilot"
+    ]
+
+
+def test_enterprise_store_upserts_workspace_members() -> None:
+    store = EnterpriseMemoryStore()
+
+    member = store.upsert_workspace_member(
+        WorkspaceMemberRecord(
+            workspace_id="workspace-a",
+            user_id="analyst-1",
+            role="analyst",
+        )
+    )
+
+    assert member.role == "analyst"
+    assert store.get_workspace_member("workspace-a", "analyst-1") == member
+    assert [item.user_id for item in store.list_workspace_members("workspace-a")] == [
+        "analyst-1",
+        "system-user",
+    ]
+
+
+def test_enterprise_store_round_trips_notifications_with_audit() -> None:
+    store = EnterpriseMemoryStore()
+
+    notification = store.upsert_notification(
+        NotificationRecord(
+            id="notification-1",
+            workspace_id="workspace-a",
+            notification_type="scheduled_scan_summary",
+            severity="success",
+            status="sent",
+            title="Scheduled scan finished",
+            body="1 project scanned.",
+            resource_type="scheduled_scan",
+            resource_id="weekly",
+        )
+    )
+
+    assert notification.status == "sent"
+    assert store.list_notifications("workspace-a") == [notification]
+    assert store.list_notifications("workspace-a", status="sent") == [notification]
+    assert store.list_notifications("workspace-b") == []
+    assert any(log.action == "notification.upserted" for log in store.list_audit_logs())
+
+
+def test_pydantic_ai_metadata_preserves_model_backed_fallback_reason() -> None:
+    report = EvidenceGapReport(project_id="project-1", scenario_id="l1_pricing_pack")
+    result = AgentExecutionResult(
+        run_id="run-1",
+        agent_name="evidence_gap",
+        output_schema="EvidenceGapReport",
+        payload=report.model_dump(mode="json"),
+        metadata={
+            "execution_mode": "pydantic_ai_model_backed_fallback",
+            "pydantic_ai_model_backed_requested": True,
+            "pydantic_ai_model_backed_fallback": True,
+            "pydantic_ai_model_backed_error": "provider timeout",
+            "pydantic_ai_model_name": "openai:test-model",
+            "typed_contract_enforced": True,
+        },
+    )
+
+    updated = _with_pydantic_ai_execution_metadata(report, result)
+    matrix_metadata = _quality_agent_pydantic_ai_metadata(updated)
+
+    assert updated.pydantic_ai_execution_mode == "pydantic_ai_model_backed_fallback"
+    assert updated.pydantic_ai_model_backed_requested is True
+    assert updated.pydantic_ai_model_backed_fallback is True
+    assert updated.pydantic_ai_fallback_reason == "provider timeout"
+    assert updated.pydantic_ai_model_name == "openai:test-model"
+    assert matrix_metadata["pydantic_ai_fallback_reason"] == "provider timeout"
+
+
+def test_pydantic_ai_fallback_counts_as_quality_matrix_warning() -> None:
+    report = EvidenceGapReport(project_id="project-1", scenario_id="l1_pricing_pack")
+    result = AgentExecutionResult(
+        run_id="run-1",
+        agent_name="evidence_gap",
+        output_schema="EvidenceGapReport",
+        payload=report.model_dump(mode="json"),
+        metadata={
+            "execution_mode": "pydantic_ai_model_backed_fallback",
+            "pydantic_ai_model_backed_requested": True,
+            "pydantic_ai_model_backed_fallback": True,
+            "pydantic_ai_model_backed_error": "provider timeout",
+            "typed_contract_enforced": True,
+        },
+    )
+
+    updated = _with_pydantic_ai_execution_metadata(report, result)
+
+    assert _pydantic_ai_runtime_warn_count(updated) == 1
+    assert _pydantic_ai_runtime_score_penalty(updated) == 12
+    assert "fell back (provider timeout)" in _pydantic_ai_runtime_summary_suffix(updated)
+
+
+def test_enterprise_store_tracks_workspace_usage_and_quota_decision() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail().model_copy(
+        update={
+            "status": "completed",
+            "metrics": RunMetrics(
+                input_tokens_estimate=700,
+                output_tokens_estimate=400,
+                cost_estimate_usd=0.25,
+            ),
+        }
+    )
+
+    context = store.start_run(detail, workspace_id="workspace-a")
+    usage = store.get_workspace_usage(context.workspace_id)
+    updated = store.update_workspace_quota(
+        context.workspace_id,
+        WorkspaceQuotaUpdateRequest(
+            monthly_run_quota=1,
+            monthly_token_quota=1_000,
+            monthly_cost_quota_usd=0.2,
+            quota_enforcement="block",
+        ),
+    )
+    decision = store.check_workspace_quota(context.workspace_id)
+
+    assert usage.run_count == 1
+    assert usage.total_tokens_estimate == 1100
+    assert usage.status == "ok"
+    assert updated is not None
+    assert updated.monthly_cost_quota_usd == 0.2
+    assert decision.status == "exceeded"
+    assert decision.allowed is False
+    assert any(log.action == "workspace.quota_updated" for log in store.list_audit_logs())
+
+
+def test_enterprise_store_round_trips_projection() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+
+    store.save_projection(projection)
+    loaded = store.get_run_projection(detail.id)
+
+    assert loaded is not None
+    assert loaded.report_version.id == projection.report_version.id
+    assert loaded.report_version.quality_metadata["memory_observations"][0]["kind"] == (
+        "analysis_plan"
+    )
+    assert [item.id for item in loaded.evidence_records] == [
+        item.id for item in projection.evidence_records
+    ]
+    assert [item.id for item in loaded.claim_records] == [
+        item.id for item in projection.claim_records
+    ]
+    actions = {log.action for log in store.list_audit_logs()}
+    assert actions >= {
+        "run.created",
+        "project.upserted",
+        "competitor.upserted",
+        "project_competitor.linked",
+        "evidence.upserted",
+        "claim.upserted",
+        "report_version.upserted",
+        "run.projected",
+    }
+
+
+def test_enterprise_store_project_lists_include_report_version_links() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    evidence = projection.evidence_records[0]
+    claim = projection.claim_records[0]
+    store.evidence_records[evidence.id] = evidence.model_copy(
+        update={"project_id": "project-other"}
+    )
+    store.claim_records[claim.id] = claim.model_copy(update={"project_id": "project-other"})
+
+    assert [item.id for item in store.list_evidence(project_id=context.project_id)] == [evidence.id]
+    assert [item.id for item in store.list_claims(project_id=context.project_id)] == [claim.id]
+
+
+def test_report_release_gate_scope_uses_version_competitors_not_stale_project_links() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail, project_id="project-reused")
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    stale_detail = _detail().model_copy(
+        deep=True,
+        update={
+            "id": "run-stale",
+            "project_id": context.project_id,
+            "plan": detail.plan.model_copy(
+                update={
+                    "competitors": ["Gemini"],
+                    "homepage_hints": {"Gemini": "https://gemini.google.com"},
+                }
+            ),
+        },
+    )
+    stale_context = store.start_run(stale_detail, project_id=context.project_id)
+    project = store.get_project(context.project_id)
+
+    assert project is not None
+    competitors, evidence, claims = _report_release_gate_scope(
+        projection.report_version,
+        project=project,
+        store=store,
+    )
+    scope = build_report_scope(projection.report_version, project=project, store=store)
+
+    assert [item.name for item in competitors] == ["Cursor"]
+    assert [item.id for item in evidence] == projection.report_version.evidence_ids
+    assert [item.id for item in claims] == projection.report_version.claim_ids
+    assert scope.metadata["scope_policy"] == "report_version_scope_only"
+    assert scope.metadata["history_policy"] == "project_history_and_memory_are_advisory_context"
+    assert scope.metadata["scope_source"] == "run_projection"
+    assert stale_context.competitor_id_map["Gemini"] in scope.metadata[
+        "excluded_project_competitor_ids"
+    ]
+    assert stale_context.competitor_id_map["Gemini"] not in scope.metadata[
+        "scoped_competitor_ids"
+    ]
+
+
+def test_enterprise_store_tracks_evidence_lifecycle_across_runs() -> None:
+    store = EnterpriseMemoryStore()
+    first_detail = _detail()
+    first_context = store.start_run(first_detail)
+    first_projection = build_enterprise_projection(
+        first_detail,
+        workspace_id=first_context.workspace_id,
+        project_id=first_context.project_id,
+        competitor_id_map=first_context.competitor_id_map,
+    )
+    store.save_projection(first_projection)
+
+    second_detail = _detail().model_copy(deep=True, update={"id": "run-2"})
+    second_context = store.start_run(second_detail)
+    second_projection = build_enterprise_projection(
+        second_detail,
+        workspace_id=second_context.workspace_id,
+        project_id=second_context.project_id,
+        version_number=2,
+        competitor_id_map=second_context.competitor_id_map,
+    )
+    store.save_projection(second_projection)
+    store.save_projection(second_projection)
+
+    [evidence] = store.list_evidence(project_id=first_context.project_id)
+    assert evidence.first_seen_run_id == "run-1"
+    assert evidence.last_seen_run_id == "run-2"
+    assert evidence.seen_count == 2
+    assert evidence.run_id == "run-1"
+
+
+def test_enterprise_store_preserves_raw_source_aliases_across_lifecycle_runs() -> None:
+    store = EnterpriseMemoryStore()
+    first_detail = _detail()
+    first_context = store.start_run(first_detail)
+    first_projection = build_enterprise_projection(
+        first_detail,
+        workspace_id=first_context.workspace_id,
+        project_id=first_context.project_id,
+        competitor_id_map=first_context.competitor_id_map,
+    )
+    store.save_projection(first_projection)
+
+    second_detail = _detail().model_copy(
+        deep=True,
+        update={"id": "run-2", "report_md": _structured_demo_report("pricing-2")},
+    )
+    second_detail.raw_sources = [
+        second_detail.raw_sources[0].model_copy(update={"id": "pricing-2"})
+    ]
+    second_detail.competitor_knowledge["Cursor"].pricing_model.notes[0].source_ids = ["pricing-2"]
+    second_context = store.start_run(second_detail)
+    second_projection = build_enterprise_projection(
+        second_detail,
+        workspace_id=second_context.workspace_id,
+        project_id=second_context.project_id,
+        version_number=2,
+        competitor_id_map=second_context.competitor_id_map,
+    )
+    store.save_projection(second_projection)
+
+    [evidence] = store.list_evidence(project_id=first_context.project_id)
+    assert evidence.seen_count == 2
+    assert set(evidence.metadata["raw_source_aliases"]) == {"pricing-1", "pricing-2"}
+
+
+def test_enterprise_store_registers_sources_from_evidence_lifecycle() -> None:
+    store = EnterpriseMemoryStore()
+    first_detail = _detail()
+    first_context = store.start_run(first_detail)
+    first_projection = build_enterprise_projection(
+        first_detail,
+        workspace_id=first_context.workspace_id,
+        project_id=first_context.project_id,
+        competitor_id_map=first_context.competitor_id_map,
+    )
+    store.save_projection(first_projection)
+
+    second_detail = _detail().model_copy(deep=True, update={"id": "run-2"})
+    second_context = store.start_run(second_detail)
+    second_projection = build_enterprise_projection(
+        second_detail,
+        workspace_id=second_context.workspace_id,
+        project_id=second_context.project_id,
+        version_number=2,
+        competitor_id_map=second_context.competitor_id_map,
+    )
+    store.save_projection(second_projection)
+    store.save_projection(second_projection)
+
+    [source] = store.list_source_registry(workspace_id=first_context.workspace_id)
+    assert source.domain == "cursor.sh"
+    assert source.source_type == "webpage_verified"
+    assert source.trust_level == "verified"
+    assert source.homepage_url is not None
+    assert str(source.homepage_url) == "https://cursor.sh/"
+    assert source.policy_review_status == "not_required"
+    assert source.first_seen_run_id == "run-1"
+    assert source.last_seen_run_id == "run-2"
+    assert source.seen_count == 2
+    assert any(log.action == "source_registry.upserted" for log in store.list_audit_logs())
+
+
+def test_enterprise_store_merges_source_registry_by_natural_key() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    [existing] = store.list_source_registry(workspace_id=context.workspace_id)
+
+    updated = store.upsert_source_registry(
+        existing.model_copy(
+            update={
+                "id": "legacy-source-registry-id",
+                "display_name": "Cursor source registry",
+                "last_seen_run_id": "run-2",
+            }
+        )
+    )
+
+    records = store.list_source_registry(workspace_id=context.workspace_id)
+    assert len(records) == 1
+    assert updated.id == existing.id
+    assert records[0].id == existing.id
+    assert records[0].display_name == "Cursor source registry"
+    assert records[0].last_seen_run_id == "run-2"
+
+
+def test_enterprise_store_queues_source_policy_review_from_evidence_metadata() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    detail.raw_sources[0].source_type = "robots_blocked"
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+
+    [source] = store.list_source_registry(workspace_id=context.workspace_id)
+    assert source.robots_status == "blocked"
+    assert source.policy_review_status == "pending"
+    assert source.policy_review_reason == "Robots/source policy status is blocked."
+
+
+def test_enterprise_store_indexes_and_searches_evidence_embeddings() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+
+    embeddings = store.list_evidence_embeddings(workspace_id=context.workspace_id)
+    hits = store.search_evidence(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        query="Cursor pricing plan",
+        limit=3,
+    )
+    reindexed = store.reindex_evidence_embeddings(workspace_id=context.workspace_id)
+
+    assert len(embeddings) == 1
+    assert embeddings[0].evidence_id == projection.evidence_records[0].id
+    assert reindexed.indexed_count == 1
+    assert [hit.evidence.id for hit in hits] == [projection.evidence_records[0].id]
+    assert hits[0].embedding_model == "hashing-384"
+
+
+def test_enterprise_store_deduplicates_embedding_index_by_content_hash() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    canonical = projection.evidence_records[0]
+    duplicate = canonical.model_copy(
+        update={
+            "id": "zz-duplicate-evidence",
+            "raw_source_id": "duplicate-source",
+            "canonical_url": "https://mirror.example/pricing",
+            "metadata": {},
+        }
+    )
+
+    stored_duplicate = store.upsert_evidence(duplicate)
+    embeddings = store.list_evidence_embeddings(workspace_id=context.workspace_id)
+    hits = store.search_evidence(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        query="Cursor pricing plan",
+        limit=5,
+    )
+    reindexed = store.reindex_evidence_embeddings(workspace_id=context.workspace_id)
+
+    assert stored_duplicate.metadata["embedding_duplicate_of"] == canonical.id
+    assert stored_duplicate.metadata["embedding_indexed"] is False
+    canonical_after_duplicate = store.evidence_records[canonical.id]
+    assert canonical_after_duplicate.metadata["embedding_duplicate_ids"] == [
+        "zz-duplicate-evidence"
+    ]
+    assert canonical_after_duplicate.metadata["embedding_duplicate_count"] == 1
+    assert len(store.list_evidence(project_id=context.project_id)) == 2
+    assert len(embeddings) == 1
+    assert embeddings[0].evidence_id == canonical.id
+    assert [hit.evidence.id for hit in hits] == [canonical.id]
+    assert reindexed.indexed_count == 1
+    assert reindexed.duplicate_count == 1
+    assert (
+        store.evidence_records["zz-duplicate-evidence"].metadata["embedding_duplicate_of"]
+        == canonical.id
+    )
+    assert store.evidence_records[canonical.id].metadata["embedding_duplicate_count"] == 1
+
+
+def test_enterprise_store_deduplicates_embedding_index_by_canonical_url() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    canonical = projection.evidence_records[0].model_copy(
+        update={
+            "canonical_url": "https://cursor.sh/pricing",
+            "content_hash": "canonical-hash",
+            "metadata": {},
+        }
+    )
+    store.upsert_evidence(canonical)
+    duplicate = canonical.model_copy(
+        update={
+            "id": "zz-url-duplicate-evidence",
+            "raw_source_id": "url-duplicate-source",
+            "content_hash": "changed-content-hash",
+            "metadata": {},
+        }
+    )
+
+    stored_duplicate = store.upsert_evidence(duplicate)
+    reindexed = store.reindex_evidence_embeddings(workspace_id=context.workspace_id)
+    embeddings = store.list_evidence_embeddings(workspace_id=context.workspace_id)
+    hits = store.search_evidence(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        query="Cursor pricing plan",
+        limit=5,
+    )
+
+    assert stored_duplicate.metadata["embedding_duplicate_of"] == canonical.id
+    assert stored_duplicate.metadata["embedding_dedupe_strategy"] == "canonical_url"
+    assert stored_duplicate.metadata["embedding_indexed"] is False
+    assert len(embeddings) == 1
+    assert embeddings[0].evidence_id == canonical.id
+    assert [hit.evidence.id for hit in hits] == [canonical.id]
+    assert reindexed.indexed_count == 1
+    assert reindexed.duplicate_count == 1
+    assert (
+        store.evidence_records["zz-url-duplicate-evidence"].metadata["embedding_dedupe_strategy"]
+        == "canonical_url"
+    )
+
+
+def test_schema_suggestion_review_persists_metadata_and_updates_plan_dimensions() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    suggestion = SchemaEvolutionSuggestion(
+        id="schema-suggestion-enterprise-sso",
+        dimension="enterprise_sso",
+        normalized_dimension="enterprise_sso",
+        reason="Reviewer wants enterprise SSO tracked as a first-class dimension.",
+        source_gap_ids=["gap-enterprise-sso"],
+        proposed_skill=SkillSpec(
+            name="enterprise_sso",
+            subagent_class="GenericCollector",
+            description="Collect enterprise SSO evidence.",
+            tools_allowlist=["web_search", "fetch_page"],
+            query_templates=["{competitor} enterprise SSO official"],
+            source_type="webpage",
+            output=SkillOutputSpec(
+                prefix="enterprise_sso",
+                confidence_default=0.8,
+                confidence_no_url=0.45,
+                required_dimension="enterprise_sso",
+            ),
+        ),
+    )
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    client = TestClient(app)
+
+    response = client.post(
+        f"/api/enterprise/projects/{context.project_id}/schema-suggestions/{suggestion.id}/review",
+        headers={"X-User-Role": "reviewer"},
+        json={
+            "decision": "accepted",
+            "note": "Track enterprise SSO in this project.",
+            "suggestion": suggestion.model_dump(mode="json"),
+        },
+    )
+    plan = client.get(f"/api/enterprise/projects/{context.project_id}/business-plan")
+    gaps = client.get(f"/api/enterprise/projects/{context.project_id}/evidence-gaps")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["review"]["decision"] == "accepted"
+    assert body["accepted_schema_dimensions"]["enterprise_sso"]["reviewed_by"] == "system-user"
+    project = store.get_project(context.project_id)
+    assert project is not None
+    assert "enterprise_sso" in project.metadata["accepted_schema_dimensions"]
+    assert plan.status_code == 200
+    assert "enterprise_sso" in plan.json()["requested_dimensions"]
+    assert gaps.status_code == 200
+    assert any(gap["dimension"] == "enterprise_sso" for gap in gaps.json()["gaps"])
+    assert any(
+        log.action == "project.upserted"
+        and log.resource_id == context.project_id
+        and "accepted_schema_dimensions" in log.after.get("metadata", {})
+        for log in store.list_audit_logs()
+    )
+    assert any(
+        log.action == "schema_evolution.reviewed"
+        and log.resource_type == "schema_evolution_suggestion"
+        and log.resource_id
+        == audit_relationship_resource_id(
+            "schema-evolution-suggestion",
+            context.project_id,
+            suggestion.id,
+        )
+        and log.after["decision"] == "accepted"
+        and log.after["normalized_dimension"] == "enterprise_sso"
+        for log in store.list_audit_logs()
+    )
+
+
+def test_enterprise_store_round_trips_artifacts_with_audit() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    evidence = projection.evidence_records[0]
+
+    artifact = store.upsert_artifact(
+        ArtifactRecord(
+            id="artifact-1",
+            workspace_id=context.workspace_id,
+            project_id=context.project_id,
+            evidence_id=evidence.id,
+            run_id=detail.id,
+            artifact_type="web_snapshot",
+            filename="pricing.html",
+            media_type="text/html",
+            storage_backend="local",
+            uri="local://default-workspace/artifact-1/pricing.html",
+            byte_size=128,
+            content_hash="hash-artifact",
+            created_by="analyst-1",
+        )
+    )
+
+    assert store.get_artifact(artifact.id) == artifact
+    assert store.list_artifacts(project_id=context.project_id) == [artifact]
+    assert store.list_artifacts(evidence_id=evidence.id) == [artifact]
+    assert any(log.action == "artifact.upserted" for log in store.list_audit_logs())
+
+
+def test_enterprise_store_updates_evidence_quality_with_audit() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+
+    updated = store.update_evidence_quality(
+        projection.evidence_records[0].id,
+        "rejected",
+        note="Outdated pricing page.",
+    )
+
+    assert updated is not None
+    assert updated.quality_label == "rejected"
+    assert updated.metadata["quality_note"] == "Outdated pricing page."
+    assert any(log.action == "evidence.quality_updated" for log in store.list_audit_logs())
+
+
+def test_enterprise_store_increments_report_version_by_group() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+
+    store.save_projection(projection)
+    next_version = store.next_report_version_number(
+        project_id=projection.project_id,
+        topic_normalized=projection.report_version.topic_normalized,
+        competitor_layer=projection.report_version.competitor_layer,
+        competitor_set_hash=projection.report_version.competitor_set_hash,
+    )
+
+    assert next_version == 2
+
+
+def test_enterprise_store_audits_report_version_status_changes() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+
+    store.upsert_report_version(projection.report_version.model_copy(update={"status": "approved"}))
+    status_logs = [
+        log for log in store.list_audit_logs() if log.action == "report_version.status_changed"
+    ]
+
+    assert len(status_logs) == 1
+    assert status_logs[0].resource_id == projection.report_version.id
+    assert status_logs[0].before == {"status": "draft"}
+    assert status_logs[0].after["status"] == "approved"
+    assert status_logs[0].after["project_id"] == projection.project_id
+
+
+def test_report_version_diff_uses_previous_version() -> None:
+    store = EnterpriseMemoryStore()
+    first_detail = _detail()
+    first_context = store.start_run(first_detail)
+    first_projection = build_enterprise_projection(
+        first_detail,
+        workspace_id=first_context.workspace_id,
+        project_id=first_context.project_id,
+        competitor_id_map=first_context.competitor_id_map,
+    )
+    store.save_projection(first_projection)
+
+    second_detail = _detail().model_copy(
+        deep=True,
+        update={
+            "id": "run-2",
+            "report_md": (
+                f"{first_detail.report_md}\nCursor has a public paid plan. [source:pricing-1]"
+            ),
+        },
+    )
+    second_context = store.start_run(second_detail)
+    second_projection = build_enterprise_projection(
+        second_detail,
+        workspace_id=second_context.workspace_id,
+        project_id=second_context.project_id,
+        version_number=store.next_report_version_number(
+            project_id=second_context.project_id,
+            topic_normalized=first_projection.report_version.topic_normalized,
+            competitor_layer=first_projection.report_version.competitor_layer,
+            competitor_set_hash=first_projection.report_version.competitor_set_hash,
+        ),
+        competitor_id_map=second_context.competitor_id_map,
+    )
+    store.save_projection(second_projection)
+
+    previous = store.get_previous_report_version(second_projection.report_version)
+    diff = build_report_version_diff(second_projection.report_version, base_version=previous)
+
+    assert previous is not None
+    assert previous.id == first_projection.report_version.id
+    assert diff.target_version.version_number == 2
+    assert diff.added_lines == 1
+    assert diff.unchanged_lines >= 1
+
+
+@pytest.mark.asyncio
+async def test_run_service_reuses_explicit_idempotency_key() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+    request = RunCreateRequest(
+        topic="AI coding assistant comparison",
+        competitors=["Cursor"],
+        dimensions=["pricing"],
+        execution_mode="demo",
+        idempotency_key="temporal-request-001",
+    )
+
+    first = await service.create_run(request)
+    second = await service.create_run(request)
+
+    assert first.id == second.id
+    assert first.idempotency_key == "temporal-request-001"
+    assert [log.action for log in store.list_audit_logs()].count("run.created") == 1
+
+
+@pytest.mark.asyncio
+async def test_run_service_writes_enterprise_projection_on_completion() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+    created = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[created.id]
+    detail = _detail()
+    record.detail.raw_sources = detail.raw_sources
+    record.detail.competitor_knowledge = detail.competitor_knowledge
+    record.detail.report_md = detail.report_md
+    record.detail.status = "running"
+
+    await service._finalize_demo_pipeline(record)
+
+    projection = store.get_run_projection(created.id)
+    assert projection is not None
+    assert projection.project_id == record.detail.project_id
+    assert projection.evidence_records[0].competitor_id.startswith("competitor-")
+    assert len(projection.evidence_records) == 1
+    assert {event.type for event in record.events} >= {
+        "claim.validated",
+        "self_consistency.sampled",
+        "benchmark.scored",
+    }
+    claim_event = next(event for event in record.events if event.type == "claim.validated")
+    consistency_event = next(
+        event for event in record.events if event.type == "self_consistency.sampled"
+    )
+    assert claim_event.payload["claim_validation"]["supported_count"] == 1
+    assert claim_event.payload["claim_status_counts"]["supported"] == 1
+    assert consistency_event.payload["self_consistency_score"] >= 70
+    assert consistency_event.payload["sample_count"] == 3
+    assert consistency_event.payload["validation_sample_count"] == 3
+    assert consistency_event.payload["minority_sample_count"] == 0
+    assert consistency_event.payload["minority_validation_samples"] == []
+    assert consistency_event.payload["consistency_votes"]["text_support"] >= 1
+    assert consistency_event.payload["consistency_votes"]["supported_claims"] == 1
+    assert record.events[-1].payload["enterprise_projection"]["evidence_count"] == 1
+    assert record.events[-1].payload["enterprise_projection"]["release_gate"]["allowed"] is True
+    assert not [
+        item
+        for item in store.list_notifications(created.workspace_id)
+        if item.notification_type == "release_gate_blocked"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_run_service_records_release_gate_notification_for_weak_report() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+    created = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[created.id]
+    record.detail.report_md = "Weak report without evidence."
+    record.detail.status = "running"
+
+    await service._finalize_demo_pipeline(record)
+
+    projection = store.get_run_projection(created.id)
+    notifications = [
+        item
+        for item in store.list_notifications(created.workspace_id)
+        if item.notification_type == "release_gate_blocked"
+    ]
+    assert projection is not None
+    assert projection.report_version.status == "draft"
+    assert record.detail.status == "completed_with_blockers"
+    assert record.events[-1].payload["enterprise_projection"]["release_gate"]["allowed"] is False
+    assert record.events[-1].payload["enterprise_projection"]["release_gate"]["status"] == "blocked"
+    assert "Release gate blocked" in record.events[-1].message
+    assert notifications
+    assert notifications[0].resource_id == projection.report_version.id
+    assert notifications[0].metadata["issue_count"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_writer_node_persists_enterprise_report_version_draft() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+    created = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[created.id]
+    detail = _detail()
+    record.detail.raw_sources = detail.raw_sources
+    record.detail.competitor_knowledge = detail.competitor_knowledge
+    record.detail.status = "running"
+
+    await service._demo_writer_step(record)
+
+    projection = store.get_run_projection(created.id)
+    assert projection is not None
+    assert projection.report_version.report_md == record.detail.report_md
+    assert record.detail.enterprise_projection == projection
+    loaded = service.get_run(created.id)
+    assert loaded is not None
+    assert loaded.enterprise_projection == projection
+    assert f"[source:{projection.evidence_records[0].raw_source_id}]" in record.detail.report_md
+    assert projection.report_version.version_number == 1
+    assert record.events[-1].payload["enterprise_projection"]["report_version_id"] == (
+        projection.report_version.id
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_service_attaches_business_intel_plan_to_project() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+
+    created = await service.create_run(
+        RunCreateRequest(
+            topic="Cursor vs Copilot pricing battlecard",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing"],
+            competitor_layer="L1",
+            scenario_id="l1_pricing_pack",
+            execution_mode="demo",
+        )
+    )
+
+    assert created.plan.competitor_layer == "L1"
+    assert created.plan.scenario_id == "l1_pricing_pack"
+    assert "pricing_currentness" in created.plan.qa_rule_ids
+    project = store.get_project(created.project_id or "")
+    assert project is not None
+    assert project.competitor_layer == "L1"
+    assert project.scenario_id == "l1_pricing_pack"
+    assert {item.layer for item in store.list_competitors(project_id=project.id)} == {"L1"}
+
+
+@pytest.mark.asyncio
+async def test_run_service_applies_confirmed_memory_to_plan() -> None:
+    store = EnterpriseMemoryStore()
+    memory = PreferenceMemoryStore.in_memory()
+    feedback = memory.add_feedback(
+        UserFeedbackRecord(
+            id="",
+            workspace_id="default-workspace",
+            project_id="project-memory",
+            user_id="analyst-1",
+            feedback_type="preference",
+            target_type="project",
+            target_id="project-memory",
+            message="Prefer persona evidence and concise battlecard tables in this project.",
+            tags=[],
+        )
+    )
+    for candidate in memory.extract_candidates(feedback, auto_confirm=True):
+        memory.upsert_candidate(candidate)
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+        preference_memory=memory,
+    )
+
+    created = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+            project_id="project-memory",
+        )
+    )
+
+    assert "persona" in created.plan.dimensions
+    assert created.plan.memory_candidate_ids
+    assert created.plan.memory_recall_score >= 70
+    assert any("battlecard" in item for item in created.plan.memory_prompt_context)
+    report_md = service._demo_report(created)
+    assert "## Memory Context" in report_md
+    assert "## Scenario QA Checklist" in report_md
+    assert "## Claim Validation & Evidence Risk" in report_md
+    assert created.plan.memory_candidate_ids[0] in report_md
+    assert "Confirmed MemoryAgent guidance" in report_md
+
+
+@pytest.mark.asyncio
+async def test_run_service_blocks_when_workspace_quota_is_exhausted() -> None:
+    store = EnterpriseMemoryStore()
+    store.update_workspace_quota(
+        "default-workspace",
+        WorkspaceQuotaUpdateRequest(monthly_run_quota=0, quota_enforcement="block"),
+    )
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+
+    with pytest.raises(WorkspaceQuotaExceededError) as exc_info:
+        await service.create_run(
+            RunCreateRequest(
+                topic="AI coding assistant comparison",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+
+    assert exc_info.value.decision.allowed is False
+    assert exc_info.value.decision.status == "exceeded"
+
+
+@pytest.mark.asyncio
+async def test_run_service_increments_enterprise_report_versions() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+    )
+
+    async def run_once() -> str:
+        created = await service.create_run(
+            RunCreateRequest(
+                topic="AI coding assistant comparison",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+        record = service._runs[created.id]
+        detail = _detail()
+        record.detail.raw_sources = detail.raw_sources
+        record.detail.competitor_knowledge = detail.competitor_knowledge
+        record.detail.report_md = detail.report_md
+        record.detail.status = "running"
+        await service._finalize_demo_pipeline(record)
+        return created.id
+
+    first_run_id = await run_once()
+    second_run_id = await run_once()
+
+    first_projection = store.get_run_projection(first_run_id)
+    second_projection = store.get_run_projection(second_run_id)
+    assert first_projection is not None
+    assert second_projection is not None
+    assert first_projection.report_version.version_number == 1
+    assert second_projection.report_version.version_number == 2
+
+
+def test_enterprise_router_exposes_projection() -> None:
+    artifact_root = Path("backend/.test-artifacts/router")
+    shutil.rmtree(artifact_root, ignore_errors=True)
+    store = EnterpriseMemoryStore()
+    memory = PreferenceMemoryStore.in_memory()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    app.dependency_overrides[get_artifact_storage] = lambda: LocalArtifactStorage(artifact_root)
+    app.dependency_overrides[get_preference_memory] = lambda: memory
+    client = TestClient(app)
+
+    response = client.get(f"/api/enterprise/runs/{detail.id}/projection")
+    workspaces = client.get("/api/enterprise/workspaces")
+    usage = client.get(f"/api/enterprise/workspaces/{context.workspace_id}/usage")
+    quota_update = client.patch(
+        f"/api/enterprise/workspaces/{context.workspace_id}/quota",
+        json={"monthly_run_quota": 1, "quota_enforcement": "monitor"},
+    )
+    quota_decision = client.get(f"/api/enterprise/workspaces/{context.workspace_id}/quota-decision")
+    notification_upsert = client.post(
+        "/api/enterprise/notifications",
+        json=NotificationRecord(
+            id="notification-route-1",
+            workspace_id=context.workspace_id,
+            notification_type="scheduled_scan_summary",
+            severity="success",
+            status="sent",
+            title="Scheduled scan finished",
+        ).model_dump(mode="json"),
+    )
+    notifications = client.get(f"/api/enterprise/notifications?workspace_id={context.workspace_id}")
+    policy_actions = client.get("/api/enterprise/policy/actions")
+    policy_decision = client.post(
+        "/api/enterprise/policy/evaluate",
+        json={
+            "workspace_id": context.workspace_id,
+            "action": "project:read",
+            "target_type": "project",
+            "target_id": context.project_id,
+        },
+    )
+    model_policy = client.get("/api/enterprise/model-policy")
+    project = client.get(f"/api/enterprise/projects/{context.project_id}")
+    business_plan = client.get(f"/api/enterprise/projects/{context.project_id}/business-plan")
+    qa_evaluation = client.get(f"/api/enterprise/projects/{context.project_id}/qa-evaluation")
+    claim_validation = client.get(f"/api/enterprise/projects/{context.project_id}/claim-validation")
+    memory_ingest = client.post(
+        f"/api/enterprise/projects/{context.project_id}/memory/feedback",
+        json={
+            "feedback_type": "preference",
+            "target_type": "report",
+            "target_id": projection.report_version.id,
+            "run_id": detail.id,
+            "report_version_id": projection.report_version.id,
+            "message": (
+                "Prefer official pricing sources, concise battlecard tables, and explicit "
+                "evidence gap risks."
+            ),
+            "tags": [],
+        },
+    )
+    candidate_id = memory_ingest.json()["candidates"][0]["id"]
+    memory_confirm = client.patch(
+        f"/api/enterprise/projects/{context.project_id}/memory/candidates/{candidate_id}",
+        params={"status": "confirmed"},
+        headers={"X-User-Role": "reviewer"},
+    )
+    memory_recall = client.get(
+        f"/api/enterprise/projects/{context.project_id}/memory/recall",
+        params={"query": "pricing source risk"},
+    )
+    memory_feedback = client.get(f"/api/enterprise/projects/{context.project_id}/memory/feedback")
+    memory_stats = client.get(f"/api/enterprise/projects/{context.project_id}/memory/stats")
+    audit_logs = client.get(f"/api/enterprise/audit-logs?workspace_id={context.workspace_id}")
+    audit_filtered = client.get(
+        "/api/enterprise/audit-logs",
+        params={
+            "workspace_id": context.workspace_id,
+            "action": "memory.feedback_captured",
+            "actor_id": "system-user",
+            "actor_type": "system",
+            "resource_type": "memory_feedback",
+            "resource_id": memory_ingest.json()["feedback"]["id"],
+        },
+    )
+    audit_limited = client.get(
+        "/api/enterprise/audit-logs",
+        params={"workspace_id": context.workspace_id, "limit": 1},
+    )
+    audit_invalid_range = client.get(
+        "/api/enterprise/audit-logs",
+        params={
+            "workspace_id": context.workspace_id,
+            "created_from": "2026-01-02T00:00:00",
+            "created_to": "2026-01-01T00:00:00",
+        },
+    )
+    readiness = client.get(f"/api/enterprise/projects/{context.project_id}/readiness-score")
+    gaps = client.get(f"/api/enterprise/projects/{context.project_id}/evidence-gaps")
+    red_team = client.get(f"/api/enterprise/projects/{context.project_id}/red-team")
+    quality_matrix = client.get(f"/api/enterprise/projects/{context.project_id}/quality-matrix")
+    competitors = client.get(f"/api/enterprise/competitors?project_id={context.project_id}")
+    source_registry = client.get(
+        f"/api/enterprise/source-registry?workspace_id={context.workspace_id}"
+    )
+    source_upsert = client.post(
+        "/api/enterprise/source-registry",
+        json=store.list_source_registry()[0].model_dump(mode="json"),
+    )
+    project_upsert = client.post(
+        "/api/enterprise/projects",
+        json=store.get_project(context.project_id).model_dump(mode="json"),
+    )
+    evidence_upsert = client.post(
+        "/api/enterprise/evidence",
+        json=projection.evidence_records[0].model_dump(mode="json"),
+    )
+    evidence_search = client.get(
+        "/api/enterprise/evidence/search",
+        params={
+            "workspace_id": context.workspace_id,
+            "project_id": context.project_id,
+            "query": "Cursor pricing",
+        },
+    )
+    evidence_reindex = client.post(
+        "/api/enterprise/evidence/reindex",
+        params={"workspace_id": context.workspace_id},
+    )
+    artifact_create = client.post(
+        "/api/enterprise/artifacts",
+        json={
+            "workspace_id": context.workspace_id,
+            "project_id": context.project_id,
+            "evidence_id": projection.evidence_records[0].id,
+            "run_id": detail.id,
+            "artifact_type": "web_snapshot",
+            "filename": "cursor-pricing.html",
+            "media_type": "text/html",
+            "external_uri": "https://storage.example.test/cursor-pricing.html",
+            "source_url": "https://cursor.sh/pricing",
+        },
+    )
+    artifacts = client.get(
+        "/api/enterprise/artifacts",
+        params={
+            "workspace_id": context.workspace_id,
+            "project_id": context.project_id,
+        },
+    )
+    release_gate = client.get(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/release-gate"
+    )
+    draft_publish = client.post(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/publish"
+    )
+    approval_requested = asyncio.run(
+        ReportApprovalActivities(store).request_report_approval(
+            ReportApprovalWorkflowInput(
+                report_version_id=projection.report_version.id,
+                requested_by="workbench-approver",
+                approver_ids=["workbench-approver"],
+            )
+        )
+    )
+    approval_decision = asyncio.run(
+        ReportApprovalActivities(store).approve_report_version(
+            ReportApprovalDecisionInput(
+                report_version_id=projection.report_version.id,
+                approver_id="workbench-approver",
+                note="Approved in router smoke test.",
+            )
+        )
+    )
+    approval_upsert = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}")
+    publish = client.post(f"/api/enterprise/report-versions/{projection.report_version.id}/publish")
+    quality = client.patch(
+        f"/api/enterprise/evidence/{projection.evidence_records[0].id}/quality",
+        json={"quality_label": "stale", "note": "Needs review."},
+    )
+    quality_memory_feedback = memory.list_feedback(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+    )
+    quality_memory_recall = memory.recall(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        query="stale evidence source quality gate",
+        include_unconfirmed=True,
+    )
+    report_upsert = client.post(
+        "/api/enterprise/report-versions",
+        json=projection.report_version.model_dump(mode="json"),
+    )
+    manual_revision = client.post(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/manual-revision",
+        json={
+            "report_md": f"{projection.report_version.report_md}\n\nManual correction.",
+            "note": "Clarified recommendation before approval.",
+        },
+    )
+    version = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}")
+    diff = client.get(f"/api/enterprise/report-versions/{projection.report_version.id}/diff")
+
+    assert response.status_code == 200
+    assert response.json()["report_version"]["id"].startswith("report-version-")
+    assert workspaces.status_code == 200
+    assert workspaces.json()[0]["id"] == "default-workspace"
+    assert usage.status_code == 200
+    assert usage.json()["run_count"] == 1
+    assert quota_update.status_code == 200
+    assert quota_update.json()["monthly_run_quota"] == 1
+    assert quota_decision.status_code == 200
+    assert quota_decision.json()["status"] == "exceeded"
+    assert quota_decision.json()["allowed"] is True
+    assert notification_upsert.status_code == 200
+    assert notification_upsert.json()["id"] == "notification-route-1"
+    assert notifications.status_code == 200
+    assert notifications.json()[0]["notification_type"] == "scheduled_scan_summary"
+    assert policy_actions.status_code == 200
+    assert policy_actions.json()["project:write"] == "analyst"
+    assert policy_decision.status_code == 200
+    assert policy_decision.json()["allowed"] is True
+    assert policy_decision.json()["engine"] == "internal-opa-compatible"
+    assert model_policy.status_code == 200
+    assert model_policy.json()["policy_version"] == "2026-05-phase5-model-policy"
+    assert project.status_code == 200
+    assert project.json()["id"] == context.project_id
+    assert business_plan.status_code == 200
+    assert business_plan.json()["scenario_pack"]["id"]
+    assert qa_evaluation.status_code == 200
+    assert "finding_count" in qa_evaluation.json()
+    assert claim_validation.status_code == 200
+    assert claim_validation.json()["supported_count"] == 1
+    assert claim_validation.json()["self_consistency_score"] >= 70
+    assert claim_validation.json()["results"][0]["self_consistency_score"] >= 70
+    assert [
+        sample["checker"] for sample in claim_validation.json()["results"][0]["validation_samples"]
+    ] == [
+        "text_support",
+        "evidence_quality",
+        "triangulation",
+    ]
+    assert memory_ingest.status_code == 200
+    assert memory_ingest.json()["feedback"]["id"].startswith("feedback-")
+    assert memory_ingest.json()["candidates"]
+    assert memory_confirm.status_code == 200
+    assert memory_confirm.json()["status"] == "confirmed"
+    assert memory_recall.status_code == 200
+    assert memory_recall.json()["candidates"][0]["id"] == candidate_id
+    assert memory_feedback.status_code == 200
+    assert memory_feedback.json()[0]["target_id"] == projection.report_version.id
+    assert memory_stats.status_code == 200
+    assert memory_stats.json()["confirmed_candidate_count"] >= 1
+    assert audit_logs.status_code == 200
+    assert audit_filtered.status_code == 200
+    assert len(audit_filtered.json()) == 1
+    assert audit_filtered.json()[0]["action"] == "memory.feedback_captured"
+    assert audit_filtered.json()[0]["resource_id"] == memory_ingest.json()["feedback"]["id"]
+    assert audit_limited.status_code == 200
+    assert len(audit_limited.json()) == 1
+    assert audit_invalid_range.status_code == 400
+    assert "created_from" in audit_invalid_range.json()["detail"]
+    assert any(
+        log["action"] == "memory.feedback_captured"
+        and log["resource_id"] == memory_ingest.json()["feedback"]["id"]
+        and log["after"]["run_id"] == detail.id
+        and log["after"]["report_version_id"] == projection.report_version.id
+        and log["after"]["candidate_count"] == len(memory_ingest.json()["candidates"])
+        for log in audit_logs.json()
+    )
+    assert readiness.status_code == 200
+    assert readiness.json()["risk_level"] in {"ready", "watch", "at_risk", "blocked"}
+    assert gaps.status_code == 200
+    assert "gap_count" in gaps.json()
+    assert gaps.json()["framework"] == "pydantic-ai"
+    assert gaps.json()["pydantic_ai_execution_mode"] == "deterministic_handler"
+    assert gaps.json()["pydantic_ai_model_backed_requested"] is False
+    assert gaps.json()["typed_contract_enforced"] is True
+    assert gaps.json()["pydantic_ai_runtime_prompt_hash"]
+    assert gaps.json()["pydantic_ai_input_schema_hash"]
+    assert gaps.json()["pydantic_ai_output_schema_hash"]
+    assert gaps.json()["pydantic_ai_runtime_prompt_chars"] > 0
+    assert red_team.status_code == 200
+    assert red_team.json()["framework"] == "pydantic-ai"
+    assert red_team.json()["pydantic_ai_execution_mode"] == "deterministic_handler"
+    assert red_team.json()["pydantic_ai_model_backed_requested"] is False
+    assert red_team.json()["typed_contract_enforced"] is True
+    assert red_team.json()["pydantic_ai_runtime_prompt_hash"]
+    assert red_team.json()["pydantic_ai_input_schema_hash"]
+    assert red_team.json()["pydantic_ai_output_schema_hash"]
+    assert red_team.json()["pydantic_ai_runtime_prompt_chars"] > 0
+    assert quality_matrix.status_code == 200
+    assert isinstance(quality_matrix.json()["findings"], list)
+    assert isinstance(quality_matrix.json()["groups"], list)
+    group_keys = {
+        (item["group_by"], item["key"]) for item in quality_matrix.json()["groups"]
+    }
+    assert ("source_agent", "ClaimValidator") in group_keys
+    assert all(
+        isinstance(item["suggested_redos"], list) for item in quality_matrix.json()["entries"]
+    )
+    assert all(isinstance(item["findings"], list) for item in quality_matrix.json()["entries"])
+    assert {item["agent_name"] for item in quality_matrix.json()["entries"]} >= {
+        "BusinessQA",
+        "ClaimValidator",
+        "EvidenceGap",
+        "RedTeam",
+        "BenchmarkAgent",
+        "ReleaseGate",
+        "EvalOps",
+        "MemoryAgent",
+    }
+    claim_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "ClaimValidator"
+    )
+    assert claim_matrix["framework"] == "deterministic-self-consistency"
+    assert "self-consistency" in claim_matrix["summary"]
+    assert claim_matrix["metadata"]["validation_sample_count"] == 3
+    assert claim_matrix["metadata"]["sample_checkers"] == [
+        "text_support",
+        "evidence_quality",
+        "triangulation",
+    ]
+    memory_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "MemoryAgent"
+    )
+    assert memory_matrix["framework"] == "deterministic-preference-memory"
+    assert memory_matrix["score"] >= 80
+    evidence_gap_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "EvidenceGap"
+    )
+    assert evidence_gap_matrix["metadata"]["pydantic_ai_execution_mode"] == "deterministic_handler"
+    assert evidence_gap_matrix["metadata"]["typed_contract_enforced"] is True
+    assert evidence_gap_matrix["metadata"]["pydantic_ai_runtime_prompt_hash"]
+    assert evidence_gap_matrix["metadata"]["pydantic_ai_input_schema_hash"]
+    assert evidence_gap_matrix["metadata"]["pydantic_ai_output_schema_hash"]
+    assert evidence_gap_matrix["metadata"]["pydantic_ai_runtime_prompt_chars"] > 0
+    red_team_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "RedTeam"
+    )
+    assert red_team_matrix["metadata"]["pydantic_ai_execution_mode"] == "deterministic_handler"
+    assert red_team_matrix["metadata"]["typed_contract_enforced"] is True
+    assert red_team_matrix["metadata"]["pydantic_ai_runtime_prompt_hash"]
+    assert red_team_matrix["metadata"]["pydantic_ai_input_schema_hash"]
+    assert red_team_matrix["metadata"]["pydantic_ai_output_schema_hash"]
+    assert red_team_matrix["metadata"]["pydantic_ai_runtime_prompt_chars"] > 0
+    assert set(red_team_matrix["metadata"]["review_targets"]) >= {
+        "BusinessQA",
+        "ClaimValidator",
+        "EvidenceGap",
+        "BenchmarkAgent",
+        "ReleaseGate",
+    }
+    benchmark_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "BenchmarkAgent"
+    )
+    assert benchmark_matrix["framework"] == "deterministic-report-benchmark"
+    assert benchmark_matrix["metadata"]["report_version_id"] == projection.report_version.id
+    assert benchmark_matrix["metadata"]["source_token_count"] >= 1
+    assert benchmark_matrix["metadata"]["component_scores"]["release_score"] >= 80
+    assert set(benchmark_matrix["metadata"]["peer_reviewed_by"]) >= {
+        "BusinessQA",
+        "ClaimValidator",
+        "EvidenceGap",
+        "RedTeam",
+        "ReleaseGate",
+    }
+    assert set(benchmark_matrix["metadata"]["review_targets"]) >= {
+        "ClaimValidator",
+        "EvidenceGap",
+        "RedTeam",
+        "ReleaseGate",
+        "EvalOps",
+    }
+    release_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "ReleaseGate"
+    )
+    assert release_matrix["framework"] == "enterprise-release-gate"
+    assert release_matrix["status"] == "pass"
+    assert projection.report_version.id in release_matrix["summary"]
+    assert release_matrix["metadata"]["peer_review_mode"] == "deterministic_cross_agent_matrix"
+    assert release_matrix["metadata"]["quality_finding_schema"] == "QualityFinding"
+    assert isinstance(release_matrix["metadata"]["quality_finding_ids"], list)
+    assert set(release_matrix["metadata"]["peer_reviewed_by"]) >= {
+        "BusinessQA",
+        "ClaimValidator",
+        "EvidenceGap",
+        "RedTeam",
+        "BenchmarkAgent",
+        "EvalOps",
+    }
+    evalops_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "EvalOps"
+    )
+    assert evalops_matrix["framework"] == "deterministic-release-contract"
+    assert evalops_matrix["metadata"]["policy_version"] == "c5.5"
+    assert evalops_matrix["metadata"]["mode"] == "advisory"
+    assert evalops_matrix["metadata"]["decision"] in {
+        "allowed",
+        "review_required",
+        "blocked",
+    }
+    assert evalops_matrix["metadata"]["quality_finding_schema"] == "QualityFinding"
+    assert set(evalops_matrix["metadata"]["review_targets"]) >= {
+        "BenchmarkAgent",
+        "ReleaseGate",
+        "ClaimValidator",
+    }
+    assert competitors.status_code == 200
+    assert [item["name"] for item in competitors.json()] == ["Cursor"]
+    assert source_registry.status_code == 200
+    assert source_registry.json()[0]["domain"] == "cursor.sh"
+    assert source_upsert.status_code == 200
+    assert source_upsert.json()["source_type"] == "webpage_verified"
+    assert project_upsert.status_code == 200
+    assert project_upsert.json()["id"] == context.project_id
+    assert evidence_upsert.status_code == 200
+    assert evidence_upsert.json()["id"] == projection.evidence_records[0].id
+    assert evidence_search.status_code == 200
+    assert evidence_search.json()[0]["evidence"]["id"] == projection.evidence_records[0].id
+    assert evidence_reindex.status_code == 200
+    assert evidence_reindex.json()["indexed_count"] == 1
+    assert artifact_create.status_code == 200
+    artifact_id = artifact_create.json()["artifact"]["id"]
+    assert artifact_create.json()["artifact"]["evidence_id"] == projection.evidence_records[0].id
+    artifact = client.get(f"/api/enterprise/artifacts/{artifact_id}")
+    assert artifacts.status_code == 200
+    assert artifacts.json()[0]["id"] == artifact_id
+    assert artifact.status_code == 200
+    assert artifact.json()["storage_backend"] == "external"
+    assert artifact.json()["uri"] == "https://storage.example.test/cursor-pricing.html"
+    assert release_gate.status_code == 200
+    assert release_gate.json()["allowed"] is True
+    assert draft_publish.status_code == 409
+    assert draft_publish.json()["detail"]["reason"] == "report_approval_required"
+    assert approval_requested.status == "in_review"
+    assert approval_decision.status == "approved"
+    assert approval_upsert.status_code == 200
+    assert approval_upsert.json()["status"] == "approved"
+    assert approval_upsert.json()["quality_metadata"]["approval_workflow"]["decision"] == "approved"
+    assert publish.status_code == 200
+    assert publish.json()["status"] == "published"
+    assert publish.json()["quality_metadata"]["publication"]["status"] == "published"
+    assert quality.status_code == 200
+    assert quality.json()["evidence"]["quality_label"] == "stale"
+    assert any(
+        item.target_id == projection.evidence_records[0].id
+        and item.metadata["source"] == "evidence_quality_review"
+        for item in quality_memory_feedback
+    )
+    assert any(
+        candidate.metadata["target_id"] == projection.evidence_records[0].id
+        for candidate in quality_memory_recall.candidates
+    )
+    assert report_upsert.status_code == 409
+    assert report_upsert.json()["detail"]["reason"] == "report_lifecycle_transition_forbidden"
+    assert report_upsert.json()["detail"]["report_version_id"] == projection.report_version.id
+    assert manual_revision.status_code == 200
+    assert manual_revision.json()["parent_version_id"] == projection.report_version.id
+    assert manual_revision.json()["version_number"] == 2
+    assert manual_revision.json()["status"] == "draft"
+    assert "Manual correction." in manual_revision.json()["report_md"]
+    assert (
+        manual_revision.json()["quality_metadata"]["manual_revision"]["edited_by"] == "system-user"
+    )
+    assert (
+        manual_revision.json()["quality_metadata"]["manual_revision"]["source_report_version_id"]
+        == projection.report_version.id
+    )
+    manual_memory_feedback = memory.list_feedback(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        limit=20,
+    )
+    manual_memory_recall = memory.recall(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        query="manual report correction writing quality gate",
+        include_unconfirmed=True,
+    )
+    assert any(
+        item.target_id == manual_revision.json()["id"]
+        and item.report_version_id == manual_revision.json()["id"]
+        and item.metadata["source"] == "manual_report_revision"
+        for item in manual_memory_feedback
+    )
+    assert any(
+        candidate.metadata["target_id"] == manual_revision.json()["id"]
+        for candidate in manual_memory_recall.candidates
+    )
+    assert version.status_code == 200
+    assert version.json()["id"] == projection.report_version.id
+    assert diff.status_code == 200
+    assert diff.json()["base_version"] is None
+    assert diff.json()["added_lines"] >= 1
+    shutil.rmtree(artifact_root, ignore_errors=True)
+
+
+def test_enterprise_router_blocks_report_approval_status_when_gate_fails() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    projection.report_version = projection.report_version.model_copy(update={"claim_ids": []})
+    store.save_projection(projection)
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/enterprise/report-versions",
+        json=projection.report_version.model_copy(update={"status": "approved"}).model_dump(
+            mode="json"
+        ),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["status"] == "blocked"
+    assert response.json()["detail"]["reason"] == "report_approval_workflow_required"
+
+    requested = asyncio.run(
+        ReportApprovalActivities(store).request_report_approval(
+            ReportApprovalWorkflowInput(
+                report_version_id=projection.report_version.id,
+                requested_by="approver-1",
+                approver_ids=["approver-1"],
+            )
+        )
+    )
+
+    assert requested.status == "in_review"
+    with pytest.raises(RuntimeError, match="release gate blocked"):
+        asyncio.run(
+            ReportApprovalActivities(store).approve_report_version(
+                ReportApprovalDecisionInput(
+                    report_version_id=projection.report_version.id,
+                    approver_id="approver-1",
+                    note="Weak report should be blocked.",
+                )
+            )
+        )
+
+
+def test_enterprise_router_requires_reviewer_for_source_policy_review() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    app.dependency_overrides[get_artifact_storage] = lambda: LocalArtifactStorage(
+        Path("backend/.test-artifacts/router")
+    )
+    client = TestClient(app)
+    source = store.list_source_registry(workspace_id=context.workspace_id)[0].model_copy(
+        update={
+            "policy_review_status": "approved",
+            "policy_review_reason": "Reviewed by source policy owner.",
+        }
+    )
+
+    analyst_response = client.post(
+        "/api/enterprise/source-registry",
+        json=source.model_dump(mode="json"),
+        headers={"X-User-Role": "analyst"},
+    )
+    reviewer_response = client.post(
+        "/api/enterprise/source-registry",
+        json=source.model_dump(mode="json"),
+        headers={"X-User-Id": "source-reviewer-1", "X-User-Role": "reviewer"},
+    )
+
+    assert analyst_response.status_code == 403
+    assert reviewer_response.status_code == 200
+    assert reviewer_response.json()["policy_review_status"] == "approved"
+    assert any(
+        log.action == "source_registry.upserted"
+        and log.actor_id == "source-reviewer-1"
+        and log.resource_id == source.id
+        for log in store.list_audit_logs()
+    )
+
+
+def test_enterprise_router_blocks_direct_publish_status_without_approval() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    client = TestClient(app)
+
+    direct_publish = client.post(
+        "/api/enterprise/report-versions",
+        json=projection.report_version.model_copy(update={"status": "published"}).model_dump(
+            mode="json"
+        ),
+    )
+    direct_review = client.post(
+        "/api/enterprise/report-versions",
+        json=projection.report_version.model_copy(update={"status": "in_review"}).model_dump(
+            mode="json"
+        ),
+    )
+    direct_approved = client.post(
+        "/api/enterprise/report-versions",
+        json=projection.report_version.model_copy(update={"status": "approved"}).model_dump(
+            mode="json"
+        ),
+    )
+    draft_publish = client.post(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/publish"
+    )
+    requested = asyncio.run(
+        ReportApprovalActivities(store).request_report_approval(
+            ReportApprovalWorkflowInput(
+                report_version_id=projection.report_version.id,
+                requested_by="approver-1",
+                approver_ids=["approver-1"],
+            )
+        )
+    )
+    approved = asyncio.run(
+        ReportApprovalActivities(store).approve_report_version(
+            ReportApprovalDecisionInput(
+                report_version_id=projection.report_version.id,
+                approver_id="approver-1",
+                note="Ready to publish.",
+            )
+        )
+    )
+    approved_publish = client.post(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/publish"
+    )
+    logs = store.list_audit_logs(workspace_id=projection.workspace_id)
+
+    assert direct_publish.status_code == 409
+    assert direct_publish.json()["detail"]["reason"] == "report_publish_endpoint_required"
+    assert direct_review.status_code == 409
+    assert direct_review.json()["detail"]["reason"] == "report_approval_workflow_required"
+    assert direct_approved.status_code == 409
+    assert direct_approved.json()["detail"]["reason"] == "report_approval_workflow_required"
+    assert draft_publish.status_code == 409
+    assert draft_publish.json()["detail"]["reason"] == "report_approval_required"
+    assert requested.status == "in_review"
+    assert approved.status == "approved"
+    assert approved_publish.status_code == 200
+    assert approved_publish.json()["status"] == "published"
+    assert (
+        approved_publish.json()["quality_metadata"]["approval_workflow"]["decision"] == "approved"
+    )
+    assert approved_publish.json()["quality_metadata"]["publication"]["status"] == "published"
+    evalops_contract = approved_publish.json()["quality_metadata"]["publication"][
+        "evalops_release_contract"
+    ]
+    assert evalops_contract["policy_version"] == "c5.5"
+    assert evalops_contract["mode"] == "advisory"
+    assert evalops_contract["allowed"] is True
+    assert any(log.action == "report_version.approved" for log in logs)
+    published_logs = [
+        log for log in store.list_audit_logs() if log.action == "report_version.published"
+    ]
+    assert published_logs
+    assert published_logs[0].after is not None
+    assert published_logs[0].after["command_id"].startswith("runtime-command-")
+    assert published_logs[0].after["audit_correlation_id"].startswith("audit-correlation-")
+    assert published_logs[0].after["replay_correlation_id"].startswith("replay-correlation-")
+    assert published_logs[0].after["release_gate"]["allowed"] is True
+    assert published_logs[0].after["evalops_release_contract"]["policy_version"] == "c5.5"
+
+
+def test_manual_report_revision_after_rejection_creates_audited_draft() -> None:
+    store = EnterpriseMemoryStore()
+    memory = PreferenceMemoryStore.in_memory()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    app.dependency_overrides[get_preference_memory] = lambda: memory
+    client = TestClient(app)
+
+    requested = asyncio.run(
+        ReportApprovalActivities(store).request_report_approval(
+            ReportApprovalWorkflowInput(
+                report_version_id=projection.report_version.id,
+                requested_by="approver-1",
+                approver_ids=["approver-1"],
+            )
+        )
+    )
+    rejected = asyncio.run(
+        ReportApprovalActivities(store).reject_report_version(
+            ReportApprovalDecisionInput(
+                report_version_id=projection.report_version.id,
+                approver_id="approver-1",
+                note="Needs stronger evidence before publish.",
+            )
+        )
+    )
+    manual_revision = client.post(
+        f"/api/enterprise/report-versions/{projection.report_version.id}/manual-revision",
+        json={
+            "report_md": f"{projection.report_version.report_md}\n\nReviewer correction.",
+            "note": "Added stronger evidence caveat after rejection.",
+        },
+    )
+    revision_id = manual_revision.json()["id"]
+    direct_approve = client.post(
+        "/api/enterprise/report-versions",
+        json=manual_revision.json() | {"status": "approved"},
+    )
+    draft_publish = client.post(f"/api/enterprise/report-versions/{revision_id}/publish")
+    diff = client.get(f"/api/enterprise/report-versions/{revision_id}/diff")
+    logs = store.list_audit_logs(workspace_id=projection.workspace_id)
+    feedback = memory.list_feedback(project_id=projection.project_id)
+
+    assert requested.status == "in_review"
+    assert rejected.status == "rejected"
+    assert manual_revision.status_code == 200
+    assert manual_revision.json()["status"] == "draft"
+    assert manual_revision.json()["parent_version_id"] == projection.report_version.id
+    manual_lifecycle = manual_revision.json()["quality_metadata"]["hitl_lifecycle"][-1]
+    assert manual_lifecycle["lifecycle_stage"] == "revision_created"
+    assert manual_lifecycle["review_kind"] == "manual_report_revision"
+    assert manual_lifecycle["target_id"] == revision_id
+    assert manual_lifecycle["report_version_id"] == revision_id
+    assert (
+        manual_revision.json()["quality_metadata"]["manual_revision"]["edited_by"]
+        == "system-user"
+    )
+    assert direct_approve.status_code == 409
+    assert direct_approve.json()["detail"]["reason"] == "report_approval_workflow_required"
+    assert draft_publish.status_code == 409
+    assert draft_publish.json()["detail"]["reason"] == "report_approval_required"
+    assert diff.status_code == 200
+    assert diff.json()["base_version"]["id"] == projection.report_version.id
+    assert diff.json()["target_version"]["id"] == revision_id
+    assert diff.json()["added_lines"] >= 1
+    assert any(log.action == "report_version.rejected" for log in logs)
+    revision_logs = [
+        log for log in logs if log.action == "report_version.manual_revision_created"
+    ]
+    assert revision_logs
+    assert revision_logs[0].after is not None
+    assert revision_logs[0].after["command_id"].startswith("runtime-command-")
+    assert revision_logs[0].after["audit_correlation_id"].startswith("audit-correlation-")
+    assert revision_logs[0].after["replay_correlation_id"].startswith("replay-correlation-")
+    assert revision_logs[0].after["hitl_lifecycle"][-1]["target_id"] == revision_id
+    assert any(
+        log.action == "memory.feedback_captured"
+        and log.after["target_id"] == revision_id
+        and log.after["report_version_id"] == revision_id
+        for log in logs
+    )
+    assert any(
+        item.target_id == revision_id
+        and item.report_version_id == revision_id
+        and item.metadata["source"] == "manual_report_revision"
+        for item in feedback
+    )
+
+
+def test_gap_fill_result_carries_release_gate_improvement_delta() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail)
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    store.save_projection(projection)
+    source_version = projection.report_version.model_copy(
+        update={
+            "id": "report-source-gapped",
+            "version_number": 1,
+            "evidence_ids": [],
+            "claim_ids": [],
+        }
+    )
+    store.upsert_report_version(source_version)
+    project = store.get_project(context.project_id)
+    assert project is not None
+    result = EvidenceGapFillResult(
+        project_id=context.project_id,
+        workspace_id=context.workspace_id,
+        source_report_version_id=source_version.id,
+        updated_report_version_id=projection.report_version.id,
+        gap_count=1,
+        filled_gap_count=1,
+        added_evidence_count=1,
+        candidate_evidence_ids=projection.report_version.evidence_ids,
+        filled_gap_ids=["gap-pricing"],
+        remaining_gap_ids=[],
+        report=EvidenceGapReport(
+            project_id=context.project_id,
+            scenario_id="l1_pricing_pack",
+            gap_count=0,
+        ),
+        updated_report_version=projection.report_version,
+    )
+
+    enriched = _with_gap_fill_release_gate_delta(result, project=project, store=store)
+
+    assert enriched.source_release_gate is not None
+    assert enriched.updated_release_gate is not None
+    assert enriched.source_release_gate.allowed is False
+    assert enriched.updated_release_gate.allowed is True
+    assert enriched.release_gate_improved is True
+    assert enriched.release_gate_blocker_delta > 0
+    assert enriched.readiness_score_delta >= 0
+    assert enriched.updated_report_version is not None
+    release_delta = enriched.updated_report_version.quality_metadata["rag_gap_fill"][
+        "release_gate_delta"
+    ]
+    assert release_delta["source_report_version_id"] == source_version.id
+    assert release_delta["updated_report_version_id"] == projection.report_version.id
+    assert release_delta["source_allowed"] is False
+    assert release_delta["updated_allowed"] is True
+    assert release_delta["release_gate_improved"] is True
+    assert release_delta["release_gate_blocker_delta"] == enriched.release_gate_blocker_delta
+    stored_version = store.get_report_version(projection.report_version.id)
+    assert stored_version is not None
+    assert (
+        stored_version.quality_metadata["rag_gap_fill"]["release_gate_delta"][
+            "release_gate_improved"
+        ]
+        is True
+    )
+
+
+def test_enterprise_router_enforces_rbac_workspace_scope() -> None:
+    store = EnterpriseMemoryStore()
+    memory = PreferenceMemoryStore.in_memory()
+    detail_a = _detail().model_copy(deep=True, update={"id": "run-a"})
+    context_a = store.start_run(detail_a, workspace_id="workspace-a")
+    projection_a = build_enterprise_projection(
+        detail_a,
+        workspace_id=context_a.workspace_id,
+        project_id=context_a.project_id,
+        competitor_id_map=context_a.competitor_id_map,
+    )
+    store.save_projection(projection_a)
+    detail_b = _detail().model_copy(deep=True, update={"id": "run-b"})
+    context_b = store.start_run(detail_b, workspace_id="workspace-b")
+    projection_b = build_enterprise_projection(
+        detail_b,
+        workspace_id=context_b.workspace_id,
+        project_id=context_b.project_id,
+        competitor_id_map=context_b.competitor_id_map,
+    )
+    store.save_projection(projection_b)
+    artifact_b = store.upsert_artifact(
+        ArtifactRecord(
+            id="artifact-workspace-b",
+            workspace_id=context_b.workspace_id,
+            project_id=context_b.project_id,
+            evidence_id=projection_b.evidence_records[0].id,
+            run_id=detail_b.id,
+            report_version_id=projection_b.report_version.id,
+            artifact_type="web_snapshot",
+            filename="workspace-b-pricing.html",
+            media_type="text/html",
+            storage_backend="external",
+            uri="https://storage.example.test/workspace-b-pricing.html",
+            byte_size=0,
+            content_hash="hash-workspace-b",
+            created_by="analyst-b",
+        )
+    )
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    app.dependency_overrides[get_preference_memory] = lambda: memory
+    client = TestClient(app)
+    viewer_headers = {
+        "X-User-Id": "viewer-a",
+        "X-User-Role": "viewer",
+        "X-Workspace-Id": "workspace-a",
+    }
+    reviewer_headers = {
+        "X-User-Id": "reviewer-a",
+        "X-User-Role": "reviewer",
+        "X-Workspace-Id": "workspace-a",
+    }
+    analyst_headers = {
+        "X-User-Id": "analyst-a",
+        "X-User-Role": "analyst",
+        "X-Workspace-Id": "workspace-a",
+    }
+    admin_headers = {
+        "X-User-Id": "admin-a",
+        "X-User-Role": "admin",
+        "X-Workspace-Id": "workspace-a",
+    }
+
+    scoped_projects = client.get("/api/enterprise/projects", headers=viewer_headers)
+    cross_project = client.get(
+        f"/api/enterprise/projects/{context_b.project_id}",
+        headers=viewer_headers,
+    )
+    cross_report = client.get(
+        f"/api/enterprise/report-versions/{projection_b.report_version.id}",
+        headers=viewer_headers,
+    )
+    cross_advisory_context = client.get(
+        f"/api/enterprise/report-versions/{projection_b.report_version.id}/advisory-context",
+        headers=viewer_headers,
+    )
+    cross_evidence = client.get(
+        "/api/enterprise/evidence/search",
+        params={"workspace_id": context_b.workspace_id, "query": "pricing"},
+        headers=viewer_headers,
+    )
+    cross_artifact = client.get(
+        f"/api/enterprise/artifacts/{artifact_b.id}",
+        headers=viewer_headers,
+    )
+    cross_report_artifacts = client.get(
+        "/api/enterprise/artifacts",
+        params={
+            "workspace_id": context_a.workspace_id,
+            "report_version_id": projection_b.report_version.id,
+        },
+        headers=viewer_headers,
+    )
+    cross_sources = client.get(
+        "/api/enterprise/source-registry",
+        params={"workspace_id": context_b.workspace_id},
+        headers=viewer_headers,
+    )
+    cross_memory = client.get(
+        f"/api/enterprise/projects/{context_b.project_id}/memory/feedback",
+        headers=viewer_headers,
+    )
+    cross_audit = client.get(
+        "/api/enterprise/audit-logs",
+        params={"workspace_id": context_b.workspace_id},
+        headers=admin_headers,
+    )
+    cross_tenant_readiness = client.get(
+        "/api/enterprise/governance/tenant-readiness",
+        params={"workspace_id": context_b.workspace_id},
+        headers=admin_headers,
+    )
+    viewer_audit = client.get(
+        "/api/enterprise/audit-logs",
+        params={"workspace_id": context_a.workspace_id},
+        headers=viewer_headers,
+    )
+    forbidden_write = client.post(
+        "/api/enterprise/projects",
+        json=store.get_project(context_a.project_id).model_dump(mode="json"),
+        headers=viewer_headers,
+    )
+    viewer_artifact_write = client.post(
+        "/api/enterprise/artifacts",
+        json={
+            "workspace_id": context_a.workspace_id,
+            "project_id": context_a.project_id,
+            "evidence_id": projection_a.evidence_records[0].id,
+            "run_id": detail_a.id,
+            "report_version_id": projection_a.report_version.id,
+            "artifact_type": "web_snapshot",
+            "filename": "viewer-upload.html",
+            "external_uri": "https://storage.example.test/viewer-upload.html",
+        },
+        headers=viewer_headers,
+    )
+    analyst_artifact_write = client.post(
+        "/api/enterprise/artifacts",
+        json={
+            "workspace_id": context_a.workspace_id,
+            "project_id": context_a.project_id,
+            "evidence_id": projection_a.evidence_records[0].id,
+            "run_id": detail_a.id,
+            "report_version_id": projection_a.report_version.id,
+            "artifact_type": "web_snapshot",
+            "filename": "analyst-upload.html",
+            "external_uri": "https://storage.example.test/analyst-upload.html",
+        },
+        headers=analyst_headers,
+    )
+    reviewer_report_write = client.post(
+        f"/api/enterprise/report-versions/{projection_a.report_version.id}/manual-revision",
+        json={
+            "report_md": f"{projection_a.report_version.report_md}\n\nReviewer edit.",
+            "note": "Reviewer should not directly edit report.",
+        },
+        headers=reviewer_headers,
+    )
+    cross_manual_revision_command = client.post(
+        f"/api/enterprise/report-versions/{projection_b.report_version.id}/manual-revision",
+        json={
+            "report_md": f"{projection_b.report_version.report_md}\n\nCross edit.",
+            "note": "Must not edit another workspace report.",
+        },
+        headers=admin_headers,
+    )
+    cross_publish_command = client.post(
+        f"/api/enterprise/report-versions/{projection_b.report_version.id}/publish",
+        headers=admin_headers,
+    )
+    cross_approval_start_command = client.post(
+        "/api/workflows/report-approval",
+        json={
+            "report_version_id": projection_b.report_version.id,
+            "requested_by": "admin-a",
+            "approver_ids": ["reviewer-a"],
+        },
+        headers=admin_headers,
+    )
+    cross_approval_signal_command = client.post(
+        f"/api/workflows/report-approval/{projection_b.report_version.id}/approve",
+        json={"approver_id": "reviewer-a", "note": "Cross approve must fail."},
+        headers=admin_headers,
+    )
+    quality = client.patch(
+        f"/api/enterprise/evidence/{projection_a.evidence_records[0].id}/quality",
+        json={"quality_label": "accepted", "note": "Reviewed."},
+        headers=reviewer_headers,
+    )
+
+    assert scoped_projects.status_code == 200
+    assert [item["workspace_id"] for item in scoped_projects.json()] == ["workspace-a"]
+    assert cross_project.status_code == 403
+    assert cross_report.status_code == 403
+    assert cross_advisory_context.status_code == 403
+    assert cross_evidence.status_code == 403
+    assert cross_artifact.status_code == 403
+    assert cross_report_artifacts.status_code == 403
+    assert cross_sources.status_code == 403
+    assert cross_memory.status_code == 403
+    assert cross_audit.status_code == 403
+    assert cross_tenant_readiness.status_code == 403
+    assert viewer_audit.status_code == 403
+    assert forbidden_write.status_code == 403
+    assert viewer_artifact_write.status_code == 403
+    assert analyst_artifact_write.status_code == 200
+    assert analyst_artifact_write.json()["artifact"]["created_by"] == "analyst-a"
+    assert reviewer_report_write.status_code == 403
+    assert cross_manual_revision_command.status_code == 403
+    assert cross_publish_command.status_code == 403
+    assert cross_approval_start_command.status_code == 403
+    assert cross_approval_signal_command.status_code == 403
+    assert quality.status_code == 200
+    assert quality.json()["evidence"]["quality_label"] == "accepted"
+
+
+def test_enterprise_router_returns_404_for_missing_project() -> None:
+    store = EnterpriseMemoryStore()
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    client = TestClient(app)
+
+    response = client.get("/api/enterprise/projects/missing")
+
+    assert response.status_code == 404

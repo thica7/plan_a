@@ -1,11 +1,23 @@
 import { NavLink, Route, Routes } from "react-router-dom";
-import { Activity, BookOpen, History, Radar, Search, Workflow } from "lucide-react";
+import {
+  Activity,
+  BookOpen,
+  Briefcase,
+  Database,
+  FileText,
+  History,
+  Layers,
+  Radar,
+  Search,
+  Workflow,
+} from "lucide-react";
 import { NewRun } from "./pages/NewRun";
 import { RunDetail } from "./pages/RunDetail";
 import { HistoryPage } from "./pages/History";
 import KnowledgePage from "./pages/KnowledgePage";
 import SearchPage from "./pages/SearchPage";
 import CrawlPage from "./pages/CrawlPage";
+import { EnterpriseWorkbench } from "./pages/EnterpriseWorkbench";
 
 export function App() {
   return (
@@ -39,6 +51,22 @@ export function App() {
             <Workflow size={18} aria-hidden />
             Crawl
           </NavLink>
+          <NavLink to="/enterprise">
+            <Briefcase size={18} aria-hidden />
+            Enterprise
+          </NavLink>
+          <NavLink to="/competitors">
+            <Layers size={18} aria-hidden />
+            Competitors
+          </NavLink>
+          <NavLink to="/evidence">
+            <Database size={18} aria-hidden />
+            Evidence
+          </NavLink>
+          <NavLink to="/reports">
+            <FileText size={18} aria-hidden />
+            Reports
+          </NavLink>
         </nav>
       </aside>
 
@@ -50,6 +78,10 @@ export function App() {
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/crawl" element={<CrawlPage />} />
+          <Route path="/enterprise" element={<EnterpriseWorkbench initialTab="competitors" />} />
+          <Route path="/competitors" element={<EnterpriseWorkbench initialTab="competitors" />} />
+          <Route path="/evidence" element={<EnterpriseWorkbench initialTab="evidence" />} />
+          <Route path="/reports" element={<EnterpriseWorkbench initialTab="reports" />} />
         </Routes>
       </main>
     </div>
