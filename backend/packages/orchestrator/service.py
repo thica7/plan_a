@@ -27,7 +27,7 @@ from packages.business_intel import (
 )
 from packages.business_intel.homepage import verify_homepages
 from packages.business_intel.release_repair import (
-    apply_release_gate_warning_report_repair,
+    apply_release_gate_report_repair,
 )
 from packages.compliance import compliance_policy_from_settings, redact_text
 from packages.config import Settings
@@ -2391,10 +2391,12 @@ class RunService(
         metadata = dict(projection.report_version.quality_metadata)
         initial_gaps = quality_gaps_from_release_gate(gate)
         initial_tasks = repair_tasks_from_gaps(initial_gaps)
-        report_repair = apply_release_gate_warning_report_repair(
+        repair_evidence = list(projection.evidence_records)
+        report_repair = apply_release_gate_report_repair(
             projection.report_version.report_md,
             gate=gate,
             tasks=initial_tasks,
+            evidence=repair_evidence,
         )
         gate_for_metadata = gate
         if report_repair.changed:
@@ -2404,10 +2406,11 @@ class RunService(
             after_gate = self._evaluate_report_release_gate(projection)
             if after_gate is not None:
                 gate_for_metadata = after_gate
-                report_repair = apply_release_gate_warning_report_repair(
+                report_repair = apply_release_gate_report_repair(
                     projection.report_version.report_md,
                     gate=gate,
                     tasks=initial_tasks,
+                    evidence=repair_evidence,
                     after_gate=after_gate,
                 )
                 if report_repair.changed:

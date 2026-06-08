@@ -17,6 +17,7 @@ from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
     EnterpriseRunProjection,
+    EvidenceRecord,
     ModelRouteCandidate,
     ModelRouteDecision,
     ProjectReadinessScore,
@@ -38,7 +39,6 @@ from packages.schema.models import (
     RevisionRecord,
 )
 from packages.search import SearchResult
-
 from packages.skills.registry import SkillRegistry
 from packages.tools.evidence_fetch import EvidenceFetchResult
 from packages.tools.fetch_page import FetchPageResult
@@ -4794,6 +4794,124 @@ def test_release_gate_quality_metadata_records_followup_tasks() -> None:
     assert "## Release Gate Follow-up Repairs" in projection.report_version.report_md
     assert projection.report_version.report_md.count("## Release Gate Follow-up Repairs") == 1
     assert "Collect a second independent pricing source." in projection.report_version.report_md
+
+
+def test_release_gate_quality_metadata_repairs_strong_conclusion_weak_citation() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    projection = EnterpriseRunProjection(
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-1",
+        evidence_records=[
+            EvidenceRecord(
+                id="evidence-strong",
+                workspace_id="workspace-1",
+                project_id="project-1",
+                run_id="run-1",
+                raw_source_id="raw-source-strong",
+                competitor_id="competitor-cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://example.com/pricing",
+                snippet="Cursor publishes pricing.",
+                content_hash="hash-strong",
+                reliability_score=0.96,
+                quality_label="accepted",
+            ),
+            EvidenceRecord(
+                id="evidence-weak",
+                workspace_id="workspace-1",
+                project_id="project-1",
+                run_id="run-1",
+                raw_source_id="raw-source-weak",
+                competitor_id="competitor-windsurf",
+                dimension="persona",
+                source_type="interview_record",
+                title="Windsurf proxy interview",
+                snippet="Directional interview note.",
+                content_hash="hash-weak",
+                reliability_score=0.56,
+                quality_label="unreviewed",
+            ),
+        ],
+        report_version=ReportVersionRecord(
+            id="report-version-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id="run-1",
+            version_number=1,
+            topic_normalized="release-gate-citation-policy",
+            competitor_layer="L1",
+            competitor_set_hash="hash",
+            evidence_ids=["evidence-strong", "evidence-weak"],
+            report_md=(
+                "# Report\n\n"
+                "Overall Confidence: 0.78 | Caveat: Persona coverage is partial. "
+                "[source:raw-source-weak]"
+            ),
+        ),
+    )
+    gate = ReportReleaseGate(
+        report_version_id="report-version-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        allowed=False,
+        status="blocked",
+        readiness=ProjectReadinessScore(
+            project_id="project-1",
+            score=94,
+            risk_level="ready",
+            evidence_score=90,
+            claim_score=90,
+            coverage_score=90,
+            qa_score=90,
+            summary="Ready except citation policy.",
+        ),
+        qa_evaluation=BusinessQAEvaluation(
+            project_id="project-1",
+            scenario_id="l1_pricing_pack",
+            competitor_layer="L1",
+        ),
+        issue_count=1,
+        blocker_count=1,
+        warn_count=0,
+        issues=[
+            BusinessQAFinding(
+                id="release-citation-1",
+                rule_id="strong_conclusion_uses_weak_source",
+                rule_name="Strong conclusion source quality",
+                severity="blocker",
+                message="A strong report conclusion cites weak evidence.",
+                evidence_ids=["evidence-weak"],
+                recommendation="Rewrite the conclusion as tentative.",
+            )
+        ],
+    )
+
+    changed = service._attach_release_gate_quality_metadata(projection, gate)
+    metadata = projection.report_version.quality_metadata["release_gate"]
+
+    assert changed is True
+    assert "Evidence caveat:" in projection.report_version.report_md
+    assert "[source:raw-source-weak]" not in projection.report_version.report_md
+    assert "[source:raw-source-strong]" in projection.report_version.report_md
+    assert metadata["warning_repair"]["changed"] is True
+    assert metadata["warning_repair"]["citation_policy_repair"]["changed"] is True
+    assert (
+        metadata["warning_repair"]["citation_policy_repair"]["violations"][0]["rule_id"]
+        == "strong_conclusion_uses_weak_source"
+    )
 
 
 @pytest.mark.asyncio

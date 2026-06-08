@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from packages.business_intel.claim_validator import validate_project_claims
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS, evaluate_business_qa
 from packages.business_intel.planning import build_business_intel_plan
+from packages.business_intel.report_citation_policy import report_citation_policy_violations
 from packages.business_intel.scorer import score_project_readiness
 from packages.business_intel.source_reconciliation import (
     evidence_by_source_token,
@@ -31,14 +32,6 @@ MIN_READY_SCORE = 85
 MIN_RELEASE_SOURCE_CONFIDENCE = 0.75
 MIN_REPORT_STRUCTURE_SCORE = 0.7
 MIN_REPORT_BODY_CHARS = 900
-STRONG_CONCLUSION_RE = re.compile(
-    r"\b("
-    r"winner|leading option|best option|safer|safest|recommended|recommendation|"
-    r"dimension winner|executive summary|soc\s*2|iso\s*/?\s*iec|ip indemnity|"
-    r"sso|saml|scim|audit log|pricing transparency"
-    r")\b",
-    flags=re.IGNORECASE,
-)
 
 
 def evaluate_report_release_gate(
@@ -593,36 +586,16 @@ def _report_citation_quality_issues(
     report_version: ReportVersionRecord,
     evidence: list[EvidenceRecord],
 ) -> list[BusinessQAFinding]:
-    evidence_by_token = evidence_by_source_token(evidence)
-
     issues: list[BusinessQAFinding] = []
-    for line in report_version.report_md.splitlines():
-        if not STRONG_CONCLUSION_RE.search(line):
-            continue
-        weak = [
-            evidence_by_token[normalized]
-            for token in _cited_source_tokens(line)
-            if (normalized := normalize_source_token(token)) in evidence_by_token
-            and (
-                evidence_by_token[normalized].source_type != "webpage_verified"
-                or evidence_by_token[normalized].reliability_score < MIN_RELEASE_SOURCE_CONFIDENCE
-                or evidence_by_token[normalized].quality_label in BAD_QUALITY_LABELS
-            )
-        ]
-        if not weak:
-            continue
+    for violation in report_citation_policy_violations(report_version.report_md, evidence):
         issues.append(
             _gate_issue(
-                "strong_conclusion_uses_weak_source",
-                "Strong conclusion source quality",
-                (
-                    "A strong report conclusion cites weak or search-only evidence. "
-                    f"Line: {line.strip()[:220]}"
-                ),
-                evidence_ids=[item.id for item in weak],
-                recommendation=(
-                    "Rewrite the conclusion as tentative or recollect official/verified sources."
-                ),
+                violation.rule_id,
+                violation.rule_name,
+                violation.message,
+                severity=violation.severity,
+                evidence_ids=violation.evidence_ids,
+                recommendation=violation.recommendation,
             )
         )
     return issues
