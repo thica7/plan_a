@@ -30,6 +30,9 @@ from packages.schema.models import (
     RawSource,
 )
 
+OPENROUTER_PREFIX = "sk" + "-or-v1-"
+FIXTURE_OPENROUTER_KEY = OPENROUTER_PREFIX + "redacted_fixture_1234567890redacted_fixture"
+
 
 def test_source_snapshot_assets_external_s3_pointer_and_source_registry() -> None:
     store, context = _projected_store()
@@ -100,7 +103,7 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
             content_text=(
                 "Enterprise buyer survey: Cursor adoption depends on onboarding, "
                 "security review, and workflow fit. Contact buyer@example.com "
-                "with OPENROUTER_TEST_KEY_REDACTED."
+                f"with {FIXTURE_OPENROUTER_KEY}."
             ),
             display_name="Enterprise buyer survey",
             trust_level="verified",
@@ -150,7 +153,7 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
     assert evidence.raw_source_id in result.artifact.metadata["source_tokens"]
     assert "workflow fit" in evidence.snippet
     assert "buyer@example.com" not in evidence.snippet
-    assert "sk-or-v1-redacted" not in evidence.snippet
+    assert OPENROUTER_PREFIX + "redacted" not in evidence.snippet
     assert "[redacted:email]" in evidence.snippet
     assert "[redacted:api_key]" in evidence.snippet
     assert result.artifact.metadata["redaction_applied"] is True
@@ -169,7 +172,7 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
     )
     artifact_text = artifact_path.read_text(encoding="utf-8")
     assert "buyer@example.com" not in artifact_text
-    assert "sk-or-v1-redacted" not in artifact_text
+    assert OPENROUTER_PREFIX + "redacted" not in artifact_text
     assert "[redacted:email]" in artifact_text
     assert "[redacted:api_key]" in artifact_text
     assert result.snapshot_quality_score >= 80

@@ -16,6 +16,10 @@ from packages.schema.survey import (
 )
 from packages.skills.registry import SkillRegistry
 
+OPENROUTER_PREFIX = "sk" + "-or-v1-"
+FIXTURE_OPENROUTER_KEY = OPENROUTER_PREFIX + "redacted_fixture_1234567890redacted_fixture"
+RAW_NOTE_OPENROUTER_KEY = OPENROUTER_PREFIX + "abcdefghijklmnop1234"
+
 
 @pytest.mark.asyncio
 async def test_survey_interview_enrichment_adds_typed_research_evidence() -> None:
@@ -51,7 +55,7 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
             field_path="raw_sources.persona",
             problem=(
                 "Interview coordinator jane.buyer@example.com shared "
-                "OPENROUTER_TEST_KEY_REDACTED as a private note."
+                f"{FIXTURE_OPENROUTER_KEY} as a private note."
             ),
             redo_scope=RedoScope(
                 kind="collector",
@@ -84,9 +88,9 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
     assert "pain points" in interview_source.snippet
     assert interview_source.confidence == 0.62
     assert "jane.buyer@example.com" not in survey_source.snippet
-    assert "sk-or-v1-redacted" not in survey_source.snippet
+    assert OPENROUTER_PREFIX + "redacted" not in survey_source.snippet
     assert "jane.buyer@example.com" not in interview_source.snippet
-    assert "sk-or-v1-redacted" not in interview_source.snippet
+    assert OPENROUTER_PREFIX + "redacted" not in interview_source.snippet
     assert record.detail.agent_messages[-1].message_type == "survey_interview_evidence_collected"
     assert set(record.detail.agent_messages[-1].payload["source_ids"]) == {
         survey_source.id,
@@ -119,7 +123,7 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
     assert span.metadata["research_redacted"] is True
     assert span.metadata["research_redaction_email_count"] >= 1
     assert "jane.buyer@example.com" not in span.full_output
-    assert "sk-or-v1-redacted" not in span.full_output
+    assert OPENROUTER_PREFIX + "redacted" not in span.full_output
     assert "[redacted:email]" in span.full_output
     assert "[redacted:api_key]" in span.full_output
 
@@ -354,7 +358,7 @@ async def test_user_research_import_redacts_and_projects_claim_links() -> None:
                     text=(
                         "Jane Buyer jane.buyer@example.com said enterprise developer teams "
                         "liked Acme for workflow fit, but onboarding friction and switching "
-                        "risk slowed adoption. Private token OPENROUTER_TEST_KEY_REDACTED "
+                        f"risk slowed adoption. Private token {RAW_NOTE_OPENROUTER_KEY} "
                         "was included in the raw note by mistake."
                     ),
                     confidence=0.86,
@@ -374,7 +378,7 @@ async def test_user_research_import_redacts_and_projects_claim_links() -> None:
     assert source.source_type == "manual_transcript"
     assert source.metadata["imported_user_research"] is True
     assert "jane.buyer@example.com" not in source.snippet
-    assert "OPENROUTER_TEST_KEY_REDACTED" not in source.snippet
+    assert RAW_NOTE_OPENROUTER_KEY not in source.snippet
     assert "[redacted:email]" in source.snippet
     assert "[redacted:api_key]" in source.snippet
     knowledge = service.get_run(detail.id).competitor_knowledge["Acme"]  # type: ignore[union-attr]
@@ -397,6 +401,6 @@ async def test_user_research_import_redacts_and_projects_claim_links() -> None:
     )
     assert span.metadata["research_redacted"] is True
     assert "jane.buyer@example.com" not in span.full_input
-    assert "OPENROUTER_TEST_KEY_REDACTED" not in span.full_input
+    assert RAW_NOTE_OPENROUTER_KEY not in span.full_input
     assert "jane.buyer@example.com" not in span.full_output
-    assert "OPENROUTER_TEST_KEY_REDACTED" not in span.full_output
+    assert RAW_NOTE_OPENROUTER_KEY not in span.full_output

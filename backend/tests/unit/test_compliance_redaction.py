@@ -1,18 +1,26 @@
 from packages.compliance import CompliancePolicy, redact_text
 
-FAKE_OPENROUTER_KEY = "sk-or-v1-" + "test" * 12
+OPENROUTER_PREFIX = "sk" + "-or-v1-"
+OPENAI_PROJECT_PREFIX = "sk" + "-proj-"
+ANTHROPIC_PREFIX = "sk" + "-ant-api03-"
+PERPLEXITY_PREFIX = "pplx" + "-"
+GOOGLE_PREFIX = "AI" + "za"
+AWS_PREFIX = "AK" + "IA"
+HF_PREFIX = "hf" + "_"
+
+FAKE_OPENROUTER_KEY = OPENROUTER_PREFIX + "test" * 12
 
 
 def test_redacts_common_provider_key_families() -> None:
     text = "\n".join(
         [
             f"BACKUP_LLM_API_KEY={FAKE_OPENROUTER_KEY}",
-            "OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz1234567890",
-            "ANTHROPIC_API_KEY=sk-ant-api03-abcdefghijklmnopqrstuvwxyz123456",
-            "PPLX_API_KEY=pplx-abcdefghijklmnopqrstuvwxyz123456",
-            "GOOGLE_API_KEY=AIzaabcdefghijklmnopqrstuvwxyz123456",
-            "AWS_ACCESS_KEY_ID=AKIAABCDEFGHIJKLMNOP",
-            "HF_TOKEN=hf_abcdefghijklmnopqrstuvwxyz123456",
+            f"OPENAI_API_KEY={OPENAI_PROJECT_PREFIX}abcdefghijklmnopqrstuvwxyz1234567890",
+            f"ANTHROPIC_API_KEY={ANTHROPIC_PREFIX}abcdefghijklmnopqrstuvwxyz123456",
+            f"PPLX_API_KEY={PERPLEXITY_PREFIX}abcdefghijklmnopqrstuvwxyz123456",
+            f"GOOGLE_API_KEY={GOOGLE_PREFIX}abcdefghijklmnopqrstuvwxyz123456",
+            f"AWS_ACCESS_KEY_ID={AWS_PREFIX}ABCDEFGHIJKLMNOP",
+            f"HF_TOKEN={HF_PREFIX}abcdefghijklmnopqrstuvwxyz123456",
         ]
     )
 

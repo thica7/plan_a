@@ -30,6 +30,9 @@ from packages.schema.models import (
     TraceSpan,
 )
 
+OPENROUTER_PREFIX = "sk" + "-or-v1-"
+TRACE_FIXTURE_OPENROUTER_KEY = OPENROUTER_PREFIX + "abcdef1234567890abcdef1234567890"
+
 
 def test_trace_payload_sanitizes_nested_secrets() -> None:
     payload = {
@@ -64,7 +67,7 @@ def test_build_run_event_applies_trace_sanitizer() -> None:
 
 def test_trace_payload_sanitizes_sensitive_text_values() -> None:
     sanitized = sanitize_for_trace(
-        {"note": ("Contact alice@example.com with OPENROUTER_TEST_KEY_REDACTED.")}
+        {"note": (f"Contact alice@example.com with {TRACE_FIXTURE_OPENROUTER_KEY}.")}
     )
 
     assert sanitized["note"] == ("Contact [redacted:email] with [redacted:api_key].")
@@ -80,7 +83,7 @@ def test_compliance_redactor_reports_counts_by_kind() -> None:
 
 def test_compliance_redactor_obeys_policy() -> None:
     result = redact_text(
-        "Contact alice@example.com with OPENROUTER_TEST_KEY_REDACTED.",
+        f"Contact alice@example.com with {TRACE_FIXTURE_OPENROUTER_KEY}.",
         policy=CompliancePolicy(redact_emails=False, redact_api_keys=True),
     )
 

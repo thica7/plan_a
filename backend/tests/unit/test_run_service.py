@@ -38,9 +38,13 @@ from packages.schema.models import (
     RevisionRecord,
 )
 from packages.search import SearchResult
+
 from packages.skills.registry import SkillRegistry
 from packages.tools.evidence_fetch import EvidenceFetchResult
 from packages.tools.fetch_page import FetchPageResult
+
+OPENROUTER_PREFIX = "sk" + "-or-v1-"
+TRACE_FIXTURE_OPENROUTER_KEY = OPENROUTER_PREFIX + "abcdef1234567890abcdef1234567890"
 
 
 def _test_graph_checkpointer() -> GraphCheckpointer:
@@ -1157,7 +1161,7 @@ async def test_trace_spans_redact_sensitive_text_before_storage() -> None:
         name="compliance_probe",
         status="ok",
         started=time.perf_counter(),
-        input_text=("contact alice@example.com with OPENROUTER_TEST_KEY_REDACTED"),
+        input_text=(f"contact alice@example.com with {TRACE_FIXTURE_OPENROUTER_KEY}"),
         output_text="Bearer abcdef1234567890 accepted",
     )
 

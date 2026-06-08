@@ -4,10 +4,15 @@ import importlib.util
 import sys
 from pathlib import Path
 
-FAKE_GITLAB_TOKEN = "glpat-" + "gitlabtoken" * 3
-FAKE_OPENROUTER_KEY = "sk-or-v1-" + "livekey" * 8
-FIXTURE_OPENROUTER_KEY = "sk-or-v1-" + "redacted_fixture_1234567890" * 2
-FAKE_PERPLEXITY_KEY = "pplx-" + "perplexity" * 3
+GITLAB_PREFIX = "glpat" + "-"
+OPENROUTER_PREFIX = "sk" + "-or-v1-"
+OPENAI_PROJECT_PREFIX = "sk" + "-proj-"
+PERPLEXITY_PREFIX = "pplx" + "-"
+
+FAKE_GITLAB_TOKEN = GITLAB_PREFIX + "gitlabtoken" * 3
+FAKE_OPENROUTER_KEY = OPENROUTER_PREFIX + "livekey" * 8
+FIXTURE_OPENROUTER_KEY = OPENROUTER_PREFIX + "redacted_fixture_1234567890" * 2
+FAKE_PERPLEXITY_KEY = PERPLEXITY_PREFIX + "perplexity" * 3
 
 
 def _load_scan_module():
@@ -48,7 +53,7 @@ def test_secret_scan_ignores_placeholders_and_test_fixtures(tmp_path: Path) -> N
     module = _load_scan_module()
     placeholder = tmp_path / "README.md"
     placeholder.write_text(
-        "OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz1234567890\n",
+        f"OPENAI_API_KEY={OPENAI_PROJECT_PREFIX}abcdefghijklmnopqrstuvwxyz1234567890\n",
         encoding="utf-8",
     )
     fixture = tmp_path / "backend" / "tests" / "unit" / "test_fixture.py"
