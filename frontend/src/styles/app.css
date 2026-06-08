@@ -774,11 +774,6 @@ input[type="checkbox"] {
 .candidate-card,
 .competitor-library-card,
 .recommendation-card,
-.competitor-score-card,
-.evidence-gap-card,
-.red-team-card,
-.business-qa-finding,
-.source-review-row,
 .notification-item,
 .kb-list article,
 .claim-list article {
@@ -812,7 +807,6 @@ input[type="checkbox"] {
 .preset-tile.active,
 .skill-tile.active,
 .project-card.active,
-.version-list button.active,
 .candidate-card.selected {
   background: var(--accent-soft);
   border-color: rgba(15, 118, 110, 0.42);
@@ -1223,10 +1217,6 @@ input[type="checkbox"] {
 .topology-dispatch.complete,
 .topology-join.complete,
 .parallel-card.complete,
-.readiness-panel.pass,
-.release-gate-panel.pass,
-.report-approval-panel.approved,
-.report-approval-panel.published,
 .recommendation-card.low {
   border-color: rgba(22, 131, 63, 0.28);
 }
@@ -1239,9 +1229,6 @@ input[type="checkbox"] {
 .topology-dispatch.interrupted,
 .topology-join.interrupted,
 .parallel-card.interrupted,
-.readiness-panel.warn,
-.release-gate-panel.warn,
-.report-approval-panel.needs_review,
 .recommendation-card.medium {
   border-color: rgba(183, 121, 31, 0.3);
 }
@@ -1250,10 +1237,6 @@ input[type="checkbox"] {
 .topology-dispatch.failed,
 .topology-join.failed,
 .parallel-card.failed,
-.release-gate-panel.blocked,
-.report-approval-panel.rejected,
-.evidence-gap-panel.critical,
-.red-team-panel.high,
 .recommendation-card.high {
   border-color: rgba(194, 65, 58, 0.28);
 }
@@ -1759,40 +1742,6 @@ input[type="checkbox"] {
   gap: 9px;
 }
 
-.quality-step {
-  align-items: center;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  display: grid;
-  gap: 9px;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
-  min-height: 42px;
-  padding: 9px 11px;
-}
-
-.quality-step svg {
-  color: var(--muted);
-}
-
-.quality-step.pass svg {
-  color: var(--success);
-}
-
-.quality-step.warn svg {
-  color: var(--warning);
-}
-
-.quality-step span {
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.quality-step strong {
-  color: var(--muted);
-  font-size: 12px;
-}
-
 .report-version-summary,
 .release-gate-summary,
 .gap-fill-result {
@@ -2097,47 +2046,15 @@ input[type="checkbox"] {
   margin-bottom: 14px;
 }
 
-.readiness-panel,
-.evidence-gap-panel,
-.red-team-panel,
-.business-qa-panel,
-.competitor-score-panel,
-.manual-report-revision-panel,
-.report-quality-metadata-panel,
-.report-approval-panel,
-.report-export-panel,
-.release-gate-panel {
-  display: grid;
-  gap: 12px;
-}
-
-.readiness-panel.pass,
-.release-gate-panel.pass,
-.report-approval-panel.approved,
-.report-approval-panel.published {
-  border-color: rgba(22, 131, 63, 0.22);
-}
-
-.readiness-panel.warn,
-.release-gate-panel.warn,
-.release-gate-panel.blocked,
-.report-approval-panel.rejected {
-  border-color: rgba(183, 121, 31, 0.25);
-}
-
 .recommendation-list.compact {
   gap: 8px;
 }
 
-.recommendation-card.high,
-.red-team-card.high,
-.business-qa-finding.blocker {
+.recommendation-card.high {
   background: var(--danger-soft);
 }
 
-.recommendation-card.medium,
-.red-team-card.medium,
-.business-qa-finding.warn {
+.recommendation-card.medium {
   background: var(--amber-soft);
 }
 
@@ -2145,40 +2062,11 @@ input[type="checkbox"] {
   background: var(--surface-muted);
 }
 
-.audit-filter-grid,
-.decision-filter-grid,
-.manual-research-grid,
-.manual-revision-actions {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.search-box {
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  display: flex;
-  gap: 8px;
-  padding: 0 10px;
-}
-
-.search-box input {
-  background: transparent;
-  border: 0;
-  min-height: 38px;
-  padding: 0;
-  width: 100%;
-}
-
-.decision-timeline,
 .trace-list,
 .span-list,
 .context-list,
 .agent-message-list,
-.tool-message-list,
-.quality-redo-list {
+.tool-message-list {
   display: grid;
   gap: 8px;
   list-style: none;
@@ -2201,7 +2089,6 @@ input[type="checkbox"] {
 
 .trace-list li,
 .span-list li,
-.decision-event-card,
 .context-list article,
 .agent-message-list article,
 .tool-message-list article,
@@ -2222,7 +2109,6 @@ input[type="checkbox"] {
 .trace-list li small,
 .span-list li p,
 .span-list li small,
-.decision-event-card p,
 .context-list span,
 .context-list em {
   color: var(--muted);
@@ -2233,7 +2119,6 @@ input[type="checkbox"] {
 
 .trace-list li strong,
 .span-list li strong,
-.decision-event-card strong,
 .context-list strong {
   color: var(--text);
   font-size: 13px;
@@ -2255,42 +2140,12 @@ input[type="checkbox"] {
 
 .playback-meta,
 .playback-columns,
-.revision-diff-grid,
-.report-history-grid {
+.revision-diff-grid {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.report-history-grid {
-  align-items: start;
-  grid-template-columns: 280px minmax(0, 1fr);
-}
-
-.version-list {
-  display: grid;
-  gap: 8px;
-}
-
-.version-list button {
-  background: var(--surface-muted);
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  color: var(--text);
-  cursor: pointer;
-  display: grid;
-  gap: 4px;
-  padding: 10px;
-  text-align: left;
-}
-
-.report-reader {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-}
-
-.report-diff pre,
 .playback-columns pre,
 .revision-diff-grid pre {
   background: #0f172a;
@@ -2303,21 +2158,6 @@ input[type="checkbox"] {
   padding: 12px;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.manual-research-form,
-.memory-feedback-form,
-.manual-report-revision-panel,
-.report-quality-metadata-panel,
-.release-gate-panel,
-.report-approval-panel,
-.report-export-panel {
-  background: var(--surface-muted);
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  display: grid;
-  gap: 12px;
-  padding: 14px;
 }
 
 .score-bar {
@@ -2382,15 +2222,6 @@ input[type="checkbox"] {
 .workspace-usage-panel meter {
   accent-color: var(--accent);
   width: 100%;
-}
-
-.source-review-list,
-.evidence-gap-list,
-.gap-retrieval-list,
-.red-team-list,
-.business-qa-findings {
-  display: grid;
-  gap: 9px;
 }
 
 .candidate-evidence {
@@ -2460,8 +2291,7 @@ input[type="checkbox"] {
   .workspace-two-column,
   .report-studio-layout,
   .project-summary,
-  .dashboard-grid,
-  .report-history-grid {
+  .dashboard-grid {
     grid-template-columns: 1fr;
   }
 
