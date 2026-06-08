@@ -285,6 +285,10 @@
   gap: 10px;
 }
 
+.history-summary-panel {
+  margin-bottom: 16px;
+}
+
 .history-table {
   display: grid;
 }

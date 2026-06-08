@@ -277,6 +277,11 @@
   display: flex;
   gap: 24px;
   margin-bottom: 20px;
+  min-width: 0;
+}
+
+.page-header > div {
+  min-width: 0;
 }
 
 .page-header-split {
@@ -296,6 +301,7 @@
   font-size: 14px;
   margin: 8px 0 0;
   max-width: 760px;
+  overflow-wrap: anywhere;
 }
 
 .header-stat {

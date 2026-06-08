@@ -8,8 +8,6 @@
 .project-rail {
   display: grid;
   gap: 14px;
-  max-height: calc(100vh - 104px);
-  overflow: auto;
   position: sticky;
   top: 84px;
 }
@@ -84,6 +82,11 @@
 
 .status-metric.gate {
   grid-template-columns: 34px minmax(0, 1fr) auto;
+}
+
+.status-metric.gate .status-pill {
+  justify-self: end;
+  white-space: nowrap;
 }
 
 .metric-icon {

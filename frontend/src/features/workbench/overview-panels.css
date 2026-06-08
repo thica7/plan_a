@@ -13,10 +13,10 @@
 
 .qa-blocker-head,
 .qa-blocker-row {
-  align-items: center;
+  align-items: start;
   display: grid;
   gap: 12px;
-  grid-template-columns: 92px 132px minmax(0, 1fr) 150px;
+  grid-template-columns: 82px minmax(108px, 0.75fr) minmax(180px, 1.4fr) minmax(120px, 0.8fr);
 }
 
 .qa-blocker-head,
@@ -34,7 +34,7 @@
   border-top: 1px solid var(--border-soft);
   color: var(--muted);
   font-size: 12px;
-  padding: 9px 10px;
+  padding: 11px 10px;
 }
 
 .qa-blocker-row strong,
@@ -47,12 +47,17 @@
   white-space: nowrap;
 }
 
+.qa-blocker-row strong {
+  line-height: 1.35;
+  white-space: normal;
+}
+
 .qa-blocker-row em {
   font-style: normal;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .auto-redo-strip {
