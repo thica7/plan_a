@@ -16,6 +16,7 @@ from app.routers import (
     trace,
     workflows,
 )
+from app.routes import crawl, knowledge
 
 
 def create_app() -> FastAPI:
@@ -35,6 +36,8 @@ def create_app() -> FastAPI:
     app.include_router(skills.router, prefix="/api", tags=["skills"])
     app.include_router(runtime.router, prefix="/api", tags=["runtime"])
     app.include_router(trace.router, prefix="/api", tags=["trace"])
+    app.include_router(knowledge.router, prefix="/api", tags=["knowledge"])
+    app.include_router(crawl.router, prefix="/api", tags=["crawl"])
     app.include_router(kb.router, prefix="/api", tags=["kb"])
     app.include_router(revisions.router, prefix="/api", tags=["revisions"])
     app.include_router(enterprise.router, prefix="/api", tags=["enterprise"])

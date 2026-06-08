@@ -2,13 +2,17 @@ import builtins
 import sys
 import types
 
+import pytest
+
 from app.events import RunEvent
 from packages.compliance import CompliancePolicy, redact_text
 from packages.compliance.report import build_run_compliance_report
 from packages.config import Settings
+from packages.knowledge.repository import KnowledgeRepository
 from packages.observability import (
     LangfuseAdapter,
     LangfuseConfig,
+    RetrievalObservability,
     build_decision_replay,
     build_otel_trace_export,
     build_run_event,
@@ -63,6 +67,55 @@ def test_build_run_event_applies_trace_sanitizer() -> None:
     assert event.swimlane == "pricing"
     assert event.trace_id == trace_id_for_run("run-1")
     assert event.payload == {"api_key": "[redacted]", "query": "pricing"}
+
+
+def test_retrieval_observability_record_defaults_trace_fields() -> None:
+    record = RetrievalObservability(
+        query="pricing",
+        preset_used="pricing",
+        dense_hits=2,
+        sparse_hits=3,
+        reranked_hits=1,
+        latency_ms=12.5,
+        cache_hit=False,
+        competitor="Acme",
+        dimension="pricing",
+        source_type="webpage_verified",
+        retrieval_preset="pricing",
+    )
+
+    assert record.query == "pricing"
+    assert record.retrieval_preset == "pricing"
+    assert record.dense_hits == 2
+
+
+@pytest.mark.asyncio
+async def test_repository_persists_retrieval_observability_record(tmp_path) -> None:
+    repo = KnowledgeRepository(str(tmp_path / "knowledge.db"))
+    await repo.initialise()
+    try:
+        trace_id = await repo.record_retrieval_trace(
+            RetrievalObservability(
+                query="compare pricing",
+                preset_used="comparison",
+                dense_hits=4,
+                sparse_hits=5,
+                reranked_hits=3,
+                latency_ms=25.0,
+                cache_hit=True,
+            )
+        )
+        async with repo._connection.execute(
+            "SELECT * FROM retrieval_traces WHERE id = ?",
+            (trace_id,),
+        ) as cur:
+            row = await cur.fetchone()
+
+        assert row["query"] == "compare pricing"
+        assert row["preset_used"] == "comparison"
+        assert row["cache_hit"] == 1
+    finally:
+        await repo.close()
 
 
 def test_trace_payload_sanitizes_sensitive_text_values() -> None:

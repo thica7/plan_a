@@ -1,8 +1,22 @@
 import { NavLink, Route, Routes } from "react-router-dom";
-import { Activity, Briefcase, Database, FileText, History, Layers, Radar } from "lucide-react";
+import {
+  Activity,
+  BookOpen,
+  Briefcase,
+  Database,
+  FileText,
+  History,
+  Layers,
+  Radar,
+  Search,
+  Workflow,
+} from "lucide-react";
 import { NewRun } from "./pages/NewRun";
 import { RunDetail } from "./pages/RunDetail";
 import { HistoryPage } from "./pages/History";
+import KnowledgePage from "./pages/KnowledgePage";
+import SearchPage from "./pages/SearchPage";
+import CrawlPage from "./pages/CrawlPage";
 import { EnterpriseWorkbench } from "./pages/EnterpriseWorkbench";
 
 export function App() {
@@ -24,6 +38,18 @@ export function App() {
           <NavLink to="/history">
             <History size={18} aria-hidden />
             History
+          </NavLink>
+          <NavLink to="/knowledge">
+            <BookOpen size={18} aria-hidden />
+            Knowledge
+          </NavLink>
+          <NavLink to="/search">
+            <Search size={18} aria-hidden />
+            Search
+          </NavLink>
+          <NavLink to="/crawl">
+            <Workflow size={18} aria-hidden />
+            Crawl
           </NavLink>
           <NavLink to="/enterprise">
             <Briefcase size={18} aria-hidden />
@@ -49,6 +75,9 @@ export function App() {
           <Route path="/" element={<NewRun />} />
           <Route path="/runs/:runId" element={<RunDetail />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/knowledge" element={<KnowledgePage />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/crawl" element={<CrawlPage />} />
           <Route path="/enterprise" element={<EnterpriseWorkbench initialTab="competitors" />} />
           <Route path="/competitors" element={<EnterpriseWorkbench initialTab="competitors" />} />
           <Route path="/evidence" element={<EnterpriseWorkbench initialTab="evidence" />} />

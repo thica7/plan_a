@@ -1,4 +1,12 @@
 services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
   postgres:
     image: pgvector/pgvector:pg17
     restart: unless-stopped
@@ -53,6 +61,8 @@ services:
       dockerfile: backend/Dockerfile
     env_file: .env
     environment:
+      QDRANT_URL: http://qdrant:6333
+      KB_DB_PATH: /app/runs/knowledge_docker.db
       ENTERPRISE_STORE_BACKEND: postgres
       ENTERPRISE_DATABASE_URL: postgresql://${POSTGRES_USER:-competiscope}:${POSTGRES_PASSWORD:-competiscope}@postgres:5432/${POSTGRES_DB:-competiscope}?connect_timeout=5
       RUN_ORCHESTRATION_BACKEND: temporal
@@ -77,6 +87,8 @@ services:
       timeout: 5s
       retries: 8
     depends_on:
+      qdrant:
+        condition: service_started
       postgres:
         condition: service_healthy
       temporal:
@@ -130,6 +142,7 @@ services:
       - temporal-ui
 
 volumes:
+  qdrant_data:
   postgres-data:
   run-data:
   artifact-data:

@@ -79,4 +79,3 @@ docker compose down -v
   startup.
 - Nginx proxies `/api/*` to the backend and the rest of the site to the
   frontend container.
-

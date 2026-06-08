@@ -207,6 +207,8 @@ class EnterpriseStore(Protocol):
 
     def upsert_evidence(self, evidence: EvidenceRecord) -> EvidenceRecord: ...
 
+    def upsert_evidence_batch(self, evidence: list[EvidenceRecord]) -> list[EvidenceRecord]: ...
+
     def list_evidence_embeddings(
         self,
         workspace_id: str | None = None,
@@ -982,29 +984,11 @@ class EnterpriseMemoryStore:
 
     def upsert_evidence(self, evidence: EvidenceRecord) -> EvidenceRecord:
         with self._lock:
-            before_record = self.evidence_records.get(evidence.id)
-            evidence = _merge_evidence_lifecycle(before_record, evidence)
-            evidence, duplicate_of = self._apply_embedding_dedupe_locked(evidence)
-            self.evidence_records[evidence.id] = evidence
-            if duplicate_of is None:
-                self._upsert_evidence_embedding_locked(evidence)
-            else:
-                self._delete_evidence_embedding_locked(evidence.id)
-            self._upsert_source_registry_locked(
-                source_registry_from_evidence(evidence),
-                actor_id=DEFAULT_USER_ID,
-                audit_once=True,
-            )
-            self._append_audit(
-                workspace_id=evidence.workspace_id,
-                actor_id=DEFAULT_USER_ID,
-                action="evidence.upserted",
-                resource_type="evidence",
-                resource_id=evidence.id,
-                before=before_record.model_dump(mode="json") if before_record else None,
-                after=evidence.model_dump(mode="json"),
-            )
-            return evidence
+            return self._upsert_evidence_locked(evidence)
+
+    def upsert_evidence_batch(self, evidence: list[EvidenceRecord]) -> list[EvidenceRecord]:
+        with self._lock:
+            return [self._upsert_evidence_locked(item) for item in evidence]
 
     def list_evidence_embeddings(
         self,
@@ -1366,6 +1350,31 @@ class EnterpriseMemoryStore:
                 role="owner",
             ),
         )
+
+    def _upsert_evidence_locked(self, evidence: EvidenceRecord) -> EvidenceRecord:
+        before_record = self.evidence_records.get(evidence.id)
+        evidence = _merge_evidence_lifecycle(before_record, evidence)
+        evidence, duplicate_of = self._apply_embedding_dedupe_locked(evidence)
+        self.evidence_records[evidence.id] = evidence
+        if duplicate_of is None:
+            self._upsert_evidence_embedding_locked(evidence)
+        else:
+            self._delete_evidence_embedding_locked(evidence.id)
+        self._upsert_source_registry_locked(
+            source_registry_from_evidence(evidence),
+            actor_id=DEFAULT_USER_ID,
+            audit_once=True,
+        )
+        self._append_audit(
+            workspace_id=evidence.workspace_id,
+            actor_id=DEFAULT_USER_ID,
+            action="evidence.upserted",
+            resource_type="evidence",
+            resource_id=evidence.id,
+            before=before_record.model_dump(mode="json") if before_record else None,
+            after=evidence.model_dump(mode="json"),
+        )
+        return evidence
 
     def _upsert_evidence_embedding_locked(
         self,

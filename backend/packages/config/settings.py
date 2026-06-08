@@ -359,3 +359,13 @@ def get_settings() -> Settings:
             maximum=200,
         ),
     )
+
+
+if __name__ == "__main__":
+    import sys
+    if "--print-timeout" in sys.argv:
+        settings = get_settings()
+        print(f"llm_timeout_seconds={settings.llm_timeout_seconds}")
+        print(f"hitl_timeout_seconds={settings.hitl_timeout_seconds}")
+        sys.exit(0)
+

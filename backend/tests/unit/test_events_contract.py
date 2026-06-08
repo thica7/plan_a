@@ -35,7 +35,8 @@ def test_backend_sse_event_type_contract() -> None:
 
 
 def test_frontend_subscribes_to_backend_sse_event_types() -> None:
-    client_source = Path("frontend/src/api/client.ts").read_text(encoding="utf-8")
+    base_dir = Path(__file__).resolve().parents[3]
+    client_source = (base_dir / "frontend" / "src" / "api" / "client.ts").read_text(encoding="utf-8")
 
     for event_type in EXPECTED_EVENT_TYPES:
         assert f'"{event_type}"' in client_source

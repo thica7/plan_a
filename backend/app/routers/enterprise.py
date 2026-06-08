@@ -1,12 +1,14 @@
+import asyncio
 import csv
 import html
 import io
 import re
 from collections.abc import Iterable
-from datetime import datetime
-from typing import Annotated
+from datetime import UTC, datetime
+from threading import RLock
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 
 from app.deps import (
@@ -79,6 +81,7 @@ from packages.governance import (
     build_tool_registry_report,
 )
 from packages.identity import compute_content_hash, stable_prefixed_id
+from packages.knowledge.repository import KnowledgeRepository
 from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.service import RunService
 from packages.quality import (
@@ -94,6 +97,7 @@ from packages.rag import (
     fill_evidence_gaps,
     fill_evidence_gaps_online,
     ingest_evidence_seed_corpus,
+    sync_knowledge_to_evidence,
 )
 from packages.refs import build_competitor_alias_map, quality_entry_keys
 from packages.runtime import (
@@ -135,6 +139,10 @@ from packages.schema.enterprise import (
     EvidenceSearchHit,
     EvidenceSeedIngestRequest,
     EvidenceSeedIngestResult,
+    KnowledgeEvidenceSyncJobRecord,
+    KnowledgeEvidenceSyncMetricRecord,
+    KnowledgeEvidenceSyncRequest,
+    KnowledgeEvidenceSyncResult,
     KnowledgeGraphReadModel,
     ManualReportRevisionRequest,
     MemoryCandidate,
@@ -190,6 +198,9 @@ ArtifactStorageDep = Annotated[ArtifactStorage, Depends(get_artifact_storage)]
 PreferenceMemoryDep = Annotated[PreferenceMemoryStore, Depends(get_preference_memory)]
 RuntimeCommandServiceDep = Annotated[RuntimeCommandService, Depends(get_runtime_command_service)]
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
+
+_KB_SYNC_JOBS: dict[str, KnowledgeEvidenceSyncJobRecord] = {}
+_KB_SYNC_JOBS_LOCK = RLock()
 
 
 @router.get("/enterprise/workspaces", response_model=list[WorkspaceRecord])
@@ -1815,6 +1826,95 @@ def ingest_project_evidence_seed(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@router.post(
+    "/enterprise/projects/{project_id}/evidence/kb-sync",
+    response_model=KnowledgeEvidenceSyncResult,
+)
+async def sync_project_knowledge_evidence(
+    project_id: str,
+    request: KnowledgeEvidenceSyncRequest,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> KnowledgeEvidenceSyncResult:
+    project = _project_or_404(project_id, store, user, "evidence:write")
+    # 这里只做 KB -> Evidence 的投影，不重新抓取网页；采集和同步解耦能减少请求耗时。
+    async with KnowledgeRepository() as repo:
+        return await sync_knowledge_to_evidence(
+            repo=repo,
+            store=store,
+            workspace_id=project.workspace_id,
+            project_id=project_id,
+            request=request,
+            competitor_id_map=_competitor_id_map_for_project(project_id, store),
+        )
+
+
+@router.post(
+    "/enterprise/projects/{project_id}/evidence/kb-sync/jobs",
+    response_model=KnowledgeEvidenceSyncJobRecord,
+)
+async def start_project_knowledge_evidence_sync_job(
+    project_id: str,
+    request: KnowledgeEvidenceSyncRequest,
+    background_tasks: BackgroundTasks,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> KnowledgeEvidenceSyncJobRecord:
+    project = _project_or_404(project_id, store, user, "evidence:write")
+    job = _create_kb_sync_job(
+        workspace_id=project.workspace_id,
+        project_id=project_id,
+        request=request,
+    )
+    background_tasks.add_task(
+        _run_kb_sync_job,
+        job.id,
+        workspace_id=project.workspace_id,
+        project_id=project_id,
+        request=request,
+        store=store,
+        competitor_id_map=_competitor_id_map_for_project(project_id, store),
+    )
+    return job
+
+
+@router.get(
+    "/enterprise/projects/{project_id}/evidence/kb-sync/metrics",
+    response_model=list[KnowledgeEvidenceSyncMetricRecord],
+)
+async def list_project_knowledge_evidence_sync_metrics(
+    project_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[KnowledgeEvidenceSyncMetricRecord]:
+    project = _project_or_404(project_id, store, user, "evidence:read")
+    async with KnowledgeRepository() as repo:
+        rows = await repo.list_evidence_sync_metrics(
+            workspace_id=project.workspace_id,
+            project_id=project_id,
+            limit=limit,
+        )
+    return [KnowledgeEvidenceSyncMetricRecord.model_validate(row) for row in rows]
+
+
+@router.get(
+    "/enterprise/projects/{project_id}/evidence/kb-sync/jobs/{job_id}",
+    response_model=KnowledgeEvidenceSyncJobRecord,
+)
+def get_project_knowledge_evidence_sync_job(
+    project_id: str,
+    job_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+) -> KnowledgeEvidenceSyncJobRecord:
+    _project_or_404(project_id, store, user, "evidence:read")
+    job = _get_kb_sync_job(job_id)
+    if job is None or job.project_id != project_id:
+        raise HTTPException(status_code=404, detail="KB sync job not found")
+    return job
+
+
 @router.post("/enterprise/evidence", response_model=EvidenceRecord)
 def upsert_evidence(
     evidence: EvidenceRecord,
@@ -2456,6 +2556,121 @@ def _capture_manual_report_revision_memory(
     for candidate in candidates:
         memory.upsert_candidate(candidate)
     store.record_memory_feedback_audit(feedback, candidates, actor_id=user.user_id)
+
+
+def _create_kb_sync_job(
+    *,
+    workspace_id: str,
+    project_id: str,
+    request: KnowledgeEvidenceSyncRequest,
+) -> KnowledgeEvidenceSyncJobRecord:
+    now = datetime.now(UTC)
+    job = KnowledgeEvidenceSyncJobRecord(
+        id=stable_prefixed_id("kb-sync-job", workspace_id, project_id, now.isoformat(), length=20),
+        workspace_id=workspace_id,
+        project_id=project_id,
+        status="queued",
+        request=request,
+        created_at=now,
+        updated_at=now,
+    )
+    _set_kb_sync_job(job)
+    return job
+
+
+def _get_kb_sync_job(job_id: str) -> KnowledgeEvidenceSyncJobRecord | None:
+    with _KB_SYNC_JOBS_LOCK:
+        return _KB_SYNC_JOBS.get(job_id)
+
+
+def _set_kb_sync_job(job: KnowledgeEvidenceSyncJobRecord) -> None:
+    with _KB_SYNC_JOBS_LOCK:
+        _KB_SYNC_JOBS[job.id] = job
+
+
+def _update_kb_sync_job(
+    job_id: str,
+    *,
+    status: Literal["queued", "running", "succeeded", "failed"],
+    result: KnowledgeEvidenceSyncResult | None = None,
+    error: str = "",
+) -> None:
+    job = _get_kb_sync_job(job_id)
+    if job is None:
+        return
+    _set_kb_sync_job(
+        job.model_copy(
+            update={
+                "status": status,
+                "result": result,
+                "error": error,
+                "updated_at": datetime.now(UTC),
+            }
+        )
+    )
+
+
+async def _run_kb_sync_job(
+    job_id: str,
+    *,
+    workspace_id: str,
+    project_id: str,
+    request: KnowledgeEvidenceSyncRequest,
+    store: EnterpriseStore,
+    competitor_id_map: dict[str, str],
+) -> None:
+    _update_kb_sync_job(job_id, status="running")
+    if request.delay_seconds > 0:
+        await asyncio.sleep(request.delay_seconds)
+    try:
+        async with KnowledgeRepository() as repo:
+            result = await sync_knowledge_to_evidence(
+                repo=repo,
+                store=store,
+                workspace_id=workspace_id,
+                project_id=project_id,
+                request=request,
+                competitor_id_map=competitor_id_map,
+            )
+        _update_kb_sync_job(job_id, status="succeeded", result=result)
+    except Exception as exc:
+        await _record_kb_sync_failure_metric(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            request=request,
+            error=str(exc),
+        )
+        _update_kb_sync_job(job_id, status="failed", error=str(exc))
+
+
+async def _record_kb_sync_failure_metric(
+    *,
+    workspace_id: str,
+    project_id: str,
+    request: KnowledgeEvidenceSyncRequest,
+    error: str,
+) -> None:
+    started_at = datetime.now(UTC)
+    try:
+        async with KnowledgeRepository() as repo:
+            await repo.record_evidence_sync_metric(
+                workspace_id=workspace_id,
+                project_id=project_id,
+                status="failed",
+                started_at=started_at,
+                completed_at=datetime.now(UTC),
+                duration_ms=0.0,
+                loaded_count=0,
+                ingested_count=0,
+                skipped_count=0,
+                chunk_count=0,
+                indexed_count=0,
+                duplicate_count=0,
+                request=request.model_dump(mode="json"),
+                error=error,
+            )
+    except Exception:
+        return
 
 
 def _project_or_404(
