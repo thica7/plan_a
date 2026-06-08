@@ -1,0 +1,559 @@
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime
+from typing import Any
+
+from packages.auth import EnterpriseUserContext, evaluate_access_policy
+from packages.business_intel import evaluate_report_release_gate
+from packages.compliance import compliance_policy_from_settings
+from packages.config import Settings
+from packages.enterprise import (
+    EnterpriseStore,
+    WorkspaceQuotaExceededError,
+    build_report_version_diff,
+    report_release_gate_scope,
+)
+from packages.enterprise.report_lifecycle import (
+    mark_report_published,
+    report_release_gate_snapshot,
+)
+from packages.governance import build_model_policy_report, model_policy_block_message
+from packages.hitl import append_hitl_lifecycle, build_hitl_lifecycle_event, hitl_lifecycle_history
+from packages.identity import new_ui_run_idempotency_key, stable_prefixed_id
+from packages.memory import PreferenceMemoryStore
+from packages.orchestrator.service import RunService
+from packages.runtime.commands import (
+    CreateRunCommand,
+    PublishReportCommand,
+    ReviseReportCommand,
+    RuntimeCommandError,
+    RuntimeCommandResult,
+    RuntimeCommandRoute,
+    RuntimeCommandStatus,
+    RuntimeCommandType,
+)
+from packages.schema.api_dto import RunCreateRequest, WorkflowStartResponse
+from packages.schema.enterprise import (
+    ManualReportRevisionRequest,
+    ProjectRecord,
+    ReportReleaseGate,
+    ReportVersionRecord,
+    UserFeedbackRecord,
+)
+from packages.workflows.service import TemporalWorkflowService, decide_temporal_cutover
+
+
+class RuntimeCommandService:
+    def __init__(
+        self,
+        *,
+        settings: Settings,
+        run_service: RunService,
+        workflow_service: TemporalWorkflowService,
+        enterprise_store: EnterpriseStore,
+        preference_memory: PreferenceMemoryStore,
+    ) -> None:
+        self._settings = settings
+        self._run_service = run_service
+        self._workflow_service = workflow_service
+        self._store = enterprise_store
+        self._memory = preference_memory
+
+    async def create_run(
+        self,
+        command: CreateRunCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        request = _with_run_idempotency_key(command.request)
+        command_id = _command_id("create_run", actor, request.idempotency_key or request.topic)
+        self._require_workspace_access(
+            actor,
+            request.workspace_id,
+            "project:write",
+            target_type="run",
+            target_id=request.idempotency_key,
+        )
+        self._ensure_model_policy_allows_execution_mode(request.execution_mode)
+        self._ensure_workspace_quota(request.workspace_id)
+        cutover = decide_temporal_cutover(self._settings, request)
+        metadata = {
+            "temporal_target_percent": cutover.target_percent,
+            "temporal_cutover_bucket": cutover.bucket,
+            "temporal_cutover_reason": cutover.reason,
+        }
+        if cutover.route == "temporal":
+            try:
+                result = await self._workflow_service.start_competitive_intel(request)
+            except Exception as exc:  # noqa: BLE001 - command surface explains route failure.
+                raise RuntimeCommandError(
+                    503,
+                    "Temporal workflow service is unavailable.",
+                    command_type="create_run",
+                ) from exc
+            try:
+                await self._ensure_temporal_run_visible(result, request)
+            except WorkspaceQuotaExceededError as exc:
+                raise RuntimeCommandError(
+                    429,
+                    exc.decision.model_dump(mode="json"),
+                    command_type="create_run",
+                ) from exc
+            except ValueError as exc:
+                raise RuntimeCommandError(400, str(exc), command_type="create_run") from exc
+            except Exception as exc:  # noqa: BLE001 - preserve existing API behavior.
+                raise RuntimeCommandError(
+                    500,
+                    "Temporal workflow started but run visibility sync failed.",
+                    command_type="create_run",
+                ) from exc
+            return _result(
+                command_id=command_id,
+                command_type="create_run",
+                status="accepted",
+                resource_type="run",
+                resource_id=result.run_id,
+                workspace_id=request.workspace_id,
+                project_id=request.project_id,
+                run_id=result.run_id,
+                route="temporal",
+                payload=result,
+                metadata=metadata,
+            )
+
+        try:
+            detail = await self._run_service.create_run(request)
+        except WorkspaceQuotaExceededError as exc:
+            raise RuntimeCommandError(
+                429,
+                exc.decision.model_dump(mode="json"),
+                command_type="create_run",
+            ) from exc
+        except ValueError as exc:
+            raise RuntimeCommandError(400, str(exc), command_type="create_run") from exc
+        asyncio.create_task(self._run_service.run_pipeline(detail.id))
+        return _result(
+            command_id=command_id,
+            command_type="create_run",
+            status="succeeded",
+            resource_type="run",
+            resource_id=detail.id,
+            workspace_id=detail.workspace_id,
+            project_id=detail.project_id,
+            run_id=detail.id,
+            route="langgraph",
+            payload=detail,
+            metadata=metadata,
+        )
+
+    def revise_report(
+        self,
+        command: ReviseReportCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        source = self._report_version_or_error(command.report_version_id, actor, "report:write")
+        updated, command_id = self._create_manual_report_revision(source, command.request, actor)
+        return _result(
+            command_id=command_id,
+            command_type="revise_report",
+            status="succeeded",
+            resource_type="report_version",
+            resource_id=updated.id,
+            workspace_id=updated.workspace_id,
+            project_id=updated.project_id,
+            run_id=updated.run_id,
+            report_version_id=updated.id,
+            route="enterprise",
+            payload=updated,
+            metadata={
+                "source_report_version_id": source.id,
+                "source_status": source.status,
+                "version_number": updated.version_number,
+            },
+        )
+
+    def publish_report(
+        self,
+        command: PublishReportCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        version = self._report_version_or_error(command.report_version_id, actor, "report:write")
+        command_id = _command_id("publish_report", actor, version.id)
+        if version.status not in {"approved", "published"}:
+            raise RuntimeCommandError(
+                409,
+                {
+                    "status": "blocked",
+                    "reason": "report_approval_required",
+                    "message": "Report version must be approved before it can be published.",
+                    "report_version_id": version.id,
+                    "current_status": version.status,
+                    "command_id": command_id,
+                },
+                command_type="publish_report",
+            )
+        gate = self._enforce_report_release_gate(version, actor)
+        updated = mark_report_published(version, actor_id=actor.user_id, gate=gate)
+        stored = self._store.upsert_report_version(updated)
+        self._store.audit_report_version_transition(
+            stored,
+            action="report_version.published",
+            actor_id=actor.user_id,
+            before_status=version.status,
+            metadata={
+                "command_id": command_id,
+                "audit_correlation_id": _audit_correlation_id(command_id),
+                "replay_correlation_id": _replay_correlation_id(command_id),
+                "publication": stored.quality_metadata.get("publication", {}),
+                "hitl_lifecycle": stored.quality_metadata.get("hitl_lifecycle", []),
+                "release_gate": report_release_gate_snapshot(gate),
+            },
+        )
+        return _result(
+            command_id=command_id,
+            command_type="publish_report",
+            status="succeeded",
+            resource_type="report_version",
+            resource_id=stored.id,
+            workspace_id=stored.workspace_id,
+            project_id=stored.project_id,
+            run_id=stored.run_id,
+            report_version_id=stored.id,
+            route="enterprise",
+            payload=stored,
+            metadata={"release_gate": report_release_gate_snapshot(gate)},
+        )
+
+    async def _ensure_temporal_run_visible(
+        self,
+        result: WorkflowStartResponse,
+        request: RunCreateRequest,
+    ) -> None:
+        visible_request = request.model_copy(update={"idempotency_key": result.idempotency_key})
+        detail = await self._run_service.ensure_run_visible(visible_request)
+        if detail.id != result.run_id:
+            raise RuntimeError(
+                f"Temporal returned run_id={result.run_id}, but local visibility "
+                f"created run_id={detail.id}."
+            )
+
+    def _create_manual_report_revision(
+        self,
+        source: ReportVersionRecord,
+        request: ManualReportRevisionRequest,
+        actor: EnterpriseUserContext,
+    ) -> tuple[ReportVersionRecord, str]:
+        next_version = self._store.next_report_version_number(
+            project_id=source.project_id,
+            topic_normalized=source.topic_normalized,
+            competitor_layer=source.competitor_layer,
+            competitor_set_hash=source.competitor_set_hash,
+        )
+        revision_id = stable_prefixed_id(
+            "report-version-manual",
+            source.id,
+            next_version,
+            request.report_md,
+            length=16,
+        )
+        metadata = dict(source.quality_metadata)
+        metadata["manual_revision"] = {
+            "source_report_version_id": source.id,
+            "edited_by": actor.user_id,
+            "note": request.note,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        metadata = append_hitl_lifecycle(
+            metadata,
+            build_hitl_lifecycle_event(
+                lifecycle_stage="revision_created",
+                review_kind="manual_report_revision",
+                stage="manual_report_revision",
+                decision="manual_revision",
+                actor_id=actor.user_id,
+                target_type="report_version",
+                target_id=revision_id,
+                run_id=source.run_id,
+                report_version_id=revision_id,
+                result_action="create_draft_report_version",
+                note=request.note,
+                metadata={
+                    "source_report_version_id": source.id,
+                    "source_status": source.status,
+                    "next_version_number": next_version,
+                },
+                sequence=len(hitl_lifecycle_history(metadata)) + 1,
+            ),
+        )
+        revision = source.model_copy(
+            update={
+                "id": revision_id,
+                "parent_version_id": source.id,
+                "version_number": next_version,
+                "status": "draft",
+                "report_md": request.report_md,
+                "quality_metadata": metadata,
+                "created_at": datetime.utcnow(),
+                "published_at": None,
+            }
+        )
+        updated = self._store.upsert_report_version(revision)
+        diff = build_report_version_diff(updated, base_version=source)
+        command_id = _command_id("revise_report", actor, updated.id)
+        self._store.audit_report_version_transition(
+            updated,
+            action="report_version.manual_revision_created",
+            actor_id=actor.user_id,
+            before_status=source.status,
+            note=request.note,
+            metadata={
+                "command_id": command_id,
+                "audit_correlation_id": _audit_correlation_id(command_id),
+                "replay_correlation_id": _replay_correlation_id(command_id),
+                "manual_revision": updated.quality_metadata.get("manual_revision", {}),
+                "hitl_lifecycle": updated.quality_metadata.get("hitl_lifecycle", []),
+                "source_report_version_id": source.id,
+                "source_status": source.status,
+                "diff": {
+                    "base_version_id": source.id,
+                    "added_lines": diff.added_lines,
+                    "removed_lines": diff.removed_lines,
+                    "unchanged_lines": diff.unchanged_lines,
+                },
+            },
+        )
+        self._capture_manual_report_revision_memory(source, updated, request, actor)
+        return updated, command_id
+
+    def _capture_manual_report_revision_memory(
+        self,
+        source: ReportVersionRecord,
+        revision: ReportVersionRecord,
+        request: ManualReportRevisionRequest,
+        actor: EnterpriseUserContext,
+    ) -> None:
+        note = request.note.strip()
+        message_parts = [
+            f"Manual report correction created draft v{revision.version_number}.",
+            (
+                "Treat reviewer edits as writing and QA policy feedback: keep recommendations "
+                "source-backed, decision-ready, and explicit about evidence risk."
+            ),
+        ]
+        if note:
+            message_parts.append(note)
+        feedback = self._memory.add_feedback(
+            UserFeedbackRecord(
+                id="",
+                workspace_id=revision.workspace_id,
+                project_id=revision.project_id,
+                user_id=actor.user_id,
+                feedback_type="correction",
+                target_type="report",
+                target_id=revision.id,
+                run_id=revision.run_id,
+                report_version_id=revision.id,
+                message=" ".join(message_parts),
+                tags=[
+                    "manual_revision",
+                    "report",
+                    "correction",
+                    "writing",
+                    "quality_gate",
+                    revision.competitor_layer,
+                ],
+                metadata={
+                    "source": "manual_report_revision",
+                    "source_report_version_id": source.id,
+                    "updated_report_version_id": revision.id,
+                    "version_number": revision.version_number,
+                    "note": note,
+                },
+            ),
+            policy=compliance_policy_from_settings(self._settings),
+        )
+        candidates = [candidate for candidate in self._memory.extract_candidates(feedback)]
+        for candidate in candidates:
+            self._memory.upsert_candidate(candidate)
+        self._store.record_memory_feedback_audit(feedback, candidates, actor_id=actor.user_id)
+
+    def _ensure_model_policy_allows_execution_mode(self, execution_mode: str) -> None:
+        if execution_mode != "real":
+            return
+        report = build_model_policy_report(self._settings)
+        if report.real_execution_allowed:
+            return
+        raise RuntimeCommandError(
+            400,
+            {
+                "message": model_policy_block_message(report),
+                "policy_version": report.policy_version,
+                "blocking_finding_ids": report.blocking_finding_ids,
+                "status": report.status,
+            },
+            command_type="create_run",
+        )
+
+    def _ensure_workspace_quota(self, workspace_id: str) -> None:
+        try:
+            self._run_service.ensure_workspace_quota_allows_run(workspace_id)
+        except WorkspaceQuotaExceededError as exc:
+            raise RuntimeCommandError(
+                429,
+                exc.decision.model_dump(mode="json"),
+                command_type="create_run",
+            ) from exc
+
+    def _project_or_error(
+        self,
+        project_id: str,
+        actor: EnterpriseUserContext,
+        action: str,
+    ) -> ProjectRecord:
+        project = self._store.get_project(project_id)
+        if project is None:
+            raise RuntimeCommandError(404, "Project not found")
+        self._require_workspace_access(
+            actor,
+            project.workspace_id,
+            action,
+            target_type="project",
+            target_id=project.id,
+        )
+        return project
+
+    def _report_version_or_error(
+        self,
+        version_id: str,
+        actor: EnterpriseUserContext,
+        action: str,
+    ) -> ReportVersionRecord:
+        version = self._store.get_report_version(version_id)
+        if version is None:
+            raise RuntimeCommandError(404, "Report version not found")
+        self._require_workspace_access(
+            actor,
+            version.workspace_id,
+            action,
+            target_type="report_version",
+            target_id=version.id,
+        )
+        return version
+
+    def _release_gate_for_version(
+        self,
+        version: ReportVersionRecord,
+        actor: EnterpriseUserContext,
+        action: str,
+    ) -> ReportReleaseGate:
+        project = self._project_or_error(version.project_id, actor, action)
+        if project.workspace_id != version.workspace_id:
+            raise RuntimeCommandError(400, "Report workspace does not match project")
+        competitors, evidence, claims = report_release_gate_scope(
+            version,
+            project=project,
+            store=self._store,
+        )
+        return evaluate_report_release_gate(
+            project=project,
+            report_version=version,
+            competitors=competitors,
+            evidence=evidence,
+            claims=claims,
+            source_registry=self._store.list_source_registry(workspace_id=project.workspace_id),
+        )
+
+    def _enforce_report_release_gate(
+        self,
+        version: ReportVersionRecord,
+        actor: EnterpriseUserContext,
+    ) -> ReportReleaseGate:
+        gate = self._release_gate_for_version(version, actor, "report:write")
+        if gate.allowed:
+            return gate
+        raise RuntimeCommandError(409, gate.model_dump(mode="json"), command_type="publish_report")
+
+    def _require_workspace_access(
+        self,
+        actor: EnterpriseUserContext,
+        workspace_id: str,
+        action: str,
+        *,
+        target_type: str = "workspace",
+        target_id: str | None = None,
+    ) -> None:
+        decision = evaluate_access_policy(
+            actor,
+            workspace_id,
+            action,
+            target_type=target_type,
+            target_id=target_id,
+        )
+        if decision.allowed:
+            return
+        raise RuntimeCommandError(403, decision.model_dump(mode="json"))
+
+
+def _with_run_idempotency_key(request: RunCreateRequest) -> RunCreateRequest:
+    if request.idempotency_key:
+        return request
+    return request.model_copy(update={"idempotency_key": new_ui_run_idempotency_key()})
+
+
+def _result(
+    *,
+    command_id: str,
+    command_type: RuntimeCommandType,
+    status: RuntimeCommandStatus,
+    resource_type: str,
+    resource_id: str | None = None,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    run_id: str | None = None,
+    report_version_id: str | None = None,
+    route: RuntimeCommandRoute = "none",
+    payload: Any = None,
+    metadata: dict[str, Any] | None = None,
+) -> RuntimeCommandResult:
+    return RuntimeCommandResult(
+        command_id=command_id,
+        command_type=command_type,
+        status=status,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        run_id=run_id,
+        report_version_id=report_version_id,
+        audit_correlation_id=_audit_correlation_id(command_id),
+        replay_correlation_id=_replay_correlation_id(command_id),
+        route=route,
+        payload=payload,
+        metadata=metadata or {},
+    )
+
+
+def _command_id(
+    command_type: RuntimeCommandType,
+    actor: EnterpriseUserContext,
+    target_id: str | None,
+) -> str:
+    return stable_prefixed_id(
+        "runtime-command",
+        command_type,
+        actor.user_id,
+        target_id or "",
+        datetime.utcnow().isoformat(),
+        length=16,
+    )
+
+
+def _audit_correlation_id(command_id: str) -> str:
+    return stable_prefixed_id("audit-correlation", command_id, length=16)
+
+
+def _replay_correlation_id(command_id: str) -> str:
+    return stable_prefixed_id("replay-correlation", command_id, length=16)

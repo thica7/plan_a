@@ -13,7 +13,7 @@ This document implements the next step from:
 - `docs/checkpoint5_enterprise_runtime_plan.md`
 - `docs/enterprise_execution_master_plan.md`
 - `dev_plan_final/dev_plan_final/10_HIGH_SCORE_FUSION_BACKLOG.md`
-- CC推进推荐, mapped into Checkpoint 5 on 2026-06-08
+- CC recommendations, mapped into Checkpoint 5 on 2026-06-08
 
 ## Scope
 
@@ -141,4 +141,3 @@ feat(runtime): add enterprise command layer
 refactor(api): route run and report actions through runtime commands
 test(runtime): guard command-layer publication and revision paths
 ```
-

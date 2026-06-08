@@ -1953,7 +1953,15 @@ def test_enterprise_router_blocks_direct_publish_status_without_approval() -> No
     )
     assert approved_publish.json()["quality_metadata"]["publication"]["status"] == "published"
     assert any(log.action == "report_version.approved" for log in logs)
-    assert any(log.action == "report_version.published" for log in store.list_audit_logs())
+    published_logs = [
+        log for log in store.list_audit_logs() if log.action == "report_version.published"
+    ]
+    assert published_logs
+    assert published_logs[0].after is not None
+    assert published_logs[0].after["command_id"].startswith("runtime-command-")
+    assert published_logs[0].after["audit_correlation_id"].startswith("audit-correlation-")
+    assert published_logs[0].after["replay_correlation_id"].startswith("replay-correlation-")
+    assert published_logs[0].after["release_gate"]["allowed"] is True
 
 
 def test_manual_report_revision_after_rejection_creates_audited_draft() -> None:
@@ -2036,6 +2044,9 @@ def test_manual_report_revision_after_rejection_creates_audited_draft() -> None:
     ]
     assert revision_logs
     assert revision_logs[0].after is not None
+    assert revision_logs[0].after["command_id"].startswith("runtime-command-")
+    assert revision_logs[0].after["audit_correlation_id"].startswith("audit-correlation-")
+    assert revision_logs[0].after["replay_correlation_id"].startswith("replay-correlation-")
     assert revision_logs[0].after["hitl_lifecycle"][-1]["target_id"] == revision_id
     assert any(
         log.action == "memory.feedback_captured"

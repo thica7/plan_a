@@ -13,6 +13,7 @@ from packages.memory import KBCache, PreferenceMemoryStore, RunJournal
 from packages.observability import TraceStore
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
+from packages.runtime import RuntimeCommandService
 from packages.skills.registry import SkillRegistry
 from packages.workflows.service import TemporalWorkflowService
 
@@ -111,3 +112,19 @@ def get_run_service() -> RunService:
 @lru_cache
 def get_temporal_workflow_service() -> TemporalWorkflowService:
     return TemporalWorkflowService(get_app_settings())
+
+
+def get_runtime_command_service(
+    settings: Annotated[Settings, Depends(get_app_settings)],
+    run_service: Annotated[RunService, Depends(get_run_service)],
+    workflow_service: Annotated[TemporalWorkflowService, Depends(get_temporal_workflow_service)],
+    enterprise_store: Annotated[EnterpriseStore, Depends(get_enterprise_store)],
+    preference_memory: Annotated[PreferenceMemoryStore, Depends(get_preference_memory)],
+) -> RuntimeCommandService:
+    return RuntimeCommandService(
+        settings=settings,
+        run_service=run_service,
+        workflow_service=workflow_service,
+        enterprise_store=enterprise_store,
+        preference_memory=preference_memory,
+    )

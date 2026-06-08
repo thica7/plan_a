@@ -517,6 +517,9 @@ def test_runs_router_generates_visible_new_run_keys_for_temporal_cutover() -> No
 
     assert first.status_code == 202
     assert second.status_code == 202
+    assert first.headers["X-Runtime-Command-Id"].startswith("runtime-command-")
+    assert first.headers["X-Runtime-Audit-Correlation-Id"].startswith("audit-correlation-")
+    assert first.headers["X-Run-Orchestration-Route"] == "temporal"
     first_body = first.json()
     second_body = second.json()
     assert first_body["idempotency_key"].startswith("ui-run:")

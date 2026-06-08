@@ -15,6 +15,7 @@ from app.deps import (
     get_enterprise_store,
     get_enterprise_user_context,
     get_preference_memory,
+    get_runtime_command_service,
 )
 from packages.agents import AgentExecutionRequest, AgentExecutionResult
 from packages.artifacts import ArtifactStorage, ArtifactStorageError
@@ -58,17 +59,12 @@ from packages.enterprise import (
 from packages.enterprise import (
     report_release_gate_scope as _report_release_gate_scope,
 )
-from packages.enterprise.report_lifecycle import (
-    mark_report_published,
-    report_release_gate_snapshot,
-)
 from packages.governance import (
     ModelPolicyReport,
     build_model_policy_report,
     build_model_route_decision,
     build_tool_registry_report,
 )
-from packages.hitl import append_hitl_lifecycle, build_hitl_lifecycle_event, hitl_lifecycle_history
 from packages.identity import compute_content_hash, stable_prefixed_id
 from packages.memory import PreferenceMemoryStore
 from packages.quality import (
@@ -85,6 +81,12 @@ from packages.rag import (
     ingest_evidence_seed_corpus,
 )
 from packages.refs import build_competitor_alias_map, quality_entry_keys
+from packages.runtime import (
+    PublishReportCommand,
+    ReviseReportCommand,
+    RuntimeCommandError,
+    RuntimeCommandService,
+)
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
     ArtifactCreateResult,
@@ -157,6 +159,7 @@ EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 ArtifactStorageDep = Annotated[ArtifactStorage, Depends(get_artifact_storage)]
 PreferenceMemoryDep = Annotated[PreferenceMemoryStore, Depends(get_preference_memory)]
+RuntimeCommandServiceDep = Annotated[RuntimeCommandService, Depends(get_runtime_command_service)]
 
 
 @router.get("/enterprise/workspaces", response_model=list[WorkspaceRecord])
@@ -1813,83 +1816,17 @@ def get_report_version(
 def create_manual_report_revision(
     version_id: str,
     request: ManualReportRevisionRequest,
-    store: EnterpriseStoreDep,
+    runtime: RuntimeCommandServiceDep,
     user: EnterpriseUserDep,
-    settings: SettingsDep,
-    memory: PreferenceMemoryDep,
 ) -> ReportVersionRecord:
-    source = _report_version_or_404(version_id, store, user, "report:write")
-    next_version = store.next_report_version_number(
-        project_id=source.project_id,
-        topic_normalized=source.topic_normalized,
-        competitor_layer=source.competitor_layer,
-        competitor_set_hash=source.competitor_set_hash,
-    )
-    revision_id = _manual_report_revision_id(source, next_version, request.report_md)
-    metadata = dict(source.quality_metadata)
-    metadata["manual_revision"] = {
-        "source_report_version_id": source.id,
-        "edited_by": user.user_id,
-        "note": request.note,
-        "created_at": datetime.utcnow().isoformat(),
-    }
-    metadata = append_hitl_lifecycle(
-        metadata,
-        build_hitl_lifecycle_event(
-            lifecycle_stage="revision_created",
-            review_kind="manual_report_revision",
-            stage="manual_report_revision",
-            decision="manual_revision",
-            actor_id=user.user_id,
-            target_type="report_version",
-            target_id=revision_id,
-            run_id=source.run_id,
-            report_version_id=revision_id,
-            result_action="create_draft_report_version",
-            note=request.note,
-            metadata={
-                "source_report_version_id": source.id,
-                "source_status": source.status,
-                "next_version_number": next_version,
-            },
-            sequence=len(hitl_lifecycle_history(metadata)) + 1,
-        ),
-    )
-    revision = source.model_copy(
-        update={
-            "id": revision_id,
-            "parent_version_id": source.id,
-            "version_number": next_version,
-            "status": "draft",
-            "report_md": request.report_md,
-            "quality_metadata": metadata,
-            "created_at": datetime.utcnow(),
-            "published_at": None,
-        }
-    )
-    updated = store.upsert_report_version(revision)
-    diff = build_report_version_diff(updated, base_version=source)
-    store.audit_report_version_transition(
-        updated,
-        action="report_version.manual_revision_created",
-        actor_id=user.user_id,
-        before_status=source.status,
-        note=request.note,
-        metadata={
-            "manual_revision": updated.quality_metadata.get("manual_revision", {}),
-            "hitl_lifecycle": updated.quality_metadata.get("hitl_lifecycle", []),
-            "source_report_version_id": source.id,
-            "source_status": source.status,
-            "diff": {
-                "base_version_id": source.id,
-                "added_lines": diff.added_lines,
-                "removed_lines": diff.removed_lines,
-                "unchanged_lines": diff.unchanged_lines,
-            },
-        },
-    )
-    _capture_manual_report_revision_memory(source, updated, request, user, settings, memory, store)
-    return updated
+    try:
+        result = runtime.revise_report(
+            ReviseReportCommand(report_version_id=version_id, request=request),
+            actor=user,
+        )
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
 
 
 @router.post("/enterprise/report-versions/{version_id}/export", response_model=ArtifactCreateResult)
@@ -1991,36 +1928,17 @@ def get_report_release_gate(
 )
 def publish_report_version(
     version_id: str,
-    store: EnterpriseStoreDep,
+    runtime: RuntimeCommandServiceDep,
     user: EnterpriseUserDep,
 ) -> ReportVersionRecord:
-    version = _report_version_or_404(version_id, store, user, "report:write")
-    if version.status not in {"approved", "published"}:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "status": "blocked",
-                "reason": "report_approval_required",
-                "message": ("Report version must be approved before it can be published."),
-                "report_version_id": version.id,
-                "current_status": version.status,
-            },
+    try:
+        result = runtime.publish_report(
+            PublishReportCommand(report_version_id=version_id),
+            actor=user,
         )
-    gate = _enforce_report_release_gate(version, store, user)
-    updated = mark_report_published(version, actor_id=user.user_id, gate=gate)
-    stored = store.upsert_report_version(updated)
-    store.audit_report_version_transition(
-        stored,
-        action="report_version.published",
-        actor_id=user.user_id,
-        before_status=version.status,
-        metadata={
-            "publication": stored.quality_metadata.get("publication", {}),
-            "hitl_lifecycle": stored.quality_metadata.get("hitl_lifecycle", []),
-            "release_gate": report_release_gate_snapshot(gate),
-        },
-    )
-    return stored
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
 
 
 @router.get("/enterprise/runs/{run_id}/projection", response_model=EnterpriseRunProjection)
@@ -2582,6 +2500,10 @@ def _enforce_report_publish_status(
             "current_status": current_status,
         },
     )
+
+
+def _raise_runtime_command_error(error: RuntimeCommandError) -> None:
+    raise HTTPException(status_code=error.status_code, detail=error.detail)
 
 
 def _scoped_workspace_id(

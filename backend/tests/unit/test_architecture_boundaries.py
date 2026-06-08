@@ -16,14 +16,31 @@ def test_temporal_competitive_intel_shell_invokes_langgraph_activity() -> None:
     assert "build_scoped_redo_graph" not in text
 
 
-def test_runs_router_evaluates_temporal_cutover_before_direct_run_create() -> None:
-    text = _read("app/routers/runs.py")
+def test_runtime_command_layer_owns_create_run_orchestration_boundary() -> None:
+    runs_text = _read("app/routers/runs.py")
+    command_text = _read("packages/runtime/service.py")
 
-    cutover_index = text.index("cutover = decide_temporal_cutover(settings, request)")
-    temporal_start_index = text.index("workflow_service.start_competitive_intel(request)")
-    direct_create_index = text.index("detail = await service.create_run(request)")
+    assert "runtime.create_run" in runs_text
+    assert "decide_temporal_cutover" not in runs_text
+    assert "start_competitive_intel" not in runs_text
+    assert "self._workflow_service.start_competitive_intel(request)" in command_text
+    assert "detail = await self._run_service.create_run(request)" in command_text
+
+    cutover_index = command_text.index("cutover = decide_temporal_cutover(self._settings, request)")
+    temporal_start_index = command_text.index(
+        "self._workflow_service.start_competitive_intel(request)"
+    )
+    direct_create_index = command_text.index("detail = await self._run_service.create_run(request)")
 
     assert cutover_index < temporal_start_index < direct_create_index
+
+
+def test_enterprise_router_delegates_report_runtime_commands() -> None:
+    text = _read("app/routers/enterprise.py")
+
+    assert "runtime.revise_report" in text
+    assert "runtime.publish_report" in text
+    assert "mark_report_published" not in text
 
 
 def test_langgraph_and_agents_do_not_own_report_publication() -> None:
