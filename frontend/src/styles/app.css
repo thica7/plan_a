@@ -2239,7 +2239,7 @@ input[type="checkbox"] {
   padding: 4px 7px;
 }
 
-@media (max-width: 1480px) {
+@media (max-width: 1700px) {
   .concept-workbench-grid {
     grid-template-columns: 1fr;
   }
