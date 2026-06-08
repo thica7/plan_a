@@ -1,0 +1,32 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from packages.identity import new_subagent_context_id
+
+
+@dataclass
+class SubagentContext:
+    run_id: str
+    agent: str
+    subagent: str
+    context_id: str = field(init=False)
+    messages: list[dict[str, str]] = field(default_factory=list)
+    tool_trace: list[dict[str, str]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.context_id = new_subagent_context_id(self.run_id, self.agent, self.subagent)
+
+    def add_message(self, role: str, content: str) -> None:
+        self.messages.append({"role": role, "content": content})
+
+    def add_tool_call(self, name: str, detail: str) -> None:
+        self.tool_trace.append({"name": name, "detail": detail})
+        self.add_message("tool", f"{name}: {detail}")
+
+    def metadata(self) -> dict[str, str | int]:
+        return {
+            "context_id": self.context_id,
+            "message_count": len(self.messages),
+            "tool_call_count": len(self.tool_trace),
+        }

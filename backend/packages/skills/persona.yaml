@@ -1,0 +1,20 @@
+name: persona
+subagent_class: PersonaCollector
+description: Infer ICP, buyer persona, use cases, and switching triggers from public evidence.
+tools_allowlist:
+  - web_search
+  - fetch_page
+  - survey_simulator
+  - extract_facts
+query_templates:
+  - "{competitor} customers use cases"
+  - "{competitor} case studies"
+  - "{competitor} target customer"
+max_turns: 6
+source_type: synthesized
+output:
+  prefix: persona
+  confidence_default: 0.7
+  confidence_no_url: 0.5
+  required_dimension: persona
+
