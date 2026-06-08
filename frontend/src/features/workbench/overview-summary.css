@@ -37,6 +37,35 @@
   text-transform: uppercase;
 }
 
+.readiness-empty,
+.summary-empty {
+  background: var(--surface-muted);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.readiness-empty span,
+.summary-empty span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.readiness-empty span {
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.readiness-empty strong,
+.summary-empty strong {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
 .score-breakdown {
   display: grid;
   gap: 7px;
@@ -78,6 +107,14 @@
   color: var(--text);
   font-size: 11px;
   justify-self: end;
+}
+
+.score-breakdown span.empty b {
+  background: transparent;
+}
+
+.score-breakdown span.empty strong {
+  color: var(--muted);
 }
 
 .large-metric {
