@@ -1,6 +1,16 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { KeyRound, Play, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Gauge,
+  KeyRound,
+  Layers,
+  ListChecks,
+  Play,
+  RefreshCw,
+  Users,
+} from "lucide-react";
 import { createRun, getRuntime, getWorkspaceQuotaDecision, listScenarioPacks, listSkills } from "../api/client";
 import type {
   CompetitorLayer,
@@ -74,18 +84,15 @@ export function NewRun() {
       .catch(() => setQuotaDecision(null));
   }, []);
 
-  const competitorList = useMemo(
-    () => {
-      if (competitorMode === "auto") {
-        return [];
-      }
-      return competitors
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-    },
-    [competitorMode, competitors],
-  );
+  const competitorList = useMemo(() => {
+    if (competitorMode === "auto") {
+      return [];
+    }
+    return competitors
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }, [competitorMode, competitors]);
   const selectedScenario = useMemo(
     () => scenarioPacks.find((pack) => pack.id === scenarioId) ?? null,
     [scenarioId, scenarioPacks],
@@ -154,290 +161,346 @@ export function NewRun() {
   }
 
   return (
-    <section className="work-surface">
-      <header className="page-header">
+    <section className="work-surface new-run-page">
+      <header className="page-header page-header-split">
         <div>
           <h1>New analysis run</h1>
-          <p>Start with the schema-first contract, then watch the agent graph progress in real time.</p>
+          <p>Configure the market scope, research lens, execution mode, and quality controls before launch.</p>
+        </div>
+        <div className="header-stat">
+          <strong>{selected.length}</strong>
+          <span>dimensions selected</span>
         </div>
       </header>
 
-      <form className="run-form" onSubmit={handleSubmit}>
-        <label>
-          Topic
-          <input value={topic} onChange={(event) => setTopic(event.target.value)} />
-        </label>
-
-        <fieldset>
-          <legend>Starter presets</legend>
-          <div className="preset-grid">
-            {starterPresets.map((preset) => (
-              <button
-                className={`preset-tile${scenarioId === preset.scenarioId ? " active" : ""}`}
-                key={preset.id}
-                type="button"
-                onClick={() => applyStarterPreset(preset)}
-              >
-                <strong>{preset.name}</strong>
-                <span>{preset.competitorLayer} 路 {preset.scenarioId}</span>
-                <small>{preset.competitors.join(", ")}</small>
-              </button>
-            ))}
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Competitors</legend>
-          <div className="segmented-control" role="radiogroup" aria-label="Competitor mode">
-            <button
-              className={competitorMode === "auto" ? "active" : ""}
-              type="button"
-              onClick={() => setCompetitorMode("auto")}
-            >
-              Auto-discover
-            </button>
-            <button
-              className={competitorMode === "manual" ? "active" : ""}
-              type="button"
-              onClick={() => {
-                setCompetitorMode("manual");
-                setCompetitors((current) => current || defaultCompetitors);
-              }}
-            >
-              Manual
-            </button>
-          </div>
-          {competitorMode === "manual" ? (
-            <textarea
-              aria-label="Competitors"
-              value={competitors}
-              onChange={(event) => setCompetitors(event.target.value)}
-              rows={3}
+      <form className="run-builder" onSubmit={handleSubmit}>
+        <div className="run-builder-main">
+          <section className="form-section">
+            <SectionHeading
+              icon={<ListChecks size={17} aria-hidden />}
+              index="01"
+              meta="topic and starting preset"
+              title="Scope"
             />
-          ) : (
-            <p className="scope-note">
-              Planner will search the market and select direct competitors before collecting evidence.
-            </p>
-          )}
-        </fieldset>
+            <label className="field-block">
+              Topic
+              <input value={topic} onChange={(event) => setTopic(event.target.value)} />
+            </label>
+            <div className="preset-grid">
+              {starterPresets.map((preset) => (
+                <button
+                  className={`preset-tile${scenarioId === preset.scenarioId ? " active" : ""}`}
+                  key={preset.id}
+                  type="button"
+                  onClick={() => applyStarterPreset(preset)}
+                >
+                  <strong>{preset.name}</strong>
+                  <span>{preset.competitorLayer} / {preset.scenarioId}</span>
+                  <small>{preset.competitors.join(", ")}</small>
+                </button>
+              ))}
+            </div>
+          </section>
 
-        <fieldset>
-          <legend>Competitive lens</legend>
-          <div className="segmented-control" role="radiogroup" aria-label="Competitive layer">
-            {(["auto", "L1", "L2", "L3"] as LayerSelection[]).map((layer) => (
+          <section className="form-section">
+            <SectionHeading
+              icon={<Users size={17} aria-hidden />}
+              index="02"
+              meta={competitorMode === "auto" ? "planner discovery" : "manual list"}
+              title="Competitors"
+            />
+            <div className="segmented-control" role="radiogroup" aria-label="Competitor mode">
               <button
-                className={selectedLayer === layer ? "active" : ""}
-                key={layer}
+                className={competitorMode === "auto" ? "active" : ""}
+                type="button"
+                onClick={() => setCompetitorMode("auto")}
+              >
+                Auto-discover
+              </button>
+              <button
+                className={competitorMode === "manual" ? "active" : ""}
                 type="button"
                 onClick={() => {
-                  setSelectedLayer(layer);
-                  if (
-                    scenarioId
-                    && !dynamicScenarioSelected
-                    && scenarioPacks.find((pack) => pack.id === scenarioId)?.competitor_layer !== layer
-                  ) {
-                    setScenarioId("");
-                  }
+                  setCompetitorMode("manual");
+                  setCompetitors((current) => current || defaultCompetitors);
                 }}
               >
-                {layer === "auto" ? "Auto" : layer}
+                Manual
               </button>
-            ))}
-          </div>
-          <label>
-            Scenario pack
-            <select
-              value={scenarioId}
-              onChange={(event) => {
-                if (event.target.value === dynamicScenarioId) {
-                  setScenarioId(dynamicScenarioId);
-                  return;
-                }
-                const next = scenarioPacks.find((pack) => pack.id === event.target.value) ?? null;
-                applyScenario(next);
-              }}
-            >
-              <option value="">Auto scenario</option>
-              <option value={dynamicScenarioId}>Dynamic scenario</option>
-              {scenarioPacks
-                .filter((pack) => selectedLayer === "auto" || pack.competitor_layer === selectedLayer)
-                .map((pack) => (
-                  <option key={pack.id} value={pack.id}>
-                    {pack.competitor_layer} · {pack.name}
-                  </option>
-                ))}
-            </select>
-          </label>
-          {selectedScenario ? (
-            <div className="scenario-preview">
-              <strong>{selectedScenario.name}</strong>
-              <span>{selectedScenario.description}</span>
-              <div>
-                {[...selectedScenario.required_dimensions, ...selectedScenario.optional_dimensions].map((dimension) => (
-                  <em key={dimension}>{dimension}</em>
-                ))}
-              </div>
-              {selectedScenario.seed_competitors.length > 0 ? (
-                <small>{selectedScenario.seed_competitors.join(", ")}</small>
-              ) : null}
             </div>
-          ) : dynamicScenarioSelected ? (
-            <div className="scenario-preview">
-              <strong>Dynamic scenario</strong>
-              <span>
-                Generated from the topic, selected layer, competitors, and current dimensions.
+            {competitorMode === "manual" ? (
+              <textarea
+                aria-label="Competitors"
+                value={competitors}
+                onChange={(event) => setCompetitors(event.target.value)}
+                rows={3}
+              />
+            ) : (
+              <p className="scope-note">
+                Planner selects direct competitors before evidence collection.
+              </p>
+            )}
+          </section>
+
+          <section className="form-section">
+            <SectionHeading
+              icon={<Layers size={17} aria-hidden />}
+              index="03"
+              meta="L1 battlecard, L2 workflow, or L3 landscape"
+              title="Lens"
+            />
+            <div className="field-grid">
+              <fieldset>
+                <legend>Competitive layer</legend>
+                <div className="segmented-control" role="radiogroup" aria-label="Competitive layer">
+                  {(["auto", "L1", "L2", "L3"] as LayerSelection[]).map((layer) => (
+                    <button
+                      className={selectedLayer === layer ? "active" : ""}
+                      key={layer}
+                      type="button"
+                      onClick={() => {
+                        setSelectedLayer(layer);
+                        if (
+                          scenarioId &&
+                          !dynamicScenarioSelected &&
+                          scenarioPacks.find((pack) => pack.id === scenarioId)?.competitor_layer !== layer
+                        ) {
+                          setScenarioId("");
+                        }
+                      }}
+                    >
+                      {layer === "auto" ? "Auto" : layer}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+              <label>
+                Scenario pack
+                <select
+                  value={scenarioId}
+                  onChange={(event) => {
+                    if (event.target.value === dynamicScenarioId) {
+                      setScenarioId(dynamicScenarioId);
+                      return;
+                    }
+                    const next = scenarioPacks.find((pack) => pack.id === event.target.value) ?? null;
+                    applyScenario(next);
+                  }}
+                >
+                  <option value="">Auto scenario</option>
+                  <option value={dynamicScenarioId}>Dynamic scenario</option>
+                  {scenarioPacks
+                    .filter((pack) => selectedLayer === "auto" || pack.competitor_layer === selectedLayer)
+                    .map((pack) => (
+                      <option key={pack.id} value={pack.id}>
+                        {pack.competitor_layer} / {pack.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+            {selectedScenario ? (
+              <div className="scenario-preview">
+                <strong>{selectedScenario.name}</strong>
+                <span>{selectedScenario.description}</span>
+                <div>
+                  {[...selectedScenario.required_dimensions, ...selectedScenario.optional_dimensions].map((dimension) => (
+                    <em key={dimension}>{dimension}</em>
+                  ))}
+                </div>
+                {selectedScenario.seed_competitors.length > 0 ? (
+                  <small>{selectedScenario.seed_competitors.join(", ")}</small>
+                ) : null}
+              </div>
+            ) : dynamicScenarioSelected ? (
+              <div className="scenario-preview">
+                <strong>Dynamic scenario</strong>
+                <span>Generated from the selected scope and dimensions.</span>
+                <div>
+                  {selected.map((dimension) => (
+                    <em key={dimension}>{dimension}</em>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="form-section">
+            <SectionHeading
+              icon={<Gauge size={17} aria-hidden />}
+              index="04"
+              meta={`${selected.length} active schema dimensions`}
+              title="Dimensions"
+            />
+            <div className="skill-grid">
+              {skills.map((skill) => {
+                const active = selected.includes(skill.name);
+                const locked = isDimensionLocked(skill.name, lockedDimensions);
+                return (
+                  <button
+                    className={active ? "skill-tile active" : "skill-tile"}
+                    key={skill.name}
+                    type="button"
+                    onClick={() =>
+                      setSelected((current) => {
+                        if (locked) return current;
+                        return active ? current.filter((item) => item !== skill.name) : [...current, skill.name];
+                      })
+                    }
+                  >
+                    <strong>{skill.name}</strong>
+                    <span>
+                      {locked
+                        ? selectedScenario
+                          ? `${skill.description} Required by selected ScenarioPack.`
+                          : `${skill.description} Required schema dimension.`
+                        : skill.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+
+        <aside className="run-builder-rail">
+          <section className="panel launch-panel">
+            <div className="panel-heading-row">
+              <h2>Execution</h2>
+              <span className={executionMode === "real" ? "flow-status running" : "flow-status"}>
+                {executionMode}
               </span>
-              <div>
-                {selected.map((dimension) => (
-                  <em key={dimension}>{dimension}</em>
-                ))}
-              </div>
             </div>
-          ) : null}
-        </fieldset>
-
-        <fieldset>
-          <legend>Execution</legend>
-          <div className="segmented-control" role="radiogroup" aria-label="Execution mode">
-            <button
-              className={executionMode === "demo" ? "active" : ""}
-              type="button"
-              onClick={() => setExecutionMode("demo")}
-            >
-              Demo
-            </button>
-            <button
-              className={executionMode === "real" ? "active" : ""}
-              type="button"
-              onClick={() => setExecutionMode("real")}
-            >
-              <KeyRound size={16} aria-hidden />
-              Real API
-            </button>
-          </div>
-          {runtime ? (
-            <div className="runtime-lines">
-              <p
-                className={
-                  (runtime.has_ark_api_key && runtime.has_ark_model)
-                  || (runtime.has_backup_llm_api_key && runtime.has_backup_llm_model)
-                    ? "runtime-ok"
-                    : "runtime-warn"
-                }
+            <div className="segmented-control" role="radiogroup" aria-label="Execution mode">
+              <button
+                className={executionMode === "demo" ? "active" : ""}
+                type="button"
+                onClick={() => setExecutionMode("demo")}
               >
-                {runtime.has_ark_api_key && runtime.has_ark_model
-                  ? `Backend is ready for real calls with ${runtime.ark_model}.`
-                  : runtime.has_backup_llm_api_key && runtime.has_backup_llm_model
-                    ? `Backend is ready for backup LLM calls with ${runtime.backup_llm_model}.`
-                    : "Real API mode needs primary ARK or BACKUP_LLM settings in backend .env."}
-              </p>
-              <p className={runtime.has_web_search_key ? "runtime-ok" : "runtime-warn"}>
-                {runtime.has_web_search_key
-                  ? `${runtime.web_search_provider} web_search is enabled.`
-                  : "web_search needs PPLX_API_KEY or PERPLEXITY_API_KEY in backend .env."}
-              </p>
-              <p className={runtime.auto_redo_enabled ? "runtime-ok" : "runtime-warn"}>
-                {runtime.auto_redo_enabled
-                  ? "Automatic scoped redo is enabled."
-                  : "Automatic scoped redo is disabled by backend config."}
-              </p>
-              <p className={runtime.hitl_demo_ready ? "runtime-ok" : "runtime-warn"}>
-                {runtime.hitl_demo_ready
-                  ? `HITL pauses are enabled at ${runtime.hitl_review_checkpoints.join(", ")}.`
-                  : runtime.hitl_ready_reason}
-              </p>
-              <p className={runtime.pydantic_ai_model_backed_ready ? "runtime-ok" : "runtime-warn"}>
-                {runtime.pydantic_ai_model_backed_ready
-                  ? `Pydantic-AI model-backed agents use ${runtime.pydantic_ai_model_name}.`
-                  : runtime.pydantic_ai_model_backed_reason}
-              </p>
-              <p className={runtime.temporal_cutover_ready ? "runtime-ok" : "runtime-warn"}>
-                {runtime.temporal_cutover_ready
-                  ? `Run entry is 100% routed through Temporal on ${runtime.temporal_task_queue}.`
-                  : runtime.temporal_cutover_reason}
-              </p>
-              {quotaDecision ? (
-                <p className={quotaDecision.allowed ? "runtime-ok" : "runtime-warn"}>
-                  {quotaDecision.allowed
-                    ? `Workspace quota allows new runs (${quotaDecision.status}, ${quotaDecision.enforcement}).`
-                    : quotaDecision.reason}
-                </p>
-              ) : null}
+                Demo
+              </button>
+              <button
+                className={executionMode === "real" ? "active" : ""}
+                type="button"
+                onClick={() => setExecutionMode("real")}
+              >
+                <KeyRound size={15} aria-hidden />
+                Real API
+              </button>
             </div>
-          ) : null}
-          <label className="toggle-row">
-            <input
-              checked={autoRedoWarn}
-              disabled={runtime?.auto_redo_enabled === false || hitlEnabled}
-              onChange={(event) => setAutoRedoWarn(event.target.checked)}
-              type="checkbox"
-            />
-            <span>
-              <strong>Auto-redo warnings</strong>
-              <em>When enabled, warn-level QA findings can trigger automatic redo. Blockers always can.</em>
-            </span>
-          </label>
-          <label className="toggle-row">
-            <input
-              checked={hitlEnabled}
-              onChange={(event) => {
-                const enabled = event.target.checked;
-                setHitlEnabled(enabled);
-                if (enabled) {
-                  setAutoRedoWarn(false);
-                }
-              }}
-              type="checkbox"
-            />
-            <span>
-              <strong>Human review pauses</strong>
-              <em>Pause this run at planner and QA checkpoints for manual resume or redo.</em>
-            </span>
-          </label>
-        </fieldset>
 
-        <fieldset>
-          <legend>Dimensions</legend>
-          <div className="skill-grid">
-            {skills.map((skill) => {
-              const active = selected.includes(skill.name);
-              const locked = isDimensionLocked(skill.name, lockedDimensions);
-              return (
-                <button
-                  className={active ? "skill-tile active" : "skill-tile"}
-                  key={skill.name}
-                  type="button"
-                  onClick={() =>
-                    setSelected((current) => {
-                      if (locked) return current;
-                      return active ? current.filter((item) => item !== skill.name) : [...current, skill.name];
-                    })
+            {runtime ? (
+              <div className="runtime-lines">
+                <RuntimeLine
+                  ok={
+                    (runtime.has_ark_api_key && runtime.has_ark_model) ||
+                    (runtime.has_backup_llm_api_key && runtime.has_backup_llm_model)
                   }
                 >
-                  <strong>{skill.name}</strong>
-                  <span>
-                    {locked
-                      ? selectedScenario
-                        ? `${skill.description} Required by selected ScenarioPack.`
-                        : `${skill.description} Required schema dimension.`
-                      : skill.description}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
+                  {runtime.has_ark_api_key && runtime.has_ark_model
+                    ? `Primary LLM ${runtime.ark_model}`
+                    : runtime.has_backup_llm_api_key && runtime.has_backup_llm_model
+                      ? `Backup LLM ${runtime.backup_llm_model}`
+                      : "LLM credentials missing"}
+                </RuntimeLine>
+                <RuntimeLine ok={runtime.has_web_search_key}>
+                  {runtime.has_web_search_key
+                    ? `${runtime.web_search_provider} search enabled`
+                    : "Search credentials missing"}
+                </RuntimeLine>
+                <RuntimeLine ok={runtime.auto_redo_enabled}>
+                  {runtime.auto_redo_enabled ? "Scoped redo enabled" : "Scoped redo disabled"}
+                </RuntimeLine>
+                <RuntimeLine ok={runtime.hitl_demo_ready}>
+                  {runtime.hitl_demo_ready
+                    ? `HITL ${runtime.hitl_review_checkpoints.join(", ")}`
+                    : runtime.hitl_ready_reason}
+                </RuntimeLine>
+                <RuntimeLine ok={runtime.pydantic_ai_model_backed_ready}>
+                  {runtime.pydantic_ai_model_backed_ready
+                    ? `Pydantic-AI ${runtime.pydantic_ai_model_name}`
+                    : runtime.pydantic_ai_model_backed_reason}
+                </RuntimeLine>
+                <RuntimeLine ok={runtime.temporal_cutover_ready}>
+                  {runtime.temporal_cutover_ready
+                    ? `Temporal ${runtime.temporal_task_queue}`
+                    : runtime.temporal_cutover_reason}
+                </RuntimeLine>
+                {quotaDecision ? (
+                  <RuntimeLine ok={quotaDecision.allowed}>
+                    {quotaDecision.allowed
+                      ? `Quota ${quotaDecision.status}, ${quotaDecision.enforcement}`
+                      : quotaDecision.reason}
+                  </RuntimeLine>
+                ) : null}
+              </div>
+            ) : null}
 
-        {error ? <p className="error-line">{error}</p> : null}
+            <label className="toggle-row">
+              <input
+                checked={autoRedoWarn}
+                disabled={runtime?.auto_redo_enabled === false || hitlEnabled}
+                onChange={(event) => setAutoRedoWarn(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                <strong>Auto-redo warnings</strong>
+                <em>Warn-level QA can trigger targeted redo.</em>
+              </span>
+            </label>
+            <label className="toggle-row">
+              <input
+                checked={hitlEnabled}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  setHitlEnabled(enabled);
+                  if (enabled) {
+                    setAutoRedoWarn(false);
+                  }
+                }}
+                type="checkbox"
+              />
+              <span>
+                <strong>Human review pauses</strong>
+                <em>Pause at planner and QA checkpoints.</em>
+              </span>
+            </label>
 
-        <button
-          className="primary-button"
-          type="submit"
-          disabled={isSubmitting || selected.length === 0 || runBlockedByQuota}
-        >
-          {isSubmitting ? <RefreshCw size={18} aria-hidden /> : <Play size={18} aria-hidden />}
-          Start run
-        </button>
+            {error ? <p className="error-line">{error}</p> : null}
+
+            <button
+              className="primary-button full-width"
+              type="submit"
+              disabled={isSubmitting || selected.length === 0 || runBlockedByQuota}
+            >
+              {isSubmitting ? <RefreshCw size={18} aria-hidden /> : <Play size={18} aria-hidden />}
+              Start run
+            </button>
+          </section>
+
+          <section className="panel selection-panel">
+            <h2>Run contract</h2>
+            <dl className="contract-list">
+              <div>
+                <dt>Layer</dt>
+                <dd>{selectedLayer}</dd>
+              </div>
+              <div>
+                <dt>Scenario</dt>
+                <dd>{selectedScenario?.name ?? (dynamicScenarioSelected ? "Dynamic" : "Auto")}</dd>
+              </div>
+              <div>
+                <dt>Competitors</dt>
+                <dd>{competitorMode === "auto" ? "Auto discovery" : competitorList.join(", ") || "Manual"}</dd>
+              </div>
+            </dl>
+            <div className="contract-chips">
+              {selected.map((dimension) => (
+                <span key={dimension}>{dimension}</span>
+              ))}
+            </div>
+          </section>
+        </aside>
       </form>
     </section>
   );
@@ -448,4 +511,36 @@ function newRunIdempotencyKey() {
     return `ui-run:${crypto.randomUUID()}`;
   }
   return `ui-run:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
+}
+
+function SectionHeading({
+  icon,
+  index,
+  meta,
+  title,
+}: {
+  icon: ReactNode;
+  index: string;
+  meta: string;
+  title: string;
+}) {
+  return (
+    <div className="section-heading">
+      <span>{index}</span>
+      <div className="section-heading-icon">{icon}</div>
+      <div>
+        <h2>{title}</h2>
+        <p>{meta}</p>
+      </div>
+    </div>
+  );
+}
+
+function RuntimeLine({ children, ok }: { children: ReactNode; ok: boolean }) {
+  return (
+    <p className={ok ? "runtime-ok" : "runtime-warn"}>
+      {ok ? <CheckCircle2 size={14} aria-hidden /> : <AlertTriangle size={14} aria-hidden />}
+      <span>{children}</span>
+    </p>
+  );
 }

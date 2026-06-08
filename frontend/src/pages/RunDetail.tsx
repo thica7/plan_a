@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { AlertTriangle, CheckCircle2, Download, Loader2, RotateCcw } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Database,
+  Download,
+  FileText,
+  GitBranch,
+  Loader2,
+  RotateCcw,
+} from "lucide-react";
 import {
   exportRunComplianceReport,
   getDecisionReplay,
@@ -32,6 +41,7 @@ import type {
   DecisionReplayReport,
   ReflectionRecord,
   RunComplianceReport,
+  RunDetail as RunDetailRecord,
   RunSummary,
   RunQualityComparison,
 } from "../api/types";
@@ -39,6 +49,7 @@ import type {
 export function RunDetail() {
   const { runId } = useParams();
   const { detail, events, setDetail, addEvent, reset } = useRunStore();
+  const [activeView, setActiveView] = useState<"overview" | "report" | "agents" | "quality">("overview");
   const [error, setError] = useState<string | null>(null);
   const [isRedoing, setRedoing] = useState(false);
   const [planDimensions, setPlanDimensions] = useState("");
@@ -196,6 +207,9 @@ export function RunDetail() {
   const recommendedDimensions = detail.plan.scenario_recommended_dimensions.filter(
     (dimension) => !detail.plan.dimensions.includes(dimension),
   );
+  const citedClaimRate = Math.round(detail.metrics.claim_citation_rate * 100);
+  const verifiedSourceRate = Math.round(detail.metrics.verified_source_rate * 100);
+  const sourceCoverageRate = Math.round(detail.metrics.source_coverage_rate * 100);
 
   async function handleRedo() {
     if (!runId) return;
@@ -252,11 +266,11 @@ export function RunDetail() {
 
   return (
     <section className="run-detail">
-      <header className="page-header">
+      <header className="page-header page-header-split">
         <div>
           <h1>{detail.topic}</h1>
           <p>
-            {detail.plan.competitors.join(" vs ")} · {detail.plan.dimensions.join(", ")} ·{" "}
+            {detail.plan.competitors.join(" vs ")} / {detail.plan.dimensions.join(", ")} /{" "}
             {detail.execution_mode}
           </p>
           <div className="run-meta-row">
@@ -284,6 +298,46 @@ export function RunDetail() {
         </div>
       </header>
 
+      <section className="run-command-grid">
+        <article className="panel run-summary-panel">
+          <div className="panel-heading-row">
+            <h2>Run overview</h2>
+            <span className="muted-text">{detail.id}</span>
+          </div>
+          <div className="metric-grid compact">
+            <MetricValue label="Sources" value={String(detail.raw_sources.length)} />
+            <MetricValue label="Verified" value={`${verifiedSourceRate}%`} />
+            <MetricValue label="Coverage" value={`${sourceCoverageRate}%`} />
+            <MetricValue label="Cited claims" value={`${citedClaimRate}%`} />
+            <MetricValue label="QA issues" value={String(detail.qa_findings.length)} />
+            <MetricValue label="Spans" value={String(detail.metrics.total_spans)} />
+          </div>
+        </article>
+        <article className="panel run-inspector-panel">
+          <div className="inspector-row">
+            <Database size={17} aria-hidden />
+            <div>
+              <strong>Evidence scope</strong>
+              <span>{detail.raw_sources.length} raw sources / {detail.plan.competitors.length} competitors</span>
+            </div>
+          </div>
+          <div className="inspector-row">
+            <GitBranch size={17} aria-hidden />
+            <div>
+              <strong>Agent graph</strong>
+              <span>{detail.plan.task_decomposition.length} adaptive tasks / {detail.revisions.length} redo rounds</span>
+            </div>
+          </div>
+          <div className="inspector-row">
+            <FileText size={17} aria-hidden />
+            <div>
+              <strong>Report</strong>
+              <span>{detail.report_md ? `${detail.report_md.length} characters` : "draft pending"}</span>
+            </div>
+          </div>
+        </article>
+      </section>
+
       {detail.status === "interrupted" && latestInterrupt ? (
         interruptStage === "planner" ? (
           <PlanReviewModal
@@ -305,105 +359,159 @@ export function RunDetail() {
         )
       ) : null}
 
-      <div className="detail-grid">
-        <SwimlaneView events={events} currentNode={detail.current_node} />
-        <StaticGraphView
-          activeNode={detail.current_node}
-          competitors={detail.plan.competitors}
-          dimensions={detail.plan.dimensions}
-          events={events}
-          revisionCount={detail.revisions.length}
-          status={detail.status}
-        />
-        <CompetitorDiscoveryView discovery={detail.competitor_discovery} />
-        <TaskDecompositionPanel tasks={detail.plan.task_decomposition} />
-        <ReportView
-          markdown={detail.report_md}
-          sourceAliases={reportSources.aliases}
-          sources={reportSources.sources}
-        />
-        <KbMatrixView
-          kbs={detail.competitor_kbs}
-          knowledge={detail.competitor_knowledge}
-          matrix={detail.comparison_matrix}
-          sources={detail.raw_sources}
-        />
-        <AgentMessagesView messages={detail.agent_messages} toolCalls={detail.tool_call_messages} />
-        <TracePlayback spans={detail.trace_spans} />
-        <RevisionDiff revisions={detail.revisions} />
-        <CostPanel metrics={detail.metrics} spans={detail.trace_spans} />
-        <RunQualityPanel
-          baselineRunId={qualityBaselineRunId}
-          comparison={qualityComparison}
-          onBaselineRunChange={setQualityBaselineRunId}
-          runHistory={runHistory}
-        />
-        <CompliancePanel
-          exportArtifact={complianceExport}
-          isExporting={isExportingCompliance}
-          onExport={handleExportCompliance}
-          report={complianceReport}
-        />
-        <aside className="qa-panel">
-          <div className="panel-heading-row">
-            <h2>QA findings</h2>
-            {detail.qa_findings.length > 0 ? (
-              <button
-                className="icon-text-button"
-                disabled={isRedoing || redoLimitReached}
-                onClick={handleRedo}
-                title={redoLimitReached ? "Maximum redo iterations reached" : "Redo scoped issue"}
-                type="button"
-              >
-                <RotateCcw size={15} aria-hidden />
-                {redoLimitReached ? "Limit reached" : "Redo"}
-              </button>
-            ) : null}
-          </div>
-          {detail.qa_findings.length > 0 ? (
-            <p className="muted-text">
-              Redo rounds {detail.revisions.length}/{detail.max_iterations}
-            </p>
-          ) : null}
-          {detail.qa_findings.length === 0 ? (
-            <p>No findings yet.</p>
-          ) : (
-            detail.qa_findings.map((issue) => (
-              <article key={issue.id} className="issue-row">
-                <strong>{issue.severity}</strong>
-                <span>{issue.problem}</span>
-                <code>
-                  {issue.redo_scope.kind}:
-                  {issue.redo_scope.target_competitors?.length
-                    ? `${issue.redo_scope.target_competitors.join(", ")}/`
-                    : issue.redo_scope.target_competitor
-                      ? `${issue.redo_scope.target_competitor}/`
-                      : ""}
-                  {issue.redo_scope.target_subagent || "all"}
-                </code>
-              </article>
-            ))
-          )}
-          {reflectionItems.length > 0 ? (
-            <div className="reflection-review">
-              <h3>Reflector review</h3>
-              {reflectionItems.map((item) => (
-                <article key={`${item.kind}-${item.index}`} className="issue-row reflection-row">
-                  <strong>{item.kind}</strong>
-                  <span>{item.text}</span>
-                </article>
-              ))}
-            </div>
-          ) : null}
-        </aside>
-        <TraceList
-          events={events}
-          metrics={detail.metrics}
-          replay={decisionReplay}
-          spans={detail.trace_spans}
-        />
-      </div>
+      <nav className="module-tabs run-detail-tabs" aria-label="Run detail sections">
+        {(["overview", "report", "agents", "quality"] as const).map((view) => (
+          <button
+            className={activeView === view ? "active" : ""}
+            key={view}
+            type="button"
+            onClick={() => setActiveView(view)}
+          >
+            {view}
+          </button>
+        ))}
+      </nav>
+
+      {activeView === "overview" ? (
+        <div className="detail-grid">
+          <SwimlaneView events={events} currentNode={detail.current_node} />
+          <StaticGraphView
+            activeNode={detail.current_node}
+            competitors={detail.plan.competitors}
+            dimensions={detail.plan.dimensions}
+            events={events}
+            revisionCount={detail.revisions.length}
+            status={detail.status}
+          />
+          <CompetitorDiscoveryView discovery={detail.competitor_discovery} />
+          <TaskDecompositionPanel tasks={detail.plan.task_decomposition} />
+          <KbMatrixView
+            kbs={detail.competitor_kbs}
+            knowledge={detail.competitor_knowledge}
+            matrix={detail.comparison_matrix}
+            sources={detail.raw_sources}
+          />
+        </div>
+      ) : null}
+
+      {activeView === "report" ? (
+        <div className="detail-grid report-detail-grid">
+          <ReportView
+            markdown={detail.report_md}
+            sourceAliases={reportSources.aliases}
+            sources={reportSources.sources}
+          />
+          <RevisionDiff revisions={detail.revisions} />
+        </div>
+      ) : null}
+
+      {activeView === "agents" ? (
+        <div className="detail-grid">
+          <AgentMessagesView messages={detail.agent_messages} toolCalls={detail.tool_call_messages} />
+          <TracePlayback spans={detail.trace_spans} />
+          <TraceList
+            events={events}
+            metrics={detail.metrics}
+            replay={decisionReplay}
+            spans={detail.trace_spans}
+          />
+        </div>
+      ) : null}
+
+      {activeView === "quality" ? (
+        <div className="detail-grid">
+          <RunQaPanel
+            detail={detail}
+            isRedoing={isRedoing}
+            onRedo={handleRedo}
+            redoLimitReached={redoLimitReached}
+            reflectionItems={reflectionItems}
+          />
+          <RunQualityPanel
+            baselineRunId={qualityBaselineRunId}
+            comparison={qualityComparison}
+            onBaselineRunChange={setQualityBaselineRunId}
+            runHistory={runHistory}
+          />
+          <CompliancePanel
+            exportArtifact={complianceExport}
+            isExporting={isExportingCompliance}
+            onExport={handleExportCompliance}
+            report={complianceReport}
+          />
+          <CostPanel metrics={detail.metrics} spans={detail.trace_spans} />
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+function RunQaPanel({
+  detail,
+  isRedoing,
+  onRedo,
+  redoLimitReached,
+  reflectionItems,
+}: {
+  detail: RunDetailRecord;
+  isRedoing: boolean;
+  onRedo: () => void;
+  redoLimitReached: boolean;
+  reflectionItems: Array<{ kind: string; text: string; index: number }>;
+}) {
+  return (
+    <aside className="qa-panel">
+      <div className="panel-heading-row">
+        <h2>QA findings</h2>
+        {detail.qa_findings.length > 0 ? (
+          <button
+            className="icon-text-button"
+            disabled={isRedoing || redoLimitReached}
+            onClick={onRedo}
+            title={redoLimitReached ? "Maximum redo iterations reached" : "Redo scoped issue"}
+            type="button"
+          >
+            <RotateCcw size={15} aria-hidden />
+            {redoLimitReached ? "Limit reached" : "Redo"}
+          </button>
+        ) : null}
+      </div>
+      {detail.qa_findings.length > 0 ? (
+        <p className="muted-text">
+          Redo rounds {detail.revisions.length}/{detail.max_iterations}
+        </p>
+      ) : null}
+      {detail.qa_findings.length === 0 ? (
+        <p>No findings yet.</p>
+      ) : (
+        detail.qa_findings.map((issue) => (
+          <article key={issue.id} className="issue-row">
+            <strong>{issue.severity}</strong>
+            <span>{issue.problem}</span>
+            <code>
+              {issue.redo_scope.kind}:
+              {issue.redo_scope.target_competitors?.length
+                ? `${issue.redo_scope.target_competitors.join(", ")}/`
+                : issue.redo_scope.target_competitor
+                  ? `${issue.redo_scope.target_competitor}/`
+                  : ""}
+              {issue.redo_scope.target_subagent || "all"}
+            </code>
+          </article>
+        ))
+      )}
+      {reflectionItems.length > 0 ? (
+        <div className="reflection-review">
+          <h3>Reflector review</h3>
+          {reflectionItems.map((item) => (
+            <article key={`${item.kind}-${item.index}`} className="issue-row reflection-row">
+              <strong>{item.kind}</strong>
+              <span>{item.text}</span>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </aside>
   );
 }
 
