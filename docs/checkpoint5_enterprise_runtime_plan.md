@@ -91,7 +91,7 @@ C5.3 Tenant governance boundary: complete
 C5.4 Advisory context governance: complete
 C5.5 EvalOps release contract: complete
 C5.6 Cost/model/tool policy runtime: complete
-C5.7 Monitor operations: pending
+C5.7 Monitor operations: in progress - monitor job command boundary complete
 ```
 
 ## CC Recommendation Integration
@@ -512,6 +512,20 @@ Purpose:
 
 Make recurring competitive intelligence monitoring a product workflow, not just
 an available Temporal shell.
+
+Implementation status:
+
+- `MonitorJobRecord`, create/update requests, and lifecycle status fields are
+  defined in `backend/packages/schema/enterprise.py`.
+- `EnterpriseStore` now persists monitor jobs and records monitor run outcomes.
+- Runtime command layer owns create, update, pause, resume, and trigger monitor
+  job commands.
+- `/api/enterprise/monitor-jobs` exposes list/create/update/pause/resume/trigger
+  operations.
+- Triggering a monitor job starts the existing Temporal `MonitorWorkflow` and
+  records the workflow id and running state on the job.
+- Monitor cycle activities write run/report results and failures back to the
+  monitor job record.
 
 Implementation direction:
 

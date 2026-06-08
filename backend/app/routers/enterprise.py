@@ -97,11 +97,17 @@ from packages.rag import (
 )
 from packages.refs import build_competitor_alias_map, quality_entry_keys
 from packages.runtime import (
+    CreateMonitorJobCommand,
+    PauseMonitorJobCommand,
     PublishReportCommand,
+    ResumeMonitorJobCommand,
     ReviseReportCommand,
     RuntimeCommandError,
     RuntimeCommandService,
+    TriggerMonitorJobCommand,
+    UpdateMonitorJobCommand,
 )
+from packages.schema.api_dto import MonitorStartResponse
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
     ArtifactCreateResult,
@@ -131,6 +137,9 @@ from packages.schema.enterprise import (
     MemoryRecallContext,
     MemoryStats,
     ModelRouteDecision,
+    MonitorJobCreateRequest,
+    MonitorJobRecord,
+    MonitorJobUpdateRequest,
     NotificationRecord,
     ProjectReadinessScore,
     ProjectRecord,
@@ -303,6 +312,112 @@ def upsert_notification(
                 detail="Notification workspace does not match project",
             )
     return store.upsert_notification(notification)
+
+
+@router.get("/enterprise/monitor-jobs", response_model=list[MonitorJobRecord])
+def list_monitor_jobs(
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    status: str | None = None,
+) -> list[MonitorJobRecord]:
+    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "project:read")
+    if project_id is not None:
+        project = store.get_project(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if project.workspace_id != scoped_workspace_id:
+            raise HTTPException(status_code=403, detail="Project is outside workspace scope")
+    return store.list_monitor_jobs(
+        workspace_id=scoped_workspace_id,
+        project_id=project_id,
+        status=status,
+    )
+
+
+@router.post("/enterprise/monitor-jobs", response_model=MonitorJobRecord)
+async def create_monitor_job(
+    request: MonitorJobCreateRequest,
+    runtime: RuntimeCommandServiceDep,
+    user: EnterpriseUserDep,
+) -> MonitorJobRecord:
+    try:
+        result = await runtime.create_monitor_job(
+            CreateMonitorJobCommand(request=request),
+            actor=user,
+        )
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
+
+
+@router.patch("/enterprise/monitor-jobs/{monitor_id}", response_model=MonitorJobRecord)
+async def update_monitor_job(
+    monitor_id: str,
+    request: MonitorJobUpdateRequest,
+    runtime: RuntimeCommandServiceDep,
+    user: EnterpriseUserDep,
+) -> MonitorJobRecord:
+    try:
+        result = await runtime.update_monitor_job(
+            UpdateMonitorJobCommand(monitor_id=monitor_id, request=request),
+            actor=user,
+        )
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
+
+
+@router.post("/enterprise/monitor-jobs/{monitor_id}/pause", response_model=MonitorJobRecord)
+async def pause_monitor_job(
+    monitor_id: str,
+    runtime: RuntimeCommandServiceDep,
+    user: EnterpriseUserDep,
+) -> MonitorJobRecord:
+    try:
+        result = await runtime.pause_monitor_job(
+            PauseMonitorJobCommand(monitor_id=monitor_id),
+            actor=user,
+        )
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
+
+
+@router.post("/enterprise/monitor-jobs/{monitor_id}/resume", response_model=MonitorJobRecord)
+async def resume_monitor_job(
+    monitor_id: str,
+    runtime: RuntimeCommandServiceDep,
+    user: EnterpriseUserDep,
+) -> MonitorJobRecord:
+    try:
+        result = await runtime.resume_monitor_job(
+            ResumeMonitorJobCommand(monitor_id=monitor_id),
+            actor=user,
+        )
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
+
+
+@router.post(
+    "/enterprise/monitor-jobs/{monitor_id}/trigger",
+    response_model=MonitorStartResponse,
+)
+async def trigger_monitor_job(
+    monitor_id: str,
+    runtime: RuntimeCommandServiceDep,
+    user: EnterpriseUserDep,
+) -> MonitorStartResponse:
+    try:
+        result = await runtime.trigger_monitor_job(
+            TriggerMonitorJobCommand(monitor_id=monitor_id),
+            actor=user,
+        )
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
 
 
 @router.get("/enterprise/scenario-packs", response_model=list[ScenarioPack])

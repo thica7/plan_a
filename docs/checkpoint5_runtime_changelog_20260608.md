@@ -267,3 +267,37 @@ Validation:
   router, runtime command service, and focused tests.
 - Focused pytest passed for allowed, denied, fallback, quota-pressure, and
   enterprise route decisions.
+
+## 2026-06-08 - C5.7 Monitor Job Command Boundary
+
+Implemented the first monitor operations product boundary.
+
+Changed:
+
+- Added `MonitorJobRecord`, `MonitorJobCreateRequest`, and
+  `MonitorJobUpdateRequest`.
+- Added in-memory enterprise store support for:
+  - listing monitor jobs,
+  - getting a monitor job,
+  - upserting monitor jobs,
+  - updating monitor jobs,
+  - recording monitor run outcomes.
+- Added runtime commands for:
+  - create monitor job,
+  - update monitor job,
+  - pause monitor job,
+  - resume monitor job,
+  - trigger monitor job.
+- Added enterprise routes for monitor job list/create/update/pause/resume/trigger.
+- Monitor trigger now starts the existing Temporal `MonitorWorkflow` through the
+  runtime command layer and records workflow/running status on the monitor job.
+- Monitor cycle activities now write completed/interrupted/failed run and report
+  outcomes back to the monitor job record.
+
+Validation:
+
+- `ruff check` passed for schema, enterprise store, runtime commands, runtime
+  service, enterprise router, workflow activities, and monitor job tests.
+- Focused pytest passed for monitor job lifecycle commands, paused-trigger
+  blocking, Temporal trigger request shape, audit events, and run outcome
+  recording.

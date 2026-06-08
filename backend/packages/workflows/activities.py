@@ -328,6 +328,12 @@ class MonitorActivities:
                 raise RuntimeError("Monitor run disappeared during execution.")
         except Exception as exc:  # noqa: BLE001 - monitor failures should become alerts.
             error = str(exc)[:1000]
+            self._store.record_monitor_job_run(
+                request.monitor_id,
+                status="failed",
+                error=error,
+                actor_id=request.requested_by,
+            )
             anomalies = _detect_monitor_anomalies(
                 previous,
                 None,
@@ -358,6 +364,14 @@ class MonitorActivities:
             status=status,
             error="Run failed during monitor cycle." if detail.status == "failed" else "",
             cycle_index=cycle_input.cycle_index,
+        )
+        self._store.record_monitor_job_run(
+            request.monitor_id,
+            status=status,
+            run_id=detail.id,
+            report_version_id=current.report_version_id if current else None,
+            error="Run failed during monitor cycle." if detail.status == "failed" else "",
+            actor_id=request.requested_by,
         )
         return MonitorCycleResult(
             cycle_index=cycle_input.cycle_index,

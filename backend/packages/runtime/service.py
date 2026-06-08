@@ -30,11 +30,14 @@ from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.service import RunService
 from packages.runtime.commands import (
     ApproveReportCommand,
+    CreateMonitorJobCommand,
     CreateRunCommand,
+    PauseMonitorJobCommand,
     PublishReportCommand,
     RejectReportCommand,
     RequestApprovalCommand,
     RequestRedoCommand,
+    ResumeMonitorJobCommand,
     ResumeReviewCommand,
     ReviseReportCommand,
     RuntimeCommandError,
@@ -42,8 +45,11 @@ from packages.runtime.commands import (
     RuntimeCommandRoute,
     RuntimeCommandStatus,
     RuntimeCommandType,
+    TriggerMonitorJobCommand,
+    UpdateMonitorJobCommand,
 )
 from packages.schema.api_dto import (
+    MonitorStartRequest,
     ReportApprovalSignalRequest,
     RunCreateRequest,
     RunDetail,
@@ -51,6 +57,8 @@ from packages.schema.api_dto import (
 )
 from packages.schema.enterprise import (
     ManualReportRevisionRequest,
+    MonitorJobRecord,
+    MonitorJobUpdateRequest,
     ProjectRecord,
     ReportReleaseGate,
     ReportVersionRecord,
@@ -168,6 +176,196 @@ class RuntimeCommandService:
             route="langgraph",
             payload=detail,
             metadata=metadata,
+        )
+
+    async def create_monitor_job(
+        self,
+        command: CreateMonitorJobCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        request = command.request
+        project = self._project_or_error(request.project_id, actor, "project:write")
+        if project.workspace_id != request.workspace_id:
+            raise RuntimeCommandError(
+                400,
+                "Monitor job workspace does not match project workspace.",
+                command_type="create_monitor_job",
+            )
+        monitor_id = request.monitor_id or stable_prefixed_id(
+            "monitor-job",
+            request.workspace_id,
+            request.project_id,
+            request.name,
+            request.schedule,
+            length=16,
+        )
+        competitors = self._store.list_competitors(project_id=project.id)
+        job = MonitorJobRecord(
+            id=monitor_id,
+            workspace_id=request.workspace_id,
+            project_id=request.project_id,
+            name=request.name,
+            dimensions=request.dimensions,
+            competitor_ids=[item.id for item in competitors],
+            schedule=request.schedule,
+            interval_seconds=request.interval_seconds,
+            max_cycles=request.max_cycles,
+            execution_mode=request.execution_mode,
+            alert_policy=request.alert_policy,
+            release_policy=request.release_policy,
+            notification_target=request.notification_target,
+            created_by=actor.user_id,
+            metadata={
+                **request.metadata,
+                "project_topic": project.topic,
+                "runtime_command_boundary": True,
+            },
+        )
+        stored = self._store.upsert_monitor_job(job, actor_id=actor.user_id)
+        command_id = _command_id("create_monitor_job", actor, stored.id)
+        return _result(
+            command_id=command_id,
+            command_type="create_monitor_job",
+            status="succeeded",
+            resource_type="monitor_job",
+            resource_id=stored.id,
+            workspace_id=stored.workspace_id,
+            project_id=stored.project_id,
+            route="enterprise",
+            payload=stored,
+            metadata={"monitor_job_status": stored.status},
+        )
+
+    async def update_monitor_job(
+        self,
+        command: UpdateMonitorJobCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        job = self._monitor_job_or_error(command.monitor_id, actor, "project:write")
+        updated = self._store.update_monitor_job(
+            job.id,
+            command.request,
+            actor_id=actor.user_id,
+        )
+        if updated is None:
+            raise RuntimeCommandError(
+                404,
+                "Monitor job not found",
+                command_type="update_monitor_job",
+            )
+        command_id = _command_id("update_monitor_job", actor, updated.id)
+        return _result(
+            command_id=command_id,
+            command_type="update_monitor_job",
+            status="succeeded",
+            resource_type="monitor_job",
+            resource_id=updated.id,
+            workspace_id=updated.workspace_id,
+            project_id=updated.project_id,
+            route="enterprise",
+            payload=updated,
+            metadata={"monitor_job_status": updated.status},
+        )
+
+    async def pause_monitor_job(
+        self,
+        command: PauseMonitorJobCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        return await self.update_monitor_job(
+            UpdateMonitorJobCommand(
+                monitor_id=command.monitor_id,
+                request=MonitorJobUpdateRequest(status="paused"),
+            ),
+            actor=actor,
+        )
+
+    async def resume_monitor_job(
+        self,
+        command: ResumeMonitorJobCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        return await self.update_monitor_job(
+            UpdateMonitorJobCommand(
+                monitor_id=command.monitor_id,
+                request=MonitorJobUpdateRequest(status="active"),
+            ),
+            actor=actor,
+        )
+
+    async def trigger_monitor_job(
+        self,
+        command: TriggerMonitorJobCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        job = self._monitor_job_or_error(command.monitor_id, actor, "project:write")
+        if job.status != "active":
+            raise RuntimeCommandError(
+                409,
+                f"Monitor job {job.id} is {job.status}; resume it before triggering.",
+                command_type="trigger_monitor_job",
+            )
+        runtime_policy = build_runtime_policy_decision(
+            self._settings,
+            store=self._store,
+            workspace_id=job.workspace_id,
+            execution_mode=_resolved_monitor_execution_mode(job, self._settings),
+            requested_tools=[
+                "web_search",
+                "fetch_page",
+                "rag_search_evidence",
+                "online_gap_fill",
+                "claim_validator",
+                "source_snapshot",
+            ],
+        )
+        if runtime_policy.status == "deny":
+            raise RuntimeCommandError(
+                409,
+                runtime_policy.model_dump(mode="json"),
+                command_type="trigger_monitor_job",
+            )
+        start_request = _monitor_start_request(job, requested_by=actor.user_id)
+        try:
+            response = await self._workflow_service.start_monitor(start_request)
+        except Exception as exc:  # noqa: BLE001 - command layer owns workflow failures.
+            self._store.record_monitor_job_run(
+                job.id,
+                status="failed",
+                error="Temporal workflow service is unavailable.",
+                actor_id=actor.user_id,
+            )
+            raise RuntimeCommandError(
+                503,
+                "Temporal workflow service is unavailable.",
+                command_type="trigger_monitor_job",
+            ) from exc
+        updated = self._store.record_monitor_job_run(
+            job.id,
+            status="running",
+            workflow_id=response.workflow_id,
+            actor_id=actor.user_id,
+        )
+        command_id = _command_id("trigger_monitor_job", actor, job.id)
+        return _result(
+            command_id=command_id,
+            command_type="trigger_monitor_job",
+            status="accepted",
+            resource_type="monitor_job",
+            resource_id=job.id,
+            workspace_id=job.workspace_id,
+            project_id=job.project_id,
+            route="temporal",
+            payload=response,
+            metadata={
+                "monitor_job_status": updated.status if updated else job.status,
+                "runtime_policy_decision": runtime_policy.model_dump(mode="json"),
+            },
         )
 
     async def resume_review(
@@ -691,6 +889,24 @@ class RuntimeCommandService:
         )
         return project
 
+    def _monitor_job_or_error(
+        self,
+        monitor_id: str,
+        actor: EnterpriseUserContext,
+        action: str,
+    ) -> MonitorJobRecord:
+        job = self._store.get_monitor_job(monitor_id)
+        if job is None:
+            raise RuntimeCommandError(404, "Monitor job not found")
+        self._require_workspace_access(
+            actor,
+            job.workspace_id,
+            action,
+            target_type="monitor_job",
+            target_id=job.id,
+        )
+        return job
+
     def _report_version_or_error(
         self,
         version_id: str,
@@ -822,6 +1038,29 @@ def _resolved_execution_mode(request: RunCreateRequest, settings: Settings) -> s
     if request.execution_mode in {"demo", "real"}:
         return request.execution_mode
     return "real" if settings.default_execution_mode == "real" else "demo"
+
+
+def _resolved_monitor_execution_mode(job: MonitorJobRecord, settings: Settings) -> str:
+    if job.execution_mode in {"demo", "real"}:
+        return job.execution_mode
+    return "real" if settings.default_execution_mode == "real" else "demo"
+
+
+def _monitor_start_request(
+    job: MonitorJobRecord,
+    *,
+    requested_by: str,
+) -> MonitorStartRequest:
+    return MonitorStartRequest(
+        workspace_id=job.workspace_id,
+        project_id=job.project_id,
+        monitor_id=job.id,
+        requested_by=requested_by,
+        dimensions=job.dimensions,
+        execution_mode=job.execution_mode,
+        interval_seconds=job.interval_seconds,
+        max_cycles=job.max_cycles,
+    )
 
 
 def _result(

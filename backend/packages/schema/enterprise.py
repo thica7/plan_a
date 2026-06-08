@@ -72,6 +72,10 @@ MemoryCandidateKind = Literal[
     "correction",
 ]
 MemoryCandidateStatus = Literal["candidate", "confirmed", "rejected", "archived"]
+MonitorJobStatus = Literal["active", "paused", "disabled"]
+MonitorRunStatus = Literal["idle", "running", "completed", "interrupted", "failed"]
+MonitorAlertPolicy = Literal["all_anomalies", "critical_only", "none"]
+MonitorReleasePolicy = Literal["review_required", "manual_only", "auto_publish_allowed"]
 SourceSnapshotKind = Literal["webpage", "pdf", "screenshot", "interview", "survey", "manual"]
 ToolRegistryCategory = Literal[
     "collection",
@@ -204,6 +208,76 @@ class NotificationRecord(BaseModel):
     sent_at: datetime | None = None
     read_at: datetime | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MonitorJobRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    workspace_id: str
+    project_id: str
+    name: str
+    dimensions: list[str] = Field(default_factory=list, min_length=1, max_length=8)
+    competitor_ids: list[str] = Field(default_factory=list)
+    schedule: str = Field(default="manual", min_length=1, max_length=160)
+    interval_seconds: int = Field(default=604800, ge=1, le=2592000)
+    max_cycles: int = Field(default=1, ge=1, le=52)
+    execution_mode: Literal["auto", "demo", "real"] = "auto"
+    alert_policy: MonitorAlertPolicy = "all_anomalies"
+    release_policy: MonitorReleasePolicy = "review_required"
+    notification_target: str = "in_app"
+    status: MonitorJobStatus = "active"
+    last_status: MonitorRunStatus = "idle"
+    last_workflow_id: str | None = None
+    last_run_id: str | None = None
+    last_report_version_id: str | None = None
+    last_error: str = ""
+    last_started_at: datetime | None = None
+    last_completed_at: datetime | None = None
+    next_run_at: datetime | None = None
+    created_by: str | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MonitorJobCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str = Field(min_length=1, max_length=120)
+    project_id: str = Field(min_length=1, max_length=160)
+    monitor_id: str | None = Field(default=None, min_length=1, max_length=160)
+    name: str = Field(default="Project monitor", min_length=1, max_length=180)
+    dimensions: list[str] = Field(
+        default_factory=lambda: ["pricing", "feature", "persona"],
+        min_length=1,
+        max_length=8,
+    )
+    schedule: str = Field(default="manual", min_length=1, max_length=160)
+    interval_seconds: int = Field(default=604800, ge=1, le=2592000)
+    max_cycles: int = Field(default=1, ge=1, le=52)
+    execution_mode: Literal["auto", "demo", "real"] = "auto"
+    alert_policy: MonitorAlertPolicy = "all_anomalies"
+    release_policy: MonitorReleasePolicy = "review_required"
+    notification_target: str = Field(default="in_app", min_length=1, max_length=160)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MonitorJobUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=180)
+    dimensions: list[str] | None = Field(default=None, min_length=1, max_length=8)
+    schedule: str | None = Field(default=None, min_length=1, max_length=160)
+    interval_seconds: int | None = Field(default=None, ge=1, le=2592000)
+    max_cycles: int | None = Field(default=None, ge=1, le=52)
+    execution_mode: Literal["auto", "demo", "real"] | None = None
+    alert_policy: MonitorAlertPolicy | None = None
+    release_policy: MonitorReleasePolicy | None = None
+    notification_target: str | None = Field(default=None, min_length=1, max_length=160)
+    status: MonitorJobStatus | None = None
+    next_run_at: datetime | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class ProjectRecord(BaseModel):

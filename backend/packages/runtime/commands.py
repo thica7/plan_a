@@ -10,10 +10,19 @@ from packages.schema.api_dto import (
     ReportApprovalStartRequest,
     RunCreateRequest,
 )
-from packages.schema.enterprise import ManualReportRevisionRequest
+from packages.schema.enterprise import (
+    ManualReportRevisionRequest,
+    MonitorJobCreateRequest,
+    MonitorJobUpdateRequest,
+)
 
 RuntimeCommandType = Literal[
     "create_run",
+    "create_monitor_job",
+    "update_monitor_job",
+    "pause_monitor_job",
+    "resume_monitor_job",
+    "trigger_monitor_job",
     "request_review",
     "resume_review",
     "request_redo",
@@ -46,6 +55,37 @@ class CreateRunCommand(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     request: RunCreateRequest
+
+
+class CreateMonitorJobCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request: MonitorJobCreateRequest
+
+
+class UpdateMonitorJobCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    monitor_id: str = Field(min_length=1, max_length=200)
+    request: MonitorJobUpdateRequest
+
+
+class PauseMonitorJobCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    monitor_id: str = Field(min_length=1, max_length=200)
+
+
+class ResumeMonitorJobCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    monitor_id: str = Field(min_length=1, max_length=200)
+
+
+class TriggerMonitorJobCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    monitor_id: str = Field(min_length=1, max_length=200)
 
 
 class ReviseReportCommand(BaseModel):

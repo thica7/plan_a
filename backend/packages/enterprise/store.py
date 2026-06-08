@@ -42,6 +42,8 @@ from packages.schema.enterprise import (
     EvidenceReindexResult,
     EvidenceSearchHit,
     MemoryCandidate,
+    MonitorJobRecord,
+    MonitorJobUpdateRequest,
     NotificationRecord,
     ProjectCompetitorLink,
     ProjectRecord,
@@ -150,6 +152,43 @@ class EnterpriseStore(Protocol):
         self,
         notification: NotificationRecord,
     ) -> NotificationRecord: ...
+
+    def list_monitor_jobs(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+        status: str | None = None,
+    ) -> list[MonitorJobRecord]: ...
+
+    def get_monitor_job(self, monitor_id: str) -> MonitorJobRecord | None: ...
+
+    def upsert_monitor_job(
+        self,
+        job: MonitorJobRecord,
+        *,
+        actor_id: str | None = None,
+    ) -> MonitorJobRecord: ...
+
+    def update_monitor_job(
+        self,
+        monitor_id: str,
+        update: MonitorJobUpdateRequest,
+        *,
+        actor_id: str | None = None,
+    ) -> MonitorJobRecord | None: ...
+
+    def record_monitor_job_run(
+        self,
+        monitor_id: str,
+        *,
+        status: str,
+        workflow_id: str | None = None,
+        run_id: str | None = None,
+        report_version_id: str | None = None,
+        error: str = "",
+        actor_id: str | None = None,
+    ) -> MonitorJobRecord | None: ...
 
     def list_projects(self, workspace_id: str | None = None) -> list[ProjectRecord]: ...
 
@@ -275,6 +314,7 @@ class EnterpriseMemoryStore:
         self.users: dict[str, UserRecord] = {}
         self.workspace_members: dict[tuple[str, str], WorkspaceMemberRecord] = {}
         self.notifications: dict[str, NotificationRecord] = {}
+        self.monitor_jobs: dict[str, MonitorJobRecord] = {}
         self.run_details: dict[str, RunDetail] = {}
         self.projects: dict[str, ProjectRecord] = {}
         self.competitors: dict[str, CompetitorRecord] = {}
@@ -727,6 +767,130 @@ class EnterpriseMemoryStore:
                 after=notification.model_dump(mode="json"),
             )
             return notification
+
+    def list_monitor_jobs(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+        status: str | None = None,
+    ) -> list[MonitorJobRecord]:
+        with self._lock:
+            records = list(self.monitor_jobs.values())
+            if workspace_id:
+                records = [item for item in records if item.workspace_id == workspace_id]
+            if project_id:
+                records = [item for item in records if item.project_id == project_id]
+            if status:
+                records = [item for item in records if item.status == status]
+            return sorted(records, key=lambda item: item.updated_at, reverse=True)
+
+    def get_monitor_job(self, monitor_id: str) -> MonitorJobRecord | None:
+        with self._lock:
+            job = self.monitor_jobs.get(monitor_id)
+            return job.model_copy(deep=True) if job is not None else None
+
+    def upsert_monitor_job(
+        self,
+        job: MonitorJobRecord,
+        *,
+        actor_id: str | None = None,
+    ) -> MonitorJobRecord:
+        with self._lock:
+            self._ensure_workspace(job.workspace_id)
+            before = self.monitor_jobs.get(job.id)
+            stored = job.model_copy(update={"updated_at": datetime.utcnow()})
+            self.monitor_jobs[job.id] = stored
+            self._append_audit(
+                workspace_id=stored.workspace_id,
+                actor_id=actor_id or DEFAULT_USER_ID,
+                action="monitor_job.upserted",
+                resource_type="monitor_job",
+                resource_id=stored.id,
+                before=before.model_dump(mode="json") if before else None,
+                after=stored.model_dump(mode="json"),
+            )
+            return stored
+
+    def update_monitor_job(
+        self,
+        monitor_id: str,
+        update: MonitorJobUpdateRequest,
+        *,
+        actor_id: str | None = None,
+    ) -> MonitorJobRecord | None:
+        with self._lock:
+            current = self.monitor_jobs.get(monitor_id)
+            if current is None:
+                return None
+            update_values = update.model_dump(exclude_none=True)
+            if "metadata" in update_values:
+                update_values["metadata"] = {
+                    **current.metadata,
+                    **dict(update_values["metadata"]),
+                }
+            updated = current.model_copy(
+                update={**update_values, "updated_at": datetime.utcnow()}
+            )
+            self.monitor_jobs[monitor_id] = updated
+            self._append_audit(
+                workspace_id=updated.workspace_id,
+                actor_id=actor_id or DEFAULT_USER_ID,
+                action="monitor_job.updated",
+                resource_type="monitor_job",
+                resource_id=updated.id,
+                before=current.model_dump(mode="json"),
+                after=updated.model_dump(mode="json"),
+            )
+            return updated
+
+    def record_monitor_job_run(
+        self,
+        monitor_id: str,
+        *,
+        status: str,
+        workflow_id: str | None = None,
+        run_id: str | None = None,
+        report_version_id: str | None = None,
+        error: str = "",
+        actor_id: str | None = None,
+    ) -> MonitorJobRecord | None:
+        with self._lock:
+            current = self.monitor_jobs.get(monitor_id)
+            if current is None:
+                return None
+            now = datetime.utcnow()
+            completed_at = now if status in {"completed", "failed"} else current.last_completed_at
+            updated = current.model_copy(
+                update={
+                    "last_status": status,
+                    "last_workflow_id": workflow_id or current.last_workflow_id,
+                    "last_run_id": run_id or current.last_run_id,
+                    "last_report_version_id": report_version_id
+                    or current.last_report_version_id,
+                    "last_error": error,
+                    "last_started_at": now if status == "running" else current.last_started_at,
+                    "last_completed_at": completed_at,
+                    "updated_at": now,
+                }
+            )
+            self.monitor_jobs[monitor_id] = updated
+            self._append_audit(
+                workspace_id=updated.workspace_id,
+                actor_id=actor_id or DEFAULT_USER_ID,
+                action="monitor_job.run_recorded",
+                resource_type="monitor_job",
+                resource_id=updated.id,
+                before=current.model_dump(mode="json"),
+                after={
+                    "status": status,
+                    "workflow_id": workflow_id,
+                    "run_id": run_id,
+                    "report_version_id": report_version_id,
+                    "error": error,
+                },
+            )
+            return updated
 
     def list_projects(self, workspace_id: str | None = None) -> list[ProjectRecord]:
         with self._lock:
