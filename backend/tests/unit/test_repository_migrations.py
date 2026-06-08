@@ -106,7 +106,11 @@ async def test_repository_initialise_migrates_existing_schema(tmp_path) -> None:
             chunk_columns = {row["name"] for row in await cur.fetchall()}
         async with db.execute(
             "SELECT name FROM sqlite_master "
-            "WHERE name IN ('chunks_fts', 'ingest_jobs', 'retrieval_traces')"
+            "WHERE name IN ("
+            "'chunks_fts', 'ingest_jobs', 'retrieval_traces', "
+            "'evidence_sync_state', 'evidence_sync_metrics', "
+            "'idx_chunks_crawl_run_document'"
+            ")"
         ) as cur:
             objects = {row["name"] for row in await cur.fetchall()}
 
@@ -122,10 +126,18 @@ async def test_repository_initialise_migrates_existing_schema(tmp_path) -> None:
             "add document last seen timestamp",
             "add chunk crawl run id",
             "add retrieval traces table",
+            "add evidence sync tracking",
         }
         assert {"is_active", "version", "parent_document_id", "last_seen_at"} <= document_columns
         assert "crawl_run_id" in chunk_columns
-        assert {"chunks_fts", "ingest_jobs", "retrieval_traces"} <= objects
+        assert {
+            "chunks_fts",
+            "ingest_jobs",
+            "retrieval_traces",
+            "evidence_sync_state",
+            "evidence_sync_metrics",
+            "idx_chunks_crawl_run_document",
+        } <= objects
     finally:
         await repo.close()
 

@@ -17,6 +17,10 @@ from packages.rag.grounded_prompt import (
     build_run_grounding_prompt,
     format_retrieval_records_for_prompt,
 )
+from packages.rag.knowledge_bridge import (
+    knowledge_document_to_evidence_record,
+    sync_knowledge_to_evidence,
+)
 from packages.rag.retriever import grounded_context, retrieve_grounded_context
 from packages.rag.seed_corpus import (
     filter_evidence_seed_rows,
@@ -45,10 +49,12 @@ __all__ = [
     "format_retrieval_records_for_prompt",
     "grounded_context",
     "ingest_evidence_seed_corpus",
+    "knowledge_document_to_evidence_record",
     "load_evidence_seed_rows",
     "recall_evidence",
     "recall_evidence_scores",
     "retrieve_gap_candidates",
     "retrieve_grounded_context",
     "seed_row_to_evidence_record",
+    "sync_knowledge_to_evidence",
 ]

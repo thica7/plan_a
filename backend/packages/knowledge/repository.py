@@ -130,6 +130,41 @@ CREATE INDEX IF NOT EXISTS idx_ingest_jobs_status ON ingest_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_eval_runs_created_at ON eval_runs(created_at);
 CREATE INDEX IF NOT EXISTS idx_retrieval_traces_created_at ON retrieval_traces(created_at);
 CREATE INDEX IF NOT EXISTS idx_retrieval_traces_preset ON retrieval_traces(preset_used);
+
+CREATE TABLE IF NOT EXISTS evidence_sync_state (
+    workspace_id   TEXT NOT NULL,
+    project_id     TEXT NOT NULL,
+    document_id    TEXT NOT NULL,
+    content_hash   TEXT NOT NULL,
+    evidence_id    TEXT NOT NULL,
+    synced_at      TEXT NOT NULL,
+    metadata_json  TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY (workspace_id, project_id, document_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_sync_state_project_hash
+ON evidence_sync_state(workspace_id, project_id, content_hash);
+
+CREATE TABLE IF NOT EXISTS evidence_sync_metrics (
+    id              TEXT PRIMARY KEY,
+    workspace_id    TEXT NOT NULL,
+    project_id      TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    started_at      TEXT NOT NULL,
+    completed_at    TEXT NOT NULL,
+    duration_ms     REAL NOT NULL DEFAULT 0,
+    loaded_count    INTEGER NOT NULL DEFAULT 0,
+    ingested_count  INTEGER NOT NULL DEFAULT 0,
+    skipped_count   INTEGER NOT NULL DEFAULT 0,
+    chunk_count     INTEGER NOT NULL DEFAULT 0,
+    indexed_count   INTEGER NOT NULL DEFAULT 0,
+    duplicate_count INTEGER NOT NULL DEFAULT 0,
+    request_json    TEXT NOT NULL DEFAULT '{}',
+    error           TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_sync_metrics_project
+ON evidence_sync_metrics(workspace_id, project_id, completed_at);
 """
 
 _POST_MIGRATION_SCHEMA = """
@@ -145,6 +180,9 @@ WHERE is_active = 1;
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_chunks_document_chunk_index
 ON chunks(document_id, chunk_index);
+
+CREATE INDEX IF NOT EXISTS idx_chunks_crawl_run_document
+ON chunks(crawl_run_id, document_id);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
     title,
@@ -384,6 +422,221 @@ class KnowledgeRepository:
         ) as cur:
             rows = await cur.fetchall()
             return [self._row_to_document(r) for r in rows]
+
+    async def list_documents_for_evidence_sync(
+        self,
+        *,
+        crawl_run_id: str | None = None,
+        competitors: list[str] | None = None,
+        dimensions: list[str] | None = None,
+        source_types: list[str] | None = None,
+        statuses: list[str] | None = None,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[KnowledgeDocument]:
+        """按同步条件分页取文档，避免在 Python 层全库扫描。"""
+        db = self._connection
+        active_statuses = statuses or ["active", "stale"]
+        clauses: list[str] = []
+        params: list[Any] = []
+        if active_statuses:
+            placeholders = ", ".join("?" for _ in active_statuses)
+            clauses.append(f"d.status IN ({placeholders})")
+            params.extend(active_statuses)
+        if crawl_run_id:
+            clauses.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM chunks c
+                    WHERE c.document_id = d.id AND c.crawl_run_id = ?
+                )
+                """
+            )
+            params.append(crawl_run_id)
+        if competitors:
+            placeholders = ", ".join("?" for _ in competitors)
+            clauses.append(f"d.competitor IN ({placeholders})")
+            params.extend(competitors)
+        if dimensions:
+            placeholders = ", ".join("?" for _ in dimensions)
+            clauses.append(f"d.dimension IN ({placeholders})")
+            params.extend(dimensions)
+        if source_types:
+            placeholders = ", ".join("?" for _ in source_types)
+            clauses.append(f"d.source_type IN ({placeholders})")
+            params.extend(source_types)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.extend([limit, offset])
+        async with db.execute(
+            f"""
+            SELECT d.*
+            FROM documents d
+            {where}
+            ORDER BY COALESCE(d.last_seen_at, d.fetched_at) DESC, d.rowid DESC
+            LIMIT ? OFFSET ?
+            """,
+            params,
+        ) as cur:
+            rows = await cur.fetchall()
+            return [self._row_to_document(r) for r in rows]
+
+    async def get_evidence_sync_states(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        document_ids: list[str],
+    ) -> dict[str, dict[str, Any]]:
+        if not document_ids:
+            return {}
+        db = self._connection
+        placeholders = ", ".join("?" for _ in document_ids)
+        params = [workspace_id, project_id, *document_ids]
+        async with db.execute(
+            f"""
+            SELECT *
+            FROM evidence_sync_state
+            WHERE workspace_id = ?
+              AND project_id = ?
+              AND document_id IN ({placeholders})
+            """,
+            params,
+        ) as cur:
+            rows = await cur.fetchall()
+        return {
+            row["document_id"]: {
+                "workspace_id": row["workspace_id"],
+                "project_id": row["project_id"],
+                "document_id": row["document_id"],
+                "content_hash": row["content_hash"],
+                "evidence_id": row["evidence_id"],
+                "synced_at": row["synced_at"],
+                "metadata": json.loads(row["metadata_json"]),
+            }
+            for row in rows
+        }
+
+    async def record_evidence_sync_states(self, records: list[dict[str, Any]]) -> None:
+        if not records:
+            return
+        now = datetime.now(UTC).isoformat()
+        async with self._write_transaction() as db:
+            await db.executemany(
+                """
+                INSERT INTO evidence_sync_state (
+                    workspace_id, project_id, document_id, content_hash,
+                    evidence_id, synced_at, metadata_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (workspace_id, project_id, document_id) DO UPDATE SET
+                    content_hash = excluded.content_hash,
+                    evidence_id = excluded.evidence_id,
+                    synced_at = excluded.synced_at,
+                    metadata_json = excluded.metadata_json
+                """,
+                [
+                    (
+                        item["workspace_id"],
+                        item["project_id"],
+                        item["document_id"],
+                        item["content_hash"],
+                        item["evidence_id"],
+                        item.get("synced_at") or now,
+                        json.dumps(item.get("metadata", {})),
+                    )
+                    for item in records
+                ],
+            )
+
+    async def record_evidence_sync_metric(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        status: str,
+        started_at: datetime,
+        completed_at: datetime,
+        duration_ms: float,
+        loaded_count: int,
+        ingested_count: int,
+        skipped_count: int,
+        chunk_count: int,
+        indexed_count: int,
+        duplicate_count: int,
+        request: dict[str, Any],
+        error: str = "",
+    ) -> str:
+        metric_id = str(uuid.uuid4())
+        async with self._write_transaction() as db:
+            await db.execute(
+                """
+                INSERT INTO evidence_sync_metrics (
+                    id, workspace_id, project_id, status, started_at, completed_at,
+                    duration_ms, loaded_count, ingested_count, skipped_count,
+                    chunk_count, indexed_count, duplicate_count, request_json, error
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    metric_id,
+                    workspace_id,
+                    project_id,
+                    status,
+                    started_at.isoformat(),
+                    completed_at.isoformat(),
+                    duration_ms,
+                    loaded_count,
+                    ingested_count,
+                    skipped_count,
+                    chunk_count,
+                    indexed_count,
+                    duplicate_count,
+                    json.dumps(request),
+                    error,
+                ),
+            )
+        return metric_id
+
+    async def list_evidence_sync_metrics(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        db = self._connection
+        async with db.execute(
+            """
+            SELECT *
+            FROM evidence_sync_metrics
+            WHERE workspace_id = ? AND project_id = ?
+            ORDER BY completed_at DESC
+            LIMIT ?
+            """,
+            (workspace_id, project_id, limit),
+        ) as cur:
+            rows = await cur.fetchall()
+        return [
+            {
+                "id": row["id"],
+                "workspace_id": row["workspace_id"],
+                "project_id": row["project_id"],
+                "status": row["status"],
+                "started_at": datetime.fromisoformat(row["started_at"]),
+                "completed_at": datetime.fromisoformat(row["completed_at"]),
+                "duration_ms": float(row["duration_ms"]),
+                "loaded_count": int(row["loaded_count"]),
+                "ingested_count": int(row["ingested_count"]),
+                "skipped_count": int(row["skipped_count"]),
+                "chunk_count": int(row["chunk_count"]),
+                "indexed_count": int(row["indexed_count"]),
+                "duplicate_count": int(row["duplicate_count"]),
+                "request": json.loads(row["request_json"]),
+                "error": row["error"],
+            }
+            for row in rows
+        ]
 
     async def count_documents(
         self,
@@ -1096,6 +1349,7 @@ class KnowledgeRepository:
             (6, "add document last seen timestamp", self._migration_006_documents_last_seen),
             (7, "add chunk crawl run id", self._migration_007_chunks_crawl_run_id),
             (8, "add retrieval traces table", self._migration_008_retrieval_traces),
+            (9, "add evidence sync tracking", self._migration_009_evidence_sync_tracking),
         ]
         db = self._connection
         async with db.execute("SELECT id FROM _schema_version") as cur:
@@ -1238,6 +1492,61 @@ class KnowledgeRepository:
         await self._connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_retrieval_traces_preset "
             "ON retrieval_traces(preset_used)"
+        )
+
+    async def _migration_009_evidence_sync_tracking(self) -> None:
+        await self._connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_chunks_crawl_run_document
+            ON chunks(crawl_run_id, document_id)
+            """
+        )
+        await self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS evidence_sync_state (
+                workspace_id   TEXT NOT NULL,
+                project_id     TEXT NOT NULL,
+                document_id    TEXT NOT NULL,
+                content_hash   TEXT NOT NULL,
+                evidence_id    TEXT NOT NULL,
+                synced_at      TEXT NOT NULL,
+                metadata_json  TEXT NOT NULL DEFAULT '{}',
+                PRIMARY KEY (workspace_id, project_id, document_id)
+            )
+            """
+        )
+        await self._connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_evidence_sync_state_project_hash
+            ON evidence_sync_state(workspace_id, project_id, content_hash)
+            """
+        )
+        await self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS evidence_sync_metrics (
+                id              TEXT PRIMARY KEY,
+                workspace_id    TEXT NOT NULL,
+                project_id      TEXT NOT NULL,
+                status          TEXT NOT NULL,
+                started_at      TEXT NOT NULL,
+                completed_at    TEXT NOT NULL,
+                duration_ms     REAL NOT NULL DEFAULT 0,
+                loaded_count    INTEGER NOT NULL DEFAULT 0,
+                ingested_count  INTEGER NOT NULL DEFAULT 0,
+                skipped_count   INTEGER NOT NULL DEFAULT 0,
+                chunk_count     INTEGER NOT NULL DEFAULT 0,
+                indexed_count   INTEGER NOT NULL DEFAULT 0,
+                duplicate_count INTEGER NOT NULL DEFAULT 0,
+                request_json    TEXT NOT NULL DEFAULT '{}',
+                error           TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        await self._connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_evidence_sync_metrics_project
+            ON evidence_sync_metrics(workspace_id, project_id, completed_at)
+            """
         )
 
     async def _add_column_if_missing(
