@@ -88,7 +88,8 @@ C5.0 Runtime smoke gate: complete
 C5.1 Runtime command layer: complete
 C5.2 Artifact lifecycle: complete
 C5.3 Tenant governance boundary: complete
-C5.4-C5.7: pending
+C5.4 Advisory context governance: complete
+C5.5-C5.7: pending
 ```
 
 ## CC Recommendation Integration
@@ -370,6 +371,23 @@ Acceptance:
   report scope.
 - Tests cover stale historical evidence, recalled memory, and current report
   scope staying separate.
+
+Progress on 2026-06-08:
+
+- Added `AdvisoryContextReport` and `AdvisoryContextItem` as the typed C5.4
+  contract.
+- ReportVersion projection now writes `quality_metadata.advisory_context` with
+  report-scope evidence/claim IDs, memory candidate IDs, and explicit advisory
+  policies.
+- Added `/api/enterprise/report-versions/{version_id}/advisory-context`.
+- The advisory context report separates:
+  - recalled MemoryAgent candidates as advisory-only,
+  - RAG retrieval records as report-scope only when admitted into the current
+    ReportVersion evidence IDs,
+  - stale or historical project evidence as advisory-only unless linked to the
+    current ReportVersion.
+- Added tests for stale historical evidence, recalled memory, RAG admission, and
+  cross-workspace route isolation.
 
 Suggested commit:
 

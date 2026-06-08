@@ -185,3 +185,28 @@ Validation:
 - `ruff check backend/tests/integration/test_postgres_rls_smoke.py`
 - `pytest backend/tests/integration/test_postgres_rls_smoke.py` skipped as
   expected without `ENTERPRISE_RLS_SMOKE_DATABASE_URL`.
+
+## 2026-06-08 - C5.4 Advisory Context Governance
+
+Completed the first Memory/RAG advisory governance contract.
+
+Changed:
+
+- Added `backend/packages/enterprise/advisory_context.py`.
+- Added `AdvisoryContextReport` and `AdvisoryContextItem` so report versions can
+  explain memory, RAG retrieval, and project-history context through one typed
+  contract.
+- ReportVersion projection now writes `quality_metadata.advisory_context` with:
+  - report-scope evidence IDs,
+  - report-scope claim IDs,
+  - MemoryAgent candidate IDs,
+  - explicit memory/RAG/project-history policy labels.
+- Added `/api/enterprise/report-versions/{version_id}/advisory-context`.
+- Added cross-workspace negative coverage for the new advisory context route.
+
+Validation:
+
+- `ruff check` passed for advisory context, projection, enterprise router, and
+  focused tests.
+- Focused pytest passed for advisory context scope separation, projection
+  metadata, and enterprise RBAC/workspace route isolation.

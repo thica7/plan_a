@@ -2205,6 +2205,10 @@ def test_enterprise_router_enforces_rbac_workspace_scope() -> None:
         f"/api/enterprise/report-versions/{projection_b.report_version.id}",
         headers=viewer_headers,
     )
+    cross_advisory_context = client.get(
+        f"/api/enterprise/report-versions/{projection_b.report_version.id}/advisory-context",
+        headers=viewer_headers,
+    )
     cross_evidence = client.get(
         "/api/enterprise/evidence/search",
         params={"workspace_id": context_b.workspace_id, "query": "pricing"},
@@ -2323,6 +2327,7 @@ def test_enterprise_router_enforces_rbac_workspace_scope() -> None:
     assert [item["workspace_id"] for item in scoped_projects.json()] == ["workspace-a"]
     assert cross_project.status_code == 403
     assert cross_report.status_code == 403
+    assert cross_advisory_context.status_code == 403
     assert cross_evidence.status_code == 403
     assert cross_artifact.status_code == 403
     assert cross_report_artifacts.status_code == 403

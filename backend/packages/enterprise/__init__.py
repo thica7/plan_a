@@ -1,3 +1,9 @@
+from packages.enterprise.advisory_context import (
+    AdvisoryContextItem,
+    AdvisoryContextReport,
+    build_advisory_context_report,
+    build_run_advisory_context_metadata,
+)
 from packages.enterprise.embedding_index import (
     EMBEDDING_DIMENSIONS,
     EMBEDDING_MODEL,
@@ -31,9 +37,13 @@ __all__ = [
     "EnterpriseStore",
     "EMBEDDING_DIMENSIONS",
     "EMBEDDING_MODEL",
+    "AdvisoryContextItem",
+    "AdvisoryContextReport",
     "WorkspaceQuotaExceededError",
+    "build_advisory_context_report",
     "build_enterprise_projection",
     "build_project_knowledge_graph_read_model",
+    "build_run_advisory_context_metadata",
     "build_report_scope",
     "build_report_version_diff",
     "capture_gap_fill_source_snapshots",

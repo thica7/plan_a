@@ -80,6 +80,11 @@ def test_build_enterprise_projection_links_evidence_claims_and_report() -> None:
     assert projection.report_version.version_number == 2
     assert projection.report_version.competitor_layer == "L1"
     assert projection.report_version.quality_metadata["run_id"] == "run-1"
+    advisory = projection.report_version.quality_metadata["advisory_context"]
+    assert advisory["policy_version"] == "c5.4"
+    assert advisory["scope_policy"] == "report_version_scope_only"
+    assert advisory["report_scope_evidence_ids"] == [projection.evidence_records[0].id]
+    assert advisory["memory_policy"] == "advisory_only"
     assert projection.report_version.quality_metadata["report_competitor_homepages"] == [
         {
             "competitor_id": "cursor",

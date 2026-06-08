@@ -4,6 +4,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from datetime import datetime
 
+from packages.enterprise.advisory_context import build_run_advisory_context_metadata
 from packages.identity import (
     compute_claim_id,
     compute_competitor_set_hash,
@@ -195,7 +196,7 @@ def _build_report_version(
         scoped_evidence_ids=evidence_ids,
     )
     release_claim_records = _release_claim_records(claim_records)
-    return ReportVersionRecord(
+    report_version = ReportVersionRecord(
         id=compute_report_version_id(
             run_id=detail.id,
             version_number=version_number,
@@ -232,6 +233,13 @@ def _build_report_version(
         },
         created_at=_parse_datetime(detail.updated_at),
     )
+    quality_metadata = dict(report_version.quality_metadata)
+    quality_metadata["advisory_context"] = build_run_advisory_context_metadata(
+        version=report_version,
+        memory_candidate_ids=detail.plan.memory_candidate_ids,
+        memory_prompt_context=detail.plan.memory_prompt_context,
+    )
+    return report_version.model_copy(update={"quality_metadata": quality_metadata})
 
 
 def _index_evidence_by_source(

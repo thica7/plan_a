@@ -55,7 +55,9 @@ from packages.compliance import (
 )
 from packages.config import Settings
 from packages.enterprise import (
+    AdvisoryContextReport,
     EnterpriseStore,
+    build_advisory_context_report,
     build_project_knowledge_graph_read_model,
     build_report_version_diff,
     capture_gap_fill_source_snapshots,
@@ -1839,6 +1841,24 @@ def get_report_version(
         raise HTTPException(status_code=404, detail="Report version not found")
     _require_workspace_access(user, version.workspace_id, "report:read")
     return version
+
+
+@router.get(
+    "/enterprise/report-versions/{version_id}/advisory-context",
+    response_model=AdvisoryContextReport,
+)
+def get_report_version_advisory_context(
+    version_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    memory: PreferenceMemoryDep,
+) -> AdvisoryContextReport:
+    version = _report_version_or_404(version_id, store, user, "report:read")
+    return build_advisory_context_report(
+        version=version,
+        store=store,
+        memory=memory,
+    )
 
 
 @router.post(
