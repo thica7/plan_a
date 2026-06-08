@@ -50,6 +50,22 @@
 }
 
 @media (max-width: 760px) {
+  .app-shell,
+  .content-shell,
+  .main-pane,
+  .work-surface,
+  .run-detail,
+  .enterprise-workbench {
+    max-width: 100%;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .app-shell,
+  .content-shell {
+    overflow-x: hidden;
+  }
+
   .topbar {
     align-items: flex-start;
     display: grid;
@@ -93,20 +109,53 @@
     display: grid;
     max-width: 100%;
     min-width: 0;
+    overflow: visible;
+    width: 100%;
+  }
+
+  .page-header > div {
+    max-width: 100%;
+    min-width: 0;
+    overflow: visible;
+    width: 100%;
   }
 
   .page-header h1 {
     font-size: 27px;
-    max-width: calc(100vw - 28px);
+    max-width: 100%;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+    width: 100%;
   }
 
   .page-header p {
-    max-width: calc(100vw - 28px);
-    width: min(100%, calc(100vw - 28px));
+    max-width: 100%;
+    overflow: visible;
+    overflow-wrap: break-word;
+    text-overflow: clip;
+    white-space: normal;
+    width: 100%;
   }
 
   .header-stat {
     justify-items: start;
+    width: 100%;
+  }
+
+  .run-meta-row {
+    max-width: 100%;
+    min-width: 0;
+    overflow: visible;
+    width: 100%;
+  }
+
+  .run-meta-row span {
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .nav-list {
