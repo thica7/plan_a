@@ -1,0 +1,21 @@
+.status-pill,
+.metric-card {
+  min-width: 0;
+}
+
+.status-pill.good,
+.metric-card.good i {
+  background: rgba(20, 184, 166, 0.14);
+  color: var(--success);
+}
+
+.status-pill.warn,
+.metric-card.warn i {
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--warning);
+}
+
+.status-pill.bad {
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--danger);
+}
