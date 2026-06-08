@@ -18,6 +18,7 @@ from packages.enterprise.report_lifecycle import (
     mark_report_published,
     report_release_gate_snapshot,
 )
+from packages.evals import build_enterprise_evalops_report, build_evalops_release_contract
 from packages.governance import build_model_policy_report, model_policy_block_message
 from packages.hitl import append_hitl_lifecycle, build_hitl_lifecycle_event, hitl_lifecycle_history
 from packages.identity import new_ui_run_idempotency_key, stable_prefixed_id
@@ -51,6 +52,7 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
     UserFeedbackRecord,
 )
+from packages.schema.evals import EvalOpsReleaseContract
 from packages.workflows.service import TemporalWorkflowService, decide_temporal_cutover
 
 
@@ -403,7 +405,31 @@ class RuntimeCommandService:
                 command_type="publish_report",
             )
         gate = self._enforce_report_release_gate(version, actor)
+        evalops_contract = self._evalops_release_contract_for_version(version)
+        if self._settings.evalops_release_mode == "blocking" and not evalops_contract.allowed:
+            raise RuntimeCommandError(
+                409,
+                {
+                    "status": "blocked",
+                    "reason": "evalops_release_contract_blocked",
+                    "message": evalops_contract.reason,
+                    "report_version_id": version.id,
+                    "command_id": command_id,
+                    "evalops_release_contract": evalops_contract.model_dump(mode="json"),
+                },
+                command_type="publish_report",
+            )
         updated = mark_report_published(version, actor_id=actor.user_id, gate=gate)
+        publication = dict(updated.quality_metadata.get("publication") or {})
+        publication["evalops_release_contract"] = evalops_contract.model_dump(mode="json")
+        updated = updated.model_copy(
+            update={
+                "quality_metadata": {
+                    **updated.quality_metadata,
+                    "publication": publication,
+                }
+            }
+        )
         stored = self._store.upsert_report_version(updated)
         self._store.audit_report_version_transition(
             stored,
@@ -417,6 +443,7 @@ class RuntimeCommandService:
                 "publication": stored.quality_metadata.get("publication", {}),
                 "hitl_lifecycle": stored.quality_metadata.get("hitl_lifecycle", []),
                 "release_gate": report_release_gate_snapshot(gate),
+                "evalops_release_contract": evalops_contract.model_dump(mode="json"),
             },
         )
         return _result(
@@ -431,7 +458,10 @@ class RuntimeCommandService:
             report_version_id=stored.id,
             route="enterprise",
             payload=stored,
-            metadata={"release_gate": report_release_gate_snapshot(gate)},
+            metadata={
+                "release_gate": report_release_gate_snapshot(gate),
+                "evalops_release_contract": evalops_contract.model_dump(mode="json"),
+            },
         )
 
     async def _ensure_temporal_run_visible(
@@ -700,6 +730,31 @@ class RuntimeCommandService:
         if gate.allowed:
             return gate
         raise RuntimeCommandError(409, gate.model_dump(mode="json"), command_type="publish_report")
+
+    def _evalops_release_contract_for_version(
+        self,
+        version: ReportVersionRecord,
+    ) -> EvalOpsReleaseContract:
+        runs = [
+            detail
+            for summary in self._run_service.list_runs()
+            if (detail := self._run_service.get_run(summary.id)) is not None
+            and detail.project_id == version.project_id
+        ]
+        if version.run_id and all(detail.id != version.run_id for detail in runs):
+            detail = self._run_service.get_run(version.run_id)
+            if detail is not None:
+                runs.append(detail)
+        report = build_enterprise_evalops_report(
+            runs,
+            limit=self._settings.evalops_release_limit,
+            judge_mode="heuristic",
+            settings=self._settings,
+        )
+        return build_evalops_release_contract(
+            report,
+            mode=self._settings.evalops_release_mode,
+        )
 
     def _require_workspace_access(
         self,

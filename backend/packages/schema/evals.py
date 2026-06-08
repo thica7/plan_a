@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 EvalOpsStatus = Literal["pass", "warn", "fail"]
 EvalJudgeMode = Literal["heuristic", "llm"]
+EvalOpsReleaseMode = Literal["advisory", "blocking"]
+EvalOpsReleaseDecision = Literal["allowed", "review_required", "blocked"]
 
 
 class EvalOpsMetric(BaseModel):
@@ -125,4 +127,38 @@ class EvalOpsReport(BaseModel):
     metrics: list[EvalOpsMetric] = Field(default_factory=list)
     cases: list[EvalOpsCaseResult] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class EvalOpsReleaseMetricRequirement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    value: float
+    target: float
+    status: EvalOpsStatus
+    blocking: bool = False
+    summary: str = ""
+
+
+class EvalOpsReleaseContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    policy_version: str = "c5.5"
+    mode: EvalOpsReleaseMode = "advisory"
+    decision: EvalOpsReleaseDecision
+    allowed: bool
+    status: EvalOpsStatus
+    reason: str
+    evaluated_run_ids: list[str] = Field(default_factory=list)
+    baseline_run_id: str | None = None
+    judge_mode: EvalJudgeMode = "heuristic"
+    regression_gate_status: EvalOpsStatus
+    regression_gate_reason: str
+    required_metrics: list[EvalOpsReleaseMetricRequirement] = Field(default_factory=list)
+    blocking_issue_ids: list[str] = Field(default_factory=list)
+    warning_issue_ids: list[str] = Field(default_factory=list)
+    quality_finding_ids: list[str] = Field(default_factory=list)
+    quality_findings: list[dict[str, object]] = Field(default_factory=list)
+    metadata: dict[str, object] = Field(default_factory=dict)
     generated_at: datetime = Field(default_factory=datetime.utcnow)

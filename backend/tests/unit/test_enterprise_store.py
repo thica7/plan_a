@@ -1612,6 +1612,7 @@ def test_enterprise_router_exposes_projection() -> None:
         "RedTeam",
         "BenchmarkAgent",
         "ReleaseGate",
+        "EvalOps",
         "MemoryAgent",
     }
     claim_matrix = next(
@@ -1674,6 +1675,7 @@ def test_enterprise_router_exposes_projection() -> None:
         "EvidenceGap",
         "RedTeam",
         "ReleaseGate",
+        "EvalOps",
     }
     release_matrix = next(
         item for item in quality_matrix.json()["entries"] if item["agent_name"] == "ReleaseGate"
@@ -1690,6 +1692,24 @@ def test_enterprise_router_exposes_projection() -> None:
         "EvidenceGap",
         "RedTeam",
         "BenchmarkAgent",
+        "EvalOps",
+    }
+    evalops_matrix = next(
+        item for item in quality_matrix.json()["entries"] if item["agent_name"] == "EvalOps"
+    )
+    assert evalops_matrix["framework"] == "deterministic-release-contract"
+    assert evalops_matrix["metadata"]["policy_version"] == "c5.5"
+    assert evalops_matrix["metadata"]["mode"] == "advisory"
+    assert evalops_matrix["metadata"]["decision"] in {
+        "allowed",
+        "review_required",
+        "blocked",
+    }
+    assert evalops_matrix["metadata"]["quality_finding_schema"] == "QualityFinding"
+    assert set(evalops_matrix["metadata"]["review_targets"]) >= {
+        "BenchmarkAgent",
+        "ReleaseGate",
+        "ClaimValidator",
     }
     assert competitors.status_code == 200
     assert [item["name"] for item in competitors.json()] == ["Cursor"]
@@ -1952,6 +1972,12 @@ def test_enterprise_router_blocks_direct_publish_status_without_approval() -> No
         approved_publish.json()["quality_metadata"]["approval_workflow"]["decision"] == "approved"
     )
     assert approved_publish.json()["quality_metadata"]["publication"]["status"] == "published"
+    evalops_contract = approved_publish.json()["quality_metadata"]["publication"][
+        "evalops_release_contract"
+    ]
+    assert evalops_contract["policy_version"] == "c5.5"
+    assert evalops_contract["mode"] == "advisory"
+    assert evalops_contract["allowed"] is True
     assert any(log.action == "report_version.approved" for log in logs)
     published_logs = [
         log for log in store.list_audit_logs() if log.action == "report_version.published"
@@ -1962,6 +1988,7 @@ def test_enterprise_router_blocks_direct_publish_status_without_approval() -> No
     assert published_logs[0].after["audit_correlation_id"].startswith("audit-correlation-")
     assert published_logs[0].after["replay_correlation_id"].startswith("replay-correlation-")
     assert published_logs[0].after["release_gate"]["allowed"] is True
+    assert published_logs[0].after["evalops_release_contract"]["policy_version"] == "c5.5"
 
 
 def test_manual_report_revision_after_rejection_creates_audited_draft() -> None:

@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.deps import get_run_service
 from app.main import create_app
-from packages.evals import build_enterprise_evalops_report
+from packages.evals import build_enterprise_evalops_report, build_evalops_release_contract
 from packages.schema.api_dto import RunDetail, RunSummary
 from packages.schema.models import (
     AgentMessage,
@@ -264,6 +264,44 @@ def test_enterprise_evalops_router_exposes_report() -> None:
     assert response.json()["time_savings_rate"] > 0.9
     assert response.json()["regression_gate_status"] in {"pass", "warn", "fail"}
     assert response.json()["regression_gate_issues"] == []
+
+    contract_response = client.get(
+        "/api/evals/enterprise/release-contract",
+        params={"project_id": "project-a", "mode": "blocking"},
+    )
+
+    assert contract_response.status_code == 200
+    assert contract_response.json()["policy_version"] == "c5.5"
+    assert contract_response.json()["mode"] == "blocking"
+    assert contract_response.json()["decision"] == "allowed"
+    assert contract_response.json()["allowed"] is True
+    assert contract_response.json()["regression_gate_status"] == "pass"
+    assert contract_response.json()["required_metrics"]
+
+
+def test_evalops_release_contract_distinguishes_advisory_and_blocking_modes() -> None:
+    target = _run_detail(
+        run_id="real-run-with-pii",
+        execution_mode="real",
+        source_count=4,
+        quality_score=1.0,
+        report_md=f"{_structured_report_md()}\n\nContact buyer@example.com for procurement.",
+        project_id="project-a",
+    )
+    report = build_enterprise_evalops_report([target])
+
+    advisory = build_evalops_release_contract(report, mode="advisory")
+    blocking = build_evalops_release_contract(report, mode="blocking")
+
+    assert report.regression_gate_status == "fail"
+    assert advisory.allowed is True
+    assert advisory.decision == "review_required"
+    assert advisory.blocking_issue_ids
+    assert blocking.allowed is False
+    assert blocking.decision == "blocked"
+    assert blocking.blocking_issue_ids == advisory.blocking_issue_ids
+    assert any(item.blocking for item in blocking.required_metrics)
+    assert any(finding["source_agent"] == "EvalOps" for finding in blocking.quality_findings)
 
 
 def test_enterprise_evalops_measures_citation_validity_separately_from_density() -> None:

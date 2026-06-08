@@ -210,3 +210,29 @@ Validation:
   focused tests.
 - Focused pytest passed for advisory context scope separation, projection
   metadata, and enterprise RBAC/workspace route isolation.
+
+## 2026-06-08 - C5.5 EvalOps Release Contract
+
+Completed the EvalOps release contract slice.
+
+Changed:
+
+- Added `EvalOpsReleaseContract` and `EvalOpsReleaseMetricRequirement`.
+- Added `backend/packages/evals/release_contract.py`.
+- Added `/api/evals/enterprise/release-contract`.
+- Added `EVALOPS_RELEASE_MODE=advisory|blocking` and `EVALOPS_RELEASE_LIMIT`.
+- Report publish now records the EvalOps release contract in publication
+  metadata, command metadata, and audit metadata.
+- In `blocking` mode, publish returns a 409 when the EvalOps release contract is
+  not allowed.
+- Enterprise Quality Matrix now has an `EvalOps` entry backed by
+  `quality_findings_from_evalops`, so regression gate issues enter the same
+  QualityFinding surface as BusinessQA, EvidenceGap, RedTeam, ClaimValidator,
+  BenchmarkAgent, ReleaseGate, and MemoryAgent.
+
+Validation:
+
+- `ruff check` passed for schema, evals, evals router, enterprise router,
+  runtime service, and focused tests.
+- Focused pytest passed for release-contract route output, advisory vs blocking
+  behavior, publish metadata, and enterprise quality matrix integration.

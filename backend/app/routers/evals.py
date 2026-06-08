@@ -4,9 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.deps import get_app_settings, get_run_service
 from packages.config import Settings
-from packages.evals import build_enterprise_evalops_report
+from packages.evals import build_enterprise_evalops_report, build_evalops_release_contract
 from packages.orchestrator.service import RunService
-from packages.schema.evals import EvalJudgeMode, EvalOpsReport
+from packages.schema.evals import (
+    EvalJudgeMode,
+    EvalOpsReleaseContract,
+    EvalOpsReleaseMode,
+    EvalOpsReport,
+)
 
 router = APIRouter()
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
@@ -21,6 +26,52 @@ async def get_enterprise_evalops_report(
     baseline_run_id: str | None = None,
     limit: int = Query(default=30, ge=1, le=200),
     judge_mode: EvalJudgeMode = "heuristic",
+) -> EvalOpsReport:
+    return _enterprise_evalops_report(
+        service=service,
+        settings=settings,
+        project_id=project_id,
+        baseline_run_id=baseline_run_id,
+        limit=limit,
+        judge_mode=judge_mode,
+    )
+
+
+@router.get(
+    "/evals/enterprise/release-contract",
+    response_model=EvalOpsReleaseContract,
+)
+async def get_enterprise_evalops_release_contract(
+    service: RunServiceDep,
+    settings: SettingsDep,
+    project_id: str | None = None,
+    baseline_run_id: str | None = None,
+    limit: int = Query(default=30, ge=1, le=200),
+    judge_mode: EvalJudgeMode = "heuristic",
+    mode: EvalOpsReleaseMode | None = None,
+) -> EvalOpsReleaseContract:
+    report = _enterprise_evalops_report(
+        service=service,
+        settings=settings,
+        project_id=project_id,
+        baseline_run_id=baseline_run_id,
+        limit=limit,
+        judge_mode=judge_mode,
+    )
+    return build_evalops_release_contract(
+        report,
+        mode=mode or settings.evalops_release_mode,
+    )
+
+
+def _enterprise_evalops_report(
+    *,
+    service: RunService,
+    settings: Settings,
+    project_id: str | None,
+    baseline_run_id: str | None,
+    limit: int,
+    judge_mode: EvalJudgeMode,
 ) -> EvalOpsReport:
     runs = [
         detail

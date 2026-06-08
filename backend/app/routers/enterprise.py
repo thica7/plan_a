@@ -15,6 +15,7 @@ from app.deps import (
     get_enterprise_store,
     get_enterprise_user_context,
     get_preference_memory,
+    get_run_service,
     get_runtime_command_service,
 )
 from packages.agents import AgentExecutionRequest, AgentExecutionResult
@@ -66,6 +67,7 @@ from packages.enterprise import (
 from packages.enterprise import (
     report_release_gate_scope as _report_release_gate_scope,
 )
+from packages.evals import build_enterprise_evalops_report, build_evalops_release_contract
 from packages.governance import (
     ModelPolicyReport,
     TenantGovernanceReadinessReport,
@@ -76,9 +78,11 @@ from packages.governance import (
 )
 from packages.identity import compute_content_hash, stable_prefixed_id
 from packages.memory import PreferenceMemoryStore
+from packages.orchestrator.service import RunService
 from packages.quality import (
     quality_findings_from_business_qa,
     quality_findings_from_claim_validation,
+    quality_findings_from_evalops,
     quality_findings_from_evidence_gaps,
     quality_findings_from_red_team,
     quality_findings_from_release_gate,
@@ -169,6 +173,7 @@ SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 ArtifactStorageDep = Annotated[ArtifactStorage, Depends(get_artifact_storage)]
 PreferenceMemoryDep = Annotated[PreferenceMemoryStore, Depends(get_preference_memory)]
 RuntimeCommandServiceDep = Annotated[RuntimeCommandService, Depends(get_runtime_command_service)]
+RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 
 
 @router.get("/enterprise/workspaces", response_model=list[WorkspaceRecord])
@@ -847,6 +852,7 @@ async def get_project_quality_matrix(
     user: EnterpriseUserDep,
     settings: SettingsDep,
     memory: PreferenceMemoryDep,
+    run_service: RunServiceDep,
 ) -> QualityAgentMatrix:
     plan = _business_plan_for_project(project_id, store, user)
     competitors = store.list_competitors(project_id=project_id)
@@ -1086,6 +1092,11 @@ async def get_project_quality_matrix(
                 findings=release_gate_quality_findings,
             )
         ),
+        _evalops_quality_matrix_entry(
+            project_id=project_id,
+            run_service=run_service,
+            settings=settings,
+        ),
         QualityAgentMatrixEntry(
             agent_name="MemoryAgent",
             framework="deterministic-preference-memory",
@@ -1117,6 +1128,70 @@ async def get_project_quality_matrix(
         entries=entries,
         findings=findings,
         groups=_quality_finding_groups(findings, entries=entries),
+    )
+
+
+def _evalops_quality_matrix_entry(
+    *,
+    project_id: str,
+    run_service: RunService,
+    settings: Settings,
+) -> QualityAgentMatrixEntry:
+    runs = [
+        detail
+        for summary in run_service.list_runs()
+        if (detail := run_service.get_run(summary.id)) is not None
+        and detail.project_id == project_id
+    ]
+    report = build_enterprise_evalops_report(
+        runs,
+        limit=settings.evalops_release_limit,
+        judge_mode="heuristic",
+        settings=settings,
+    )
+    contract = build_evalops_release_contract(
+        report,
+        mode=settings.evalops_release_mode,
+    )
+    findings = quality_findings_from_evalops(report)
+    blocker_count = sum(1 for finding in findings if finding.severity == "blocker")
+    warn_count = sum(1 for finding in findings if finding.severity == "warn")
+    score = max(
+        0,
+        min(
+            100,
+            round(report.report_quality_score * 0.45 + report.golden_set_pass_rate * 55)
+            - blocker_count * 20
+            - warn_count * 6,
+        ),
+    )
+    return QualityAgentMatrixEntry(
+        agent_name="EvalOps",
+        framework="deterministic-release-contract",
+        status=_matrix_status(blocker_count, warn_count),
+        score=score,
+        blocker_count=blocker_count,
+        warn_count=warn_count,
+        finding_count=len(findings),
+        summary=(
+            f"EvalOps release contract is {contract.decision}; "
+            f"regression gate {report.regression_gate_status}."
+        ),
+        finding_ids=[finding.id for finding in findings],
+        findings=findings,
+        metadata={
+            "policy_version": contract.policy_version,
+            "mode": contract.mode,
+            "decision": contract.decision,
+            "allowed": contract.allowed,
+            "regression_gate_status": report.regression_gate_status,
+            "regression_gate_reason": report.regression_gate_reason,
+            "evaluated_run_ids": report.evaluated_run_ids,
+            "required_metric_count": len(contract.required_metrics),
+            "blocking_issue_ids": contract.blocking_issue_ids,
+            "warning_issue_ids": contract.warning_issue_ids,
+            "quality_finding_schema": "QualityFinding",
+        },
     )
 
 
@@ -1212,18 +1287,20 @@ def _with_quality_peer_review_metadata(
     available_agents = {entry.agent_name for entry in entries}
     review_targets = {
         "BusinessQA": ["EvidenceGap", "BenchmarkAgent", "ReleaseGate"],
-        "ClaimValidator": ["BusinessQA", "BenchmarkAgent", "ReleaseGate"],
-        "EvidenceGap": ["BusinessQA", "BenchmarkAgent", "ReleaseGate"],
+        "ClaimValidator": ["BusinessQA", "BenchmarkAgent", "ReleaseGate", "EvalOps"],
+        "EvidenceGap": ["BusinessQA", "BenchmarkAgent", "ReleaseGate", "EvalOps"],
         "RedTeam": [
             "BusinessQA",
             "ClaimValidator",
             "EvidenceGap",
             "BenchmarkAgent",
             "ReleaseGate",
+            "EvalOps",
         ],
-        "BenchmarkAgent": ["ClaimValidator", "EvidenceGap", "RedTeam", "ReleaseGate"],
-        "ReleaseGate": ["BenchmarkAgent"],
+        "BenchmarkAgent": ["ClaimValidator", "EvidenceGap", "RedTeam", "ReleaseGate", "EvalOps"],
+        "ReleaseGate": ["BenchmarkAgent", "EvalOps"],
         "MemoryAgent": ["BusinessQA", "RedTeam"],
+        "EvalOps": ["BenchmarkAgent", "ReleaseGate", "ClaimValidator"],
     }
     reviewed_by: dict[str, list[str]] = {agent: [] for agent in available_agents}
     for reviewer, targets in review_targets.items():

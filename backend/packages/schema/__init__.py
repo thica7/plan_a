@@ -67,6 +67,8 @@ from packages.schema.evals import (
     EvalOpsMetric,
     EvalOpsQualityChainStep,
     EvalOpsRegressionGateIssue,
+    EvalOpsReleaseContract,
+    EvalOpsReleaseMetricRequirement,
     EvalOpsReport,
 )
 from packages.schema.models import (
@@ -143,6 +145,8 @@ __all__ = [
     "EvalOpsMetric",
     "EvalOpsQualityChainStep",
     "EvalOpsRegressionGateIssue",
+    "EvalOpsReleaseContract",
+    "EvalOpsReleaseMetricRequirement",
     "EvalOpsReport",
     "FeatureNode",
     "FeatureTree",

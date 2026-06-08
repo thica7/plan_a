@@ -89,7 +89,8 @@ C5.1 Runtime command layer: complete
 C5.2 Artifact lifecycle: complete
 C5.3 Tenant governance boundary: complete
 C5.4 Advisory context governance: complete
-C5.5-C5.7: pending
+C5.5 EvalOps release contract: complete
+C5.6-C5.7: pending
 ```
 
 ## CC Recommendation Integration
@@ -423,6 +424,20 @@ Acceptance:
 - Regression gate issues appear in the unified finding matrix.
 - Publish flow can explain whether EvalOps is advisory or blocking.
 - Tests cover both advisory and blocking modes.
+
+Progress on 2026-06-08:
+
+- Added `EvalOpsReleaseContract` and `EvalOpsReleaseMetricRequirement`.
+- Added `build_evalops_release_contract`.
+- Added `/api/evals/enterprise/release-contract`.
+- Added `EVALOPS_RELEASE_MODE=advisory|blocking` and
+  `EVALOPS_RELEASE_LIMIT`.
+- Report publish now records the EvalOps release contract in publication
+  metadata and audit metadata. Blocking mode rejects publish when EvalOps fails.
+- Enterprise Quality Matrix now includes an `EvalOps` entry with
+  QualityFinding mappings from regression gate issues.
+- Tests cover advisory vs blocking contract behavior, route output, publish
+  metadata, and matrix integration.
 
 Suggested commits:
 

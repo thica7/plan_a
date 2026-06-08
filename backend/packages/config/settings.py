@@ -149,6 +149,8 @@ class Settings:
     auth_policy_engine: Literal["internal", "opa", "cerbos"] = "internal"
     auth_policy_url: str | None = None
     auth_policy_timeout_seconds: float = 1.0
+    evalops_release_mode: Literal["advisory", "blocking"] = "advisory"
+    evalops_release_limit: int = 30
 
     @property
     def has_llm_credentials(self) -> bool:
@@ -345,5 +347,15 @@ def get_settings() -> Settings:
         auth_policy_timeout_seconds=max(
             0.1,
             min(10.0, float(os.getenv("AUTH_POLICY_TIMEOUT_SECONDS", "1.0"))),
+        ),
+        evalops_release_mode=cast(
+            Literal["advisory", "blocking"],
+            _env_choice("EVALOPS_RELEASE_MODE", "advisory", {"advisory", "blocking"}),
+        ),
+        evalops_release_limit=_env_int(
+            "EVALOPS_RELEASE_LIMIT",
+            30,
+            minimum=1,
+            maximum=200,
         ),
     )
