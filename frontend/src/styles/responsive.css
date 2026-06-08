@@ -1,0 +1,118 @@
+@media (max-width: 1180px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-bottom: 1px solid var(--border-soft);
+    display: grid;
+    gap: 14px;
+    min-height: auto;
+    position: static;
+  }
+
+  .nav-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sidebar-system {
+    display: none;
+  }
+
+  .run-builder,
+  .run-command-grid,
+  .detail-grid,
+  .enterprise-layout,
+  .enterprise-shell-grid,
+  .workspace-two-column,
+  .report-studio-layout,
+  .project-summary,
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .run-builder-rail,
+  .project-rail,
+  .inspector-panel,
+  .version-rail,
+  .report-inspector {
+    max-height: none;
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    align-items: flex-start;
+    display: grid;
+    height: auto;
+    padding: 12px 16px;
+  }
+
+  .main-pane {
+    padding: 18px 14px 36px;
+  }
+
+  .page-header,
+  .page-header-split {
+    display: grid;
+  }
+
+  .page-header h1 {
+    font-size: 27px;
+  }
+
+  .header-stat {
+    justify-items: start;
+  }
+
+  .nav-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field-grid,
+  .preset-grid,
+  .skill-grid,
+  .metric-grid,
+  .source-trace-metrics,
+  .source-trace-grid,
+  .playback-meta,
+  .playback-columns,
+  .revision-diff-grid,
+  .history-row,
+  .trace-list li,
+  .span-list li {
+    grid-template-columns: 1fr;
+  }
+
+  .history-row {
+    align-items: start;
+  }
+
+  .panel,
+  .qa-panel,
+  .form-section {
+    padding: 14px;
+  }
+
+  .project-rail {
+    max-height: 360px;
+    overflow: auto;
+  }
+
+  .segmented-control,
+  .enterprise-tabs,
+  .module-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .data-table {
+    overflow-x: auto;
+  }
+
+  .action-grid {
+    grid-template-columns: 1fr;
+  }
+
+}
