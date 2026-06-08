@@ -58,6 +58,15 @@ def test_local_artifact_storage_writes_text_payload_with_stable_metadata(
     assert artifact.compliance_metadata["robots_status"] == "allowed"
     assert artifact.byte_size == len(b"<html>Cursor pricing</html>")
     assert artifact.uri.startswith("local://workspace-a/")
+    lifecycle = artifact.metadata["artifact_lifecycle"]
+    assert lifecycle["version"] == "c5.2"
+    assert lifecycle["material_kind"] == "web_snapshot"
+    assert lifecycle["storage_backend"] == "local"
+    assert lifecycle["retention_policy"] == "90d"
+    assert lifecycle["source_policy_status"] == "allowed"
+    assert lifecycle["links"]["evidence_id"] == "evidence-a"
+    assert lifecycle["links"]["report_version_id"] == "report-v1"
+    assert lifecycle["replay"]["has_payload"] is True
     assert written_files[
         (root / "workspace-a" / artifact.id / artifact.filename).resolve()
     ] == b"<html>Cursor pricing</html>"
@@ -106,6 +115,12 @@ def test_external_artifact_storage_records_s3_pointer() -> None:
     assert artifact.metadata["external_pointer"] is True
     assert artifact.metadata["configured_storage_backend"] == "s3"
     assert artifact.metadata["detected_storage_backend"] == "s3"
+    lifecycle = artifact.metadata["artifact_lifecycle"]
+    assert lifecycle["storage_backend"] == "s3"
+    assert lifecycle["material_kind"] == "web_snapshot"
+    assert lifecycle["retention_policy"] == "legal_hold"
+    assert lifecycle["source_policy_status"] == "approved"
+    assert lifecycle["replay"]["external_pointer"] is True
 
 
 def test_external_artifact_storage_rejects_wrong_scheme() -> None:
@@ -134,6 +149,7 @@ def test_build_artifact_storage_selects_pointer_backend() -> None:
 
     assert artifact.storage_backend == "external"
     assert artifact.metadata["configured_storage_backend"] == "external"
+    assert artifact.metadata["artifact_lifecycle"]["storage_backend"] == "external"
 
 
 def _artifact_root(name: str) -> Path:

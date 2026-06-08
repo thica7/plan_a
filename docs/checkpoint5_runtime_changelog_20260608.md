@@ -68,3 +68,33 @@ Remaining C5.1 scope:
   until the product has a real archive workflow.
 - Decision Replay/SSE still need a dedicated command event view beyond the run
   event emitted by HITL commands.
+
+## 2026-06-08 - C5.2 Artifact Lifecycle Vocabulary
+
+Implemented the first Artifact And Source Material Lifecycle slice.
+
+Changed:
+
+- Added `backend/packages/artifacts/lifecycle.py` with one lifecycle vocabulary
+  for captured/imported, stored, linked, governed, retained, and replayable
+  source materials.
+- Local artifact storage and external/S3/OSS pointer storage now add
+  `artifact_lifecycle` metadata to every `ArtifactRecord`.
+- Source snapshots now copy linked `evidence_id`, `raw_source_id`,
+  `source_registry_id`, `report_version_id`, source policy status, and PII
+  redaction status into lifecycle links.
+- Web snapshots, survey imports, interview/manual transcript artifact types,
+  and report exports share the same lifecycle metadata shape.
+
+Validation:
+
+- `ruff check` passed for artifact lifecycle, source snapshots, and focused
+  tests.
+- Focused pytest passed for local artifact storage, external/S3 pointers,
+  source snapshot links, and redacted survey snapshot lifecycle metadata.
+
+Remaining C5.2 scope:
+
+- Add a read/report helper that summarizes artifact lifecycle status per
+  project or report version.
+- Surface lifecycle evidence in Decision Replay or the artifact detail API.

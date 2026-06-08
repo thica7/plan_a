@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
-from packages.artifacts import ArtifactStorage
+from packages.artifacts import ArtifactStorage, with_artifact_lifecycle_links
 from packages.compliance import redact_text
 from packages.enterprise.store import EnterpriseStore, source_registry_id
 from packages.identity import (
@@ -76,14 +76,31 @@ def capture_source_snapshot(
     )
     if evidence is not None:
         evidence = store.upsert_evidence(evidence)
-        artifact = artifact.model_copy(
-            update={
-                "evidence_id": evidence.id,
-                "metadata": {
-                    **artifact.metadata,
-                    **_source_identity_metadata(evidence),
-                },
-            }
+        artifact = with_artifact_lifecycle_links(
+            artifact.model_copy(
+                update={
+                    "evidence_id": evidence.id,
+                    "metadata": {
+                        **artifact.metadata,
+                        **_source_identity_metadata(evidence),
+                    },
+                }
+            ),
+            raw_source_id=evidence.raw_source_id,
+            source_registry_id=source.id,
+            evidence_id=evidence.id,
+            report_version_id=request.report_version_id,
+            source_policy_status=_lifecycle_source_policy_status(request),
+            pii_redaction_status=_lifecycle_redaction_status(redaction_counts),
+        )
+    else:
+        artifact = with_artifact_lifecycle_links(
+            artifact,
+            source_registry_id=source.id,
+            evidence_id=request.evidence_id,
+            report_version_id=request.report_version_id,
+            source_policy_status=_lifecycle_source_policy_status(request),
+            pii_redaction_status=_lifecycle_redaction_status(redaction_counts),
         )
     stored_artifact = store.upsert_artifact(artifact)
     return SourceSnapshotResult(
@@ -372,3 +389,24 @@ def _snapshot_redaction_metadata(counts: dict[str, int]) -> dict[str, object]:
         "redaction_count": sum(positive_counts.values()),
         "redaction_counts": positive_counts,
     }
+
+
+def _lifecycle_redaction_status(counts: dict[str, int]) -> str:
+    return "redacted" if any(value > 0 for value in counts.values()) else "not_required"
+
+
+def _lifecycle_source_policy_status(request: SourceSnapshotCreateRequest) -> str:
+    explicit = _metadata_text(
+        request.compliance_metadata,
+        "source_policy_status",
+        "source_policy",
+    )
+    if explicit:
+        return explicit
+    if request.robots_status == "allowed":
+        return "allowed"
+    if request.robots_status in {"blocked", "error"}:
+        return "review_required"
+    if request.source_url:
+        return "unknown"
+    return "not_required"

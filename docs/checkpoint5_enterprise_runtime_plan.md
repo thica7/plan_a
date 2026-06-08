@@ -85,8 +85,9 @@ Current status:
 
 ```text
 C5.0 Runtime smoke gate: complete
-C5.1 Runtime command layer: next
-C5.2-C5.7: pending
+C5.1 Runtime command layer: complete
+C5.2 Artifact lifecycle: in progress
+C5.3-C5.7: pending
 ```
 
 ## CC Recommendation Integration
@@ -263,6 +264,15 @@ Acceptance:
 - Decision replay can explain which artifact supported a source or report
   version.
 - Tests cover local and external artifact backends without requiring S3/OSS.
+
+Progress on 2026-06-08:
+
+- Added `artifact_lifecycle` metadata to local, external, S3, and OSS artifact
+  records.
+- Source snapshots now sync evidence, raw source, source registry, report
+  version, source policy, and PII redaction status into lifecycle links.
+- Tests cover local payloads, external pointers, S3 pointers, and survey
+  snapshot redaction lifecycle.
 
 Suggested commit:
 

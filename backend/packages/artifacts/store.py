@@ -7,6 +7,10 @@ import re
 from pathlib import Path
 from typing import Literal, Protocol
 
+from packages.artifacts.lifecycle import (
+    artifact_lifecycle_metadata,
+    merge_artifact_lifecycle_metadata,
+)
 from packages.identity import compute_artifact_id, compute_content_hash
 from packages.schema.enterprise import ArtifactCreateRequest, ArtifactRecord, ArtifactStorageBackend
 
@@ -58,6 +62,12 @@ class LocalArtifactStorage:
             raise ArtifactStorageError("Artifact target path escapes storage root.")
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_bytes(payload)
+        lifecycle = artifact_lifecycle_metadata(
+            request,
+            storage_backend="local",
+            content_hash=content_hash,
+            byte_size=len(payload),
+        )
 
         return ArtifactRecord(
             id=artifact_id,
@@ -77,7 +87,10 @@ class LocalArtifactStorage:
             created_by=actor_id,
             retention_policy=request.retention_policy,
             compliance_metadata=request.compliance_metadata,
-            metadata={**request.metadata, "storage_root": str(root_path)},
+            metadata=merge_artifact_lifecycle_metadata(
+                {**request.metadata, "storage_root": str(root_path)},
+                lifecycle,
+            ),
         )
 
 
@@ -123,6 +136,13 @@ def external_artifact_record(
     if not request.external_uri:
         raise ArtifactStorageError("external_uri is required for external artifact records.")
     content_hash = hashlib.sha256(request.external_uri.encode("utf-8")).hexdigest()
+    storage_backend = _external_backend(request.external_uri)
+    lifecycle = artifact_lifecycle_metadata(
+        request,
+        storage_backend=storage_backend,
+        content_hash=content_hash,
+        byte_size=0,
+    )
     artifact_id = artifact_id_for(
         workspace_id=request.workspace_id,
         project_id=request.project_id,
@@ -131,7 +151,6 @@ def external_artifact_record(
         filename=request.filename,
         content_hash=content_hash,
     )
-    storage_backend = _external_backend(request.external_uri)
     return ArtifactRecord(
         id=artifact_id,
         workspace_id=request.workspace_id,
@@ -150,11 +169,14 @@ def external_artifact_record(
         created_by=actor_id,
         retention_policy=request.retention_policy,
         compliance_metadata=request.compliance_metadata,
-        metadata={
-            **request.metadata,
-            "external_pointer": True,
-            "detected_storage_backend": storage_backend,
-        },
+        metadata=merge_artifact_lifecycle_metadata(
+            {
+                **request.metadata,
+                "external_pointer": True,
+                "detected_storage_backend": storage_backend,
+            },
+            lifecycle,
+        ),
     )
 
 

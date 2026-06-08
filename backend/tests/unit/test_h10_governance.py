@@ -68,6 +68,13 @@ def test_source_snapshot_assets_external_s3_pointer_and_source_registry() -> Non
     assert result.artifact.metadata["raw_source_id"] == evidence.raw_source_id
     assert evidence.id in result.artifact.metadata["source_tokens"]
     assert evidence.raw_source_id in result.artifact.metadata["source_tokens"]
+    lifecycle = result.artifact.metadata["artifact_lifecycle"]
+    assert lifecycle["material_kind"] == "webpage"
+    assert lifecycle["source_policy_status"] == "approved"
+    assert lifecycle["links"]["source_registry_id"] == result.source.id
+    assert lifecycle["links"]["evidence_id"] == evidence.id
+    assert lifecycle["links"]["raw_source_id"] == evidence.raw_source_id
+    assert lifecycle["links"]["report_version_id"] == report.id
     assert result.source.metadata["raw_source_id"] == evidence.raw_source_id
     assert store.get_artifact(result.artifact.id) == result.artifact
     assert any(item.id == result.source.id for item in store.list_source_registry())
@@ -146,6 +153,12 @@ def test_manual_survey_snapshot_creates_research_evidence(tmp_path: Path) -> Non
     assert result.artifact.metadata["redaction_count"] >= 3
     assert result.artifact.metadata["redaction_counts"]["email"] >= 2
     assert result.artifact.metadata["redaction_counts"]["api_key"] == 1
+    lifecycle = result.artifact.metadata["artifact_lifecycle"]
+    assert lifecycle["material_kind"] == "survey"
+    assert lifecycle["pii_redaction_status"] == "redacted"
+    assert lifecycle["links"]["evidence_id"] == evidence.id
+    assert lifecycle["links"]["raw_source_id"] == evidence.raw_source_id
+    assert lifecycle["links"]["report_version_id"] == report.id
     assert evidence.metadata["redaction_applied"] is True
     artifact_path = Path(str(result.artifact.metadata["storage_root"])) / Path(
         result.artifact.uri.removeprefix("local://")
