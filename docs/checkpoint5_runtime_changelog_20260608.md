@@ -301,3 +301,28 @@ Validation:
 - Focused pytest passed for monitor job lifecycle commands, paused-trigger
   blocking, Temporal trigger request shape, audit events, and run outcome
   recording.
+
+## 2026-06-08 - C5.7 Monitor Job Postgres Persistence
+
+Completed the durable store slice for monitor jobs.
+
+Changed:
+
+- Added `monitor_jobs` to `backend/db/postgres/001_enterprise_core.sql`.
+- Added workspace/project indexes for monitor job lookup.
+- Added workspace RLS policy for `monitor_jobs`.
+- Added Postgres-backed `EnterpriseStore` methods for:
+  - listing monitor jobs,
+  - getting a monitor job,
+  - upserting monitor jobs,
+  - updating monitor jobs,
+  - recording monitor run outcomes.
+- Updated strict Postgres schema tests so monitor jobs are part of the expected
+  enterprise table set and tenant isolation surface.
+
+Validation:
+
+- `ruff check` passed for Postgres store, enterprise store, schema, runtime
+  service, workflow activities, and monitor job tests.
+- Focused pytest passed for strict Postgres schema checks and monitor job
+  command tests.

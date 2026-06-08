@@ -51,6 +51,8 @@ from packages.schema.enterprise import (
     EvidenceReindexResult,
     EvidenceSearchHit,
     MemoryCandidate,
+    MonitorJobRecord,
+    MonitorJobUpdateRequest,
     NotificationRecord,
     ProjectRecord,
     ReportVersionRecord,
@@ -715,6 +717,163 @@ class EnterprisePostgresStore:
                 )
             conn.commit()
         return notification
+
+    def list_monitor_jobs(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+        status: str | None = None,
+    ) -> list[MonitorJobRecord]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if workspace_id:
+            clauses.append("workspace_id = %s")
+            params.append(workspace_id)
+        if project_id:
+            clauses.append("project_id = %s")
+            params.append(project_id)
+        if status:
+            clauses.append("status = %s")
+            params.append(status)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        return self._list_models(
+            f"""
+            SELECT *
+            FROM monitor_jobs
+            {where}
+            ORDER BY updated_at DESC
+            """,
+            tuple(params),
+            MonitorJobRecord,
+        )
+
+    def get_monitor_job(self, monitor_id: str) -> MonitorJobRecord | None:
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            row = conn.execute(
+                "SELECT * FROM monitor_jobs WHERE id = %s",
+                (monitor_id,),
+            ).fetchone()
+        return self._model_from_row(MonitorJobRecord, row) if row else None
+
+    def upsert_monitor_job(
+        self,
+        job: MonitorJobRecord,
+        *,
+        actor_id: str | None = None,
+    ) -> MonitorJobRecord:
+        stored = job.model_copy(update={"updated_at": datetime.utcnow()})
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._upsert_workspace(cur, stored.workspace_id)
+                if stored.created_by:
+                    self._upsert_user_placeholder(cur, stored.created_by)
+                before_row = cur.execute(
+                    "SELECT * FROM monitor_jobs WHERE id = %s",
+                    (stored.id,),
+                ).fetchone()
+                self._upsert_monitor_job(cur, stored)
+                self._append_audit(
+                    cur,
+                    workspace_id=stored.workspace_id,
+                    actor_id=actor_id or DEFAULT_USER_ID,
+                    action="monitor_job.upserted",
+                    resource_type="monitor_job",
+                    resource_id=stored.id,
+                    before=self._model_from_row(MonitorJobRecord, before_row).model_dump(
+                        mode="json"
+                    )
+                    if before_row
+                    else None,
+                    after=stored.model_dump(mode="json"),
+                )
+            conn.commit()
+        return stored
+
+    def update_monitor_job(
+        self,
+        monitor_id: str,
+        update: MonitorJobUpdateRequest,
+        *,
+        actor_id: str | None = None,
+    ) -> MonitorJobRecord | None:
+        current = self.get_monitor_job(monitor_id)
+        if current is None:
+            return None
+        update_values = update.model_dump(exclude_none=True)
+        if "metadata" in update_values:
+            update_values["metadata"] = {
+                **current.metadata,
+                **dict(update_values["metadata"]),
+            }
+        updated = current.model_copy(update={**update_values, "updated_at": datetime.utcnow()})
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._upsert_monitor_job(cur, updated)
+                self._append_audit(
+                    cur,
+                    workspace_id=updated.workspace_id,
+                    actor_id=actor_id or DEFAULT_USER_ID,
+                    action="monitor_job.updated",
+                    resource_type="monitor_job",
+                    resource_id=updated.id,
+                    before=current.model_dump(mode="json"),
+                    after=updated.model_dump(mode="json"),
+                )
+            conn.commit()
+        return updated
+
+    def record_monitor_job_run(
+        self,
+        monitor_id: str,
+        *,
+        status: str,
+        workflow_id: str | None = None,
+        run_id: str | None = None,
+        report_version_id: str | None = None,
+        error: str = "",
+        actor_id: str | None = None,
+    ) -> MonitorJobRecord | None:
+        current = self.get_monitor_job(monitor_id)
+        if current is None:
+            return None
+        now = datetime.utcnow()
+        updated = current.model_copy(
+            update={
+                "last_status": status,
+                "last_workflow_id": workflow_id or current.last_workflow_id,
+                "last_run_id": run_id or current.last_run_id,
+                "last_report_version_id": report_version_id
+                or current.last_report_version_id,
+                "last_error": error,
+                "last_started_at": now if status == "running" else current.last_started_at,
+                "last_completed_at": now
+                if status in {"completed", "interrupted", "failed"}
+                else current.last_completed_at,
+                "updated_at": now,
+            }
+        )
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                self._upsert_monitor_job(cur, updated)
+                self._append_audit(
+                    cur,
+                    workspace_id=updated.workspace_id,
+                    actor_id=actor_id or DEFAULT_USER_ID,
+                    action="monitor_job.run_recorded",
+                    resource_type="monitor_job",
+                    resource_id=updated.id,
+                    before=current.model_dump(mode="json"),
+                    after={
+                        "status": status,
+                        "workflow_id": workflow_id,
+                        "run_id": run_id,
+                        "report_version_id": report_version_id,
+                        "error": error,
+                    },
+                )
+            conn.commit()
+        return updated
 
     def list_projects(self, workspace_id: str | None = None) -> list[ProjectRecord]:
         if workspace_id:
@@ -2117,6 +2276,73 @@ class EnterprisePostgresStore:
                 notification.sent_at,
                 notification.read_at,
                 self._json(notification.metadata),
+            ),
+        )
+
+    def _upsert_monitor_job(self, cur: Any, job: MonitorJobRecord) -> None:
+        cur.execute(
+            """
+            INSERT INTO monitor_jobs (
+                id, workspace_id, project_id, name, dimensions, competitor_ids, schedule,
+                interval_seconds, max_cycles, execution_mode, alert_policy, release_policy,
+                notification_target, status, last_status, last_workflow_id, last_run_id,
+                last_report_version_id, last_error, last_started_at, last_completed_at,
+                next_run_at, created_by, created_at, updated_at, metadata
+            )
+            VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name,
+                dimensions = EXCLUDED.dimensions,
+                competitor_ids = EXCLUDED.competitor_ids,
+                schedule = EXCLUDED.schedule,
+                interval_seconds = EXCLUDED.interval_seconds,
+                max_cycles = EXCLUDED.max_cycles,
+                execution_mode = EXCLUDED.execution_mode,
+                alert_policy = EXCLUDED.alert_policy,
+                release_policy = EXCLUDED.release_policy,
+                notification_target = EXCLUDED.notification_target,
+                status = EXCLUDED.status,
+                last_status = EXCLUDED.last_status,
+                last_workflow_id = EXCLUDED.last_workflow_id,
+                last_run_id = EXCLUDED.last_run_id,
+                last_report_version_id = EXCLUDED.last_report_version_id,
+                last_error = EXCLUDED.last_error,
+                last_started_at = EXCLUDED.last_started_at,
+                last_completed_at = EXCLUDED.last_completed_at,
+                next_run_at = EXCLUDED.next_run_at,
+                updated_at = EXCLUDED.updated_at,
+                metadata = EXCLUDED.metadata
+            """,
+            (
+                job.id,
+                job.workspace_id,
+                job.project_id,
+                self._text(job.name),
+                self._json(job.dimensions),
+                self._json(job.competitor_ids),
+                self._text(job.schedule),
+                job.interval_seconds,
+                job.max_cycles,
+                job.execution_mode,
+                job.alert_policy,
+                job.release_policy,
+                self._text(job.notification_target),
+                job.status,
+                job.last_status,
+                job.last_workflow_id,
+                job.last_run_id,
+                job.last_report_version_id,
+                self._text(job.last_error),
+                job.last_started_at,
+                job.last_completed_at,
+                job.next_run_at,
+                job.created_by,
+                job.created_at,
+                job.updated_at,
+                self._json(job.metadata),
             ),
         )
 

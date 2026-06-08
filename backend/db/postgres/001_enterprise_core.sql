@@ -87,6 +87,40 @@ CREATE TABLE IF NOT EXISTS notifications (
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
+CREATE TABLE IF NOT EXISTS monitor_jobs (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    dimensions JSONB NOT NULL DEFAULT '[]'::jsonb,
+    competitor_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    schedule TEXT NOT NULL DEFAULT 'manual',
+    interval_seconds INTEGER NOT NULL DEFAULT 604800 CHECK (interval_seconds >= 1),
+    max_cycles INTEGER NOT NULL DEFAULT 1 CHECK (max_cycles >= 1),
+    execution_mode TEXT NOT NULL DEFAULT 'auto'
+        CHECK (execution_mode IN ('auto', 'demo', 'real')),
+    alert_policy TEXT NOT NULL DEFAULT 'all_anomalies'
+        CHECK (alert_policy IN ('all_anomalies', 'critical_only', 'none')),
+    release_policy TEXT NOT NULL DEFAULT 'review_required'
+        CHECK (release_policy IN ('review_required', 'manual_only', 'auto_publish_allowed')),
+    notification_target TEXT NOT NULL DEFAULT 'in_app',
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'paused', 'disabled')),
+    last_status TEXT NOT NULL DEFAULT 'idle'
+        CHECK (last_status IN ('idle', 'running', 'completed', 'interrupted', 'failed')),
+    last_workflow_id TEXT,
+    last_run_id TEXT,
+    last_report_version_id TEXT,
+    last_error TEXT NOT NULL DEFAULT '',
+    last_started_at TIMESTAMPTZ,
+    last_completed_at TIMESTAMPTZ,
+    next_run_at TIMESTAMPTZ,
+    created_by TEXT REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
 CREATE TABLE IF NOT EXISTS competitors (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -346,6 +380,10 @@ CREATE INDEX IF NOT EXISTS idx_notifications_workspace_created
     ON notifications(workspace_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_workspace_status
     ON notifications(workspace_id, status);
+CREATE INDEX IF NOT EXISTS idx_monitor_jobs_workspace_status
+    ON monitor_jobs(workspace_id, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_monitor_jobs_project
+    ON monitor_jobs(project_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_competitors_workspace ON competitors(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_project_dimension
@@ -518,6 +556,19 @@ CREATE POLICY tenant_isolation_projects ON projects
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation_notifications ON notifications;
 CREATE POLICY tenant_isolation_notifications ON notifications
+    FOR ALL
+    USING (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    )
+    WITH CHECK (
+        COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')
+        OR workspace_id = NULLIF(current_setting('app.current_workspace_id', true), '')
+    );
+
+ALTER TABLE monitor_jobs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_monitor_jobs ON monitor_jobs;
+CREATE POLICY tenant_isolation_monitor_jobs ON monitor_jobs
     FOR ALL
     USING (
         COALESCE(current_setting('app.service_role', true), 'off') IN ('on', 'true', '1')

@@ -526,6 +526,8 @@ Implementation status:
   records the workflow id and running state on the job.
 - Monitor cycle activities write run/report results and failures back to the
   monitor job record.
+- Postgres now has `monitor_jobs` persistence, indexes, and workspace RLS
+  policies behind the same `EnterpriseStore` boundary.
 
 Implementation direction:
 

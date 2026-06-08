@@ -18,6 +18,7 @@ def test_phase1_postgres_schema_has_strict_core_tables() -> None:
         "users",
         "workspace_members",
         "notifications",
+        "monitor_jobs",
         "projects",
         "competitors",
         "project_competitors",
@@ -97,6 +98,18 @@ def test_phase5_notifications_schema_is_present() -> None:
     assert "idx_notifications_workspace_status" in sql
 
 
+def test_phase5_monitor_jobs_schema_is_present() -> None:
+    sql = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS monitor_jobs" in sql
+    assert "workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE" in sql
+    assert "project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE" in sql
+    assert "CHECK (status IN ('active', 'paused', 'disabled'))" in sql
+    assert "CHECK (last_status IN ('idle', 'running', 'completed', 'interrupted', 'failed'))" in sql
+    assert "idx_monitor_jobs_workspace_status" in sql
+    assert "idx_monitor_jobs_project" in sql
+
+
 def test_phase5_workspace_quota_schema_is_present() -> None:
     sql = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
 
@@ -132,6 +145,7 @@ def test_phase5_postgres_schema_has_workspace_rls_guardrails() -> None:
         "workspace_members",
         "projects",
         "notifications",
+        "monitor_jobs",
         "competitors",
         "project_competitors",
         "runs",
