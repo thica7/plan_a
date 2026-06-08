@@ -1,52 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 
-import {
-  approveReportWorkflow,
-  exportReportVersion,
-  fillProjectEvidenceGaps,
-  getEnterpriseEvalOps,
-  getModelPolicy,
-  getModelRouteDecision,
-  getProjectBusinessPlan,
-  getProjectClaimValidation,
-  getProjectCompetitorScores,
-  getProjectEvidenceGaps,
-  getProjectQAEvaluation,
-  getProjectQualityMatrix,
-  getProjectReadinessScore,
-  getProjectRedTeam,
-  getReportReleaseGate,
-  getWorkspaceQuotaDecision,
-  getWorkspaceRetentionReport,
-  getWorkspaceUsage,
-  listArtifacts,
-  listEnterpriseAuditLogs,
-  listEnterpriseCompetitors,
-  listEnterpriseNotifications,
-  listEnterpriseProjects,
-  listProjectClaims,
-  listProjectEvidence,
-  listProjectReportVersions,
-  listSourceRegistry,
-  publishReportVersion,
-  rejectReportWorkflow,
-  startReportApprovalWorkflow,
-  updateEvidenceQuality,
-} from "../../api/client";
+import { fillProjectEvidenceGaps, updateEvidenceQuality } from "../../api/client";
 import type {
   ArtifactRecord,
   EvidenceGapFillResult,
   EvidenceQualityLabel,
-  EvidenceRecord,
   ProjectRecord,
   ReportReleaseGate,
-  ReportVersionRecord,
 } from "../../api/types";
-import { buildReportSourceBundle } from "../report/sourceBundle";
+import { loadProjectCore, loadProjectSignals, loadReleaseGate, loadWorkbenchProjects } from "./dataLoaders";
+import { exportReportArtifact, performReportAction, type ReportAction, type ReportExportFormat } from "./reportOperations";
+import {
+  buildCompetitorMap,
+  buildEvidenceMap,
+  buildWorkbenchReportSources,
+  filterWorkbenchEvidence,
+} from "./selectors";
 import { emptyProjectData, type EnterpriseView, type ProjectData } from "./types";
-
-export type ReportAction = "start_review" | "approve" | "reject" | "publish";
-export type ReportExportFormat = "markdown" | "html" | "csv";
 
 export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
@@ -80,36 +50,19 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     [data.versions, selectedVersionId],
   );
 
-  const competitorById = useMemo(
-    () => new Map(data.competitors.map((competitor) => [competitor.id, competitor])),
-    [data.competitors],
-  );
+  const competitorById = useMemo(() => buildCompetitorMap(data.competitors), [data.competitors]);
 
-  const evidenceById = useMemo(
-    () => new Map(data.evidence.map((item) => [item.id, item])),
-    [data.evidence],
-  );
+  const evidenceById = useMemo(() => buildEvidenceMap(data.evidence), [data.evidence]);
 
   const reportSources = useMemo(
-    () =>
-      buildReportSourceBundle(data.evidence, {
-        competitorById,
-        scopedEvidenceIds: selectedVersion?.evidence_ids ?? null,
-      }),
-    [competitorById, data.evidence, selectedVersion?.evidence_ids],
+    () => buildWorkbenchReportSources(data.evidence, competitorById, selectedVersion),
+    [competitorById, data.evidence, selectedVersion],
   );
 
-  const filteredEvidence = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return data.evidence;
-    return data.evidence.filter((item) => {
-      const competitor = competitorById.get(item.competitor_id)?.name ?? item.competitor_id;
-      return [item.title, item.dimension, item.source_type, item.snippet, competitor]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle);
-    });
-  }, [competitorById, data.evidence, query]);
+  const filteredEvidence = useMemo(
+    () => filterWorkbenchEvidence(data.evidence, competitorById, query),
+    [competitorById, data.evidence, query],
+  );
 
   useEffect(() => {
     if (!selectedProject) {
@@ -128,13 +81,9 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     }
     let active = true;
     setLastExport(null);
-    getReportReleaseGate(selectedVersion.id)
-      .then((gate) => {
-        if (active) setReleaseGate(gate);
-      })
-      .catch(() => {
-        if (active) setReleaseGate(null);
-      });
+    loadReleaseGate(selectedVersion.id).then((gate) => {
+      if (active) setReleaseGate(gate);
+    });
     return () => {
       active = false;
     };
@@ -143,10 +92,10 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
   function refreshProjects() {
     setLoadingProjects(true);
     setError(null);
-    Promise.all([listEnterpriseProjects(), listEnterpriseNotifications({ limit: 8 })])
-      .then(([items, notifications]) => {
-        setProjects(items);
+    loadWorkbenchProjects()
+      .then(({ notifications, projects: items }) => {
         setData((current) => ({ ...current, notifications }));
+        setProjects(items);
         setSelectedProjectId((current) => current ?? items[0]?.id ?? null);
       })
       .catch((err: Error) => {
@@ -161,25 +110,15 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     setError(null);
     setGapFillResult(null);
     try {
-      const [competitors, artifacts, evidence, claims, versions, notifications] = await Promise.all([
-        listEnterpriseCompetitors({ projectId: project.id }),
-        listArtifacts({ projectId: project.id }),
-        listProjectEvidence(project.id),
-        listProjectClaims(project.id),
-        listProjectReportVersions(project.id),
-        listEnterpriseNotifications({ workspaceId: project.workspace_id, limit: 8 }).catch(() => []),
-      ]);
+      const coreData = await loadProjectCore(project);
       setData({
         ...emptyProjectData,
-        artifacts,
-        claims,
-        competitors,
-        evidence,
-        notifications,
-        versions,
+        ...coreData,
       });
       setSelectedVersionId((current) =>
-        current && versions.some((version) => version.id === current) ? current : versions[0]?.id ?? null,
+        current && coreData.versions.some((version) => version.id === current)
+          ? current
+          : coreData.versions[0]?.id ?? null,
       );
       setLoadingProject(false);
       void refreshProjectSignals(project);
@@ -193,60 +132,8 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
 
   async function refreshProjectSignals(project: ProjectRecord) {
     try {
-      const [
-        businessPlan,
-        qaEvaluation,
-        claimValidation,
-        readiness,
-        competitorScores,
-        evidenceGaps,
-        redTeam,
-        matrix,
-        evalOps,
-        registry,
-        modelPolicy,
-        modelRoute,
-        usage,
-        quota,
-        retention,
-        auditLogs,
-      ] = await Promise.all([
-        getProjectBusinessPlan(project.id).catch(() => null),
-        getProjectQAEvaluation(project.id).catch(() => null),
-        getProjectClaimValidation(project.id).catch(() => null),
-        getProjectReadinessScore(project.id).catch(() => null),
-        getProjectCompetitorScores(project.id).catch(() => null),
-        getProjectEvidenceGaps(project.id).catch(() => null),
-        getProjectRedTeam(project.id).catch(() => null),
-        getProjectQualityMatrix(project.id).catch(() => null),
-        getEnterpriseEvalOps({ projectId: project.id }).catch(() => null),
-        listSourceRegistry(project.workspace_id).catch(() => []),
-        getModelPolicy().catch(() => null),
-        getModelRouteDecision().catch(() => null),
-        getWorkspaceUsage(project.workspace_id).catch(() => null),
-        getWorkspaceQuotaDecision(project.workspace_id).catch(() => null),
-        getWorkspaceRetentionReport(project.workspace_id).catch(() => null),
-        listEnterpriseAuditLogs({ workspaceId: project.workspace_id, limit: 50 }).catch(() => []),
-      ]);
-      setData((current) => ({
-        ...current,
-        auditLogs,
-        businessPlan,
-        claimValidation,
-        competitorScores,
-        evidenceGaps,
-        evalOps,
-        matrix,
-        modelPolicy,
-        modelRoute,
-        qaEvaluation,
-        readiness,
-        redTeam,
-        registry,
-        retention,
-        usage,
-        quota,
-      }));
+      const signals = await loadProjectSignals(project);
+      setData((current) => ({ ...current, ...signals }));
     } catch (err) {
       console.warn("Unable to refresh project signals", err);
     } finally {
@@ -286,26 +173,7 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     setReportActionPending(true);
     setError(null);
     try {
-      if (action === "start_review") {
-        await startReportApprovalWorkflow({
-          report_version_id: selectedVersion.id,
-          requested_by: "ui-reviewer",
-          approver_ids: ["ui-reviewer"],
-          timeout_seconds: 3600,
-        });
-      } else if (action === "approve") {
-        await approveReportWorkflow(selectedVersion.id, {
-          approver_id: "ui-reviewer",
-          note: "Approved in report studio",
-        });
-      } else if (action === "reject") {
-        await rejectReportWorkflow(selectedVersion.id, {
-          approver_id: "ui-reviewer",
-          note: "Rejected in report studio",
-        });
-      } else {
-        await publishReportVersion(selectedVersion.id);
-      }
+      await performReportAction(selectedVersion.id, action);
       if (selectedProject) await refreshProject(selectedProject);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Report action failed");
@@ -319,8 +187,8 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     setReportActionPending(true);
     setError(null);
     try {
-      const result = await exportReportVersion(selectedVersion.id, format);
-      setLastExport(result.artifact);
+      const artifact = await exportReportArtifact(selectedVersion.id, format);
+      setLastExport(artifact);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to export report");
     } finally {

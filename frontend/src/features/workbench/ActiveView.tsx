@@ -15,8 +15,8 @@ import { EvidenceCenter } from "./EvidenceCenter";
 import { GovernanceCenter } from "./GovernanceCenter";
 import { OverviewDashboard } from "./OverviewDashboard";
 import { ReportStudio } from "./ReportStudio";
+import type { ReportAction, ReportExportFormat } from "./reportOperations";
 import type { EnterpriseView, ProjectData } from "./types";
-import type { ReportAction, ReportExportFormat } from "./useEnterpriseWorkbenchData";
 
 interface ActiveViewProps {
   activeView: EnterpriseView;

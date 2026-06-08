@@ -9,7 +9,7 @@ import { EmptyState, LoadingState, Panel, StatusPill } from "../../components/ui
 import { ReportView } from "../report/ReportView";
 import type { ReportSourceBundle } from "../report/sourceBundle";
 import { formatDate } from "./format";
-import type { ReportAction, ReportExportFormat } from "./useEnterpriseWorkbenchData";
+import type { ReportAction, ReportExportFormat } from "./reportOperations";
 
 interface ReportStudioProps {
   evidenceById: Map<string, EvidenceRecord>;
