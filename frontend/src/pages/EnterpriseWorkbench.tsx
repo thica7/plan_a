@@ -1,16 +1,12 @@
-import { useMemo, type ReactNode } from "react";
 import {
-  AlertTriangle,
   Bell,
   CalendarClock,
   CheckCircle2,
   Database,
   Download,
-  ExternalLink,
   FileText,
   Gauge,
   GitCompare,
-  Layers,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -22,7 +18,6 @@ import type {
   BusinessIntelPlan,
   BusinessQAEvaluation,
   CompetitorRecord,
-  CompetitorScoreReport,
   DataRetentionReport,
   EvidenceGapFillResult,
   EvidenceGapReport,
@@ -43,6 +38,8 @@ import type {
 import { EmptyState, LoadingState, MetricCard, PageHeader, Panel, StatusPill } from "../components/ui";
 import { ReportView } from "../features/report/ReportView";
 import type { ReportSourceBundle } from "../features/report/sourceBundle";
+import { AuditTrail } from "../features/workbench/AuditTrail";
+import { CompetitorLibrary } from "../features/workbench/CompetitorLibrary";
 import { formatDate, formatPercent, reportStatusTone } from "../features/workbench/format";
 import { OverviewDashboard } from "../features/workbench/OverviewDashboard";
 import { ProjectRail } from "../features/workbench/ProjectRail";
@@ -523,52 +520,6 @@ function ReportStudio({
   );
 }
 
-function CompetitorLibrary({
-  competitors,
-  evidence,
-  scores,
-}: {
-  competitors: CompetitorRecord[];
-  evidence: EvidenceRecord[];
-  scores: CompetitorScoreReport | null;
-}) {
-  const evidenceCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    evidence.forEach((item) => counts.set(item.competitor_id, (counts.get(item.competitor_id) ?? 0) + 1));
-    return counts;
-  }, [evidence]);
-  const scoreByCompetitor = new Map(scores?.scores.map((score) => [score.competitor_id, score]) ?? []);
-  return (
-    <Panel title="Competitor library" icon={<Layers size={16} aria-hidden />}>
-      <div className="competitor-catalog-grid">
-        {competitors.map((competitor) => {
-          const score = scoreByCompetitor.get(competitor.id);
-          return (
-            <article className="competitor-library-card" key={competitor.id}>
-              <div>
-                <strong>{competitor.name}</strong>
-                <span>{competitor.layer} / {competitor.normalized_name}</span>
-              </div>
-              <div className="metric-grid compact">
-                <MetricCard label="Score" value={score?.total_score ?? "n/a"} />
-                <MetricCard label="Evidence" value={evidenceCounts.get(competitor.id) ?? 0} />
-                <MetricCard label="Coverage" value={score ? formatPercent(score.coverage_score) : "n/a"} />
-              </div>
-              {competitor.homepage_url ? (
-                <a href={competitor.homepage_url} target="_blank" rel="noreferrer">
-                  <ExternalLink size={14} aria-hidden />
-                  Homepage
-                </a>
-              ) : null}
-              {score?.recommendation ? <p>{score.recommendation}</p> : null}
-            </article>
-          );
-        })}
-      </div>
-    </Panel>
-  );
-}
-
 function GovernanceCenter({
   auditLogs,
   matrix,
@@ -692,39 +643,6 @@ function ActivityCenter({
       <Panel title="Audit trail" icon={<CalendarClock size={16} aria-hidden />}>
         <AuditTrail logs={auditLogs} />
       </Panel>
-    </div>
-  );
-}
-
-function AuditTrail({ logs }: { logs: AuditLogRecord[] }) {
-  return (
-    <div className="audit-timeline">
-      {logs.slice(0, 24).map((log) => (
-        <article key={log.id}>
-          <strong>{log.action}</strong>
-          <span>{log.resource_type} / {log.resource_id}</span>
-          <em>{log.actor_type}{log.actor_id ? `:${log.actor_id}` : ""} / {formatDate(log.created_at)}</em>
-        </article>
-      ))}
-      {logs.length === 0 ? <p className="muted-line">No audit records returned.</p> : null}
-    </div>
-  );
-}
-
-function QualityStep({
-  label,
-  ok,
-  value,
-}: {
-  label: string;
-  ok: boolean;
-  value: ReactNode;
-}) {
-  return (
-    <div className={ok ? "quality-step pass" : "quality-step warn"}>
-      {ok ? <CheckCircle2 size={16} aria-hidden /> : <AlertTriangle size={16} aria-hidden />}
-      <span>{label}</span>
-      <strong>{value}</strong>
     </div>
   );
 }
