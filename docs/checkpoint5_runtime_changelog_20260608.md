@@ -95,6 +95,27 @@ Validation:
 
 Remaining C5.2 scope:
 
-- Add a read/report helper that summarizes artifact lifecycle status per
-  project or report version.
-- Surface lifecycle evidence in Decision Replay or the artifact detail API.
+- Completed in the follow-up slice: `/api/enterprise/artifacts/lifecycle`
+  summarizes artifact lifecycle status per workspace/project/evidence/report
+  version.
+- Completed in the follow-up slice: Decision Replay artifact audit events now
+  include lifecycle summaries.
+
+## 2026-06-08 - C5.2 Lifecycle Report And Replay
+
+Completed the Artifact And Source Material Lifecycle read/replay closure.
+
+Changed:
+
+- Added `ArtifactLifecycleItem` and `ArtifactLifecycleReport` contracts.
+- Added `build_artifact_lifecycle_report` for artifact lifecycle summaries.
+- Added `/api/enterprise/artifacts/lifecycle` with the same workspace/project/
+  evidence/report-version scope checks as `/api/enterprise/artifacts`.
+- Added lifecycle summaries to Decision Replay artifact audit events.
+
+Validation:
+
+- `ruff check` passed for artifact lifecycle, source snapshots, decision replay,
+  enterprise router, and focused tests.
+- Focused pytest passed for artifact storage, source snapshots, lifecycle route,
+  and enterprise audit decision replay.

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from packages.schema.enterprise import ArtifactCreateRequest, ArtifactRecord
 
 ARTIFACT_LIFECYCLE_VERSION = "c5.2"
@@ -13,6 +15,37 @@ ARTIFACT_LIFECYCLE_STAGES = [
     "retained_or_expired",
     "replayable",
 ]
+
+
+class ArtifactLifecycleItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_id: str
+    artifact_type: str
+    filename: str
+    material_kind: str = ""
+    stage: str = ""
+    storage_backend: str = ""
+    retention_policy: str = ""
+    source_policy_status: str = ""
+    pii_redaction_status: str = ""
+    links: dict[str, Any] = Field(default_factory=dict)
+
+
+class ArtifactLifecycleReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str | None = None
+    project_id: str | None = None
+    evidence_id: str | None = None
+    report_version_id: str | None = None
+    total_count: int = 0
+    replayable_count: int = 0
+    by_material_kind: dict[str, int] = Field(default_factory=dict)
+    by_storage_backend: dict[str, int] = Field(default_factory=dict)
+    by_source_policy_status: dict[str, int] = Field(default_factory=dict)
+    by_pii_redaction_status: dict[str, int] = Field(default_factory=dict)
+    items: list[ArtifactLifecycleItem] = Field(default_factory=list)
 
 
 def artifact_lifecycle_metadata(
@@ -51,6 +84,30 @@ def artifact_lifecycle_metadata(
     }
 
 
+def build_artifact_lifecycle_report(
+    artifacts: list[ArtifactRecord],
+    *,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    evidence_id: str | None = None,
+    report_version_id: str | None = None,
+) -> ArtifactLifecycleReport:
+    items = [_artifact_lifecycle_item(artifact) for artifact in artifacts]
+    return ArtifactLifecycleReport(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        evidence_id=evidence_id,
+        report_version_id=report_version_id,
+        total_count=len(items),
+        replayable_count=sum(1 for item in items if item.stage == "stored"),
+        by_material_kind=_count_by(items, "material_kind"),
+        by_storage_backend=_count_by(items, "storage_backend"),
+        by_source_policy_status=_count_by(items, "source_policy_status"),
+        by_pii_redaction_status=_count_by(items, "pii_redaction_status"),
+        items=items,
+    )
+
+
 def merge_artifact_lifecycle_metadata(
     metadata: dict[str, Any],
     lifecycle: dict[str, Any],
@@ -86,6 +143,33 @@ def with_artifact_lifecycle_links(
     return artifact.model_copy(
         update={"metadata": {**artifact.metadata, "artifact_lifecycle": lifecycle}}
     )
+
+
+def _artifact_lifecycle_item(artifact: ArtifactRecord) -> ArtifactLifecycleItem:
+    lifecycle = artifact.metadata.get("artifact_lifecycle")
+    lifecycle = lifecycle if isinstance(lifecycle, dict) else {}
+    links = lifecycle.get("links")
+    return ArtifactLifecycleItem(
+        artifact_id=artifact.id,
+        artifact_type=artifact.artifact_type,
+        filename=artifact.filename,
+        material_kind=_metadata_text(lifecycle, "material_kind"),
+        stage=_metadata_text(lifecycle, "stage"),
+        storage_backend=_metadata_text(lifecycle, "storage_backend") or artifact.storage_backend,
+        retention_policy=_metadata_text(lifecycle, "retention_policy")
+        or artifact.retention_policy,
+        source_policy_status=_metadata_text(lifecycle, "source_policy_status"),
+        pii_redaction_status=_metadata_text(lifecycle, "pii_redaction_status"),
+        links=links if isinstance(links, dict) else {},
+    )
+
+
+def _count_by(items: list[ArtifactLifecycleItem], field_name: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        value = str(getattr(item, field_name) or "unknown")
+        counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def _material_kind(request: ArtifactCreateRequest) -> str:

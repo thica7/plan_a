@@ -18,7 +18,12 @@ from app.deps import (
     get_runtime_command_service,
 )
 from packages.agents import AgentExecutionRequest, AgentExecutionResult
-from packages.artifacts import ArtifactStorage, ArtifactStorageError
+from packages.artifacts import (
+    ArtifactLifecycleReport,
+    ArtifactStorage,
+    ArtifactStorageError,
+    build_artifact_lifecycle_report,
+)
 from packages.auth import (
     EnterpriseUserContext,
     PolicyDecision,
@@ -1601,27 +1606,36 @@ def list_artifacts(
     evidence_id: str | None = None,
     report_version_id: str | None = None,
 ) -> list[ArtifactRecord]:
-    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "artifact:read")
-    if project_id is not None:
-        project = _project_or_404(project_id, store, user, "artifact:read")
-        scoped_workspace_id = project.workspace_id
-    if report_version_id is not None:
-        version = _report_version_or_404(report_version_id, store, user, "artifact:read")
-        scoped_workspace_id = version.workspace_id
-        if project_id is not None and version.project_id != project_id:
-            raise HTTPException(status_code=400, detail="Report version does not belong to project")
-    if evidence_id is not None:
-        evidence = _evidence_or_404(evidence_id, store)
-        _require_workspace_access(user, evidence.workspace_id, "artifact:read")
-        scoped_workspace_id = evidence.workspace_id
-        if project_id is not None and evidence.project_id != project_id:
-            raise HTTPException(status_code=400, detail="Evidence does not belong to project")
-        if report_version_id is not None and evidence_id not in version.evidence_ids:
-            raise HTTPException(
-                status_code=400,
-                detail="Evidence is not linked to report version",
-            )
-    return store.list_artifacts(
+    artifacts, _ = _scoped_artifacts(
+        store=store,
+        user=user,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        evidence_id=evidence_id,
+        report_version_id=report_version_id,
+    )
+    return artifacts
+
+
+@router.get("/enterprise/artifacts/lifecycle", response_model=ArtifactLifecycleReport)
+def get_artifact_lifecycle_report(
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    evidence_id: str | None = None,
+    report_version_id: str | None = None,
+) -> ArtifactLifecycleReport:
+    artifacts, scoped_workspace_id = _scoped_artifacts(
+        store=store,
+        user=user,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        evidence_id=evidence_id,
+        report_version_id=report_version_id,
+    )
+    return build_artifact_lifecycle_report(
+        artifacts,
         workspace_id=scoped_workspace_id,
         project_id=project_id,
         evidence_id=evidence_id,
@@ -1886,6 +1900,47 @@ def _enforce_artifact_report_scope(
     if evidence_id is not None and evidence_id not in version.evidence_ids:
         raise HTTPException(status_code=400, detail="Artifact evidence is not linked to report")
     return version
+
+
+def _scoped_artifacts(
+    *,
+    store: EnterpriseStore,
+    user: EnterpriseUserContext,
+    workspace_id: str | None,
+    project_id: str | None,
+    evidence_id: str | None,
+    report_version_id: str | None,
+) -> tuple[list[ArtifactRecord], str | None]:
+    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "artifact:read")
+    version: ReportVersionRecord | None = None
+    if project_id is not None:
+        project = _project_or_404(project_id, store, user, "artifact:read")
+        scoped_workspace_id = project.workspace_id
+    if report_version_id is not None:
+        version = _report_version_or_404(report_version_id, store, user, "artifact:read")
+        scoped_workspace_id = version.workspace_id
+        if project_id is not None and version.project_id != project_id:
+            raise HTTPException(status_code=400, detail="Report version does not belong to project")
+    if evidence_id is not None:
+        evidence = _evidence_or_404(evidence_id, store)
+        _require_workspace_access(user, evidence.workspace_id, "artifact:read")
+        scoped_workspace_id = evidence.workspace_id
+        if project_id is not None and evidence.project_id != project_id:
+            raise HTTPException(status_code=400, detail="Evidence does not belong to project")
+        if version is not None and evidence_id not in version.evidence_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="Evidence is not linked to report version",
+            )
+    return (
+        store.list_artifacts(
+            workspace_id=scoped_workspace_id,
+            project_id=project_id,
+            evidence_id=evidence_id,
+            report_version_id=report_version_id,
+        ),
+        scoped_workspace_id,
+    )
 
 
 @router.get("/enterprise/report-versions/{version_id}/diff", response_model=ReportVersionDiff)

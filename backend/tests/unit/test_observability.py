@@ -1030,7 +1030,24 @@ def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
                 "storage_backend": "local",
                 "retention_policy": "workspace_default",
                 "compliance_metadata": {"artifact_scope": "run_compliance_report"},
-                "metadata": {"export_kind": "run_compliance_report"},
+                "metadata": {
+                    "export_kind": "run_compliance_report",
+                    "artifact_lifecycle": {
+                        "version": "c5.2",
+                        "stage": "stored",
+                        "material_kind": "report_export",
+                        "storage_backend": "local",
+                        "retention_policy": "workspace_default",
+                        "source_policy_status": "not_required",
+                        "pii_redaction_status": "not_required",
+                        "links": {
+                            "workspace_id": "workspace-1",
+                            "project_id": "project-1",
+                            "run_id": "run-audit",
+                            "report_version_id": "report-audit-v1",
+                        },
+                    },
+                },
             },
             created_at="2026-05-31T00:04:00Z",
         ),
@@ -1110,6 +1127,10 @@ def test_decision_replay_includes_enterprise_audit_governance_events() -> None:
     assert audit_events["audit-compliance-export"].payload["compliance_metadata"][
         "artifact_scope"
     ] == "run_compliance_report"
+    lifecycle = audit_events["audit-compliance-export"].payload["artifact_lifecycle"]
+    assert lifecycle["material_kind"] == "report_export"
+    assert lifecycle["links"]["run_id"] == "run-audit"
+    assert lifecycle["links"]["report_version_id"] == "report-audit-v1"
     memory_event = audit_events["audit-memory-feedback"]
     assert memory_event.event_type == "memory.feedback_captured"
     assert memory_event.payload["feedback_id"] == "feedback-1"

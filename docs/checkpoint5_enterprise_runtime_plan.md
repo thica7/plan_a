@@ -86,7 +86,7 @@ Current status:
 ```text
 C5.0 Runtime smoke gate: complete
 C5.1 Runtime command layer: complete
-C5.2 Artifact lifecycle: in progress
+C5.2 Artifact lifecycle: complete
 C5.3-C5.7: pending
 ```
 
@@ -273,6 +273,9 @@ Progress on 2026-06-08:
   version, source policy, and PII redaction status into lifecycle links.
 - Tests cover local payloads, external pointers, S3 pointers, and survey
   snapshot redaction lifecycle.
+- Added `/api/enterprise/artifacts/lifecycle` to summarize lifecycle status by
+  material kind, storage backend, source policy, and PII redaction status.
+- Decision Replay artifact events now include lifecycle summaries.
 
 Suggested commit:
 

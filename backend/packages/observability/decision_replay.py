@@ -440,6 +440,7 @@ def _audit_log_decision(
 
     if log.action == "artifact.upserted" and _audit_run_id(log) == detail.id:
         metadata = _audit_metadata(log)
+        lifecycle = _artifact_lifecycle_summary(metadata.get("artifact_lifecycle"))
         export_kind = _optional_string(metadata.get("export_kind"))
         artifact_type = _audit_after_string(log, "artifact_type") or "artifact"
         report_version_id = _audit_after_string(log, "report_version_id")
@@ -457,6 +458,7 @@ def _audit_log_decision(
                 "report_version_id": report_version_id,
                 "retention_policy": _audit_after_string(log, "retention_policy"),
                 "compliance_metadata": _audit_after_value(log, "compliance_metadata"),
+                "artifact_lifecycle": lifecycle,
                 "run_id": detail.id,
             },
         )
@@ -747,6 +749,22 @@ def _audit_metadata(log: AuditLogRecord) -> dict[str, Any]:
     return metadata if isinstance(metadata, dict) else {}
 
 
+def _artifact_lifecycle_summary(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    links = value.get("links")
+    return {
+        "version": _optional_string(value.get("version")) or "",
+        "stage": _optional_string(value.get("stage")) or "",
+        "material_kind": _optional_string(value.get("material_kind")) or "",
+        "storage_backend": _optional_string(value.get("storage_backend")) or "",
+        "retention_policy": _optional_string(value.get("retention_policy")) or "",
+        "source_policy_status": _optional_string(value.get("source_policy_status")) or "",
+        "pii_redaction_status": _optional_string(value.get("pii_redaction_status")) or "",
+        "links": links if isinstance(links, dict) else {},
+    }
+
+
 def _audit_metadata_string(log: AuditLogRecord, key: str) -> str | None:
     return _optional_string(_audit_metadata(log).get(key))
 
@@ -879,6 +897,7 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "version_number",
         "report_version_status",
         "artifact_type",
+        "artifact_lifecycle",
         "export_kind",
         "storage_backend",
         "retention_policy",

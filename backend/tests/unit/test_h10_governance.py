@@ -379,6 +379,10 @@ def test_h10_enterprise_routes_are_callable() -> None:
         "/api/enterprise/artifacts",
         params={"workspace_id": context.workspace_id, "report_version_id": report_version_id},
     )
+    lifecycle_response = client.get(
+        "/api/enterprise/artifacts/lifecycle",
+        params={"workspace_id": context.workspace_id, "report_version_id": report_version_id},
+    )
 
     assert route_response.status_code == 200
     assert route_response.json()["selected"]["provider_kind"] == "backup"
@@ -408,6 +412,17 @@ def test_h10_enterprise_routes_are_callable() -> None:
         snapshot_response.json()["artifact"]["id"],
         interview_artifact["id"],
     }
+    assert lifecycle_response.status_code == 200
+    lifecycle = lifecycle_response.json()
+    assert lifecycle["total_count"] >= 3
+    assert lifecycle["by_material_kind"]["report_export"] >= 1
+    assert lifecycle["by_material_kind"]["webpage"] >= 1
+    assert lifecycle["by_material_kind"]["interview"] >= 1
+    assert lifecycle["by_storage_backend"]["oss"] >= 1
+    assert any(
+        item["links"]["report_version_id"] == report_version_id
+        for item in lifecycle["items"]
+    )
 
 
 def _projected_store() -> tuple[EnterpriseMemoryStore, object]:
