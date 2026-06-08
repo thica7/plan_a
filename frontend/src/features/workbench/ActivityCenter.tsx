@@ -28,9 +28,15 @@ export function ActivityCenter({
         <div className="notification-list">
           {notifications.map((notification) => (
             <article className={`notification-item ${notification.severity}`} key={notification.id}>
-              <strong>{notification.title}</strong>
-              <span>{notification.body}</span>
-              <em>{notification.status} / {formatDate(notification.created_at)}</em>
+              <header>
+                <strong>{notification.title}</strong>
+                <em>{notification.severity}</em>
+              </header>
+              <span>{clipText(notification.body, 220)}</span>
+              <footer>
+                <em>{notification.status}</em>
+                <time dateTime={notification.created_at}>{formatDate(notification.created_at)}</time>
+              </footer>
             </article>
           ))}
           {notifications.length === 0 ? <p className="muted-line">No notifications for {project.name}.</p> : null}
@@ -60,4 +66,9 @@ export function ActivityCenter({
       </Panel>
     </div>
   );
+}
+
+function clipText(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1).trim()}...`;
 }

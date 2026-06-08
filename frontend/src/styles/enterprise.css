@@ -311,6 +311,64 @@
   overflow: auto;
 }
 
+.evidence-ledger {
+  display: grid;
+  gap: 8px;
+}
+
+.evidence-ledger-row {
+  background: #ffffff;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 11px;
+}
+
+.evidence-source-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.evidence-source-main strong {
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.evidence-source-main em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidence-source-meta {
+  align-items: end;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(82px, 1fr)) minmax(120px, 0.8fr);
+}
+
+.evidence-source-meta span {
+  color: var(--text-soft);
+  display: grid;
+  font-size: 12px;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.evidence-source-meta strong {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .inspector-panel {
   position: sticky;
   top: 82px;
@@ -418,6 +476,64 @@
 
 .source-scope-list span {
   font-size: 12px;
+}
+
+.notification-list {
+  display: grid;
+  gap: 10px;
+}
+
+.notification-item {
+  background: #ffffff;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 11px;
+}
+
+.notification-item.high,
+.notification-item.critical,
+.notification-item.blocker {
+  background: var(--danger-soft);
+  border-color: rgba(194, 65, 58, 0.2);
+}
+
+.notification-item.warn,
+.notification-item.medium {
+  background: var(--amber-soft);
+  border-color: rgba(183, 121, 31, 0.22);
+}
+
+.notification-item header,
+.notification-item footer {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.notification-item strong {
+  color: var(--text);
+  font-size: 13px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.notification-item span {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.notification-item em,
+.notification-item time {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-style: normal;
 }
 
 .competitor-catalog-grid {

@@ -17,6 +17,7 @@ export function App() {
         <Route path="/evidence" element={<EnterpriseWorkbench initialView="evidence" />} />
         <Route path="/reports" element={<EnterpriseWorkbench initialView="reports" />} />
         <Route path="/governance" element={<EnterpriseWorkbench initialView="governance" />} />
+        <Route path="/activity" element={<EnterpriseWorkbench initialView="activity" />} />
       </Routes>
     </AppShell>
   );

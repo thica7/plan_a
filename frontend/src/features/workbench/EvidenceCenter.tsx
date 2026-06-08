@@ -57,23 +57,26 @@ export function EvidenceCenter({
           <MetricCard label="Verified-like" value={verifiedCount} tone={verifiedCount >= evidence.length * 0.7 ? "good" : "warn"} />
           <MetricCard label="Accepted" value={evidence.filter((item) => item.quality_label === "accepted").length} />
         </div>
-        <div className="data-table evidence-table">
-          <div className="data-table-head">
-            <span>Source</span>
-            <span>Competitor</span>
-            <span>Dimension</span>
-            <span>Quality</span>
-            <span>Reliability</span>
-          </div>
+        <div className="evidence-ledger">
           {evidence.slice(0, 80).map((item) => (
-            <article className="data-row" id={`evidence-${item.id}`} key={item.id}>
-              <span>
+            <article className="evidence-ledger-row" id={`evidence-${item.id}`} key={item.id}>
+              <div className="evidence-source-main">
                 <strong>{item.title}</strong>
                 <em>{item.url ?? item.raw_source_id}</em>
-              </span>
-              <span>{competitorById.get(item.competitor_id)?.name ?? item.competitor_id}</span>
-              <span>{item.dimension}</span>
-              <span>
+              </div>
+              <div className="evidence-source-meta">
+                <span>
+                  <strong>Competitor</strong>
+                  {competitorById.get(item.competitor_id)?.name ?? item.competitor_id}
+                </span>
+                <span>
+                  <strong>Dimension</strong>
+                  {item.dimension}
+                </span>
+                <span>
+                  <strong>Reliability</strong>
+                  {formatPercent(item.reliability_score)}
+                </span>
                 <select
                   aria-label={`Quality for ${item.title}`}
                   value={item.quality_label}
@@ -84,8 +87,7 @@ export function EvidenceCenter({
                   <option value="rejected">rejected</option>
                   <option value="stale">stale</option>
                 </select>
-              </span>
-              <span>{formatPercent(item.reliability_score)}</span>
+              </div>
             </article>
           ))}
         </div>

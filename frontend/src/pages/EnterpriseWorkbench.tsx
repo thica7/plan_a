@@ -1,13 +1,16 @@
 import { RefreshCw } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { EmptyState, LoadingState, PageHeader } from "../components/ui";
 import { ActiveView } from "../features/workbench/ActiveView";
 import { ProjectRail } from "../features/workbench/ProjectRail";
 import { useEnterpriseWorkbenchData } from "../features/workbench/useEnterpriseWorkbenchData";
 import { ViewSwitcher } from "../features/workbench/ViewSwitcher";
 import { WorkbenchStatusStrip } from "../features/workbench/WorkbenchStatusStrip";
+import { workbenchViewRoutes } from "../features/workbench/routes";
 import type { EnterpriseView } from "../features/workbench/types";
 
 export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?: EnterpriseView }) {
+  const navigate = useNavigate();
   const {
     activeView,
     competitorById,
@@ -39,6 +42,11 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
     setSelectedProjectId,
     setSelectedVersionId,
   } = useEnterpriseWorkbenchData(initialView);
+
+  function handleViewChange(view: EnterpriseView) {
+    setActiveView(view);
+    navigate(workbenchViewRoutes[view]);
+  }
 
   return (
     <section className="work-surface enterprise-workbench">
@@ -78,7 +86,7 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
         />
 
         <main className="enterprise-work-area">
-          <ViewSwitcher activeView={activeView} onChange={setActiveView} />
+          <ViewSwitcher activeView={activeView} onChange={handleViewChange} />
 
           {isLoadingProject ? <LoadingState label="Loading project workspace" /> : null}
           {!isLoadingProject && !selectedProject ? (

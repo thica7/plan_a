@@ -1,4 +1,5 @@
 import {
+  Bell,
   Briefcase,
   Database,
   FileText,
@@ -16,6 +17,7 @@ export const navItems = [
   { to: "/evidence", label: "Evidence", icon: Database },
   { to: "/reports", label: "Reports", icon: FileText },
   { to: "/governance", label: "Governance", icon: ShieldCheck },
+  { to: "/activity", label: "Activity", icon: Bell },
 ];
 
 export function routeTitle(pathname: string) {
@@ -26,6 +28,7 @@ export function routeTitle(pathname: string) {
   if (pathname.startsWith("/evidence")) return "Evidence center";
   if (pathname.startsWith("/reports")) return "Report studio";
   if (pathname.startsWith("/governance")) return "Governance";
+  if (pathname.startsWith("/activity")) return "Activity center";
   if (pathname.startsWith("/enterprise")) return "Enterprise workbench";
   return "Workspace";
 }

@@ -3,7 +3,6 @@ import { ExternalLink, Layers } from "lucide-react";
 
 import type { CompetitorRecord, CompetitorScoreReport, EvidenceRecord } from "../../api/types";
 import { MetricCard, Panel } from "../../components/ui";
-import { formatPercent } from "./format";
 
 export function CompetitorLibrary({
   competitors,
@@ -35,7 +34,7 @@ export function CompetitorLibrary({
               <div className="metric-grid compact">
                 <MetricCard label="Score" value={score?.total_score ?? "n/a"} />
                 <MetricCard label="Evidence" value={evidenceCounts.get(competitor.id) ?? 0} />
-                <MetricCard label="Coverage" value={score ? formatPercent(score.coverage_score) : "n/a"} />
+                <MetricCard label="Coverage" value={score ? formatScorePercent(score.coverage_score) : "n/a"} />
               </div>
               {competitor.homepage_url ? (
                 <a href={competitor.homepage_url} target="_blank" rel="noreferrer">
@@ -50,4 +49,9 @@ export function CompetitorLibrary({
       </div>
     </Panel>
   );
+}
+
+function formatScorePercent(value: number) {
+  const percent = value > 1 ? value : value * 100;
+  return `${Math.round(percent)}%`;
 }
