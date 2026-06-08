@@ -50,6 +50,12 @@ async def create_run(
         response.headers["X-Temporal-Cutover-Bucket"] = str(
             result.metadata["temporal_cutover_bucket"]
         )
+    runtime_policy = result.metadata.get("runtime_policy_decision")
+    if isinstance(runtime_policy, dict):
+        response.headers["X-Runtime-Policy-Status"] = str(runtime_policy.get("status", ""))
+        response.headers["X-Runtime-Policy-Reason"] = str(
+            runtime_policy.get("audit_reason", "")
+        )[:240]
     response.headers["X-Runtime-Command-Id"] = result.command_id
     response.headers["X-Runtime-Audit-Correlation-Id"] = result.audit_correlation_id
     if result.route == "temporal":

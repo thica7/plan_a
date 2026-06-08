@@ -19,7 +19,11 @@ from packages.enterprise.report_lifecycle import (
     report_release_gate_snapshot,
 )
 from packages.evals import build_enterprise_evalops_report, build_evalops_release_contract
-from packages.governance import build_model_policy_report, model_policy_block_message
+from packages.governance import (
+    build_model_policy_report,
+    build_runtime_policy_decision,
+    model_policy_block_message,
+)
 from packages.hitl import append_hitl_lifecycle, build_hitl_lifecycle_event, hitl_lifecycle_history
 from packages.identity import new_ui_run_idempotency_key, stable_prefixed_id
 from packages.memory import PreferenceMemoryStore
@@ -87,10 +91,17 @@ class RuntimeCommandService:
             target_type="run",
             target_id=request.idempotency_key,
         )
+        runtime_policy = build_runtime_policy_decision(
+            self._settings,
+            store=self._store,
+            workspace_id=request.workspace_id,
+            execution_mode=_resolved_execution_mode(request, self._settings),
+        )
         self._ensure_model_policy_allows_execution_mode(request.execution_mode)
         self._ensure_workspace_quota(request.workspace_id)
         cutover = decide_temporal_cutover(self._settings, request)
         metadata = {
+            "runtime_policy_decision": runtime_policy.model_dump(mode="json"),
             "temporal_target_percent": cutover.target_percent,
             "temporal_cutover_bucket": cutover.bucket,
             "temporal_cutover_reason": cutover.reason,
@@ -805,6 +816,12 @@ def _with_run_idempotency_key(request: RunCreateRequest) -> RunCreateRequest:
     if request.idempotency_key:
         return request
     return request.model_copy(update={"idempotency_key": new_ui_run_idempotency_key()})
+
+
+def _resolved_execution_mode(request: RunCreateRequest, settings: Settings) -> str:
+    if request.execution_mode in {"demo", "real"}:
+        return request.execution_mode
+    return "real" if settings.default_execution_mode == "real" else "demo"
 
 
 def _result(

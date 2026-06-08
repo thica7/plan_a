@@ -90,7 +90,8 @@ C5.2 Artifact lifecycle: complete
 C5.3 Tenant governance boundary: complete
 C5.4 Advisory context governance: complete
 C5.5 EvalOps release contract: complete
-C5.6-C5.7: pending
+C5.6 Cost/model/tool policy runtime: complete
+C5.7 Monitor operations: pending
 ```
 
 ## CC Recommendation Integration
@@ -452,6 +453,27 @@ Purpose:
 
 Make provider selection, tool use, cost, quotas, and compliance policy one
 runtime decision surface.
+
+Implementation status:
+
+- `backend/packages/governance/runtime_policy.py` defines the single
+  `RuntimePolicyDecision` contract.
+- The decision combines:
+  - selected provider/model;
+  - fallback provider/model;
+  - model policy status;
+  - tool allow/guard/deny decisions;
+  - estimated cost;
+  - workspace quota pressure;
+  - compliance constraints;
+  - audit reason.
+- `/api/enterprise/governance/runtime-policy` exposes the pre-run governance
+  decision for operators and UI surfaces.
+- The runtime command layer attaches the same policy decision to create-run
+  command metadata and run creation response headers.
+- LLM spans already carry model-router metadata through
+  `RunService._llm_route_metadata`, so provider fallback is traceable in trace
+  and decision replay instead of hidden inside exception handling.
 
 Implementation direction:
 

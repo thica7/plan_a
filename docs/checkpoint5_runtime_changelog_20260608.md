@@ -236,3 +236,34 @@ Validation:
   runtime service, and focused tests.
 - Focused pytest passed for release-contract route output, advisory vs blocking
   behavior, publish metadata, and enterprise quality matrix integration.
+
+## 2026-06-08 - C5.6 Runtime Policy Decision
+
+Completed the unified model/tool/quota/cost policy decision surface.
+
+Changed:
+
+- Added `backend/packages/governance/runtime_policy.py`.
+- Added `RuntimePolicyDecision` and `RuntimeToolPolicyDecision`.
+- Added `/api/enterprise/governance/runtime-policy`.
+- The decision now explains, through one typed contract:
+  - selected provider/model,
+  - fallback provider/model,
+  - model policy status,
+  - tool allow/guard/deny results,
+  - estimated cost,
+  - workspace quota pressure,
+  - compliance constraints,
+  - audit reason.
+- Runtime create-run commands now attach the same policy decision to command
+  metadata.
+- `/api/runs` creation responses expose `X-Runtime-Policy-Status` and
+  `X-Runtime-Policy-Reason` headers so pre-run blocking and fallback reasons are
+  visible at the API boundary.
+
+Validation:
+
+- `ruff check` passed for governance runtime policy, enterprise router, runs
+  router, runtime command service, and focused tests.
+- Focused pytest passed for allowed, denied, fallback, quota-pressure, and
+  enterprise route decisions.

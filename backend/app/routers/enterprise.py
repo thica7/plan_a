@@ -70,9 +70,11 @@ from packages.enterprise import (
 from packages.evals import build_enterprise_evalops_report, build_evalops_release_contract
 from packages.governance import (
     ModelPolicyReport,
+    RuntimePolicyDecision,
     TenantGovernanceReadinessReport,
     build_model_policy_report,
     build_model_route_decision,
+    build_runtime_policy_decision,
     build_tenant_governance_readiness_report,
     build_tool_registry_report,
 )
@@ -340,6 +342,32 @@ def get_tenant_governance_readiness(
     return build_tenant_governance_readiness_report(
         store=store,
         workspace_id=scoped_workspace_id,
+    )
+
+
+@router.get(
+    "/enterprise/governance/runtime-policy",
+    response_model=RuntimePolicyDecision,
+)
+def get_runtime_policy_decision(
+    settings: SettingsDep,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    workspace_id: str | None = None,
+    execution_mode: Annotated[str, Query(pattern="^(demo|real)$")] = "real",
+    requested_tools: Annotated[list[str] | None, Query()] = None,
+    estimated_input_tokens: Annotated[int, Query(ge=0)] = 0,
+    estimated_output_tokens: Annotated[int, Query(ge=0)] = 0,
+) -> RuntimePolicyDecision:
+    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "audit:read")
+    return build_runtime_policy_decision(
+        settings,
+        store=store,
+        workspace_id=scoped_workspace_id,
+        execution_mode="demo" if execution_mode == "demo" else "real",
+        requested_tools=requested_tools,
+        estimated_input_tokens=estimated_input_tokens,
+        estimated_output_tokens=estimated_output_tokens,
     )
 
 
