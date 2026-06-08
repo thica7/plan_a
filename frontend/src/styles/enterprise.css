@@ -320,15 +320,26 @@
   align-items: start;
   display: grid;
   gap: 16px;
-  grid-template-columns: 220px minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
 }
 
-.version-rail,
 .report-inspector {
   display: grid;
   gap: 12px;
   position: sticky;
   top: 82px;
+}
+
+.version-rail {
+  display: grid;
+  gap: 10px;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  position: static;
+}
+
+.version-rail .panel-heading-row {
+  grid-column: 1 / -1;
 }
 
 .version-item {
@@ -362,6 +373,10 @@
 
 .report-reader-panel {
   min-width: 0;
+}
+
+.report-reader-panel .report-panel {
+  margin: 0;
 }
 
 .report-inspector,

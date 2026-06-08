@@ -11,12 +11,23 @@
   overflow: hidden;
 }
 
+.qa-blocker-table {
+  background: #f8fafc;
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
 .qa-blocker-head,
 .qa-blocker-row {
   align-items: start;
   display: grid;
   gap: 12px;
   grid-template-columns: 82px minmax(108px, 0.75fr) minmax(180px, 1.4fr) minmax(120px, 0.8fr);
+}
+
+.qa-blocker-head {
+  display: none;
 }
 
 .qa-blocker-head,
@@ -37,6 +48,29 @@
   padding: 11px 10px;
 }
 
+.qa-blocker-row {
+  background: #ffffff;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  gap: 4px 10px;
+  grid-template-columns: 86px minmax(0, 1fr);
+}
+
+.qa-blocker-row .status-pill {
+  align-self: start;
+  grid-row: 1 / span 3;
+}
+
+.qa-blocker-row > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
 .qa-blocker-row strong,
 .compact-data-row strong {
   color: var(--text);
@@ -49,14 +83,16 @@
 
 .qa-blocker-row strong {
   line-height: 1.35;
+  overflow: visible;
+  text-overflow: clip;
   white-space: normal;
 }
 
 .qa-blocker-row em {
+  color: var(--muted);
   font-style: normal;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   white-space: normal;
 }
 

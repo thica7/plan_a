@@ -56,7 +56,7 @@ export function ReportStudio({
         {versions.length === 0 ? <EmptyState title="No report versions" /> : null}
       </Panel>
 
-      <Panel className="report-reader-panel" title="Report reader" icon={<FileText size={16} aria-hidden />}>
+      <div className="report-reader-panel" aria-label="Report reader">
         {selectedVersion ? (
           <ReportView
             markdown={selectedVersion.report_md}
@@ -66,7 +66,7 @@ export function ReportStudio({
         ) : (
           <EmptyState title="Select a version" />
         )}
-      </Panel>
+      </div>
 
       <aside className="report-inspector">
         <Panel title="Release gate" icon={<ShieldCheck size={16} aria-hidden />}>
