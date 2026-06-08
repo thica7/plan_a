@@ -1,0 +1,26 @@
+.concept-workbench-grid {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.concept-main-column {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.concept-summary-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(200px, 0.9fr) minmax(200px, 0.9fr) minmax(320px, 1.35fr);
+}
+
+.concept-lower-grid {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 0.45fr);
+}
+

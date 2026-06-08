@@ -1,0 +1,137 @@
+.qa-blocker-panel,
+.recent-activity-panel,
+.competitor-overview-table {
+  min-width: 0;
+}
+
+.qa-blocker-table,
+.compact-data-table {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.qa-blocker-head,
+.qa-blocker-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 92px 132px minmax(0, 1fr) 150px;
+}
+
+.qa-blocker-head,
+.compact-data-head {
+  background: #f8fafc;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+  padding: 9px 10px;
+  text-transform: uppercase;
+}
+
+.qa-blocker-row,
+.compact-data-row {
+  border-top: 1px solid var(--border-soft);
+  color: var(--muted);
+  font-size: 12px;
+  padding: 9px 10px;
+}
+
+.qa-blocker-row strong,
+.compact-data-row strong {
+  color: var(--text);
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qa-blocker-row em {
+  font-style: normal;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auto-redo-strip {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 9px 10px;
+}
+
+.auto-redo-strip strong {
+  color: var(--accent);
+}
+
+.activity-timeline.compact {
+  display: grid;
+  gap: 0;
+}
+
+.activity-timeline.compact article {
+  align-items: start;
+  display: block;
+  padding: 0 0 14px 16px;
+  position: relative;
+}
+
+.activity-timeline.compact article > i {
+  background: var(--accent);
+  border: 2px solid #ecfeff;
+  border-radius: 999px;
+  height: 8px;
+  left: 1px;
+  position: absolute;
+  top: 5px;
+  width: 8px;
+}
+
+.activity-timeline.compact strong,
+.activity-timeline.compact span,
+.activity-timeline.compact time {
+  display: block;
+}
+
+.activity-timeline.compact strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.activity-timeline.compact span,
+.activity-timeline.compact time {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.compact-data-head,
+.compact-data-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(160px, 1fr) 80px minmax(120px, 0.8fr) 80px 70px;
+}
+
+.progress-bar {
+  background: #e5e7eb;
+  border-radius: 999px;
+  display: block;
+  height: 6px;
+  overflow: hidden;
+}
+
+.progress-bar i {
+  background: var(--accent);
+  display: block;
+  height: 100%;
+}
+

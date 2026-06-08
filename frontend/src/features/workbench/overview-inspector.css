@@ -1,0 +1,128 @@
+.concept-inspector {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
+  min-width: 0;
+  overflow: hidden;
+  position: sticky;
+  top: 82px;
+}
+
+.inspector-tabs {
+  border-bottom: 1px solid var(--border-soft);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.inspector-tabs button {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 720;
+  min-height: 42px;
+}
+
+.inspector-tabs button.active {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+.inspector-body {
+  display: grid;
+  gap: 13px;
+  padding: 16px;
+}
+
+.inspector-body h3 {
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.inspector-body a,
+.inspector-body code,
+.inspector-body p,
+.linked-chip-list span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.inspector-body a {
+  color: var(--accent);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.inspector-body code {
+  background: #f8fafc;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 7px;
+}
+
+.inspector-meta-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.inspector-meta-grid span {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+}
+
+.inspector-meta-grid strong {
+  color: var(--text);
+  margin-left: 10px;
+  text-align: right;
+}
+
+.snapshot-box {
+  border-top: 1px solid var(--border-soft);
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.snapshot-box strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.snapshot-box p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.linked-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.linked-chip-list span {
+  background: #f8fafc;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 4px 7px;
+}
+
+.active-report-card .report-version-summary {
+  align-items: center;
+  gap: 10px 16px;
+  grid-template-columns: auto minmax(160px, 1fr) repeat(3, auto);
+}
+

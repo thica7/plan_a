@@ -1,0 +1,40 @@
+@media (max-width: 1700px) {
+  .concept-workbench-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .concept-inspector {
+    max-height: none;
+    position: static;
+  }
+}
+
+@media (max-width: 1180px) {
+  .concept-workbench-grid,
+  .concept-lower-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .concept-inspector {
+    max-height: none;
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .concept-summary-grid,
+  .qa-blocker-head,
+  .qa-blocker-row,
+  .compact-data-head,
+  .compact-data-row {
+    grid-template-columns: 1fr;
+  }
+
+  .coverage-heatmap {
+    grid-template-columns: minmax(86px, 1fr) repeat(var(--heatmap-cols), 22px);
+  }
+
+  .active-report-card .report-version-summary {
+    grid-template-columns: 1fr;
+  }
+}
