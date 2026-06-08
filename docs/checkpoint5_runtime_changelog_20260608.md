@@ -142,7 +142,32 @@ Validation:
 
 Remaining C5.3 scope:
 
-- Add explicit negative cross-workspace tests for runtime commands, artifact
-  reads, audit reads, and report publication paths.
+- Add an opt-in live Postgres RLS smoke test once a real Postgres test instance
+  is configured.
+
+## 2026-06-08 - C5.3 Runtime Command Isolation Tests
+
+Closed the local negative-isolation coverage for the new command layer.
+
+Changed:
+
+- Extended the enterprise RBAC/workspace-scope test to cover the Checkpoint 5
+  runtime command routes:
+  - tenant readiness report access,
+  - manual report revision,
+  - report publish,
+  - report approval start,
+  - report approval signal.
+- Kept the existing artifact, audit, evidence, source registry, project, report,
+  and memory negative checks in the same test so tenant isolation remains one
+  coherent contract instead of scattered route-specific assertions.
+
+Validation:
+
+- `ruff check backend/tests/unit/test_enterprise_store.py`
+- `pytest backend/tests/unit/test_enterprise_store.py::test_enterprise_router_enforces_rbac_workspace_scope`
+
+Remaining C5.3 scope:
+
 - Add an opt-in live Postgres RLS smoke test once a real Postgres test instance
   is configured.

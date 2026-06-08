@@ -2236,6 +2236,11 @@ def test_enterprise_router_enforces_rbac_workspace_scope() -> None:
         params={"workspace_id": context_b.workspace_id},
         headers=admin_headers,
     )
+    cross_tenant_readiness = client.get(
+        "/api/enterprise/governance/tenant-readiness",
+        params={"workspace_id": context_b.workspace_id},
+        headers=admin_headers,
+    )
     viewer_audit = client.get(
         "/api/enterprise/audit-logs",
         params={"workspace_id": context_a.workspace_id},
@@ -2282,6 +2287,32 @@ def test_enterprise_router_enforces_rbac_workspace_scope() -> None:
         },
         headers=reviewer_headers,
     )
+    cross_manual_revision_command = client.post(
+        f"/api/enterprise/report-versions/{projection_b.report_version.id}/manual-revision",
+        json={
+            "report_md": f"{projection_b.report_version.report_md}\n\nCross edit.",
+            "note": "Must not edit another workspace report.",
+        },
+        headers=admin_headers,
+    )
+    cross_publish_command = client.post(
+        f"/api/enterprise/report-versions/{projection_b.report_version.id}/publish",
+        headers=admin_headers,
+    )
+    cross_approval_start_command = client.post(
+        "/api/workflows/report-approval",
+        json={
+            "report_version_id": projection_b.report_version.id,
+            "requested_by": "admin-a",
+            "approver_ids": ["reviewer-a"],
+        },
+        headers=admin_headers,
+    )
+    cross_approval_signal_command = client.post(
+        f"/api/workflows/report-approval/{projection_b.report_version.id}/approve",
+        json={"approver_id": "reviewer-a", "note": "Cross approve must fail."},
+        headers=admin_headers,
+    )
     quality = client.patch(
         f"/api/enterprise/evidence/{projection_a.evidence_records[0].id}/quality",
         json={"quality_label": "accepted", "note": "Reviewed."},
@@ -2298,12 +2329,17 @@ def test_enterprise_router_enforces_rbac_workspace_scope() -> None:
     assert cross_sources.status_code == 403
     assert cross_memory.status_code == 403
     assert cross_audit.status_code == 403
+    assert cross_tenant_readiness.status_code == 403
     assert viewer_audit.status_code == 403
     assert forbidden_write.status_code == 403
     assert viewer_artifact_write.status_code == 403
     assert analyst_artifact_write.status_code == 200
     assert analyst_artifact_write.json()["artifact"]["created_by"] == "analyst-a"
     assert reviewer_report_write.status_code == 403
+    assert cross_manual_revision_command.status_code == 403
+    assert cross_publish_command.status_code == 403
+    assert cross_approval_start_command.status_code == 403
+    assert cross_approval_signal_command.status_code == 403
     assert quality.status_code == 200
     assert quality.json()["evidence"]["quality_label"] == "accepted"
 

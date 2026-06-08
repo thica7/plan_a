@@ -317,6 +317,9 @@ Progress on 2026-06-08:
   identity, audit filtering, artifact filtering, report publication policy, and
   Postgres RLS migration checks.
 - Added `/api/enterprise/governance/tenant-readiness`.
+- Extended cross-workspace negative tests to the new runtime command paths:
+  tenant readiness, manual report revision, report publish, approval start, and
+  approval signal.
 - The report labels local readiness separately from production SSO/RLS smoke
   requirements.
 
