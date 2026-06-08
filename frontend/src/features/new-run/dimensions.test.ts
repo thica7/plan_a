@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ScenarioPack } from "../api/types";
+import type { ScenarioPack } from "../../api/types";
 import {
   coreDimensions,
   isDimensionLocked,
@@ -8,7 +8,7 @@ import {
   scenarioCompetitorPreset,
   starterPresetDimensions,
   starterPresets,
-} from "./newRunDimensions";
+} from "./dimensions";
 
 describe("New Run dimension helpers", () => {
   it("locks the default schema dimensions when no scenario is selected", () => {
