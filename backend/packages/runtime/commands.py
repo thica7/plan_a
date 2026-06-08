@@ -9,6 +9,7 @@ from packages.schema.api_dto import (
     ReportApprovalSignalRequest,
     ReportApprovalStartRequest,
     RunCreateRequest,
+    ScheduledScanStartRequest,
 )
 from packages.schema.enterprise import (
     ManualReportRevisionRequest,
@@ -23,6 +24,7 @@ RuntimeCommandType = Literal[
     "pause_monitor_job",
     "resume_monitor_job",
     "trigger_monitor_job",
+    "start_scheduled_scan",
     "request_review",
     "resume_review",
     "request_redo",
@@ -86,6 +88,12 @@ class TriggerMonitorJobCommand(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     monitor_id: str = Field(min_length=1, max_length=200)
+
+
+class StartScheduledScanCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request: ScheduledScanStartRequest
 
 
 class ReviseReportCommand(BaseModel):

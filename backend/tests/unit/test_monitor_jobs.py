@@ -14,9 +14,14 @@ from packages.runtime import (
     ResumeMonitorJobCommand,
     RuntimeCommandError,
     RuntimeCommandService,
+    StartScheduledScanCommand,
     TriggerMonitorJobCommand,
 )
-from packages.schema.api_dto import MonitorStartResponse
+from packages.schema.api_dto import (
+    MonitorStartResponse,
+    ScheduledScanStartRequest,
+    ScheduledScanStartResponse,
+)
 from packages.schema.enterprise import MonitorJobCreateRequest, ProjectRecord
 
 DEFAULT_WORKSPACE_ID = "default-workspace"
@@ -118,9 +123,41 @@ def test_store_records_monitor_job_run_completion() -> None:
     assert updated.last_completed_at is not None
 
 
+@pytest.mark.asyncio
+async def test_runtime_command_starts_scheduled_scan_with_policy_metadata(
+    tmp_path: Path,
+) -> None:
+    store = _store_with_project()
+    workflow = _FakeWorkflowService()
+    service = _runtime_service(store, workflow, tmp_path)
+
+    result = await service.start_scheduled_scan(
+        StartScheduledScanCommand(
+            request=ScheduledScanStartRequest(
+                workspace_id=DEFAULT_WORKSPACE_ID,
+                schedule_id="weekly-scan",
+                project_ids=["project-monitor"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        ),
+        actor=_actor(),
+    )
+
+    assert result.command_type == "start_scheduled_scan"
+    assert result.route == "temporal"
+    assert result.resource_type == "scheduled_scan"
+    assert result.payload.workflow_id == "scheduled-weekly-scan"
+    assert result.metadata["project_ids"] == ["project-monitor"]
+    assert result.metadata["dimensions"] == ["pricing"]
+    assert result.metadata["runtime_policy_decision"]["status"] in {"allow", "warn"}
+    assert workflow.scheduled[0].schedule_id == "weekly-scan"
+
+
 class _FakeWorkflowService:
     def __init__(self) -> None:
         self.started = []
+        self.scheduled = []
 
     async def start_monitor(self, request):
         self.started.append(request)
@@ -129,6 +166,16 @@ class _FakeWorkflowService:
             workspace_id=request.workspace_id,
             project_id=request.project_id,
             monitor_id=request.monitor_id,
+            task_queue="competitive-intel",
+            status="started",
+        )
+
+    async def start_scheduled_scan(self, request):
+        self.scheduled.append(request)
+        return ScheduledScanStartResponse(
+            workflow_id=f"scheduled-{request.schedule_id}",
+            workspace_id=request.workspace_id,
+            schedule_id=request.schedule_id,
             task_queue="competitive-intel",
             status="started",
         )

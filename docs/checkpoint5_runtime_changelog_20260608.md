@@ -326,3 +326,25 @@ Validation:
   service, workflow activities, and monitor job tests.
 - Focused pytest passed for strict Postgres schema checks and monitor job
   command tests.
+
+## 2026-06-08 - C5.7 Scheduled Scan Runtime Command
+
+Closed the scheduled scan API boundary so enterprise-triggered scans use the
+same runtime command surface as manual runs and monitor triggers.
+
+Changed:
+
+- Added `StartScheduledScanCommand`.
+- Added `RuntimeCommandService.start_scheduled_scan`.
+- Added `/api/enterprise/scheduled-scans/trigger`.
+- Scheduled scan triggers now include runtime policy metadata, project scope,
+  and dimension scope in command metadata.
+- The legacy `/api/workflows/scheduled-scan` route remains available as a
+  low-level workflow/debug entry point.
+
+Validation:
+
+- `ruff check` passed for runtime commands, runtime service, enterprise router,
+  and monitor job tests.
+- Focused pytest passed for scheduled scan command routing, policy metadata, and
+  project/dimension scope preservation.

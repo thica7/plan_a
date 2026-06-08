@@ -45,6 +45,7 @@ from packages.runtime.commands import (
     RuntimeCommandRoute,
     RuntimeCommandStatus,
     RuntimeCommandType,
+    StartScheduledScanCommand,
     TriggerMonitorJobCommand,
     UpdateMonitorJobCommand,
 )
@@ -53,6 +54,7 @@ from packages.schema.api_dto import (
     ReportApprovalSignalRequest,
     RunCreateRequest,
     RunDetail,
+    ScheduledScanStartRequest,
     WorkflowStartResponse,
 )
 from packages.schema.enterprise import (
@@ -365,6 +367,65 @@ class RuntimeCommandService:
             metadata={
                 "monitor_job_status": updated.status if updated else job.status,
                 "runtime_policy_decision": runtime_policy.model_dump(mode="json"),
+            },
+        )
+
+    async def start_scheduled_scan(
+        self,
+        command: StartScheduledScanCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        request = command.request
+        self._require_workspace_access(
+            actor,
+            request.workspace_id,
+            "project:write",
+            target_type="scheduled_scan",
+            target_id=request.schedule_id,
+        )
+        runtime_policy = build_runtime_policy_decision(
+            self._settings,
+            store=self._store,
+            workspace_id=request.workspace_id,
+            execution_mode=_resolved_scheduled_scan_execution_mode(request, self._settings),
+            requested_tools=[
+                "web_search",
+                "fetch_page",
+                "rag_search_evidence",
+                "online_gap_fill",
+                "claim_validator",
+                "source_snapshot",
+            ],
+        )
+        if runtime_policy.status == "deny":
+            raise RuntimeCommandError(
+                409,
+                runtime_policy.model_dump(mode="json"),
+                command_type="start_scheduled_scan",
+            )
+        try:
+            response = await self._workflow_service.start_scheduled_scan(request)
+        except Exception as exc:  # noqa: BLE001 - command layer owns workflow failures.
+            raise RuntimeCommandError(
+                503,
+                "Temporal workflow service is unavailable.",
+                command_type="start_scheduled_scan",
+            ) from exc
+        command_id = _command_id("start_scheduled_scan", actor, request.schedule_id)
+        return _result(
+            command_id=command_id,
+            command_type="start_scheduled_scan",
+            status="accepted",
+            resource_type="scheduled_scan",
+            resource_id=request.schedule_id,
+            workspace_id=request.workspace_id,
+            route="temporal",
+            payload=response,
+            metadata={
+                "runtime_policy_decision": runtime_policy.model_dump(mode="json"),
+                "project_ids": list(request.project_ids),
+                "dimensions": list(request.dimensions),
             },
         )
 
@@ -1043,6 +1104,15 @@ def _resolved_execution_mode(request: RunCreateRequest, settings: Settings) -> s
 def _resolved_monitor_execution_mode(job: MonitorJobRecord, settings: Settings) -> str:
     if job.execution_mode in {"demo", "real"}:
         return job.execution_mode
+    return "real" if settings.default_execution_mode == "real" else "demo"
+
+
+def _resolved_scheduled_scan_execution_mode(
+    request: ScheduledScanStartRequest,
+    settings: Settings,
+) -> str:
+    if request.execution_mode in {"demo", "real"}:
+        return request.execution_mode
     return "real" if settings.default_execution_mode == "real" else "demo"
 
 

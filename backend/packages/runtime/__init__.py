@@ -14,6 +14,7 @@ from packages.runtime.commands import (
     RuntimeCommandResult,
     RuntimeCommandStatus,
     RuntimeCommandType,
+    StartScheduledScanCommand,
     TriggerMonitorJobCommand,
     UpdateMonitorJobCommand,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "RuntimeCommandService",
     "RuntimeCommandStatus",
     "RuntimeCommandType",
+    "StartScheduledScanCommand",
     "TriggerMonitorJobCommand",
     "UpdateMonitorJobCommand",
 ]

@@ -528,6 +528,9 @@ Implementation status:
   monitor job record.
 - Postgres now has `monitor_jobs` persistence, indexes, and workspace RLS
   policies behind the same `EnterpriseStore` boundary.
+- `/api/enterprise/scheduled-scans/trigger` starts `ScheduledScanWorkflow`
+  through the runtime command layer with the same runtime policy decision
+  metadata used by manual runs and monitor triggers.
 
 Implementation direction:
 

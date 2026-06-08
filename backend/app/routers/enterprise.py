@@ -104,10 +104,15 @@ from packages.runtime import (
     ReviseReportCommand,
     RuntimeCommandError,
     RuntimeCommandService,
+    StartScheduledScanCommand,
     TriggerMonitorJobCommand,
     UpdateMonitorJobCommand,
 )
-from packages.schema.api_dto import MonitorStartResponse
+from packages.schema.api_dto import (
+    MonitorStartResponse,
+    ScheduledScanStartRequest,
+    ScheduledScanStartResponse,
+)
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
     ArtifactCreateResult,
@@ -413,6 +418,25 @@ async def trigger_monitor_job(
     try:
         result = await runtime.trigger_monitor_job(
             TriggerMonitorJobCommand(monitor_id=monitor_id),
+            actor=user,
+        )
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
+
+
+@router.post(
+    "/enterprise/scheduled-scans/trigger",
+    response_model=ScheduledScanStartResponse,
+)
+async def trigger_scheduled_scan(
+    request: ScheduledScanStartRequest,
+    runtime: RuntimeCommandServiceDep,
+    user: EnterpriseUserDep,
+) -> ScheduledScanStartResponse:
+    try:
+        result = await runtime.start_scheduled_scan(
+            StartScheduledScanCommand(request=request),
             actor=user,
         )
     except RuntimeCommandError as exc:
