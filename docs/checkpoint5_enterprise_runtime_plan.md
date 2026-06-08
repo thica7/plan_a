@@ -1,6 +1,6 @@
 # Checkpoint 5 Enterprise Runtime Plan
 
-Last updated: 2026-06-07
+Last updated: 2026-06-08
 
 ## Position
 
@@ -19,6 +19,7 @@ Authoritative inputs:
 - `D:/codex_workspace/websearch_v2/clean_research_pipeline_rewrite_plan.md`
 - `docs/architecture_first_execution_plan_20260607.md`
 - `docs/checkpoint4_architecture_contract_consolidation_plan.md`
+- CC推进推荐, supplied by the user on 2026-06-08
 
 Current baseline:
 
@@ -87,6 +88,50 @@ C5.0 Runtime smoke gate: complete
 C5.1 Runtime command layer: next
 C5.2-C5.7: pending
 ```
+
+## CC Recommendation Integration
+
+The CC recommendations are absorbed into Checkpoint 5 as enterprise runtime
+work. They do not replace the current architecture route, and they do not reopen
+the Clean Research Pipeline as a collector patch project.
+
+Integration rule:
+
+```text
+Existing RAG / memory / artifact / quality modules are reused.
+Missing boundaries are added as C5 contracts.
+No duplicate online-gap-fill, source-id, or collector-specific patch layer.
+```
+
+| CC recommendation | C5 owner | Current baseline | Checkpoint 5 action |
+|---|---|---|---|
+| `backend/packages/rag/vector_store.py`, `chunker.py`, `retriever.py` | C5.4 | These modules already exist. | Do not recreate them. Govern how their outputs become advisory context or report-scope evidence. |
+| `ingestion.py` and `online_gap_fill.py` naming | C5.2 + C5.4 | `gap_fill.py`, `gap_retrieval.py`, artifact snapshots, and research capture already exist. | Add a unified ingestion boundary only if it reduces scattered snapshot/chunk/embed calls. Keep existing file names unless a rename removes real confusion. |
+| Collector checks local vector store before online search | C5.4 | RAG and online gap fill exist, but collector still primarily runs research capture first. | Define a retrieval policy: local recall first for advisory context, online search only for typed `QualityGap` or missing admitted evidence. |
+| QA/EvidenceGap computes competitor x dimension gaps, then gap-only online search | C5.4 + C5.5 | EvidenceGap and `/evidence-gaps/fill` already exist. | Make gap-fill results explicit in advisory context and EvalOps release decisions. |
+| robots preflight + fetch + snapshot + chunk + embed | C5.2 + C5.4 | Robots/fetch/source snapshots/artifacts/RAG chunks exist across modules. | Formalize the lifecycle so every captured material can be snapshotted, chunked, embedded, linked, retained, and replayed through one contract. |
+| Analyst only generates claims from source-id evidence | C5.5 | Claim citation/source-token gates exist. | Promote this to release contract language: publishable claims require admitted source scope and citation validity. |
+| MemoryAgent feedback API, candidates, human confirmation, Planner/Comparator weighting | C5.4 | Memory feedback/candidates/recall exist; Planner uses memory context. | Strengthen the advisory contract and add Comparator influence only through visible metadata. |
+| BenchmarkPanel with sources, unique URLs, citation rate, verified rate, schema pass, before/after, time saved | C5.5 | Run quality comparison and EvalOps metrics exist. | Consolidate these into an EvalOps/Benchmark release panel instead of adding another disconnected score surface. |
+| Finer SSE events for agent, tool, online gap fill, memory, benchmark, release gate | C5.1 + C5.5 | Decision replay is strong; SSE remains more run-status oriented. | Runtime commands emit consistent event correlation keys; EvalOps/release events become inspectable from the same timeline. |
+| SelfConsistencyRunner | C5.5 | ClaimValidator/self-consistency findings exist, but no generic multi-sample runner. | Add only after C5.1, as a quality contract feeding ClaimValidator/QualityMatrix, not as agent-side hidden retries. |
+| Real Survey/Interview chain | C5.2 + C5.4 | Survey/interview/import/redaction exist; not a full questionnaire platform. | Treat survey CSV/JSON/transcripts as governed artifacts and advisory/persona evidence with explicit confidence. |
+| Evidence Conflict Detection | C5.5 | `conflicting` states and claim-validation conflict hooks exist. | Productize conflict findings in the Quality Matrix and Release Contract. |
+| Dynamic Schema Pack | C5.3 + C5.4 | ScenarioPack and schema suggestions exist. | Add schema-pack governance only after tenant scope and advisory context are stable. |
+| Report Review Studio | C5.1 + C5.5 | Report diff, approval, manual revision, release gate, and quality matrix exist. | Build it by composing runtime commands and EvalOps release contract, not by creating a separate review subsystem. |
+
+Extension mapping:
+
+| CC extension | Checkpoint 5 placement |
+|---|---|
+| Continuous monitoring | C5.7 monitor operations |
+| Industry template market | After C5.3, as governed ScenarioPack/SchemaPack |
+| Evidence knowledge graph | C5.4 advisory/read-model governance, not publish scope by default |
+| Multimodal evidence | C5.2 artifact lifecycle |
+| EvalOps | C5.5 release contract |
+| Human-AI collaboration | C5.1 runtime command layer + C5.4 memory governance |
+| Enterprise governance | C5.3 + C5.6 |
+| Opportunity recommendation | After C5.5, as a report/recommender product feature |
 
 ## C5.0 Runtime Smoke Gate
 
