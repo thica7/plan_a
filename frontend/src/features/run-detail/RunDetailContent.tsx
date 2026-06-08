@@ -78,9 +78,9 @@ export function RunDetailContent({
 
   if (activeView === "agents") {
     return (
-      <div className="detail-grid">
-        <AgentMessagesView messages={detail.agent_messages} toolCalls={detail.tool_call_messages} />
+      <div className="detail-grid agents-detail-grid">
         <TracePlayback spans={detail.trace_spans} />
+        <AgentMessagesView messages={detail.agent_messages} toolCalls={detail.tool_call_messages} />
         <TraceList
           events={events}
           metrics={detail.metrics}
@@ -120,7 +120,12 @@ export function RunDetailContent({
 
   return (
     <div className="detail-grid">
-      <SwimlaneView events={events} currentNode={detail.current_node} />
+      <SwimlaneView
+        currentNode={detail.current_node}
+        events={events}
+        spans={detail.trace_spans}
+        status={detail.status}
+      />
       <StaticGraphView
         activeNode={detail.current_node}
         competitors={detail.plan.competitors}

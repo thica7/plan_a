@@ -23,9 +23,9 @@ export function AgentMessagesView({ messages, toolCalls }: Props) {
         <div className="agent-message-list">
           {messages.slice(-18).map((message) => (
             <article key={message.id}>
-              <div>
+              <div className="message-route">
                 <strong>{message.from_agent} -&gt; {message.to_agent}</strong>
-                <code className={message.status}>{message.status}</code>
+                <code className={`message-status ${message.status}`}>{message.status}</code>
               </div>
               <span>{message.message_type}</span>
               <code>{message.payload_schema}</code>

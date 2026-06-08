@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
 import {
   exportRunComplianceReport,
   getDecisionReplay,
@@ -16,6 +16,7 @@ import type {
   DecisionReplayReport,
   RunComplianceReport,
   RunQualityComparison,
+  RunStatus,
   RunSummary,
 } from "../../api/types";
 import { buildReportSourceBundle } from "../report/sourceBundle";
@@ -27,8 +28,11 @@ export type HitlDecision = "accept" | "modify_plan" | "force_pass" | "redo";
 
 export function useRunDetailController() {
   const { runId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { detail, events, setDetail, addEvent, reset } = useRunStore();
-  const [activeView, setActiveView] = useState<RunDetailView>("overview");
+  const [activeView, setActiveViewState] = useState<RunDetailView>(
+    () => parseRunDetailView(searchParams.get("view")) ?? "overview",
+  );
   const [error, setError] = useState<string | null>(null);
   const [isRedoing, setRedoing] = useState(false);
   const [planDimensions, setPlanDimensions] = useState("");
@@ -55,6 +59,32 @@ export function useRunDetailController() {
     });
   }, [detail?.enterprise_projection, detail?.raw_sources]);
   const interruptStage = typeof latestInterrupt?.payload.stage === "string" ? latestInterrupt.payload.stage : null;
+
+  useEffect(() => {
+    const nextView = parseRunDetailView(searchParams.get("view")) ?? "overview";
+    if (nextView !== activeView) {
+      setActiveViewState(nextView);
+    }
+  }, [activeView, searchParams]);
+
+  const setActiveView = useCallback(
+    (view: RunDetailView) => {
+      setActiveViewState(view);
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          if (view === "overview") {
+            next.delete("view");
+          } else {
+            next.set("view", view);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   useEffect(() => {
     if (!runId) return;
@@ -98,7 +128,9 @@ export function useRunDetailController() {
             .catch(() => {
               if (!cancelled) setComplianceReport(null);
             });
-          unsubscribe = subscribeRun(runId, addEvent);
+          if (isLiveRunStatus(loaded.status)) {
+            unsubscribe = subscribeRun(runId, addEvent);
+          }
         })
         .catch((err: Error) => {
           if (cancelled) return;
@@ -252,4 +284,15 @@ export function useRunDetailController() {
     sourceCoverageRate,
     verifiedSourceRate,
   };
+}
+
+function isLiveRunStatus(status: RunStatus) {
+  return status === "queued" || status === "running" || status === "interrupted";
+}
+
+function parseRunDetailView(value: string | null): RunDetailView | null {
+  if (value === "overview" || value === "report" || value === "agents" || value === "quality") {
+    return value;
+  }
+  return null;
 }

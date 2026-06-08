@@ -9,14 +9,26 @@
 .cost-panel,
 .kb-matrix-panel,
 .discovery-panel,
-.revision-panel,
-.agent-messages-panel,
-.trace-playback-panel {
+.revision-panel {
   grid-column: 1 / -1;
 }
 
 .report-panel {
   grid-column: span 1;
+}
+
+.agents-detail-grid {
+  align-items: start;
+  grid-template-columns: minmax(360px, 0.95fr) minmax(360px, 1.05fr);
+}
+
+.agents-detail-grid .trace-panel {
+  grid-column: 1 / -1;
+}
+
+.agents-detail-grid .agent-messages-panel,
+.agents-detail-grid .trace-playback-panel {
+  min-height: 0;
 }
 
 .qa-panel {
@@ -51,6 +63,7 @@
 }
 
 .bubble-row {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
@@ -71,6 +84,34 @@
 .event-bubble.node_completed,
 .event-bubble.run_completed {
   background: var(--success);
+}
+
+.event-bubble.span-llm {
+  background: #0f766e;
+}
+
+.event-bubble.span-search {
+  background: #2563eb;
+}
+
+.event-bubble.span-fetch {
+  background: #7c3aed;
+}
+
+.event-bubble.span-tool {
+  background: #d97706;
+}
+
+.event-bubble.error {
+  background: #dc2626;
+}
+
+.lane-overflow,
+.lane-empty {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1;
 }
 
 .topology-graph {

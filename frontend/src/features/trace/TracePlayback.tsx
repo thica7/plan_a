@@ -58,8 +58,8 @@ export function TracePlayback({ spans }: Props) {
       <article className={`playback-card ${active.status}`}>
         <header>
           <strong>{active.agent}{active.subagent ? `/${active.subagent}` : ""}</strong>
-          <span>{active.kind} / {active.name}</span>
-          <code>{active.status}</code>
+          <span className="playback-kind">{active.kind} / {active.name}</span>
+          <code className={`playback-status ${active.status}`}>{active.status}</code>
         </header>
         <div className="playback-meta">
           <span>{active.duration_ms}ms</span>
