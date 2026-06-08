@@ -24,8 +24,13 @@ from packages.identity import new_ui_run_idempotency_key, stable_prefixed_id
 from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.service import RunService
 from packages.runtime.commands import (
+    ApproveReportCommand,
     CreateRunCommand,
     PublishReportCommand,
+    RejectReportCommand,
+    RequestApprovalCommand,
+    RequestRedoCommand,
+    ResumeReviewCommand,
     ReviseReportCommand,
     RuntimeCommandError,
     RuntimeCommandResult,
@@ -33,7 +38,12 @@ from packages.runtime.commands import (
     RuntimeCommandStatus,
     RuntimeCommandType,
 )
-from packages.schema.api_dto import RunCreateRequest, WorkflowStartResponse
+from packages.schema.api_dto import (
+    ReportApprovalSignalRequest,
+    RunCreateRequest,
+    RunDetail,
+    WorkflowStartResponse,
+)
 from packages.schema.enterprise import (
     ManualReportRevisionRequest,
     ProjectRecord,
@@ -145,6 +155,203 @@ class RuntimeCommandService:
             route="langgraph",
             payload=detail,
             metadata=metadata,
+        )
+
+    async def resume_review(
+        self,
+        command: ResumeReviewCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        detail = self._run_or_error(command.run_id, actor, "project:write")
+        if command.request.decision == "redo" and not self._run_service.has_pending_interrupt(
+            command.run_id
+        ):
+            raise RuntimeCommandError(
+                409,
+                "Manual scoped redo must use POST /runs/{run_id}/redo",
+                command_type="resume_review",
+            )
+        command_id = _command_id("resume_review", actor, command.run_id)
+        updated = await self._run_service.resume(command.run_id, command.request)
+        if updated is None:
+            raise RuntimeCommandError(404, "Run not found", command_type="resume_review")
+        await self._emit_run_command(
+            command_id=command_id,
+            command_type="resume_review",
+            run_id=updated.id,
+            message=f"Runtime command accepted HITL decision: {command.request.decision}.",
+            metadata={
+                "decision": command.request.decision,
+                "note_present": bool(command.request.note),
+                "dimensions": command.request.dimensions or [],
+            },
+        )
+        return _result(
+            command_id=command_id,
+            command_type="resume_review",
+            status="succeeded",
+            resource_type="run",
+            resource_id=updated.id,
+            workspace_id=updated.workspace_id,
+            project_id=updated.project_id,
+            run_id=updated.id,
+            route="langgraph",
+            payload=updated,
+            metadata={"previous_status": detail.status, "decision": command.request.decision},
+        )
+
+    async def request_redo(
+        self,
+        command: RequestRedoCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        detail = self._run_or_error(command.run_id, actor, "project:write")
+        if self._run_service.has_pending_interrupt(command.run_id):
+            raise RuntimeCommandError(
+                409,
+                "Resolve the active HITL interrupt before manual redo.",
+                command_type="request_redo",
+            )
+        if not self._run_service.can_start_redo(command.run_id):
+            raise RuntimeCommandError(
+                409,
+                "No eligible QA findings or redo limit reached.",
+                command_type="request_redo",
+            )
+        command_id = _command_id("request_redo", actor, command.run_id)
+        await self._emit_run_command(
+            command_id=command_id,
+            command_type="request_redo",
+            run_id=detail.id,
+            message="Runtime command requested manual scoped redo.",
+            metadata={
+                "qa_finding_count": len(detail.qa_findings),
+                "current_status": detail.status,
+            },
+        )
+        asyncio.create_task(self._run_service.run_scoped_redo(command.run_id))
+        return _result(
+            command_id=command_id,
+            command_type="request_redo",
+            status="accepted",
+            resource_type="run",
+            resource_id=detail.id,
+            workspace_id=detail.workspace_id,
+            project_id=detail.project_id,
+            run_id=detail.id,
+            route="langgraph",
+            payload=detail,
+            metadata={"qa_finding_count": len(detail.qa_findings)},
+        )
+
+    async def request_approval(
+        self,
+        command: RequestApprovalCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        version = self._report_version_or_error(
+            command.request.report_version_id,
+            actor,
+            "report:write",
+        )
+        command_id = _command_id("request_approval", actor, version.id)
+        try:
+            response = await self._workflow_service.start_report_approval(command.request)
+        except Exception as exc:  # noqa: BLE001 - command surface explains route failure.
+            raise RuntimeCommandError(
+                503,
+                "Temporal report approval workflow service is unavailable.",
+                command_type="request_approval",
+            ) from exc
+        return _result(
+            command_id=command_id,
+            command_type="request_approval",
+            status="accepted",
+            resource_type="report_version",
+            resource_id=version.id,
+            workspace_id=version.workspace_id,
+            project_id=version.project_id,
+            run_id=version.run_id,
+            report_version_id=version.id,
+            route="temporal",
+            payload=response,
+            metadata={
+                "workflow_id": response.workflow_id,
+                "approver_ids": list(command.request.approver_ids),
+            },
+        )
+
+    async def approve_report(
+        self,
+        command: ApproveReportCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        return await self._signal_report_approval(
+            command_type="approve_report",
+            report_version_id=command.report_version_id,
+            request=command.request,
+            actor=actor,
+        )
+
+    async def reject_report(
+        self,
+        command: RejectReportCommand,
+        *,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        return await self._signal_report_approval(
+            command_type="reject_report",
+            report_version_id=command.report_version_id,
+            request=command.request,
+            actor=actor,
+        )
+
+    async def _signal_report_approval(
+        self,
+        *,
+        command_type: RuntimeCommandType,
+        report_version_id: str,
+        request: ReportApprovalSignalRequest,
+        actor: EnterpriseUserContext,
+    ) -> RuntimeCommandResult:
+        version = self._report_version_or_error(report_version_id, actor, "report:review")
+        command_id = _command_id(command_type, actor, version.id)
+        try:
+            if command_type == "approve_report":
+                response = await self._workflow_service.approve_report(report_version_id, request)
+            elif command_type == "reject_report":
+                response = await self._workflow_service.reject_report(report_version_id, request)
+            else:
+                raise RuntimeCommandError(400, "Unsupported approval signal command.")
+        except RuntimeCommandError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - command surface explains route failure.
+            raise RuntimeCommandError(
+                503,
+                "Temporal report approval workflow service is unavailable.",
+                command_type=command_type,
+            ) from exc
+        return _result(
+            command_id=command_id,
+            command_type=command_type,
+            status="accepted",
+            resource_type="report_version",
+            resource_id=version.id,
+            workspace_id=version.workspace_id,
+            project_id=version.project_id,
+            run_id=version.run_id,
+            report_version_id=version.id,
+            route="temporal",
+            payload=response,
+            metadata={
+                "workflow_id": response.workflow_id,
+                "decision": response.decision,
+                "approver_id": request.approver_id,
+            },
         )
 
     def revise_report(
@@ -407,6 +614,24 @@ class RuntimeCommandService:
                 command_type="create_run",
             ) from exc
 
+    def _run_or_error(
+        self,
+        run_id: str,
+        actor: EnterpriseUserContext,
+        action: str,
+    ) -> RunDetail:
+        detail = self._run_service.get_run(run_id)
+        if detail is None:
+            raise RuntimeCommandError(404, "Run not found")
+        self._require_workspace_access(
+            actor,
+            detail.workspace_id,
+            action,
+            target_type="run",
+            target_id=detail.id,
+        )
+        return detail
+
     def _project_or_error(
         self,
         project_id: str,
@@ -495,6 +720,30 @@ class RuntimeCommandService:
         if decision.allowed:
             return
         raise RuntimeCommandError(403, decision.model_dump(mode="json"))
+
+    async def _emit_run_command(
+        self,
+        *,
+        command_id: str,
+        command_type: RuntimeCommandType,
+        run_id: str,
+        message: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        await self._run_service.emit(
+            run_id,
+            "runtime.command",
+            "runtime",
+            None,
+            message,
+            {
+                "command_id": command_id,
+                "command_type": command_type,
+                "audit_correlation_id": _audit_correlation_id(command_id),
+                "replay_correlation_id": _replay_correlation_id(command_id),
+                "metadata": metadata or {},
+            },
+        )
 
 
 def _with_run_idempotency_key(request: RunCreateRequest) -> RunCreateRequest:

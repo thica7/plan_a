@@ -2,11 +2,25 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.deps import get_app_settings, get_run_service, get_temporal_workflow_service
+from app.deps import (
+    get_app_settings,
+    get_enterprise_user_context,
+    get_run_service,
+    get_runtime_command_service,
+    get_temporal_workflow_service,
+)
 from app.governance import ensure_model_policy_allows_execution_mode
+from packages.auth import EnterpriseUserContext
 from packages.config import Settings
 from packages.enterprise import WorkspaceQuotaExceededError
 from packages.orchestrator.service import RunService
+from packages.runtime import (
+    ApproveReportCommand,
+    RejectReportCommand,
+    RequestApprovalCommand,
+    RuntimeCommandError,
+    RuntimeCommandService,
+)
 from packages.schema.api_dto import (
     MonitorStartRequest,
     MonitorStartResponse,
@@ -29,6 +43,8 @@ TemporalWorkflowServiceDep = Annotated[
     Depends(get_temporal_workflow_service),
 ]
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+RuntimeCommandServiceDep = Annotated[RuntimeCommandService, Depends(get_runtime_command_service)]
+EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
 
 
 @router.post(
@@ -156,15 +172,17 @@ async def start_monitor_workflow(
 )
 async def start_report_approval_workflow(
     request: ReportApprovalStartRequest,
-    service: TemporalWorkflowServiceDep,
+    runtime: RuntimeCommandServiceDep,
+    user: EnterpriseUserDep,
 ) -> ReportApprovalStartResponse:
     try:
-        return await service.start_report_approval(request)
-    except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Temporal workflow service is unavailable.",
-        ) from exc
+        result = await runtime.request_approval(
+            RequestApprovalCommand(request=request),
+            actor=user,
+        )
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
 
 
 @router.post(
@@ -175,15 +193,17 @@ async def start_report_approval_workflow(
 async def approve_report_approval_workflow(
     report_version_id: str,
     request: ReportApprovalSignalRequest,
-    service: TemporalWorkflowServiceDep,
+    runtime: RuntimeCommandServiceDep,
+    user: EnterpriseUserDep,
 ) -> ReportApprovalSignalResponse:
     try:
-        return await service.approve_report(report_version_id, request)
-    except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Temporal workflow service is unavailable.",
-        ) from exc
+        result = await runtime.approve_report(
+            ApproveReportCommand(report_version_id=report_version_id, request=request),
+            actor=user,
+        )
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
 
 
 @router.post(
@@ -194,12 +214,18 @@ async def approve_report_approval_workflow(
 async def reject_report_approval_workflow(
     report_version_id: str,
     request: ReportApprovalSignalRequest,
-    service: TemporalWorkflowServiceDep,
+    runtime: RuntimeCommandServiceDep,
+    user: EnterpriseUserDep,
 ) -> ReportApprovalSignalResponse:
     try:
-        return await service.reject_report(report_version_id, request)
-    except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Temporal workflow service is unavailable.",
-        ) from exc
+        result = await runtime.reject_report(
+            RejectReportCommand(report_version_id=report_version_id, request=request),
+            actor=user,
+        )
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
+
+
+def _raise_runtime_command_error(error: RuntimeCommandError) -> None:
+    raise HTTPException(status_code=error.status_code, detail=error.detail)

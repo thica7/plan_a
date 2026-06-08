@@ -43,6 +43,23 @@ def test_enterprise_router_delegates_report_runtime_commands() -> None:
     assert "mark_report_published" not in text
 
 
+def test_hitl_and_approval_routers_delegate_runtime_commands() -> None:
+    hitl_text = _read("app/routers/hitl.py")
+    workflow_text = _read("app/routers/workflows.py")
+
+    assert "runtime.resume_review" in hitl_text
+    assert "runtime.request_redo" in hitl_text
+    assert "service.resume" not in hitl_text
+    assert "service.run_scoped_redo" not in hitl_text
+
+    assert "runtime.request_approval" in workflow_text
+    assert "runtime.approve_report" in workflow_text
+    assert "runtime.reject_report" in workflow_text
+    assert "service.start_report_approval" not in workflow_text
+    assert "service.approve_report" not in workflow_text
+    assert "service.reject_report" not in workflow_text
+
+
 def test_langgraph_and_agents_do_not_own_report_publication() -> None:
     forbidden = (
         "mark_report_published",

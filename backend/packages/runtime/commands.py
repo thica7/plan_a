@@ -4,7 +4,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from packages.schema.api_dto import RunCreateRequest
+from packages.schema.api_dto import (
+    HitlResumeRequest,
+    ReportApprovalSignalRequest,
+    ReportApprovalStartRequest,
+    RunCreateRequest,
+)
 from packages.schema.enterprise import ManualReportRevisionRequest
 
 RuntimeCommandType = Literal[
@@ -50,6 +55,39 @@ class ReviseReportCommand(BaseModel):
     request: ManualReportRevisionRequest
 
 
+class ResumeReviewCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str = Field(min_length=1, max_length=200)
+    request: HitlResumeRequest
+
+
+class RequestRedoCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str = Field(min_length=1, max_length=200)
+
+
+class RequestApprovalCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request: ReportApprovalStartRequest
+
+
+class ApproveReportCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report_version_id: str = Field(min_length=1, max_length=200)
+    request: ReportApprovalSignalRequest
+
+
+class RejectReportCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report_version_id: str = Field(min_length=1, max_length=200)
+    request: ReportApprovalSignalRequest
+
+
 class PublishReportCommand(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -73,4 +111,3 @@ class RuntimeCommandResult(BaseModel):
     route: RuntimeCommandRoute = "none"
     payload: Any = None
     metadata: dict[str, Any] = Field(default_factory=dict)
-

@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi.testclient import TestClient
 
-from app.deps import get_app_settings, get_run_service, get_temporal_workflow_service
+from app.deps import (
+    get_app_settings,
+    get_enterprise_store,
+    get_run_service,
+    get_temporal_workflow_service,
+)
 from app.main import create_app
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
@@ -20,6 +27,7 @@ from packages.schema.api_dto import (
     WorkflowStartResponse,
     WorkflowStateResponse,
 )
+from packages.schema.enterprise import ProjectRecord, ReportVersionRecord
 from packages.skills.registry import SkillRegistry
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
 from packages.workflows.monitor import MonitorWorkflow
@@ -643,7 +651,34 @@ def test_workflow_router_exposes_report_approval_start_and_signal() -> None:
                 status="signaled",
             )
 
+    store = EnterpriseMemoryStore()
+    store.upsert_project(
+        ProjectRecord(
+            id="project-1",
+            workspace_id="default-workspace",
+            name="AI coding assistant",
+            topic="AI coding assistant",
+            topic_normalized="ai-coding-assistant",
+            competitor_layer="L1",
+            competitor_set_hash="cursor",
+        )
+    )
+    store.upsert_report_version(
+        ReportVersionRecord(
+            id="report-version-1",
+            workspace_id="default-workspace",
+            project_id="project-1",
+            run_id="run-1",
+            version_number=1,
+            topic_normalized="ai-coding-assistant",
+            competitor_layer="L1",
+            competitor_set_hash="cursor",
+            report_md="Ready for review.",
+        )
+    )
+
     app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
     app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
     client = TestClient(app)
 
@@ -670,6 +705,27 @@ def test_workflow_router_exposes_report_approval_start_and_signal() -> None:
         "decision": "approved",
         "status": "signaled",
     }
+
+
+def test_hitl_router_delegates_manual_redo_guard_to_runtime_command() -> None:
+    run_service = _memory_run_service()
+    detail = asyncio.run(
+        run_service.create_run(
+            _request(
+                topic="AI coding assistant HITL",
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+    )
+    app = create_app()
+    app.dependency_overrides[get_run_service] = lambda: run_service
+    client = TestClient(app)
+
+    response = client.post(f"/api/runs/{detail.id}/redo")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "No eligible QA findings or redo limit reached."
 
 
 def test_workflow_router_exposes_scheduled_scan_start() -> None:

@@ -1,49 +1,54 @@
-import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.deps import get_run_service
-from packages.orchestrator.service import RunService
+from app.deps import get_enterprise_user_context, get_runtime_command_service
+from packages.auth import EnterpriseUserContext
+from packages.runtime import (
+    RequestRedoCommand,
+    ResumeReviewCommand,
+    RuntimeCommandError,
+    RuntimeCommandService,
+)
 from packages.schema.api_dto import HitlResumeRequest, RunDetail
 
 router = APIRouter()
-RunServiceDep = Annotated[RunService, Depends(get_run_service)]
+RuntimeCommandServiceDep = Annotated[RuntimeCommandService, Depends(get_runtime_command_service)]
+EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
 
 
 @router.post("/runs/{run_id}/resume", response_model=RunDetail)
 async def resume_run(
     run_id: str,
     request: HitlResumeRequest,
-    service: RunServiceDep,
+    runtime: RuntimeCommandServiceDep,
+    user: EnterpriseUserDep,
 ) -> RunDetail:
-    if service.get_run(run_id) is None:
-        raise HTTPException(status_code=404, detail="Run not found")
-    if request.decision == "redo" and not service.has_pending_interrupt(run_id):
-        raise HTTPException(
-            status_code=409, detail="Manual scoped redo must use POST /runs/{run_id}/redo"
+    try:
+        result = await runtime.resume_review(
+            ResumeReviewCommand(run_id=run_id, request=request),
+            actor=user,
         )
-    detail = await service.resume(run_id, request)
-    if detail is None:
-        raise HTTPException(status_code=404, detail="Run not found")
-    return detail
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
 
 
 @router.post("/runs/{run_id}/redo", response_model=RunDetail)
 async def start_manual_redo(
     run_id: str,
-    service: RunServiceDep,
+    runtime: RuntimeCommandServiceDep,
+    user: EnterpriseUserDep,
 ) -> RunDetail:
-    detail = service.get_run(run_id)
-    if detail is None:
-        raise HTTPException(status_code=404, detail="Run not found")
-    if service.has_pending_interrupt(run_id):
-        raise HTTPException(
-            status_code=409, detail="Resolve the active HITL interrupt before manual redo."
+    try:
+        result = await runtime.request_redo(
+            RequestRedoCommand(run_id=run_id),
+            actor=user,
         )
-    if not service.can_start_redo(run_id):
-        raise HTTPException(
-            status_code=409, detail="No eligible QA findings or redo limit reached."
-        )
-    asyncio.create_task(service.run_scoped_redo(run_id))
-    return detail
+    except RuntimeCommandError as exc:
+        _raise_runtime_command_error(exc)
+    return result.payload
+
+
+def _raise_runtime_command_error(error: RuntimeCommandError) -> None:
+    raise HTTPException(status_code=error.status_code, detail=error.detail)

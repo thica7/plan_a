@@ -127,9 +127,11 @@ The first implementation pass is accepted when:
 
 The second implementation pass is accepted when:
 
-- HITL planner/QA resume and redo requests use runtime commands.
-- approval request/approve/reject use runtime commands.
-- archive uses runtime commands.
+- HITL planner/QA resume and redo requests use runtime commands. Done in
+  `feat(runtime): add enterprise command layer` follow-up on 2026-06-08.
+- approval request/approve/reject use runtime commands. Done in
+  `feat(runtime): add enterprise command layer` follow-up on 2026-06-08.
+- archive uses runtime commands once a public archive product workflow exists.
 - Decision Replay can show command-level events for review, redo, revision,
   approval, publication, and monitor actions.
 
