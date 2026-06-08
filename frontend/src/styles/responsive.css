@@ -39,6 +39,14 @@
     max-height: none;
     position: static;
   }
+
+  .workbench-status-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .status-metric:nth-child(odd) {
+    border-left: 0;
+  }
 }
 
 @media (max-width: 760px) {
@@ -73,6 +81,7 @@
   .field-grid,
   .preset-grid,
   .skill-grid,
+  .workbench-status-strip,
   .metric-grid,
   .source-trace-metrics,
   .source-trace-grid,
@@ -115,4 +124,8 @@
     grid-template-columns: 1fr;
   }
 
+  .status-metric + .status-metric {
+    border-left: 0;
+    border-top: 1px solid var(--border-soft);
+  }
 }

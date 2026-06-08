@@ -4,6 +4,7 @@ import { ActiveView } from "../features/workbench/ActiveView";
 import { ProjectRail } from "../features/workbench/ProjectRail";
 import { useEnterpriseWorkbenchData } from "../features/workbench/useEnterpriseWorkbenchData";
 import { ViewSwitcher } from "../features/workbench/ViewSwitcher";
+import { WorkbenchStatusStrip } from "../features/workbench/WorkbenchStatusStrip";
 import type { EnterpriseView } from "../features/workbench/types";
 
 export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?: EnterpriseView }) {
@@ -58,6 +59,14 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
       />
 
       {error ? <p className="error-line">{error}</p> : null}
+
+      <WorkbenchStatusStrip
+        competitorCount={data.competitors.length}
+        evidence={data.evidence}
+        project={selectedProject}
+        releaseGate={releaseGate}
+        report={selectedVersion}
+      />
 
       <div className="enterprise-shell-grid">
         <ProjectRail
