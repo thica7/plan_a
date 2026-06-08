@@ -91,7 +91,7 @@ C5.3 Tenant governance boundary: complete
 C5.4 Advisory context governance: complete
 C5.5 EvalOps release contract: complete
 C5.6 Cost/model/tool policy runtime: complete
-C5.7 Monitor operations: in progress - monitor job command boundary complete
+C5.7 Monitor operations: complete
 ```
 
 ## CC Recommendation Integration
@@ -531,6 +531,9 @@ Implementation status:
 - `/api/enterprise/scheduled-scans/trigger` starts `ScheduledScanWorkflow`
   through the runtime command layer with the same runtime policy decision
   metadata used by manual runs and monitor triggers.
+- Acceptance coverage is in `backend/tests/unit/test_monitor_jobs.py` and
+  verifies create, pause, resume, trigger, scheduled-scan scope, audit events,
+  Temporal request shape, and monitor run outcome recording.
 
 Implementation direction:
 

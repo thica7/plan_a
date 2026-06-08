@@ -348,3 +348,39 @@ Validation:
   and monitor job tests.
 - Focused pytest passed for scheduled scan command routing, policy metadata, and
   project/dimension scope preservation.
+
+## 2026-06-08 - Checkpoint 5 Runtime Closure
+
+Checkpoint 5 implementation status is now complete across C5.0-C5.7.
+
+Validated closure scope:
+
+- C5.6 runtime policy decision:
+  - allowed decisions,
+  - denied tool decisions,
+  - model fallback decisions,
+  - quota-pressure decisions,
+  - enterprise route response.
+- C5.7 monitor operations:
+  - monitor job create/update/pause/resume/trigger,
+  - Temporal monitor trigger shape,
+  - scheduled scan runtime command trigger,
+  - Postgres monitor job table/index/RLS contract,
+  - monitor cycle run outcome recording.
+
+Validation:
+
+- `ruff check backend/packages/governance/runtime_policy.py
+  backend/packages/governance/__init__.py backend/app/routers/enterprise.py
+  backend/app/routers/runs.py backend/packages/runtime
+  backend/packages/enterprise/store.py backend/packages/enterprise/postgres.py
+  backend/packages/workflows/activities.py backend/tests/unit/test_runtime_policy.py
+  backend/tests/unit/test_monitor_jobs.py
+  backend/tests/unit/test_enterprise_postgres_schema.py`
+- `pytest backend/tests/unit/test_runtime_policy.py
+  backend/tests/unit/test_monitor_jobs.py
+  backend/tests/unit/test_enterprise_postgres_schema.py
+  backend/tests/unit/test_workflow_service.py::test_workflow_router_exposes_scheduled_scan_start
+  backend/tests/unit/test_workflow_service.py::test_workflow_router_exposes_monitor_start
+  backend/tests/unit/test_h10_governance.py::test_h10_enterprise_routes_are_callable`
+- Result: 22 focused tests passed.
