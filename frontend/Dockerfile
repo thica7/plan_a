@@ -1,8 +1,8 @@
 FROM node:20-alpine AS build
 
 WORKDIR /app
-COPY frontend/package.json ./
-RUN corepack enable && pnpm install
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --frozen-lockfile
 COPY frontend/ ./
 RUN pnpm build
 

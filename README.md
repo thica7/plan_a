@@ -10,6 +10,16 @@ make dev-backend
 make dev-frontend
 ```
 
+Docker deployment:
+
+```powershell
+Copy-Item .env.example .env
+powershell -ExecutionPolicy Bypass -File scripts\docker_deploy.ps1 -Build
+```
+
+Then open `http://localhost:8080`. See
+`docs/docker_deployment.md` for the deployment contract and production notes.
+
 Windows one-command real-run startup:
 
 ```powershell
