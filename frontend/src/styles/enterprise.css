@@ -461,6 +461,14 @@
   min-width: 0;
 }
 
+.enterprise-work-stack .evidence-workbench {
+  grid-template-columns: 1fr;
+}
+
+.enterprise-work-stack .evidence-side-rail {
+  position: static;
+}
+
 .evidence-side-rail {
   display: grid;
   gap: 12px;

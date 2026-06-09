@@ -1,5 +1,14 @@
 import { Link } from "react-router-dom";
-import { Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  Bell,
+  CheckCircle2,
+  ChevronDown,
+  HelpCircle,
+  Menu,
+  Network,
+} from "lucide-react";
 import type { RuntimeConfig } from "../../api/types";
 
 export function Topbar({
@@ -11,11 +20,28 @@ export function Topbar({
 }) {
   return (
     <header className="topbar">
-      <div className="topbar-title">
-        <span>{routeLabel}</span>
-        <strong>{runtime?.default_execution_mode === "real" ? "Real mode" : "Demo mode"}</strong>
+      <div className="topbar-context">
+        <button className="topbar-menu-button" type="button" aria-label="Open navigation">
+          <Menu size={18} aria-hidden />
+        </button>
+        <button className="workspace-switcher" type="button">
+          <span>Acme Corp</span>
+          <ChevronDown size={15} aria-hidden />
+        </button>
+        <span className="topbar-divider" aria-hidden />
+        <div className="topbar-title">
+          <span>{routeLabel}</span>
+          <strong>
+            <Network size={15} aria-hidden />
+            AI Competitive Intel
+          </strong>
+        </div>
       </div>
       <div className="topbar-actions" aria-label="System status">
+        <Link className="primary-link topbar-research-link" to="/">
+          <Activity size={15} aria-hidden />
+          AI Research
+        </Link>
         <StatusBadge
           good={Boolean(runtime?.temporal_cutover_ready)}
           label="Temporal"
@@ -28,10 +54,18 @@ export function Topbar({
           good={Boolean(runtime?.compliance_redaction_enabled)}
           label="Compliance"
         />
-        <Link className="primary-link" to="/">
-          <Activity size={15} aria-hidden />
-          Run
-        </Link>
+        <button className="topbar-icon-button" type="button" aria-label="Notifications">
+          <Bell size={17} aria-hidden />
+          <i aria-hidden />
+        </button>
+        <button className="topbar-icon-button" type="button" aria-label="Help">
+          <HelpCircle size={17} aria-hidden />
+        </button>
+        <div className="topbar-user">
+          <span className="avatar">AC</span>
+          <strong>Acme Admin</strong>
+          <ChevronDown size={14} aria-hidden />
+        </div>
       </div>
     </header>
   );

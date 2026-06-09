@@ -9,16 +9,38 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-export const navItems = [
-  { to: "/", label: "New run", icon: PlusCircle, end: true },
-  { to: "/history", label: "Runs", icon: History },
-  { to: "/enterprise", label: "Workbench", icon: Briefcase },
-  { to: "/competitors", label: "Competitors", icon: Layers },
-  { to: "/evidence", label: "Evidence", icon: Database },
-  { to: "/reports", label: "Reports", icon: FileText },
-  { to: "/governance", label: "Governance", icon: ShieldCheck },
-  { to: "/activity", label: "Activity", icon: Bell },
+export const navGroups = [
+  {
+    label: "Research",
+    items: [
+      { to: "/", label: "New Run", icon: PlusCircle, end: true },
+      { to: "/history", label: "Runs", icon: History },
+      { to: "/enterprise", label: "Workbench", icon: Briefcase },
+    ],
+  },
+  {
+    label: "Evidence",
+    items: [
+      { to: "/evidence", label: "Sources", icon: Database },
+      { to: "/reports", label: "Reports", icon: FileText },
+    ],
+  },
+  {
+    label: "Analysis",
+    items: [
+      { to: "/competitors", label: "Competitors", icon: Layers },
+      { to: "/activity", label: "Activity", icon: Bell },
+    ],
+  },
+  {
+    label: "Quality",
+    items: [
+      { to: "/governance", label: "Governance", icon: ShieldCheck },
+    ],
+  },
 ];
+
+export const navItems = navGroups.flatMap((group) => group.items);
 
 export function routeTitle(pathname: string) {
   if (pathname === "/") return "Run setup";

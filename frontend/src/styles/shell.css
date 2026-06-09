@@ -1,19 +1,30 @@
 .app-shell {
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-columns: 248px minmax(0, 1fr);
   min-height: 100vh;
 }
 
 .sidebar {
-  background: #111827;
+  background:
+    linear-gradient(180deg, rgba(20, 184, 166, 0.08) 0%, rgba(20, 184, 166, 0) 30%),
+    #0c1726;
   color: #f8fafc;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 18px;
   min-height: 100vh;
-  padding: 20px 14px;
+  padding: 18px 14px 14px;
   position: sticky;
   top: 0;
+}
+
+.sidebar-head,
+.nav-list,
+.nav-section,
+.nav-section > div,
+.sidebar-admin {
+  display: grid;
+  gap: 6px;
 }
 
 .brand {
@@ -41,7 +52,12 @@
 }
 
 .brand strong,
-.brand small {
+.brand small,
+.sidebar-system strong,
+.sidebar-system small,
+.sidebar-profile strong,
+.sidebar-profile small,
+.topbar-user strong {
   display: block;
   min-width: 0;
   overflow: hidden;
@@ -51,7 +67,7 @@
 
 .brand strong {
   font-size: 16px;
-  font-weight: 720;
+  font-weight: 760;
 }
 
 .brand small {
@@ -61,51 +77,70 @@
 }
 
 .nav-list {
-  display: grid;
-  gap: 5px;
+  gap: 18px;
 }
 
-.nav-list a {
+.nav-section > strong,
+.sidebar-admin > strong {
+  color: #7f8da3;
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0;
+  padding: 0 8px;
+  text-transform: uppercase;
+}
+
+.nav-list a,
+.sidebar-admin a {
   align-items: center;
   border: 1px solid transparent;
   border-radius: 8px;
-  color: #cbd5e1;
+  color: #d6deea;
   display: flex;
   font-size: 14px;
-  font-weight: 560;
+  font-weight: 600;
   gap: 10px;
-  min-height: 42px;
+  min-height: 38px;
   min-width: 0;
-  padding: 0 11px;
+  padding: 0 10px;
   text-decoration: none;
 }
 
-.nav-list a span {
+.nav-list a span,
+.sidebar-admin a span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.nav-list a svg {
+.nav-list a svg,
+.sidebar-admin a svg {
   color: #94a3b8;
   flex: 0 0 auto;
   stroke-width: 1.9;
 }
 
-.nav-list a:hover {
-  background: rgba(255, 255, 255, 0.06);
+.nav-list a:hover,
+.sidebar-admin a:hover {
+  background: rgba(255, 255, 255, 0.07);
   color: #ffffff;
 }
 
-.nav-list a.active {
-  background: #f8fafc;
-  border-color: #ffffff;
-  color: #0f172a;
+.nav-list a.active,
+.sidebar-admin a.active {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(148, 163, 184, 0.14);
+  color: #ffffff;
 }
 
-.nav-list a.active svg {
-  color: var(--accent);
+.nav-list a.active svg,
+.sidebar-admin a.active svg {
+  color: #2dd4bf;
+}
+
+.sidebar-admin {
+  margin-top: 2px;
 }
 
 .sidebar-system {
@@ -115,24 +150,17 @@
   gap: 10px;
   grid-template-columns: 10px minmax(0, 1fr);
   margin-top: auto;
-  padding: 16px 8px 0;
+  padding: 14px 8px 0;
 }
 
 .sidebar-system strong,
-.sidebar-system small {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-system strong {
+.sidebar-profile strong {
   color: #ffffff;
   font-size: 13px;
 }
 
-.sidebar-system small {
+.sidebar-system small,
+.sidebar-profile small {
   color: #9ca3af;
   font-size: 12px;
   margin-top: 2px;
@@ -152,6 +180,48 @@
   background: #f59e0b;
 }
 
+.sidebar-profile {
+  align-items: center;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  padding: 6px 6px 2px;
+}
+
+.avatar {
+  align-items: center;
+  background: #e0f2fe;
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  border-radius: 999px;
+  color: #0369a1;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 760;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.sidebar-profile svg {
+  color: #94a3b8;
+}
+
+.sidebar-collapse {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: #9ca3af;
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  gap: 6px;
+  min-height: 34px;
+  padding: 8px 8px 0;
+  text-align: left;
+}
+
 .content-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -160,13 +230,13 @@
 
 .topbar {
   align-items: center;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.94);
   border-bottom: 1px solid var(--border-soft);
   display: flex;
   gap: 18px;
-  height: 64px;
+  height: 62px;
   justify-content: space-between;
-  padding: 0 28px;
+  padding: 0 22px;
   position: sticky;
   top: 0;
   z-index: 30;
@@ -178,29 +248,88 @@
   }
 }
 
+.topbar-context,
+.topbar-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.topbar-context {
+  gap: 12px;
+}
+
+.topbar-actions {
+  justify-content: flex-end;
+}
+
+.topbar-menu-button,
+.topbar-icon-button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  position: relative;
+  width: 34px;
+}
+
+.topbar-icon-button i {
+  background: var(--danger);
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  height: 9px;
+  position: absolute;
+  right: 7px;
+  top: 7px;
+  width: 9px;
+}
+
+.workspace-switcher {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 720;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 4px;
+}
+
+.topbar-divider {
+  background: var(--border-soft);
+  height: 28px;
+  width: 1px;
+}
+
 .topbar-title {
   display: grid;
   gap: 2px;
+  min-width: 0;
 }
 
 .topbar-title span {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .topbar-title strong {
-  color: var(--text);
-  font-size: 18px;
-  font-weight: 720;
-}
-
-.topbar-actions {
   align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
+  color: var(--text);
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 720;
+  gap: 7px;
+  min-width: 0;
 }
 
 .status-badge,
@@ -241,20 +370,38 @@
   border-color: var(--accent-strong);
 }
 
+.topbar-research-link {
+  min-width: 136px;
+}
+
+.topbar-user {
+  align-items: center;
+  display: inline-grid;
+  gap: 7px;
+  grid-template-columns: auto minmax(0, auto) auto;
+  min-width: 0;
+}
+
+.topbar-user strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+  max-width: 112px;
+}
+
 .main-pane {
   min-width: 0;
-  padding: 28px 30px 48px;
+  padding: 24px 26px 48px;
 }
 
 .work-surface,
 .run-detail,
 .enterprise-workbench {
   margin: 0 auto;
-  max-width: 1320px;
+  max-width: 1480px;
   width: 100%;
 }
 
 .enterprise-workbench {
-  max-width: 1680px;
+  max-width: 1720px;
 }
-
