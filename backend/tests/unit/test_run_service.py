@@ -38,7 +38,6 @@ from packages.schema.models import (
     RevisionRecord,
 )
 from packages.search import SearchResult
-
 from packages.skills.registry import SkillRegistry
 from packages.tools.evidence_fetch import EvidenceFetchResult
 from packages.tools.fetch_page import FetchPageResult
@@ -295,6 +294,129 @@ async def test_real_mode_accepts_backup_provider_when_model_policy_allows() -> N
     )
 
     assert detail.execution_mode == "real"
+
+
+@pytest.mark.asyncio
+async def test_create_run_reuses_recent_active_duplicate_even_with_new_key() -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+
+    first = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:first",
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity", "Claude"],
+            dimensions=["pricing", "feature"],
+            execution_mode="demo",
+        )
+    )
+    duplicate = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:second",
+            topic="  AI   research assistant competitive analysis ",
+            competitors=["claude", "Perplexity"],
+            dimensions=["feature", "pricing"],
+            execution_mode="demo",
+        )
+    )
+
+    assert duplicate.id == first.id
+    assert duplicate.idempotency_key == first.idempotency_key
+    assert duplicate.active_run_fingerprint == first.active_run_fingerprint
+
+
+@pytest.mark.asyncio
+async def test_duplicate_run_short_circuits_pre_create_verification(monkeypatch) -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+    calls = 0
+
+    def verify_once(competitors: list[str]) -> dict[str, HomepageVerification]:
+        nonlocal calls
+        calls += 1
+        return {
+            competitor: HomepageVerification(
+                competitor=competitor,
+                homepage_url=None,
+                verified=False,
+                reason="test",
+            )
+            for competitor in competitors
+        }
+
+    monkeypatch.setattr("packages.orchestrator.service.verify_homepages", verify_once)
+
+    first = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:verify-first",
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity", "Claude"],
+            dimensions=["pricing", "feature"],
+            execution_mode="demo",
+        )
+    )
+    duplicate = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:verify-second",
+            topic="AI research assistant competitive analysis",
+            competitors=["Claude", "Perplexity"],
+            dimensions=["feature", "pricing"],
+            execution_mode="demo",
+        )
+    )
+
+    assert duplicate.id == first.id
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_create_run_allows_duplicate_after_active_run_finishes() -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+
+    first = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:finished-first",
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    first.status = "completed"
+    duplicate = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:finished-second",
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+
+    assert duplicate.id != first.id
+    assert duplicate.active_run_fingerprint == first.active_run_fingerprint
 
 
 @pytest.mark.asyncio

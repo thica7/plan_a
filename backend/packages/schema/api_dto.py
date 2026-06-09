@@ -200,6 +200,7 @@ class RunDetail(RunSummary):
     max_iterations: int = Field(default=2, ge=1)
     auto_redo_warn_enabled: bool = False
     hitl_enabled: bool = False
+    active_run_fingerprint: str | None = None
     report_md: str = ""
     raw_sources: list[RawSource] = Field(default_factory=list)
     competitor_kbs: dict[str, CompetitorKB] = Field(default_factory=dict)

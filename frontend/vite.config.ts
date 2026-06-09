@@ -6,6 +6,15 @@ declare const process: { env: Record<string, string | undefined> };
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          return id.indexOf("node_modules") >= 0 ? "vendor" : undefined;
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

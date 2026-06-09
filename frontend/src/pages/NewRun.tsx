@@ -127,6 +127,18 @@ export function NewRun() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    const validationError = validateRunDraft({
+      topic,
+      competitorMode,
+      competitorList,
+      selected,
+      executionMode,
+      runtime,
+    });
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     if (runBlockedByQuota) {
       setError(quotaDecision?.reason ?? "Workspace quota blocks new runs.");
       return;
@@ -448,4 +460,47 @@ function newRunIdempotencyKey() {
     return `ui-run:${crypto.randomUUID()}`;
   }
   return `ui-run:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
+}
+
+function validateRunDraft({
+  topic,
+  competitorMode,
+  competitorList,
+  selected,
+  executionMode,
+  runtime,
+}: {
+  topic: string;
+  competitorMode: "auto" | "manual";
+  competitorList: string[];
+  selected: string[];
+  executionMode: "demo" | "real";
+  runtime: RuntimeConfig | null;
+}) {
+  if (topic.trim().length < 2) {
+    return "Topic must be at least 2 characters.";
+  }
+  if (selected.length === 0) {
+    return "Select at least one analysis dimension.";
+  }
+  if (selected.length > 8) {
+    return "Select no more than 8 analysis dimensions.";
+  }
+  if (competitorMode === "manual" && competitorList.length === 0) {
+    return "Enter at least one competitor or switch to Auto-discover.";
+  }
+  if (competitorList.length > 8) {
+    return "Enter no more than 8 competitors.";
+  }
+  if (
+    executionMode === "real"
+    && runtime
+    && !(
+      (runtime.has_ark_api_key && runtime.has_ark_model)
+      || (runtime.has_backup_llm_api_key && runtime.has_backup_llm_model)
+    )
+  ) {
+    return "Real API mode needs primary ARK or BACKUP_LLM settings in backend .env.";
+  }
+  return null;
 }

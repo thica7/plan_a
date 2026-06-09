@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import { fileURLToPath } from "url";
 
 if (process.argv.includes("--print-timeout")) {
   console.log("llm_timeout_seconds=60");
@@ -6,10 +7,10 @@ if (process.argv.includes("--print-timeout")) {
   process.exit(0);
 }
 
-const args = ["vitest", "run", ...process.argv.slice(2)];
-const child = spawn("npx", args, {
+const vitestBin = fileURLToPath(new URL("../node_modules/vitest/vitest.mjs", import.meta.url));
+const args = [vitestBin, "run", ...process.argv.slice(2)];
+const child = spawn(process.execPath, args, {
   stdio: "inherit",
-  shell: true,
 });
 
 child.on("close", (code) => {
