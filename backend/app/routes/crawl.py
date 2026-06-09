@@ -6,14 +6,16 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
 import aiosqlite
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
+from app.deps import get_enterprise_user_context
 from app.routes.knowledge import get_embedding_provider, ingest_crawl_result
+from packages.auth import EnterpriseUserContext, can_access_workspace
 from packages.crawler.models import (
     CrawlFrontierStats,
     CrawlRequest,
@@ -23,9 +25,11 @@ from packages.crawler.models import (
 )
 from packages.crawler.repository import CrawlerRepository
 from packages.crawler.sources import processor_for
+from packages.enterprise.store import DEFAULT_WORKSPACE_ID
 from packages.knowledge.repository import KnowledgeRepository
 
 router = APIRouter()
+EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
 
 
 class CrawlJobCreate(BaseModel):
@@ -119,15 +123,21 @@ def _load_result_metadata(raw: str | None) -> dict[str, Any]:
 
 @router.get("/crawl/jobs", response_model=list[CrawlJob])
 async def list_crawl_jobs(
+    user: EnterpriseUserDep,
     status: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[CrawlJob]:
+    _require_crawl_access(user, "source:read")
     return await _fetch_jobs(status=status, limit=limit, offset=offset)
 
 
 @router.post("/crawl/sources", response_model=CrawlSourceDetail, status_code=201)
-async def create_crawl_source(request: CrawlSourceCreate) -> CrawlSourceDetail:
+async def create_crawl_source(
+    request: CrawlSourceCreate,
+    user: EnterpriseUserDep,
+) -> CrawlSourceDetail:
+    _require_crawl_access(user, "source:write")
     repo = await _open_crawler_repository()
     try:
         config = request.config
@@ -173,7 +183,8 @@ async def create_crawl_source(request: CrawlSourceCreate) -> CrawlSourceDetail:
 
 
 @router.get("/crawl/sources", response_model=list[CrawlSource])
-async def list_crawl_sources() -> list[CrawlSource]:
+async def list_crawl_sources(user: EnterpriseUserDep) -> list[CrawlSource]:
+    _require_crawl_access(user, "source:read")
     repo = await _open_crawler_repository()
     try:
         return await repo.list_sources()
@@ -182,7 +193,8 @@ async def list_crawl_sources() -> list[CrawlSource]:
 
 
 @router.get("/crawl/sources/{source_id}", response_model=CrawlSourceDetail)
-async def get_crawl_source(source_id: str) -> CrawlSourceDetail:
+async def get_crawl_source(source_id: str, user: EnterpriseUserDep) -> CrawlSourceDetail:
+    _require_crawl_access(user, "source:read")
     repo = await _open_crawler_repository()
     try:
         source = await repo.get_source(source_id)
@@ -195,7 +207,8 @@ async def get_crawl_source(source_id: str) -> CrawlSourceDetail:
 
 
 @router.delete("/crawl/sources/{source_id}", status_code=204)
-async def delete_crawl_source(source_id: str) -> None:
+async def delete_crawl_source(source_id: str, user: EnterpriseUserDep) -> None:
+    _require_crawl_access(user, "source:write")
     repo = await _open_crawler_repository()
     try:
         deleted = await repo.delete_source(source_id)
@@ -206,7 +219,8 @@ async def delete_crawl_source(source_id: str) -> None:
 
 
 @router.post("/crawl/sources/{source_id}/retry", response_model=CrawlSourceDetail)
-async def retry_crawl_source(source_id: str) -> CrawlSourceDetail:
+async def retry_crawl_source(source_id: str, user: EnterpriseUserDep) -> CrawlSourceDetail:
+    _require_crawl_access(user, "source:write")
     repo = await _open_crawler_repository()
     try:
         source = await repo.get_source(source_id)
@@ -233,7 +247,8 @@ def _crawl_source_warnings(source_type: str, urls: list[str]) -> list[str]:
 
 
 @router.get("/crawl/frontier/stats", response_model=CrawlFrontierStats)
-async def get_crawl_frontier_stats() -> CrawlFrontierStats:
+async def get_crawl_frontier_stats(user: EnterpriseUserDep) -> CrawlFrontierStats:
+    _require_crawl_access(user, "source:read")
     repo = await _open_crawler_repository()
     try:
         return await repo.stats()
@@ -242,7 +257,8 @@ async def get_crawl_frontier_stats() -> CrawlFrontierStats:
 
 
 @router.post("/crawl/jobs", response_model=CrawlJob, status_code=201)
-async def create_crawl_job(request: CrawlJobCreate) -> CrawlJob:
+async def create_crawl_job(request: CrawlJobCreate, user: EnterpriseUserDep) -> CrawlJob:
+    _require_crawl_access(user, "source:write")
     repo = await _open_repository()
     try:
         job_id = await repo.create_crawl_job(
@@ -262,7 +278,8 @@ async def create_crawl_job(request: CrawlJobCreate) -> CrawlJob:
 
 
 @router.get("/crawl/jobs/{job_id}", response_model=CrawlJob)
-async def get_crawl_job(job_id: str) -> CrawlJob:
+async def get_crawl_job(job_id: str, user: EnterpriseUserDep) -> CrawlJob:
+    _require_crawl_access(user, "source:read")
     job = await _fetch_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Crawl job not found")
@@ -270,7 +287,12 @@ async def get_crawl_job(job_id: str) -> CrawlJob:
 
 
 @router.get("/crawl/jobs/{job_id}/stream")
-async def stream_crawl_job(job_id: str, request: Request) -> EventSourceResponse:
+async def stream_crawl_job(
+    job_id: str,
+    request: Request,
+    user: EnterpriseUserDep,
+) -> EventSourceResponse:
+    _require_crawl_access(user, "source:read")
     if await _fetch_job(job_id) is None:
         raise HTTPException(status_code=404, detail="Crawl job not found")
 
@@ -389,3 +411,9 @@ async def _ingest_frontier_result(result: CrawlResult) -> None:
         )
     finally:
         await repo.close()
+
+
+def _require_crawl_access(user: EnterpriseUserContext, action: str) -> None:
+    workspace_id = user.workspace_id or DEFAULT_WORKSPACE_ID
+    if not can_access_workspace(user, workspace_id, action):
+        raise HTTPException(status_code=403, detail="Insufficient workspace permission")

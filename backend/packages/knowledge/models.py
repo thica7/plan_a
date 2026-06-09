@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Document
@@ -88,18 +88,18 @@ class RetrievalHit(BaseModel):
 
 
 class RetrievalRequest(BaseModel):
-    query: str
+    query: str = Field(min_length=1, max_length=2_000)
     preset: str | None = None
-    competitors: list[str] = []
-    dimensions: list[str] = []
-    top_k: int = 20
-    rerank_top_k: int = 8
-    final_top_k: int = 8
-    dense_weight: float = 1.0
-    sparse_weight: float = 1.0
-    mmr_lambda: float = 0.0
+    competitors: list[str] = Field(default_factory=list, max_length=50)
+    dimensions: list[str] = Field(default_factory=list, max_length=50)
+    top_k: int = Field(default=20, ge=1, le=100)
+    rerank_top_k: int = Field(default=8, ge=0, le=100)
+    final_top_k: int = Field(default=8, ge=1, le=100)
+    dense_weight: float = Field(default=1.0, ge=0.0, le=1.0)
+    sparse_weight: float = Field(default=1.0, ge=0.0, le=1.0)
+    mmr_lambda: float = Field(default=0.0, ge=0.0, le=1.0)
     enable_query_rewrite: bool = True
-    num_rewrites: int = 3
+    num_rewrites: int = Field(default=3, ge=0, le=5)
     mode: Literal["dense", "hybrid"] = "hybrid"
 
 

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from app.routes import crawl as crawl_route
+from packages.auth import EnterpriseUserContext
 from packages.crawler.models import (
+    CrawlRequest,
     CrawlSource,
     CrawlSourceCreate,
     PricingSourceConfig,
@@ -25,6 +28,14 @@ def _resolver_for(*addresses: str):
         return [(2, 1, 6, "", (address, port)) for address in addresses]
 
     return resolver
+
+
+def _user(role: str = "owner") -> EnterpriseUserContext:
+    return EnterpriseUserContext(
+        user_id=f"{role}-user",
+        role=role,  # type: ignore[arg-type]
+        workspace_id="default-workspace",
+    )
 
 
 class FakeSearchClient:
@@ -248,7 +259,8 @@ async def test_crawl_route_persists_source_metadata_and_frontier_source_id(
             config={"competitor": "Acme", "max_urls": 5},
             dimension="pricing",
             priority=7,
-        )
+        ),
+        _user(),
     )
 
     repo = CrawlerRepository(db_path)
@@ -302,7 +314,8 @@ async def test_crawl_route_reports_empty_source_expansion_without_scheduler(
             source_type="pricing",
             config={"competitor": "Acme", "max_urls": 5},
             dimension="pricing",
-        )
+        ),
+        _user(),
     )
 
     repo = CrawlerRepository(db_path)
@@ -333,3 +346,17 @@ def _sitemap_client(urls: list[str]) -> httpx.AsyncClient:
         return httpx.Response(200, text=xml)
 
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+def test_crawl_request_rejects_unbounded_resource_values() -> None:
+    with pytest.raises(ValidationError):
+        CrawlRequest(url="https://example.com", timeout_seconds=120)
+    with pytest.raises(ValidationError):
+        CrawlRequest(url="https://example.com", max_total_bytes=1_000_000_000)
+
+
+def test_crawl_write_requires_analyst_or_higher() -> None:
+    with pytest.raises(Exception) as exc_info:
+        crawl_route._require_crawl_access(_user("viewer"), "source:write")
+
+    assert getattr(exc_info.value, "status_code", None) == 403
