@@ -1,4 +1,5 @@
 import { CalendarClock, KeyRound, Zap } from "lucide-react";
+import { useTranslation } from "../../stores/i18n";
 import { SectionHeading } from "./SectionHeading";
 import type { ExecutionMode } from "./types";
 
@@ -11,15 +12,16 @@ export function ExecutionModePanel({
   executionMode,
   setExecutionMode,
 }: ExecutionModePanelProps) {
+  const { t } = useTranslation();
   return (
     <section className="form-section execution-section">
       <SectionHeading
         icon={<Zap size={17} aria-hidden />}
         index="06"
-        meta="how this run will execute"
-        title="Execution Mode"
+        meta={t('newRun.executionModeDesc')}
+        title={t('newRun.executionMode')}
       />
-      <div className="execution-mode-grid" role="radiogroup" aria-label="Execution mode">
+      <div className="execution-mode-grid" role="radiogroup" aria-label={t('newRun.executionMode')}>
         <button
           className={executionMode === "real" ? "execution-mode-card active" : "execution-mode-card"}
           onClick={() => setExecutionMode("real")}
@@ -27,8 +29,8 @@ export function ExecutionModePanel({
         >
           <KeyRound size={18} aria-hidden />
           <span>
-            <strong>Real-time API</strong>
-            <em>Execute now with live data collection</em>
+            <strong>{t('newRun.realtimeApi')}</strong>
+            <em>{t('newRun.realtimeDesc')}</em>
           </span>
           <i aria-hidden />
         </button>
@@ -39,8 +41,8 @@ export function ExecutionModePanel({
         >
           <CalendarClock size={18} aria-hidden />
           <span>
-            <strong>Demo mode</strong>
-            <em>Use deterministic fixtures for interface review</em>
+            <strong>{t('newRun.demoMode')}</strong>
+            <em>{t('newRun.demoDesc')}</em>
           </span>
           <i aria-hidden />
         </button>

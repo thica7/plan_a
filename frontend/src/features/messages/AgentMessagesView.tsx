@@ -1,4 +1,5 @@
 import type { AgentMessage, ToolCallMessage } from "../../api/types";
+import { useTranslation } from '../../stores/i18n';
 
 interface Props {
   messages: AgentMessage[];
@@ -6,19 +7,20 @@ interface Props {
 }
 
 export function AgentMessagesView({ messages, toolCalls }: Props) {
+  const {t}=useTranslation();
   const consumed = messages.filter((message) => message.status === "consumed").length;
   const queued = messages.length - consumed;
 
   return (
     <section className="panel agent-messages-panel">
       <div className="panel-heading-row">
-        <h2>Agent messages</h2>
+        <h2>{t('messages.title')}</h2>
         <span className="muted-text">
           {messages.length} messages / {consumed} consumed / {queued} queued / {toolCalls.length} tool calls
         </span>
       </div>
       {messages.length === 0 ? (
-        <p>No explicit agent messages yet.</p>
+        <p>{t('messages.noMessages')}</p>
       ) : (
         <div className="agent-message-list">
           {messages.slice(-18).map((message) => (
@@ -39,7 +41,7 @@ export function AgentMessagesView({ messages, toolCalls }: Props) {
       )}
       {toolCalls.length > 0 ? (
         <div className="tool-message-list">
-          <h3>Tool calls</h3>
+          <h3>{t('messages.toolCalls')}</h3>
           {toolCalls.slice(-10).map((call) => (
             <article key={call.id}>
               <strong>{call.agent}{call.subagent ? `:${call.subagent}` : ""}</strong>

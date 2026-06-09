@@ -16,6 +16,7 @@ import { ReportReleasePanel } from "./ReportReleasePanel";
 import { ReportReviewDesk } from "./ReportReviewDesk";
 import { ReportVersionPanel } from "./ReportVersionPanel";
 import type { ReportAction, ReportExportFormat } from "./reportOperations";
+import { useTranslation } from "../../stores/i18n";
 
 interface ReportStudioProps {
   claims: ClaimRecord[];
@@ -54,6 +55,7 @@ export function ReportStudio({
   setSelectedVersionId,
   versions,
 }: ReportStudioProps) {
+  const { t } = useTranslation();
   const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
   const [isDiffLoading, setDiffLoading] = useState(false);
 
@@ -120,7 +122,7 @@ export function ReportStudio({
               sources={reportSources.sources}
             />
           ) : (
-            <EmptyState title="Select a version" />
+            <EmptyState title={t("workbench.selectVersion")} />
           )}
         </div>
 

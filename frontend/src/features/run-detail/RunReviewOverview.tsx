@@ -6,6 +6,7 @@ import { MetricCard, Panel, StatusPill } from "../../components/ui";
 import type { ReportSourceBundle } from "../report/sourceBundle";
 import { SwimlaneView } from "../swimlane/SwimlaneView";
 import type { ReflectionItem, RunDetailView } from "./types";
+import { useTranslation } from "../../stores/i18n";
 
 interface RunReviewOverviewProps {
   decisionReplay: DecisionReplayReport | null;
@@ -32,6 +33,7 @@ export function RunReviewOverview({
   reflectionItems,
   reportSources,
 }: RunReviewOverviewProps) {
+  const { t } = useTranslation();
   const verifiedRate = Math.round(detail.metrics.verified_source_rate * 100);
   const sourceCoverage = Math.round(detail.metrics.source_coverage_rate * 100);
   const citedClaimRate = Math.round(detail.metrics.claim_citation_rate * 100);
@@ -42,7 +44,7 @@ export function RunReviewOverview({
     <div className="run-review-overview">
       <main className="run-review-main">
         <div className="run-review-score-grid">
-          <Panel className="run-review-card" title="Run quality" icon={<ShieldCheck size={16} aria-hidden />}>
+          <Panel className="run-review-card" title={t('runQuality.title')} icon={<ShieldCheck size={16} aria-hidden />}>
             <strong className="run-review-score">{qualityScore}</strong>
             <StatusPill tone={qualityTone(qualityComparison?.verdict, qualityScore)}>
               {qualityComparison?.verdict ?? detail.status}
@@ -60,7 +62,7 @@ export function RunReviewOverview({
             </div>
           </Panel>
 
-          <Panel className="run-review-card" title="Evidence" icon={<Database size={16} aria-hidden />}>
+          <Panel className="run-review-card" title={t('report.evidence')} icon={<Database size={16} aria-hidden />}>
             <strong className="large-metric">
               {reportSources.sources.length}
               <span>/{detail.raw_sources.length}</span>
@@ -72,20 +74,20 @@ export function RunReviewOverview({
             </div>
           </Panel>
 
-          <Panel className="run-review-card" title="Report" icon={<FileText size={16} aria-hidden />}>
+          <Panel className="run-review-card" title={t('runTabs.report')} icon={<FileText size={16} aria-hidden />}>
             <strong className="large-metric">
               {detail.report_md.length.toLocaleString()}
               <span> chars</span>
             </strong>
             <p className="muted-line">{detail.enterprise_projection?.report_version.status ?? "run report"} / {detail.enterprise_projection?.report_version.claim_ids.length ?? 0} claims</p>
             <button className="icon-text-button" type="button" onClick={() => onViewChange("report")}>
-              Open report
+              {t('reviewOverview.openReport')}
               <ArrowRight size={15} aria-hidden />
             </button>
           </Panel>
         </div>
 
-        <Panel className="run-flow-panel" title="Agent graph" icon={<GitBranch size={16} aria-hidden />}>
+        <Panel className="run-flow-panel" title={t('reviewOverview.agentGraph')} icon={<GitBranch size={16} aria-hidden />}>
           <SwimlaneView
             currentNode={detail.current_node}
             events={events}
@@ -117,7 +119,7 @@ export function RunReviewOverview({
             </div>
             {reflectionItems.length > 0 ? (
               <div className="auto-redo-strip">
-                <span>Reflection</span>
+                <span>{t('reviewOverview.reflection')}</span>
                 <strong>{reflectionItems.length}</strong>
                 <span>{reflectionItems[0]?.text}</span>
               </div>
@@ -138,7 +140,7 @@ export function RunReviewOverview({
               ))}
             </div>
             <button className="icon-text-button full-width" type="button" onClick={() => onViewChange("agents")}>
-              Open trace
+              {t('reviewOverview.openTrace')}
               <ArrowRight size={15} aria-hidden />
             </button>
           </Panel>
@@ -150,7 +152,7 @@ export function RunReviewOverview({
           <div className="action-grid">
             <button className="icon-text-button" type="button" onClick={() => onViewChange("report")}>
               <FileText size={15} aria-hidden />
-              Report
+              {t('runTabs.report')}
             </button>
             <button className="icon-text-button" type="button" onClick={() => onViewChange("agents")}>
               <GitBranch size={15} aria-hidden />

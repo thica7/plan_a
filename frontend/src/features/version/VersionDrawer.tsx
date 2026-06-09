@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GitMerge, RefreshCw } from 'lucide-react';
+import { useTranslation } from '../../stores/i18n';
+
 
 interface VersionDocument {
   id: string;
@@ -68,6 +70,7 @@ function splitDiff(lines: string[]) {
 }
 
 export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
+  const { t } = useTranslation();
   const [versions, setVersions] = useState<VersionDocument[]>([]);
   const [baseId, setBaseId] = useState('');
   const [targetId, setTargetId] = useState('');
@@ -136,12 +139,12 @@ export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h4 className="font-bold">Version chain</h4>
+          <h4 className="font-bold">{t('version.title')}</h4>
           <p className="text-xs text-base-content/60">{versions.length} stored versions for this document lineage.</p>
         </div>
         <button type="button" className="btn btn-ghost btn-sm gap-1" onClick={loadVersions} disabled={loading}>
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
+          {t('version.refresh')}
         </button>
       </div>
 
@@ -190,16 +193,16 @@ export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
 
           <div className="grid gap-2 sm:grid-cols-2">
             <pre className="max-h-72 overflow-auto rounded-md bg-base-100 p-3 text-xs leading-relaxed">
-              {selectedDiff.left.join('\n') || 'No diff selected.'}
+              {selectedDiff.left.join('\n') || t('version.noDiff')}
             </pre>
             <pre className="max-h-72 overflow-auto rounded-md bg-base-100 p-3 text-xs leading-relaxed">
-              {selectedDiff.right.join('\n') || 'No diff selected.'}
+              {selectedDiff.right.join('\n') || t('version.noDiff')}
             </pre>
           </div>
 
           <button type="button" className="btn btn-primary btn-sm w-fit gap-1" onClick={handleMerge} disabled={merging || !targetId}>
             <GitMerge className="h-3.5 w-3.5" />
-            {merging ? 'Merging...' : 'Merge selected version'}
+            {merging ? 'Merging...' : t('version.mergeSelected')}
           </button>
         </div>
       )}

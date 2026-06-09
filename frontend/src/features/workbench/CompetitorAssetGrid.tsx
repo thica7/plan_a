@@ -2,6 +2,7 @@ import { ExternalLink, Layers } from "lucide-react";
 
 import type { CompetitorRecord, CompetitorScoreReport, EvidenceRecord } from "../../api/types";
 import { Panel, StatusPill } from "../../components/ui";
+import { useTranslation } from "../../stores/i18n";
 
 interface CompetitorAssetGridProps {
   competitors: CompetitorRecord[];
@@ -14,10 +15,11 @@ export function CompetitorAssetGrid({
   evidence,
   scores,
 }: CompetitorAssetGridProps) {
+  const { t } = useTranslation();
   const scoreByCompetitor = new Map(scores?.scores.map((score) => [score.competitor_id, score]) ?? []);
 
   return (
-    <Panel className="competitor-assets-panel" title="Competitor assets" icon={<Layers size={16} aria-hidden />}>
+    <Panel className="competitor-assets-panel" title={t('workbench.competitorAssets')} icon={<Layers size={16} aria-hidden />}>
       <div className="competitor-catalog-grid">
         {competitors.map((competitor) => {
           const score = scoreByCompetitor.get(competitor.id);
@@ -38,15 +40,15 @@ export function CompetitorAssetGrid({
               <div className="competitor-asset-metrics">
                 <span>
                   <strong>{score ? Math.round(score.total_score) : "n/a"}</strong>
-                  Score
+                  {t('workbench.score')}
                 </span>
                 <span>
                   <strong>{competitorEvidence.length}</strong>
-                  Evidence
+                  {t('workbench.evidence')}
                 </span>
                 <span>
                   <strong>{acceptedCount}</strong>
-                  Accepted
+                  {t('workbench.acceptedCol')}
                 </span>
               </div>
 
@@ -58,7 +60,7 @@ export function CompetitorAssetGrid({
               {competitor.homepage_url ? (
                 <a href={competitor.homepage_url} target="_blank" rel="noreferrer">
                   <ExternalLink size={14} aria-hidden />
-                  Homepage
+                  {t('workbench.homepage')}
                 </a>
               ) : null}
               {score?.recommendation ? <p>{score.recommendation}</p> : null}

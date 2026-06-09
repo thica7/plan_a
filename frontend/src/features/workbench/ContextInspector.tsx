@@ -1,8 +1,15 @@
 import type { ClaimRecord, EvidenceRecord, ReportVersionRecord } from "../../api/types";
 import { EmptyState, StatusPill } from "../../components/ui";
+import { useTranslation } from "../../stores/i18n";
 import { formatPercent, reportStatusTone } from "./format";
 
 export type InspectorTab = "source" | "claim" | "report";
+
+const tabKeys: Record<InspectorTab, string> = {
+  source: "workbench.source",
+  claim: "workbench.claim",
+  report: "workbench.reportTab",
+};
 
 export function ContextInspector({
   claim,
@@ -17,6 +24,7 @@ export function ContextInspector({
   selectedTab: InspectorTab;
   setSelectedTab: (tab: InspectorTab) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <aside className="concept-inspector">
       <div className="inspector-tabs">
@@ -27,7 +35,7 @@ export function ContextInspector({
             type="button"
             onClick={() => setSelectedTab(tab)}
           >
-            {tab}
+            {t(tabKeys[tab])}
           </button>
         ))}
       </div>
@@ -39,7 +47,8 @@ export function ContextInspector({
 }
 
 function SourceInspector({ evidence }: { evidence: EvidenceRecord | null }) {
-  if (!evidence) return <EmptyState title="No source selected" />;
+  const { t } = useTranslation();
+  if (!evidence) return <EmptyState title={t('workbench.noSourceSelected')} />;
   return (
     <div className="inspector-body">
       <StatusPill tone={evidence.quality_label === "accepted" ? "good" : "warn"}>{evidence.quality_label}</StatusPill>
@@ -51,21 +60,13 @@ function SourceInspector({ evidence }: { evidence: EvidenceRecord | null }) {
       ) : null}
       <code>{evidence.raw_source_id}</code>
       <div className="inspector-meta-grid">
-        <span>
-          Type <strong>{evidence.source_type}</strong>
-        </span>
-        <span>
-          Dimension <strong>{evidence.dimension}</strong>
-        </span>
-        <span>
-          Reliability <strong>{formatPercent(evidence.reliability_score)}</strong>
-        </span>
-        <span>
-          Freshness <strong>{formatPercent(evidence.freshness_score)}</strong>
-        </span>
+        <span>{t('workbench.type')} <strong>{evidence.source_type}</strong></span>
+        <span>{t('newRun.dimensions')} <strong>{evidence.dimension}</strong></span>
+        <span>{t('workbench.reliability')} <strong>{formatPercent(evidence.reliability_score)}</strong></span>
+        <span>{t('workbench.freshness')} <strong>{formatPercent(evidence.freshness_score)}</strong></span>
       </div>
       <section className="snapshot-box">
-        <strong>Snapshot</strong>
+        <strong>{t('workbench.snapshot')}</strong>
         <p>{evidence.snippet}</p>
       </section>
     </div>
@@ -73,7 +74,8 @@ function SourceInspector({ evidence }: { evidence: EvidenceRecord | null }) {
 }
 
 function ClaimInspector({ claim }: { claim: ClaimRecord | null }) {
-  if (!claim) return <EmptyState title="No claim selected" />;
+  const { t } = useTranslation();
+  if (!claim) return <EmptyState title={t('workbench.noClaimSelected')} />;
   return (
     <div className="inspector-body">
       <StatusPill tone={claim.status === "accepted" ? "good" : claim.status === "rejected" ? "bad" : "neutral"}>
@@ -82,15 +84,9 @@ function ClaimInspector({ claim }: { claim: ClaimRecord | null }) {
       <h3>{claim.claim_type}</h3>
       <p>{claim.claim_text}</p>
       <div className="inspector-meta-grid">
-        <span>
-          Confidence <strong>{formatPercent(claim.confidence)}</strong>
-        </span>
-        <span>
-          Evidence <strong>{claim.evidence_ids.length}</strong>
-        </span>
-        <span>
-          Agent <strong>{claim.created_by_agent ?? "unknown"}</strong>
-        </span>
+        <span>{t('workbench.confidence')} <strong>{formatPercent(claim.confidence)}</strong></span>
+        <span>{t('workbench.evidence')} <strong>{claim.evidence_ids.length}</strong></span>
+        <span>{t('workbench.agent')} <strong>{claim.created_by_agent ?? "unknown"}</strong></span>
       </div>
       <div className="linked-chip-list">
         {claim.evidence_ids.slice(0, 6).map((id) => (
@@ -102,24 +98,19 @@ function ClaimInspector({ claim }: { claim: ClaimRecord | null }) {
 }
 
 function ReportInspector({ report }: { report: ReportVersionRecord | null }) {
-  if (!report) return <EmptyState title="No report selected" />;
+  const { t } = useTranslation();
+  if (!report) return <EmptyState title={t('workbench.noReportSelected')} />;
   return (
     <div className="inspector-body">
       <StatusPill tone={reportStatusTone(report.status)}>{report.status}</StatusPill>
       <h3>Report v{report.version_number}</h3>
       <div className="inspector-meta-grid">
-        <span>
-          Claims <strong>{report.claim_ids.length}</strong>
-        </span>
-        <span>
-          Evidence <strong>{report.evidence_ids.length}</strong>
-        </span>
-        <span>
-          Size <strong>{report.report_md.length.toLocaleString()}</strong>
-        </span>
+        <span>{t('workbench.claims')} <strong>{report.claim_ids.length}</strong></span>
+        <span>{t('workbench.evidence')} <strong>{report.evidence_ids.length}</strong></span>
+        <span>{t('workbench.size')} <strong>{report.report_md.length.toLocaleString()}</strong></span>
       </div>
       <section className="snapshot-box">
-        <strong>Preview</strong>
+        <strong>{t('common.preview')}</strong>
         <p>{report.report_md.slice(0, 420)}</p>
       </section>
     </div>

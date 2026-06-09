@@ -1,4 +1,5 @@
 import { CheckCircle2, SlidersHorizontal } from "lucide-react";
+import { useTranslation } from '../../stores/i18n';
 
 interface Props {
   message: string;
@@ -17,10 +18,12 @@ export function PlanReviewModal({
   onAccept,
   onApply,
 }: Props) {
+  const { t } = useTranslation();
+
   return (
     <section className="hitl-panel">
       <div>
-        <h2>Plan review</h2>
+        <h2>{t('hitl.planReview')}</h2>
         <p>{message}</p>
       </div>
       <label>
@@ -33,7 +36,7 @@ export function PlanReviewModal({
       <div className="hitl-actions">
         <button className="icon-text-button" onClick={onAccept} type="button">
           <CheckCircle2 size={15} aria-hidden />
-          Continue current plan
+          {t('hitl.continuePlan')}
         </button>
         <button
           className="icon-text-button"
@@ -43,9 +46,10 @@ export function PlanReviewModal({
           type="button"
         >
           <SlidersHorizontal size={15} aria-hidden />
-          Apply edited dimensions
+          {t('hitl.applyEdited')}
         </button>
       </div>
     </section>
   );
 }
+

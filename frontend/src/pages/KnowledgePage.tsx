@@ -3,11 +3,13 @@ import { useKnowledgeStore } from '../stores/knowledgeStore';
 import { SourceCard } from '../components/SourceCard';
 import { UploadDrawer } from '../features/upload/UploadDrawer';
 import { VersionDrawer } from '../features/version/VersionDrawer';
+import { useTranslation } from '../stores/i18n';
 
 type SortKey = 'fetched_at' | 'title' | 'source_type';
 type DetailTab = 'content' | 'versions';
 
 export default function KnowledgePage() {
+  const { t } = useTranslation();
   const {
     documents, loading, error, filters, page, pageSize, totalCount,
     fetchDocuments, deleteDocument, setFilter, setPage,
@@ -41,9 +43,9 @@ export default function KnowledgePage() {
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Knowledge Base</h1>
+        <h1 className="text-2xl font-bold">{t('knowledge.title')}</h1>
         <button type="button" className="btn btn-primary btn-sm" onClick={() => setUploadOpen(true)}>
-          Bulk upload
+          {t('knowledge.bulkUpload')}
         </button>
       </div>
 
@@ -51,13 +53,13 @@ export default function KnowledgePage() {
       <div className="flex flex-wrap gap-4 items-center">
         <input
           className="input input-bordered w-48"
-          placeholder="Competitor"
+          placeholder={t('knowledge.competitor')}
           value={filters.competitor}
           onChange={(e) => setFilter('competitor', e.target.value)}
         />
         <input
           className="input input-bordered w-48"
-          placeholder="Dimension"
+          placeholder={t('knowledge.dimension')}
           value={filters.dimension}
           onChange={(e) => setFilter('dimension', e.target.value)}
         />
@@ -66,20 +68,20 @@ export default function KnowledgePage() {
           value={filters.source_type}
           onChange={(e) => setFilter('source_type', e.target.value)}
         >
-          <option value="">All sources</option>
-          <option value="webpage_verified">Webpage (verified)</option>
-          <option value="webpage_search">Webpage (search)</option>
-          <option value="report">Report</option>
-          <option value="manual">Manual</option>
+          <option value="">{t('knowledge.allSources')}</option>
+          <option value="webpage_verified">{t('knowledge.webpageVerified')}</option>
+          <option value="webpage_search">{t('knowledge.webpageSearch')}</option>
+          <option value="report">{t('knowledge.report')}</option>
+          <option value="manual">{t('knowledge.manual')}</option>
         </select>
         <select
           className="select select-bordered w-40"
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as SortKey)}
         >
-          <option value="fetched_at">Date</option>
-          <option value="title">Title</option>
-          <option value="source_type">Source</option>
+          <option value="fetched_at">{t('knowledge.date')}</option>
+          <option value="title">{t('knowledge.titleCol')}</option>
+          <option value="source_type">{t('knowledge.source')}</option>
         </select>
       </div>
 
@@ -109,12 +111,12 @@ export default function KnowledgePage() {
                   className="btn btn-sm btn-error absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={() => deleteDocument(doc.id)}
                 >
-                  Delete
+                  {t('common.delete')}
                 </button>
               </div>
             ))}
             {sorted.length === 0 && (
-              <p className="text-base-content/50 text-center py-12">No documents found.</p>
+              <p className="text-base-content/50 text-center py-12">{t('knowledge.noDocuments')}</p>
             )}
           </div>
 
@@ -127,17 +129,17 @@ export default function KnowledgePage() {
                   disabled={page <= 1}
                   onClick={() => setPage(page - 1)}
                 >
-                  Prev
+                  {t('common.prev')}
                 </button>
                 <button className="join-item btn btn-sm btn-disabled">
-                  Page {page} of {totalPages}
+                  {t('common.page')} {page} {t('common.of')} {totalPages}
                 </button>
                 <button
                   className="join-item btn btn-sm"
                   disabled={page >= totalPages}
                   onClick={() => setPage(page + 1)}
                 >
-                  Next
+                  {t('common.next')}
                 </button>
               </div>
             </div>
@@ -157,7 +159,7 @@ export default function KnowledgePage() {
                 <span className="badge badge-sm badge-ghost">{selectedDoc.source_type}</span>
                 {selectedDoc.url && (
                   <a href={selectedDoc.url} target="_blank" rel="noopener noreferrer" className="link link-primary text-xs">
-                    Open source
+                    {t('knowledge.openSource')}
                   </a>
                 )}
               </div>
@@ -168,14 +170,14 @@ export default function KnowledgePage() {
                   className={`tab ${detailTab === 'content' ? 'tab-active' : ''}`}
                   onClick={() => setDetailTab('content')}
                 >
-                  Content
+                  {t('knowledge.content')}
                 </button>
                 <button
                   type="button"
                   className={`tab ${detailTab === 'versions' ? 'tab-active' : ''}`}
                   onClick={() => setDetailTab('versions')}
                 >
-                  Versions
+                  {t('knowledge.versions')}
                 </button>
               </div>
               {detailTab === 'content' ? (
@@ -189,12 +191,12 @@ export default function KnowledgePage() {
           )}
           <div className="modal-action">
             <form method="dialog">
-              <button className="btn">Close</button>
+              <button className="btn">{t('common.close')}</button>
             </form>
           </div>
         </div>
         <form method="dialog" className="modal-backdrop">
-          <button>close</button>
+          <button>{t('common.close')}</button>
         </form>
       </dialog>
 

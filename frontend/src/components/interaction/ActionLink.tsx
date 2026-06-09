@@ -1,4 +1,4 @@
-import type { AnchorHTMLAttributes, MouseEventHandler, ReactNode } from "react";
+import { isValidElement, type AnchorHTMLAttributes, type MouseEventHandler, type ReactNode } from "react";
 import { useId } from "react";
 import { Link, type To } from "react-router-dom";
 import {
@@ -22,6 +22,22 @@ function assertDestination(actionId: string, destination: string): void {
   if (!trimmed || trimmed === "#" || trimmed.toLowerCase().startsWith("javascript:")) {
     throw new Error(`ActionLink "${actionId}" has an empty or placeholder destination.`);
   }
+}
+
+function nodeHasText(node: ReactNode): boolean {
+  if (typeof node === "string") {
+    return node.trim().length > 0;
+  }
+  if (typeof node === "number") {
+    return true;
+  }
+  if (Array.isArray(node)) {
+    return node.some(nodeHasText);
+  }
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return nodeHasText(node.props.children);
+  }
+  return false;
 }
 
 export interface ActionLinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> {
@@ -56,6 +72,12 @@ export function ActionLink({
 
   if (shouldAssertInteractionContracts()) {
     assertAuthenticityMetadata(authenticity);
+
+    if (!nodeHasText(children) && !anchorProps["aria-label"] && !anchorProps["aria-labelledby"]) {
+      throw new Error(
+        `ActionLink "${authenticity.actionId}" is icon-only but missing an accessible name.`,
+      );
+    }
 
     if (disabled && !reason) {
       throw new Error(`ActionLink "${authenticity.actionId}" is disabled but missing disabledReason.`);

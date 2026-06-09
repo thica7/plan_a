@@ -1,5 +1,6 @@
 import { Gauge } from "lucide-react";
 import type { ScenarioPack, SkillSpec } from "../../api/types";
+import { useTranslation } from '../../stores/i18n';
 import { isDimensionLocked } from "./dimensions";
 import { SectionHeading } from "./SectionHeading";
 
@@ -18,13 +19,14 @@ export function DimensionsSection({
   skills,
   toggleDimension,
 }: DimensionsSectionProps) {
+  const { t } = useTranslation();
   return (
     <section className="form-section">
       <SectionHeading
         icon={<Gauge size={17} aria-hidden />}
         index="04"
-        meta={`${selected.length} active schema dimensions`}
-        title="Dimensions"
+        meta={`${selected.length} ${t('newRun.dimensionsDesc')}`}
+        title={t('newRun.dimensions')}
       />
       <div className="skill-grid">
         {skills.map((skill) => {

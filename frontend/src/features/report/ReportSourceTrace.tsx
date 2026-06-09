@@ -1,6 +1,8 @@
 import type { RawSource } from "../../api/types";
 import type { MouseEvent } from "react";
 import { sourceTypeLabel, type SourceTokenGroup } from "./sourceTokens";
+import { useTranslation } from "../../stores/i18n";
+
 
 interface ReportSourceTraceProps {
   activeSourceId: string | null;
@@ -153,9 +155,10 @@ function SourceList({
   citedSourceIds: Set<string>;
   sources: RawSource[];
 }) {
+  const { t } = useTranslation();
   return (
     <div className="source-list" id="source-list">
-      <h3>Evidence</h3>
+      <h3>{t("report.evidence")}</h3>
       {sources.map((source) => (
         <article
           className={`source-card${citedSourceIds.has(source.id) ? " cited" : ""}${
@@ -194,9 +197,10 @@ function MissingSourceList({
   activeSourceId: string | null;
   missingSourceGroups: SourceTokenGroup[];
 }) {
+  const { t } = useTranslation();
   return (
     <div className="missing-source-list" id="missing-source-list">
-      <h3>Missing sources</h3>
+      <h3>{t("report.missingSources")}</h3>
       {missingSourceGroups.map((group) => (
         <article
           className={`missing-source-card${activeSourceId === group.sourceId ? " active" : ""}`}

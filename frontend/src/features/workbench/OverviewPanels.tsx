@@ -18,6 +18,7 @@ import type {
 } from "../../api/types";
 import { Panel, StatusPill } from "../../components/ui";
 import { formatDate } from "./format";
+import { useTranslation } from "../../stores/i18n";
 
 export function QaBlockersPanel({
   claimValidation,
@@ -32,6 +33,7 @@ export function QaBlockersPanel({
   qaEvaluation: BusinessQAEvaluation | null;
   redTeam: RedTeamReport | null;
 }) {
+  const { t } = useTranslation();
   const rows = [
     ...(qaEvaluation?.findings ?? []).map((finding) => ({
       id: finding.id,
@@ -51,16 +53,16 @@ export function QaBlockersPanel({
   return (
     <Panel
       className="qa-blocker-panel"
-      title="QA blockers"
+      title={t("workbench.qaBlockers")}
       icon={<AlertTriangle size={16} aria-hidden />}
       actions={<StatusPill tone={rows.length ? "warn" : "good"}>{rows.length}</StatusPill>}
     >
       <div className="qa-blocker-table">
         <div className="qa-blocker-head">
-          <span>Severity</span>
+          <span>{t("workbench.severity")}</span>
           <span>Type</span>
-          <span>Description</span>
-          <span>Scope</span>
+          <span>{t("workbench.description")}</span>
+          <span>{t("workbench.scope")}</span>
         </div>
         {rows.map((row) => (
           <article className="qa-blocker-row" key={row.id}>
@@ -73,7 +75,7 @@ export function QaBlockersPanel({
           </article>
         ))}
       </div>
-      {rows.length === 0 ? <p className="muted-line">No active QA blockers.</p> : null}
+      {rows.length === 0 ? <p className="muted-line">{t("workbench.noActiveBlockers")}</p> : null}
       <div className="auto-redo-strip">
         <span>Auto-redo suggestions</span>
         <strong>{matrix?.entries.reduce((total, entry) => total + entry.suggested_redos.length, 0) ?? 0}</strong>
@@ -97,6 +99,7 @@ export function TraceTimelinePanel({
   selectedVersion: ReportVersionRecord | null;
   traceSpans: TraceSpan[];
 }) {
+  const { t } = useTranslation();
   const rows = buildTimelineRows({ auditLogs, decisionReplay, evalOps, selectedVersion, traceSpans });
   const stages = [
     "Planning",
@@ -112,7 +115,7 @@ export function TraceTimelinePanel({
   return (
     <Panel
       className="workbench-card trace-timeline-panel"
-      title="Trace timeline"
+      title={t("workbench.traceTimeline")}
       icon={<CalendarClock size={16} aria-hidden />}
       actions={<StatusPill tone={decisionReplay?.blocker_count ? "warn" : "good"}>{rows.length}</StatusPill>}
     >
@@ -219,11 +222,12 @@ export function CompetitorsOverviewTable({
   competitors: CompetitorRecord[];
   evidence: EvidenceRecord[];
 }) {
+  const { t } = useTranslation();
   const evidenceCounts = new Map<string, number>();
   evidence.forEach((item) => evidenceCounts.set(item.competitor_id, (evidenceCounts.get(item.competitor_id) ?? 0) + 1));
   const scoreByCompetitor = new Map(competitorScores?.scores.map((score) => [score.competitor_id, score]) ?? []);
   return (
-    <Panel className="competitor-overview-table" title="Competitors" icon={<Layers size={16} aria-hidden />}>
+    <Panel className="competitor-overview-table" title={t("workbench.competitors")} icon={<Layers size={16} aria-hidden />}>
       <div className="compact-data-table">
         <div className="compact-data-head">
           <span>Competitor</span>

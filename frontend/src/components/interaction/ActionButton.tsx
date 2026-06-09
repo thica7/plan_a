@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, MouseEventHandler, ReactNode } from "react";
+import { isValidElement, type ButtonHTMLAttributes, type MouseEventHandler, type ReactNode } from "react";
 import { useId } from "react";
 import {
   assertAuthenticityMetadata,
@@ -15,6 +15,22 @@ export interface ActionButtonProps
   isLoading?: boolean;
   loadingLabel?: string;
   onClick?: MouseEventHandler<HTMLButtonElement>;
+}
+
+function nodeHasText(node: ReactNode): boolean {
+  if (typeof node === "string") {
+    return node.trim().length > 0;
+  }
+  if (typeof node === "number") {
+    return true;
+  }
+  if (Array.isArray(node)) {
+    return node.some(nodeHasText);
+  }
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return nodeHasText(node.props.children);
+  }
+  return false;
 }
 
 export function ActionButton({
@@ -40,6 +56,12 @@ export function ActionButton({
 
   if (shouldAssertInteractionContracts()) {
     assertAuthenticityMetadata(authenticity);
+
+    if (!nodeHasText(children) && !buttonProps["aria-label"] && !buttonProps["aria-labelledby"]) {
+      throw new Error(
+        `ActionButton "${authenticity.actionId}" is icon-only but missing an accessible name.`,
+      );
+    }
 
     if (!isUnavailable && type !== "submit" && !onClick) {
       throw new Error(

@@ -8,8 +8,17 @@ from app.routes.knowledge import (
     get_knowledge_document_versions,
     merge_knowledge_document_version,
 )
+from packages.auth import EnterpriseUserContext
 from packages.knowledge.models import DocumentCreate
 from packages.knowledge.repository import KnowledgeRepository
+
+
+def _user(role: str = "owner") -> EnterpriseUserContext:
+    return EnterpriseUserContext(
+        user_id=f"{role}-user",
+        role=role,  # type: ignore[arg-type]
+        workspace_id="default-workspace",
+    )
 
 
 @pytest.mark.asyncio
@@ -36,8 +45,8 @@ async def test_reingest_same_canonical_url_creates_version_chain(tmp_path) -> No
             "hash-v2",
         )
 
-        versions = await get_knowledge_document_versions(second.id, repo)
-        diff = await diff_knowledge_document(second.id, repo, against=first.id)
+        versions = await get_knowledge_document_versions(second.id, repo, user=_user())
+        diff = await diff_knowledge_document(second.id, repo, user=_user(), against=first.id)
 
         assert [doc.version for doc in versions] == [1, 2]
         assert versions[0].is_active is False
@@ -77,6 +86,7 @@ async def test_merge_document_version_marks_target_active(tmp_path) -> None:
             second.id,
             DocumentMergeRequest(target_document_id=first.id),
             repo,
+            user=_user(),
         )
         first_after = await repo.get_document(first.id)
         second_after = await repo.get_document(second.id)
@@ -90,3 +100,4 @@ async def test_merge_document_version_marks_target_active(tmp_path) -> None:
         assert second_after.status == "archived"
     finally:
         await repo.close()
+

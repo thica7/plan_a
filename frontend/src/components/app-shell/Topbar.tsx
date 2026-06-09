@@ -6,11 +6,16 @@ import {
   CheckCircle2,
   ChevronDown,
   Cuboid,
+  Globe,
   HelpCircle,
   Menu,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { ActionButton } from "../interaction/ActionButton";
 import { ActionLink } from "../interaction/ActionLink";
+import { useI18n } from "../../stores/i18n";
+import { useTheme } from "../../stores/theme";
 import type { RuntimeConfig } from "../../api/types";
 
 export function Topbar({
@@ -22,12 +27,16 @@ export function Topbar({
   routeLabel: string;
   runtime: RuntimeConfig | null;
 }) {
+  const { t, toggleLocale, locale } = useI18n();
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === 'dark';
+
   return (
     <header className="topbar">
       <div className="topbar-context">
         <ActionButton
           className="topbar-menu-button"
-          aria-label="Open navigation"
+          aria-label={t('topbar.menu')}
           authenticity={{
             actionId: 'topbar.navigation.open',
             kind: 'local',
@@ -46,12 +55,12 @@ export function Topbar({
             description: 'workspace switcher not available in demo'
           }}
           disabled
-          disabledReason="Workspace switching is not included in this demo build."
+          disabledReason={t('topbar.workspace.disabled')}
         >
           <Building2 size={17} aria-hidden />
           <span>
             <strong>Acme Corp</strong>
-            <small>Workspace</small>
+            <small>{t('topbar.workspace')}</small>
           </span>
           <ChevronDown size={15} aria-hidden />
         </ActionButton>
@@ -64,7 +73,7 @@ export function Topbar({
             description: 'product switcher not available in demo'
           }}
           disabled
-          disabledReason="Product switching is not included in this demo build."
+          disabledReason={t('topbar.product.disabled')}
         >
           <Cuboid size={17} aria-hidden />
           <span>
@@ -86,7 +95,7 @@ export function Topbar({
           }}
         >
           <Activity size={15} aria-hidden />
-          AI Research
+          {t('topbar.aiResearch')}
         </ActionLink>
 
         <StatusBadge
@@ -104,14 +113,41 @@ export function Topbar({
 
         <ActionButton
           className="topbar-icon-button"
-          aria-label="Notifications"
+          aria-label={isDark ? t('topbar.theme.light') : t('topbar.theme.dark')}
+          authenticity={{
+            actionId: 'topbar.theme.toggle',
+            kind: 'local',
+            description: 'toggles between light and dark theme'
+          }}
+          onClick={toggleTheme}
+        >
+          {isDark ? <Sun size={17} aria-hidden /> : <Moon size={17} aria-hidden />}
+        </ActionButton>
+
+        <ActionButton
+          className="topbar-icon-button"
+          aria-label={`Switch to ${locale === 'zh-CN' ? 'English' : '中文'}`}
+          authenticity={{
+            actionId: 'topbar.locale.toggle',
+            kind: 'local',
+            description: 'toggles between Chinese and English'
+          }}
+          onClick={toggleLocale}
+        >
+          <Globe size={17} aria-hidden />
+          <span className="locale-badge">{locale === 'zh-CN' ? '中' : 'EN'}</span>
+        </ActionButton>
+
+        <ActionButton
+          className="topbar-icon-button"
+          aria-label={t('topbar.notifications')}
           authenticity={{
             actionId: 'topbar.notifications.open',
             kind: 'disabled',
             description: 'notifications panel not available in demo'
           }}
           disabled
-          disabledReason="Notifications panel is not included in this demo build."
+          disabledReason={t('topbar.notifications.disabled')}
         >
           <Bell size={17} aria-hidden />
           <i aria-hidden />
@@ -119,14 +155,14 @@ export function Topbar({
 
         <ActionButton
           className="topbar-icon-button"
-          aria-label="Help"
+          aria-label={t('topbar.help')}
           authenticity={{
             actionId: 'topbar.help.open',
             kind: 'disabled',
             description: 'help panel not available in demo'
           }}
           disabled
-          disabledReason="Help panel is not included in this demo build."
+          disabledReason={t('topbar.help.disabled')}
         >
           <HelpCircle size={17} aria-hidden />
         </ActionButton>

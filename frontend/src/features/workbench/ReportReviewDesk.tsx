@@ -8,6 +8,8 @@ import type {
   ReportVersionRecord,
 } from "../../api/types";
 import { EmptyState, LoadingState, MetricCard, Panel, StatusPill } from "../../components/ui";
+import { useTranslation } from "../../stores/i18n";
+
 
 interface ReportReviewDeskProps {
   diff: ReportVersionDiff | null;
@@ -58,8 +60,9 @@ function DiffPanel({
   isLoading: boolean;
   previousVersion: ReportVersionRecord | null;
 }) {
+  const { t } = useTranslation();
   return (
-    <Panel title="Version diff" icon={<GitCompareArrows size={16} aria-hidden />}>
+    <Panel title={t("workbench.versionDiff")} icon={<GitCompareArrows size={16} aria-hidden />}>
       {isLoading ? <LoadingState label="Loading diff" /> : null}
       {!isLoading && diff ? (
         <div className="report-diff-panel">
@@ -90,8 +93,9 @@ function DiffPanel({
 }
 
 function ReleaseIssuesPanel({ releaseGate }: { releaseGate: ReportReleaseGate | null }) {
+  const { t } = useTranslation();
   return (
-    <Panel title="Gate issues" icon={<MessageSquareWarning size={16} aria-hidden />}>
+    <Panel title={t("workbench.gateIssues")} icon={<MessageSquareWarning size={16} aria-hidden />}>
       {releaseGate ? (
         <div className="recommendation-list compact">
           {releaseGate.issues.slice(0, 5).map((issue) => (
@@ -116,8 +120,9 @@ function ClaimReviewPanel({
   onSelectClaim: (claim: ClaimRecord) => void;
   scopedClaims: ClaimRecord[];
 }) {
+  const { t } = useTranslation();
   return (
-    <Panel title="Claim review" icon={<GitCompareArrows size={16} aria-hidden />}>
+    <Panel title={t("workbench.claimReview")} icon={<GitCompareArrows size={16} aria-hidden />}>
       <div className="review-claim-list">
         {scopedClaims.map((claim) => (
           <button className="review-claim-item" key={claim.id} type="button" onClick={() => onSelectClaim(claim)}>
@@ -146,6 +151,7 @@ function EvidenceScopePanel({
   onSelectEvidence: (evidence: EvidenceRecord) => void;
   selectedVersion: ReportVersionRecord | null;
 }) {
+  const { t } = useTranslation();
   return (
     <Panel title="Evidence scope" icon={<Database size={16} aria-hidden />}>
       {selectedVersion ? (
@@ -178,7 +184,7 @@ function EvidenceScopePanel({
           })}
         </div>
       ) : (
-        <EmptyState title="Select a version" />
+        <EmptyState title={t("workbench.selectVersion")} />
       )}
     </Panel>
   );

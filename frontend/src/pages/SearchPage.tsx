@@ -7,6 +7,7 @@ import {
   RetrievalParamsDrawer,
   type RetrievalParams,
 } from '../features/retrieval/RetrievalParamsDrawer';
+import { useTranslation } from '../stores/i18n';
 
 const PARAMS_STORAGE_KEY = 'retrieval_params';
 
@@ -92,6 +93,7 @@ async function fileText(file: File): Promise<string> {
 }
 
 export default function SearchPage() {
+  const { t } = useTranslation();
   const {
     query,
     competitors,
@@ -259,7 +261,7 @@ export default function SearchPage() {
           onChange={(e) => setQuery(e.target.value)}
         />
         <button className="btn btn-primary" type="submit" disabled={loading}>
-          {loading ? 'Searching...' : 'Search'}
+          {loading ? `${t('trace.search')}...` : t('trace.search')}
         </button>
         <button
           type="button"
@@ -341,7 +343,7 @@ export default function SearchPage() {
               <input className="hidden" type="file" accept=".jsonl,.json" onChange={handleEvalFile} />
             </label>
             <button type="button" className="btn btn-primary btn-sm" disabled={evalLoading || evalLabels.length === 0} onClick={runEval}>
-              {evalLoading ? 'Running...' : 'Run eval'}
+              {evalLoading ? `${t('common.running')}...` : 'Run eval'}
             </button>
           </div>
         </div>

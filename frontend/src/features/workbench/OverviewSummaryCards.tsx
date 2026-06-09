@@ -14,6 +14,8 @@ import type {
 } from "../../api/types";
 import { EmptyState, Panel, StatusPill } from "../../components/ui";
 import { formatDate, formatPercent, reportStatusTone } from "./format";
+import { useTranslation } from "../../stores/i18n";
+
 
 export function RunQualityPanel({
   acceptedRate,
@@ -34,6 +36,7 @@ export function RunQualityPanel({
   redTeam: RedTeamReport | null;
   verifiedRate: number;
 }) {
+  const { t } = useTranslation();
   const score = readiness?.score ?? Math.round(verifiedRate * 100);
   const blockerCount =
     (qaEvaluation?.blocker_count ?? 0) +
@@ -42,7 +45,7 @@ export function RunQualityPanel({
     (redTeam?.high_severity_count ?? 0);
   const qualityRows = [
     { label: "Source quality", value: verifiedRate },
-    { label: "Coverage", value: readiness?.coverage_score ?? null },
+    { label: t("summary.coverage"), value: readiness?.coverage_score ?? null },
     { label: "Schema fit", value: readiness?.claim_score ?? null },
     { label: "Citation rate", value: acceptedRate },
     { label: "Consistency", value: claimValidation?.self_consistency_score ?? null },
@@ -51,9 +54,9 @@ export function RunQualityPanel({
   return (
     <Panel
       className="workbench-card run-quality-panel"
-      title="Run quality"
+      title={t("workbench.runQuality")}
       icon={<Gauge size={16} aria-hidden />}
-      actions={<StatusPill tone={blockerCount > 0 ? "warn" : "good"}>{blockerCount ? `${blockerCount} blockers` : "Good"}</StatusPill>}
+      actions={<StatusPill tone={blockerCount > 0 ? "warn" : "good"}>{blockerCount ? `${blockerCount} blockers` : t("workbench.good")}</StatusPill>}
     >
       <div className="run-quality-body">
         <div
@@ -194,10 +197,11 @@ function CoverageRow({
 }
 
 function HeatmapLegend() {
+  const { t } = useTranslation();
   return (
     <span className="heatmap-status-legend">
       <i className="good" />
-      Good
+      {t("workbench.good")}
       <i className="mid" />
       Medium
       <i className="low" />

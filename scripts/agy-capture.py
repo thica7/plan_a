@@ -207,6 +207,12 @@ def newest_conversation_after(start_time: float) -> Path | None:
 
 
 def main() -> int:
+    # 修复 Windows GBK 输出问题，强制 stdout/stderr 使用 UTF-8。
+    import sys
+    if sys.platform == 'win32':
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+
     args = parse_args()
     prompt = read_prompt(args)
     agy_path = Path(args.agy)

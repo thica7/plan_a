@@ -1,4 +1,6 @@
 import { useState, MouseEvent } from 'react';
+import { useTranslation } from '../stores/i18n';
+
 
 /** Reusable source card for displaying a knowledge document or retrieval hit. */
 
@@ -27,6 +29,7 @@ export function SourceCard({
   rerank_score,
   onClick,
 }: SourceCardProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async (e: MouseEvent) => {
@@ -61,7 +64,7 @@ export function SourceCard({
             <button
               onClick={handleCopy}
               className="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content flex-shrink-0"
-              title="Copy URL"
+              title={t('common.copyUrl')}
               type="button"
             >
               {copied ? (

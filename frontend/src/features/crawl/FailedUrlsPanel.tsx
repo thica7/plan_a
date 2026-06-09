@@ -1,6 +1,7 @@
 import { RotateCw } from 'lucide-react';
 import type { CrawlJob } from '../../api/crawl';
 import type { CrawlSource } from './JobQueueTable';
+import { useTranslation } from '../../stores/i18n';
 
 interface FailedUrlsPanelProps {
   jobs: CrawlJob[];
@@ -10,6 +11,7 @@ interface FailedUrlsPanelProps {
 }
 
 export function FailedUrlsPanel({ jobs, sources, onRetryJob, onRetrySource }: FailedUrlsPanelProps) {
+  const { t } = useTranslation();
   const failedJobs = jobs.filter((job) => job.status === 'failed' && job.error);
   const failedSources = sources.filter((source) => {
     const progress = source.config.progress as Record<string, number> | undefined;
@@ -20,7 +22,7 @@ export function FailedUrlsPanel({ jobs, sources, onRetryJob, onRetrySource }: Fa
     <section className="rounded-lg border border-base-300 bg-base-100 p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
-          <h2 className="font-bold">Failed URLs</h2>
+          <h2 className="font-bold">{t('crawl.failedUrls')}</h2>
           <p className="text-xs text-base-content/60">Retry failed crawl jobs and source-driven failures.</p>
         </div>
         <span className="badge badge-error badge-sm">{failedJobs.length + failedSources.length}</span>
@@ -36,7 +38,7 @@ export function FailedUrlsPanel({ jobs, sources, onRetryJob, onRetrySource }: Fa
               </div>
               <button type="button" className="btn btn-outline btn-error btn-xs gap-1" onClick={() => onRetryJob(job.id)}>
                 <RotateCw className="h-3 w-3" />
-                Retry
+                {t('crawl.retry')}
               </button>
             </div>
           </div>
@@ -58,7 +60,7 @@ export function FailedUrlsPanel({ jobs, sources, onRetryJob, onRetrySource }: Fa
                 </div>
                 <button type="button" className="btn btn-outline btn-error btn-xs gap-1" onClick={() => onRetrySource(source.id)}>
                   <RotateCw className="h-3 w-3" />
-                  Retry
+                  {t('crawl.retry')}
                 </button>
               </div>
             </div>
@@ -67,7 +69,7 @@ export function FailedUrlsPanel({ jobs, sources, onRetryJob, onRetrySource }: Fa
 
         {failedJobs.length === 0 && failedSources.length === 0 && (
           <p className="rounded-lg border border-dashed border-base-300 p-4 text-center text-sm text-base-content/50">
-            No failed URLs.
+            {t('crawl.noFailedUrls')}
           </p>
         )}
       </div>

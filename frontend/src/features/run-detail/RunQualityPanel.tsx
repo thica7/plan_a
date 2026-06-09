@@ -1,5 +1,6 @@
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import type { RunQualityComparison, RunSummary } from "../../api/types";
+import { useTranslation } from "../../stores/i18n";
 import { MetricValue } from "./MetricValue";
 import { formatQualityValue, metricWeightedLoss } from "./utils";
 
@@ -16,11 +17,12 @@ export function RunQualityPanel({
   onBaselineRunChange,
   runHistory,
 }: RunQualityPanelProps) {
+  const { t } = useTranslation();
   if (!comparison) {
     return (
       <aside className="qa-panel run-quality-panel">
         <div className="panel-heading-row">
-          <h2>Run quality</h2>
+          <h2>{t("runQuality.title")}</h2>
           <Loader2 className="spin" size={16} aria-hidden />
         </div>
         <p className="muted-text">Loading quality comparison.</p>
@@ -52,10 +54,10 @@ export function RunQualityPanel({
   return (
     <aside className={`qa-panel run-quality-panel ${comparison.verdict}`}>
       <div className="panel-heading-row">
-        <h2>Run quality</h2>
+        <h2>{t("runQuality.title")}</h2>
         <div className="panel-heading-actions">
           <label className="compact-select">
-            <span>Baseline</span>
+            <span>{t("runQuality.baseline")}</span>
             <select
               aria-label="Run quality baseline"
               onChange={(event) => onBaselineRunChange(event.target.value)}
@@ -77,15 +79,15 @@ export function RunQualityPanel({
         </div>
       </div>
       <div className="metric-grid compact">
-        <MetricValue label="Score" value={`${comparison.target_score}/100`} />
-        <MetricValue label="Verdict" value={comparison.verdict} />
-        <MetricValue label="Gate" value={comparison.regression_gate_status} />
+        <MetricValue label={t("runQuality.score")} value={`${comparison.target_score}/100`} />
+        <MetricValue label={t("runQuality.verdict")} value={comparison.verdict} />
+        <MetricValue label={t("runQuality.gate")} value={comparison.regression_gate_status} />
         <MetricValue
-          label="Baseline"
+          label={t("runQuality.baseline")}
           value={comparison.baseline_score === null || comparison.baseline_score === undefined ? "none" : `${comparison.baseline_score}/100`}
         />
         <MetricValue
-          label="Delta"
+          label={t("runQuality.delta")}
           value={comparison.delta_score === null || comparison.delta_score === undefined ? "n/a" : String(comparison.delta_score)}
         />
       </div>
@@ -145,7 +147,7 @@ export function RunQualityPanel({
       ) : null}
       {comparison.recommendations.length > 0 ? (
         <div className="reflection-review">
-          <h3>Recommendations</h3>
+          <h3>{t("runQuality.recommendations")}</h3>
           {comparison.recommendations.slice(0, 3).map((item) => (
             <article className="issue-row reflection-row" key={item}>
               <strong>next</strong>

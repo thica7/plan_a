@@ -2,6 +2,8 @@
 @import "./shell.css";
 @import "./components.css";
 @import "./interaction.css";
+@import "./theme-dark.css";
+@import "./locale-badge.css";
 @import "./workflow.css";
 @import "./run-detail.css";
 @import "./enterprise.css";

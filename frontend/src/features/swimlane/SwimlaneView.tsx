@@ -1,5 +1,6 @@
 import type { RunEvent } from "../../api/sse_types";
 import type { RunStatus, TraceSpan } from "../../api/types";
+import { useTranslation } from "../../stores/i18n";
 
 interface Props {
   events: RunEvent[];
@@ -11,13 +12,14 @@ interface Props {
 const lanes = ["planner", "collector", "analyst", "comparator", "reflector", "writer", "qa"];
 
 export function SwimlaneView({ events, currentNode, spans = [], status }: Props) {
+  const { t } = useTranslation();
   const useLiveEvents = isLiveStatus(status) || events.length > 0;
   const latestActive =
     [...events].reverse().find((event) => event.type === "node_started" && event.agent)?.agent || currentNode;
   return (
     <section className="panel swimlane-panel">
       <div className="panel-heading-row">
-        <h2>Agent swimlane</h2>
+        <h2>{t('swimlane.title')}</h2>
         <span className="panel-kicker">{useLiveEvents ? `${events.length} events` : `${spans.length} trace spans`}</span>
       </div>
       <div className="swimlane-grid">

@@ -27,6 +27,7 @@ import {
   resolveVisibleStages,
   stageWaveCount,
 } from "./graphModel";
+import { useTranslation } from '../../stores/i18n';
 
 interface Props {
   activeNode?: string | null;
@@ -38,6 +39,7 @@ interface Props {
 }
 
 export function StaticGraphView({ activeNode, competitors, dimensions, events, revisionCount, status }: Props) {
+  const { t } = useTranslation();
   const active = resolveActiveNode(events, activeNode, status);
   const latestRedo = [...events].reverse().find((event) => event.message.startsWith("Scoped redo started"));
   const branchDimensions = dimensions.length > 0 ? dimensions : ["pricing", "feature"];
@@ -50,7 +52,7 @@ export function StaticGraphView({ activeNode, competitors, dimensions, events, r
   return (
     <section className="panel graph-panel">
       <div className="panel-heading-row">
-        <h2>Flow graph</h2>
+        <h2>{t('graph.flowGraph')}</h2>
         <span className={`flow-status ${status}`}>{formatRunStatus(status)}</span>
       </div>
 
@@ -145,9 +147,9 @@ export function StaticGraphView({ activeNode, competitors, dimensions, events, r
       </div>
 
       <div className="flow-meta">
-        <span>Events {events.length}</span>
-        <span>Revisions {revisionCount}</span>
-        <span>Parallel branches {collectorBranches.length + analystBranches.length}</span>
+        <span>{t('graph.events')} {events.length}</span>
+        <span>{t('graph.revisions')} {revisionCount}</span>
+        <span>{t('graph.parallelBranches')} {collectorBranches.length + analystBranches.length}</span>
         {latestRedo ? <span>{latestRedo.message}</span> : null}
       </div>
     </section>

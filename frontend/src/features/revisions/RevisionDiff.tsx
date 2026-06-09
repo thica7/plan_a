@@ -1,5 +1,6 @@
 import { GitCompareArrows } from "lucide-react";
 import type { RevisionRecord } from "../../api/types";
+import { useTranslation } from '../../stores/i18n';
 
 interface RevisionDiffProps {
   compact?: boolean;
@@ -7,6 +8,7 @@ interface RevisionDiffProps {
 }
 
 export function RevisionDiff({ compact = false, revisions }: RevisionDiffProps) {
+  const { t } = useTranslation();
   const latest = revisions.length > 0 ? revisions[revisions.length - 1] : undefined;
   const targetCompetitors = latest?.target_competitors?.length
     ? latest.target_competitors.join(", ")
@@ -18,12 +20,12 @@ export function RevisionDiff({ compact = false, revisions }: RevisionDiffProps) 
   return (
     <section className="panel revision-panel">
       <div className="panel-heading-row">
-        <h2>Revision loop</h2>
+        <h2>{t('revisions.title')}</h2>
         <GitCompareArrows size={17} aria-hidden />
       </div>
 
       {!latest ? (
-        <p>No revisions yet.</p>
+        <p>{t('revisions.noRevisions')}</p>
       ) : (
         <>
           <div className="revision-metrics">
@@ -63,11 +65,11 @@ export function RevisionDiff({ compact = false, revisions }: RevisionDiffProps) 
           ) : (
             <div className="revision-diff-grid">
               <article>
-                <strong>Before</strong>
+                <strong>{t('revisions.before')}</strong>
                 <pre>{latest.before_md || "No prior report body."}</pre>
               </article>
               <article>
-                <strong>After</strong>
+                <strong>{t('revisions.after')}</strong>
                 <pre>{latest.after_md || "No updated report body."}</pre>
               </article>
             </div>

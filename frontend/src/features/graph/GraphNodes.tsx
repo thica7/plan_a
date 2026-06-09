@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Circle, GitBranch, Loader2, Merge, PauseCircle, RotateCcw } from "lucide-react";
 import type { RunEvent } from "../../api/sse_types";
 import type { RunStatus } from "../../api/types";
+import { useTranslation } from '../../stores/i18n';
 import {
   analystCaption,
   branchAttemptCount,
@@ -20,6 +21,7 @@ interface ParallelGroupProps {
 }
 
 export function ParallelGroup({ agent, branches, caption, events, status, active }: ParallelGroupProps) {
+  const { t } = useTranslation();
   return (
     <div className="parallel-group">
       {branches.map((branch) => {
@@ -33,7 +35,7 @@ export function ParallelGroup({ agent, branches, caption, events, status, active
             </div>
             <p>{agent === "collector" ? collectorCaption(branch) : analystCaption(branch)}</p>
             <em>
-              {caption} · {branchAttemptCount(events, agent, branch)} run(s)
+              {caption} · {branchAttemptCount(events, agent, branch)} {t('graph.runCount')}
             </em>
           </article>
         );
@@ -83,6 +85,7 @@ export function QaNode({ label, caption, state }: { label: string; caption: stri
 }
 
 export function ReturnGroup({ returns }: { returns: ReturnItem[] }) {
+  const { t } = useTranslation();
   return (
     <div className="return-group" aria-label="QA return path">
       {returns.map((item) => (
@@ -92,7 +95,7 @@ export function ReturnGroup({ returns }: { returns: ReturnItem[] }) {
           </div>
           <div>
             <strong>
-              {item.from} returned to {item.to}
+              {item.from} {t('graph.returnedTo')} {item.to}
             </strong>
             <span>
               {item.severity}: {item.problem}
@@ -105,6 +108,7 @@ export function ReturnGroup({ returns }: { returns: ReturnItem[] }) {
 }
 
 export function ScopedRedoPanel({ loops }: { loops: ScopedRedoItem[] }) {
+  const { t } = useTranslation();
   return (
     <div className="scoped-redo-panel" aria-label="Final QA scoped redo returns">
       {loops.map((loop) => (
@@ -114,7 +118,7 @@ export function ScopedRedoPanel({ loops }: { loops: ScopedRedoItem[] }) {
           </div>
           <div>
             <strong>
-              {loop.from} returned to {loop.to}
+              {loop.from} {t('graph.returnedTo')} {loop.to}
             </strong>
             <span>
               {loop.severity}: {loop.problem}

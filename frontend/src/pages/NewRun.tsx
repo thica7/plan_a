@@ -7,8 +7,10 @@ import { LensSection } from "../features/new-run/LensSection";
 import { RunReadinessRail } from "../features/new-run/RunReadinessRail";
 import { ScopeSection } from "../features/new-run/ScopeSection";
 import { useNewRunBuilder } from "../features/new-run/useNewRunBuilder";
+import { useTranslation } from "../stores/i18n";
 
 export function NewRun() {
+  const { t } = useTranslation();
   const builder = useNewRunBuilder();
 
   async function handleSubmit(event: FormEvent) {
@@ -20,13 +22,13 @@ export function NewRun() {
     <section className="work-surface new-run-page">
       <header className="page-header new-run-header">
         <div>
-          <h1>New Research Run</h1>
-          <p>Configure your research scope, data sources, and quality controls before launching.</p>
+          <h1>{t('newRun.title')}</h1>
+          <p>{t('newRun.description')}</p>
         </div>
       </header>
 
       <form className="run-builder" onSubmit={handleSubmit}>
-        <div className="run-builder-main" aria-label="Run builder">
+        <div className="run-builder-main" aria-label={t('newRun.builder')}>
           <ScopeSection
             onPreset={builder.applyStarterPreset}
             scenarioId={builder.scenarioId}
@@ -66,8 +68,8 @@ export function NewRun() {
             setExecutionMode={builder.setExecutionMode}
           />
           <details className="advanced-options-row">
-            <summary>Advanced Options</summary>
-            <p>Additional source policy and workflow controls are enforced in the readiness rail.</p>
+            <summary>{t('newRun.advancedOptions')}</summary>
+            <p>{t('newRun.advancedDesc')}</p>
           </details>
         </div>
 

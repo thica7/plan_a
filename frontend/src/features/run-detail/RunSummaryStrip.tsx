@@ -1,6 +1,7 @@
 import { Database, FileText, GitBranch } from "lucide-react";
 import type { RunDetail as RunDetailRecord } from "../../api/types";
 import { MetricValue } from "./MetricValue";
+import { useTranslation } from '../../stores/i18n';
 
 interface RunSummaryStripProps {
   citedClaimRate: number;
@@ -15,19 +16,20 @@ export function RunSummaryStrip({
   sourceCoverageRate,
   verifiedSourceRate,
 }: RunSummaryStripProps) {
+  const { t } = useTranslation();
   return (
     <section className="run-command-grid">
       <article className="panel run-summary-panel">
         <div className="panel-heading-row">
-          <h2>Run overview</h2>
+          <h2>{t('summary.runOverview')}</h2>
           <span className="muted-text">{detail.id}</span>
         </div>
         <div className="metric-grid compact">
-          <MetricValue label="Sources" value={String(detail.raw_sources.length)} />
-          <MetricValue label="Verified" value={`${verifiedSourceRate}%`} />
-          <MetricValue label="Coverage" value={`${sourceCoverageRate}%`} />
-          <MetricValue label="Cited claims" value={`${citedClaimRate}%`} />
-          <MetricValue label="QA issues" value={String(detail.qa_findings.length)} />
+          <MetricValue label={t('reportStatus.sources')} value={String(detail.raw_sources.length)} />
+          <MetricValue label={t('summary.verified')} value={`${verifiedSourceRate}%`} />
+          <MetricValue label={t('summary.coverage')} value={`${sourceCoverageRate}%`} />
+          <MetricValue label={t('summary.citedClaims')} value={`${citedClaimRate}%`} />
+          <MetricValue label={t('summary.qaIssues')} value={String(detail.qa_findings.length)} />
           <MetricValue label="Spans" value={String(detail.metrics.total_spans)} />
         </div>
       </article>

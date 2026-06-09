@@ -18,6 +18,7 @@ import { RunQualityPanel } from "./RunQualityPanel";
 import { RunReportReviewStudio } from "./RunReportReviewStudio";
 import { RunReviewOverview } from "./RunReviewOverview";
 import type { ReflectionItem, RunDetailView } from "./types";
+import { useTranslation } from "../../stores/i18n";
 
 interface RunDetailContentProps {
   activeView: RunDetailView;
@@ -60,6 +61,7 @@ export function RunDetailContent({
   reportSources,
   runHistory,
 }: RunDetailContentProps) {
+  const { t } = useTranslation();
   if (activeView === "report") {
     return <RunReportReviewStudio detail={detail} reportSources={reportSources} />;
   }

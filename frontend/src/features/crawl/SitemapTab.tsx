@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Search } from 'lucide-react';
+import { useTranslation } from '../../stores/i18n';
 
 interface SitemapTabProps {
   competitor?: string;
@@ -29,6 +30,7 @@ async function createSitemapSource(url: string, config: Record<string, unknown>)
 }
 
 export function SitemapTab({ competitor, dimension, priority, onSubmitted }: SitemapTabProps) {
+  const { t } = useTranslation();
   const [url, setUrl] = useState('');
   const [maxUrls, setMaxUrls] = useState(100);
   const [preview, setPreview] = useState<string[]>([]);
@@ -89,22 +91,22 @@ export function SitemapTab({ competitor, dimension, priority, onSubmitted }: Sit
         />
         <button type="button" className="btn btn-outline btn-sm gap-1" onClick={loadPreview} disabled={loading || !url.trim()}>
           <Search className="h-3.5 w-3.5" />
-          Preview
+          {t('common.preview')}
         </button>
       </div>
       {error && <div className="alert alert-error text-sm">{error}</div>}
       <div className="rounded-lg border border-base-300 bg-base-100 p-3">
         <div className="mb-2 flex items-center justify-between text-xs">
-          <span className="font-semibold">Preview</span>
+          <span className="font-semibold">{t('common.preview')}</span>
           <span className="text-base-content/55">{preview.length} shown</span>
         </div>
         <ol className="grid gap-1 text-xs">
           {preview.map((item) => <li key={item} className="truncate">{item}</li>)}
-          {preview.length === 0 && <li className="text-base-content/50">No URLs discovered yet.</li>}
+          {preview.length === 0 && <li className="text-base-content/50">{t('crawl.noUrlsYet')}</li>}
         </ol>
       </div>
       <button type="button" className="btn btn-primary btn-sm w-fit" onClick={submit} disabled={submitting || !url.trim()}>
-        {submitting ? 'Submitting...' : 'Submit sitemap'}
+        {submitting ? t('crawl.submitting') : t('crawl.submitSitemap')}
       </button>
     </div>
   );

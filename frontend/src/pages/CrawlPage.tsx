@@ -6,6 +6,7 @@ import { SitemapTab } from '../features/crawl/SitemapTab';
 import { RssTab } from '../features/crawl/RssTab';
 import { JobQueueTable, type CrawlSource } from '../features/crawl/JobQueueTable';
 import { FailedUrlsPanel } from '../features/crawl/FailedUrlsPanel';
+import { useTranslation } from '../stores/i18n';
 
 type SourceTab = 'manual' | 'sitemap' | 'rss';
 
@@ -32,6 +33,7 @@ async function retrySource(sourceId: string): Promise<void> {
 }
 
 export default function CrawlPage() {
+  const { t } = useTranslation();
   const {
     jobs,
     loading,
@@ -115,15 +117,15 @@ export default function CrawlPage() {
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent flex items-center gap-2">
             <Sparkles className="w-8 h-8 text-primary" />
-            Crawl Jobs
+            {t('crawl.title')}
           </h1>
           <p className="text-sm text-base-content/60 mt-1">
-            Create multi-source crawl inputs, review queue progress, and retry failed URLs.
+            {t('crawl.description')}
           </p>
         </div>
         <button type="button" className="btn btn-outline btn-sm gap-1" onClick={refreshAll} disabled={loading}>
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
+          {t('common.refresh')}
         </button>
       </div>
 
@@ -131,13 +133,13 @@ export default function CrawlPage() {
         <div className="grid gap-3 sm:grid-cols-3">
           <input
             className="input input-bordered"
-            placeholder="Competitor (optional)"
+            placeholder={t('crawl.competitor')}
             value={competitor}
             onChange={(event) => setCompetitor(event.target.value)}
           />
           <input
             className="input input-bordered"
-            placeholder="Dimension (optional)"
+            placeholder={t('crawl.dimension')}
             value={dimension}
             onChange={(event) => setDimension(event.target.value)}
           />
@@ -147,7 +149,7 @@ export default function CrawlPage() {
             min={1}
             value={priority}
             onChange={(event) => setPriority(Number(event.target.value))}
-            aria-label="Queue priority"
+            aria-label={t('crawl.queuePriority')}
           />
         </div>
 
@@ -159,7 +161,7 @@ export default function CrawlPage() {
               className={`tab capitalize ${activeTab === tab ? 'tab-active' : ''}`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab === 'manual' ? 'URL list' : tab}
+              {tab === 'manual' ? t('crawl.urlList') : tab}
             </button>
           ))}
         </div>
@@ -173,7 +175,7 @@ export default function CrawlPage() {
         <div className="alert alert-error shadow-sm border border-error/20 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
           <div className="text-sm">
-            <h3 className="font-bold">Execution Error</h3>
+            <h3 className="font-bold">{t('crawl.executionError')}</h3>
             <p className="opacity-90">{error || sourceError}</p>
           </div>
         </div>
@@ -181,19 +183,19 @@ export default function CrawlPage() {
 
       <div className="grid gap-3 sm:grid-cols-4">
         <div className="rounded-lg bg-base-200 p-3">
-          <span className="text-xs text-base-content/55">Jobs</span>
+          <span className="text-xs text-base-content/55">{t('crawl.jobs')}</span>
           <strong className="block text-lg">{jobs.length}</strong>
         </div>
         <div className="rounded-lg bg-base-200 p-3">
-          <span className="text-xs text-base-content/55">Active</span>
+          <span className="text-xs text-base-content/55">{t('crawl.active')}</span>
           <strong className="block text-lg">{activeJobs}</strong>
         </div>
         <div className="rounded-lg bg-base-200 p-3">
-          <span className="text-xs text-base-content/55">Sources</span>
+          <span className="text-xs text-base-content/55">{t('crawl.sources')}</span>
           <strong className="block text-lg">{sources.length}</strong>
         </div>
         <div className="rounded-lg bg-base-200 p-3">
-          <span className="text-xs text-base-content/55">Failed</span>
+          <span className="text-xs text-base-content/55">{t('crawl.failed')}</span>
           <strong className="block text-lg">{jobs.filter((job) => job.status === 'failed').length}</strong>
         </div>
       </div>

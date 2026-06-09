@@ -1,15 +1,28 @@
 import { Bell, Database, FileText, Gauge, Layers, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
+import { ActionButton } from "../../components/interaction/ActionButton";
+import { useTranslation } from "../../stores/i18n";
 import type { EnterpriseView } from "./types";
 
-const viewItems: Array<{ id: EnterpriseView; label: string; icon: ReactNode }> = [
-  { id: "overview", label: "Overview", icon: <Gauge size={15} aria-hidden /> },
-  { id: "evidence", label: "Evidence", icon: <Database size={15} aria-hidden /> },
-  { id: "reports", label: "Reports", icon: <FileText size={15} aria-hidden /> },
-  { id: "competitors", label: "Competitors", icon: <Layers size={15} aria-hidden /> },
-  { id: "governance", label: "Governance", icon: <ShieldCheck size={15} aria-hidden /> },
-  { id: "activity", label: "Activity", icon: <Bell size={15} aria-hidden /> },
-];
+const viewIcons: Record<EnterpriseView, ReactNode> = {
+  overview: <Gauge size={15} aria-hidden />,
+  evidence: <Database size={15} aria-hidden />,
+  reports: <FileText size={15} aria-hidden />,
+  competitors: <Layers size={15} aria-hidden />,
+  governance: <ShieldCheck size={15} aria-hidden />,
+  activity: <Bell size={15} aria-hidden />,
+};
+
+const viewKeys: Record<EnterpriseView, string> = {
+  overview: "workbench.viewOverview",
+  evidence: "workbench.viewEvidence",
+  reports: "workbench.viewReports",
+  competitors: "workbench.viewCompetitors",
+  governance: "workbench.viewGovernance",
+  activity: "workbench.viewActivity",
+};
+
+const viewOrder: EnterpriseView[] = ["overview", "evidence", "reports", "competitors", "governance", "activity"];
 
 export function ViewSwitcher({
   activeView,
@@ -18,18 +31,23 @@ export function ViewSwitcher({
   activeView: EnterpriseView;
   onChange: (view: EnterpriseView) => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <nav className="module-tabs" aria-label="Workbench sections">
-      {viewItems.map((item) => (
-        <button
-          className={item.id === activeView ? "active" : ""}
-          key={item.id}
-          type="button"
-          onClick={() => onChange(item.id)}
+    <nav className="module-tabs" aria-label={t('workbench.sections')}>
+      {viewOrder.map((view) => (
+        <ActionButton
+          authenticity={{
+            actionId: `workbench.view.${view}`,
+            kind: "toggle",
+            description: `switches workbench to the ${view} view`,
+          }}
+          className={view === activeView ? "active" : ""}
+          key={view}
+          onClick={() => onChange(view)}
         >
-          {item.icon}
-          {item.label}
-        </button>
+          {viewIcons[view]}
+          {t(viewKeys[view])}
+        </ActionButton>
       ))}
     </nav>
   );

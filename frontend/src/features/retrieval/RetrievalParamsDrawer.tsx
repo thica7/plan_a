@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { useTranslation } from '../../stores/i18n';
 
 export interface RetrievalParams {
   dense_weight: number;
@@ -86,6 +87,7 @@ function ToggleRow({
 }
 
 export function RetrievalParamsDrawer({ open, params, onChange, onClose }: RetrievalParamsDrawerProps) {
+  const { t } = useTranslation();
   const update = (patch: Partial<RetrievalParams>) => onChange({ ...params, ...patch });
 
   return (
@@ -98,7 +100,7 @@ export function RetrievalParamsDrawer({ open, params, onChange, onClose }: Retri
         <div className="flex h-full flex-col">
           <div className="flex items-center justify-between border-b border-base-300 p-5">
             <div>
-              <h2 className="text-lg font-bold">Retrieval parameters</h2>
+              <h2 className="text-lg font-bold">{t('retrieval.title')}</h2>
               <p className="text-xs text-base-content/60">Changes re-run the current search automatically.</p>
             </div>
             <button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={onClose} aria-label="Close retrieval parameters">
@@ -107,9 +109,9 @@ export function RetrievalParamsDrawer({ open, params, onChange, onClose }: Retri
           </div>
 
           <div className="grid flex-1 content-start gap-5 overflow-y-auto p-5">
-            <SliderRow label="Dense weight" value={params.dense_weight} min={0} max={2} step={0.1} onChange={(value) => update({ dense_weight: value })} />
-            <SliderRow label="Sparse weight" value={params.sparse_weight} min={0} max={2} step={0.1} onChange={(value) => update({ sparse_weight: value })} />
-            <SliderRow label="Rerank top K" value={params.rerank_top_k} min={1} max={50} step={1} onChange={(value) => update({ rerank_top_k: value })} />
+            <SliderRow label={t('retrieval.denseWeight')} value={params.dense_weight} min={0} max={2} step={0.1} onChange={(value) => update({ dense_weight: value })} />
+            <SliderRow label={t('retrieval.sparseWeight')} value={params.sparse_weight} min={0} max={2} step={0.1} onChange={(value) => update({ sparse_weight: value })} />
+            <SliderRow label={t('retrieval.rerankTopK')} value={params.rerank_top_k} min={1} max={50} step={1} onChange={(value) => update({ rerank_top_k: value })} />
             <SliderRow label="Final top K" value={params.final_top_k} min={1} max={30} step={1} onChange={(value) => update({ final_top_k: value })} />
             <SliderRow label="MMR lambda" value={params.mmr_lambda} min={0} max={1} step={0.05} onChange={(value) => update({ mmr_lambda: value })} />
 

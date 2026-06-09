@@ -1,6 +1,8 @@
 import { CheckCircle2, Download, FileText, ShieldCheck, XCircle } from "lucide-react";
 import type { ArtifactRecord, ReportReleaseGate, ReportVersionRecord } from "../../api/types";
+import { ActionButton } from "../../components/interaction/ActionButton";
 import { MetricCard, Panel, StatusPill } from "../../components/ui";
+import { useTranslation } from "../../stores/i18n";
 import type { ReportAction, ReportExportFormat } from "./reportOperations";
 
 interface ReportReleasePanelProps {
@@ -20,53 +22,136 @@ export function ReportReleasePanel({
   releaseGate,
   selectedVersion,
 }: ReportReleasePanelProps) {
+  const { t } = useTranslation();
+  const pendingReason = "Another report action is already in progress.";
+  const noVersionReason = "Select a report version before using report release actions.";
+  const inReviewReason = "Move this report version into review before approving or rejecting it.";
+  const approvedReason = releaseGate?.blocker_count
+    ? `Publish is blocked by ${releaseGate.blocker_count} release gate blocker(s).`
+    : "Approve this report version before publishing it.";
+  const exportReason = !selectedVersion
+    ? "Select a report version before exporting."
+    : isPending
+      ? pendingReason
+      : undefined;
+
+  const actionDisabledReason = (action: ReportAction): string | undefined => {
+    if (!selectedVersion) {
+      return noVersionReason;
+    }
+    if (isPending) {
+      return pendingReason;
+    }
+    if ((action === "approve" || action === "reject") && selectedVersion.status !== "in_review") {
+      return inReviewReason;
+    }
+    if (action === "publish") {
+      if (selectedVersion.status !== "approved") return approvedReason;
+      if (releaseGate && !releaseGate.allowed) return approvedReason;
+    }
+    return undefined;
+  };
+
+  const isActionDisabled = (action: ReportAction) => Boolean(actionDisabledReason(action));
+
   return (
-    <Panel className="report-release-panel" title="Review gate" icon={<ShieldCheck size={16} aria-hidden />}>
+    <Panel className="report-release-panel" title={t('workbench.reviewGate')} icon={<ShieldCheck size={16} aria-hidden />}>
       {releaseGate ? (
         <div className="report-gate-summary">
           <StatusPill tone={releaseGate.allowed ? "good" : "bad"}>{releaseGate.status}</StatusPill>
-          <strong>{releaseGate.readiness.score} readiness</strong>
+          <strong>{releaseGate.readiness.score} {t('workbench.readiness')}</strong>
           <div className="metric-grid compact">
-            <MetricCard label="blockers" value={releaseGate.blocker_count} tone={releaseGate.blocker_count ? "warn" : "good"} />
-            <MetricCard label="warnings" value={releaseGate.warn_count} tone={releaseGate.warn_count ? "warn" : "neutral"} />
+            <MetricCard label={t('workbench.blockers')} value={releaseGate.blocker_count} tone={releaseGate.blocker_count ? "warn" : "good"} />
+            <MetricCard label={t('workbench.warnings')} value={releaseGate.warn_count} tone={releaseGate.warn_count ? "warn" : "neutral"} />
           </div>
         </div>
       ) : (
         <div className="report-gate-summary">
-          <StatusPill tone="neutral">not checked</StatusPill>
-          <strong>{selectedVersion ? "Gate result unavailable" : "Select a report version"}</strong>
+          <StatusPill tone="neutral">{t('workbench.notChecked')}</StatusPill>
+          <strong>{selectedVersion ? t('workbench.gateResultUnavailable') : t('workbench.selectReportVersion')}</strong>
           <div className="metric-grid compact">
-            <MetricCard label="status" value={selectedVersion?.status ?? "n/a"} />
-            <MetricCard label="evidence scope" value={selectedVersion?.evidence_ids.length ?? 0} />
+            <MetricCard label={t('compliance.status')} value={selectedVersion?.status ?? "n/a"} />
+            <MetricCard label={t('summary.evidenceScope')} value={selectedVersion?.evidence_ids.length ?? 0} />
           </div>
         </div>
       )}
 
-      <div className="report-action-row" aria-label="Report review actions">
-        <button className="icon-text-button" disabled={isPending || !selectedVersion} onClick={() => onReportAction("start_review")} type="button">
+      <div className="report-action-row" aria-label={t('reportStudio.reviewActions')}>
+        <ActionButton
+          className="icon-text-button"
+          authenticity={{
+            actionId: "report.release.start-review",
+            kind: "mutation",
+            description: "starts report approval workflow",
+          }}
+          disabled={isActionDisabled("start_review")}
+          disabledReason={actionDisabledReason("start_review")}
+          onClick={() => onReportAction("start_review")}
+        >
           <ShieldCheck size={15} aria-hidden />
-          Start review
-        </button>
-        <button className="icon-text-button" disabled={isPending || selectedVersion?.status !== "in_review"} onClick={() => onReportAction("approve")} type="button">
+          {t('workbench.startReview')}
+        </ActionButton>
+        <ActionButton
+          className="icon-text-button"
+          authenticity={{
+            actionId: "report.release.approve",
+            kind: "mutation",
+            description: "approves the selected report version",
+          }}
+          disabled={isActionDisabled("approve")}
+          disabledReason={actionDisabledReason("approve")}
+          onClick={() => onReportAction("approve")}
+        >
           <CheckCircle2 size={15} aria-hidden />
-          Approve
-        </button>
-        <button className="icon-text-button" disabled={isPending || selectedVersion?.status !== "in_review"} onClick={() => onReportAction("reject")} type="button">
+          {t('workbench.approve')}
+        </ActionButton>
+        <ActionButton
+          className="icon-text-button"
+          authenticity={{
+            actionId: "report.release.reject",
+            kind: "mutation",
+            description: "rejects the selected report version",
+          }}
+          disabled={isActionDisabled("reject")}
+          disabledReason={actionDisabledReason("reject")}
+          onClick={() => onReportAction("reject")}
+        >
           <XCircle size={15} aria-hidden />
-          Reject
-        </button>
-        <button className="icon-text-button" disabled={isPending || selectedVersion?.status !== "approved"} onClick={() => onReportAction("publish")} type="button">
+          {t('workbench.reject')}
+        </ActionButton>
+        <ActionButton
+          className="icon-text-button"
+          authenticity={{
+            actionId: "report.release.publish",
+            kind: "mutation",
+            description: "publishes the selected report version",
+          }}
+          disabled={isActionDisabled("publish")}
+          disabledReason={actionDisabledReason("publish")}
+          onClick={() => onReportAction("publish")}
+        >
           <FileText size={15} aria-hidden />
-          Publish
-        </button>
+          {t('workbench.publish')}
+        </ActionButton>
       </div>
 
-      <div className="report-export-row" aria-label="Report export actions">
+      <div className="report-export-row" aria-label={t('common.export')}>
         {(["markdown", "html", "csv"] as const).map((format) => (
-          <button className="icon-text-button" disabled={isPending || !selectedVersion} key={format} type="button" onClick={() => onExport(format)}>
+          <ActionButton
+            className="icon-text-button"
+            authenticity={{
+              actionId: `report.export.${format}`,
+              kind: "download",
+              description: `exports the selected report as ${format}`,
+            }}
+            disabled={Boolean(exportReason)}
+            disabledReason={exportReason}
+            key={format}
+            onClick={() => onExport(format)}
+          >
             <Download size={15} aria-hidden />
             {format.toUpperCase()}
-          </button>
+          </ActionButton>
         ))}
       </div>
       {lastExport ? <p className="muted-line">{lastExport.filename} / {lastExport.uri}</p> : null}

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { RunDetail as RunDetailRecord } from "../../api/types";
 import { StatusPill } from "../../components/ui";
 import type { ReportSourceBundle } from "../report/sourceBundle";
+import { useTranslation } from '../../stores/i18n';
 
 export function ReportStatusStrip({
   detail,
@@ -13,6 +14,7 @@ export function ReportStatusStrip({
   reportSources: ReportSourceBundle;
   wordCount: number;
 }) {
+  const { t } = useTranslation();
   const qualityScore = Math.round(
     (formatRateValue(detail.metrics.verified_source_rate) +
       formatRateValue(detail.metrics.claim_citation_rate) +
@@ -25,20 +27,20 @@ export function ReportStatusStrip({
     <section className="report-review-status-strip" aria-label="Report review status">
       <ReportStatusMetric
         icon={<Gauge size={16} aria-hidden />}
-        label="Quality"
+        label={t('reportStatus.quality')}
         value={`${qualityScore || 0}/100`}
-        detail={blockerCount ? `${blockerCount} blockers` : "Ready for review"}
+        detail={blockerCount ? `${blockerCount} blockers` : t('reportStatus.readyForReview')}
         tone={blockerCount ? "warn" : "good"}
       />
       <ReportStatusMetric
         icon={<ShieldCheck size={16} aria-hidden />}
-        label="Sources"
+        label={t('reportStatus.sources')}
         value={String(reportSources.sources.length)}
         detail={`${formatRate(detail.metrics.verified_source_rate)} verified`}
       />
       <ReportStatusMetric
         icon={<Target size={16} aria-hidden />}
-        label="Claims"
+        label={t('reportStatus.claims')}
         value={String(detail.enterprise_projection?.report_version.claim_ids.length ?? "n/a")}
         detail={`${formatRate(detail.metrics.claim_citation_rate)} cited`}
       />

@@ -1,4 +1,5 @@
 import type { ComparisonMatrix, CompetitorKB, CompetitorKnowledge, KnowledgeClaim, RawSource } from "../../api/types";
+import { useTranslation } from '../../stores/i18n';
 
 interface Props {
   kbs: Record<string, CompetitorKB>;
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
+  const { t } = useTranslation();
   const competitors = matrix?.competitors ?? Array.from(new Set([...Object.keys(kbs), ...Object.keys(knowledge)]));
   const dimensions =
     matrix?.dimensions ??
@@ -16,9 +18,9 @@ export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
 
   return (
     <section className="panel kb-matrix-panel">
-      <h2>KB & Matrix</h2>
+      <h2>{t('kb.title')}</h2>
       {competitors.length === 0 ? (
-        <p>No structured KB yet.</p>
+        <p>{t('kb.noStructuredKb')}</p>
       ) : (
         <>
           <div className="matrix-table-wrap">
@@ -42,7 +44,7 @@ export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
                       const fallback = kbs[competitor]?.slices[dimension]?.join("; ");
                       return (
                         <td key={`${dimension}-${competitor}`}>
-                          <p>{cell?.value || fallback || "No finding"}</p>
+                          <p>{cell?.value || fallback || t('kb.noFinding')}</p>
                           {cell ? <span>{Math.round(cell.confidence * 100)}%</span> : null}
                         </td>
                       );
