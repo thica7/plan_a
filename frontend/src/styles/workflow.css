@@ -383,41 +383,41 @@
   grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
 }
 
-.metric-grid span,
+.metric-grid > span:not(.metric-card),
 .trace-metrics span,
 .cost-summary span,
 .revision-metrics span {
   background: var(--surface-muted);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: grid;
   gap: 3px;
   min-height: 62px;
   padding: 10px;
 }
 
-.metric-grid span i {
+.metric-grid > span:not(.metric-card) i {
   background: var(--accent);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   height: 7px;
   width: 7px;
 }
 
-.metric-grid strong,
+.metric-grid > span:not(.metric-card) strong,
 .trace-metrics strong,
 .cost-summary strong,
 .revision-metrics strong {
   color: var(--text);
   font-size: 18px;
-  font-weight: 760;
+  font-weight: var(--font-weight-title);
 }
 
-.metric-grid em,
+.metric-grid > span:not(.metric-card) em,
 .trace-metrics span,
 .cost-summary span,
 .revision-metrics span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-label);
   font-style: normal;
 }
 
