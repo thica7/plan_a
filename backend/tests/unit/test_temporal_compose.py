@@ -15,6 +15,7 @@ def test_docker_compose_declares_temporal_server_ui_and_worker() -> None:
     assert '"${TEMPORAL_UI_BIND:-127.0.0.1:8233}:8080"' in compose
     assert "PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}" in compose
     assert "NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmjs.org/}" in compose
+    assert "APT_MIRROR: ${APT_MIRROR:-http://deb.debian.org/debian}" in compose
 
 
 def test_makefile_declares_real_temporal_server_smoke() -> None:
@@ -45,3 +46,4 @@ def test_env_example_defaults_run_entry_to_temporal_cutover() -> None:
     assert "TEMPORAL_TRAFFIC_PERCENT=100" in env_example
     assert "PIP_INDEX_URL=https://pypi.org/simple" in env_example
     assert "NPM_CONFIG_REGISTRY=https://registry.npmjs.org/" in env_example
+    assert "APT_MIRROR=http://deb.debian.org/debian" in env_example
