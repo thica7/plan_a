@@ -1,26 +1,39 @@
-.concept-workbench-grid {
-  align-items: start;
-  display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(0, 1fr) 320px;
-}
-
-.concept-main-column {
+.workbench-overview {
   display: grid;
   gap: 16px;
   min-width: 0;
 }
 
-.concept-summary-grid {
+.workbench-overview-grid {
+  align-items: stretch;
   display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(200px, 0.9fr) minmax(200px, 0.9fr) minmax(320px, 1.35fr);
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
 }
 
-.concept-lower-grid {
+.workbench-support-grid {
   align-items: start;
   display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(0, 1fr) minmax(270px, 0.45fr);
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
 }
 
+.workbench-card {
+  min-width: 0;
+}
+
+.coverage-heatmap-panel,
+.trace-timeline-panel {
+  min-height: 260px;
+}
+
+.coverage-heatmap-panel,
+.trace-timeline-panel {
+  grid-column: span 2;
+}
+
+.report-review-studio-panel {
+  grid-column: span 1;
+}

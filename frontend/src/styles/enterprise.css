@@ -46,6 +46,115 @@
   justify-content: flex-end;
 }
 
+.product-workspace {
+  display: grid;
+  gap: 16px;
+  margin: 0 auto;
+  max-width: 1580px;
+  min-width: 0;
+}
+
+.product-project-header {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+}
+
+.project-title-block,
+.project-title-row {
+  min-width: 0;
+}
+
+.project-title-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.project-title-row h1 {
+  color: #0f172a;
+  font-size: 30px;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.08;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.project-title-row svg {
+  color: #d99817;
+  flex: 0 0 auto;
+}
+
+.project-title-block p {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 8px 0 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.product-header-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: end;
+}
+
+.primary-action {
+  align-items: center;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: var(--font-size-control);
+  font-weight: 760;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.primary-action:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.product-workspace-body {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(220px, 0.32fr) minmax(420px, 1fr) minmax(280px, 0.36fr);
+  min-width: 0;
+}
+
+.product-project-rail,
+.product-work-area,
+.product-inspector-rail {
+  min-width: 0;
+}
+
+.product-project-rail,
+.product-inspector-rail {
+  position: sticky;
+  top: 84px;
+}
+
+.product-work-area {
+  display: grid;
+  gap: 14px;
+}
+
+.product-inspector-rail .concept-inspector {
+  position: static;
+}
+
 .enterprise-shell-grid {
   align-items: start;
   display: grid;
@@ -69,7 +178,6 @@
   display: grid;
   gap: 1px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 18px;
   overflow: hidden;
 }
 
@@ -140,6 +248,15 @@
   display: grid;
   gap: 14px;
   padding: 0;
+}
+
+.project-rail .project-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.project-rail .project-card {
+  min-width: 0;
+  width: 100%;
 }
 
 .enterprise-work-area {

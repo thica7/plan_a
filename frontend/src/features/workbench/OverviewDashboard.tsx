@@ -12,11 +12,12 @@ import type {
   ProjectReadinessScore,
   QualityAgentMatrix,
   RedTeamReport,
+  ReportReleaseGate,
   ReportVersionRecord,
   TraceSpan,
 } from "../../api/types";
 import { CompetitorsOverviewTable, QaBlockersPanel, TraceTimelinePanel } from "./OverviewPanels";
-import { ActiveReportCard, CoverageHeatmap, EvidenceQualityCard, ReadinessCard } from "./OverviewSummaryCards";
+import { CoverageHeatmap, ReportReviewStudioPanel, RunQualityPanel } from "./OverviewSummaryCards";
 import "./overview.css";
 
 export interface OverviewDashboardProps {
@@ -32,6 +33,7 @@ export interface OverviewDashboardProps {
   qaEvaluation: BusinessQAEvaluation | null;
   readiness: ProjectReadinessScore | null;
   redTeam: RedTeamReport | null;
+  releaseGate: ReportReleaseGate | null;
   runDecisionReplay: DecisionReplayReport | null;
   runTraceSpans: TraceSpan[];
   selectedVersion: ReportVersionRecord | null;
@@ -50,6 +52,7 @@ export function OverviewDashboard(props: OverviewDashboardProps) {
     qaEvaluation,
     readiness,
     redTeam,
+    releaseGate,
     runDecisionReplay,
     runTraceSpans,
     selectedVersion,
@@ -57,26 +60,19 @@ export function OverviewDashboard(props: OverviewDashboardProps) {
   const evidenceQuality = summarizeEvidenceQuality(evidence);
 
   return (
-    <div className="concept-main-column">
-      <div className="concept-summary-grid">
-        <ReadinessCard readiness={readiness} />
-        <EvidenceQualityCard
+    <div className="workbench-overview">
+      <div className="workbench-overview-grid">
+        <RunQualityPanel
           acceptedRate={evidenceQuality.acceptedRate}
+          claimValidation={claimValidation}
           evidence={evidence}
+          evidenceGaps={evidenceGaps}
+          qaEvaluation={qaEvaluation}
+          readiness={readiness}
+          redTeam={redTeam}
           verifiedRate={evidenceQuality.verifiedRate}
         />
         <CoverageHeatmap competitors={competitors} evidence={evidence} />
-        <ActiveReportCard selectedVersion={selectedVersion} />
-      </div>
-
-      <div className="concept-lower-grid">
-        <QaBlockersPanel
-          claimValidation={claimValidation}
-          evidenceGaps={evidenceGaps}
-          matrix={matrix}
-          qaEvaluation={qaEvaluation}
-          redTeam={redTeam}
-        />
         <TraceTimelinePanel
           auditLogs={auditLogs}
           decisionReplay={runDecisionReplay}
@@ -84,9 +80,19 @@ export function OverviewDashboard(props: OverviewDashboardProps) {
           selectedVersion={selectedVersion}
           traceSpans={runTraceSpans}
         />
+        <ReportReviewStudioPanel releaseGate={releaseGate} selectedVersion={selectedVersion} />
       </div>
 
-      <CompetitorsOverviewTable competitorScores={competitorScores} competitors={competitors} evidence={evidence} />
+      <div className="workbench-support-grid">
+        <QaBlockersPanel
+          claimValidation={claimValidation}
+          evidenceGaps={evidenceGaps}
+          matrix={matrix}
+          qaEvaluation={qaEvaluation}
+          redTeam={redTeam}
+        />
+        <CompetitorsOverviewTable competitorScores={competitorScores} competitors={competitors} evidence={evidence} />
+      </div>
     </div>
   );
 }

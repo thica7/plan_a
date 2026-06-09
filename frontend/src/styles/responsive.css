@@ -85,6 +85,7 @@
   .run-builder,
   .run-command-grid,
   .execution-mode-grid,
+  .product-workspace-body,
   .detail-grid,
   .run-review-score-grid,
   .run-review-lower-grid,
@@ -105,6 +106,8 @@
   }
 
   .run-builder-rail,
+  .product-project-rail,
+  .product-inspector-rail,
   .project-rail,
   .inspector-panel,
   .report-source-rail,
@@ -221,7 +224,8 @@
   }
 
   .page-header,
-  .page-header-split {
+  .page-header-split,
+  .product-project-header {
     display: grid;
     max-width: 100%;
     min-width: 0;
@@ -234,6 +238,21 @@
     min-width: 0;
     overflow: visible;
     width: 100%;
+  }
+
+  .product-header-actions {
+    justify-content: start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .product-project-header {
+    gap: 12px;
+    grid-template-columns: 1fr;
+  }
+
+  .project-title-row h1 {
+    font-size: 27px;
   }
 
   .page-header h1 {

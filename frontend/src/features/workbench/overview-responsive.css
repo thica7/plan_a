@@ -1,30 +1,27 @@
-@media (max-width: 1700px) {
-  .concept-workbench-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 1180px) {
-  .concept-workbench-grid,
-  .concept-lower-grid {
+  .workbench-overview-grid,
+  .workbench-support-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 760px) {
-  .concept-summary-grid,
   .qa-blocker-head,
   .qa-blocker-row,
   .compact-data-head,
-  .compact-data-row {
+  .compact-data-row,
+  .run-quality-body,
+  .report-studio-summary,
+  .trace-metric-row {
     grid-template-columns: 1fr;
   }
 
-  .coverage-heatmap {
-    grid-template-columns: minmax(86px, 1fr) repeat(var(--heatmap-cols), 22px);
+  .quality-score-ring {
+    max-width: 150px;
   }
 
-  .active-report-card .report-version-summary {
-    grid-template-columns: 1fr;
+  .coverage-table,
+  .trace-stepper {
+    min-width: 620px;
   }
 }

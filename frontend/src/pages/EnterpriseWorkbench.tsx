@@ -1,8 +1,10 @@
-import { RefreshCw } from "lucide-react";
+import { MoreHorizontal, Plus, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { EmptyState, LoadingState, PageHeader } from "../components/ui";
+import { ProjectHeader, WorkspaceLayout } from "../components/product-shell";
+import { EmptyState, LoadingState } from "../components/ui";
 import { ActiveView } from "../features/workbench/ActiveView";
 import { ContextInspector } from "../features/workbench/ContextInspector";
+import { formatDate } from "../features/workbench/format";
 import { ProjectRail } from "../features/workbench/ProjectRail";
 import { useEnterpriseWorkbenchData } from "../features/workbench/useEnterpriseWorkbenchData";
 import { useWorkbenchInspector } from "../features/workbench/useWorkbenchInspector";
@@ -59,35 +61,45 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
     navigate(workbenchViewRoutes[view]);
   }
 
+  const projectMeta = selectedProject
+    ? `${selectedProject.topic} / ${selectedProject.competitor_layer.toUpperCase()} / ${data.competitors.length} competitors / updated ${formatDate(selectedProject.updated_at)}`
+    : "Projects, evidence, reports, governance, and review operations.";
+
   return (
-    <section className="work-surface enterprise-workbench">
-      <PageHeader
-        eyebrow="Enterprise workspace"
-        title={selectedProject?.name ?? "Enterprise workbench"}
-        meta={
-          selectedProject
-            ? `${selectedProject.topic} / ${selectedProject.competitor_layer} / ${data.versions.length} report version(s)`
-            : "Projects, evidence, reports, governance, and review operations."
-        }
-        actions={
-          <button className="icon-text-button" type="button" onClick={refreshProjects}>
-            <RefreshCw size={16} aria-hidden />
-            Refresh
-          </button>
-        }
-      />
-
-      {error ? <p className="error-line">{error}</p> : null}
-
-      <WorkbenchStatusStrip
-        competitorCount={data.competitors.length}
-        evidence={data.evidence}
-        project={selectedProject}
-        releaseGate={releaseGate}
-        report={selectedVersion}
-      />
-
-      <div className="enterprise-shell-grid">
+    <WorkspaceLayout
+      className="enterprise-workbench"
+      error={error ? <p className="error-line">{error}</p> : null}
+      header={
+        <ProjectHeader
+          title={selectedProject?.name ?? "Enterprise workbench"}
+          meta={projectMeta}
+          status={selectedProject ? "Active" : "No project"}
+          actions={
+            <>
+              <button className="primary-action" type="button" onClick={() => navigate("/")}>
+                <Plus size={16} aria-hidden />
+                New Run
+              </button>
+              <button className="icon-button" type="button" onClick={refreshProjects} aria-label="Refresh workbench">
+                <RefreshCw size={16} aria-hidden />
+              </button>
+              <button className="icon-button" type="button" aria-label="More workspace actions">
+                <MoreHorizontal size={16} aria-hidden />
+              </button>
+            </>
+          }
+        />
+      }
+      statusStrip={
+        <WorkbenchStatusStrip
+          competitorCount={data.competitors.length}
+          evidence={data.evidence}
+          project={selectedProject}
+          releaseGate={releaseGate}
+          report={selectedVersion}
+        />
+      }
+      projectRail={
         <ProjectRail
           isLoading={isLoadingProjects}
           notifications={data.notifications}
@@ -95,55 +107,52 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
           projects={projects}
           selectedProjectId={selectedProjectId}
         />
+      }
+      inspector={
+        <ContextInspector
+          claim={selectedClaim}
+          evidence={selectedEvidence}
+          report={selectedVersion}
+          selectedTab={selectedTab}
+          setSelectedTab={setSelectedTab}
+        />
+      }
+    >
+      <ViewSwitcher activeView={activeView} onChange={handleViewChange} />
 
-        <div className="enterprise-work-stack">
-          <main className="enterprise-work-area">
-            <ViewSwitcher activeView={activeView} onChange={handleViewChange} />
-
-            {isLoadingProject ? <LoadingState label="Loading project workspace" /> : null}
-            {!isLoadingProject && !selectedProject ? (
-              <EmptyState title="No project selected">Run an analysis first, then return to the workbench.</EmptyState>
-            ) : null}
-            {!isLoadingProject && selectedProject ? (
-              <ActiveView
-                activeView={activeView}
-                competitorById={competitorById}
-                data={data}
-                evidenceById={evidenceById}
-                filteredEvidence={filteredEvidence}
-                gapFillResult={gapFillResult}
-                isFillingGaps={isFillingGaps}
-                isReportActionPending={isReportActionPending}
-                lastExport={lastExport}
-                onEvidenceQuality={handleEvidenceQuality}
-                onExport={handleExport}
-                onFillGaps={handleGapFill}
-                onReportAction={handleReportAction}
-                onSelectClaim={inspectClaim}
-                onSelectEvidence={inspectEvidence}
-                onSelectReport={inspectReport}
-                query={query}
-                releaseGate={releaseGate}
-                reportSources={reportSources}
-                selectedEvidenceId={selectedEvidence?.id ?? null}
-                selectedProject={selectedProject}
-                selectedVersion={selectedVersion}
-                selectedVersionId={selectedVersionId}
-                setQuery={setQuery}
-                setSelectedVersionId={setSelectedVersionId}
-              />
-            ) : null}
-          </main>
-
-          <ContextInspector
-            claim={selectedClaim}
-            evidence={selectedEvidence}
-            report={selectedVersion}
-            selectedTab={selectedTab}
-            setSelectedTab={setSelectedTab}
-          />
-        </div>
-      </div>
-    </section>
+      {isLoadingProject ? <LoadingState label="Loading project workspace" /> : null}
+      {!isLoadingProject && !selectedProject ? (
+        <EmptyState title="No project selected">Run an analysis first, then return to the workbench.</EmptyState>
+      ) : null}
+      {!isLoadingProject && selectedProject ? (
+        <ActiveView
+          activeView={activeView}
+          competitorById={competitorById}
+          data={data}
+          evidenceById={evidenceById}
+          filteredEvidence={filteredEvidence}
+          gapFillResult={gapFillResult}
+          isFillingGaps={isFillingGaps}
+          isReportActionPending={isReportActionPending}
+          lastExport={lastExport}
+          onEvidenceQuality={handleEvidenceQuality}
+          onExport={handleExport}
+          onFillGaps={handleGapFill}
+          onReportAction={handleReportAction}
+          onSelectClaim={inspectClaim}
+          onSelectEvidence={inspectEvidence}
+          onSelectReport={inspectReport}
+          query={query}
+          releaseGate={releaseGate}
+          reportSources={reportSources}
+          selectedEvidenceId={selectedEvidence?.id ?? null}
+          selectedProject={selectedProject}
+          selectedVersion={selectedVersion}
+          selectedVersionId={selectedVersionId}
+          setQuery={setQuery}
+          setSelectedVersionId={setSelectedVersionId}
+        />
+      ) : null}
+    </WorkspaceLayout>
   );
 }

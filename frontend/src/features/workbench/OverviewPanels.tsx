@@ -1,4 +1,5 @@
 import { AlertTriangle, CalendarClock, Layers } from "lucide-react";
+import type { CSSProperties } from "react";
 
 import type {
   AuditLogRecord,
@@ -97,17 +98,49 @@ export function TraceTimelinePanel({
   traceSpans: TraceSpan[];
 }) {
   const rows = buildTimelineRows({ auditLogs, decisionReplay, evalOps, selectedVersion, traceSpans });
+  const stages = [
+    "Planning",
+    "Discovery",
+    "Capture",
+    "Extraction",
+    "Analysis",
+    "Quality gate",
+    "Report",
+    "Review",
+  ];
+  const completedStages = selectedVersion ? 7 : Math.min(6, Math.max(1, Math.ceil(rows.length / 2)));
   return (
     <Panel
-      className="recent-activity-panel"
-      title={decisionReplay || traceSpans.length ? "Trace timeline" : "Recent activity"}
+      className="workbench-card trace-timeline-panel"
+      title="Trace timeline"
       icon={<CalendarClock size={16} aria-hidden />}
       actions={<StatusPill tone={decisionReplay?.blocker_count ? "warn" : "good"}>{rows.length}</StatusPill>}
     >
-      <div className="activity-timeline compact">
-        {rows.slice(0, 7).map((row) => (
+      <div className="trace-stepper" style={{ "--completed-stages": completedStages } as CSSProperties}>
+        {stages.map((stage, index) => (
+          <span className={index < completedStages ? "complete" : undefined} key={stage}>
+            <i aria-hidden>{index < completedStages ? "" : index + 1}</i>
+            <strong>{stage}</strong>
+          </span>
+        ))}
+      </div>
+      <div className="trace-metric-row">
+        <span>
+          Events <strong>{decisionReplay?.events.length ?? rows.length}</strong>
+        </span>
+        <span>
+          Spans <strong>{traceSpans.length}</strong>
+        </span>
+        <span>
+          Cost <strong>{evalOps ? `$${evalOps.cost_per_report_usd.toFixed(2)}` : "n/a"}</strong>
+        </span>
+        <span>
+          Gate <strong>{evalOps?.regression_gate_status ?? "n/a"}</strong>
+        </span>
+      </div>
+      <div className="trace-event-list">
+        {rows.slice(0, 4).map((row) => (
           <article key={row.id}>
-            <i aria-hidden />
             <div>
               <strong>{row.title}</strong>
               <span>{row.meta}</span>

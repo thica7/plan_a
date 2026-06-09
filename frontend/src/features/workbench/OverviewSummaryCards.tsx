@@ -1,73 +1,80 @@
 import type { CSSProperties } from "react";
 import { FileText, Gauge, ShieldCheck } from "lucide-react";
 
-import type { CompetitorRecord, EvidenceRecord, ProjectReadinessScore, ReportVersionRecord } from "../../api/types";
+import type {
+  BusinessQAEvaluation,
+  ClaimValidationReport,
+  CompetitorRecord,
+  EvidenceGapReport,
+  EvidenceRecord,
+  ProjectReadinessScore,
+  RedTeamReport,
+  ReportReleaseGate,
+  ReportVersionRecord,
+} from "../../api/types";
 import { EmptyState, Panel, StatusPill } from "../../components/ui";
 import { formatDate, formatPercent, reportStatusTone } from "./format";
 
-export function ReadinessCard({ readiness }: { readiness: ProjectReadinessScore | null }) {
-  const scoreItems = [
-    { label: "Coverage", value: readiness?.coverage_score ?? null },
-    { label: "Quality", value: readiness?.evidence_score ?? null },
-    { label: "Claims", value: readiness?.claim_score ?? null },
-    { label: "QA", value: readiness?.qa_score ?? null },
-  ];
-
-  return (
-    <Panel className="concept-card readiness-card" title="Readiness score" icon={<FileText size={16} aria-hidden />}>
-      {readiness ? (
-        <div className="readiness-score compact">
-          <strong>{readiness.score}</strong>
-          <span>{readiness.risk_level}</span>
-        </div>
-      ) : (
-        <div className="readiness-empty">
-          <span>Not scored</span>
-          <strong>Waiting for readiness projection</strong>
-        </div>
-      )}
-      <ScoreBreakdown items={scoreItems} />
-      <p>{readiness?.summary ?? "Run analysis or refresh project signals to generate a readiness score."}</p>
-    </Panel>
-  );
-}
-
-export function EvidenceQualityCard({
+export function RunQualityPanel({
   acceptedRate,
+  claimValidation,
   evidence,
+  evidenceGaps,
+  qaEvaluation,
+  readiness,
+  redTeam,
   verifiedRate,
 }: {
   acceptedRate: number;
+  claimValidation: ClaimValidationReport | null;
   evidence: EvidenceRecord[];
+  evidenceGaps: EvidenceGapReport | null;
+  qaEvaluation: BusinessQAEvaluation | null;
+  readiness: ProjectReadinessScore | null;
+  redTeam: RedTeamReport | null;
   verifiedRate: number;
 }) {
-  const accepted = evidence.filter((item) => item.quality_label === "accepted").length;
-  const rejected = evidence.filter((item) => item.quality_label === "rejected").length;
-  const verified = evidence.filter((item) => item.source_type.includes("verified") || item.reliability_score >= 0.72).length;
+  const score = readiness?.score ?? Math.round(verifiedRate * 100);
+  const blockerCount =
+    (qaEvaluation?.blocker_count ?? 0) +
+    (claimValidation?.blocker_count ?? 0) +
+    (evidenceGaps?.critical_count ?? 0) +
+    (redTeam?.high_severity_count ?? 0);
+  const qualityRows = [
+    { label: "Source quality", value: verifiedRate },
+    { label: "Coverage", value: readiness?.coverage_score ?? null },
+    { label: "Schema fit", value: readiness?.claim_score ?? null },
+    { label: "Citation rate", value: acceptedRate },
+    { label: "Consistency", value: claimValidation?.self_consistency_score ?? null },
+  ];
+
   return (
-    <Panel className="concept-card" title="Evidence quality" icon={<ShieldCheck size={16} aria-hidden />}>
-      {evidence.length > 0 ? (
-        <>
-          <strong className="large-metric">
-            {verified}
-            <span>/{evidence.length}</span>
-          </strong>
-          <p>{formatPercent(verifiedRate)} verified-like sources</p>
-        </>
-      ) : (
-        <SummaryEmpty title="No evidence yet" description="Evidence quality appears after sources are projected." />
-      )}
-      <div className="compact-stat-list">
-        <span>
-          Accepted <strong>{accepted}</strong>
-        </span>
-        <span>
-          Rejected <strong>{rejected}</strong>
-        </span>
-        <span>
-          Accepted rate <strong>{formatPercent(acceptedRate)}</strong>
-        </span>
+    <Panel
+      className="workbench-card run-quality-panel"
+      title="Run quality"
+      icon={<Gauge size={16} aria-hidden />}
+      actions={<StatusPill tone={blockerCount > 0 ? "warn" : "good"}>{blockerCount ? `${blockerCount} blockers` : "Good"}</StatusPill>}
+    >
+      <div className="run-quality-body">
+        <div
+          className="quality-score-ring"
+          style={{ "--quality-score-angle": `${Math.max(0, Math.min(100, score)) * 3.6}deg` } as CSSProperties}
+        >
+          <strong>{score || "n/a"}</strong>
+          <span>/100</span>
+        </div>
+        <div className="quality-breakdown">
+          {qualityRows.map((row) => (
+            <QualityLine key={row.label} label={row.label} value={row.value} />
+          ))}
+        </div>
       </div>
+      <p className="quality-summary">
+        {readiness?.summary ??
+          (evidence.length
+            ? `${evidence.length} evidence records projected into the current workspace.`
+            : "Run analysis to produce quality and coverage signals.")}
+      </p>
     </Panel>
   );
 }
@@ -79,36 +86,33 @@ export function CoverageHeatmap({
   competitors: CompetitorRecord[];
   evidence: EvidenceRecord[];
 }) {
-  const dimensions = [...new Set(evidence.map((item) => item.dimension).filter(Boolean))].slice(0, 7);
-  const visibleCompetitors = competitors.slice(0, 6);
+  const dimensions = [...new Set(evidence.map((item) => item.dimension).filter(Boolean))].slice(0, 6);
+  const visibleCompetitors = competitors.slice(0, 7);
   const coverage = new Map<string, number>();
   for (const item of evidence) {
     const key = `${item.competitor_id}:${item.dimension}`;
     coverage.set(key, (coverage.get(key) ?? 0) + 1);
   }
+
   return (
-    <Panel className="concept-card heatmap-card" title="Coverage" icon={<Gauge size={16} aria-hidden />}>
+    <Panel
+      className="workbench-card coverage-heatmap-panel"
+      title="Coverage heatmap"
+      icon={<ShieldCheck size={16} aria-hidden />}
+      actions={<HeatmapLegend />}
+    >
       {dimensions.length > 0 && visibleCompetitors.length > 0 ? (
-        <>
-          <div className="coverage-heatmap" style={{ "--heatmap-cols": dimensions.length } as CSSProperties}>
-            <span />
-            {dimensions.map((dimension) => (
-              <strong key={dimension} title={dimension}>
-                {dimension.slice(0, 2).toUpperCase()}
-              </strong>
-            ))}
-            {visibleCompetitors.map((competitor) => (
-              <CoverageRow competitor={competitor} coverage={coverage} dimensions={dimensions} key={competitor.id} />
-            ))}
-          </div>
-          <div className="heatmap-legend">
-            <span>Low</span>
-            <i />
-            <i />
-            <i />
-            <span>High</span>
-          </div>
-        </>
+        <div className="coverage-table" style={{ "--coverage-cols": dimensions.length } as CSSProperties}>
+          <span className="coverage-corner">Competitors</span>
+          {dimensions.map((dimension) => (
+            <strong key={dimension} title={dimension}>
+              {formatDimension(dimension)}
+            </strong>
+          ))}
+          {visibleCompetitors.map((competitor) => (
+            <CoverageRow competitor={competitor} coverage={coverage} dimensions={dimensions} key={competitor.id} />
+          ))}
+        </div>
       ) : (
         <SummaryEmpty title="No coverage matrix" description="Coverage appears after evidence is mapped to competitors and dimensions." />
       )}
@@ -116,18 +120,41 @@ export function CoverageHeatmap({
   );
 }
 
-export function ActiveReportCard({ selectedVersion }: { selectedVersion: ReportVersionRecord | null }) {
+export function ReportReviewStudioPanel({
+  releaseGate,
+  selectedVersion,
+}: {
+  releaseGate: ReportReleaseGate | null;
+  selectedVersion: ReportVersionRecord | null;
+}) {
   return (
-    <Panel className="concept-card active-report-card" title="Active report" icon={<FileText size={16} aria-hidden />}>
-      {selectedVersion ? (
-        <div className="report-version-summary">
+    <Panel
+      className="workbench-card report-review-studio-panel"
+      title="Report review studio"
+      icon={<FileText size={16} aria-hidden />}
+      actions={
+        selectedVersion ? (
           <StatusPill tone={reportStatusTone(selectedVersion.status)}>{selectedVersion.status}</StatusPill>
-          <strong>Report v{selectedVersion.version_number}</strong>
-          <span>{selectedVersion.report_md.length.toLocaleString()} characters</span>
-          <span>
-            {selectedVersion.claim_ids.length} claims / {selectedVersion.evidence_ids.length} evidence links
-          </span>
-          <time dateTime={selectedVersion.created_at}>{formatDate(selectedVersion.created_at)}</time>
+        ) : null
+      }
+    >
+      {selectedVersion ? (
+        <div className="report-studio-summary">
+          <div className="report-cover-preview">
+            <span>CompetiScope</span>
+            <strong>Competitive Intelligence Report</strong>
+            <em>v{selectedVersion.version_number}</em>
+          </div>
+          <div className="report-review-facts">
+            <strong>Report v{selectedVersion.version_number}</strong>
+            <span>Generated {formatDate(selectedVersion.created_at)}</span>
+            <span>{selectedVersion.claim_ids.length} claims</span>
+            <span>{selectedVersion.evidence_ids.length} evidence links</span>
+            <span>{selectedVersion.report_md.length.toLocaleString()} characters</span>
+            <em className={releaseGate?.allowed ? "ready" : "hold"}>
+              {releaseGate ? `${releaseGate.status} / ${releaseGate.blocker_count} blockers` : "Release gate pending"}
+            </em>
+          </div>
         </div>
       ) : (
         <EmptyState title="No report version yet" />
@@ -150,35 +177,43 @@ function CoverageRow({
       <em title={competitor.name}>{competitor.name}</em>
       {dimensions.map((dimension) => {
         const count = coverage.get(`${competitor.id}:${dimension}`) ?? 0;
+        const score = coverageScore(count);
         const level = count >= 5 ? "high" : count >= 2 ? "mid" : count === 1 ? "low" : "empty";
         return (
           <span
-            className={`heat-cell ${level}`}
+            className={`coverage-cell ${level}`}
             key={`${competitor.id}-${dimension}`}
-            title={`${competitor.name} / ${dimension}: ${count}`}
-          />
+            title={`${competitor.name} / ${dimension}: ${count} source(s)`}
+          >
+            {score ? `${score}%` : "-"}
+          </span>
         );
       })}
     </>
   );
 }
 
-function ScoreBreakdown({ items }: { items: Array<{ label: string; value: number | null }> }) {
+function HeatmapLegend() {
   return (
-    <div className="score-breakdown">
-      {items.map((item) => (
-        <ScoreLine key={item.label} label={item.label} value={item.value} />
-      ))}
-    </div>
+    <span className="heatmap-status-legend">
+      <i className="good" />
+      Good
+      <i className="mid" />
+      Medium
+      <i className="low" />
+      Low
+    </span>
   );
 }
 
-function ScoreLine({ label, value }: { label: string; value: number | null }) {
-  const normalized = value === null ? null : Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
+function QualityLine({ label, value }: { label: string; value: number | null }) {
+  const normalized = normalizeScore(value);
   return (
     <span className={normalized === null ? "empty" : undefined}>
       <em>{label}</em>
-      <b style={{ width: `${Math.round((normalized ?? 0) * 100)}%` }} />
+      <b>
+        <i style={{ width: `${Math.round((normalized ?? 0) * 100)}%` }} />
+      </b>
       <strong>{normalized === null ? "n/a" : formatPercent(normalized)}</strong>
     </span>
   );
@@ -191,4 +226,22 @@ function SummaryEmpty({ description, title }: { description: string; title: stri
       <span>{description}</span>
     </div>
   );
+}
+
+function coverageScore(count: number) {
+  if (count >= 5) return 92;
+  if (count >= 3) return 82;
+  if (count === 2) return 68;
+  if (count === 1) return 46;
+  return 0;
+}
+
+function formatDimension(value: string) {
+  const text = value.replace(/[_-]+/g, " ");
+  return text.length > 12 ? `${text.slice(0, 11)}...` : text;
+}
+
+function normalizeScore(value: number | null) {
+  if (value === null || Number.isNaN(value)) return null;
+  return Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
 }

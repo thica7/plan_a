@@ -167,6 +167,7 @@ export function ActiveView({
       redTeam={data.redTeam}
       runDecisionReplay={data.runDecisionReplay}
       runTraceSpans={data.runTraceSpans}
+      releaseGate={releaseGate}
       selectedVersion={selectedVersion}
     />
   );

@@ -36,13 +36,13 @@ export function WorkbenchStatusStrip({
         icon={<Database size={16} aria-hidden />}
         label="Evidence"
         value={`${verifiedEvidence}/${evidence.length}`}
-        detail={`${acceptedEvidence} accepted · ${formatPercent(evidenceRate)} verified`}
+        detail={`${acceptedEvidence} accepted / ${formatPercent(evidenceRate)} verified`}
       />
       <StatusMetric
         icon={<FileText size={16} aria-hidden />}
         label="Report"
         value={report ? `v${report.version_number}` : "None"}
-        detail={report ? `${report.status} · ${report.claim_ids.length} claims` : "Run analysis to create a report"}
+        detail={report ? `${report.status} / ${report.claim_ids.length} claims` : "Run analysis to create a report"}
       />
       <div className="status-metric gate">
         <span className="metric-icon">
@@ -51,7 +51,7 @@ export function WorkbenchStatusStrip({
         <div>
           <span>Release gate</span>
           <strong>{releaseGate?.status ?? "not checked"}</strong>
-          <em>{releaseGate ? `${releaseGate.blocker_count} blockers · ${releaseGate.warn_count} warnings` : "No active version"}</em>
+          <em>{releaseGate ? `${releaseGate.blocker_count} blockers / ${releaseGate.warn_count} warnings` : "No active version"}</em>
         </div>
         <StatusPill tone={releaseGate?.status === "pass" ? "good" : releaseGate ? "bad" : "neutral"}>
           {releaseGate?.allowed ? "ready" : "hold"}
