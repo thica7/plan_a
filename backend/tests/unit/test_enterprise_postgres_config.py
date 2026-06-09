@@ -5,6 +5,7 @@ import pytest
 
 from packages.config.settings import (
     DEFAULT_ENTERPRISE_DATABASE_URL,
+    ENV_FILE_LOADING_FLAG,
     _env_file_candidates,
     get_settings,
 )
@@ -58,6 +59,30 @@ def test_env_file_candidates_include_source_root_when_cwd_is_backend(tmp_path: P
     assert project_root / ".env" in candidates
     assert backend_root / ".env" in candidates
     assert len(candidates) == len({path.resolve() for path in candidates})
+
+
+def test_settings_do_not_load_env_files_when_disabled(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(ENV_FILE_LOADING_FLAG, "0")
+    monkeypatch.delenv("LLM_TIMEOUT_SECONDS", raising=False)
+    (tmp_path / ".env").write_text("LLM_TIMEOUT_SECONDS=12\n", encoding="utf-8")
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.llm_timeout_seconds == 90.0
+
+
+def test_settings_load_env_files_when_enabled(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(ENV_FILE_LOADING_FLAG, "1")
+    monkeypatch.delenv("LLM_TIMEOUT_SECONDS", raising=False)
+    (tmp_path / ".env").write_text("LLM_TIMEOUT_SECONDS=12\n", encoding="utf-8")
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.llm_timeout_seconds == 12.0
 
 
 def test_enterprise_store_settings_allow_explicit_memory(monkeypatch) -> None:
