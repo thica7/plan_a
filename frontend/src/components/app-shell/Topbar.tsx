@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
@@ -10,6 +9,8 @@ import {
   HelpCircle,
   Menu,
 } from "lucide-react";
+import { ActionButton } from "../interaction/ActionButton";
+import { ActionLink } from "../interaction/ActionLink";
 import type { RuntimeConfig } from "../../api/types";
 
 export function Topbar({
@@ -24,31 +25,70 @@ export function Topbar({
   return (
     <header className="topbar">
       <div className="topbar-context">
-        <button className="topbar-menu-button" onClick={onMenuClick} type="button" aria-label="Open navigation">
+        <ActionButton
+          className="topbar-menu-button"
+          aria-label="Open navigation"
+          authenticity={{
+            actionId: 'topbar.navigation.open',
+            kind: 'local',
+            description: 'opens mobile navigation menu'
+          }}
+          onClick={onMenuClick}
+        >
           <Menu size={18} aria-hidden />
-        </button>
-        <button className="context-switcher workspace-context" type="button">
+        </ActionButton>
+
+        <ActionButton
+          className="context-switcher workspace-context"
+          authenticity={{
+            actionId: 'topbar.workspace.switch',
+            kind: 'disabled',
+            description: 'workspace switcher not available in demo'
+          }}
+          disabled
+          disabledReason="Workspace switching is not included in this demo build."
+        >
           <Building2 size={17} aria-hidden />
           <span>
             <strong>Acme Corp</strong>
             <small>Workspace</small>
           </span>
           <ChevronDown size={15} aria-hidden />
-        </button>
-        <button className="context-switcher product-context" type="button">
+        </ActionButton>
+
+        <ActionButton
+          className="context-switcher product-context"
+          authenticity={{
+            actionId: 'topbar.product.switch',
+            kind: 'disabled',
+            description: 'product switcher not available in demo'
+          }}
+          disabled
+          disabledReason="Product switching is not included in this demo build."
+        >
           <Cuboid size={17} aria-hidden />
           <span>
             <strong>AI Competitive Intel</strong>
             <small>{routeLabel}</small>
           </span>
           <ChevronDown size={15} aria-hidden />
-        </button>
+        </ActionButton>
       </div>
+
       <div className="topbar-actions" aria-label="System status">
-        <Link className="primary-link topbar-research-link" to="/">
+        <ActionLink
+          className="primary-link topbar-research-link"
+          to="/"
+          authenticity={{
+            actionId: 'topbar.ai-research.open',
+            kind: 'route',
+            description: 'navigates to new research run page'
+          }}
+        >
           <Activity size={15} aria-hidden />
           AI Research
-        </Link>
+        </ActionLink>
+
         <StatusBadge
           good={Boolean(runtime?.temporal_cutover_ready)}
           label="Temporal"
@@ -61,13 +101,36 @@ export function Topbar({
           good={Boolean(runtime?.compliance_redaction_enabled)}
           label="Compliance"
         />
-        <button className="topbar-icon-button" type="button" aria-label="Notifications">
+
+        <ActionButton
+          className="topbar-icon-button"
+          aria-label="Notifications"
+          authenticity={{
+            actionId: 'topbar.notifications.open',
+            kind: 'disabled',
+            description: 'notifications panel not available in demo'
+          }}
+          disabled
+          disabledReason="Notifications panel is not included in this demo build."
+        >
           <Bell size={17} aria-hidden />
           <i aria-hidden />
-        </button>
-        <button className="topbar-icon-button" type="button" aria-label="Help">
+        </ActionButton>
+
+        <ActionButton
+          className="topbar-icon-button"
+          aria-label="Help"
+          authenticity={{
+            actionId: 'topbar.help.open',
+            kind: 'disabled',
+            description: 'help panel not available in demo'
+          }}
+          disabled
+          disabledReason="Help panel is not included in this demo build."
+        >
           <HelpCircle size={17} aria-hidden />
-        </button>
+        </ActionButton>
+
         <div className="topbar-user">
           <span className="avatar">AC</span>
           <strong>Acme Admin</strong>

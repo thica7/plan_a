@@ -15,6 +15,7 @@ import type {
   ScenarioPack,
   WorkspaceQuotaDecision,
 } from "../../api/types";
+import { ActionButton } from "../../components/interaction/ActionButton";
 import { RuntimeLine } from "./RuntimeLine";
 import type { CompetitorMode, ExecutionMode, LayerSelection } from "./types";
 
@@ -118,7 +119,18 @@ export function RunReadinessRail({
         <div className="readiness-section">
           <header>
             <h3>Cost Estimate</h3>
-            <button type="button">Details</button>
+            <ActionButton
+              className="ghost-button"
+              authenticity={{
+                actionId: 'new-run.cost-details.disabled',
+                kind: 'disabled',
+                description: 'detailed cost breakdown not available in demo'
+              }}
+              disabled
+              disabledReason="Detailed cost breakdown is not included in this demo build."
+            >
+              Details
+            </ActionButton>
           </header>
           <strong className="cost-estimate">~$48.60</strong>
           <dl className="readiness-cost-list">
@@ -221,14 +233,28 @@ export function RunReadinessRail({
 
         {error ? <p className="error-line">{error}</p> : null}
 
-        <button
+        <ActionButton
           className="primary-button full-width"
-          disabled={isSubmitting || selected.length === 0 || runBlockedByQuota}
           type="submit"
+          authenticity={{
+            actionId: 'new-run.submit',
+            kind: 'submit',
+            description: 'submits the new run builder form'
+          }}
+          disabled={selected.length === 0 || runBlockedByQuota}
+          disabledReason={
+            runBlockedByQuota
+              ? quotaDecision?.reason || 'Run blocked by workspace quota policy.'
+              : selected.length === 0
+                ? 'Select at least one analysis dimension before starting a run.'
+                : undefined
+          }
+          isLoading={isSubmitting}
+          loadingLabel="Starting run..."
         >
           {isSubmitting ? <RefreshCw size={18} aria-hidden /> : <Play size={18} aria-hidden />}
           Start Run
-        </button>
+        </ActionButton>
       </section>
 
       <section className="panel run-contract-panel">
