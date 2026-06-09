@@ -3,39 +3,46 @@ import {
   Activity,
   AlertTriangle,
   Bell,
+  Building2,
   CheckCircle2,
   ChevronDown,
+  Cuboid,
   HelpCircle,
   Menu,
-  Network,
 } from "lucide-react";
 import type { RuntimeConfig } from "../../api/types";
 
 export function Topbar({
+  onMenuClick,
   routeLabel,
   runtime,
 }: {
+  onMenuClick: () => void;
   routeLabel: string;
   runtime: RuntimeConfig | null;
 }) {
   return (
     <header className="topbar">
       <div className="topbar-context">
-        <button className="topbar-menu-button" type="button" aria-label="Open navigation">
+        <button className="topbar-menu-button" onClick={onMenuClick} type="button" aria-label="Open navigation">
           <Menu size={18} aria-hidden />
         </button>
-        <button className="workspace-switcher" type="button">
-          <span>Acme Corp</span>
+        <button className="context-switcher workspace-context" type="button">
+          <Building2 size={17} aria-hidden />
+          <span>
+            <strong>Acme Corp</strong>
+            <small>Workspace</small>
+          </span>
           <ChevronDown size={15} aria-hidden />
         </button>
-        <span className="topbar-divider" aria-hidden />
-        <div className="topbar-title">
-          <span>{routeLabel}</span>
-          <strong>
-            <Network size={15} aria-hidden />
-            AI Competitive Intel
-          </strong>
-        </div>
+        <button className="context-switcher product-context" type="button">
+          <Cuboid size={17} aria-hidden />
+          <span>
+            <strong>AI Competitive Intel</strong>
+            <small>{routeLabel}</small>
+          </span>
+          <ChevronDown size={15} aria-hidden />
+        </button>
       </div>
       <div className="topbar-actions" aria-label="System status">
         <Link className="primary-link topbar-research-link" to="/">

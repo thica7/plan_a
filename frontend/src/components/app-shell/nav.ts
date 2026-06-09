@@ -4,12 +4,25 @@ import {
   Database,
   FileText,
   History,
+  type LucideIcon,
   Layers,
   PlusCircle,
   ShieldCheck,
 } from "lucide-react";
 
-export const navGroups = [
+export interface ShellNavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end?: boolean;
+}
+
+export interface ShellNavGroup {
+  label: string;
+  items: ShellNavItem[];
+}
+
+export const navGroups: ShellNavGroup[] = [
   {
     label: "Research",
     items: [
