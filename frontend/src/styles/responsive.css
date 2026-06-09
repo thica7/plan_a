@@ -84,6 +84,7 @@
 
   .run-builder,
   .run-command-grid,
+  .execution-mode-grid,
   .detail-grid,
   .run-review-score-grid,
   .run-review-lower-grid,
@@ -284,6 +285,8 @@
   .field-grid,
   .preset-grid,
   .skill-grid,
+  .depth-option-grid,
+  .execution-mode-grid,
   .evidence-source-meta,
   .evidence-ledger-row,
   .revision-compact-grid,

@@ -21,7 +21,7 @@ export function CompetitorsSection({
     <section className="form-section">
       <SectionHeading
         icon={<Users size={17} aria-hidden />}
-        index="02"
+        index="03"
         meta={competitorMode === "auto" ? "planner discovery" : "manual list"}
         title="Competitors"
       />
