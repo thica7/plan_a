@@ -1,13 +1,29 @@
 .env
 runs/
+logs/
+backups/
+.claude/
 
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest-tmp/
+*.egg-info/
 
 node_modules/
+.pnpm-store/
 dist/
 *.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts
 
+review/*.html
+review/*_review_*.md
+review/*_review_*.html
+review/**/*.html
+review/**/*_review_*.md
+review/**/*_review_*.html
+review/strict_*_comparison_*.md
+review/版本/
+codex_review.md
+backend/scripts/tmp_*.py

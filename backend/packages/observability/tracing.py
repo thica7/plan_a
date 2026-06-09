@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from pydantic import BaseModel, Field
+
 from app.events import RunEvent, RunEventType
+from packages.compliance import redact_text
+from packages.identity import compute_otel_span_id, compute_trace_id
 
 SENSITIVE_KEY_PARTS = (
     "api_key",
@@ -13,6 +17,22 @@ SENSITIVE_KEY_PARTS = (
     "secret",
     "token",
 )
+
+
+class RetrievalObservability(BaseModel):
+    query: str
+    preset_used: str | None = None
+    dense_hits: int = Field(default=0, ge=0)
+    sparse_hits: int = Field(default=0, ge=0)
+    reranked_hits: int = Field(default=0, ge=0)
+    latency_ms: float = Field(default=0.0, ge=0.0)
+    cache_hit: bool = False
+    crawl_run_id: str | None = None
+    competitor: str | None = None
+    dimension: str | None = None
+    source_type: str | None = None
+    retrieval_preset: str | None = None
+    metadata: dict[str, Any] = {}
 
 
 def sanitize_for_trace(value: Any) -> Any:
@@ -31,6 +51,8 @@ def sanitize_for_trace(value: Any) -> Any:
         return [sanitize_for_trace(item) for item in value]
     if isinstance(value, str) and value.lower().startswith("bearer "):
         return "[redacted]"
+    if isinstance(value, str):
+        return redact_text(value).text
     return value
 
 
@@ -47,6 +69,7 @@ def build_run_event(
     return RunEvent(
         id=event_id,
         run_id=run_id,
+        trace_id=trace_id_for_run(run_id),
         type=cast(RunEventType, event_type),
         agent=agent,
         subagent=subagent,
@@ -59,3 +82,15 @@ def build_run_event(
 def _is_sensitive_key(key: str) -> bool:
     lowered = key.lower().replace("-", "_")
     return any(part in lowered for part in SENSITIVE_KEY_PARTS)
+
+
+def trace_id_for_run(run_id: str) -> str:
+    return compute_trace_id(run_id)
+
+
+def otel_span_id_for_span(run_id: str, span_id: str) -> str:
+    return compute_otel_span_id(run_id, span_id)
+
+
+def traceparent_for_span(trace_id: str, otel_span_id: str) -> str:
+    return f"00-{trace_id}-{otel_span_id}-01"

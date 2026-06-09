@@ -1,0 +1,50 @@
+{"id":"seed_001","topic":"AI coding assistant","competitor":"Cursor","dimension":"pricing","source_type":"official_pricing","url":"https://www.cursor.com/pricing","reliability":0.90}
+{"id":"seed_002","topic":"AI coding assistant","competitor":"GitHub Copilot","dimension":"pricing","source_type":"official_pricing","url":"https://github.com/features/copilot/plans","reliability":0.90}
+{"id":"seed_003","topic":"AI coding assistant","competitor":"Windsurf","dimension":"pricing","source_type":"official_pricing","url":"https://windsurf.com/pricing","reliability":0.86}
+{"id":"seed_004","topic":"AI coding assistant","competitor":"Tabnine","dimension":"pricing","source_type":"official_pricing","url":"https://www.tabnine.com/pricing","reliability":0.86}
+{"id":"seed_005","topic":"AI coding assistant","competitor":"Codeium","dimension":"feature","source_type":"official_docs","url":"https://codeium.com","reliability":0.80}
+{"id":"seed_006","topic":"Product analytics","competitor":"Amplitude","dimension":"feature","source_type":"official_docs","url":"https://amplitude.com","reliability":0.85}
+{"id":"seed_007","topic":"Product analytics","competitor":"Mixpanel","dimension":"feature","source_type":"official_docs","url":"https://mixpanel.com","reliability":0.85}
+{"id":"seed_008","topic":"Product analytics","competitor":"Heap","dimension":"feature","source_type":"official_docs","url":"https://heap.io","reliability":0.78}
+{"id":"seed_009","topic":"Product analytics","competitor":"PostHog","dimension":"pricing","source_type":"official_pricing","url":"https://posthog.com/pricing","reliability":0.86}
+{"id":"seed_010","topic":"Product analytics","competitor":"Pendo","dimension":"persona","source_type":"official_docs","url":"https://www.pendo.io","reliability":0.78}
+{"id":"seed_011","topic":"Customer support chatbot","competitor":"Intercom","dimension":"pricing","source_type":"official_pricing","url":"https://www.intercom.com/pricing","reliability":0.85}
+{"id":"seed_012","topic":"Customer support chatbot","competitor":"Zendesk","dimension":"pricing","source_type":"official_pricing","url":"https://www.zendesk.com/pricing","reliability":0.85}
+{"id":"seed_013","topic":"Customer support chatbot","competitor":"Freshdesk","dimension":"feature","source_type":"official_docs","url":"https://www.freshworks.com/freshdesk","reliability":0.80}
+{"id":"seed_014","topic":"Customer support chatbot","competitor":"Ada","dimension":"feature","source_type":"official_docs","url":"https://www.ada.cx","reliability":0.78}
+{"id":"seed_015","topic":"Customer support chatbot","competitor":"Forethought","dimension":"persona","source_type":"official_docs","url":"https://forethought.ai","reliability":0.76}
+{"id":"seed_016","topic":"Enterprise search","competitor":"Glean","dimension":"security","source_type":"trust_center","url":"https://www.glean.com","reliability":0.84}
+{"id":"seed_017","topic":"Enterprise search","competitor":"Coveo","dimension":"security","source_type":"trust_center","url":"https://www.coveo.com","reliability":0.82}
+{"id":"seed_018","topic":"Enterprise search","competitor":"Elastic","dimension":"feature","source_type":"official_docs","url":"https://www.elastic.co","reliability":0.82}
+{"id":"seed_019","topic":"Enterprise search","competitor":"Algolia","dimension":"pricing","source_type":"official_pricing","url":"https://www.algolia.com/pricing","reliability":0.84}
+{"id":"seed_020","topic":"Enterprise search","competitor":"Lucidworks","dimension":"persona","source_type":"official_docs","url":"https://lucidworks.com","reliability":0.76}
+{"id":"seed_021","topic":"CRM","competitor":"Salesforce","dimension":"pricing","source_type":"official_pricing","url":"https://www.salesforce.com/pricing","reliability":0.86}
+{"id":"seed_022","topic":"CRM","competitor":"HubSpot","dimension":"pricing","source_type":"official_pricing","url":"https://www.hubspot.com/pricing","reliability":0.86}
+{"id":"seed_023","topic":"CRM","competitor":"Zoho CRM","dimension":"feature","source_type":"official_docs","url":"https://www.zoho.com/crm","reliability":0.80}
+{"id":"seed_024","topic":"CRM","competitor":"Pipedrive","dimension":"persona","source_type":"official_docs","url":"https://www.pipedrive.com","reliability":0.78}
+{"id":"seed_025","topic":"CRM","competitor":"Freshsales","dimension":"integrations","source_type":"official_docs","url":"https://www.freshworks.com/crm","reliability":0.76}
+{"id":"seed_026","topic":"Project management","competitor":"Asana","dimension":"pricing","source_type":"official_pricing","url":"https://asana.com/pricing","reliability":0.85}
+{"id":"seed_027","topic":"Project management","competitor":"Monday.com","dimension":"pricing","source_type":"official_pricing","url":"https://monday.com/pricing","reliability":0.85}
+{"id":"seed_028","topic":"Project management","competitor":"ClickUp","dimension":"feature","source_type":"official_docs","url":"https://clickup.com","reliability":0.80}
+{"id":"seed_029","topic":"Project management","competitor":"Jira","dimension":"integrations","source_type":"official_docs","url":"https://www.atlassian.com/software/jira","reliability":0.82}
+{"id":"seed_030","topic":"Project management","competitor":"Notion","dimension":"persona","source_type":"official_docs","url":"https://www.notion.so","reliability":0.78}
+{"id":"seed_031","topic":"Data warehouse","competitor":"Snowflake","dimension":"pricing","source_type":"official_pricing","url":"https://www.snowflake.com/pricing","reliability":0.84}
+{"id":"seed_032","topic":"Data warehouse","competitor":"BigQuery","dimension":"pricing","source_type":"official_pricing","url":"https://cloud.google.com/bigquery/pricing","reliability":0.86}
+{"id":"seed_033","topic":"Data warehouse","competitor":"Redshift","dimension":"pricing","source_type":"official_pricing","url":"https://aws.amazon.com/redshift/pricing","reliability":0.86}
+{"id":"seed_034","topic":"Data warehouse","competitor":"Databricks","dimension":"feature","source_type":"official_docs","url":"https://www.databricks.com","reliability":0.82}
+{"id":"seed_035","topic":"Data warehouse","competitor":"ClickHouse","dimension":"feature","source_type":"official_docs","url":"https://clickhouse.com","reliability":0.80}
+{"id":"seed_036","topic":"Observability","competitor":"Datadog","dimension":"pricing","source_type":"official_pricing","url":"https://www.datadoghq.com/pricing","reliability":0.86}
+{"id":"seed_037","topic":"Observability","competitor":"New Relic","dimension":"pricing","source_type":"official_pricing","url":"https://newrelic.com/pricing","reliability":0.84}
+{"id":"seed_038","topic":"Observability","competitor":"Grafana Cloud","dimension":"feature","source_type":"official_docs","url":"https://grafana.com/products/cloud","reliability":0.82}
+{"id":"seed_039","topic":"Observability","competitor":"Splunk","dimension":"security","source_type":"trust_center","url":"https://www.splunk.com","reliability":0.78}
+{"id":"seed_040","topic":"Observability","competitor":"Sentry","dimension":"persona","source_type":"official_docs","url":"https://sentry.io","reliability":0.78}
+{"id":"seed_041","topic":"AI meeting assistant","competitor":"Fathom","dimension":"pricing","source_type":"official_pricing","url":"https://fathom.video/pricing","reliability":0.82}
+{"id":"seed_042","topic":"AI meeting assistant","competitor":"Otter","dimension":"pricing","source_type":"official_pricing","url":"https://otter.ai/pricing","reliability":0.82}
+{"id":"seed_043","topic":"AI meeting assistant","competitor":"Fireflies","dimension":"pricing","source_type":"official_pricing","url":"https://fireflies.ai/pricing","reliability":0.82}
+{"id":"seed_044","topic":"AI meeting assistant","competitor":"Avoma","dimension":"feature","source_type":"official_docs","url":"https://www.avoma.com","reliability":0.78}
+{"id":"seed_045","topic":"AI meeting assistant","competitor":"tl;dv","dimension":"persona","source_type":"official_docs","url":"https://tldv.io","reliability":0.76}
+{"id":"seed_046","topic":"Payments","competitor":"Stripe","dimension":"pricing","source_type":"official_pricing","url":"https://stripe.com/pricing","reliability":0.88}
+{"id":"seed_047","topic":"Payments","competitor":"Adyen","dimension":"pricing","source_type":"official_pricing","url":"https://www.adyen.com/pricing","reliability":0.84}
+{"id":"seed_048","topic":"Payments","competitor":"PayPal","dimension":"feature","source_type":"official_docs","url":"https://www.paypal.com/business","reliability":0.80}
+{"id":"seed_049","topic":"Payments","competitor":"Checkout.com","dimension":"security","source_type":"trust_center","url":"https://www.checkout.com","reliability":0.78}
+{"id":"seed_050","topic":"Payments","competitor":"Square","dimension":"persona","source_type":"official_docs","url":"https://squareup.com","reliability":0.78}

@@ -3,9 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Self
 
-import yaml
-
 from packages.schema.models import SkillSpec
+from packages.skills.base import SkillDefinition
 
 
 class SkillRegistry:
@@ -20,9 +19,7 @@ class SkillRegistry:
     def from_path(cls, path: Path) -> Self:
         skills: dict[str, SkillSpec] = {}
         for yaml_path in sorted(path.glob("*.yaml")):
-            with yaml_path.open("r", encoding="utf-8") as handle:
-                payload = yaml.safe_load(handle) or {}
-            spec = SkillSpec.model_validate(payload)
+            spec = SkillDefinition.from_yaml(yaml_path).spec
             skills[spec.name] = spec
         return cls(skills)
 

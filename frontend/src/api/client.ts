@@ -1,4 +1,78 @@
-import type { RunCreateRequest, RunDetail, RunSummary, RuntimeConfig, SkillSpec } from "./types";
+import type {
+  AgentMessage,
+  ArtifactCreateRequest,
+  ArtifactCreateResult,
+  ArtifactRecord,
+  AuditLogRecord,
+  BusinessIntelPlan,
+  BusinessQAEvaluation,
+  ClaimValidationReport,
+  CompetitorScoreReport,
+  CompetitorKnowledge,
+  ClaimRecord,
+  CompetitorRecord,
+  DataRetentionReport,
+  DecisionReplayReport,
+  EvalOpsReport,
+  EvidenceQualityLabel,
+  EvidenceGapFillResult,
+  EvidenceGapReport,
+  EvidenceRecord,
+  KnowledgeGraphReadModel,
+  MemoryCandidate,
+  MemoryCandidateStatus,
+  MemoryFeedbackIngestResult,
+  MemoryRecallContext,
+  MemoryStats,
+  ManualReportRevisionRequest,
+  ModelRouteDecision,
+  ModelPolicyReport,
+  MonitorStartRequest,
+  MonitorStartResponse,
+  NotificationRecord,
+  OtelTraceExport,
+  PolicyDecision,
+  PolicyEvaluationRequest,
+  ProjectReadinessScore,
+  ProjectRecord,
+  QualityAgentMatrix,
+  ReportApprovalSignalRequest,
+  ReportApprovalSignalResponse,
+  ReportApprovalStartRequest,
+  ReportApprovalStartResponse,
+  ReportReleaseGate,
+  RevisionRecord,
+  RedTeamReport,
+  ReportVersionDiff,
+  ReportVersionRecord,
+  RunCreateRequest,
+  RunDetail,
+  RunQualityComparison,
+  RunSummary,
+  RuntimeConfig,
+  ScheduledScanStartRequest,
+  ScheduledScanStartResponse,
+  SchemaEvolutionReviewRequest,
+  SchemaEvolutionReviewResult,
+  ScenarioPack,
+  SkillSpec,
+  SourceSnapshotCreateRequest,
+  SourceSnapshotResult,
+  SourceRegistryRecord,
+  ToolRegistryReport,
+  ToolCallMessage,
+  TraceObservabilityReport,
+  TraceSpan,
+  UserFeedbackCreateRequest,
+  UserFeedbackRecord,
+  WorkflowStartResponse,
+  WorkflowStateResponse,
+  RunComplianceReport,
+  WorkspaceQuotaDecision,
+  WorkspaceQuotaUpdateRequest,
+  WorkspaceRecord,
+  WorkspaceUsageSummary,
+} from "./types";
 import type { RunEvent } from "./sse_types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -37,14 +111,130 @@ export function getRuntime() {
 }
 
 export function createRun(payload: RunCreateRequest) {
-  return request<RunDetail>("/runs", {
+  return request<RunDetail | WorkflowStartResponse>("/runs", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
+export function startCompetitiveIntelWorkflow(payload: RunCreateRequest) {
+  return request<WorkflowStartResponse>("/workflows/competitive-intel", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getWorkflowState(workflowId: string) {
+  return request<WorkflowStateResponse>(`/workflows/${workflowId}`);
+}
+
+export function startScheduledScanWorkflow(payload: ScheduledScanStartRequest) {
+  return request<ScheduledScanStartResponse>("/workflows/scheduled-scan", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function startMonitorWorkflow(payload: MonitorStartRequest) {
+  return request<MonitorStartResponse>("/workflows/monitor", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function startReportApprovalWorkflow(payload: ReportApprovalStartRequest) {
+  return request<ReportApprovalStartResponse>("/workflows/report-approval", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function approveReportWorkflow(
+  reportVersionId: string,
+  payload: ReportApprovalSignalRequest,
+) {
+  return request<ReportApprovalSignalResponse>(
+    `/workflows/report-approval/${reportVersionId}/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function rejectReportWorkflow(
+  reportVersionId: string,
+  payload: ReportApprovalSignalRequest,
+) {
+  return request<ReportApprovalSignalResponse>(
+    `/workflows/report-approval/${reportVersionId}/reject`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export function getRun(runId: string) {
   return request<RunDetail>(`/runs/${runId}`);
+}
+
+export function getRunQualityComparison(runId: string, baselineRunId?: string) {
+  const params = baselineRunId ? `?baseline_run_id=${encodeURIComponent(baselineRunId)}` : "";
+  return request<RunQualityComparison>(`/runs/${runId}/quality-comparison${params}`);
+}
+
+export function getEnterpriseEvalOps(
+  options: { projectId?: string; baselineRunId?: string; judgeMode?: "heuristic" | "llm" } = {},
+) {
+  const params = new URLSearchParams();
+  if (options.projectId) params.set("project_id", options.projectId);
+  if (options.baselineRunId) params.set("baseline_run_id", options.baselineRunId);
+  if (options.judgeMode) params.set("judge_mode", options.judgeMode);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request<EvalOpsReport>(`/evals/enterprise${suffix}`);
+}
+
+export function getRunKb(runId: string) {
+  return request<Record<string, CompetitorKnowledge>>(`/runs/${runId}/kb`);
+}
+
+export function getRunRevisions(runId: string) {
+  return request<RevisionRecord[]>(`/runs/${runId}/revisions`);
+}
+
+export function getTraceSpans(runId: string) {
+  return request<TraceSpan[]>(`/runs/${runId}/trace/spans`);
+}
+
+export function getOtelTraceExport(runId: string) {
+  return request<OtelTraceExport>(`/runs/${runId}/trace/otel`);
+}
+
+export function getTraceObservabilityReport(runId: string) {
+  return request<TraceObservabilityReport>(`/runs/${runId}/trace/observability`);
+}
+
+export function getDecisionReplay(runId: string) {
+  return request<DecisionReplayReport>(`/runs/${runId}/decision-replay`);
+}
+
+export function getRunComplianceReport(runId: string) {
+  return request<RunComplianceReport>(`/runs/${runId}/compliance`);
+}
+
+export function exportRunComplianceReport(runId: string) {
+  return request<ArtifactCreateResult>(`/runs/${runId}/compliance/export`, {
+    method: "POST",
+  });
+}
+
+export function getAgentMessages(runId: string) {
+  return request<AgentMessage[]>(`/runs/${runId}/trace/agent-messages`);
+}
+
+export function getToolCallMessages(runId: string) {
+  return request<ToolCallMessage[]>(`/runs/${runId}/trace/tool-calls`);
 }
 
 export function resumeRun(
@@ -61,8 +251,340 @@ export function resumeRun(
   });
 }
 
+export function redoRun(runId: string) {
+  return request<RunDetail>(`/runs/${runId}/redo`, {
+    method: "POST",
+  });
+}
+
 export function listRuns() {
   return request<RunSummary[]>("/runs");
+}
+
+export function listEnterpriseProjects(workspaceId?: string) {
+  const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
+  return request<ProjectRecord[]>(`/enterprise/projects${params}`);
+}
+
+export function listEnterpriseAuditLogs(
+  options: string | {
+    workspaceId?: string;
+    action?: string;
+    actorId?: string;
+    actorType?: string;
+    resourceType?: string;
+    resourceId?: string;
+    createdFrom?: string;
+    createdTo?: string;
+    limit?: number;
+  } = {},
+) {
+  const resolved = typeof options === "string" ? { workspaceId: options } : options;
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set("workspace_id", resolved.workspaceId);
+  if (resolved.action) params.set("action", resolved.action);
+  if (resolved.actorId) params.set("actor_id", resolved.actorId);
+  if (resolved.actorType) params.set("actor_type", resolved.actorType);
+  if (resolved.resourceType) params.set("resource_type", resolved.resourceType);
+  if (resolved.resourceId) params.set("resource_id", resolved.resourceId);
+  if (resolved.createdFrom) params.set("created_from", resolved.createdFrom);
+  if (resolved.createdTo) params.set("created_to", resolved.createdTo);
+  if (resolved.limit !== undefined) params.set("limit", String(resolved.limit));
+  const query = params.toString();
+  return request<AuditLogRecord[]>(`/enterprise/audit-logs${query ? `?${query}` : ""}`);
+}
+
+export function listScenarioPacks() {
+  return request<ScenarioPack[]>("/enterprise/scenario-packs");
+}
+
+export function getPolicyActions() {
+  return request<Record<string, string>>("/enterprise/policy/actions");
+}
+
+export function evaluatePolicy(payload: PolicyEvaluationRequest) {
+  return request<PolicyDecision>("/enterprise/policy/evaluate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getModelPolicy() {
+  return request<ModelPolicyReport>("/enterprise/model-policy");
+}
+
+export function getModelRouteDecision() {
+  return request<ModelRouteDecision>("/enterprise/model-route");
+}
+
+export function getToolRegistry() {
+  return request<ToolRegistryReport>("/enterprise/tool-registry");
+}
+
+export function getWorkspaceUsage(workspaceId: string) {
+  return request<WorkspaceUsageSummary>(
+    `/enterprise/workspaces/${encodeURIComponent(workspaceId)}/usage`,
+  );
+}
+
+export function getWorkspaceQuotaDecision(workspaceId: string) {
+  return request<WorkspaceQuotaDecision>(
+    `/enterprise/workspaces/${encodeURIComponent(workspaceId)}/quota-decision`,
+  );
+}
+
+export function getWorkspaceRetentionReport(workspaceId: string) {
+  return request<DataRetentionReport>(
+    `/enterprise/workspaces/${encodeURIComponent(workspaceId)}/retention`,
+  );
+}
+
+export function updateWorkspaceQuota(
+  workspaceId: string,
+  payload: WorkspaceQuotaUpdateRequest,
+) {
+  return request<WorkspaceRecord>(
+    `/enterprise/workspaces/${encodeURIComponent(workspaceId)}/quota`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function listEnterpriseNotifications(params: {
+  workspaceId?: string;
+  status?: string;
+  limit?: number;
+} = {}) {
+  const search = new URLSearchParams();
+  if (params.workspaceId) search.set("workspace_id", params.workspaceId);
+  if (params.status) search.set("status", params.status);
+  if (params.limit) search.set("limit", String(params.limit));
+  const query = search.toString();
+  return request<NotificationRecord[]>(`/enterprise/notifications${query ? `?${query}` : ""}`);
+}
+
+export function listEnterpriseCompetitors(params: {
+  workspaceId?: string;
+  projectId?: string;
+} = {}) {
+  const search = new URLSearchParams();
+  if (params.workspaceId) search.set("workspace_id", params.workspaceId);
+  if (params.projectId) search.set("project_id", params.projectId);
+  const query = search.toString();
+  return request<CompetitorRecord[]>(`/enterprise/competitors${query ? `?${query}` : ""}`);
+}
+
+export function listProjectEvidence(projectId: string) {
+  return request<EvidenceRecord[]>(`/enterprise/projects/${projectId}/evidence`);
+}
+
+export function listArtifacts(params: {
+  workspaceId?: string;
+  projectId?: string;
+  evidenceId?: string;
+} = {}) {
+  const search = new URLSearchParams();
+  if (params.workspaceId) search.set("workspace_id", params.workspaceId);
+  if (params.projectId) search.set("project_id", params.projectId);
+  if (params.evidenceId) search.set("evidence_id", params.evidenceId);
+  const query = search.toString();
+  return request<ArtifactRecord[]>(`/enterprise/artifacts${query ? `?${query}` : ""}`);
+}
+
+export function createArtifact(payload: ArtifactCreateRequest) {
+  return request<ArtifactCreateResult>("/enterprise/artifacts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createSourceSnapshot(payload: SourceSnapshotCreateRequest) {
+  return request<SourceSnapshotResult>("/enterprise/source-snapshots", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listSourceRegistry(workspaceId?: string) {
+  const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
+  return request<SourceRegistryRecord[]>(`/enterprise/source-registry${params}`);
+}
+
+export function upsertSourceRegistry(record: SourceRegistryRecord) {
+  return request<SourceRegistryRecord>("/enterprise/source-registry", {
+    method: "POST",
+    body: JSON.stringify(record),
+  });
+}
+
+export function getArtifact(artifactId: string) {
+  return request<ArtifactRecord>(`/enterprise/artifacts/${encodeURIComponent(artifactId)}`);
+}
+
+export function getProjectKnowledgeGraph(projectId: string) {
+  return request<KnowledgeGraphReadModel>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/kg-read-model`,
+  );
+}
+
+export function ingestProjectMemoryFeedback(projectId: string, payload: UserFeedbackCreateRequest) {
+  return request<MemoryFeedbackIngestResult>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/memory/feedback`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function listProjectMemoryFeedback(projectId: string, limit = 20) {
+  return request<UserFeedbackRecord[]>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/memory/feedback?limit=${limit}`,
+  );
+}
+
+export function recallProjectMemory(
+  projectId: string,
+  options: { query?: string; limit?: number; includeUnconfirmed?: boolean } = {},
+) {
+  const search = new URLSearchParams();
+  if (options.query) search.set("query", options.query);
+  if (options.limit !== undefined) search.set("limit", String(options.limit));
+  if (options.includeUnconfirmed !== undefined) {
+    search.set("include_unconfirmed", String(options.includeUnconfirmed));
+  }
+  const query = search.toString();
+  return request<MemoryRecallContext>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/memory/recall${query ? `?${query}` : ""}`,
+  );
+}
+
+export function updateProjectMemoryCandidate(
+  projectId: string,
+  candidateId: string,
+  status: MemoryCandidateStatus,
+) {
+  return request<MemoryCandidate>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/memory/candidates/${encodeURIComponent(candidateId)}?status=${status}`,
+    { method: "PATCH" },
+  );
+}
+
+export function getProjectMemoryStats(projectId: string) {
+  return request<MemoryStats>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/memory/stats`,
+  );
+}
+
+export function getProjectBusinessPlan(projectId: string) {
+  return request<BusinessIntelPlan>(`/enterprise/projects/${projectId}/business-plan`);
+}
+
+export function getProjectQAEvaluation(projectId: string) {
+  return request<BusinessQAEvaluation>(`/enterprise/projects/${projectId}/qa-evaluation`);
+}
+
+export function getProjectClaimValidation(projectId: string) {
+  return request<ClaimValidationReport>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/claim-validation`,
+  );
+}
+
+export function getProjectReadinessScore(projectId: string) {
+  return request<ProjectReadinessScore>(`/enterprise/projects/${projectId}/readiness-score`);
+}
+
+export function getProjectCompetitorScores(projectId: string) {
+  return request<CompetitorScoreReport>(`/enterprise/projects/${projectId}/competitor-scores`);
+}
+
+export function getProjectEvidenceGaps(projectId: string) {
+  return request<EvidenceGapReport>(`/enterprise/projects/${projectId}/evidence-gaps`);
+}
+
+export function fillProjectEvidenceGaps(projectId: string) {
+  return request<EvidenceGapFillResult>(`/enterprise/projects/${projectId}/evidence-gaps/fill`, {
+    method: "POST",
+  });
+}
+
+export function reviewProjectSchemaSuggestion(
+  projectId: string,
+  suggestionId: string,
+  payload: SchemaEvolutionReviewRequest,
+) {
+  return request<SchemaEvolutionReviewResult>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/schema-suggestions/${encodeURIComponent(suggestionId)}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function getProjectRedTeam(projectId: string) {
+  return request<RedTeamReport>(`/enterprise/projects/${projectId}/red-team`);
+}
+
+export function getProjectQualityMatrix(projectId: string) {
+  return request<QualityAgentMatrix>(
+    `/enterprise/projects/${encodeURIComponent(projectId)}/quality-matrix`,
+  );
+}
+
+export function updateEvidenceQuality(
+  evidenceId: string,
+  payload: { quality_label: EvidenceQualityLabel; note?: string },
+) {
+  return request<{ evidence: EvidenceRecord }>(`/enterprise/evidence/${evidenceId}/quality`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listProjectClaims(projectId: string) {
+  return request<ClaimRecord[]>(`/enterprise/projects/${projectId}/claims`);
+}
+
+export function listProjectReportVersions(projectId: string) {
+  return request<ReportVersionRecord[]>(`/enterprise/projects/${projectId}/report-versions`);
+}
+
+export function getReportVersionDiff(versionId: string, baseVersionId?: string) {
+  const params = baseVersionId ? `?base_version_id=${encodeURIComponent(baseVersionId)}` : "";
+  return request<ReportVersionDiff>(`/enterprise/report-versions/${versionId}/diff${params}`);
+}
+
+export function getReportReleaseGate(versionId: string) {
+  return request<ReportReleaseGate>(`/enterprise/report-versions/${versionId}/release-gate`);
+}
+
+export function createManualReportRevision(
+  versionId: string,
+  payload: ManualReportRevisionRequest,
+) {
+  return request<ReportVersionRecord>(
+    `/enterprise/report-versions/${encodeURIComponent(versionId)}/manual-revision`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function publishReportVersion(versionId: string) {
+  return request<ReportVersionRecord>(`/enterprise/report-versions/${versionId}/publish`, {
+    method: "POST",
+  });
+}
+
+export function exportReportVersion(versionId: string, format: "markdown" | "html" | "csv") {
+  return request<ArtifactCreateResult>(
+    `/enterprise/report-versions/${versionId}/export?format=${encodeURIComponent(format)}`,
+    { method: "POST" },
+  );
 }
 
 export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) {
@@ -80,6 +602,19 @@ export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) 
     "revision_recorded",
     "run_completed",
     "run_failed",
+    "agent.started",
+    "agent.finished",
+    "tool.called",
+    "rag.retrieved",
+    "self_consistency.sampled",
+    "memory.recalled",
+    "memory.feedback_captured",
+    "hitl.reviewed",
+    "claim.validated",
+    "qa.blocked",
+    "redo.routed",
+    "benchmark.scored",
+    "report.ready",
   ];
   for (const type of eventTypes) {
     source.addEventListener(type, (message) => {

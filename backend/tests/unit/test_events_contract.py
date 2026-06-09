@@ -4,7 +4,6 @@ from typing import get_args
 
 from app.events import RunEvent, RunEventType
 
-
 EXPECTED_EVENT_TYPES = {
     "run_created",
     "node_started",
@@ -15,6 +14,19 @@ EXPECTED_EVENT_TYPES = {
     "revision_recorded",
     "run_completed",
     "run_failed",
+    "agent.started",
+    "agent.finished",
+    "tool.called",
+    "rag.retrieved",
+    "self_consistency.sampled",
+    "memory.recalled",
+    "memory.feedback_captured",
+    "hitl.reviewed",
+    "claim.validated",
+    "qa.blocked",
+    "redo.routed",
+    "benchmark.scored",
+    "report.ready",
 }
 
 
@@ -23,7 +35,10 @@ def test_backend_sse_event_type_contract() -> None:
 
 
 def test_frontend_subscribes_to_backend_sse_event_types() -> None:
-    client_source = Path("frontend/src/api/client.ts").read_text(encoding="utf-8")
+    base_dir = Path(__file__).resolve().parents[3]
+    client_source = (base_dir / "frontend" / "src" / "api" / "client.ts").read_text(
+        encoding="utf-8"
+    )
 
     for event_type in EXPECTED_EVENT_TYPES:
         assert f'"{event_type}"' in client_source

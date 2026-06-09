@@ -1,0 +1,149 @@
+from packages.auth import (
+    EnterpriseUserContext,
+    can_access_workspace,
+    can_perform,
+    evaluate_access_policy,
+    list_policy_actions,
+    normalize_role,
+)
+from packages.config import Settings
+from packages.governance import build_model_policy_report
+
+
+def test_rbac_role_permissions_are_ordered() -> None:
+    assert can_perform("owner", "audit:read")
+    assert can_perform("analyst", "project:write")
+    assert can_perform("analyst", "memory:write")
+    assert can_perform("reviewer", "evidence:review")
+    assert can_perform("reviewer", "source:review")
+    assert can_perform("reviewer", "memory:review")
+    assert can_perform("viewer", "tool:read")
+    assert can_perform("viewer", "model:read")
+    assert can_perform("viewer", "kg:read")
+    assert not can_perform("viewer", "project:write")
+    assert not can_perform("reviewer", "evidence:write")
+    assert not can_perform("analyst", "source:review")
+
+
+def test_rbac_workspace_scope_blocks_cross_workspace_access() -> None:
+    user = EnterpriseUserContext(user_id="viewer-1", role="viewer", workspace_id="workspace-a")
+
+    assert can_access_workspace(user, "workspace-a", "project:read")
+    assert not can_access_workspace(user, "workspace-b", "project:read")
+    assert normalize_role("unknown") == "viewer"
+
+
+def test_policy_decision_explains_denies_and_allows() -> None:
+    viewer = EnterpriseUserContext(
+        user_id="viewer-1",
+        role="viewer",
+        workspace_id="workspace-a",
+    )
+    analyst = EnterpriseUserContext(
+        user_id="analyst-1",
+        role="analyst",
+        workspace_id="workspace-a",
+    )
+
+    role_deny = evaluate_access_policy(viewer, "workspace-a", "project:write")
+    scope_deny = evaluate_access_policy(analyst, "workspace-b", "project:write")
+    allow = evaluate_access_policy(analyst, "workspace-a", "project:write")
+
+    assert role_deny.allowed is False
+    assert role_deny.matched_rules[0].rule_id == "deny_role_below_minimum"
+    assert scope_deny.allowed is False
+    assert scope_deny.matched_rules[0].rule_id == "deny_cross_workspace_scope"
+    assert allow.allowed is True
+    assert allow.engine == "internal-opa-compatible"
+    assert list_policy_actions()["audit:read"] == "admin"
+    assert list_policy_actions()["memory:read"] == "viewer"
+
+
+def test_external_opa_policy_allows_from_pdp_response(monkeypatch) -> None:
+    def fake_post_policy_json(url: str, payload: dict[str, object], *, timeout_seconds: float):
+        assert url == "http://opa.test/v1/data/competiscope/authz"
+        assert timeout_seconds == 1.5
+        assert payload["input"]["action"] == "project:write"  # type: ignore[index]
+        return {"result": {"allow": True, "reason": "opa allow"}}
+
+    monkeypatch.setattr("packages.auth.rbac._post_policy_json", fake_post_policy_json)
+    user = EnterpriseUserContext(
+        user_id="analyst-1",
+        role="viewer",
+        workspace_id="workspace-a",
+        policy_engine="opa",
+        policy_url="http://opa.test/v1/data/competiscope/authz",
+        policy_timeout_seconds=1.5,
+    )
+
+    decision = evaluate_access_policy(user, "workspace-a", "project:write")
+
+    assert decision.allowed is True
+    assert decision.engine == "opa"
+    assert decision.reason == "opa allow"
+    assert decision.matched_rules[0].rule_id == "external_policy_allow"
+
+
+def test_external_cerbos_policy_denies_from_pdp_response(monkeypatch) -> None:
+    def fake_post_policy_json(url: str, payload: dict[str, object], *, timeout_seconds: float):
+        assert url == "http://cerbos.test/api/check/resources"
+        assert payload["principal"]["roles"] == ["admin"]  # type: ignore[index]
+        return {"results": [{"actions": {"audit:read": "EFFECT_DENY"}}]}
+
+    monkeypatch.setattr("packages.auth.rbac._post_policy_json", fake_post_policy_json)
+    user = EnterpriseUserContext(
+        user_id="admin-1",
+        role="admin",
+        workspace_id="workspace-a",
+        policy_engine="cerbos",
+        policy_url="http://cerbos.test/api/check/resources",
+    )
+
+    decision = evaluate_access_policy(user, "workspace-a", "audit:read")
+
+    assert decision.allowed is False
+    assert decision.engine == "cerbos"
+    assert decision.reason == "Denied by Cerbos policy."
+    assert decision.matched_rules[0].rule_id == "external_policy_deny"
+
+
+def test_external_policy_engine_fails_closed_without_url() -> None:
+    user = EnterpriseUserContext(
+        user_id="owner-1",
+        role="owner",
+        workspace_id="workspace-a",
+        policy_engine="opa",
+    )
+
+    decision = evaluate_access_policy(user, "workspace-a", "project:read")
+
+    assert decision.allowed is False
+    assert decision.engine == "opa"
+    assert decision.matched_rules[0].rule_id == "deny_external_policy_unconfigured"
+
+
+def test_model_policy_report_blocks_disabled_redaction() -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=180,
+        llm_temperature=0.2,
+        compliance_redaction_enabled=False,
+    )
+
+    report = build_model_policy_report(settings)
+
+    assert report.status == "fail"
+    assert report.real_execution_allowed is False
+    assert report.blocker_count == 1
+    assert report.blocking_finding_ids == [
+        "provider.no_real_provider",
+        "compliance.redaction_disabled",
+    ]
+    assert {finding.id for finding in report.findings} >= {
+        "compliance.redaction_disabled",
+        "provider.no_real_provider",
+        "cost.timeout_high",
+    }

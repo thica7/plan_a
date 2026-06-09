@@ -1,102 +1,107 @@
 # Competiscope v2
 
-Plan A implementation scaffold: graph-driven competitive analysis with schema-first agent outputs, skill-based dimensions, scoped QA redo, and a React operations console.
+Plan A is a competitive intelligence workbench with a FastAPI backend, a
+React/Vite console, graph-driven run orchestration, RAG/KB ingestion, enterprise
+data boundaries, and Docker-first deployment scaffolding.
 
 ## Quick Start
 
-For the simplest setup, use Docker. Copy the example environment file, fill in your API credentials, then start the full stack:
-
-```bash
-cp .env.example .env
-docker compose up --build
-```
-
-Open `http://localhost:8080`.
-
-To run against real APIs, set at least `ARK_API_KEY`, `ARK_MODEL`, and `DEMO_MODE=false` in `.env`. `PPLX_API_KEY` is optional and enables Perplexity-backed web search. Without API credentials, the app falls back to demo-mode behavior.
-
-For local development without Docker, install the backend and frontend dependencies first, then run:
-
-```bash
-make dev-backend
-make dev-frontend
-```
-
-The backend runs on `http://localhost:8000`. The frontend runs on `http://localhost:5173` and proxies `/api` to the backend. The Makefile assumes a local Conda environment named `bd-competiscope-v2`; adjust the commands if you use a different Python environment.
-
-## Real API Test
-
-Create a local `.env` in the repository root:
-
-```bash
-ARK_API_KEY=your_key
-ARK_MODEL=your_model_or_endpoint_id
-ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
-PPLX_API_KEY=your_perplexity_key
-PPLX_BASE_URL=https://api.perplexity.ai
-WEB_SEARCH_PROVIDER=perplexity
-DEMO_MODE=false
-MAX_ITERATIONS=2
-AUTO_REDO_ENABLED=true
-AUTO_REDO_WARN_ENABLED=false
-HITL_ENABLED=false
-HITL_TIMEOUT_SECONDS=60
-COLLECTOR_REACT_ENABLED=true
-COLLECTOR_REACT_MAX_TURNS=3
-ANALYST_REACT_ENABLED=true
-ANALYST_REACT_MAX_TURNS=3
-```
-
-Then restart the backend with `make dev-backend`. The New Run screen will show whether the backend detected `ARK_API_KEY` and `ARK_MODEL`; choose `Real API` to send real chat completion calls through the backend. The API key is never sent from the browser.
-Leave Competitors on `Auto-discover` to provide only a topic; the planner will search and select direct competitors before evidence collection.
-When `PPLX_API_KEY` is present, collector subagents prefer Perplexity `web_search` results, fetch and hash the returned pages, and fall back to LLM-generated evidence candidates if search is unavailable.
-
-M0 smoke checks:
-
-```bash
-make m0-check
-make smoke-llm
-make smoke-search
-make smoke-fetch
-```
-
-`m0-check` is offline-safe except for local package execution. The real smoke commands require the matching keys in `.env`; they print only non-secret metadata.
-
-If port `8000` is occupied during local development, start the backend on another port and point Vite at it:
+Docker deployment:
 
 ```powershell
-conda run -n bd-competiscope-v2 uvicorn app.main:app --port 8010 --app-dir backend
-cd frontend
-$env:VITE_API_TARGET="http://localhost:8010"
-pnpm dev
+Copy-Item .env.example .env
+powershell -ExecutionPolicy Bypass -File scripts\docker_deploy.ps1 -Build
 ```
+
+Then open `http://localhost:8080`. See `docs/docker_deployment.md` for the
+deployment contract and production notes.
+
+Windows one-command development startup:
+
+```powershell
+.\scripts\dev_start.ps1
+```
+
+This starts local Postgres, Temporal, Temporal UI, the FastAPI backend, the
+Temporal worker, and the Vite frontend. To stop or inspect the local stack:
+
+```powershell
+.\scripts\dev_stop.ps1
+.\scripts\dev_status.ps1
+```
+
+The backend runs on `http://localhost:8000`. The frontend runs on
+`http://localhost:5173` and proxies `/api` to the backend. Temporal exposes gRPC
+on `127.0.0.1:7233` and UI on `http://localhost:8233` when the full stack is
+running.
+
+For the lighter RAG/KB demo path, Qdrant remains in `docker-compose.yml` and the
+backend uses `QDRANT_URL=http://qdrant:6333` plus
+`KB_DB_PATH=/app/runs/knowledge_docker.db`.
+
+## Real API Mode
+
+Create a root `.env` from `.env.example`, then set the provider keys you need:
+
+```text
+DEMO_MODE=false
+ARK_API_KEY=your_key
+ARK_MODEL=your_model_or_endpoint_id
+PPLX_API_KEY=your_perplexity_key
+BACKUP_LLM_API_KEY=your_backup_key
+BACKUP_LLM_MODEL=your_backup_model
+```
+
+Leave Competitors on `Auto-discover` to provide only a topic; the planner will
+search and select direct competitors before evidence collection. When
+`PPLX_API_KEY` is present, collector subagents prefer official source registry
+candidates, then Perplexity `web_search` results, fetch and hash returned pages,
+and fall back to LLM-generated evidence candidates when search is unavailable.
 
 ## Current Slice
 
-- FastAPI backend with `/api/runs`, `/api/runs/{id}/stream`, `/api/skills`, `/api/runtime`, and `/api/runs/{id}/resume`
-- M0 health and smoke endpoints: `/api/health`, `/api/smoke/llm`, `/api/smoke/search`, and `/api/smoke/fetch`
-- Pydantic schema additions for `RedoScope`, `QCIssue`, `ReflectionRecord`, `RevisionRecord`, structured KB, comparison matrix, and run DTOs
-- YAML skill registry for the first dimensions
-- LangGraph real-run DAG and scoped redo graph with SQLite checkpoints at `runs/graph_checkpoints.db`
-- Concurrent collector and analyst dimension fan-out inside the LangGraph nodes
-- Collect join normalizes and deduplicates `RawSource` evidence, including structured `covered_competitors`
-- Independent collector and analyst subagent contexts with context IDs in trace metadata
-- Bounded collector ReAct runner (`web_search -> fetch_page -> finish`) with deterministic fallback
-- Bounded analyst ReAct runner (`inspect_sources -> validate_citations -> finish`) with one-shot fallback
-- Verified source handling for collector ReAct finish URLs, multi-competitor source attribution, and matrix citation consistency QA
-- React + Vite + TypeScript frontend shell with New Run, Run Detail, KB/matrix, trace, and revision views
-- SSE event types shared conceptually between backend and frontend
-- Real-run trace spans for LLM/search/fetch calls with latency and token estimates
-- QA consistency checks for comparison matrices plus bounded scoped redo iterations
-- Automatic scoped redo loop for blocker QA findings, bounded by `MAX_ITERATIONS` and disabled when HITL is active; warn-level redo is opt-in with `AUTO_REDO_WARN_ENABLED` or the New Run switch
-- Optional HITL interrupts for planner and QA review, enabled with `HITL_ENABLED=true`
-- Docker and Makefile scaffolding for the planned demo path
+- FastAPI backend with run, stream, HITL, health, metrics, skills, runtime,
+  trace, crawl, knowledge, KB, revision, enterprise, eval, and workflow routers.
+- RAG/KB ingestion with crawl sources, document parsing, SimHash deduplication,
+  retrieval presets, Qdrant vector support, and retrieval trace recording.
+- Enterprise boundary for workspace, project, competitor, evidence, claim,
+  report version, audit log, auth/RBAC, compliance, and Postgres storage.
+- Temporal thin shell for retry-safe workflow wrapping and report approval
+  signals.
+- Observability coverage for local traces, decision replay, OpenTelemetry export,
+  Langfuse mirroring, and compliance redaction.
+- React + Vite + TypeScript console with run, history, crawl, search, knowledge,
+  enterprise, evidence, competitor, report, trace, and revision views.
+- Docker Compose stack with Nginx, frontend, backend, Qdrant, Postgres, Temporal,
+  Temporal UI, and a Temporal worker.
+
+## Useful Commands
+
+```bash
+make test-backend
+make test-frontend
+make sync-openapi
+make secret-scan
+make m0-check
+```
+
+Enterprise and workflow smoke checks:
+
+```bash
+docker compose up -d postgres temporal temporal-ui
+make smoke-enterprise-postgres
+make smoke-temporal-thin-shell
+make smoke-temporal-server
+```
 
 ## Project Layout
 
 ```text
-backend/    FastAPI app, schema, skill registry, orchestration service
-frontend/   React/Vite app, API client, run pages, live swimlane view
-docs/       Architecture and API contract notes
-docker/     nginx reverse proxy config
+backend/      FastAPI app, schema, agents, orchestration, RAG, enterprise code
+frontend/     React/Vite console and generated OpenAPI client types
+docs/         Architecture, deployment, ADR, contract, and eval notes
+docker/       Nginx reverse proxy config
+data/         Seed data and golden sets
+eval/         RAG evaluation data
+third_party/  Vendored runtime helpers, including webfetch_v2
 ```

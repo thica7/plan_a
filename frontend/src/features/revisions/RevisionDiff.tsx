@@ -7,6 +7,12 @@ interface RevisionDiffProps {
 
 export function RevisionDiff({ revisions }: RevisionDiffProps) {
   const latest = revisions.length > 0 ? revisions[revisions.length - 1] : undefined;
+  const targetCompetitors = latest?.target_competitors?.length
+    ? latest.target_competitors.join(", ")
+    : latest?.target_competitor || "all";
+  const scopeLabel = latest
+    ? `${latest.stage}:${targetCompetitors}/${latest.target_subagent || "all"}`
+    : "";
 
   return (
     <section className="panel revision-panel">
@@ -25,8 +31,12 @@ export function RevisionDiff({ revisions }: RevisionDiffProps) {
               iteration
             </span>
             <span>
-              <strong>{latest.stage}</strong>
+              <strong>{scopeLabel}</strong>
               scope
+            </span>
+            <span>
+              <strong>{latest.issue_ids.length}</strong>
+              selected issues
             </span>
             <span>
               <strong>{`${latest.issue_count_before} -> ${latest.issue_count_after}`}</strong>

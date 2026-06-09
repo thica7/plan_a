@@ -31,11 +31,11 @@ export function CompetitorDiscoveryView({ discovery }: CompetitorDiscoveryViewPr
               <span>{candidate.selected ? "Selected" : "Candidate"} · {Math.round(candidate.confidence * 100)}%</span>
             </div>
             {candidate.rationale ? <p>{candidate.rationale}</p> : null}
-            {candidate.evidence_urls.length > 0 ? (
+            {(candidate.evidence_urls ?? []).length > 0 ? (
               <div className="candidate-evidence">
-                {candidate.evidence_urls.slice(0, 2).map((url, index) => (
+                {(candidate.evidence_urls ?? []).slice(0, 2).map((url, index) => (
                   <a href={url} key={url} rel="noreferrer" target="_blank">
-                    {candidate.evidence_titles[index] || url}
+                    {(candidate.evidence_titles ?? [])[index] || url}
                   </a>
                 ))}
               </div>

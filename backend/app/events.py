@@ -13,6 +13,19 @@ RunEventType = Literal[
     "revision_recorded",
     "run_completed",
     "run_failed",
+    "agent.started",
+    "agent.finished",
+    "tool.called",
+    "rag.retrieved",
+    "self_consistency.sampled",
+    "memory.recalled",
+    "memory.feedback_captured",
+    "hitl.reviewed",
+    "claim.validated",
+    "qa.blocked",
+    "redo.routed",
+    "benchmark.scored",
+    "report.ready",
 ]
 
 
@@ -21,6 +34,7 @@ class RunEvent(BaseModel):
 
     id: int
     run_id: str
+    trace_id: str = ""
     type: RunEventType
     agent: str | None = None
     subagent: str | None = None
