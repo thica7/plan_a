@@ -470,12 +470,18 @@
   font-size: 13px;
 }
 
-.workspace-two-column,
-.evidence-workbench {
+.workspace-two-column {
   align-items: start;
   display: grid;
   gap: 16px;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 0.42fr);
+}
+
+.evidence-workbench {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .search-control {
@@ -589,8 +595,7 @@
 .evidence-side-rail {
   display: grid;
   gap: 12px;
-  position: sticky;
-  top: 82px;
+  position: static;
 }
 
 .evidence-ledger-panel {
@@ -635,6 +640,7 @@
   min-width: 0;
   padding: 0;
   text-align: left;
+  width: 100%;
 }
 
 .evidence-ledger-open span {
@@ -864,7 +870,7 @@
 }
 
 .report-export-row {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(96px, 1fr));
 }
 
 .report-reading-grid {

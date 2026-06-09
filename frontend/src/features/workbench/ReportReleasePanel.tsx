@@ -1,6 +1,6 @@
 import { CheckCircle2, Download, FileText, ShieldCheck, XCircle } from "lucide-react";
 import type { ArtifactRecord, ReportReleaseGate, ReportVersionRecord } from "../../api/types";
-import { LoadingState, MetricCard, Panel, StatusPill } from "../../components/ui";
+import { MetricCard, Panel, StatusPill } from "../../components/ui";
 import type { ReportAction, ReportExportFormat } from "./reportOperations";
 
 interface ReportReleasePanelProps {
@@ -32,7 +32,14 @@ export function ReportReleasePanel({
           </div>
         </div>
       ) : (
-        <LoadingState label="Loading release gate" />
+        <div className="report-gate-summary">
+          <StatusPill tone="neutral">not checked</StatusPill>
+          <strong>{selectedVersion ? "Gate result unavailable" : "Select a report version"}</strong>
+          <div className="metric-grid compact">
+            <MetricCard label="status" value={selectedVersion?.status ?? "n/a"} />
+            <MetricCard label="evidence scope" value={selectedVersion?.evidence_ids.length ?? 0} />
+          </div>
+        </div>
       )}
 
       <div className="report-action-row" aria-label="Report review actions">

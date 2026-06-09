@@ -10,11 +10,13 @@
   border-radius: var(--radius-md);
   color: var(--text-soft);
   display: inline-flex;
+  flex-shrink: 0;
   font-size: var(--font-size-label);
   font-weight: var(--font-weight-control);
   gap: var(--space-2);
   line-height: 1;
   min-height: 28px;
+  min-width: max-content;
   padding: 0 var(--space-3);
   text-transform: none;
   white-space: nowrap;
@@ -532,6 +534,7 @@ input[type="checkbox"] {
 .table-action-button {
   background: #ffffff;
   color: var(--text-soft);
+  min-width: max-content;
   padding: 0 var(--space-4);
 }
 

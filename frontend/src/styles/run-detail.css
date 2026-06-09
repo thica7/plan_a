@@ -311,12 +311,11 @@
 .report-review-export-grid {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(96px, 1fr));
 }
 
 .report-review-export-grid .icon-text-button {
   justify-content: center;
-  min-width: 0;
 }
 
 .review-action-message {
