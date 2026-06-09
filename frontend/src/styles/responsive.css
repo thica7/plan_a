@@ -127,6 +127,18 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .history-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .history-filter-panel {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .history-search-control {
+    grid-column: 1 / -1;
+  }
+
   .report-review-status-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -340,6 +352,24 @@
   .trace-list li,
   .span-list li {
     grid-template-columns: 1fr;
+  }
+
+  .history-filter-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .history-filter-panel label,
+  .history-filter-panel strong {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .history-filter-panel select {
+    flex: 1 1 auto;
+  }
+
+  .history-row-header {
+    display: none;
   }
 
   .history-row {

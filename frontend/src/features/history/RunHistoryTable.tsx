@@ -4,25 +4,34 @@ import type { RunSummary } from "../../api/types";
 import { formatDate, statusClass } from "./format";
 
 export function RunHistoryTable({
+  isFiltered,
   isLoading,
   runs,
 }: {
+  isFiltered: boolean;
   isLoading: boolean;
   runs: RunSummary[];
 }) {
   return (
     <section className="panel history-panel">
       <div className="panel-heading-row">
-        <h2>Runs</h2>
+        <h2>Runs ledger</h2>
         {isLoading ? <Loader2 className="spin" size={16} aria-hidden /> : null}
       </div>
       {runs.length === 0 && !isLoading ? (
         <div className="empty-state compact">
           <Clock3 size={18} aria-hidden />
-          <p>No runs returned by the backend.</p>
+          <p>{isFiltered ? "No runs match the active filters." : "No runs returned by the backend."}</p>
         </div>
       ) : (
         <div className="history-table">
+          <div className="history-row history-row-header" role="row">
+            <span aria-hidden />
+            <span>Run</span>
+            <span>Gate</span>
+            <span>Mode</span>
+            <span>Updated</span>
+          </div>
           {runs.map((run) => (
             <Link className="history-row" to={`/runs/${run.id}`} key={run.id}>
               <span className={`status-dot ${statusClass(run.status)}`}>
