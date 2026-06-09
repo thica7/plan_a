@@ -17,6 +17,7 @@
   .report-command-row,
   .report-reading-grid,
   .activity-workbench,
+  .evidence-workbench,
   .governance-summary-row,
   .governance-detail-grid {
     grid-template-columns: 1fr;
@@ -41,6 +42,7 @@
 
   .report-review-desk,
   .activity-side-rail,
+  .evidence-side-rail,
   .governance-audit-panel {
     position: static;
   }
@@ -75,6 +77,7 @@
   .enterprise-layout,
   .enterprise-shell-grid,
   .workspace-two-column,
+  .evidence-workbench,
   .report-command-row,
   .report-reading-grid,
   .activity-workbench,
@@ -88,6 +91,7 @@
   .run-builder-rail,
   .project-rail,
   .inspector-panel,
+  .evidence-side-rail,
   .concept-inspector,
   .report-review-desk,
   .activity-side-rail,
@@ -254,6 +258,10 @@
   .preset-grid,
   .skill-grid,
   .evidence-source-meta,
+  .evidence-ledger-row,
+  .competitor-score-grid,
+  .competitor-rank-row,
+  .competitor-asset-metrics,
   .workbench-status-strip,
   .metric-grid,
   .source-trace-metrics,
@@ -299,6 +307,16 @@
 
   .source-registry-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .evidence-ledger-list,
+  .gap-card-list {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .evidence-review-actions {
+    justify-items: stretch;
   }
 
   .run-review-overview,
