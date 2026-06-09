@@ -3,8 +3,16 @@
     grid-template-columns: 1fr;
   }
 
+  .report-studio-layout {
+    grid-template-columns: 1fr;
+  }
+
   .enterprise-work-stack > .concept-inspector {
     max-height: none;
+    position: static;
+  }
+
+  .review-left-rail {
     position: static;
   }
 }
@@ -46,6 +54,7 @@
   .project-rail,
   .inspector-panel,
   .concept-inspector,
+  .review-left-rail,
   .version-rail,
   .report-inspector {
     max-height: none;

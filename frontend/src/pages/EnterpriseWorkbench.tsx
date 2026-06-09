@@ -45,6 +45,7 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
     setSelectedVersionId,
   } = useEnterpriseWorkbenchData(initialView);
   const {
+    inspectClaim,
     inspectEvidence,
     inspectReport,
     selectedClaim,
@@ -118,6 +119,7 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
                 onExport={handleExport}
                 onFillGaps={handleGapFill}
                 onReportAction={handleReportAction}
+                onSelectClaim={inspectClaim}
                 onSelectEvidence={inspectEvidence}
                 onSelectReport={inspectReport}
                 query={query}

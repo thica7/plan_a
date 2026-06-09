@@ -1,8 +1,13 @@
-import { CheckCircle2, Database, Download, FileText, ShieldCheck, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Database, Download, FileText, GitCompareArrows, ShieldCheck, XCircle } from "lucide-react";
+import { getReportVersionDiff } from "../../api/client";
 import type {
   ArtifactRecord,
+  ClaimRecord,
+  EvidenceQualityLabel,
   EvidenceRecord,
   ReportReleaseGate,
+  ReportVersionDiff,
   ReportVersionRecord,
 } from "../../api/types";
 import { EmptyState, LoadingState, Panel, StatusPill } from "../../components/ui";
@@ -12,10 +17,13 @@ import { formatDate } from "./format";
 import type { ReportAction, ReportExportFormat } from "./reportOperations";
 
 interface ReportStudioProps {
+  claims: ClaimRecord[];
   evidenceById: Map<string, EvidenceRecord>;
   isPending: boolean;
   lastExport: ArtifactRecord | null;
   onExport: (format: ReportExportFormat) => void;
+  onEvidenceQuality: (evidenceId: string, qualityLabel: EvidenceQualityLabel) => void;
+  onSelectClaim: (claim: ClaimRecord) => void;
   onSelectEvidence: (evidence: EvidenceRecord) => void;
   onSelectReport: (report: ReportVersionRecord) => void;
   onReportAction: (action: ReportAction) => void;
@@ -28,10 +36,13 @@ interface ReportStudioProps {
 }
 
 export function ReportStudio({
+  claims,
   evidenceById,
   isPending,
   lastExport,
   onExport,
+  onEvidenceQuality,
+  onSelectClaim,
   onSelectEvidence,
   onSelectReport,
   onReportAction,
@@ -42,26 +53,65 @@ export function ReportStudio({
   setSelectedVersionId,
   versions,
 }: ReportStudioProps) {
+  const [diff, setDiff] = useState<ReportVersionDiff | null>(null);
+  const [isDiffLoading, setDiffLoading] = useState(false);
+  const selectedClaimIds = useMemo(() => new Set(selectedVersion?.claim_ids ?? []), [selectedVersion?.claim_ids]);
+  const scopedClaims = useMemo(
+    () => claims.filter((claim) => selectedClaimIds.has(claim.id)).slice(0, 8),
+    [claims, selectedClaimIds],
+  );
+  const previousVersion = useMemo(() => {
+    if (!selectedVersion) return null;
+    const sorted = versions.slice().sort((a, b) => b.version_number - a.version_number);
+    return sorted.find((version) => version.version_number < selectedVersion.version_number) ?? null;
+  }, [selectedVersion, versions]);
+
+  useEffect(() => {
+    if (!selectedVersion) {
+      setDiff(null);
+      return;
+    }
+    let active = true;
+    setDiffLoading(true);
+    getReportVersionDiff(selectedVersion.id, previousVersion?.id)
+      .then((value) => {
+        if (active) setDiff(value);
+      })
+      .catch(() => {
+        if (active) setDiff(null);
+      })
+      .finally(() => {
+        if (active) setDiffLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [previousVersion?.id, selectedVersion?.id]);
+
   return (
     <div className="report-studio-layout">
-      <Panel className="version-rail" title="Versions">
-        {versions.map((version) => (
-          <button
-            className={version.id === selectedVersionId ? "version-item active" : "version-item"}
-            key={version.id}
-            type="button"
-            onClick={() => {
-              setSelectedVersionId(version.id);
-              onSelectReport(version);
-            }}
-          >
-            <strong>v{version.version_number}</strong>
-            <span>{version.status}</span>
-            <em>{formatDate(version.created_at)}</em>
-          </button>
-        ))}
-        {versions.length === 0 ? <EmptyState title="No report versions" /> : null}
-      </Panel>
+      <div className="review-left-rail">
+        <Panel className="version-rail" title="Versions">
+          {versions.map((version) => (
+            <button
+              className={version.id === selectedVersionId ? "version-item active" : "version-item"}
+              key={version.id}
+              type="button"
+              onClick={() => {
+                setSelectedVersionId(version.id);
+                onSelectReport(version);
+              }}
+            >
+              <strong>v{version.version_number}</strong>
+              <span>{version.status}</span>
+              <em>{formatDate(version.created_at)}</em>
+            </button>
+          ))}
+          {versions.length === 0 ? <EmptyState title="No report versions" /> : null}
+        </Panel>
+
+        <DiffPanel diff={diff} isLoading={isDiffLoading} previousVersion={previousVersion} />
+      </div>
 
       <div className="report-reader-panel" aria-label="Report reader">
         {selectedVersion ? (
@@ -128,22 +178,49 @@ export function ReportStudio({
           {lastExport ? <p className="muted-line">{lastExport.filename} / {lastExport.uri}</p> : null}
         </Panel>
 
+        <Panel title="Claim review" icon={<GitCompareArrows size={16} aria-hidden />}>
+          <div className="review-claim-list">
+            {scopedClaims.map((claim) => (
+              <button className="review-claim-item" key={claim.id} type="button" onClick={() => onSelectClaim(claim)}>
+                <StatusPill tone={claim.status === "accepted" ? "good" : claim.status === "rejected" ? "bad" : "warn"}>
+                  {claim.status}
+                </StatusPill>
+                <strong>{claim.claim_type}</strong>
+                <span>{claim.claim_text}</span>
+                <em>{Math.round(claim.confidence * 100)}% confidence / {claim.evidence_ids.length} evidence</em>
+              </button>
+            ))}
+            {scopedClaims.length === 0 ? <EmptyState title="No scoped claims" /> : null}
+          </div>
+        </Panel>
+
         <Panel title="Evidence scope" icon={<Database size={16} aria-hidden />}>
           {selectedVersion ? (
             <div className="source-scope-list">
               {selectedVersion.evidence_ids.slice(0, 8).map((id) => {
                 const evidence = evidenceById.get(id);
                 return (
-                  <button
-                    className="source-scope-item"
-                    disabled={!evidence}
-                    key={id}
-                    type="button"
-                    onClick={() => evidence && onSelectEvidence(evidence)}
-                  >
+                  <article className="source-scope-item" key={id}>
                     <strong>{evidence?.title ?? id}</strong>
                     <span>{evidence?.dimension ?? "unknown"}</span>
-                  </button>
+                    {evidence ? (
+                      <div className="scope-review-actions">
+                        <button className="table-action-button" type="button" onClick={() => onSelectEvidence(evidence)}>
+                          Inspect
+                        </button>
+                        <select
+                          aria-label={`Quality for ${evidence.title}`}
+                          value={evidence.quality_label}
+                          onChange={(event) => onEvidenceQuality(evidence.id, event.target.value as EvidenceQualityLabel)}
+                        >
+                          <option value="unreviewed">unreviewed</option>
+                          <option value="accepted">accepted</option>
+                          <option value="rejected">rejected</option>
+                          <option value="stale">stale</option>
+                        </select>
+                      </div>
+                    ) : null}
+                  </article>
                 );
               })}
             </div>
@@ -151,5 +228,57 @@ export function ReportStudio({
         </Panel>
       </aside>
     </div>
+  );
+}
+
+function DiffPanel({
+  diff,
+  isLoading,
+  previousVersion,
+}: {
+  diff: ReportVersionDiff | null;
+  isLoading: boolean;
+  previousVersion: ReportVersionRecord | null;
+}) {
+  return (
+    <Panel title="Version diff" icon={<GitCompareArrows size={16} aria-hidden />}>
+      {isLoading ? <LoadingState label="Loading diff" /> : null}
+      {!isLoading && diff ? (
+        <div className="report-diff-panel">
+          <div className="metric-grid compact">
+            <span className="metric-card good">
+              <i aria-hidden />
+              <strong>{diff.added_lines}</strong>
+              <em>added</em>
+            </span>
+            <span className="metric-card warn">
+              <i aria-hidden />
+              <strong>{diff.removed_lines}</strong>
+              <em>removed</em>
+            </span>
+            <span className="metric-card">
+              <i aria-hidden />
+              <strong>{diff.unchanged_lines}</strong>
+              <em>same</em>
+            </span>
+          </div>
+          <p className="muted-line">
+            {previousVersion ? `Compared with v${previousVersion.version_number}` : "No previous version available."}
+          </p>
+          <div className="report-diff-lines">
+            {diff.lines
+              .filter((line) => line.kind !== "unchanged")
+              .slice(0, 12)
+              .map((line, index) => (
+                <code className={line.kind} key={`${line.kind}-${index}`}>
+                  {line.kind === "added" ? "+ " : "- "}
+                  {line.text}
+                </code>
+              ))}
+          </div>
+        </div>
+      ) : null}
+      {!isLoading && !diff ? <EmptyState title="No diff available" /> : null}
+    </Panel>
   );
 }

@@ -391,7 +391,15 @@
   align-items: start;
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+  grid-template-columns: minmax(190px, 0.42fr) minmax(0, 1fr) minmax(250px, 0.5fr);
+}
+
+.review-left-rail {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  position: sticky;
+  top: 82px;
 }
 
 .report-inspector {
@@ -401,11 +409,23 @@
   top: 82px;
 }
 
+.report-inspector .recommendation-list.compact {
+  max-height: 178px;
+  overflow: auto;
+}
+
+.report-inspector .source-scope-list,
+.report-inspector .review-claim-list {
+  max-height: 240px;
+  overflow: auto;
+}
+
 .version-rail {
   display: grid;
   gap: 10px;
-  grid-column: 1 / -1;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: 1fr;
+  max-height: 310px;
+  overflow: auto;
   position: static;
 }
 
@@ -478,7 +498,6 @@
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   color: var(--muted);
-  cursor: pointer;
   display: grid;
   gap: 3px;
   padding: 9px;
@@ -486,15 +505,9 @@
   text-align: left;
 }
 
-.source-scope-item:disabled {
-  cursor: not-allowed;
-  opacity: 0.62;
-}
-
 .source-scope-list a:hover,
-.source-scope-item:hover:not(:disabled) {
+.source-scope-item:hover {
   border-color: rgba(15, 118, 110, 0.32);
-  color: var(--accent);
 }
 
 .source-scope-list strong,
@@ -506,6 +519,91 @@
 .source-scope-list span,
 .source-scope-item span {
   font-size: 12px;
+}
+
+.scope-review-actions {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-top: 5px;
+}
+
+.scope-review-actions select {
+  min-height: 32px;
+  min-width: 0;
+  width: 100%;
+}
+
+.report-diff-panel,
+.report-diff-lines,
+.review-claim-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.report-diff-lines {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.report-diff-lines code {
+  border-radius: 7px;
+  display: block;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  padding: 7px;
+  white-space: pre-wrap;
+}
+
+.report-diff-lines code.added {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.report-diff-lines code.removed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.review-claim-item {
+  background: #ffffff;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  text-align: left;
+}
+
+.review-claim-item:hover {
+  border-color: rgba(15, 118, 110, 0.32);
+}
+
+.review-claim-item strong,
+.review-claim-item span,
+.review-claim-item em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-claim-item strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.review-claim-item span,
+.review-claim-item em {
+  font-size: 12px;
+}
+
+.review-claim-item em {
+  color: var(--muted);
+  font-style: normal;
 }
 
 .notification-list {

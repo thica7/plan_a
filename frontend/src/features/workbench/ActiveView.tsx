@@ -1,5 +1,6 @@
 import type {
   ArtifactRecord,
+  ClaimRecord,
   CompetitorRecord,
   EvidenceGapFillResult,
   EvidenceQualityLabel,
@@ -32,6 +33,7 @@ interface ActiveViewProps {
   onExport: (format: ReportExportFormat) => void;
   onFillGaps: () => void;
   onReportAction: (action: ReportAction) => void;
+  onSelectClaim: (claim: ClaimRecord) => void;
   onSelectEvidence: (evidence: EvidenceRecord) => void;
   onSelectReport: (report: ReportVersionRecord) => void;
   query: string;
@@ -59,6 +61,7 @@ export function ActiveView({
   onExport,
   onFillGaps,
   onReportAction,
+  onSelectClaim,
   onSelectEvidence,
   onSelectReport,
   query,
@@ -92,10 +95,13 @@ export function ActiveView({
   if (activeView === "reports") {
     return (
       <ReportStudio
+        claims={data.claims}
         evidenceById={evidenceById}
         isPending={isReportActionPending}
         lastExport={lastExport}
+        onEvidenceQuality={onEvidenceQuality}
         onExport={onExport}
+        onSelectClaim={onSelectClaim}
         onSelectEvidence={onSelectEvidence}
         onSelectReport={onSelectReport}
         onReportAction={onReportAction}
