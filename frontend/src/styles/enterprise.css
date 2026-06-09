@@ -191,6 +191,141 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.governance-workbench {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.governance-summary-row {
+  align-items: stretch;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.62fr);
+}
+
+.governance-detail-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+.runtime-policy-panel,
+.workspace-usage-panel,
+.source-registry-panel,
+.governance-audit-panel {
+  min-width: 0;
+}
+
+.governance-audit-panel {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.governance-status-row {
+  align-items: center;
+  border-bottom: 1px solid var(--border-soft);
+  display: grid;
+  gap: 4px 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+}
+
+.governance-status-row > strong,
+.governance-status-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.governance-status-row > strong {
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 760;
+}
+
+.governance-status-row > span {
+  color: var(--muted);
+  font-size: 12px;
+  grid-column: 2;
+}
+
+.policy-finding-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  max-height: 172px;
+  overflow: auto;
+}
+
+.usage-bars {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.usage-bar {
+  display: grid;
+  gap: 6px;
+}
+
+.usage-bar span {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+}
+
+.usage-bar strong {
+  color: var(--text);
+}
+
+.usage-bar i {
+  background: #eef2f7;
+  border-radius: 999px;
+  display: block;
+  height: 8px;
+  overflow: hidden;
+}
+
+.usage-bar b {
+  background: var(--accent);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.source-registry-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.registry-stat {
+  background: #ffffff;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+}
+
+.registry-stat strong {
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.registry-stat em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
 .quality-chain {
   display: grid;
   gap: 9px;
@@ -262,8 +397,8 @@
 
 .source-registry-table .data-table-head,
 .source-registry-table .data-row {
-  grid-template-columns: minmax(240px, 1.2fr) minmax(100px, 0.45fr) minmax(100px, 0.45fr) minmax(120px, 0.55fr);
-  min-width: 680px;
+  grid-template-columns: minmax(240px, 1.25fr) minmax(108px, 0.48fr) minmax(108px, 0.48fr) minmax(124px, 0.55fr) minmax(142px, 0.68fr);
+  min-width: 820px;
 }
 
 .data-table-head {

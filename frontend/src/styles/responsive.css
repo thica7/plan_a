@@ -16,7 +16,9 @@
 
   .report-command-row,
   .report-reading-grid,
-  .activity-workbench {
+  .activity-workbench,
+  .governance-summary-row,
+  .governance-detail-grid {
     grid-template-columns: 1fr;
   }
 
@@ -38,7 +40,8 @@
   }
 
   .report-review-desk,
-  .activity-side-rail {
+  .activity-side-rail,
+  .governance-audit-panel {
     position: static;
   }
 }
@@ -75,6 +78,8 @@
   .report-command-row,
   .report-reading-grid,
   .activity-workbench,
+  .governance-summary-row,
+  .governance-detail-grid,
   .project-summary,
   .dashboard-grid {
     grid-template-columns: 1fr;
@@ -85,7 +90,8 @@
   .inspector-panel,
   .concept-inspector,
   .report-review-desk,
-  .activity-side-rail {
+  .activity-side-rail,
+  .governance-audit-panel {
     max-height: none;
     position: static;
   }
@@ -289,6 +295,10 @@
 
   .action-grid {
     grid-template-columns: 1fr;
+  }
+
+  .source-registry-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .run-review-overview,
