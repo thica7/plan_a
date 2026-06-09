@@ -10,6 +10,7 @@ import { useRunDetailController } from "../features/run-detail/useRunDetailContr
 export function RunDetail() {
   const {
     activeView,
+    canApplyPlanDimensionChanges,
     citedClaimRate,
     complianceExport,
     complianceReport,
@@ -74,6 +75,7 @@ export function RunDetail() {
       {detail.status === "interrupted" && latestInterrupt ? (
         interruptStage === "planner" ? (
           <PlanReviewModal
+            canApplyDimensions={canApplyPlanDimensionChanges}
             dimensions={planDimensions}
             message={latestInterrupt.message}
             onAccept={() => handleHitl("accept")}

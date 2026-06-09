@@ -23,6 +23,12 @@ import { buildReportSourceBundle } from "../report/sourceBundle";
 import { useRunStore } from "../../stores/run";
 import type { RunDetailView } from "./types";
 import { flattenReflection } from "./utils";
+import {
+  canApplyPlanDimensions,
+  fallbackHitlMessage,
+  hitlStageFromCurrentNode,
+  parsePlanDimensionsInput,
+} from "./planReview";
 
 export type HitlDecision = "accept" | "modify_plan" | "force_pass" | "redo";
 
@@ -45,10 +51,28 @@ export function useRunDetailController() {
   const [isExportingCompliance, setExportingCompliance] = useState(false);
 
   const redoLimitReached = detail ? detail.revisions.length >= detail.max_iterations : false;
+  const canApplyPlanDimensionChanges = detail
+    ? canApplyPlanDimensions(planDimensions, detail.plan.dimensions)
+    : false;
   const latestInterrupt = useMemo(
     () => [...events].reverse().find((event) => event.type === "interrupt"),
     [events],
   );
+  const visibleInterrupt = useMemo(() => {
+    if (latestInterrupt || detail?.status !== "interrupted") return latestInterrupt;
+    const stage = hitlStageFromCurrentNode(detail.current_node);
+    if (!stage) return undefined;
+    if (stage === "planner") {
+      return {
+        message: fallbackHitlMessage(stage),
+        payload: { interrupt_node: "planner_hitl", stage: "planner" },
+      };
+    }
+    return {
+      message: fallbackHitlMessage(stage),
+      payload: { interrupt_node: "qa_hitl", stage: "qa" },
+    };
+  }, [detail?.current_node, detail?.status, latestInterrupt]);
   const reportSources = useMemo(() => {
     const projection = detail?.enterprise_projection;
     if (!projection) {
@@ -58,7 +82,7 @@ export function useRunDetailController() {
       scopedEvidenceIds: projection.report_version.evidence_ids,
     });
   }, [detail?.enterprise_projection, detail?.raw_sources]);
-  const interruptStage = typeof latestInterrupt?.payload.stage === "string" ? latestInterrupt.payload.stage : null;
+  const interruptStage = typeof visibleInterrupt?.payload.stage === "string" ? visibleInterrupt.payload.stage : null;
 
   useEffect(() => {
     const nextView = parseRunDetailView(searchParams.get("view")) ?? "overview";
@@ -225,12 +249,12 @@ export function useRunDetailController() {
           ? {
               decision,
               note: "Plan reviewed in HITL panel",
-              dimensions: planDimensions
-                .split(",")
-                .map((item) => item.trim())
-                .filter(Boolean),
+              dimensions: parsePlanDimensionsInput(planDimensions),
             }
           : { decision, note: "Reviewed in HITL panel" };
+      if (decision === "modify_plan" && !canApplyPlanDimensionChanges) {
+        return;
+      }
       const updated = await resumeRun(runId, payload);
       setDetail(updated);
     } catch (err) {
@@ -256,6 +280,7 @@ export function useRunDetailController() {
 
   return {
     activeView,
+    canApplyPlanDimensionChanges,
     citedClaimRate,
     complianceExport,
     complianceReport,
@@ -269,7 +294,7 @@ export function useRunDetailController() {
     interruptStage,
     isExportingCompliance,
     isRedoing,
-    latestInterrupt,
+    latestInterrupt: visibleInterrupt,
     planDimensions,
     qualityBaselineRunId,
     qualityComparison,

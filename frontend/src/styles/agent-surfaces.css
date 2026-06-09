@@ -250,6 +250,16 @@
   font-size: 13px;
 }
 
+.hitl-panel label {
+  display: grid;
+  gap: 8px;
+}
+
+.hitl-field-note {
+  color: #73540f;
+  font-size: 12px;
+}
+
 .hitl-actions {
   display: flex;
   flex-wrap: wrap;
