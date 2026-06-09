@@ -2,8 +2,10 @@ import { RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EmptyState, LoadingState, PageHeader } from "../components/ui";
 import { ActiveView } from "../features/workbench/ActiveView";
+import { ContextInspector } from "../features/workbench/ContextInspector";
 import { ProjectRail } from "../features/workbench/ProjectRail";
 import { useEnterpriseWorkbenchData } from "../features/workbench/useEnterpriseWorkbenchData";
+import { useWorkbenchInspector } from "../features/workbench/useWorkbenchInspector";
 import { ViewSwitcher } from "../features/workbench/ViewSwitcher";
 import { WorkbenchStatusStrip } from "../features/workbench/WorkbenchStatusStrip";
 import { workbenchViewRoutes } from "../features/workbench/routes";
@@ -42,6 +44,14 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
     setSelectedProjectId,
     setSelectedVersionId,
   } = useEnterpriseWorkbenchData(initialView);
+  const {
+    inspectEvidence,
+    inspectReport,
+    selectedClaim,
+    selectedEvidence,
+    selectedTab,
+    setSelectedTab,
+  } = useWorkbenchInspector({ data, selectedVersion });
 
   function handleViewChange(view: EnterpriseView) {
     setActiveView(view);
@@ -85,39 +95,52 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
           selectedProjectId={selectedProjectId}
         />
 
-        <main className="enterprise-work-area">
-          <ViewSwitcher activeView={activeView} onChange={handleViewChange} />
+        <div className="enterprise-work-stack">
+          <main className="enterprise-work-area">
+            <ViewSwitcher activeView={activeView} onChange={handleViewChange} />
 
-          {isLoadingProject ? <LoadingState label="Loading project workspace" /> : null}
-          {!isLoadingProject && !selectedProject ? (
-            <EmptyState title="No project selected">Run an analysis first, then return to the workbench.</EmptyState>
-          ) : null}
-          {!isLoadingProject && selectedProject ? (
-            <ActiveView
-              activeView={activeView}
-              competitorById={competitorById}
-              data={data}
-              evidenceById={evidenceById}
-              filteredEvidence={filteredEvidence}
-              gapFillResult={gapFillResult}
-              isFillingGaps={isFillingGaps}
-              isReportActionPending={isReportActionPending}
-              lastExport={lastExport}
-              onEvidenceQuality={handleEvidenceQuality}
-              onExport={handleExport}
-              onFillGaps={handleGapFill}
-              onReportAction={handleReportAction}
-              query={query}
-              releaseGate={releaseGate}
-              reportSources={reportSources}
-              selectedProject={selectedProject}
-              selectedVersion={selectedVersion}
-              selectedVersionId={selectedVersionId}
-              setQuery={setQuery}
-              setSelectedVersionId={setSelectedVersionId}
-            />
-          ) : null}
-        </main>
+            {isLoadingProject ? <LoadingState label="Loading project workspace" /> : null}
+            {!isLoadingProject && !selectedProject ? (
+              <EmptyState title="No project selected">Run an analysis first, then return to the workbench.</EmptyState>
+            ) : null}
+            {!isLoadingProject && selectedProject ? (
+              <ActiveView
+                activeView={activeView}
+                competitorById={competitorById}
+                data={data}
+                evidenceById={evidenceById}
+                filteredEvidence={filteredEvidence}
+                gapFillResult={gapFillResult}
+                isFillingGaps={isFillingGaps}
+                isReportActionPending={isReportActionPending}
+                lastExport={lastExport}
+                onEvidenceQuality={handleEvidenceQuality}
+                onExport={handleExport}
+                onFillGaps={handleGapFill}
+                onReportAction={handleReportAction}
+                onSelectEvidence={inspectEvidence}
+                onSelectReport={inspectReport}
+                query={query}
+                releaseGate={releaseGate}
+                reportSources={reportSources}
+                selectedEvidenceId={selectedEvidence?.id ?? null}
+                selectedProject={selectedProject}
+                selectedVersion={selectedVersion}
+                selectedVersionId={selectedVersionId}
+                setQuery={setQuery}
+                setSelectedVersionId={setSelectedVersionId}
+              />
+            ) : null}
+          </main>
+
+          <ContextInspector
+            claim={selectedClaim}
+            evidence={selectedEvidence}
+            report={selectedVersion}
+            selectedTab={selectedTab}
+            setSelectedTab={setSelectedTab}
+          />
+        </div>
       </div>
     </section>
   );

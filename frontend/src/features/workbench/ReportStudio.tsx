@@ -16,6 +16,8 @@ interface ReportStudioProps {
   isPending: boolean;
   lastExport: ArtifactRecord | null;
   onExport: (format: ReportExportFormat) => void;
+  onSelectEvidence: (evidence: EvidenceRecord) => void;
+  onSelectReport: (report: ReportVersionRecord) => void;
   onReportAction: (action: ReportAction) => void;
   releaseGate: ReportReleaseGate | null;
   reportSources: ReportSourceBundle;
@@ -30,6 +32,8 @@ export function ReportStudio({
   isPending,
   lastExport,
   onExport,
+  onSelectEvidence,
+  onSelectReport,
   onReportAction,
   releaseGate,
   reportSources,
@@ -46,7 +50,10 @@ export function ReportStudio({
             className={version.id === selectedVersionId ? "version-item active" : "version-item"}
             key={version.id}
             type="button"
-            onClick={() => setSelectedVersionId(version.id)}
+            onClick={() => {
+              setSelectedVersionId(version.id);
+              onSelectReport(version);
+            }}
           >
             <strong>v{version.version_number}</strong>
             <span>{version.status}</span>
@@ -127,10 +134,16 @@ export function ReportStudio({
               {selectedVersion.evidence_ids.slice(0, 8).map((id) => {
                 const evidence = evidenceById.get(id);
                 return (
-                  <a href={`#evidence-${id}`} key={id}>
+                  <button
+                    className="source-scope-item"
+                    disabled={!evidence}
+                    key={id}
+                    type="button"
+                    onClick={() => evidence && onSelectEvidence(evidence)}
+                  >
                     <strong>{evidence?.title ?? id}</strong>
                     <span>{evidence?.dimension ?? "unknown"}</span>
-                  </a>
+                  </button>
                 );
               })}
             </div>

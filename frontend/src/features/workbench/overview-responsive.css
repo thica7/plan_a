@@ -2,22 +2,12 @@
   .concept-workbench-grid {
     grid-template-columns: 1fr;
   }
-
-  .concept-inspector {
-    max-height: none;
-    position: static;
-  }
 }
 
 @media (max-width: 1180px) {
   .concept-workbench-grid,
   .concept-lower-grid {
     grid-template-columns: 1fr;
-  }
-
-  .concept-inspector {
-    max-height: none;
-    position: static;
   }
 }
 

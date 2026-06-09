@@ -17,7 +17,9 @@ interface EvidenceCenterProps {
   isFillingGaps: boolean;
   onEvidenceQuality: (evidenceId: string, qualityLabel: EvidenceQualityLabel) => void;
   onFillGaps: () => void;
+  onSelectEvidence: (evidence: EvidenceRecord) => void;
   query: string;
+  selectedEvidenceId: string | null;
   setQuery: (query: string) => void;
 }
 
@@ -29,7 +31,9 @@ export function EvidenceCenter({
   isFillingGaps,
   onEvidenceQuality,
   onFillGaps,
+  onSelectEvidence,
   query,
+  selectedEvidenceId,
   setQuery,
 }: EvidenceCenterProps) {
   const verifiedCount = evidence.filter((item) => item.source_type.includes("verified") || item.reliability_score >= 0.72).length;
@@ -59,7 +63,11 @@ export function EvidenceCenter({
         </div>
         <div className="evidence-ledger">
           {evidence.slice(0, 80).map((item) => (
-            <article className="evidence-ledger-row" id={`evidence-${item.id}`} key={item.id}>
+            <article
+              className={`evidence-ledger-row${item.id === selectedEvidenceId ? " selected" : ""}`}
+              id={`evidence-${item.id}`}
+              key={item.id}
+            >
               <div className="evidence-source-main">
                 <strong>{item.title}</strong>
                 <em>{item.url ?? item.raw_source_id}</em>
@@ -87,6 +95,9 @@ export function EvidenceCenter({
                   <option value="rejected">rejected</option>
                   <option value="stale">stale</option>
                 </select>
+                <button className="table-action-button" type="button" onClick={() => onSelectEvidence(item)}>
+                  Inspect
+                </button>
               </div>
             </article>
           ))}

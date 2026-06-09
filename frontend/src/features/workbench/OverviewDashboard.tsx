@@ -1,5 +1,3 @@
-import { useState } from "react";
-
 import type {
   AuditLogRecord,
   BusinessQAEvaluation,
@@ -15,7 +13,6 @@ import type {
   RedTeamReport,
   ReportVersionRecord,
 } from "../../api/types";
-import { ContextInspector } from "./ContextInspector";
 import { CompetitorsOverviewTable, QaBlockersPanel, RecentActivityPanel } from "./OverviewPanels";
 import { ActiveReportCard, CoverageHeatmap, EvidenceQualityCard, ReadinessCard } from "./OverviewSummaryCards";
 import "./overview.css";
@@ -36,13 +33,10 @@ export interface OverviewDashboardProps {
   selectedVersion: ReportVersionRecord | null;
 }
 
-type InspectorTab = "source" | "claim" | "report";
-
 export function OverviewDashboard(props: OverviewDashboardProps) {
   const {
     auditLogs,
     claimValidation,
-    claims,
     competitorScores,
     competitors,
     evidence,
@@ -54,46 +48,33 @@ export function OverviewDashboard(props: OverviewDashboardProps) {
     redTeam,
     selectedVersion,
   } = props;
-  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("source");
   const evidenceQuality = summarizeEvidenceQuality(evidence);
-  const selectedSource = pickInspectorSource(evidence);
-  const selectedClaim = pickInspectorClaim(claims, selectedSource);
 
   return (
-    <div className="concept-workbench-grid">
-      <div className="concept-main-column">
-        <div className="concept-summary-grid">
-          <ReadinessCard readiness={readiness} />
-          <EvidenceQualityCard
-            acceptedRate={evidenceQuality.acceptedRate}
-            evidence={evidence}
-            verifiedRate={evidenceQuality.verifiedRate}
-          />
-          <CoverageHeatmap competitors={competitors} evidence={evidence} />
-          <ActiveReportCard selectedVersion={selectedVersion} />
-        </div>
-
-        <div className="concept-lower-grid">
-          <QaBlockersPanel
-            claimValidation={claimValidation}
-            evidenceGaps={evidenceGaps}
-            matrix={matrix}
-            qaEvaluation={qaEvaluation}
-            redTeam={redTeam}
-          />
-          <RecentActivityPanel auditLogs={auditLogs} evalOps={evalOps} selectedVersion={selectedVersion} />
-        </div>
-
-        <CompetitorsOverviewTable competitorScores={competitorScores} competitors={competitors} evidence={evidence} />
+    <div className="concept-main-column">
+      <div className="concept-summary-grid">
+        <ReadinessCard readiness={readiness} />
+        <EvidenceQualityCard
+          acceptedRate={evidenceQuality.acceptedRate}
+          evidence={evidence}
+          verifiedRate={evidenceQuality.verifiedRate}
+        />
+        <CoverageHeatmap competitors={competitors} evidence={evidence} />
+        <ActiveReportCard selectedVersion={selectedVersion} />
       </div>
 
-      <ContextInspector
-        claim={selectedClaim}
-        evidence={selectedSource}
-        report={selectedVersion}
-        selectedTab={inspectorTab}
-        setSelectedTab={setInspectorTab}
-      />
+      <div className="concept-lower-grid">
+        <QaBlockersPanel
+          claimValidation={claimValidation}
+          evidenceGaps={evidenceGaps}
+          matrix={matrix}
+          qaEvaluation={qaEvaluation}
+          redTeam={redTeam}
+        />
+        <RecentActivityPanel auditLogs={auditLogs} evalOps={evalOps} selectedVersion={selectedVersion} />
+      </div>
+
+      <CompetitorsOverviewTable competitorScores={competitorScores} competitors={competitors} evidence={evidence} />
     </div>
   );
 }
@@ -106,12 +87,4 @@ function summarizeEvidenceQuality(evidence: EvidenceRecord[]) {
     acceptedRate: acceptedCount / evidence.length,
     verifiedRate: verifiedCount / evidence.length,
   };
-}
-
-function pickInspectorSource(evidence: EvidenceRecord[]) {
-  return evidence.find((item) => item.quality_label === "accepted") ?? evidence.find((item) => item.url) ?? evidence[0] ?? null;
-}
-
-function pickInspectorClaim(claims: ClaimRecord[], source: EvidenceRecord | null) {
-  return claims.find((claim) => source && claim.evidence_ids.includes(source.id)) ?? claims[0] ?? null;
 }

@@ -32,9 +32,12 @@ interface ActiveViewProps {
   onExport: (format: ReportExportFormat) => void;
   onFillGaps: () => void;
   onReportAction: (action: ReportAction) => void;
+  onSelectEvidence: (evidence: EvidenceRecord) => void;
+  onSelectReport: (report: ReportVersionRecord) => void;
   query: string;
   releaseGate: ReportReleaseGate | null;
   reportSources: ReportSourceBundle;
+  selectedEvidenceId: string | null;
   selectedProject: ProjectRecord;
   selectedVersion: ReportVersionRecord | null;
   selectedVersionId: string | null;
@@ -56,9 +59,12 @@ export function ActiveView({
   onExport,
   onFillGaps,
   onReportAction,
+  onSelectEvidence,
+  onSelectReport,
   query,
   releaseGate,
   reportSources,
+  selectedEvidenceId,
   selectedProject,
   selectedVersion,
   selectedVersionId,
@@ -75,7 +81,9 @@ export function ActiveView({
         isFillingGaps={isFillingGaps}
         onEvidenceQuality={onEvidenceQuality}
         onFillGaps={onFillGaps}
+        onSelectEvidence={onSelectEvidence}
         query={query}
+        selectedEvidenceId={selectedEvidenceId}
         setQuery={setQuery}
       />
     );
@@ -88,6 +96,8 @@ export function ActiveView({
         isPending={isReportActionPending}
         lastExport={lastExport}
         onExport={onExport}
+        onSelectEvidence={onSelectEvidence}
+        onSelectReport={onSelectReport}
         onReportAction={onReportAction}
         releaseGate={releaseGate}
         reportSources={reportSources}

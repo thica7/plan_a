@@ -2,7 +2,7 @@ import type { ClaimRecord, EvidenceRecord, ReportVersionRecord } from "../../api
 import { EmptyState, StatusPill } from "../../components/ui";
 import { formatPercent, reportStatusTone } from "./format";
 
-type InspectorTab = "source" | "claim" | "report";
+export type InspectorTab = "source" | "claim" | "report";
 
 export function ContextInspector({
   claim,
