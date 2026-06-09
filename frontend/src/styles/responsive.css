@@ -15,7 +15,8 @@
   }
 
   .report-command-row,
-  .report-reading-grid {
+  .report-reading-grid,
+  .activity-workbench {
     grid-template-columns: 1fr;
   }
 
@@ -36,7 +37,8 @@
     max-height: none;
   }
 
-  .report-review-desk {
+  .report-review-desk,
+  .activity-side-rail {
     position: static;
   }
 }
@@ -72,6 +74,7 @@
   .workspace-two-column,
   .report-command-row,
   .report-reading-grid,
+  .activity-workbench,
   .project-summary,
   .dashboard-grid {
     grid-template-columns: 1fr;
@@ -81,7 +84,8 @@
   .project-rail,
   .inspector-panel,
   .concept-inspector,
-  .report-review-desk {
+  .report-review-desk,
+  .activity-side-rail {
     max-height: none;
     position: static;
   }

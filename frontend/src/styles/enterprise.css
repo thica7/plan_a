@@ -648,9 +648,54 @@
   font-style: normal;
 }
 
+.activity-workbench {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 330px);
+}
+
+.activity-main,
+.activity-side-rail,
 .notification-list {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.activity-side-rail {
+  position: sticky;
+  top: 82px;
+}
+
+.benchmark-panel {
+  align-content: start;
+}
+
+.benchmark-score {
+  background: linear-gradient(180deg, #ecfdf5 0%, #f8fafc 100%);
+  border: 1px solid rgba(20, 184, 166, 0.2);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 14px;
+}
+
+.benchmark-score strong {
+  color: var(--accent);
+  font-size: 42px;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.benchmark-score span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.notification-list.redesigned {
+  gap: 9px;
 }
 
 .notification-item {
@@ -670,6 +715,7 @@
 }
 
 .notification-item.warn,
+.notification-item.warning,
 .notification-item.medium {
   background: var(--amber-soft);
   border-color: rgba(183, 121, 31, 0.22);
@@ -684,6 +730,12 @@
   min-width: 0;
 }
 
+.notification-item header > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
 .notification-item strong {
   color: var(--text);
   font-size: 13px;
@@ -691,11 +743,46 @@
   overflow-wrap: anywhere;
 }
 
+.notification-type {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
 .notification-item span {
   color: var(--text-soft);
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.notification-body {
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.notification-detail-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.notification-detail-chip {
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  padding: 5px 7px;
+  text-overflow: ellipsis;
+  white-space: normal;
 }
 
 .notification-item em,

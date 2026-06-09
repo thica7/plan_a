@@ -1,13 +1,14 @@
-import { Bell, CalendarClock, Gauge } from "lucide-react";
+import { CalendarClock } from "lucide-react";
 import type {
   AuditLogRecord,
   EvalOpsReport,
   NotificationRecord,
   ProjectRecord,
 } from "../../api/types";
-import { MetricCard, Panel } from "../../components/ui";
+import { Panel } from "../../components/ui";
 import { AuditTrail } from "./AuditTrail";
-import { formatDate, formatPercent } from "./format";
+import { BenchmarkPanel } from "./BenchmarkPanel";
+import { NotificationStream } from "./NotificationStream";
 
 interface ActivityCenterProps {
   auditLogs: AuditLogRecord[];
@@ -23,52 +24,16 @@ export function ActivityCenter({
   project,
 }: ActivityCenterProps) {
   return (
-    <div className="workspace-two-column">
-      <Panel title="Notification stream" icon={<Bell size={16} aria-hidden />}>
-        <div className="notification-list">
-          {notifications.map((notification) => (
-            <article className={`notification-item ${notification.severity}`} key={notification.id}>
-              <header>
-                <strong>{notification.title}</strong>
-                <em>{notification.severity}</em>
-              </header>
-              <span>{clipText(notification.body, 220)}</span>
-              <footer>
-                <em>{notification.status}</em>
-                <time dateTime={notification.created_at}>{formatDate(notification.created_at)}</time>
-              </footer>
-            </article>
-          ))}
-          {notifications.length === 0 ? <p className="muted-line">No notifications for {project.name}.</p> : null}
-        </div>
-      </Panel>
-
-      <Panel title="Benchmark panel" icon={<Gauge size={16} aria-hidden />}>
-        <div className="metric-grid compact">
-          <MetricCard label="Runs evaluated" value={evalOps?.run_count ?? "n/a"} />
-          <MetricCard label="Golden pass" value={evalOps ? formatPercent(evalOps.golden_set_pass_rate) : "n/a"} />
-          <MetricCard label="Report quality" value={evalOps?.report_quality_score ?? "n/a"} />
-          <MetricCard label="Time saved" value={evalOps ? `${evalOps.manual_time_saved_hours.toFixed(1)}h` : "n/a"} />
-          <MetricCard label="Gate" value={evalOps?.regression_gate_status ?? "n/a"} tone={evalOps?.regression_gate_status === "fail" ? "warn" : "good"} />
-        </div>
-        <div className="recommendation-list compact">
-          {(evalOps?.recommendations ?? []).slice(0, 5).map((item) => (
-            <article className="recommendation-card medium" key={item}>
-              <strong>Next</strong>
-              <p>{item}</p>
-            </article>
-          ))}
-        </div>
-      </Panel>
-
-      <Panel title="Audit trail" icon={<CalendarClock size={16} aria-hidden />}>
-        <AuditTrail logs={auditLogs} />
-      </Panel>
+    <div className="activity-workbench">
+      <main className="activity-main">
+        <NotificationStream notifications={notifications} project={project} />
+        <Panel title="Audit trail" icon={<CalendarClock size={16} aria-hidden />}>
+          <AuditTrail logs={auditLogs} />
+        </Panel>
+      </main>
+      <aside className="activity-side-rail">
+        <BenchmarkPanel evalOps={evalOps} />
+      </aside>
     </div>
   );
-}
-
-function clipText(value: string, maxLength: number) {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength - 1).trim()}...`;
 }
