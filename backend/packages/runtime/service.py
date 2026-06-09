@@ -436,12 +436,17 @@ class RuntimeCommandService:
         actor: EnterpriseUserContext,
     ) -> RuntimeCommandResult:
         detail = self._run_or_error(command.run_id, actor, "project:write")
-        if command.request.decision == "redo" and not self._run_service.has_pending_interrupt(
-            command.run_id
-        ):
+        has_pending_interrupt = self._run_service.has_pending_interrupt(command.run_id)
+        if command.request.decision == "redo" and not has_pending_interrupt:
             raise RuntimeCommandError(
                 409,
                 "Manual scoped redo must use POST /runs/{run_id}/redo",
+                command_type="resume_review",
+            )
+        if not has_pending_interrupt:
+            raise RuntimeCommandError(
+                409,
+                "Run has no pending HITL interrupt to resume.",
                 command_type="resume_review",
             )
         command_id = _command_id("resume_review", actor, command.run_id)

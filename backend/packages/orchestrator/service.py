@@ -782,6 +782,8 @@ class RunService(
                 )
             asyncio.create_task(self._resume_interrupted_graph(run_id, request))
             return record.detail
+        if request.decision in {"accept", "modify_plan", "force_pass"}:
+            return record.detail
         if request.decision == "redo" and not record.detail.qa_findings:
             await self._record_hitl_lifecycle_event(
                 record,

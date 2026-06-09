@@ -7174,6 +7174,45 @@ async def test_hitl_resume_creates_reviewable_memory_candidate() -> None:
 
 
 @pytest.mark.asyncio
+async def test_hitl_accept_without_pending_interrupt_leaves_run_state_unchanged() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="HITL stale accept",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+        record = service._runs[detail.id]
+        record.detail.status = "completed"
+        record.detail.current_node = None
+
+        updated = await service.resume(detail.id, HitlResumeRequest(decision="accept"))
+
+        assert updated is not None
+        assert updated.status == "completed"
+        assert updated.current_node is None
+        assert service.has_pending_interrupt(detail.id) is False
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_hitl_timeout_auto_accepts_interrupt() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
