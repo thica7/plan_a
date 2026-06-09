@@ -6,12 +6,14 @@ import type {
   ClaimValidationReport,
   CompetitorRecord,
   CompetitorScoreReport,
+  DecisionReplayReport,
   EvidenceGapReport,
   EvidenceRecord,
   EvalOpsReport,
   QualityAgentMatrix,
   RedTeamReport,
   ReportVersionRecord,
+  TraceSpan,
 } from "../../api/types";
 import { Panel, StatusPill } from "../../components/ui";
 import { formatDate } from "./format";
@@ -81,16 +83,75 @@ export function QaBlockersPanel({
   );
 }
 
-export function RecentActivityPanel({
+export function TraceTimelinePanel({
   auditLogs,
+  decisionReplay,
   evalOps,
   selectedVersion,
+  traceSpans,
 }: {
   auditLogs: AuditLogRecord[];
+  decisionReplay: DecisionReplayReport | null;
   evalOps: EvalOpsReport | null;
   selectedVersion: ReportVersionRecord | null;
+  traceSpans: TraceSpan[];
 }) {
-  const rows = [
+  const rows = buildTimelineRows({ auditLogs, decisionReplay, evalOps, selectedVersion, traceSpans });
+  return (
+    <Panel
+      className="recent-activity-panel"
+      title={decisionReplay || traceSpans.length ? "Trace timeline" : "Recent activity"}
+      icon={<CalendarClock size={16} aria-hidden />}
+      actions={<StatusPill tone={decisionReplay?.blocker_count ? "warn" : "good"}>{rows.length}</StatusPill>}
+    >
+      <div className="activity-timeline compact">
+        {rows.slice(0, 7).map((row) => (
+          <article key={row.id}>
+            <i aria-hidden />
+            <div>
+              <strong>{row.title}</strong>
+              <span>{row.meta}</span>
+            </div>
+            <time dateTime={row.time}>{formatDate(row.time)}</time>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function buildTimelineRows({
+  auditLogs,
+  decisionReplay,
+  evalOps,
+  selectedVersion,
+  traceSpans,
+}: {
+  auditLogs: AuditLogRecord[];
+  decisionReplay: DecisionReplayReport | null;
+  evalOps: EvalOpsReport | null;
+  selectedVersion: ReportVersionRecord | null;
+  traceSpans: TraceSpan[];
+}) {
+  if (decisionReplay?.events.length) {
+    return decisionReplay.events.slice(-7).reverse().map((event) => ({
+      id: event.id,
+      title: event.event_type,
+      meta: `${event.agent ?? "system"}${event.subagent ? `/${event.subagent}` : ""} / ${event.message}`,
+      time: event.created_at,
+    }));
+  }
+
+  if (traceSpans.length) {
+    return traceSpans.slice(-7).reverse().map((span) => ({
+      id: span.id,
+      title: `${span.kind} / ${span.name}`,
+      meta: `${span.agent}${span.subagent ? `/${span.subagent}` : ""} / ${span.status} / ${span.duration_ms}ms`,
+      time: span.created_at,
+    }));
+  }
+
+  return [
     selectedVersion
       ? {
           id: `report-${selectedVersion.id}`,
@@ -114,22 +175,6 @@ export function RecentActivityPanel({
       time: log.created_at,
     })),
   ].filter((row): row is { id: string; title: string; meta: string; time: string } => Boolean(row));
-  return (
-    <Panel className="recent-activity-panel" title="Recent activity" icon={<CalendarClock size={16} aria-hidden />}>
-      <div className="activity-timeline compact">
-        {rows.slice(0, 7).map((row) => (
-          <article key={row.id}>
-            <i aria-hidden />
-            <div>
-              <strong>{row.title}</strong>
-              <span>{row.meta}</span>
-            </div>
-            <time dateTime={row.time}>{formatDate(row.time)}</time>
-          </article>
-        ))}
-      </div>
-    </Panel>
-  );
 }
 
 export function CompetitorsOverviewTable({

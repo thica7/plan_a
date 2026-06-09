@@ -5,6 +5,7 @@ import type {
   ClaimValidationReport,
   CompetitorRecord,
   CompetitorScoreReport,
+  DecisionReplayReport,
   EvidenceGapReport,
   EvidenceRecord,
   EvalOpsReport,
@@ -12,8 +13,9 @@ import type {
   QualityAgentMatrix,
   RedTeamReport,
   ReportVersionRecord,
+  TraceSpan,
 } from "../../api/types";
-import { CompetitorsOverviewTable, QaBlockersPanel, RecentActivityPanel } from "./OverviewPanels";
+import { CompetitorsOverviewTable, QaBlockersPanel, TraceTimelinePanel } from "./OverviewPanels";
 import { ActiveReportCard, CoverageHeatmap, EvidenceQualityCard, ReadinessCard } from "./OverviewSummaryCards";
 import "./overview.css";
 
@@ -30,6 +32,8 @@ export interface OverviewDashboardProps {
   qaEvaluation: BusinessQAEvaluation | null;
   readiness: ProjectReadinessScore | null;
   redTeam: RedTeamReport | null;
+  runDecisionReplay: DecisionReplayReport | null;
+  runTraceSpans: TraceSpan[];
   selectedVersion: ReportVersionRecord | null;
 }
 
@@ -46,6 +50,8 @@ export function OverviewDashboard(props: OverviewDashboardProps) {
     qaEvaluation,
     readiness,
     redTeam,
+    runDecisionReplay,
+    runTraceSpans,
     selectedVersion,
   } = props;
   const evidenceQuality = summarizeEvidenceQuality(evidence);
@@ -71,7 +77,13 @@ export function OverviewDashboard(props: OverviewDashboardProps) {
           qaEvaluation={qaEvaluation}
           redTeam={redTeam}
         />
-        <RecentActivityPanel auditLogs={auditLogs} evalOps={evalOps} selectedVersion={selectedVersion} />
+        <TraceTimelinePanel
+          auditLogs={auditLogs}
+          decisionReplay={runDecisionReplay}
+          evalOps={evalOps}
+          selectedVersion={selectedVersion}
+          traceSpans={runTraceSpans}
+        />
       </div>
 
       <CompetitorsOverviewTable competitorScores={competitorScores} competitors={competitors} evidence={evidence} />

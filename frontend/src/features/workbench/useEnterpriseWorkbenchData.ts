@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { fillProjectEvidenceGaps, updateEvidenceQuality } from "../../api/client";
+import { fillProjectEvidenceGaps, getDecisionReplay, getTraceSpans, updateEvidenceQuality } from "../../api/client";
 import type {
   ArtifactRecord,
   EvidenceGapFillResult,
@@ -77,6 +77,7 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
   useEffect(() => {
     if (!selectedVersion) {
       setReleaseGate(null);
+      setData((current) => ({ ...current, runDecisionReplay: null, runTraceSpans: [] }));
       return;
     }
     let active = true;
@@ -84,6 +85,16 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     loadReleaseGate(selectedVersion.id).then((gate) => {
       if (active) setReleaseGate(gate);
     });
+    if (selectedVersion.run_id) {
+      Promise.all([
+        getTraceSpans(selectedVersion.run_id).catch(() => []),
+        getDecisionReplay(selectedVersion.run_id).catch(() => null),
+      ]).then(([runTraceSpans, runDecisionReplay]) => {
+        if (active) setData((current) => ({ ...current, runDecisionReplay, runTraceSpans }));
+      });
+    } else {
+      setData((current) => ({ ...current, runDecisionReplay: null, runTraceSpans: [] }));
+    }
     return () => {
       active = false;
     };

@@ -8,6 +8,7 @@ import type {
   CompetitorRecord,
   CompetitorScoreReport,
   DataRetentionReport,
+  DecisionReplayReport,
   EvidenceGapReport,
   EvidenceRecord,
   EvalOpsReport,
@@ -19,6 +20,7 @@ import type {
   RedTeamReport,
   ReportVersionRecord,
   SourceRegistryRecord,
+  TraceSpan,
   WorkspaceQuotaDecision,
   WorkspaceUsageSummary,
 } from "../../api/types";
@@ -51,6 +53,8 @@ export interface ProjectData {
   redTeam: RedTeamReport | null;
   registry: SourceRegistryRecord[];
   retention: DataRetentionReport | null;
+  runDecisionReplay: DecisionReplayReport | null;
+  runTraceSpans: TraceSpan[];
   usage: WorkspaceUsageSummary | null;
   quota: WorkspaceQuotaDecision | null;
   versions: ReportVersionRecord[];
@@ -76,6 +80,8 @@ export const emptyProjectData: ProjectData = {
   redTeam: null,
   registry: [],
   retention: null,
+  runDecisionReplay: null,
+  runTraceSpans: [],
   usage: null,
   quota: null,
   versions: [],

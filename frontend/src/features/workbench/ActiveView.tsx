@@ -159,6 +159,8 @@ export function ActiveView({
       qaEvaluation={data.qaEvaluation}
       readiness={data.readiness}
       redTeam={data.redTeam}
+      runDecisionReplay={data.runDecisionReplay}
+      runTraceSpans={data.runTraceSpans}
       selectedVersion={selectedVersion}
     />
   );
