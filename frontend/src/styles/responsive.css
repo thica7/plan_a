@@ -32,8 +32,10 @@
     grid-template-columns: 1fr;
   }
 
-  .run-review-side-rail {
+  .run-review-side-rail,
+  .report-reader-layout {
     position: static;
+    grid-template-columns: 1fr;
   }
 
   .run-source-list {
@@ -41,6 +43,7 @@
   }
 
   .report-review-desk,
+  .report-source-rail,
   .activity-side-rail,
   .evidence-side-rail,
   .governance-audit-panel {
@@ -74,6 +77,8 @@
   .detail-grid,
   .run-review-score-grid,
   .run-review-lower-grid,
+  .run-report-summary-row,
+  .report-reader-layout,
   .enterprise-layout,
   .enterprise-shell-grid,
   .workspace-two-column,
@@ -91,6 +96,7 @@
   .run-builder-rail,
   .project-rail,
   .inspector-panel,
+  .report-source-rail,
   .evidence-side-rail,
   .concept-inspector,
   .report-review-desk,
@@ -259,6 +265,7 @@
   .skill-grid,
   .evidence-source-meta,
   .evidence-ledger-row,
+  .revision-compact-grid,
   .competitor-score-grid,
   .competitor-rank-row,
   .competitor-asset-metrics,
@@ -338,5 +345,17 @@
   .status-metric + .status-metric {
     border-left: 0;
     border-top: 1px solid var(--border-soft);
+  }
+
+  .report-reader-body {
+    padding: 16px;
+  }
+
+  .report-panel h1 {
+    font-size: 22px;
+  }
+
+  .report-source-panel {
+    max-height: none;
   }
 }

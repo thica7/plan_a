@@ -17,6 +17,37 @@
   grid-column: span 1;
 }
 
+.run-report-workspace {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.run-report-summary-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.report-reader-layout {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  min-width: 0;
+}
+
+.report-reader-panel,
+.report-source-panel,
+.report-source-rail {
+  min-width: 0;
+}
+
+.report-source-rail {
+  position: sticky;
+  top: 82px;
+}
+
 .agents-detail-grid {
   align-items: start;
   grid-template-columns: minmax(360px, 0.95fr) minmax(360px, 1.05fr);
@@ -492,23 +523,92 @@
 
 .report-panel {
   color: #1f2937;
+  padding: 0;
+  overflow: hidden;
 }
 
-.report-panel > h2 {
-  margin-bottom: 12px;
+.report-panel > .panel-heading-row {
+  border-bottom: 1px solid var(--border-soft);
+  padding: 14px 16px;
+}
+
+.report-citation-count,
+.report-source-ok,
+.report-source-warning {
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 760;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.report-citation-count,
+.report-source-ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.report-source-warning {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.report-reader-body {
+  display: grid;
+  gap: 14px;
+  padding: 20px 28px 28px;
+}
+
+.report-reader-body > * {
+  min-width: 0;
 }
 
 .report-panel h1,
 .report-panel h2,
-.report-panel h3 {
+.report-panel h3,
+.report-panel h4 {
   color: #0f172a;
-  line-height: 1.25;
+  line-height: 1.24;
+  margin: 18px 0 9px;
+}
+
+.report-panel h1 {
+  font-size: 26px;
+  letter-spacing: 0;
+}
+
+.report-panel h2 {
+  font-size: 20px;
+}
+
+.report-panel h3 {
+  font-size: 16px;
 }
 
 .report-panel p,
 .report-panel li {
   color: #334155;
   font-size: 14px;
+  line-height: 1.72;
+}
+
+.report-panel p {
+  margin: 0 0 10px;
+}
+
+.report-panel ul,
+.report-panel ol {
+  display: grid;
+  gap: 7px;
+  margin: 8px 0 14px;
+  padding-left: 22px;
+}
+
+.report-panel blockquote {
+  background: #f8fafc;
+  border-left: 3px solid var(--accent);
+  margin: 12px 0;
+  padding: 10px 12px;
 }
 
 .report-panel table,
@@ -518,6 +618,12 @@
   border-spacing: 0;
   font-size: 13px;
   width: 100%;
+}
+
+.report-panel table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .report-panel th,
@@ -556,6 +662,10 @@
   text-decoration: none;
 }
 
+.report-reader-body .source-token-link {
+  white-space: nowrap;
+}
+
 .source-token-link.missing {
   background: var(--danger-soft);
   color: var(--danger);
@@ -583,6 +693,39 @@
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.report-source-panel {
+  max-height: calc(100vh - 108px);
+  overflow: auto;
+}
+
+.report-source-panel .source-trace-summary {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.report-source-panel .source-trace-metrics {
+  grid-template-columns: 1fr;
+}
+
+.report-source-panel .source-trace-grid,
+.report-source-panel .source-list,
+.report-source-panel .missing-source-list {
+  grid-template-columns: 1fr;
+  max-height: 300px;
+  overflow: auto;
+}
+
+.report-source-panel .source-list h3,
+.report-source-panel .missing-source-list h3 {
+  margin: 0;
+}
+
+.report-source-panel .source-strip {
+  max-height: 116px;
+  overflow: auto;
 }
 
 .source-trace-metrics span {
@@ -662,5 +805,37 @@
 .source-card.cited,
 .source-strip span.cited {
   border-color: rgba(15, 118, 110, 0.28);
+}
+
+.revision-panel {
+  min-width: 0;
+}
+
+.revision-compact-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.revision-compact-grid article {
+  background: var(--surface-muted);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.revision-compact-grid strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.revision-compact-grid p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 

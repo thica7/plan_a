@@ -8,15 +8,14 @@ import type {
 } from "../../api/types";
 import { CostPanel } from "../cost/CostPanel";
 import { AgentMessagesView } from "../messages/AgentMessagesView";
-import { ReportView } from "../report/ReportView";
 import type { ReportSourceBundle } from "../report/sourceBundle";
-import { RevisionDiff } from "../revisions/RevisionDiff";
 import { TraceList } from "../trace/TraceList";
 import { TracePlayback } from "../trace/TracePlayback";
 import type { RunEvent } from "../../api/sse_types";
 import { CompliancePanel } from "./CompliancePanel";
 import { RunQaPanel } from "./RunQaPanel";
 import { RunQualityPanel } from "./RunQualityPanel";
+import { RunReportWorkspace } from "./RunReportWorkspace";
 import { RunReviewOverview } from "./RunReviewOverview";
 import type { ReflectionItem, RunDetailView } from "./types";
 
@@ -62,16 +61,7 @@ export function RunDetailContent({
   runHistory,
 }: RunDetailContentProps) {
   if (activeView === "report") {
-    return (
-      <div className="detail-grid report-detail-grid">
-        <ReportView
-          markdown={detail.report_md}
-          sourceAliases={reportSources.aliases}
-          sources={reportSources.sources}
-        />
-        <RevisionDiff revisions={detail.revisions} />
-      </div>
-    );
+    return <RunReportWorkspace detail={detail} reportSources={reportSources} />;
   }
 
   if (activeView === "agents") {

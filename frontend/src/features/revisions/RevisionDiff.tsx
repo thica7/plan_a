@@ -2,10 +2,11 @@ import { GitCompareArrows } from "lucide-react";
 import type { RevisionRecord } from "../../api/types";
 
 interface RevisionDiffProps {
+  compact?: boolean;
   revisions: RevisionRecord[];
 }
 
-export function RevisionDiff({ revisions }: RevisionDiffProps) {
+export function RevisionDiff({ compact = false, revisions }: RevisionDiffProps) {
   const latest = revisions.length > 0 ? revisions[revisions.length - 1] : undefined;
   const targetCompetitors = latest?.target_competitors?.length
     ? latest.target_competitors.join(", ")
@@ -48,18 +49,35 @@ export function RevisionDiff({ revisions }: RevisionDiffProps) {
             </span>
           </div>
 
-          <div className="revision-diff-grid">
-            <article>
-              <strong>Before</strong>
-              <pre>{latest.before_md || "No prior report body."}</pre>
-            </article>
-            <article>
-              <strong>After</strong>
-              <pre>{latest.after_md || "No updated report body."}</pre>
-            </article>
-          </div>
+          {compact ? (
+            <div className="revision-compact-grid">
+              <article>
+                <strong>Before preview</strong>
+                <p>{compactText(latest.before_md) || "No prior report body."}</p>
+              </article>
+              <article>
+                <strong>After preview</strong>
+                <p>{compactText(latest.after_md) || "No updated report body."}</p>
+              </article>
+            </div>
+          ) : (
+            <div className="revision-diff-grid">
+              <article>
+                <strong>Before</strong>
+                <pre>{latest.before_md || "No prior report body."}</pre>
+              </article>
+              <article>
+                <strong>After</strong>
+                <pre>{latest.after_md || "No updated report body."}</pre>
+              </article>
+            </div>
+          )}
         </>
       )}
     </section>
   );
+}
+
+function compactText(markdown: string) {
+  return markdown.replace(/\s+/g, " ").trim().slice(0, 520);
 }

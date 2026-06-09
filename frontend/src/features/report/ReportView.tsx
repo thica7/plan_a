@@ -20,6 +20,7 @@ export {
 } from "./sourceTokens";
 
 interface Props {
+  layout?: "stacked" | "reader";
   markdown: string;
   sources: RawSource[];
   sourceAliases?: Record<string, string>;
@@ -27,7 +28,12 @@ interface Props {
 
 const EMPTY_SOURCE_ALIASES: Record<string, string> = {};
 
-export function ReportView({ markdown, sources, sourceAliases = EMPTY_SOURCE_ALIASES }: Props) {
+export function ReportView({
+  layout = "stacked",
+  markdown,
+  sources,
+  sourceAliases = EMPTY_SOURCE_ALIASES,
+}: Props) {
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const sourceMap = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources]);
   const sourceGroups = useMemo(
@@ -63,45 +69,61 @@ export function ReportView({ markdown, sources, sourceAliases = EMPTY_SOURCE_ALI
     target.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  return (
-    <section className="panel report-panel">
-      <h2>Report</h2>
+  const reportBody = (
+    <section className={`panel report-panel${layout === "reader" ? " report-reader-panel" : ""}`}>
+      <div className="panel-heading-row">
+        <h2>Report</h2>
+        {totalCitationCount ? <span className="report-citation-count">{totalCitationCount} citations</span> : null}
+      </div>
       {markdown ? (
-        <ReactMarkdown
-          components={{
-            a({ href, children, ...props }) {
-              const sourceLink = href?.startsWith("#source-");
-              const missingSourceLink = Boolean(href?.startsWith("#missing-source-"));
-              const sourceId = sourceLink ? href?.slice("#source-".length) : undefined;
-              const source = sourceId ? sourceMap.get(sourceId) : undefined;
-              const citationLabel = sourceId ? citationLabels.get(sourceId) : undefined;
-              return (
-                <a
-                  className={
-                    sourceLink || missingSourceLink
-                      ? `source-token-link${missingSourceLink ? " missing" : ""}${
-                          sourceId && activeSourceId === sourceId ? " active" : ""
-                        }`
-                      : undefined
-                  }
-                  data-source-id={sourceId}
-                  href={href}
-                  onClick={(event) => handleSourceJump(event, href)}
-                  title={buildSourceTitle(missingSourceLink, source, citationLabel)}
-                  {...props}
-                >
-                  {children}
-                </a>
-              );
-            },
-          }}
-          remarkPlugins={[remarkGfm]}
-        >
-          {linkedMarkdown}
-        </ReactMarkdown>
+        <div className="report-reader-body">
+          <ReactMarkdown
+            components={{
+              a({ href, children, ...props }) {
+                const sourceLink = href?.startsWith("#source-");
+                const missingSourceLink = Boolean(href?.startsWith("#missing-source-"));
+                const sourceId = sourceLink ? href?.slice("#source-".length) : undefined;
+                const source = sourceId ? sourceMap.get(sourceId) : undefined;
+                const citationLabel = sourceId ? citationLabels.get(sourceId) : undefined;
+                return (
+                  <a
+                    className={
+                      sourceLink || missingSourceLink
+                        ? `source-token-link${missingSourceLink ? " missing" : ""}${
+                            sourceId && activeSourceId === sourceId ? " active" : ""
+                          }`
+                        : undefined
+                    }
+                    data-source-id={sourceId}
+                    href={href}
+                    onClick={(event) => handleSourceJump(event, href)}
+                    title={buildSourceTitle(missingSourceLink, source, citationLabel)}
+                    {...props}
+                  >
+                    {children}
+                  </a>
+                );
+              },
+            }}
+            remarkPlugins={[remarkGfm]}
+          >
+            {linkedMarkdown}
+          </ReactMarkdown>
+        </div>
       ) : (
         <p>The writer has not produced a draft yet.</p>
       )}
+    </section>
+  );
+
+  const sourceTrace = (
+    <section className="panel report-source-panel">
+      <div className="panel-heading-row">
+        <h2>Source trace</h2>
+        <span className={missingSourceGroups.length > 0 ? "report-source-warning" : "report-source-ok"}>
+          {missingSourceGroups.length > 0 ? `${missingSourceGroups.length} missing` : "linked"}
+        </span>
+      </div>
       <ReportSourceTrace
         activeSourceId={activeSourceId}
         citationLabels={citationLabels}
@@ -113,6 +135,22 @@ export function ReportView({ markdown, sources, sourceAliases = EMPTY_SOURCE_ALI
         totalCitationCount={totalCitationCount}
       />
     </section>
+  );
+
+  if (layout === "reader") {
+    return (
+      <div className="report-reader-layout">
+        {reportBody}
+        <aside className="report-source-rail">{sourceTrace}</aside>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {reportBody}
+      {sourceTrace}
+    </>
   );
 }
 
