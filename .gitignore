@@ -15,6 +15,10 @@ docs/graph.png
 docs/graph.mmd
 frontend/design/
 review/
+docs/enterprise_execution_master_plan.md
+方案A_图驱动优化版.md
+课题概要.txt
+课题详情.txt
 
 __pycache__/
 *.py[cod]
