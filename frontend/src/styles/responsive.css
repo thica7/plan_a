@@ -12,6 +12,18 @@
     position: static;
   }
 
+  .run-review-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .run-review-side-rail {
+    position: static;
+  }
+
+  .run-source-list {
+    max-height: none;
+  }
+
   .review-left-rail {
     position: static;
   }
@@ -41,6 +53,8 @@
   .run-builder,
   .run-command-grid,
   .detail-grid,
+  .run-review-score-grid,
+  .run-review-lower-grid,
   .enterprise-layout,
   .enterprise-shell-grid,
   .workspace-two-column,
@@ -238,6 +252,22 @@
 
   .action-grid {
     grid-template-columns: 1fr;
+  }
+
+  .run-review-overview,
+  .run-review-main,
+  .run-review-card,
+  .run-flow-panel,
+  .run-review-side-rail {
+    min-width: 0;
+  }
+
+  .run-review-score {
+    font-size: 42px;
+  }
+
+  .run-review-card .large-metric {
+    font-size: 28px;
   }
 
   .status-metric + .status-metric {

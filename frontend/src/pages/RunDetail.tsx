@@ -106,6 +106,7 @@ export function RunDetail() {
         onBaselineRunChange={setQualityBaselineRunId}
         onExportCompliance={handleExportCompliance}
         onRedo={handleRedo}
+        onViewChange={setActiveView}
         qualityBaselineRunId={qualityBaselineRunId}
         qualityComparison={qualityComparison}
         redoLimitReached={redoLimitReached}

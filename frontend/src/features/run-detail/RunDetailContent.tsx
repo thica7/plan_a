@@ -6,22 +6,18 @@ import type {
   RunQualityComparison,
   RunSummary,
 } from "../../api/types";
-import { CompetitorDiscoveryView } from "../discovery/CompetitorDiscoveryView";
 import { CostPanel } from "../cost/CostPanel";
-import { StaticGraphView } from "../graph/StaticGraphView";
-import { KbMatrixView } from "../kb/KbMatrixView";
 import { AgentMessagesView } from "../messages/AgentMessagesView";
 import { ReportView } from "../report/ReportView";
 import type { ReportSourceBundle } from "../report/sourceBundle";
 import { RevisionDiff } from "../revisions/RevisionDiff";
-import { SwimlaneView } from "../swimlane/SwimlaneView";
 import { TraceList } from "../trace/TraceList";
 import { TracePlayback } from "../trace/TracePlayback";
 import type { RunEvent } from "../../api/sse_types";
 import { CompliancePanel } from "./CompliancePanel";
 import { RunQaPanel } from "./RunQaPanel";
 import { RunQualityPanel } from "./RunQualityPanel";
-import { TaskDecompositionPanel } from "./TaskDecompositionPanel";
+import { RunReviewOverview } from "./RunReviewOverview";
 import type { ReflectionItem, RunDetailView } from "./types";
 
 interface RunDetailContentProps {
@@ -36,6 +32,7 @@ interface RunDetailContentProps {
   onBaselineRunChange: (runId: string) => void;
   onExportCompliance: () => void;
   onRedo: () => void;
+  onViewChange: (view: RunDetailView) => void;
   qualityBaselineRunId: string;
   qualityComparison: RunQualityComparison | null;
   redoLimitReached: boolean;
@@ -56,6 +53,7 @@ export function RunDetailContent({
   onBaselineRunChange,
   onExportCompliance,
   onRedo,
+  onViewChange,
   qualityBaselineRunId,
   qualityComparison,
   redoLimitReached,
@@ -119,29 +117,17 @@ export function RunDetailContent({
   }
 
   return (
-    <div className="detail-grid">
-      <SwimlaneView
-        currentNode={detail.current_node}
-        events={events}
-        spans={detail.trace_spans}
-        status={detail.status}
-      />
-      <StaticGraphView
-        activeNode={detail.current_node}
-        competitors={detail.plan.competitors}
-        dimensions={detail.plan.dimensions}
-        events={events}
-        revisionCount={detail.revisions.length}
-        status={detail.status}
-      />
-      <CompetitorDiscoveryView discovery={detail.competitor_discovery} />
-      <TaskDecompositionPanel tasks={detail.plan.task_decomposition} />
-      <KbMatrixView
-        kbs={detail.competitor_kbs}
-        knowledge={detail.competitor_knowledge}
-        matrix={detail.comparison_matrix}
-        sources={detail.raw_sources}
-      />
-    </div>
+    <RunReviewOverview
+      decisionReplay={decisionReplay}
+      detail={detail}
+      events={events}
+      isRedoing={isRedoing}
+      onRedo={onRedo}
+      onViewChange={onViewChange}
+      qualityComparison={qualityComparison}
+      redoLimitReached={redoLimitReached}
+      reflectionItems={reflectionItems}
+      reportSources={reportSources}
+    />
   );
 }
