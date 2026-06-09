@@ -56,6 +56,9 @@ def get_graph_checkpointer() -> GraphCheckpointer:
     return GraphCheckpointer.from_default_path()
 
 
+_RUN_SERVICE_CACHE: dict[tuple[int, ...], RunService] = {}
+
+
 @lru_cache
 def get_enterprise_store() -> EnterpriseStore:
     settings = get_app_settings()
@@ -95,18 +98,51 @@ def get_enterprise_user_context(
     )
 
 
-@lru_cache
-def get_run_service() -> RunService:
-    return RunService(
-        skill_registry=get_skill_registry(),
-        settings=get_app_settings(),
-        journal=get_run_journal(),
-        kb_cache=get_kb_cache(),
-        preference_memory=get_preference_memory(),
-        trace_store=get_trace_store(),
-        graph_checkpointer=get_graph_checkpointer(),
-        enterprise_store=get_enterprise_store(),
+def get_run_service(
+    skill_registry: Annotated[SkillRegistry | None, Depends(get_skill_registry)] = None,
+    settings: Annotated[Settings | None, Depends(get_app_settings)] = None,
+    journal: Annotated[RunJournal | None, Depends(get_run_journal)] = None,
+    kb_cache: Annotated[KBCache | None, Depends(get_kb_cache)] = None,
+    preference_memory: Annotated[
+        PreferenceMemoryStore | None, Depends(get_preference_memory)
+    ] = None,
+    trace_store: Annotated[TraceStore | None, Depends(get_trace_store)] = None,
+    graph_checkpointer: Annotated[GraphCheckpointer | None, Depends(get_graph_checkpointer)] = None,
+    enterprise_store: Annotated[EnterpriseStore | None, Depends(get_enterprise_store)] = None,
+) -> RunService:
+    skill_registry = skill_registry or get_skill_registry()
+    settings = settings or get_app_settings()
+    journal = journal or get_run_journal()
+    kb_cache = kb_cache or get_kb_cache()
+    preference_memory = preference_memory or get_preference_memory()
+    trace_store = trace_store or get_trace_store()
+    graph_checkpointer = graph_checkpointer or get_graph_checkpointer()
+    enterprise_store = enterprise_store or get_enterprise_store()
+
+    cache_key = (
+        id(skill_registry),
+        id(settings),
+        id(journal),
+        id(kb_cache),
+        id(preference_memory),
+        id(trace_store),
+        id(graph_checkpointer),
+        id(enterprise_store),
     )
+    service = _RUN_SERVICE_CACHE.get(cache_key)
+    if service is None:
+        service = RunService(
+            skill_registry=skill_registry,
+            settings=settings,
+            journal=journal,
+            kb_cache=kb_cache,
+            preference_memory=preference_memory,
+            trace_store=trace_store,
+            graph_checkpointer=graph_checkpointer,
+            enterprise_store=enterprise_store,
+        )
+        _RUN_SERVICE_CACHE[cache_key] = service
+    return service
 
 
 @lru_cache
@@ -118,9 +154,9 @@ def get_runtime_command_service(
     settings: Annotated[Settings, Depends(get_app_settings)],
     run_service: Annotated[RunService, Depends(get_run_service)],
     workflow_service: Annotated[TemporalWorkflowService, Depends(get_temporal_workflow_service)],
-    enterprise_store: Annotated[EnterpriseStore, Depends(get_enterprise_store)],
     preference_memory: Annotated[PreferenceMemoryStore, Depends(get_preference_memory)],
 ) -> RuntimeCommandService:
+    enterprise_store = run_service.enterprise_store or get_enterprise_store()
     return RuntimeCommandService(
         settings=settings,
         run_service=run_service,

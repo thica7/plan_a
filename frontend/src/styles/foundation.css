@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+
+  --color-canvas: #f4f6f8;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f8fafc;
+  --color-surface-strong: #eef3f7;
+  --color-surface-raised: #ffffff;
+  --color-sidebar: #0c1726;
+  --color-sidebar-muted: #9ca3af;
+  --color-sidebar-line: rgba(148, 163, 184, 0.16);
+  --color-topbar: rgba(255, 255, 255, 0.94);
+  --color-text: #111827;
+  --color-text-soft: #374151;
+  --color-muted: #667085;
+  --color-muted-2: #98a2b3;
+  --color-border: #d9e2ec;
+  --color-border-soft: #e8eef4;
+  --color-accent: #0f766e;
+  --color-accent-strong: #0b5f59;
+  --color-accent-soft: #e7f6f3;
+  --color-info: #2563eb;
+  --color-info-soft: #eff6ff;
+  --color-warning: #b7791f;
+  --color-warning-soft: #fff7e8;
+  --color-danger: #c2413a;
+  --color-danger-soft: #fff0f0;
+  --color-success: #16833f;
+  --color-success-soft: #ecfdf3;
+
+  --font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-size-caption: 11px;
+  --font-size-label: 12px;
+  --font-size-control: 13px;
+  --font-size-body: 15px;
+  --font-size-panel-title: 16px;
+  --font-size-page-title: 32px;
+  --line-height-tight: 1.18;
+  --line-height-body: 1.45;
+  --line-height-reading: 1.72;
+  --font-weight-label: 700;
+  --font-weight-control: 650;
+  --font-weight-title: 760;
+
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 14px;
+  --space-7: 16px;
+  --space-8: 18px;
+  --space-9: 20px;
+  --space-10: 24px;
+  --space-11: 28px;
+  --space-12: 32px;
+
+  --radius-xs: 6px;
+  --radius-sm: 7px;
+  --radius-md: 8px;
+  --radius-pill: 999px;
+
+  --shadow-soft: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.04);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 16px 36px rgba(16, 24, 40, 0.06);
+  --shadow-raised: 0 1px 2px rgba(16, 24, 40, 0.05), 0 20px 46px rgba(16, 24, 40, 0.08);
+  --focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.2);
+  --motion-fast: 150ms ease;
+  --motion-med: 220ms ease;
+
+  --bg: var(--color-canvas);
+  --surface: var(--color-surface);
+  --surface-muted: var(--color-surface-muted);
+  --surface-strong: var(--color-surface-strong);
+  --text: var(--color-text);
+  --text-soft: var(--color-text-soft);
+  --muted: var(--color-muted);
+  --muted-2: var(--color-muted-2);
+  --border: var(--color-border);
+  --border-soft: var(--color-border-soft);
+  --accent: var(--color-accent);
+  --accent-strong: var(--color-accent-strong);
+  --accent-soft: var(--color-accent-soft);
+  --blue: var(--color-info);
+  --blue-soft: var(--color-info-soft);
+  --amber: var(--color-warning);
+  --amber-soft: var(--color-warning-soft);
+  --warning: var(--color-warning);
+  --warning-soft: var(--color-warning-soft);
+  --danger: var(--color-danger);
+  --danger-soft: var(--color-danger-soft);
+  --success: var(--color-success);
+  --success-soft: var(--color-success-soft);
+  --focus: var(--focus-ring);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg);
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  letter-spacing: 0;
+  line-height: var(--line-height-body);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: 0;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition:
+    background-color var(--motion-fast),
+    border-color var(--motion-fast),
+    box-shadow var(--motion-fast),
+    color var(--motion-fast),
+    transform var(--motion-fast);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+a {
+  color: inherit;
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+}
+
+::selection {
+  background: rgba(15, 118, 110, 0.16);
+  color: var(--text);
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--border-soft);
+  margin: var(--space-8) 0;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+.spin {
+  animation: spin 950ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

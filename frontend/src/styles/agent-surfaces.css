@@ -1,0 +1,267 @@
+.trace-list,
+.span-list,
+.context-list,
+.agent-message-list,
+.tool-message-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.trace-metrics,
+.cost-summary,
+.revision-metrics {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  margin-bottom: 14px;
+}
+
+.trace-metrics.compact {
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+}
+
+.trace-list li,
+.span-list li,
+.context-list article,
+.agent-message-list article,
+.tool-message-list article,
+.playback-card {
+  background: var(--surface-muted);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.trace-list li {
+  grid-template-columns: 70px 130px 140px minmax(0, 1fr);
+}
+
+.message-route {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.message-route strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.message-status {
+  background: var(--surface-strong);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 720;
+  padding: 3px 7px;
+}
+
+.message-status.consumed {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.message-status.queued {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.trace-list li p,
+.trace-list li small,
+.span-list li p,
+.span-list li small,
+.context-list span,
+.context-list em {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.trace-list li strong,
+.span-list li strong,
+.context-list strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.span-list li {
+  grid-template-columns: 160px minmax(0, 1fr);
+}
+
+.span-list li.error {
+  background: var(--danger-soft);
+}
+
+.playback-controls {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.playback-card header {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, auto) auto;
+}
+
+.playback-card header strong,
+.playback-kind {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.playback-kind {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.playback-status {
+  background: var(--success-soft);
+  border: 1px solid rgba(22, 131, 63, 0.18);
+  border-radius: 999px;
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 720;
+  justify-self: end;
+  padding: 3px 7px;
+}
+
+.playback-status.error {
+  background: var(--danger-soft);
+  border-color: rgba(194, 65, 58, 0.18);
+  color: var(--danger);
+}
+
+.playback-meta,
+.playback-columns,
+.revision-diff-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agents-detail-grid .playback-columns {
+  grid-template-columns: 1fr;
+}
+
+.playback-columns pre,
+.revision-diff-grid pre {
+  background: #0f172a;
+  border-radius: 8px;
+  color: #e2e8f0;
+  margin: 0;
+  max-height: 360px;
+  max-width: 100%;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.score-bar {
+  display: grid;
+  gap: 6px;
+}
+
+.score-bar div {
+  background: var(--surface-strong);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.score-bar i {
+  background: var(--accent);
+  border-radius: 999px;
+  display: block;
+  height: 100%;
+}
+
+.readiness-score-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 86px minmax(0, 1fr);
+}
+
+.readiness-score-row > strong {
+  align-items: center;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: flex;
+  font-size: 28px;
+  height: 70px;
+  justify-content: center;
+}
+
+.readiness-breakdown,
+.cost-bars {
+  display: grid;
+  gap: 10px;
+}
+
+.cost-bars label,
+.dimension-score-row {
+  display: grid;
+  gap: 6px;
+}
+
+.candidate-evidence {
+  display: grid;
+  gap: 5px;
+}
+
+.candidate-evidence a,
+.enterprise-table a {
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
+.hitl-panel {
+  background: var(--amber-soft);
+  border: 1px solid rgba(183, 121, 31, 0.28);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 16px;
+}
+
+.hitl-panel h2,
+.hitl-panel p {
+  margin: 0;
+}
+
+.hitl-panel p {
+  color: #73540f;
+  font-size: 13px;
+}
+
+.hitl-panel label {
+  display: grid;
+  gap: 8px;
+}
+
+.hitl-field-note {
+  color: #73540f;
+  font-size: 12px;
+}
+
+.hitl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

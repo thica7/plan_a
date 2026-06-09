@@ -3,6 +3,21 @@ runs/
 logs/
 backups/
 .claude/
+.ccg/
+backend/.test-artifacts/
+dev_plan_final/
+docs/superpowers/
+docs/reports/
+docs/checkpoint*.md
+docs/*202606*.md
+docs/AI_ASSISTED_DEVELOPMENT.md
+docs/submission_checklist.md
+docs/graph.png
+docs/graph.mmd
+frontend/design/
+方案A_图驱动优化版.md
+课题概要.txt
+课题详情.txt
 
 __pycache__/
 *.py[cod]

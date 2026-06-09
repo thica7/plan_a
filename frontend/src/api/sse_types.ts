@@ -22,7 +22,8 @@ export type RunEventType =
   | "qa.blocked"
   | "redo.routed"
   | "benchmark.scored"
-  | "report.ready";
+  | "report.ready"
+  | "runtime.command";
 
 export interface RunEvent {
   id: number;

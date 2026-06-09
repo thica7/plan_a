@@ -1,506 +1,95 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { KeyRound, Play, RefreshCw } from "lucide-react";
-import { createRun, getRuntime, getWorkspaceQuotaDecision, listScenarioPacks, listSkills } from "../api/client";
-import type {
-  CompetitorLayer,
-  RuntimeConfig,
-  ScenarioPack,
-  SkillSpec,
-  WorkspaceQuotaDecision,
-} from "../api/types";
-import {
-  coreDimensions,
-  isDimensionLocked,
-  lockedDimensionsForScenario,
-  mergeDimensions,
-  scenarioCompetitorPreset,
-  starterPresetDimensions,
-  starterPresets,
-  type StarterPreset,
-} from "./newRunDimensions";
-
-const defaultWorkspaceId = "default-workspace";
-const defaultCompetitors = "Perplexity, Claude, Gemini";
-const dynamicScenarioId = "dynamic_adaptive";
-type LayerSelection = "auto" | Extract<CompetitorLayer, "L1" | "L2" | "L3">;
+import type { FormEvent } from "react";
+import { CompetitorsSection } from "../features/new-run/CompetitorsSection";
+import { DepthSection } from "../features/new-run/DepthSection";
+import { DimensionsSection } from "../features/new-run/DimensionsSection";
+import { ExecutionModePanel } from "../features/new-run/ExecutionModePanel";
+import { LensSection } from "../features/new-run/LensSection";
+import { RunReadinessRail } from "../features/new-run/RunReadinessRail";
+import { ScopeSection } from "../features/new-run/ScopeSection";
+import { useNewRunBuilder } from "../features/new-run/useNewRunBuilder";
 
 export function NewRun() {
-  const navigate = useNavigate();
-  const [topic, setTopic] = useState("AI research assistant competitive analysis");
-  const [competitorMode, setCompetitorMode] = useState<"auto" | "manual">("auto");
-  const [competitors, setCompetitors] = useState("");
-  const [skills, setSkills] = useState<SkillSpec[]>([]);
-  const [scenarioPacks, setScenarioPacks] = useState<ScenarioPack[]>([]);
-  const [selectedLayer, setSelectedLayer] = useState<LayerSelection>("auto");
-  const [scenarioId, setScenarioId] = useState("");
-  const [runtime, setRuntime] = useState<RuntimeConfig | null>(null);
-  const [quotaDecision, setQuotaDecision] = useState<WorkspaceQuotaDecision | null>(null);
-  const [selected, setSelected] = useState<string[]>(coreDimensions);
-  const [executionMode, setExecutionMode] = useState<"demo" | "real">("demo");
-  const [autoRedoWarn, setAutoRedoWarn] = useState(false);
-  const [hitlEnabled, setHitlEnabled] = useState(false);
-  const [isSubmitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    getRuntime()
-      .then((config) => {
-        setRuntime(config);
-        setExecutionMode(config.default_execution_mode);
-        setAutoRedoWarn(config.auto_redo_warn_enabled);
-        setHitlEnabled(config.hitl_enabled);
-      })
-      .catch((err: Error) => setError(err.message));
-
-    listSkills()
-      .then((items) => {
-        setSkills(items);
-        if (items.length > 0) {
-          const preferred = coreDimensions.filter((name) =>
-            items.some((skill) => skill.name === name),
-          );
-          setSelected(preferred.length > 0 ? preferred : items.slice(0, 3).map((skill) => skill.name));
-        }
-      })
-      .catch((err: Error) => setError(err.message));
-
-    listScenarioPacks()
-      .then(setScenarioPacks)
-      .catch((err: Error) => setError(err.message));
-
-    getWorkspaceQuotaDecision(defaultWorkspaceId)
-      .then(setQuotaDecision)
-      .catch(() => setQuotaDecision(null));
-  }, []);
-
-  const competitorList = useMemo(
-    () => {
-      if (competitorMode === "auto") {
-        return [];
-      }
-      return competitors
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-    },
-    [competitorMode, competitors],
-  );
-  const selectedScenario = useMemo(
-    () => scenarioPacks.find((pack) => pack.id === scenarioId) ?? null,
-    [scenarioId, scenarioPacks],
-  );
-  const dynamicScenarioSelected = scenarioId.startsWith("dynamic");
-  const lockedDimensions = useMemo(
-    () => lockedDimensionsForScenario(selectedScenario),
-    [selectedScenario],
-  );
-  const runBlockedByQuota = quotaDecision?.allowed === false;
-
-  useEffect(() => {
-    setSelected((current) => mergeDimensions(current, lockedDimensions, []));
-  }, [lockedDimensions]);
-
-  function applyScenario(pack: ScenarioPack | null) {
-    if (!pack) {
-      setScenarioId("");
-      return;
-    }
-    setScenarioId(pack.id);
-    setSelectedLayer(pack.competitor_layer);
-    setSelected((current) => mergeDimensions(current, pack.required_dimensions, pack.optional_dimensions));
-    const seededCompetitors = scenarioCompetitorPreset(pack);
-    if (seededCompetitors) {
-      setCompetitorMode("manual");
-      setCompetitors(seededCompetitors);
-    }
-  }
-
-  function applyStarterPreset(preset: StarterPreset) {
-    setTopic(preset.topic);
-    setSelectedLayer(preset.competitorLayer);
-    setScenarioId(preset.scenarioId);
-    setCompetitorMode("manual");
-    setCompetitors(preset.competitors.join(", "));
-    setSelected(starterPresetDimensions(preset));
-  }
+  const builder = useNewRunBuilder();
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const validationError = validateRunDraft({
-      topic,
-      competitorMode,
-      competitorList,
-      selected,
-      executionMode,
-      runtime,
-    });
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-    if (runBlockedByQuota) {
-      setError(quotaDecision?.reason ?? "Workspace quota blocks new runs.");
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const run = await createRun({
-        idempotency_key: newRunIdempotencyKey(),
-        topic,
-        competitors: competitorList,
-        dimensions: selected,
-        competitor_layer: selectedLayer === "auto" ? null : selectedLayer,
-        scenario_id: scenarioId || null,
-        execution_mode: executionMode,
-        auto_redo_warn_enabled: autoRedoWarn,
-        hitl_enabled: hitlEnabled,
-      });
-      navigate(`/runs/${"id" in run ? run.id : run.run_id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create run");
-    } finally {
-      setSubmitting(false);
-    }
+    await builder.submitRun();
   }
 
   return (
-    <section className="work-surface">
-      <header className="page-header">
+    <section className="work-surface new-run-page">
+      <header className="page-header new-run-header">
         <div>
-          <h1>New analysis run</h1>
-          <p>Start with the schema-first contract, then watch the agent graph progress in real time.</p>
+          <h1>New Research Run</h1>
+          <p>Configure your research scope, data sources, and quality controls before launching.</p>
         </div>
       </header>
 
-      <form className="run-form" onSubmit={handleSubmit}>
-        <label>
-          Topic
-          <input value={topic} onChange={(event) => setTopic(event.target.value)} />
-        </label>
+      <form className="run-builder" onSubmit={handleSubmit}>
+        <div className="run-builder-main" aria-label="Run builder">
+          <ScopeSection
+            onPreset={builder.applyStarterPreset}
+            scenarioId={builder.scenarioId}
+            setTopic={builder.setTopic}
+            topic={builder.topic}
+          />
+          <LensSection
+            applyScenario={builder.applyScenario}
+            dynamicScenarioSelected={builder.dynamicScenarioSelected}
+            scenarioId={builder.scenarioId}
+            scenarioPacks={builder.scenarioPacks}
+            selected={builder.selected}
+            selectedLayer={builder.selectedLayer}
+            selectedScenario={builder.selectedScenario}
+            setScenarioId={builder.setScenarioId}
+          />
+          <CompetitorsSection
+            competitorMode={builder.competitorMode}
+            competitors={builder.competitors}
+            setCompetitorMode={builder.setCompetitorMode}
+            setCompetitors={builder.setCompetitors}
+            updateManualMode={builder.updateManualMode}
+          />
+          <DimensionsSection
+            lockedDimensions={builder.lockedDimensions}
+            selected={builder.selected}
+            selectedScenario={builder.selectedScenario}
+            skills={builder.skills}
+            toggleDimension={builder.toggleDimension}
+          />
+          <DepthSection
+            selectedLayer={builder.selectedLayer}
+            updateSelectedLayer={builder.updateSelectedLayer}
+          />
+          <ExecutionModePanel
+            executionMode={builder.executionMode}
+            setExecutionMode={builder.setExecutionMode}
+          />
+          <details className="advanced-options-row">
+            <summary>Advanced Options</summary>
+            <p>Additional source policy and workflow controls are enforced in the readiness rail.</p>
+          </details>
+        </div>
 
-        <fieldset>
-          <legend>Starter presets</legend>
-          <div className="preset-grid">
-            {starterPresets.map((preset) => (
-              <button
-                className={`preset-tile${scenarioId === preset.scenarioId ? " active" : ""}`}
-                key={preset.id}
-                type="button"
-                onClick={() => applyStarterPreset(preset)}
-              >
-                <strong>{preset.name}</strong>
-                <span>{preset.competitorLayer} 路 {preset.scenarioId}</span>
-                <small>{preset.competitors.join(", ")}</small>
-              </button>
-            ))}
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Competitors</legend>
-          <div className="segmented-control" role="radiogroup" aria-label="Competitor mode">
-            <button
-              className={competitorMode === "auto" ? "active" : ""}
-              type="button"
-              onClick={() => setCompetitorMode("auto")}
-            >
-              Auto-discover
-            </button>
-            <button
-              className={competitorMode === "manual" ? "active" : ""}
-              type="button"
-              onClick={() => {
-                setCompetitorMode("manual");
-                setCompetitors((current) => current || defaultCompetitors);
-              }}
-            >
-              Manual
-            </button>
-          </div>
-          {competitorMode === "manual" ? (
-            <textarea
-              aria-label="Competitors"
-              value={competitors}
-              onChange={(event) => setCompetitors(event.target.value)}
-              rows={3}
-            />
-          ) : (
-            <p className="scope-note">
-              Planner will search the market and select direct competitors before collecting evidence.
-            </p>
-          )}
-        </fieldset>
-
-        <fieldset>
-          <legend>Competitive lens</legend>
-          <div className="segmented-control" role="radiogroup" aria-label="Competitive layer">
-            {(["auto", "L1", "L2", "L3"] as LayerSelection[]).map((layer) => (
-              <button
-                className={selectedLayer === layer ? "active" : ""}
-                key={layer}
-                type="button"
-                onClick={() => {
-                  setSelectedLayer(layer);
-                  if (
-                    scenarioId
-                    && !dynamicScenarioSelected
-                    && scenarioPacks.find((pack) => pack.id === scenarioId)?.competitor_layer !== layer
-                  ) {
-                    setScenarioId("");
-                  }
-                }}
-              >
-                {layer === "auto" ? "Auto" : layer}
-              </button>
-            ))}
-          </div>
-          <label>
-            Scenario pack
-            <select
-              value={scenarioId}
-              onChange={(event) => {
-                if (event.target.value === dynamicScenarioId) {
-                  setScenarioId(dynamicScenarioId);
-                  return;
-                }
-                const next = scenarioPacks.find((pack) => pack.id === event.target.value) ?? null;
-                applyScenario(next);
-              }}
-            >
-              <option value="">Auto scenario</option>
-              <option value={dynamicScenarioId}>Dynamic scenario</option>
-              {scenarioPacks
-                .filter((pack) => selectedLayer === "auto" || pack.competitor_layer === selectedLayer)
-                .map((pack) => (
-                  <option key={pack.id} value={pack.id}>
-                    {pack.competitor_layer} · {pack.name}
-                  </option>
-                ))}
-            </select>
-          </label>
-          {selectedScenario ? (
-            <div className="scenario-preview">
-              <strong>{selectedScenario.name}</strong>
-              <span>{selectedScenario.description}</span>
-              <div>
-                {[...selectedScenario.required_dimensions, ...selectedScenario.optional_dimensions].map((dimension) => (
-                  <em key={dimension}>{dimension}</em>
-                ))}
-              </div>
-              {selectedScenario.seed_competitors.length > 0 ? (
-                <small>{selectedScenario.seed_competitors.join(", ")}</small>
-              ) : null}
-            </div>
-          ) : dynamicScenarioSelected ? (
-            <div className="scenario-preview">
-              <strong>Dynamic scenario</strong>
-              <span>
-                Generated from the topic, selected layer, competitors, and current dimensions.
-              </span>
-              <div>
-                {selected.map((dimension) => (
-                  <em key={dimension}>{dimension}</em>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </fieldset>
-
-        <fieldset>
-          <legend>Execution</legend>
-          <div className="segmented-control" role="radiogroup" aria-label="Execution mode">
-            <button
-              className={executionMode === "demo" ? "active" : ""}
-              type="button"
-              onClick={() => setExecutionMode("demo")}
-            >
-              Demo
-            </button>
-            <button
-              className={executionMode === "real" ? "active" : ""}
-              type="button"
-              onClick={() => setExecutionMode("real")}
-            >
-              <KeyRound size={16} aria-hidden />
-              Real API
-            </button>
-          </div>
-          {runtime ? (
-            <div className="runtime-lines">
-              <p
-                className={
-                  (runtime.has_ark_api_key && runtime.has_ark_model)
-                  || (runtime.has_backup_llm_api_key && runtime.has_backup_llm_model)
-                    ? "runtime-ok"
-                    : "runtime-warn"
-                }
-              >
-                {runtime.has_ark_api_key && runtime.has_ark_model
-                  ? `Backend is ready for real calls with ${runtime.ark_model}.`
-                  : runtime.has_backup_llm_api_key && runtime.has_backup_llm_model
-                    ? `Backend is ready for backup LLM calls with ${runtime.backup_llm_model}.`
-                    : "Real API mode needs primary ARK or BACKUP_LLM settings in backend .env."}
-              </p>
-              <p className={runtime.has_web_search_key ? "runtime-ok" : "runtime-warn"}>
-                {runtime.has_web_search_key
-                  ? `${runtime.web_search_provider} web_search is enabled.`
-                  : "web_search needs PPLX_API_KEY or PERPLEXITY_API_KEY in backend .env."}
-              </p>
-              <p className={runtime.auto_redo_enabled ? "runtime-ok" : "runtime-warn"}>
-                {runtime.auto_redo_enabled
-                  ? "Automatic scoped redo is enabled."
-                  : "Automatic scoped redo is disabled by backend config."}
-              </p>
-              <p className={runtime.hitl_demo_ready ? "runtime-ok" : "runtime-warn"}>
-                {runtime.hitl_demo_ready
-                  ? `HITL pauses are enabled at ${runtime.hitl_review_checkpoints.join(", ")}.`
-                  : runtime.hitl_ready_reason}
-              </p>
-              <p className={runtime.pydantic_ai_model_backed_ready ? "runtime-ok" : "runtime-warn"}>
-                {runtime.pydantic_ai_model_backed_ready
-                  ? `Pydantic-AI model-backed agents use ${runtime.pydantic_ai_model_name}.`
-                  : runtime.pydantic_ai_model_backed_reason}
-              </p>
-              <p className={runtime.temporal_cutover_ready ? "runtime-ok" : "runtime-warn"}>
-                {runtime.temporal_cutover_ready
-                  ? `Run entry is 100% routed through Temporal on ${runtime.temporal_task_queue}.`
-                  : runtime.temporal_cutover_reason}
-              </p>
-              {quotaDecision ? (
-                <p className={quotaDecision.allowed ? "runtime-ok" : "runtime-warn"}>
-                  {quotaDecision.allowed
-                    ? `Workspace quota allows new runs (${quotaDecision.status}, ${quotaDecision.enforcement}).`
-                    : quotaDecision.reason}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-          <label className="toggle-row">
-            <input
-              checked={autoRedoWarn}
-              disabled={runtime?.auto_redo_enabled === false || hitlEnabled}
-              onChange={(event) => setAutoRedoWarn(event.target.checked)}
-              type="checkbox"
-            />
-            <span>
-              <strong>Auto-redo warnings</strong>
-              <em>When enabled, warn-level QA findings can trigger automatic redo. Blockers always can.</em>
-            </span>
-          </label>
-          <label className="toggle-row">
-            <input
-              checked={hitlEnabled}
-              onChange={(event) => {
-                const enabled = event.target.checked;
-                setHitlEnabled(enabled);
-                if (enabled) {
-                  setAutoRedoWarn(false);
-                }
-              }}
-              type="checkbox"
-            />
-            <span>
-              <strong>Human review pauses</strong>
-              <em>Pause this run at planner and QA checkpoints for manual resume or redo.</em>
-            </span>
-          </label>
-        </fieldset>
-
-        <fieldset>
-          <legend>Dimensions</legend>
-          <div className="skill-grid">
-            {skills.map((skill) => {
-              const active = selected.includes(skill.name);
-              const locked = isDimensionLocked(skill.name, lockedDimensions);
-              return (
-                <button
-                  className={active ? "skill-tile active" : "skill-tile"}
-                  key={skill.name}
-                  type="button"
-                  onClick={() =>
-                    setSelected((current) => {
-                      if (locked) return current;
-                      return active ? current.filter((item) => item !== skill.name) : [...current, skill.name];
-                    })
-                  }
-                >
-                  <strong>{skill.name}</strong>
-                  <span>
-                    {locked
-                      ? selectedScenario
-                        ? `${skill.description} Required by selected ScenarioPack.`
-                        : `${skill.description} Required schema dimension.`
-                      : skill.description}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-
-        {error ? <p className="error-line">{error}</p> : null}
-
-        <button
-          className="primary-button"
-          type="submit"
-          disabled={isSubmitting || selected.length === 0 || runBlockedByQuota}
-        >
-          {isSubmitting ? <RefreshCw size={18} aria-hidden /> : <Play size={18} aria-hidden />}
-          Start run
-        </button>
+        <RunReadinessRail
+          autoRedoWarn={builder.autoRedoWarn}
+          competitorList={builder.competitorList}
+          competitorMode={builder.competitorMode}
+          dynamicScenarioSelected={builder.dynamicScenarioSelected}
+          error={builder.error}
+          executionMode={builder.executionMode}
+          hitlEnabled={builder.hitlEnabled}
+          isSubmitting={builder.isSubmitting}
+          quotaDecision={builder.quotaDecision}
+          runBlockedByQuota={builder.runBlockedByQuota}
+          runtime={builder.runtime}
+          selected={builder.selected}
+          selectedLayer={builder.selectedLayer}
+          selectedScenario={builder.selectedScenario}
+          setAutoRedoWarn={builder.setAutoRedoWarn}
+          toggleHitl={builder.toggleHitl}
+        />
       </form>
     </section>
   );
-}
-
-function newRunIdempotencyKey() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `ui-run:${crypto.randomUUID()}`;
-  }
-  return `ui-run:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
-}
-
-function validateRunDraft({
-  topic,
-  competitorMode,
-  competitorList,
-  selected,
-  executionMode,
-  runtime,
-}: {
-  topic: string;
-  competitorMode: "auto" | "manual";
-  competitorList: string[];
-  selected: string[];
-  executionMode: "demo" | "real";
-  runtime: RuntimeConfig | null;
-}) {
-  if (topic.trim().length < 2) {
-    return "Topic must be at least 2 characters.";
-  }
-  if (selected.length === 0) {
-    return "Select at least one analysis dimension.";
-  }
-  if (selected.length > 8) {
-    return "Select no more than 8 analysis dimensions.";
-  }
-  if (competitorMode === "manual" && competitorList.length === 0) {
-    return "Enter at least one competitor or switch to Auto-discover.";
-  }
-  if (competitorList.length > 8) {
-    return "Enter no more than 8 competitors.";
-  }
-  if (
-    executionMode === "real"
-    && runtime
-    && !(
-      (runtime.has_ark_api_key && runtime.has_ark_model)
-      || (runtime.has_backup_llm_api_key && runtime.has_backup_llm_model)
-    )
-  ) {
-    return "Real API mode needs primary ARK or BACKUP_LLM settings in backend .env.";
-  }
-  return null;
 }

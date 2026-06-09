@@ -27,6 +27,7 @@ EXPECTED_EVENT_TYPES = {
     "redo.routed",
     "benchmark.scored",
     "report.ready",
+    "runtime.command",
 }
 
 

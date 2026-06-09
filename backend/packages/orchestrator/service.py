@@ -267,7 +267,16 @@ class RunService(
         self._lock = asyncio.Lock()
         self._hydrate_runs()
 
-    async def create_run(self, request: RunCreateRequest) -> RunDetail:
+    @property
+    def enterprise_store(self) -> EnterpriseStore | None:
+        return self._enterprise_store
+
+    async def create_run(
+        self,
+        request: RunCreateRequest,
+        *,
+        skip_active_duplicate_check: bool = False,
+    ) -> RunDetail:
         self._ensure_workspace_quota_allows_run(request.workspace_id)
         execution_mode = self._resolve_execution_mode(request.execution_mode)
         competitors = self._normalize_competitor_names(request.competitors)
@@ -305,8 +314,10 @@ class RunService(
             auto_redo_warn_enabled=auto_redo_warn_enabled,
             hitl_enabled=hitl_enabled,
         )
-        async with self._lock:
-            duplicate = self._find_active_duplicate_run(duplicate_fingerprint, now)
+        duplicate = None
+        if not skip_active_duplicate_check:
+            async with self._lock:
+                duplicate = self._find_active_duplicate_run(duplicate_fingerprint, now)
         if duplicate is not None:
             return duplicate.detail
 
@@ -435,7 +446,7 @@ class RunService(
         return detail
 
     async def ensure_run_visible(self, request: RunCreateRequest) -> RunDetail:
-        detail = await self.create_run(request)
+        detail = await self.create_run(request, skip_active_duplicate_check=True)
         self._persist_run(detail.id)
         return detail
 
@@ -847,7 +858,13 @@ class RunService(
                     "HITL feedback was captured as reviewable MemoryAgent candidate input.",
                     memory_feedback_payload,
                 )
+            if hitl_actor_id == "system":
+                record.pending_interrupts.setdefault(stage, {})["auto_resume"] = (
+                    request.model_dump(mode="json", exclude_none=True)
+                )
             asyncio.create_task(self._resume_interrupted_graph(run_id, request))
+            return record.detail
+        if request.decision in {"accept", "modify_plan", "force_pass"}:
             return record.detail
         if request.decision == "redo" and not record.detail.qa_findings:
             await self._record_hitl_lifecycle_event(
@@ -1149,7 +1166,10 @@ class RunService(
                 record,
                 kind=kind,
                 thread_id=thread_id,
-                graph_input=Command(resume=request.model_dump(mode="json", exclude_none=True)),
+                graph_input=Command(
+                    resume=request.model_dump(mode="json", exclude_none=True),
+                    update={"run_id": run_id},
+                ),
             )
             if not completed:
                 return
@@ -1626,15 +1646,20 @@ class RunService(
                 },
             )
             self._schedule_hitl_timeout(record, stage)
-        resumed = interrupt(
-            {
-                **payload,
-                "stage": stage,
-                "interrupt_node": interrupt_node,
-                "interrupt_protocol": "langgraph_interrupt_command_resume",
-                "run_id": detail.id,
-            }
-        )
+        pending = record.pending_interrupts.get(stage) or {}
+        auto_resume = pending.pop("auto_resume", None)
+        if auto_resume is not None:
+            resumed = auto_resume
+        else:
+            resumed = interrupt(
+                {
+                    **payload,
+                    "stage": stage,
+                    "interrupt_node": interrupt_node,
+                    "interrupt_protocol": "langgraph_interrupt_command_resume",
+                    "run_id": detail.id,
+                }
+            )
         record.pending_interrupts.pop(stage, None)
         self._cancel_hitl_timeout(record, stage)
         if isinstance(resumed, HitlResumeRequest):

@@ -1,90 +1,31 @@
-import { NavLink, Route, Routes } from "react-router-dom";
-import {
-  Activity,
-  BookOpen,
-  Briefcase,
-  Database,
-  FileText,
-  History,
-  Layers,
-  Radar,
-  Search,
-  Workflow,
-} from "lucide-react";
+import { Route, Routes } from "react-router-dom";
+import { AppShell } from "./components/AppShell";
 import { NewRun } from "./pages/NewRun";
 import { RunDetail } from "./pages/RunDetail";
 import { HistoryPage } from "./pages/History";
+import { EnterpriseWorkbench } from "./pages/EnterpriseWorkbench";
 import KnowledgePage from "./pages/KnowledgePage";
 import SearchPage from "./pages/SearchPage";
 import CrawlPage from "./pages/CrawlPage";
-import { EnterpriseWorkbench } from "./pages/EnterpriseWorkbench";
 
 export function App() {
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <Radar size={28} aria-hidden />
-          <div>
-            <strong>Competiscope</strong>
-            <span>Plan A console</span>
-          </div>
-        </div>
-        <nav className="nav-list" aria-label="Primary">
-          <NavLink to="/" end>
-            <Activity size={18} aria-hidden />
-            New run
-          </NavLink>
-          <NavLink to="/history">
-            <History size={18} aria-hidden />
-            History
-          </NavLink>
-          <NavLink to="/knowledge">
-            <BookOpen size={18} aria-hidden />
-            Knowledge
-          </NavLink>
-          <NavLink to="/search">
-            <Search size={18} aria-hidden />
-            Search
-          </NavLink>
-          <NavLink to="/crawl">
-            <Workflow size={18} aria-hidden />
-            Crawl
-          </NavLink>
-          <NavLink to="/enterprise">
-            <Briefcase size={18} aria-hidden />
-            Enterprise
-          </NavLink>
-          <NavLink to="/competitors">
-            <Layers size={18} aria-hidden />
-            Competitors
-          </NavLink>
-          <NavLink to="/evidence">
-            <Database size={18} aria-hidden />
-            Evidence
-          </NavLink>
-          <NavLink to="/reports">
-            <FileText size={18} aria-hidden />
-            Reports
-          </NavLink>
-        </nav>
-      </aside>
-
-      <main className="main-pane">
-        <Routes>
-          <Route path="/" element={<NewRun />} />
-          <Route path="/runs/:runId" element={<RunDetail />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/knowledge" element={<KnowledgePage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/crawl" element={<CrawlPage />} />
-          <Route path="/enterprise" element={<EnterpriseWorkbench initialTab="competitors" />} />
-          <Route path="/competitors" element={<EnterpriseWorkbench initialTab="competitors" />} />
-          <Route path="/evidence" element={<EnterpriseWorkbench initialTab="evidence" />} />
-          <Route path="/reports" element={<EnterpriseWorkbench initialTab="reports" />} />
-        </Routes>
-      </main>
-    </div>
+    <AppShell>
+      <Routes>
+        <Route path="/" element={<NewRun />} />
+        <Route path="/runs/:runId" element={<RunDetail />} />
+        <Route path="/history" element={<HistoryPage />} />
+        <Route path="/knowledge" element={<KnowledgePage />} />
+        <Route path="/search" element={<SearchPage />} />
+        <Route path="/crawl" element={<CrawlPage />} />
+        <Route path="/enterprise" element={<EnterpriseWorkbench initialView="overview" />} />
+        <Route path="/competitors" element={<EnterpriseWorkbench initialView="competitors" />} />
+        <Route path="/evidence" element={<EnterpriseWorkbench initialView="evidence" />} />
+        <Route path="/reports" element={<EnterpriseWorkbench initialView="reports" />} />
+        <Route path="/governance" element={<EnterpriseWorkbench initialView="governance" />} />
+        <Route path="/activity" element={<EnterpriseWorkbench initialView="activity" />} />
+      </Routes>
+    </AppShell>
   );
 }
 
