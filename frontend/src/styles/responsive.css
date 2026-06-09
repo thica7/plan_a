@@ -86,6 +86,7 @@
   .run-command-grid,
   .execution-mode-grid,
   .product-workspace-body,
+  .report-review-workspace,
   .detail-grid,
   .run-review-score-grid,
   .run-review-lower-grid,
@@ -108,6 +109,8 @@
   .run-builder-rail,
   .product-project-rail,
   .product-inspector-rail,
+  .report-outline-panel,
+  .report-review-inspector,
   .project-rail,
   .inspector-panel,
   .report-source-rail,
@@ -121,6 +124,10 @@
   }
 
   .workbench-status-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-review-status-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -175,9 +182,10 @@
 
   .topbar-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 7px;
-    overflow-x: auto;
-    padding-bottom: 2px;
+    overflow: visible;
+    padding-bottom: 0;
     scrollbar-width: none;
     width: 100%;
   }
@@ -187,9 +195,16 @@
   }
 
   .topbar-actions > * {
-    flex: 0 0 auto;
     justify-content: center;
     min-width: 0;
+  }
+
+  .topbar-actions .primary-link {
+    flex: 1 1 138px;
+  }
+
+  .topbar-actions .status-badge {
+    flex: 1 1 104px;
   }
 
   .sidebar {
@@ -313,6 +328,8 @@
   .competitor-rank-row,
   .competitor-asset-metrics,
   .workbench-status-strip,
+  .report-review-status-strip,
+  .report-review-status-metric,
   .metric-grid,
   .source-trace-metrics,
   .source-trace-grid,
@@ -352,6 +369,21 @@
   }
 
   .action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-review-toolbar,
+  .report-mode-toggle,
+  .report-find-control {
+    width: 100%;
+  }
+
+  .report-mode-toggle button {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .report-review-export-grid {
     grid-template-columns: 1fr;
   }
 

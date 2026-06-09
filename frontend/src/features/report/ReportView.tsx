@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent } from "react";
+import { isValidElement, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { RawSource } from "../../api/types";
@@ -20,8 +20,12 @@ export {
 } from "./sourceTokens";
 
 interface Props {
+  activeSourceId?: string | null;
   layout?: "stacked" | "reader";
   markdown: string;
+  onActiveSourceChange?: (sourceId: string | null) => void;
+  readerTitle?: string;
+  showSourceTrace?: boolean;
   sources: RawSource[];
   sourceAliases?: Record<string, string>;
 }
@@ -29,12 +33,18 @@ interface Props {
 const EMPTY_SOURCE_ALIASES: Record<string, string> = {};
 
 export function ReportView({
+  activeSourceId: controlledActiveSourceId,
   layout = "stacked",
   markdown,
+  onActiveSourceChange,
+  readerTitle = "Report",
+  showSourceTrace = true,
   sources,
   sourceAliases = EMPTY_SOURCE_ALIASES,
 }: Props) {
-  const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
+  const [internalActiveSourceId, setInternalActiveSourceId] = useState<string | null>(null);
+  const activeSourceId =
+    controlledActiveSourceId === undefined ? internalActiveSourceId : controlledActiveSourceId;
   const sourceMap = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources]);
   const sourceGroups = useMemo(
     () => collectSourceTokenGroups(markdown, sourceMap, sourceAliases),
@@ -64,7 +74,8 @@ export function ReportView({
       : anchorId.startsWith("missing-source-")
         ? anchorId.slice("missing-source-".length)
         : null;
-    setActiveSourceId(sourceId);
+    setInternalActiveSourceId(sourceId);
+    onActiveSourceChange?.(sourceId);
     window.history.replaceState(null, "", `#${anchorId}`);
     target.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -72,7 +83,7 @@ export function ReportView({
   const reportBody = (
     <section className={`panel report-panel${layout === "reader" ? " report-reader-panel" : ""}`}>
       <div className="panel-heading-row">
-        <h2>Report</h2>
+        <h2>{readerTitle}</h2>
         {totalCitationCount ? <span className="report-citation-count">{totalCitationCount} citations</span> : null}
       </div>
       {markdown ? (
@@ -103,6 +114,18 @@ export function ReportView({
                     {children}
                   </a>
                 );
+              },
+              h1({ children, ...props }) {
+                return <h1 id={slugReportHeading(reactNodeToText(children))} {...props}>{children}</h1>;
+              },
+              h2({ children, ...props }) {
+                return <h2 id={slugReportHeading(reactNodeToText(children))} {...props}>{children}</h2>;
+              },
+              h3({ children, ...props }) {
+                return <h3 id={slugReportHeading(reactNodeToText(children))} {...props}>{children}</h3>;
+              },
+              h4({ children, ...props }) {
+                return <h4 id={slugReportHeading(reactNodeToText(children))} {...props}>{children}</h4>;
               },
             }}
             remarkPlugins={[remarkGfm]}
@@ -137,6 +160,10 @@ export function ReportView({
     </section>
   );
 
+  if (!showSourceTrace) {
+    return reportBody;
+  }
+
   if (layout === "reader") {
     return (
       <div className="report-reader-layout">
@@ -152,6 +179,24 @@ export function ReportView({
       {sourceTrace}
     </>
   );
+}
+
+export function slugReportHeading(text: string) {
+  const slug = text
+    .toLowerCase()
+    .replace(/[`*_~()[\]{}:;,.!?'"<>|/\\]+/g, " ")
+    .replace(/\s+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return `report-section-${slug || "section"}`;
+}
+
+function reactNodeToText(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(reactNodeToText).join("");
+  if (isValidElement<{ children?: ReactNode }>(node)) return reactNodeToText(node.props.children);
+  return "";
 }
 
 function buildSourceTitle(missingSourceLink: boolean, source: RawSource | undefined, citationLabel: string | undefined) {
