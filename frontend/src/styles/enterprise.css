@@ -387,50 +387,30 @@
   top: 82px;
 }
 
-.report-studio-layout {
-  align-items: start;
+.report-studio-workbench {
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(190px, 0.42fr) minmax(0, 1fr) minmax(250px, 0.5fr);
-}
-
-.review-left-rail {
-  display: grid;
-  gap: 12px;
   min-width: 0;
-  position: sticky;
-  top: 82px;
 }
 
-.report-inspector {
+.report-command-row {
+  align-items: stretch;
   display: grid;
   gap: 12px;
-  position: sticky;
-  top: 82px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.46fr);
 }
 
-.report-inspector .recommendation-list.compact {
-  max-height: 178px;
-  overflow: auto;
+.report-version-panel,
+.report-release-panel {
+  min-width: 0;
 }
 
-.report-inspector .source-scope-list,
-.report-inspector .review-claim-list {
-  max-height: 240px;
-  overflow: auto;
-}
-
-.version-rail {
+.report-version-strip {
   display: grid;
-  gap: 10px;
-  grid-template-columns: 1fr;
-  max-height: 310px;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
+  max-height: 184px;
   overflow: auto;
-  position: static;
-}
-
-.version-rail .panel-heading-row {
-  grid-column: 1 / -1;
 }
 
 .version-item {
@@ -444,6 +424,11 @@
   padding: 10px;
   text-align: left;
   width: 100%;
+}
+
+.version-item .status-pill {
+  justify-self: start;
+  width: fit-content;
 }
 
 .version-item.active {
@@ -462,6 +447,44 @@
   font-style: normal;
 }
 
+.report-gate-summary {
+  align-items: center;
+  display: grid;
+  gap: 8px 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-bottom: 12px;
+}
+
+.report-gate-summary > strong {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 760;
+}
+
+.report-gate-summary .metric-grid {
+  grid-column: 1 / -1;
+}
+
+.report-action-row,
+.report-export-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 8px;
+}
+
+.report-export-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.report-reading-grid {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(290px, 340px);
+  min-width: 0;
+}
+
 .report-reader-panel {
   min-width: 0;
 }
@@ -470,8 +493,27 @@
   margin: 0;
 }
 
-.report-inspector,
-.release-gate-summary,
+.report-review-desk {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  position: sticky;
+  top: 82px;
+}
+
+.report-review-desk .recommendation-list.compact {
+  max-height: 188px;
+  overflow: auto;
+}
+
+.report-review-desk .source-scope-list,
+.report-review-desk .review-claim-list {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.report-review-desk,
+.report-gate-summary,
 .recommendation-card,
 .issue-row,
 .source-scope-list a {
