@@ -4,6 +4,7 @@ logs/
 backups/
 .claude/
 .ccg/
+.worktrees/
 backend/.test-artifacts/
 dev_plan_final/
 docs/superpowers/
