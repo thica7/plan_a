@@ -88,3 +88,68 @@ def test_merge_structured_payload_preserves_review_summary() -> None:
     harness._merge_structured_knowledge_payload(detail, "Cursor", "review", payload)
 
     assert detail.competitor_knowledge["Cursor"].review_summary.praise_themes[0].theme == "Speed"
+
+
+def test_merge_structured_payload_sanitizes_review_summary_source_ids() -> None:
+    harness = AnalystHarness()
+    detail = RunDetail(
+        id="run-review-sanitized",
+        idempotency_key="",
+        workspace_id="default-workspace",
+        project_id=None,
+        topic="AI coding assistant user reviews",
+        status="running",
+        execution_mode="demo",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["review"]),
+        competitor_knowledge={"Cursor": CompetitorKnowledge(competitor="Cursor")},
+        raw_sources=[
+            RawSource(
+                id="review-1",
+                competitor="Cursor",
+                dimension="review",
+                source_type="review_site",
+                title="Cursor reviews",
+                snippet="Users praise speed but complain about onboarding.",
+                content_hash="reviewhash",
+                confidence=0.82,
+            )
+        ],
+    )
+    payload = {
+        "review_summary": {
+            "competitor": "Cursor",
+            "dimension": "review",
+            "praise_themes": [
+                {
+                    "theme": "Speed",
+                    "evidence": "Users praise speed.",
+                    "source_ids": ["review-1", "fake-source"],
+                    "confidence": 0.82,
+                }
+            ],
+            "complaint_themes": [
+                {
+                    "theme": "Onboarding friction",
+                    "evidence": "Users complain about onboarding.",
+                    "source_ids": ["fake-source"],
+                    "confidence": 0.61,
+                }
+            ],
+            "adoption_blockers": [],
+            "switching_triggers": [],
+            "persona_segments": [],
+            "sentiment_hint": "mixed",
+            "source_ids": ["review-1", "fake-source"],
+            "confidence": 0.82,
+        }
+    }
+
+    harness._merge_structured_knowledge_payload(detail, "Cursor", "review", payload)
+
+    summary = detail.competitor_knowledge["Cursor"].review_summary
+    assert summary.source_ids == ["review-1"]
+    assert summary.praise_themes[0].source_ids == ["review-1"]
+    assert summary.complaint_themes[0].source_ids == []
+    assert summary.complaint_themes[0].evidence_gap is True

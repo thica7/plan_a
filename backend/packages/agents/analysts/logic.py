@@ -1429,7 +1429,10 @@ class AnalystAgentMixin:
             try:
                 knowledge.review_summary = ReviewThemeSummary.model_validate(review_section)
             except Exception:
-                knowledge.review_summary = ReviewThemeSummary(competitor=competitor, dimension=dimension)
+                knowledge.review_summary = ReviewThemeSummary(
+                    competitor=competitor,
+                    dimension=dimension,
+                )
 
         self._sanitize_structured_knowledge_slice_sources(
             detail,
@@ -1482,6 +1485,8 @@ class AnalystAgentMixin:
         valid_source_ids = set(
             self._source_ids_for_competitor_dimension(detail, competitor, dimension)
         )
+        if self._dimension_uses_review_summary(dimension):
+            self._sanitize_review_summary_source_ids(knowledge.review_summary, valid_source_ids)
         if not valid_source_ids:
             return
         dimension_key = dimension.casefold()
@@ -1494,6 +1499,43 @@ class AnalystAgentMixin:
         knowledge.source_ids = [
             source_id for source_id in knowledge.source_ids if source_id in valid_source_ids
         ]
+
+    def _sanitize_review_summary_source_ids(
+        self,
+        review_summary: ReviewThemeSummary,
+        valid_source_ids: set[str],
+    ) -> None:
+        review_summary.source_ids = self._known_source_ids(
+            review_summary.source_ids,
+            valid_source_ids,
+        )
+        for items in (
+            review_summary.praise_themes,
+            review_summary.complaint_themes,
+            review_summary.adoption_blockers,
+            review_summary.switching_triggers,
+        ):
+            self._sanitize_review_theme_item_source_ids(items, valid_source_ids)
+
+    def _sanitize_review_theme_item_source_ids(
+        self,
+        items: list[ReviewThemeItem],
+        valid_source_ids: set[str],
+    ) -> None:
+        for item in items:
+            had_source_ids = bool(item.source_ids)
+            item.source_ids = self._known_source_ids(item.source_ids, valid_source_ids)
+            if had_source_ids and not item.source_ids:
+                item.evidence_gap = True
+
+    def _known_source_ids(
+        self,
+        source_ids: list[str],
+        valid_source_ids: set[str],
+    ) -> list[str]:
+        return merge_ordered_refs(
+            source_id for source_id in source_ids if source_id in valid_source_ids
+        )
 
     def _sanitize_pricing_model_source_ids(
         self,
