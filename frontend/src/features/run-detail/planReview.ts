@@ -58,11 +58,16 @@ export interface CompetitorReviewRow {
 }
 
 function slugify(value: string): string {
-  return value
+  const slug = value
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+  return slug || "name";
+}
+
+function reviewRowId(source: "candidate" | "plan", index: number, name: string): string {
+  return `${source}-${index + 1}-${slugify(name)}`;
 }
 
 function normalizeCompetitorName(value: string): string {
@@ -88,10 +93,10 @@ export function buildCompetitorReviewRows(
 ): CompetitorReviewRow[] {
   if (discovery?.candidates.length) {
     const selected = new Set(discovery.selected_competitors.map(normalizeCompetitorName));
-    return discovery.candidates.map((candidate) => {
+    return discovery.candidates.map((candidate, index) => {
       const isSelected = selected.has(normalizeCompetitorName(candidate.name)) || candidate.selected;
       return {
-        id: `candidate-${slugify(candidate.name)}`,
+        id: reviewRowId("candidate", index, candidate.name),
         originalName: candidate.name,
         name: candidate.name,
         decision: isSelected ? "keep" : "remove",
@@ -105,8 +110,8 @@ export function buildCompetitorReviewRows(
     });
   }
 
-  return planCompetitors.map((name) => ({
-    id: `plan-${slugify(name)}`,
+  return planCompetitors.map((name, index) => ({
+    id: reviewRowId("plan", index, name),
     originalName: name,
     name,
     decision: "keep",
