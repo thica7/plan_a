@@ -6,6 +6,7 @@ import pytest
 
 from packages.agents import SubagentContext
 from packages.business_intel.homepage import HomepageVerification
+from packages.business_intel.report_quality import compare_run_quality
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
 from packages.memory import PreferenceMemoryStore, RunJournal
@@ -2274,6 +2275,104 @@ def test_comparison_matrix_uses_kb_and_sources() -> None:
     assert "price=$10" in matrix.cells[0].value
     assert matrix.cells[0].source_ids == ["pricing-1"]
     assert matrix.winner_by_dimension["pricing"] == "A"
+
+
+def test_review_dimension_produces_review_summary_swot_and_report_sections() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+    source = RawSource(
+        id="review-cursor-1",
+        competitor="Cursor",
+        dimension="review",
+        source_type="review_site",
+        title="Cursor user review",
+        url="https://reviews.example/cursor",
+        snippet=(
+            "Developers praise Cursor for fast coding workflow and team value, "
+            "but complain about confusing onboarding and adoption friction. "
+            "Several users say they switched from older IDE workflows after AI "
+            "pairing became a migration trigger."
+        ),
+        content_hash="review-cursor-hash",
+        confidence=0.88,
+    )
+    detail = RunDetail(
+        id="run-review-swot",
+        topic="Cursor review regression",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        output_language="en-US",
+        plan=AnalysisPlan(
+            topic="Cursor review regression",
+            competitors=["Cursor"],
+            dimensions=["review"],
+        ),
+        raw_sources=[source],
+    )
+
+    payload = service._deterministic_structured_knowledge_payload(
+        competitor="Cursor",
+        dimension="review",
+        dimension_sources=[source.model_dump(mode="json")],
+    )
+    service._merge_structured_knowledge_payload(detail, "Cursor", "review", payload)
+    detail.comparison_matrix = service._build_comparison_matrix(
+        detail,
+        {
+            "matrix_summary": ["Cursor has mixed user review evidence."],
+            "winner_by_dimension": {"review": "Cursor"},
+        },
+    )
+    service._refresh_swot_analyses(detail)
+    detail.report_md = service._harden_report_markdown(detail, "# Cursor Review Regression")
+
+    review_summary = detail.competitor_knowledge["Cursor"].review_summary
+    assert review_summary.competitor == "Cursor"
+    assert review_summary.source_ids or any(
+        [
+            review_summary.praise_themes,
+            review_summary.complaint_themes,
+            review_summary.adoption_blockers,
+            review_summary.switching_triggers,
+        ]
+    )
+
+    swot_analysis = detail.competitor_knowledge["Cursor"].swot_analysis
+    assert swot_analysis.competitor == "Cursor"
+    assert swot_analysis.strengths
+    assert swot_analysis.opportunities
+    assert swot_analysis.threats
+    assert all(
+        item.evidence_gap and not item.source_ids
+        for item in [
+            *swot_analysis.strengths,
+            *swot_analysis.weaknesses,
+            *swot_analysis.opportunities,
+            *swot_analysis.threats,
+        ]
+        if not item.source_ids
+    )
+    assert "User Review Themes" in detail.report_md
+    assert "SWOT" in detail.report_md
+    for quadrant in ("Strengths", "Weaknesses", "Opportunities", "Threats"):
+        assert quadrant in detail.report_md
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    assert metrics["review_theme_section_score"].target_value == 1.0
+    assert metrics["swot_section_score"].target_value == 1.0
 
 
 def test_comparison_matrix_maps_multi_competitor_sources() -> None:
