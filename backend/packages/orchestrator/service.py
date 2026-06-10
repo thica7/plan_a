@@ -299,8 +299,10 @@ class RunService(
             if request.auto_redo_warn_enabled is None
             else request.auto_redo_warn_enabled
         )
-        hitl_enabled = (
-            self._settings.hitl_enabled if request.hitl_enabled is None else request.hitl_enabled
+        hitl_enabled = self._resolve_hitl_enabled(
+            request,
+            execution_mode=execution_mode,
+            requested_competitors=request.competitors,
         )
         duplicate_fingerprint = _active_run_fingerprint(
             workspace_id=request.workspace_id,
@@ -3844,6 +3846,19 @@ class RunService(
         if self._settings.default_execution_mode == "real":
             return "real" if model_policy.real_execution_allowed else "demo"
         return "demo"
+
+    def _resolve_hitl_enabled(
+        self,
+        request: RunCreateRequest,
+        *,
+        execution_mode: str,
+        requested_competitors: list[str],
+    ) -> bool:
+        if request.hitl_enabled is not None:
+            return request.hitl_enabled
+        if self._settings.hitl_enabled:
+            return True
+        return execution_mode == "real" and len(requested_competitors) == 0
 
     def _normalize_competitor_names(self, value: object) -> list[str]:
         if not isinstance(value, list):

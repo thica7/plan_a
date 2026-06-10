@@ -551,6 +551,73 @@ async def test_run_request_can_enable_hitl_per_run() -> None:
 
 
 @pytest.mark.asyncio
+async def test_real_topic_only_run_enables_planner_review_by_default() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            backup_llm_api_key="backup-key",
+            backup_llm_model="backup-model",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=False,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Agentic AI IDE",
+                competitors=[],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+
+        assert detail.hitl_enabled is True
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_explicit_hitl_false_overrides_topic_only_default() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            backup_llm_api_key="backup-key",
+            backup_llm_model="backup-model",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Agentic AI IDE",
+                competitors=[],
+                dimensions=["pricing"],
+                execution_mode="real",
+                hitl_enabled=False,
+            )
+        )
+
+        assert detail.hitl_enabled is False
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_topic_only_run_discovers_competitors_in_planner() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
