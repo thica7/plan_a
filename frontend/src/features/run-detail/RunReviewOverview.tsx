@@ -7,6 +7,7 @@ import type { ReportSourceBundle } from "../report/sourceBundle";
 import { SwimlaneView } from "../swimlane/SwimlaneView";
 import type { ReflectionItem, RunDetailView } from "./types";
 import { useTranslation } from "../../stores/i18n";
+import { parseUTC } from "../workbench/format";
 
 interface RunReviewOverviewProps {
   decisionReplay: DecisionReplayReport | null;
@@ -222,5 +223,6 @@ function buildTimelineRows(detail: RunDetailRecord, replay: DecisionReplayReport
 }
 
 function formatTime(value: string) {
-  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+  const date = parseUTC(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
 }

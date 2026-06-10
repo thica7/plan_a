@@ -47,7 +47,7 @@ from packages.hitl import (
     lifecycle_stage_for_resume_decision,
     review_kind_for_stage,
 )
-from packages.i18n.language import report_label
+from packages.i18n.language import normalize_output_language, report_label
 from packages.identity import (
     compute_competitor_set_hash,
     compute_content_hash,
@@ -3760,13 +3760,14 @@ class RunService(
         content_hash = compute_content_hash(
             f"{detail.id}:{competitor}:{dimension}:{len(detail.raw_sources) + 1}"
         )[:16]
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         source_id = compute_raw_source_id(
             source_type="webpage_verified",
             competitor=competitor,
             dimension=dimension,
             url=f"https://example.com/{self._issue_id_fragment(competitor)}/{dimension}",
             content_hash=content_hash,
-            title=f"{competitor} {dimension} evidence fixture",
+            title=f"{competitor} {dimension} 证据固定装置" if is_zh else f"{competitor} {dimension} evidence fixture",
             run_id=detail.id,
             source_role="demo",
         )
@@ -3776,17 +3777,37 @@ class RunService(
             covered_competitors=[competitor],
             dimension=dimension,
             source_type="webpage_verified",
-            title=f"{competitor} {dimension} evidence fixture",
+            title=f"{competitor} {dimension} 证据固定装置" if is_zh else f"{competitor} {dimension} evidence fixture",
             url=f"https://example.com/{self._issue_id_fragment(competitor)}/{dimension}",
             snippet=(
-                f"Demo evidence fixture for {competitor} {dimension} "
-                "with a concrete structured claim."
+                f"在 Demo 运行中，为 {competitor} {dimension} 提取的具体结构化证据。"
+                if is_zh
+                else f"Demo evidence fixture for {competitor} {dimension} with a concrete structured claim."
             ),
             content_hash=content_hash,
             confidence=0.82,
         )
 
-    def _demo_reflection(self, dimension: str) -> ReflectionRecord:
+    def _demo_reflection(self, detail: RunDetail, dimension: str) -> ReflectionRecord:
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        if is_zh:
+            return ReflectionRecord(
+                iteration=1,
+                coverage_gaps=[
+                    f"在此 Demo 切片中，只有第一个竞品具有 {dimension} 证据。"
+                ],
+                confidence_outliers=[],
+                cross_competitor_gaps=[
+                    f"{dimension} 对比在最终评分前需要另一个来源。"
+                ],
+                suggested_redos=[
+                    RedoScope(
+                        kind="collector",
+                        target_subagent=dimension,
+                        rationale=f"{dimension} 证据覆盖不完整。",
+                    )
+                ],
+            )
         return ReflectionRecord(
             iteration=1,
             coverage_gaps=[
@@ -3805,11 +3826,12 @@ class RunService(
             ],
         )
 
-    def _demo_issue(self, dimension: str) -> QCIssue:
+    def _demo_issue(self, detail: RunDetail, dimension: str) -> QCIssue:
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         scope = RedoScope(
             kind="collector",
             target_subagent=dimension,
-            rationale=f"{dimension.title()} evidence coverage is incomplete.",
+            rationale=f"{dimension} 证据覆盖不完整。" if is_zh else f"{dimension.title()} evidence coverage is incomplete.",
         )
         return QCIssue(
             id=stable_prefixed_id("qc-demo", dimension, "coverage", length=16),
@@ -3818,7 +3840,11 @@ class RunService(
             target_agent="collector",
             target_subagent=dimension,
             field_path=f"raw_sources[{dimension}]",
-            problem=f"{dimension.title()} collector returned evidence for only one competitor.",
+            problem=(
+                f"{dimension} 收集器仅返回了一个竞品的证据。"
+                if is_zh
+                else f"{dimension.title()} collector returned evidence for only one competitor."
+            ),
             redo_scope=scope,
             self_found=True,
         )
@@ -3830,6 +3856,44 @@ class RunService(
         if not source_refs:
             source_refs = ""
         memory_section = self._demo_memory_section(detail)
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        if is_zh:
+            return (
+                f"# {detail.plan.topic}\n\n"
+                f"## {report_label(detail.output_language, 'executive_summary')}\n"
+                f"本次 Demo 运行覆盖了 {competitors}，涉及维度有 {dimensions}，证明了"
+                "事件、来源、反思、QA 发现和报告 Markdown 都可以流畅地通过结构化 DTO 传输。"
+                f"{source_refs}\n\n"
+                f"## {report_label(detail.output_language, 'source_quality')}\n"
+                "Demo 证据被投射到企业 EvidenceRecord 模型中，保留来源 ID "
+                f"以供发布门禁和报告视图追溯。{source_refs}\n\n"
+                f"{memory_section}"
+                f"## {report_label(detail.output_language, 'side_by_side_matrix')}\n"
+                "| 维度 | 竞品 |\n"
+                "| --- | --- |\n"
+                f"| {dimensions} | {competitors} {source_refs} |\n\n"
+                f"## {report_label(detail.output_language, 'scenario_checklist')}\n"
+                f"- 场景：{detail.plan.scenario_id or 'auto'}；竞品层："
+                f"{detail.plan.competitor_layer}；推荐维度："
+                f"{', '.join(detail.plan.scenario_recommended_dimensions or detail.plan.dimensions)}。\n"
+                f"- QA 规则：{', '.join(detail.plan.qa_rule_ids) or '默认架构检查'}\n\n"
+                f"## {report_label(detail.output_language, 'battlecard')}\n"
+                "将此 Demo 报告用作直接的战报脚手架：在用作可发布建议之前，"
+                f"验证定价、功能和画像声明。{source_refs}\n\n"
+                f"## {report_label(detail.output_language, 'claim_risk')}\n"
+                "Demo 结论属于契约检查，并非最终的市场建议。在附带当前官方来源"
+                f"和声明验证之前，将低置信度或合成证据视为受评审门禁限制。{source_refs}\n\n"
+                f"## {report_label(detail.output_language, 'next_collection')}\n"
+                "将 Demo 证据替换为当前的官方网页，然后在发布前重新运行声明验证"
+                f"和发布门禁评审。{source_refs}\n\n"
+                f"## {report_label(detail.output_language, 'evidence_appendix')}\n"
+                + "\n".join(
+                    f"- {source.id}：{source.title} / {source.source_type} [source:{source.id}]"
+                    for source in detail.raw_sources[:8]
+                )
+                + "\n\n"
+                "本次 Demo 运行证明了契约：事件、来源、反思、QA 发现和报告 Markdown 均流畅地通过结构化 DTO 传输。"
+            )
         return (
             f"# {detail.plan.topic}\n\n"
             f"## {report_label(detail.output_language, 'executive_summary')}\n"
@@ -3872,18 +3936,30 @@ class RunService(
     def _demo_memory_section(self, detail: RunDetail) -> str:
         if not detail.plan.memory_prompt_context:
             return ""
-        candidate_ids = ", ".join(detail.plan.memory_candidate_ids) or "none"
-        lines = [
-            f"## {report_label(detail.output_language, 'memory_context')}",
-            (
-                "Confirmed MemoryAgent guidance was used as planning and writing context; "
-                "any remembered domain fact still needs current evidence before publication."
-            ),
-            f"- Candidate IDs: {candidate_ids}",
-            f"- Recall score: {detail.plan.memory_recall_score}/100",
-        ]
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        candidate_ids = ", ".join(detail.plan.memory_candidate_ids) or ("无" if is_zh else "none")
+        if is_zh:
+            lines = [
+                f"## {report_label(detail.output_language, 'memory_context')}",
+                (
+                    "已确认的 MemoryAgent 指导被用作规划和写作上下文；"
+                    "任何被记住的领域事实在发布前仍需要当前的证据支持。"
+                ),
+                f"- 候选 ID：{candidate_ids}",
+                f"- 召回得分：{detail.plan.memory_recall_score}/100",
+            ]
+        else:
+            lines = [
+                f"## {report_label(detail.output_language, 'memory_context')}",
+                (
+                    "Confirmed MemoryAgent guidance was used as planning and writing context; "
+                    "any remembered domain fact still needs current evidence before publication."
+                ),
+                f"- Candidate IDs: {candidate_ids}",
+                f"- Recall score: {detail.plan.memory_recall_score}/100",
+            ]
         lines.extend(
-            f"- {_memory_context_label(item)}: {item}"
+            f"- {_memory_context_label(item, is_zh=is_zh)}: {item}"
             for item in detail.plan.memory_prompt_context[:6]
         )
         return "\n".join(lines) + "\n\n"
@@ -4363,15 +4439,15 @@ def _hitl_lifecycle_message(event: HitlLifecycleEvent) -> str:
     return f"HITL lifecycle {event.lifecycle_stage}: {stage} decision={decision}{action}."
 
 
-def _memory_context_label(item: str) -> str:
+def _memory_context_label(item: str, *, is_zh: bool = False) -> str:
     normalized = item.casefold()
     if normalized.startswith("[domain fact") or "domain fact" in normalized:
-        return "Domain fact"
+        return "领域事实" if is_zh else "Domain fact"
     if normalized.startswith("[qa policy") or "qa policy" in normalized:
-        return "QA policy"
+        return "QA策略" if is_zh else "QA policy"
     if normalized.startswith("[failure pattern") or "failure pattern" in normalized:
-        return "Failure pattern"
-    return "Guidance"
+        return "失败模式" if is_zh else "Failure pattern"
+    return "指导" if is_zh else "Guidance"
 
 
 def _metadata_int(value: object) -> int:

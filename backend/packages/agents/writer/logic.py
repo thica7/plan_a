@@ -250,7 +250,7 @@ class WriterAgentMixin:
                     "- The deterministic writer generated this report from structured "
                     "evidence because the narrative writer could not complete."
                 ),
-                f"- Internal reason: {reason}",
+                f"- 内部原因：{reason}" if is_zh else f"- Internal reason: {reason}",
             ]
         )
         return "\n".join(lines)
@@ -264,7 +264,16 @@ class WriterAgentMixin:
     ) -> list[str]:
         refs = self._format_source_refs(source_ids)
         layer = detail.plan.competitor_layer
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         if layer == "L1":
+            if is_zh:
+                return [
+                    "",
+                    f"## {self._layer_section_heading(detail, fallback=fallback)}",
+                    f"- 直接使用定位：在更强证据改变矩阵之前，将此视为近期替代决策。{refs}",
+                    f"- 反对意见处理：在销售或产品响应中，优先考虑定价、包装、功能对齐以及切换触发因素。{refs}",
+                    f"- 行动偏向：使用置信度最高的维度赢家作为初始战报核心，在发布前验证薄弱单元格。{refs}",
+                ]
             return [
                 "",
                 f"## {self._layer_section_heading(detail, fallback=fallback)}",
@@ -282,6 +291,14 @@ class WriterAgentMixin:
                 ),
             ]
         if layer == "L2":
+            if is_zh:
+                return [
+                    "",
+                    f"## {self._layer_section_heading(detail, fallback=fallback)}",
+                    f"- 相邻工作流威胁：通过工作流重叠、集成杠杆和切换成本暴露来解读矩阵。{refs}",
+                    f"- 购买风险：在提出采购建议之前，将已证实的组织控制措施与仅限搜索或低置信度的声明区分开来。{refs}",
+                    f"- 监视列表：监控相邻竞品只需一次集成或打包更改即可吞并目标工作流的维度。{refs}",
+                ]
             return [
                 "",
                 f"## {self._layer_section_heading(detail, fallback=fallback)}",
@@ -299,6 +316,14 @@ class WriterAgentMixin:
                 ),
             ]
         if layer == "L3":
+            if is_zh:
+                return [
+                    "",
+                    f"## {self._layer_section_heading(detail, fallback=fallback)}",
+                    f"- 类别视角：避免单一直接赢家，按细分市场、趋势信号和基准强度对竞品进行分组。{refs}",
+                    f"- 战略视角：在证据广度仍低于景观级覆盖率时，将建议视为投资组合选项。{refs}",
+                    f"- 不确定性视角：在做出类别范围的声明之前，优先增加竞品和市场级来源。{refs}",
+                ]
             return [
                 "",
                 f"## {self._layer_section_heading(detail, fallback=fallback)}",
@@ -315,15 +340,24 @@ class WriterAgentMixin:
                     f"sources before making category-wide claims.{refs}"
                 ),
             ]
-        implication = (
-            "Use this evidence-indexed interim readout until the narrative writer "
-            "can regenerate a fuller version."
-            if fallback
-            else (
-                "Use this section as an evidence-indexed business readout with explicit "
-                "uncertainty."
+        if is_zh:
+            implication = (
+                "在叙事写作器能够重新生成更完整版本之前，请使用此基于证据的临时读取版本。"
+                if fallback
+                else (
+                    "将此部分用作具有明确不确定性的基于证据的业务读取版本。"
+                )
             )
-        )
+        else:
+            implication = (
+                "Use this evidence-indexed interim readout until the narrative writer "
+                "can regenerate a fuller version."
+                if fallback
+                else (
+                    "Use this section as an evidence-indexed business readout with explicit "
+                    "uncertainty."
+                )
+            )
         return [
             "",
             f"## {self._layer_section_heading(detail, fallback=fallback)}",
@@ -334,7 +368,8 @@ class WriterAgentMixin:
         self, detail: RunDetail, source_ids: list[str]
     ) -> list[str]:
         refs = self._format_source_refs(source_ids)
-        dimensions = ", ".join(detail.plan.dimensions) or "the requested dimensions"
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        dimensions = ", ".join(detail.plan.dimensions) or ("所请求的维度" if is_zh else "the requested dimensions")
         competitors = ", ".join(detail.plan.competitors) or detail.topic
         if detail.comparison_matrix is not None and detail.comparison_matrix.winner_by_dimension:
             winners = ", ".join(
@@ -342,7 +377,24 @@ class WriterAgentMixin:
                 for dimension, winner in detail.comparison_matrix.winner_by_dimension.items()
             )
         else:
-            winners = "no scored winner yet; use source coverage and QA status as constraints"
+            winners = "尚无评分赢家；将来源覆盖率和 QA 状态作为约束条件" if is_zh else "no scored winner yet; use source coverage and QA status as constraints"
+        if is_zh:
+            return [
+                "",
+                f"## {report_label(detail.output_language, 'decision_summary')}",
+                (
+                    f"- 推荐行动：使用此 {self._writer_layer_label(detail)} 对比 "
+                    f"{competitors} 在 {dimensions} 上的表现；决策锚定在 {winners}。{refs}"
+                ),
+                (
+                    "- 决策姿态：优先考虑具有已证实、高置信度证据的维度，并将薄弱单元格路由到验证计划中。"
+                    f"{refs}"
+                ),
+                (
+                    "- 当证据为单来源或仅限搜索时，不要夸大矩阵赢家、采购准备就绪度、安全姿态"
+                    f"或定价结论。{refs}"
+                ),
+            ]
         return [
             "",
             f"## {report_label(detail.output_language, 'decision_summary')}",
@@ -361,17 +413,24 @@ class WriterAgentMixin:
         ]
 
     def _fallback_competitive_findings_section(self, detail: RunDetail) -> list[str]:
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = [
             "",
             f"## {report_label(detail.output_language, 'competitive_findings')}",
         ]
         if detail.comparison_matrix is None:
             source_ids = self._matrix_source_ids(detail)
-            lines.append(
-                "- Structured comparison data is still thin; treat source coverage, QA "
-                "findings, and layer context as the main decision constraints."
-                f"{self._format_source_refs(source_ids)}"
-            )
+            if is_zh:
+                lines.append(
+                    "- 结构化对比数据仍然稀疏；将来源覆盖率、QA 发现和层上下文作为主要的决策约束。"
+                    f"{self._format_source_refs(source_ids)}"
+                )
+            else:
+                lines.append(
+                    "- Structured comparison data is still thin; treat source coverage, QA "
+                    "findings, and layer context as the main decision constraints."
+                    f"{self._format_source_refs(source_ids)}"
+                )
             return lines
 
         for dimension in detail.plan.dimensions:
@@ -381,26 +440,45 @@ class WriterAgentMixin:
             source_ids = [source_id for cell in cells for source_id in cell.source_ids]
             winner = detail.comparison_matrix.winner_by_dimension.get(dimension)
             if winner:
-                lines.append(
-                    f"- {dimension}: {winner} leads this dimension, but the implication "
-                    "should stay tied to the cited cells and confidence levels."
-                    f"{self._format_source_refs(source_ids)}"
-                )
+                if is_zh:
+                    lines.append(
+                        f"- {dimension}：{winner} 在该维度领先，但其含义应与引用的单元格和置信水平保持一致。"
+                        f"{self._format_source_refs(source_ids)}"
+                    )
+                else:
+                    lines.append(
+                        f"- {dimension}: {winner} leads this dimension, but the implication "
+                        "should stay tied to the cited cells and confidence levels."
+                        f"{self._format_source_refs(source_ids)}"
+                    )
             elif cells:
-                lines.append(
-                    f"- {dimension}: evidence exists for comparison, but no clear winner "
-                    "should be asserted without another validation pass."
-                    f"{self._format_source_refs(source_ids)}"
-                )
+                if is_zh:
+                    lines.append(
+                        f"- {dimension}：存在用于对比的证据，但在进行另一次验证之前，不应断言明确的赢家。"
+                        f"{self._format_source_refs(source_ids)}"
+                    )
+                else:
+                    lines.append(
+                        f"- {dimension}: evidence exists for comparison, but no clear winner "
+                        "should be asserted without another validation pass."
+                        f"{self._format_source_refs(source_ids)}"
+                    )
         if len(lines) == 2:
-            lines.append(
-                "- No dimension-level findings are available yet; use collection tasks before "
-                "making a competitive recommendation."
-                f"{self._format_source_refs(self._matrix_source_ids(detail))}"
-            )
+            if is_zh:
+                lines.append(
+                    "- 尚无维度级别的发现；在做出竞争建议之前，请使用收集任务。"
+                    f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+                )
+            else:
+                lines.append(
+                    "- No dimension-level findings are available yet; use collection tasks before "
+                    "making a competitive recommendation."
+                    f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+                )
         return lines
 
     def _fallback_competitor_deep_dives_section(self, detail: RunDetail) -> list[str]:
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = [
             "",
             f"## {report_label(detail.output_language, 'competitor_deep_dives')}",
@@ -411,18 +489,32 @@ class WriterAgentMixin:
                 source_ids = [
                     source.id for source in detail.raw_sources if source.competitor == competitor
                 ][:4]
-                lines.append(
-                    f"- {competitor} wins: not established yet; use verified evidence before "
-                    f"claiming advantage.{self._format_source_refs(source_ids)}"
-                )
-                lines.append(
-                    f"- {competitor} weaknesses: under-covered dimensions remain unresolved "
-                    f"until more sources are linked.{self._format_source_refs(source_ids)}"
-                )
-                lines.append(
-                    f"- {competitor} watchouts: avoid absolute claims until QA and source "
-                    f"coverage improve.{self._format_source_refs(source_ids)}"
-                )
+                if is_zh:
+                    lines.append(
+                        f"- {competitor} 优势：尚未确立；在声称优势之前，请使用已证实的证据。"
+                        f"{self._format_source_refs(source_ids)}"
+                    )
+                    lines.append(
+                        f"- {competitor} 劣势：覆盖不足的维度在链接更多来源之前仍未解决。"
+                        f"{self._format_source_refs(source_ids)}"
+                    )
+                    lines.append(
+                        f"- {competitor} 注意事项：在 QA 和来源覆盖率提高之前，避免绝对声明。"
+                        f"{self._format_source_refs(source_ids)}"
+                    )
+                else:
+                    lines.append(
+                        f"- {competitor} wins: not established yet; use verified evidence before "
+                        f"claiming advantage.{self._format_source_refs(source_ids)}"
+                    )
+                    lines.append(
+                        f"- {competitor} weaknesses: under-covered dimensions remain unresolved "
+                        f"until more sources are linked.{self._format_source_refs(source_ids)}"
+                    )
+                    lines.append(
+                        f"- {competitor} watchouts: avoid absolute claims until QA and source "
+                        f"coverage improve.{self._format_source_refs(source_ids)}"
+                    )
                 continue
 
             competitor_cells = [
@@ -439,26 +531,50 @@ class WriterAgentMixin:
                 for dimension, winner in matrix.winner_by_dimension.items()
                 if winner and winner != competitor
             ]
-            wins = ", ".join(winning_dimensions) or "no confirmed dimension winner yet"
-            weaknesses = ", ".join(weaker_dimensions) or "no explicit matrix loss yet"
-            lines.append(
-                f"- {competitor} wins: {wins}; keep the claim scoped to the cited "
-                f"dimension evidence.{self._format_source_refs(source_ids)}"
-            )
-            lines.append(
-                f"- {competitor} weaknesses: {weaknesses}; verify whether gaps are real "
-                "competitive disadvantages or collection limits."
-                f"{self._format_source_refs(source_ids)}"
-            )
-            lines.append(
-                f"- {competitor} watchouts: monitor pricing, packaging, feature, and buyer "
-                "objection claims before turning this into external messaging."
-                f"{self._format_source_refs(source_ids)}"
-            )
+            if is_zh:
+                wins = ", ".join(winning_dimensions) or "尚无确认的维度赢家"
+                weaknesses = ", ".join(weaker_dimensions) or "尚无明确的矩阵落后维度"
+                lines.append(
+                    f"- {competitor} 优势：{wins}；保持声明限定在引用的维度证据范围内。"
+                    f"{self._format_source_refs(source_ids)}"
+                )
+                lines.append(
+                    f"- {competitor} 劣势：{weaknesses}；验证差距是真正的竞争劣势还是收集限制。"
+                    f"{self._format_source_refs(source_ids)}"
+                )
+                lines.append(
+                    f"- {competitor} 注意事项：在将这些转为外部宣传信息之前，监控定价、包装、功能和买家反对意见声明。"
+                    f"{self._format_source_refs(source_ids)}"
+                )
+            else:
+                wins = ", ".join(winning_dimensions) or "no confirmed dimension winner yet"
+                weaknesses = ", ".join(weaker_dimensions) or "no explicit matrix loss yet"
+                lines.append(
+                    f"- {competitor} wins: {wins}; keep the claim scoped to the cited "
+                    f"dimension evidence.{self._format_source_refs(source_ids)}"
+                )
+                lines.append(
+                    f"- {competitor} weaknesses: {weaknesses}; verify whether gaps are real "
+                    "competitive disadvantages or collection limits."
+                    f"{self._format_source_refs(source_ids)}"
+                )
+                lines.append(
+                    f"- {competitor} watchouts: monitor pricing, packaging, feature, and buyer "
+                    "objection claims before turning this into external messaging."
+                    f"{self._format_source_refs(source_ids)}"
+                )
         return lines
 
     def _fallback_evidence_support_section(self, detail: RunDetail) -> list[str]:
         refs = self._format_source_refs(self._matrix_source_ids(detail))
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        if is_zh:
+            return [
+                "",
+                f"## {report_label(detail.output_language, 'evidence_support')}",
+                f"- 使用以下支持部分来审计来源质量、场景 QA、知识覆盖、声明风险以及剩余的验证任务。{refs}",
+                f"- 保持支持材料简洁且完整，以便上面的决策分析仍为主要读取内容。{refs}",
+            ]
         return [
             "",
             f"## {report_label(detail.output_language, 'evidence_support')}",
@@ -474,11 +590,12 @@ class WriterAgentMixin:
 
     def _fallback_source_quality_section(self, detail: RunDetail) -> list[str]:
         heading = report_label(detail.output_language, "source_quality")
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         if not detail.raw_sources:
             return [
                 "",
                 f"## {heading}",
-                "- No raw sources are available, so all conclusions require collection before use.",
+                "- 没有可用的原始来源，因此所有结论在使用前都需要进行收集。" if is_zh else "- No raw sources are available, so all conclusions require collection before use.",
             ]
         by_type: dict[str, list[tuple[str, float]]] = {}
         for source in detail.raw_sources:
@@ -487,35 +604,61 @@ class WriterAgentMixin:
         for source_type, values in sorted(by_type.items()):
             source_ids = [source_id for source_id, _confidence in values]
             avg_confidence = sum(confidence for _source_id, confidence in values) / len(values)
-            lines.append(
-                f"- {source_type}: {len(values)} source(s), avg confidence "
-                f"{avg_confidence:.2f}{self._format_source_refs(source_ids)}"
-            )
+            if is_zh:
+                lines.append(
+                    f"- {source_type}：{len(values)} 个来源，平均置信度 "
+                    f"{avg_confidence:.2f}{self._format_source_refs(source_ids)}"
+                )
+            else:
+                lines.append(
+                    f"- {source_type}: {len(values)} source(s), avg confidence "
+                    f"{avg_confidence:.2f}{self._format_source_refs(source_ids)}"
+                )
         return lines
 
     def _fallback_scenario_checklist_section(self, detail: RunDetail) -> list[str]:
         scenario_id = detail.plan.scenario_id or "auto"
         pack = get_scenario_pack(scenario_id) if detail.plan.scenario_id else None
         recommended = detail.plan.scenario_recommended_dimensions or detail.plan.dimensions
-        lines = [
-            "",
-            f"## {report_label(detail.output_language, 'scenario_checklist')}",
-            (
-                f"- Scenario: {scenario_id}; layer: {detail.plan.competitor_layer}; "
-                f"recommended dimensions: {', '.join(recommended) or 'none'}."
-            ),
-        ]
-        if pack is not None:
-            lines.append(f"- Scenario intent: {pack.description}")
-            for question in pack.analyst_questions[:3]:
-                lines.append(f"- Analyst question: {question}")
-            for requirement in pack.evidence_requirements[:3]:
-                lines.append(f"- Evidence requirement: {requirement}")
-        if detail.plan.qa_rule_ids:
-            lines.append(f"- QA rules: {', '.join(detail.plan.qa_rule_ids)}")
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        if is_zh:
+            lines = [
+                "",
+                f"## {report_label(detail.output_language, 'scenario_checklist')}",
+                (
+                    f"- 场景：{scenario_id}；竞品层：{detail.plan.competitor_layer}；"
+                    f"推荐维度：{', '.join(recommended) or '无'}。"
+                ),
+            ]
+            if pack is not None:
+                lines.append(f"- 场景意图：{pack.description}")
+                for question in pack.analyst_questions[:3]:
+                    lines.append(f"- 分析师问题：{question}")
+                for requirement in pack.evidence_requirements[:3]:
+                    lines.append(f"- 证据要求：{requirement}")
+            if detail.plan.qa_rule_ids:
+                lines.append(f"- QA 规则：{', '.join(detail.plan.qa_rule_ids)}")
+        else:
+            lines = [
+                "",
+                f"## {report_label(detail.output_language, 'scenario_checklist')}",
+                (
+                    f"- Scenario: {scenario_id}; layer: {detail.plan.competitor_layer}; "
+                    f"recommended dimensions: {', '.join(recommended) or 'none'}."
+                ),
+            ]
+            if pack is not None:
+                lines.append(f"- Scenario intent: {pack.description}")
+                for question in pack.analyst_questions[:3]:
+                    lines.append(f"- Analyst question: {question}")
+                for requirement in pack.evidence_requirements[:3]:
+                    lines.append(f"- Evidence requirement: {requirement}")
+            if detail.plan.qa_rule_ids:
+                lines.append(f"- QA rules: {', '.join(detail.plan.qa_rule_ids)}")
         return lines
 
     def _fallback_next_collection_plan(self, detail: RunDetail) -> list[str]:
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = ["", f"## {report_label(detail.output_language, 'next_collection')}"]
         source_ids_by_dimension: dict[str, list[str]] = {}
         for source in detail.raw_sources:
@@ -526,32 +669,59 @@ class WriterAgentMixin:
             if len(source_ids) >= max(1, min(2, len(detail.plan.competitors))):
                 continue
             planned += 1
-            lines.append(
-                f"- Add stronger {dimension} evidence for under-covered competitors"
-                f"{self._format_source_refs(source_ids)}"
-            )
+            if is_zh:
+                lines.append(
+                    f"- 为覆盖不足的竞品添加更强的 {dimension} 证据"
+                    f"{self._format_source_refs(source_ids)}"
+                )
+            else:
+                lines.append(
+                    f"- Add stronger {dimension} evidence for under-covered competitors"
+                    f"{self._format_source_refs(source_ids)}"
+                )
         for issue in detail.qa_findings[:3]:
             planned += 1
-            lines.append(f"- Resolve QA finding `{issue.id}`: {issue.problem}")
+            if is_zh:
+                lines.append(f"- 解决 QA 发现 `{issue.id}`：{issue.problem}")
+            else:
+                lines.append(f"- Resolve QA finding `{issue.id}`: {issue.problem}")
         if planned == 0:
-            lines.append(
-                "- Re-run collection only for stale, rejected, or low-confidence evidence."
-            )
+            if is_zh:
+                lines.append(
+                    "- 仅针对陈旧、被拒绝或低置信度的证据重新进行收集。"
+                )
+            else:
+                lines.append(
+                    "- Re-run collection only for stale, rejected, or low-confidence evidence."
+                )
         return lines
 
     def _fallback_evidence_appendix(self, detail: RunDetail) -> list[str]:
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = ["", f"## {report_label(detail.output_language, 'evidence_appendix')}"]
         if not detail.raw_sources:
-            lines.append("- No evidence records are attached to this report draft.")
+            if is_zh:
+                lines.append("- 本报告草案未附带任何证据记录。")
+            else:
+                lines.append("- No evidence records are attached to this report draft.")
             return lines
         for source in detail.raw_sources[:8]:
-            lines.append(
-                f"- {source.id}: {source.title} / {source.source_type} / confidence "
-                f"{source.confidence:.2f} [source:{source.id}]"
-            )
+            if is_zh:
+                lines.append(
+                    f"- {source.id}：{source.title} / {source.source_type} / 置信度 "
+                    f"{source.confidence:.2f} [source:{source.id}]"
+                )
+            else:
+                lines.append(
+                    f"- {source.id}: {source.title} / {source.source_type} / confidence "
+                    f"{source.confidence:.2f} [source:{source.id}]"
+                )
         if len(detail.raw_sources) > 8:
             omitted_count = len(detail.raw_sources) - 8
-            lines.append(f"- {omitted_count} additional source(s) omitted from this appendix.")
+            if is_zh:
+                lines.append(f"- 附录中省略了 {omitted_count} 个额外来源。")
+            else:
+                lines.append(f"- {omitted_count} additional source(s) omitted from this appendix.")
         return lines
 
     def _harden_report_markdown(self, detail: RunDetail, markdown: str) -> str:
@@ -1270,32 +1440,45 @@ class WriterAgentMixin:
     def _fallback_memory_context_section(self, detail: RunDetail) -> list[str]:
         if not detail.plan.memory_prompt_context:
             return []
-        candidate_ids = ", ".join(detail.plan.memory_candidate_ids) or "none"
-        lines = [
-            "",
-            f"## {report_label(detail.output_language, 'memory_context')}",
-            (
-                "Confirmed MemoryAgent guidance was used as planning and writing context; "
-                "any remembered domain fact still needs current evidence before publication."
-            ),
-            f"- Candidate IDs: {candidate_ids}",
-            f"- Recall score: {detail.plan.memory_recall_score}/100",
-        ]
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        candidate_ids = ", ".join(detail.plan.memory_candidate_ids) or ("无" if is_zh else "none")
+        if is_zh:
+            lines = [
+                "",
+                f"## {report_label(detail.output_language, 'memory_context')}",
+                (
+                    "已确认的 MemoryAgent 指导被用作规划和写作上下文；"
+                    "任何被记住的领域事实在发布前仍需要当前的证据支持。"
+                ),
+                f"- 候选 ID：{candidate_ids}",
+                f"- 召回得分：{detail.plan.memory_recall_score}/100",
+            ]
+        else:
+            lines = [
+                "",
+                f"## {report_label(detail.output_language, 'memory_context')}",
+                (
+                    "Confirmed MemoryAgent guidance was used as planning and writing context; "
+                    "any remembered domain fact still needs current evidence before publication."
+                ),
+                f"- Candidate IDs: {candidate_ids}",
+                f"- Recall score: {detail.plan.memory_recall_score}/100",
+            ]
         lines.extend(
-            f"- {self._memory_context_label(item)}: {item}"
+            f"- {self._memory_context_label(item, is_zh=is_zh)}: {item}"
             for item in detail.plan.memory_prompt_context[:6]
         )
         return lines
 
-    def _memory_context_label(self, item: str) -> str:
+    def _memory_context_label(self, item: str, *, is_zh: bool = False) -> str:
         normalized = item.casefold()
         if normalized.startswith("[domain fact") or "domain fact" in normalized:
-            return "Domain fact"
+            return "领域事实" if is_zh else "Domain fact"
         if normalized.startswith("[qa policy") or "qa policy" in normalized:
-            return "QA policy"
+            return "QA策略" if is_zh else "QA policy"
         if normalized.startswith("[failure pattern") or "failure pattern" in normalized:
-            return "Failure pattern"
-        return "Guidance"
+            return "失败模式" if is_zh else "Failure pattern"
+        return "指导" if is_zh else "Guidance"
 
     def _fallback_user_research_section(self, detail: RunDetail) -> list[str]:
         research_sources = [
@@ -1309,26 +1492,47 @@ class WriterAgentMixin:
         )
         if not research_sources and not persona_requested:
             return []
-        lines = [
-            "",
-            f"## {report_label(detail.output_language, 'user_research_evidence')}",
-            (
-                "Survey, interview, and manual-note inputs are treated as directional "
-                "buyer or user signals, not as official factual proof."
-            ),
-        ]
-        if not research_sources:
-            lines.append(
-                "- Persona or review analysis was requested, but no user-research source "
-                "is attached yet; keep persona conclusions in the evidence-gap lane."
-                f"{self._format_source_refs(self._matrix_source_ids(detail))}"
-            )
-            return lines
-        for source in research_sources[:5]:
-            lines.append(
-                f"- {source.title} / {source.source_type} / confidence {source.confidence:.2f}"
-                f" [source:{source.id}]"
-            )
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        if is_zh:
+            lines = [
+                "",
+                f"## {report_label(detail.output_language, 'user_research_evidence')}",
+                (
+                    "调查问卷、访谈和手动笔记输入被视为方向性的买家或用户信号，而非官方的事实证明。"
+                ),
+            ]
+            if not research_sources:
+                lines.append(
+                    "- 已请求用户画像或评论分析，但尚未附加用户研究来源；将画像结论保持在证据差距通道中。"
+                    f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+                )
+                return lines
+            for source in research_sources[:5]:
+                lines.append(
+                    f"- {source.title} / {source.source_type} / 置信度 {source.confidence:.2f}"
+                    f" [source:{source.id}]"
+                )
+        else:
+            lines = [
+                "",
+                f"## {report_label(detail.output_language, 'user_research_evidence')}",
+                (
+                    "Survey, interview, and manual-note inputs are treated as directional "
+                    "buyer or user signals, not as official factual proof."
+                ),
+            ]
+            if not research_sources:
+                lines.append(
+                    "- Persona or review analysis was requested, but no user-research source "
+                    "is attached yet; keep persona conclusions in the evidence-gap lane."
+                    f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+                )
+                return lines
+            for source in research_sources[:5]:
+                lines.append(
+                    f"- {source.title} / {source.source_type} / confidence {source.confidence:.2f}"
+                    f" [source:{source.id}]"
+                )
         return lines
 
     def _fallback_rag_gap_fill_section(self, detail: RunDetail) -> list[str]:
@@ -1339,30 +1543,54 @@ class WriterAgentMixin:
         ]
         if not collector_gaps:
             return []
-        lines = [
-            "",
-            f"## {report_label(detail.output_language, 'rag_gap_fill')}",
-            (
-                "Collector evidence gaps should be closed through retrieval before this "
-                "report is published or used as a final decision artifact."
-            ),
-        ]
-        for issue in collector_gaps[:5]:
-            scope = issue.redo_scope
-            target = scope.target_subagent or issue.target_subagent or issue.field_path
-            competitor = scope.target_competitor or issue.target_competitor or "all competitors"
-            query = self._gap_fill_query(detail, issue)
-            sources = self._format_source_refs(self._matrix_source_ids(detail))
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        if is_zh:
+            lines = [
+                "",
+                f"## {report_label(detail.output_language, 'rag_gap_fill')}",
+                (
+                    "在报告发布或用作最终决策产物之前，应通过检索来填补收集器证据差距。"
+                ),
+            ]
+            for issue in collector_gaps[:5]:
+                scope = issue.redo_scope
+                target = scope.target_subagent or issue.target_subagent or issue.field_path
+                competitor = scope.target_competitor or issue.target_competitor or "所有竞品"
+                query = self._gap_fill_query(detail, issue)
+                sources = self._format_source_refs(self._matrix_source_ids(detail))
+                lines.append(
+                    f"- 差距 `{issue.id}`：{issue.problem} 目标={target}；"
+                    f"竞品={competitor}；重新执行={scope.kind}。"
+                    f"建议的检索查询：{query}。{sources}"
+                )
             lines.append(
-                f"- Gap `{issue.id}`: {issue.problem} Target={target}; "
-                f"competitor={competitor}; redo={scope.kind}. "
-                f"Suggested retrieval query: {query}.{sources}"
+                "- 运行“证据差距填补”操作以检索、重排并附加已证实的证据。生成的草案版本应链接已填补的差距 ID 和检索上下文。"
             )
-        lines.append(
-            "- Run the Evidence Gap Fill action to retrieve, rerank, and attach verified "
-            "evidence. The resulting draft version should link filled gap IDs and "
-            "retrieval contexts."
-        )
+        else:
+            lines = [
+                "",
+                f"## {report_label(detail.output_language, 'rag_gap_fill')}",
+                (
+                    "Collector evidence gaps should be closed through retrieval before this "
+                    "report is published or used as a final decision artifact."
+                ),
+            ]
+            for issue in collector_gaps[:5]:
+                scope = issue.redo_scope
+                target = scope.target_subagent or issue.target_subagent or issue.field_path
+                competitor = scope.target_competitor or issue.target_competitor or "all competitors"
+                query = self._gap_fill_query(detail, issue)
+                sources = self._format_source_refs(self._matrix_source_ids(detail))
+                lines.append(
+                    f"- Gap `{issue.id}`: {issue.problem} Target={target}; "
+                    f"competitor={competitor}; redo={scope.kind}. "
+                    f"Suggested retrieval query: {query}.{sources}"
+                )
+            lines.append(
+                "- Run the Evidence Gap Fill action to retrieve, rerank, and attach verified "
+                "evidence. The resulting draft version should link filled gap IDs and "
+                "retrieval contexts."
+            )
         return lines
 
     def _gap_fill_query(self, detail: RunDetail, issue: QCIssue) -> str:
@@ -1376,6 +1604,7 @@ class WriterAgentMixin:
         return " ".join(query.split())[:180]
 
     def _fallback_claim_validation_section(self, detail: RunDetail) -> list[str]:
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = ["", f"## {report_label(detail.output_language, 'claim_risk')}"]
         source_by_id = {source.id: source for source in detail.raw_sources}
         claims = self._knowledge_claims(detail)
@@ -1384,12 +1613,20 @@ class WriterAgentMixin:
             "warn": sum(1 for issue in detail.qa_findings if issue.severity == "warn"),
             "info": sum(1 for issue in detail.qa_findings if issue.severity == "info"),
         }
-        lines.append(
-            "- QA status: "
-            f"{issue_counts['blocker']} blocker(s), {issue_counts['warn']} warning(s), "
-            f"{issue_counts['info']} info finding(s) across {len(claims)} structured claim(s)."
-            f"{self._format_source_refs(self._matrix_source_ids(detail))}"
-        )
+        if is_zh:
+            lines.append(
+                "- QA 状态："
+                f"{issue_counts['blocker']} 个阻碍型，{issue_counts['warn']} 个警告型，"
+                f"{issue_counts['info']} 个信息型发现，存在于 {len(claims)} 个结构化声明中。"
+                f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+            )
+        else:
+            lines.append(
+                "- QA status: "
+                f"{issue_counts['blocker']} blocker(s), {issue_counts['warn']} warning(s), "
+                f"{issue_counts['info']} info finding(s) across {len(claims)} structured claim(s)."
+                f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+            )
 
         weak_claims = [
             claim
@@ -1402,33 +1639,57 @@ class WriterAgentMixin:
             for claim in weak_claims[:5]:
                 labels = []
                 if claim.confidence < 0.65:
-                    labels.append(f"confidence {claim.confidence:.2f}")
+                    labels.append(f"置信度 {claim.confidence:.2f}" if is_zh else f"confidence {claim.confidence:.2f}")
                 if self._claim_has_weak_sources(claim.source_ids, source_by_id):
-                    labels.append("weak source mix")
+                    labels.append("弱来源组合" if is_zh else "weak source mix")
                 if self._claim_needs_triangulation(claim.claim, claim.source_ids):
-                    labels.append("needs triangulation")
-                lines.append(
-                    f"- Review claim ({', '.join(labels)}): {self._trim_sentence(claim.claim)}"
-                    f"{self._format_source_refs(claim.source_ids)}"
-                )
+                    labels.append("需要交叉验证" if is_zh else "needs triangulation")
+                if is_zh:
+                    lines.append(
+                        f"- 审查声明 ({', '.join(labels)})：{self._trim_sentence(claim.claim)}"
+                        f"{self._format_source_refs(claim.source_ids)}"
+                    )
+                else:
+                    lines.append(
+                        f"- Review claim ({', '.join(labels)}): {self._trim_sentence(claim.claim)}"
+                        f"{self._format_source_refs(claim.source_ids)}"
+                    )
         else:
-            lines.append(
-                "- No low-confidence or single-source high-risk structured claims were detected."
-                f"{self._format_source_refs(self._matrix_source_ids(detail))}"
-            )
+            if is_zh:
+                lines.append(
+                    "- 未检测到低置信度或单来源的高风险结构化声明。"
+                    f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+                )
+            else:
+                lines.append(
+                    "- No low-confidence or single-source high-risk structured claims were detected."
+                    f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+                )
 
         for issue in detail.qa_findings[:4]:
-            lines.append(
-                f"- QA {issue.severity} `{issue.id}`: "
-                f"{self._trim_sentence(issue.problem)}"
-            )
+            if is_zh:
+                lines.append(
+                    f"- QA {issue.severity} `{issue.id}`："
+                    f"{self._trim_sentence(issue.problem)}"
+                )
+            else:
+                lines.append(
+                    f"- QA {issue.severity} `{issue.id}`: "
+                    f"{self._trim_sentence(issue.problem)}"
+                )
 
         reflection_gaps = self._reflection_gap_notes(detail)
         for note in reflection_gaps[:4]:
-            lines.append(
-                f"- Evidence gap: {self._trim_sentence(note)}"
-                f"{self._format_source_refs(self._matrix_source_ids(detail))}"
-            )
+            if is_zh:
+                lines.append(
+                    f"- 证据差距：{self._trim_sentence(note)}"
+                    f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+                )
+            else:
+                lines.append(
+                    f"- Evidence gap: {self._trim_sentence(note)}"
+                    f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+                )
         return lines
 
     def _knowledge_claims(self, detail: RunDetail) -> list[KnowledgeClaim]:

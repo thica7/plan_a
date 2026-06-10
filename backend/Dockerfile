@@ -7,6 +7,7 @@ ARG PIP_TRUSTED_HOST=
 ARG PLAYWRIGHT_DOWNLOAD_HOST=
 ARG APT_MIRROR=http://deb.debian.org/debian
 ARG APT_SECURITY_MIRROR=http://deb.debian.org/debian-security
+ARG INSTALL_PLAYWRIGHT_BROWSERS=1
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_INDEX_URL=${PIP_INDEX_URL} \
@@ -31,7 +32,11 @@ RUN sed -i \
         -e "s|http://deb.debian.org/debian-security|${APT_SECURITY_MIRROR}|g" \
         -e "s|http://deb.debian.org/debian|${APT_MIRROR}|g" \
         /etc/apt/sources.list.d/debian.sources \
-    && python -m playwright install --with-deps chromium
+    && if [ "${INSTALL_PLAYWRIGHT_BROWSERS}" = "1" ]; then \
+        python -m playwright install --with-deps chromium; \
+    else \
+        python -m playwright install-deps chromium; \
+    fi
 
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000

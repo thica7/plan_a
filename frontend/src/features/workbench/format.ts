@@ -12,8 +12,22 @@ export function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`;
 }
 
+export function parseUTC(value: string): Date {
+  if (!value) return new Date();
+  let dateStr = value;
+  if (!value.endsWith("Z") && !value.includes("+") && !value.includes("GMT")) {
+    if (value.includes("T") || value.includes(" ")) {
+      dateStr = value.replace(" ", "T");
+      if (!dateStr.endsWith("Z")) {
+        dateStr += "Z";
+      }
+    }
+  }
+  return new Date(dateStr);
+}
+
 export function formatDate(value: string) {
-  const date = new Date(value);
+  const date = parseUTC(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",

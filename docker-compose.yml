@@ -65,6 +65,7 @@ services:
         PLAYWRIGHT_DOWNLOAD_HOST: ${PLAYWRIGHT_DOWNLOAD_HOST:-}
         APT_MIRROR: ${APT_MIRROR:-http://deb.debian.org/debian}
         APT_SECURITY_MIRROR: ${APT_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+        INSTALL_PLAYWRIGHT_BROWSERS: ${INSTALL_PLAYWRIGHT_BROWSERS:-1}
     env_file: .env
     environment:
       QDRANT_URL: http://qdrant:6333
@@ -111,6 +112,7 @@ services:
         PLAYWRIGHT_DOWNLOAD_HOST: ${PLAYWRIGHT_DOWNLOAD_HOST:-}
         APT_MIRROR: ${APT_MIRROR:-http://deb.debian.org/debian}
         APT_SECURITY_MIRROR: ${APT_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+        INSTALL_PLAYWRIGHT_BROWSERS: ${INSTALL_PLAYWRIGHT_BROWSERS:-1}
     env_file: .env
     command: ["python", "-m", "packages.workflows.worker"]
     environment:
