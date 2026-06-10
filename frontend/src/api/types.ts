@@ -171,6 +171,22 @@ export interface CompetitorDiscovery {
   created_at: string;
 }
 
+export interface CompetitorEdit {
+  action: "add" | "remove" | "rename" | "keep" | "mark_unrelated";
+  name: string;
+  new_name?: string | null;
+  reason: string;
+  source_note: string;
+}
+
+export interface HitlResumePayload {
+  decision: "accept" | "modify_plan" | "force_pass" | "redo";
+  note?: string;
+  dimensions?: string[];
+  competitors?: string[];
+  competitor_edits?: CompetitorEdit[];
+}
+
 export interface RevisionRecord {
   id: string;
   iteration: number;

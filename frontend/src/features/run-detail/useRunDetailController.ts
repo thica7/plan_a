@@ -25,9 +25,16 @@ import type { RunDetailView } from "./types";
 import { flattenReflection } from "./utils";
 import {
   canApplyPlanDimensions,
+  buildCompetitorReviewRows,
+  canSavePlanReview,
+  serializeCompetitorReview,
+  updateCompetitorRowDecision,
+  updateCompetitorRowName,
   fallbackHitlMessage,
   hitlStageFromCurrentNode,
   parsePlanDimensionsInput,
+  type CompetitorReviewDecision,
+  type CompetitorReviewRow,
 } from "./planReview";
 
 export type HitlDecision = "accept" | "modify_plan" | "force_pass" | "redo";
@@ -42,6 +49,7 @@ export function useRunDetailController() {
   const [error, setError] = useState<string | null>(null);
   const [isRedoing, setRedoing] = useState(false);
   const [planDimensions, setPlanDimensions] = useState("");
+  const [competitorRows, setCompetitorRows] = useState<CompetitorReviewRow[]>([]);
   const [qualityComparison, setQualityComparison] = useState<RunQualityComparison | null>(null);
   const [qualityBaselineRunId, setQualityBaselineRunId] = useState("");
   const [runHistory, setRunHistory] = useState<RunSummary[]>([]);
@@ -53,6 +61,9 @@ export function useRunDetailController() {
   const redoLimitReached = detail ? detail.revisions.length >= detail.max_iterations : false;
   const canApplyPlanDimensionChanges = detail
     ? canApplyPlanDimensions(planDimensions, detail.plan.dimensions)
+    : false;
+  const canApplyPlanReviewChanges = detail
+    ? canSavePlanReview(competitorRows, detail.plan.competitors, canApplyPlanDimensionChanges)
     : false;
   const latestInterrupt = useMemo(
     () => [...events].reverse().find((event) => event.type === "interrupt"),
@@ -213,8 +224,9 @@ export function useRunDetailController() {
   useEffect(() => {
     if (detail) {
       setPlanDimensions(detail.plan.dimensions.join(", "));
+      setCompetitorRows(buildCompetitorReviewRows(detail.competitor_discovery, detail.plan.competitors));
     }
-  }, [detail?.id, detail?.plan.dimensions]);
+  }, [detail?.id, detail?.plan.competitors, detail?.plan.dimensions, detail?.competitor_discovery]);
 
   const latestReflection = detail?.reflections.length ? detail.reflections[detail.reflections.length - 1] : null;
   const reflectionItems = latestReflection ? flattenReflection(latestReflection) : [];
@@ -250,9 +262,10 @@ export function useRunDetailController() {
               decision,
               note: "Plan reviewed in HITL panel",
               dimensions: parsePlanDimensionsInput(planDimensions),
+              ...serializeCompetitorReview(competitorRows),
             }
           : { decision, note: "Reviewed in HITL panel" };
-      if (decision === "modify_plan" && !canApplyPlanDimensionChanges) {
+      if (decision === "modify_plan" && !canApplyPlanReviewChanges) {
         return;
       }
       const updated = await resumeRun(runId, payload);
@@ -263,6 +276,52 @@ export function useRunDetailController() {
       setRedoing(false);
     }
   }
+
+  const handleAddCompetitor = useCallback(() => {
+    setCompetitorRows((rows) => [
+      ...rows,
+      {
+        id: `manual-${Date.now()}-${rows.length + 1}`,
+        originalName: null,
+        name: "",
+        decision: "keep",
+        initialDecision: "keep",
+        confidenceLabel: "",
+        rationale: "",
+        evidenceUrls: [],
+        evidenceTitles: [],
+        note: "",
+        manual: true,
+      },
+    ]);
+  }, []);
+
+  const handleCompetitorNameChange = useCallback((id: string, name: string) => {
+    setCompetitorRows((rows) => updateCompetitorRowName(rows, id, name));
+  }, []);
+
+  const handleCompetitorDecisionChange = useCallback(
+    (id: string, decision: CompetitorReviewDecision) => {
+      setCompetitorRows((rows) => updateCompetitorRowDecision(rows, id, decision));
+    },
+    [],
+  );
+
+  const handleCompetitorNoteChange = useCallback((id: string, note: string) => {
+    setCompetitorRows((rows) =>
+      rows.map((row) => (row.id === id ? { ...row, note } : row)),
+    );
+  }, []);
+
+  const handleDeleteCompetitor = useCallback((id: string) => {
+    setCompetitorRows((rows) =>
+      rows.flatMap((row) => {
+        if (row.id !== id) return [row];
+        if (row.manual) return [];
+        return [{ ...row, decision: "remove" as const }];
+      }),
+    );
+  }, []);
 
   async function handleExportCompliance() {
     if (!runId) return;
@@ -280,7 +339,7 @@ export function useRunDetailController() {
 
   return {
     activeView,
-    canApplyPlanDimensionChanges,
+    canApplyPlanReviewChanges,
     citedClaimRate,
     complianceExport,
     complianceReport,
@@ -289,6 +348,11 @@ export function useRunDetailController() {
     error,
     events,
     handleExportCompliance,
+    handleAddCompetitor,
+    handleCompetitorDecisionChange,
+    handleCompetitorNameChange,
+    handleCompetitorNoteChange,
+    handleDeleteCompetitor,
     handleHitl,
     handleRedo,
     interruptStage,
@@ -296,6 +360,7 @@ export function useRunDetailController() {
     isRedoing,
     latestInterrupt: visibleInterrupt,
     planDimensions,
+    competitorRows,
     qualityBaselineRunId,
     qualityComparison,
     recommendedDimensions,

@@ -437,6 +437,23 @@ class RuntimeCommandService:
     ) -> RuntimeCommandResult:
         detail = self._run_or_error(command.run_id, actor, "project:write")
         has_pending_interrupt = self._run_service.has_pending_interrupt(command.run_id)
+        has_competitor_edits = command.request.competitors is not None or bool(
+            command.request.competitor_edits
+        )
+        if has_competitor_edits and command.request.decision != "modify_plan":
+            raise RuntimeCommandError(
+                409,
+                "Competitor edits require modify_plan decision.",
+                command_type="resume_review",
+            )
+        if has_competitor_edits and not self._run_service.can_modify_plan_competitors(
+            command.run_id
+        ):
+            raise RuntimeCommandError(
+                409,
+                "Competitor edits require an active planner review.",
+                command_type="resume_review",
+            )
         if command.request.decision == "redo" and not has_pending_interrupt:
             raise RuntimeCommandError(
                 409,

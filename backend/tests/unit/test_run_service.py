@@ -28,6 +28,8 @@ from packages.schema.models import (
     AnalysisPlan,
     ComparisonCell,
     ComparisonMatrix,
+    CompetitorCandidate,
+    CompetitorDiscovery,
     CompetitorKB,
     CompetitorKnowledge,
     KnowledgeClaim,
@@ -546,6 +548,73 @@ async def test_run_request_can_enable_hitl_per_run() -> None:
     )
 
     assert detail.hitl_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_real_topic_only_run_enables_planner_review_by_default() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            backup_llm_api_key="backup-key",
+            backup_llm_model="backup-model",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=False,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Agentic AI IDE",
+                competitors=[],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+
+        assert detail.hitl_enabled is True
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_explicit_hitl_false_overrides_topic_only_default() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            backup_llm_api_key="backup-key",
+            backup_llm_model="backup-model",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Agentic AI IDE",
+                competitors=[],
+                dimensions=["pricing"],
+                execution_mode="real",
+                hitl_enabled=False,
+            )
+        )
+
+        assert detail.hitl_enabled is False
+    finally:
+        await service._graph_checkpointer.aclose()
 
 
 @pytest.mark.asyncio
@@ -6975,6 +7044,41 @@ async def test_demo_pipeline_uses_same_langgraph_fanout_shape() -> None:
         await service._graph_checkpointer.aclose()
 
 
+def test_hitl_resume_request_accepts_competitor_edits() -> None:
+    request = HitlResumeRequest(
+        decision="modify_plan",
+        dimensions=["pricing", "feature"],
+        competitors=["Cursor", "GitHub Copilot", "Windsurf"],
+        competitor_edits=[
+            {
+                "action": "rename",
+                "name": "Replit",
+                "new_name": "Windsurf",
+                "reason": "Windsurf is the direct AI IDE competitor.",
+                "source_note": "Reviewer correction",
+            },
+            {
+                "action": "remove",
+                "name": "Replit",
+                "reason": "Adjacent market, not target market.",
+            },
+        ],
+    )
+
+    assert request.competitors == ["Cursor", "GitHub Copilot", "Windsurf"]
+    assert request.competitor_edits[0].action == "rename"
+    assert request.competitor_edits[0].new_name == "Windsurf"
+    assert request.competitor_edits[1].action == "remove"
+
+
+def test_hitl_resume_request_keeps_existing_payload_compatible() -> None:
+    request = HitlResumeRequest(decision="modify_plan", dimensions=["feature"])
+
+    assert request.dimensions == ["feature"]
+    assert request.competitors is None
+    assert request.competitor_edits == []
+
+
 @pytest.mark.asyncio
 async def test_hitl_uses_langgraph_command_resume_and_updates_plan() -> None:
     service = RunService(
@@ -7068,6 +7172,255 @@ async def test_hitl_uses_langgraph_command_resume_and_updates_plan() -> None:
             and event.payload["hitl_lifecycle"]["lifecycle_stage"] == "resumed"
             for event in service.get_trace(detail.id) or []
         )
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_planner_hitl_resume_updates_competitors_and_discovery() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    async def fake_resume_graph(run_id, request):  # noqa: ANN001, ANN202
+        return None
+
+    service._resume_interrupted_graph = fake_resume_graph  # type: ignore[method-assign]
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="AI IDE",
+                competitors=["Cursor", "GitHub Co-pilot", "Replit"],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+        record = service._runs[detail.id]
+        record.pending_interrupts["planner"] = {
+            "stage": "planner",
+            "graph_kind": "real",
+            "thread_id": "thread-plan-review",
+            "interrupt_node": "planner_hitl",
+        }
+        record.detail.competitor_discovery = CompetitorDiscovery(
+            query="AI IDE competitors",
+            selected_competitors=["Cursor", "GitHub Co-pilot", "Replit"],
+            candidates=[
+                CompetitorCandidate(
+                    name="Cursor",
+                    rank=1,
+                    selected=True,
+                    rationale="Direct AI IDE.",
+                    confidence=0.9,
+                ),
+                CompetitorCandidate(
+                    name="GitHub Co-pilot",
+                    rank=2,
+                    selected=True,
+                    rationale="Direct coding assistant with spelling variant.",
+                    confidence=0.8,
+                ),
+                CompetitorCandidate(
+                    name="Replit",
+                    rank=3,
+                    selected=True,
+                    rationale="Adjacent coding platform.",
+                    confidence=0.55,
+                ),
+            ],
+        )
+        record.detail.plan.homepage_hints = {
+            "Cursor": "https://cursor.com",
+            "GitHub Co-pilot": "https://github.com/features/copilot",
+            "Replit": "https://replit.com",
+        }
+        record.detail.plan.homepage_verified = {
+            "Cursor": True,
+            "GitHub Co-pilot": True,
+            "Replit": True,
+        }
+
+        updated = await service.resume(
+            detail.id,
+            HitlResumeRequest(
+                decision="modify_plan",
+                dimensions=["pricing", "feature"],
+                competitors=["Cursor", "GitHub Copilot", "Windsurf"],
+                competitor_edits=[
+                    {
+                        "action": "rename",
+                        "name": "GitHub Co-pilot",
+                        "new_name": "GitHub Copilot",
+                        "reason": "Normalize product spelling.",
+                    },
+                    {
+                        "action": "remove",
+                        "name": "Replit",
+                        "reason": "Adjacent market.",
+                    },
+                    {
+                        "action": "add",
+                        "name": "Windsurf",
+                        "reason": "Direct buyer comparison.",
+                        "source_note": "Reviewer supplied.",
+                    },
+                ],
+            ),
+        )
+
+        assert updated is not None
+        assert updated.plan.competitors == ["Cursor", "GitHub Copilot", "Windsurf"]
+        assert updated.plan.dimensions == ["pricing", "feature"]
+        assert [
+            (task.stage, task.competitor, task.dimension)
+            for task in updated.plan.task_decomposition
+            if task.stage == "collector"
+        ] == [
+            ("collector", "Cursor", "pricing"),
+            ("collector", "Cursor", "feature"),
+            ("collector", "GitHub Copilot", "pricing"),
+            ("collector", "GitHub Copilot", "feature"),
+            ("collector", "Windsurf", "pricing"),
+            ("collector", "Windsurf", "feature"),
+        ]
+        assert updated.competitor_discovery is not None
+        assert updated.competitor_discovery.selected_competitors == [
+            "Cursor",
+            "GitHub Copilot",
+            "Windsurf",
+        ]
+        candidate_by_name = {
+            candidate.name: candidate for candidate in updated.competitor_discovery.candidates
+        }
+        assert candidate_by_name["Cursor"].selected is True
+        assert candidate_by_name["GitHub Co-pilot"].selected is False
+        assert candidate_by_name["GitHub Copilot"].selected is True
+        assert candidate_by_name["Replit"].selected is False
+        assert candidate_by_name["Windsurf"].selected is True
+        assert updated.plan.homepage_hints == {
+            "Cursor": "https://cursor.com",
+            "GitHub Copilot": "https://github.com/features/copilot",
+        }
+        assert updated.plan.homepage_verified == {"Cursor": True, "GitHub Copilot": True}
+
+        lifecycle_messages = [
+            message
+            for message in updated.agent_messages
+            if message.message_type == "hitl_lifecycle"
+        ]
+        assert lifecycle_messages[0].payload["hitl_lifecycle"]["metadata"]["competitors"] == [
+            "Cursor",
+            "GitHub Copilot",
+            "Windsurf",
+        ]
+        assert lifecycle_messages[0].payload["hitl_lifecycle"]["metadata"]["competitor_edits"][0][
+            "action"
+        ] == "rename"
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_planner_hitl_rejects_competitor_edits_without_modify_plan() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="AI IDE",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+        service._runs[detail.id].pending_interrupts["planner"] = {
+            "stage": "planner",
+            "graph_kind": "real",
+            "thread_id": "thread-plan-review",
+            "interrupt_node": "planner_hitl",
+        }
+
+        with pytest.raises(ValueError, match="modify_plan"):
+            await service.resume(
+                detail.id,
+                HitlResumeRequest(
+                    decision="accept",
+                    competitors=["Cursor", "Windsurf"],
+                    competitor_edits=[
+                        {
+                            "action": "add",
+                            "name": "Windsurf",
+                            "reason": "Direct buyer comparison.",
+                        }
+                    ],
+                ),
+            )
+
+        assert service._runs[detail.id].detail.plan.competitors == ["Cursor"]
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_planner_hitl_rejects_empty_competitor_edit() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="AI IDE",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+        service._runs[detail.id].pending_interrupts["planner"] = {
+            "stage": "planner",
+            "graph_kind": "real",
+            "thread_id": "thread-empty-competitors",
+            "interrupt_node": "planner_hitl",
+        }
+
+        with pytest.raises(ValueError, match="At least one competitor"):
+            await service.resume(
+                detail.id,
+                HitlResumeRequest(decision="modify_plan", competitors=[]),
+            )
     finally:
         await service._graph_checkpointer.aclose()
 

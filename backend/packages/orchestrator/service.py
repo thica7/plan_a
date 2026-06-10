@@ -299,8 +299,10 @@ class RunService(
             if request.auto_redo_warn_enabled is None
             else request.auto_redo_warn_enabled
         )
-        hitl_enabled = (
-            self._settings.hitl_enabled if request.hitl_enabled is None else request.hitl_enabled
+        hitl_enabled = self._resolve_hitl_enabled(
+            request,
+            execution_mode=execution_mode,
+            requested_competitors=request.competitors,
         )
         duplicate_fingerprint = _active_run_fingerprint(
             workspace_id=request.workspace_id,
@@ -617,6 +619,14 @@ class RunService(
         record = self._runs.get(run_id)
         return bool(record and record.pending_interrupts)
 
+    def can_modify_plan_competitors(self, run_id: str) -> bool:
+        record = self._runs.get(run_id)
+        return bool(
+            record
+            and record.detail.status == "interrupted"
+            and "planner" in record.pending_interrupts
+        )
+
     def _refresh_task_decomposition(self, plan: AnalysisPlan) -> None:
         plan.task_decomposition = self._build_task_decomposition(plan)
 
@@ -791,6 +801,13 @@ class RunService(
             return None
         if record.pending_interrupts:
             stage = next(iter(record.pending_interrupts))
+            has_competitor_edits = request.competitors is not None or bool(
+                request.competitor_edits
+            )
+            if has_competitor_edits and request.decision != "modify_plan":
+                raise ValueError("Competitor edits require modify_plan decision.")
+            if has_competitor_edits and stage != "planner":
+                raise ValueError("Competitor edits can only be applied during planner review.")
             hitl_actor_id = (
                 "system"
                 if (request.note or "").startswith("Auto-accepted after HITL timeout")
@@ -803,6 +820,8 @@ class RunService(
                     require_core_schema=self._plan_requires_core_schema(record.detail),
                 )
                 self._refresh_task_decomposition(record.detail.plan)
+            if stage == "planner":
+                self._apply_planner_competitor_review(record.detail, request)
             memory_feedback_payload = self._capture_hitl_memory_feedback(record, request)
             if memory_feedback_payload is not None:
                 self._refresh_quality_metrics(record.detail)
@@ -822,6 +841,10 @@ class RunService(
                 note=request.note or "",
                 metadata={
                     "dimensions": request.dimensions or [],
+                    "competitors": request.competitors or [],
+                    "competitor_edits": [
+                        edit.model_dump(mode="json") for edit in request.competitor_edits
+                    ],
                     "pending_interrupt": record.pending_interrupts.get(stage, {}),
                 },
             )
@@ -839,7 +862,13 @@ class RunService(
                 target_id=run_id,
                 result_action="graph_resume_scheduled",
                 note=request.note or "",
-                metadata={"dimensions": request.dimensions or []},
+                metadata={
+                    "dimensions": request.dimensions or [],
+                    "competitors": request.competitors or [],
+                    "competitor_edits": [
+                        edit.model_dump(mode="json") for edit in request.competitor_edits
+                    ],
+                },
             )
             await self.emit(
                 run_id,
@@ -3820,6 +3849,19 @@ class RunService(
             return "real" if model_policy.real_execution_allowed else "demo"
         return "demo"
 
+    def _resolve_hitl_enabled(
+        self,
+        request: RunCreateRequest,
+        *,
+        execution_mode: str,
+        requested_competitors: list[str],
+    ) -> bool:
+        if request.hitl_enabled is not None:
+            return request.hitl_enabled
+        if self._settings.hitl_enabled:
+            return True
+        return execution_mode == "real" and len(requested_competitors) == 0
+
     def _normalize_competitor_names(self, value: object) -> list[str]:
         if not isinstance(value, list):
             return []
@@ -3837,6 +3879,139 @@ class RunService(
             if len(names) >= 8:
                 break
         return names
+
+    def _normalize_requested_competitors(self, competitors: list[str]) -> list[str]:
+        names: list[str] = []
+        seen: set[str] = set()
+        for item in competitors:
+            name = re.sub(r"\s+", " ", str(item)).strip()
+            if not name:
+                continue
+            key = name.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            names.append(name)
+        if not names:
+            raise ValueError("At least one competitor is required for planner review.")
+        if len(names) > 8:
+            raise ValueError("Planner review supports at most 8 competitors.")
+        return names
+
+    def _apply_planner_competitor_review(
+        self,
+        detail: RunDetail,
+        request: HitlResumeRequest,
+    ) -> None:
+        if request.competitors is None:
+            return
+        competitors = self._normalize_requested_competitors(request.competitors)
+        detail.plan.homepage_hints = self._migrate_plan_homepage_map(
+            detail.plan.homepage_hints,
+            competitors,
+            request.competitor_edits,
+        )
+        detail.plan.homepage_verified = self._migrate_plan_homepage_map(
+            detail.plan.homepage_verified,
+            competitors,
+            request.competitor_edits,
+        )
+        detail.plan.competitors = competitors
+        detail.competitor_discovery = self._updated_competitor_discovery(
+            detail.competitor_discovery,
+            competitors,
+            request.competitor_edits,
+        )
+        self._refresh_task_decomposition(detail.plan)
+
+    def _migrate_plan_homepage_map(
+        self,
+        homepage_map: dict[str, Any],
+        competitors: list[str],
+        competitor_edits: list[Any],
+    ) -> dict[str, Any]:
+        final_by_key = {name.casefold(): name for name in competitors}
+        rename_by_old_key = {
+            edit.name.casefold(): edit.new_name
+            for edit in competitor_edits
+            if edit.action == "rename"
+            and edit.new_name is not None
+            and edit.new_name.casefold() in final_by_key
+        }
+        migrated: dict[str, Any] = {}
+        for name, value in homepage_map.items():
+            target = rename_by_old_key.get(name.casefold(), name)
+            final_name = final_by_key.get(target.casefold())
+            if final_name is not None:
+                migrated[final_name] = value
+        return migrated
+
+    def _updated_competitor_discovery(
+        self,
+        discovery: CompetitorDiscovery | None,
+        competitors: list[str],
+        competitor_edits: list[Any],
+    ) -> CompetitorDiscovery:
+        if discovery is None:
+            discovery = CompetitorDiscovery(query="", selected_competitors=[])
+        final_keys = {name.casefold() for name in competitors}
+        candidates = list(discovery.candidates)
+        candidate_by_key = {candidate.name.casefold(): candidate for candidate in candidates}
+        renamed_source_by_final_key = {
+            edit.new_name.casefold(): edit.name
+            for edit in competitor_edits
+            if edit.action == "rename"
+            and edit.new_name is not None
+            and edit.new_name.casefold() in final_keys
+        }
+
+        for candidate in candidates:
+            candidate.selected = candidate.name.casefold() in final_keys
+
+        next_rank = max((candidate.rank for candidate in candidates), default=0) + 1
+        for competitor in competitors:
+            key = competitor.casefold()
+            reason = self._competitor_edit_reason(competitor, competitor_edits)
+            existing = candidate_by_key.get(key)
+            if existing is not None:
+                existing.selected = True
+                if reason and not existing.rationale:
+                    existing.rationale = reason
+                continue
+
+            renamed_from = renamed_source_by_final_key.get(key)
+            source = candidate_by_key.get(renamed_from.casefold()) if renamed_from else None
+            candidate = CompetitorCandidate(
+                name=competitor,
+                rank=source.rank if source is not None else next_rank,
+                selected=True,
+                rationale=source.rationale if source is not None else reason,
+                evidence_titles=list(source.evidence_titles) if source is not None else [],
+                evidence_urls=list(source.evidence_urls) if source is not None else [],
+                confidence=source.confidence if source is not None else 0.5,
+            )
+            if not candidate.rationale:
+                candidate.rationale = reason
+            candidates.append(candidate)
+            candidate_by_key[key] = candidate
+            next_rank += 1
+
+        discovery.candidates = candidates
+        discovery.selected_competitors = competitors
+        return discovery
+
+    def _competitor_edit_reason(self, competitor: str, competitor_edits: list[Any]) -> str:
+        key = competitor.casefold()
+        for edit in competitor_edits:
+            if edit.action == "add" and edit.name.casefold() == key:
+                return edit.reason or edit.source_note
+            if (
+                edit.action == "rename"
+                and edit.new_name is not None
+                and edit.new_name.casefold() == key
+            ):
+                return edit.reason
+        return ""
 
     def _normalize_requested_dimensions(
         self,

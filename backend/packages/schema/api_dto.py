@@ -46,12 +46,24 @@ class RunCreateRequest(BaseModel):
     hitl_enabled: bool | None = None
 
 
+class CompetitorEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["add", "remove", "rename", "keep", "mark_unrelated"]
+    name: str = Field(min_length=1, max_length=200)
+    new_name: str | None = Field(default=None, min_length=1, max_length=200)
+    reason: str = Field(default="", max_length=1000)
+    source_note: str = Field(default="", max_length=1000)
+
+
 class HitlResumeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     decision: Literal["accept", "modify_plan", "force_pass", "redo"]
     note: str | None = None
     dimensions: list[str] | None = None
+    competitors: list[str] | None = Field(default=None, max_length=8)
+    competitor_edits: list[CompetitorEdit] = Field(default_factory=list, max_length=32)
 
 
 class RunSummary(BaseModel):
