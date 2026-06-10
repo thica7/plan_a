@@ -1,4 +1,5 @@
 import { Users } from "lucide-react";
+import { useTranslation } from "../../stores/i18n";
 import { SectionHeading } from "./SectionHeading";
 import type { CompetitorMode } from "./types";
 
@@ -17,40 +18,41 @@ export function CompetitorsSection({
   setCompetitors,
   updateManualMode,
 }: CompetitorsSectionProps) {
+  const { t } = useTranslation();
   return (
     <section className="form-section">
       <SectionHeading
         icon={<Users size={17} aria-hidden />}
         index="03"
-        meta={competitorMode === "auto" ? "planner discovery" : "manual list"}
-        title="Competitors"
+        meta={competitorMode === "auto" ? t('newRun.competitorsDesc') : t('newRun.manual')}
+        title={t('newRun.competitors')}
       />
-      <div className="segmented-control" role="radiogroup" aria-label="Competitor mode">
+      <div className="segmented-control" role="radiogroup" aria-label={t('newRun.competitorsDesc')}>
         <button
           className={competitorMode === "auto" ? "active" : ""}
           type="button"
           onClick={() => setCompetitorMode("auto")}
         >
-          Auto-discover
+          {t('newRun.autoDiscover')}
         </button>
         <button
           className={competitorMode === "manual" ? "active" : ""}
           type="button"
           onClick={updateManualMode}
         >
-          Manual
+          {t('newRun.manual')}
         </button>
       </div>
       {competitorMode === "manual" ? (
         <textarea
-          aria-label="Competitors"
+          aria-label={t('newRun.competitors')}
           value={competitors}
           onChange={(event) => setCompetitors(event.target.value)}
           rows={3}
         />
       ) : (
         <p className="scope-note">
-          Planner selects direct competitors before evidence collection.
+          {t('newRun.competitorsPlanner')}
         </p>
       )}
     </section>

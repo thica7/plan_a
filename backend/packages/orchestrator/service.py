@@ -27,7 +27,7 @@ from packages.business_intel import (
 )
 from packages.business_intel.homepage import verify_homepages
 from packages.business_intel.release_repair import (
-    apply_release_gate_report_repair,
+    apply_release_gate_warning_report_repair,
 )
 from packages.compliance import compliance_policy_from_settings, redact_text
 from packages.config import Settings
@@ -112,6 +112,8 @@ from packages.skills.registry import SkillRegistry
 from packages.tools import WebSearchRequest, fetch_evidence_page, robots_check, web_search
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+ACTIVE_RUN_DUPLICATE_WINDOW_SECONDS = 300
+ACTIVE_RUN_DUPLICATE_STATUSES = {"queued", "running", "interrupted"}
 QUALITY_VERIFIED_SOURCE_TYPES = {
     "webpage_verified",
     "official",
@@ -143,6 +145,34 @@ def _aggregate_consistency_votes(validation: ClaimValidationReport) -> dict[str,
     totals["unsupported_claims"] = validation.unsupported_count
     totals["blocked_claims"] = validation.blocked_count
     return totals
+
+
+def _active_run_fingerprint(
+    *,
+    workspace_id: str,
+    project_id: str | None,
+    topic: str,
+    competitors: list[str],
+    dimensions: list[str],
+    competitor_layer: str | None,
+    scenario_id: str | None,
+    execution_mode: str,
+    auto_redo_warn_enabled: bool,
+    hitl_enabled: bool,
+) -> str:
+    payload = {
+        "workspace_id": workspace_id.strip().casefold(),
+        "project_id": (project_id or "").strip().casefold(),
+        "topic": compute_topic_normalized(topic),
+        "competitors": sorted({" ".join(item.split()).casefold() for item in competitors if item}),
+        "dimensions": sorted({item.strip().casefold() for item in dimensions if item}),
+        "competitor_layer": competitor_layer or "auto",
+        "scenario_id": scenario_id or "auto",
+        "execution_mode": execution_mode,
+        "auto_redo_warn_enabled": auto_redo_warn_enabled,
+        "hitl_enabled": hitl_enabled,
+    }
+    return stable_prefixed_id("active-run", payload, length=32)
 
 
 def _claim_validation_sample_payload(validation: ClaimValidationReport) -> list[dict[str, Any]]:
@@ -237,22 +267,66 @@ class RunService(
         self._lock = asyncio.Lock()
         self._hydrate_runs()
 
-    async def create_run(self, request: RunCreateRequest) -> RunDetail:
+    @property
+    def enterprise_store(self) -> EnterpriseStore | None:
+        return self._enterprise_store
+
+    async def create_run(
+        self,
+        request: RunCreateRequest,
+        *,
+        skip_active_duplicate_check: bool = False,
+    ) -> RunDetail:
         self._ensure_workspace_quota_allows_run(request.workspace_id)
         execution_mode = self._resolve_execution_mode(request.execution_mode)
         competitors = self._normalize_competitor_names(request.competitors)
         if not competitors:
             competitors = self._scenario_seed_competitors(request.scenario_id)
+        valid_dimensions = self._normalize_requested_dimensions(
+            request.dimensions,
+            require_core_schema=not competitors,
+        )
+        now = datetime.utcnow()
+        run_id = _run_id_for_idempotency_key(request.idempotency_key) or new_run_id()
+        idempotency_key = request.idempotency_key or f"run:{run_id}"
+        if request.idempotency_key:
+            async with self._lock:
+                existing = self._load_run_record(run_id)
+            if existing is not None:
+                return existing.detail
+        auto_redo_warn_enabled = (
+            self._settings.auto_redo_warn_enabled
+            if request.auto_redo_warn_enabled is None
+            else request.auto_redo_warn_enabled
+        )
+        hitl_enabled = (
+            self._settings.hitl_enabled if request.hitl_enabled is None else request.hitl_enabled
+        )
+        duplicate_fingerprint = _active_run_fingerprint(
+            workspace_id=request.workspace_id,
+            project_id=request.project_id,
+            topic=request.topic,
+            competitors=competitors,
+            dimensions=valid_dimensions,
+            competitor_layer=request.competitor_layer,
+            scenario_id=request.scenario_id,
+            execution_mode=execution_mode,
+            auto_redo_warn_enabled=auto_redo_warn_enabled,
+            hitl_enabled=hitl_enabled,
+        )
+        duplicate = None
+        if not skip_active_duplicate_check:
+            async with self._lock:
+                duplicate = self._find_active_duplicate_run(duplicate_fingerprint, now)
+        if duplicate is not None:
+            return duplicate.detail
+
         homepage_verifications = verify_homepages(competitors)
         verified_competitors = [
             competitor for competitor in competitors if homepage_verifications[competitor].verified
         ]
         if verified_competitors:
             competitors = verified_competitors
-        valid_dimensions = self._normalize_requested_dimensions(
-            request.dimensions,
-            require_core_schema=not competitors,
-        )
         memory_context = None
         if self._preference_memory is not None and request.project_id:
             memory_context = self._preference_memory.recall(
@@ -267,7 +341,6 @@ class RunService(
                 memory_context.prompt_context,
                 [tag for item in memory_context.candidates for tag in item.tags],
             )
-        homepage_verifications = verify_homepages(competitors)
         business_plan = build_business_intel_plan(
             topic=request.topic,
             competitors=competitors,
@@ -283,14 +356,6 @@ class RunService(
                 valid_dimensions,
                 business_plan.scenario_pack.required_dimensions,
             )
-        now = datetime.utcnow()
-        run_id = _run_id_for_idempotency_key(request.idempotency_key) or new_run_id()
-        idempotency_key = request.idempotency_key or f"run:{run_id}"
-        if request.idempotency_key:
-            async with self._lock:
-                existing = self._load_run_record(run_id)
-            if existing is not None:
-                return existing.detail
         plan = AnalysisPlan(
             topic=request.topic,
             competitors=competitors,
@@ -333,18 +398,11 @@ class RunService(
             updated_at=now,
             plan=plan,
             max_iterations=self._settings.max_iterations,
-            auto_redo_warn_enabled=(
-                self._settings.auto_redo_warn_enabled
-                if request.auto_redo_warn_enabled is None
-                else request.auto_redo_warn_enabled
-            ),
-            hitl_enabled=(
-                self._settings.hitl_enabled
-                if request.hitl_enabled is None
-                else request.hitl_enabled
-            ),
+            auto_redo_warn_enabled=auto_redo_warn_enabled,
+            hitl_enabled=hitl_enabled,
             current_node="planner",
         )
+        detail.active_run_fingerprint = duplicate_fingerprint
         async with self._lock:
             self._runs[run_id] = RunRecord(detail=detail)
         if self._enterprise_store is not None:
@@ -388,7 +446,7 @@ class RunService(
         return detail
 
     async def ensure_run_visible(self, request: RunCreateRequest) -> RunDetail:
-        detail = await self.create_run(request)
+        detail = await self.create_run(request, skip_active_duplicate_check=True)
         self._persist_run(detail.id)
         return detail
 
@@ -421,6 +479,26 @@ class RunService(
         if record is None:
             return None
         return self._with_enterprise_projection(record.detail)
+
+    def _find_active_duplicate_run(
+        self,
+        fingerprint: str,
+        now: datetime,
+    ) -> RunRecord | None:
+        candidates: list[RunRecord] = []
+        for record in self._runs.values():
+            detail = record.detail
+            if detail.active_run_fingerprint != fingerprint:
+                continue
+            if detail.status not in ACTIVE_RUN_DUPLICATE_STATUSES:
+                continue
+            age_seconds = max(0.0, (now - detail.created_at).total_seconds())
+            if age_seconds > ACTIVE_RUN_DUPLICATE_WINDOW_SECONDS:
+                continue
+            candidates.append(record)
+        if not candidates:
+            return None
+        return max(candidates, key=lambda item: item.detail.created_at)
 
     def import_user_research_materials(
         self,
@@ -780,6 +858,10 @@ class RunService(
                     "HITL feedback was captured as reviewable MemoryAgent candidate input.",
                     memory_feedback_payload,
                 )
+            if hitl_actor_id == "system":
+                record.pending_interrupts.setdefault(stage, {})["auto_resume"] = (
+                    request.model_dump(mode="json", exclude_none=True)
+                )
             asyncio.create_task(self._resume_interrupted_graph(run_id, request))
             return record.detail
         if request.decision in {"accept", "modify_plan", "force_pass"}:
@@ -1084,7 +1166,10 @@ class RunService(
                 record,
                 kind=kind,
                 thread_id=thread_id,
-                graph_input=Command(resume=request.model_dump(mode="json", exclude_none=True)),
+                graph_input=Command(
+                    resume=request.model_dump(mode="json", exclude_none=True),
+                    update={"run_id": run_id},
+                ),
             )
             if not completed:
                 return
@@ -1561,15 +1646,20 @@ class RunService(
                 },
             )
             self._schedule_hitl_timeout(record, stage)
-        resumed = interrupt(
-            {
-                **payload,
-                "stage": stage,
-                "interrupt_node": interrupt_node,
-                "interrupt_protocol": "langgraph_interrupt_command_resume",
-                "run_id": detail.id,
-            }
-        )
+        pending = record.pending_interrupts.get(stage) or {}
+        auto_resume = pending.pop("auto_resume", None)
+        if auto_resume is not None:
+            resumed = auto_resume
+        else:
+            resumed = interrupt(
+                {
+                    **payload,
+                    "stage": stage,
+                    "interrupt_node": interrupt_node,
+                    "interrupt_protocol": "langgraph_interrupt_command_resume",
+                    "run_id": detail.id,
+                }
+            )
         record.pending_interrupts.pop(stage, None)
         self._cancel_hitl_timeout(record, stage)
         if isinstance(resumed, HitlResumeRequest):
@@ -2393,12 +2483,10 @@ class RunService(
         metadata = dict(projection.report_version.quality_metadata)
         initial_gaps = quality_gaps_from_release_gate(gate)
         initial_tasks = repair_tasks_from_gaps(initial_gaps)
-        repair_evidence = list(projection.evidence_records)
-        report_repair = apply_release_gate_report_repair(
+        report_repair = apply_release_gate_warning_report_repair(
             projection.report_version.report_md,
             gate=gate,
             tasks=initial_tasks,
-            evidence=repair_evidence,
         )
         gate_for_metadata = gate
         if report_repair.changed:
@@ -2408,11 +2496,10 @@ class RunService(
             after_gate = self._evaluate_report_release_gate(projection)
             if after_gate is not None:
                 gate_for_metadata = after_gate
-                report_repair = apply_release_gate_report_repair(
+                report_repair = apply_release_gate_warning_report_repair(
                     projection.report_version.report_md,
                     gate=gate,
                     tasks=initial_tasks,
-                    evidence=repair_evidence,
                     after_gate=after_gate,
                 )
                 if report_repair.changed:

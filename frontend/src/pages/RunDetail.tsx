@@ -6,8 +6,10 @@ import { RunDetailHeader } from "../features/run-detail/RunDetailHeader";
 import { RunDetailTabs } from "../features/run-detail/RunDetailTabs";
 import { RunSummaryStrip } from "../features/run-detail/RunSummaryStrip";
 import { useRunDetailController } from "../features/run-detail/useRunDetailController";
+import { useTranslation } from "../stores/i18n";
 
 export function RunDetail() {
+  const { t } = useTranslation();
   const {
     activeView,
     canApplyPlanDimensionChanges,
@@ -56,7 +58,7 @@ export function RunDetail() {
       <section className="work-surface">
         <div className="empty-state">
           <Loader2 className="spin" aria-hidden />
-          <p>Loading run</p>
+          <p>{t('runDetail.loading')}</p>
         </div>
       </section>
     );

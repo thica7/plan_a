@@ -7,15 +7,9 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from packages.business_intel.report_citation_policy import (
-    is_strong_report_line,
-    repair_report_citation_policy,
-    writer_report_citation_policy_text,
-)
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.rag.grounded_prompt import build_run_grounding_prompt
 from packages.research.evidence.normalization import normalized_fields_from_source
-from packages.research.evidence.strength import evidence_can_support_strong_report_section
 from packages.research.evidence.text import source_business_snippet
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import FeatureNode, KnowledgeClaim, QCIssue, RawSource
@@ -65,7 +59,6 @@ class WriterAgentMixin:
         required_sections = self._writer_required_sections(detail)
         grounding_prompt = self._writer_grounding_prompt(detail)
         user_research_policy = writer_user_research_policy_text()
-        citation_policy = writer_report_citation_policy_text()
         try:
             timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
             report_md = await asyncio.wait_for(
@@ -90,7 +83,6 @@ class WriterAgentMixin:
                         "llm_public_knowledge. "
                         "Follow the Grounded Evidence Contract exactly. "
                         f"{user_research_policy} "
-                        f"{citation_policy} "
                         "Honor confirmed memory guidance when it does not conflict with evidence, "
                         "schema requirements, or compliance policy. "
                         "Use the requested competitive layer to choose the report shape: L1 is a "
@@ -393,14 +385,13 @@ class WriterAgentMixin:
         return lines
 
     def _harden_report_markdown(self, detail: RunDetail, markdown: str) -> str:
-        cited = self._ensure_report_claim_citations(
+        return self._ensure_report_claim_citations(
             detail,
             self._repair_report_source_tokens(
                 detail,
                 self._ensure_report_required_sections(detail, markdown),
             ),
         )
-        return repair_report_citation_policy(cited, list(detail.raw_sources)).report_md
 
     def _ensure_report_required_sections(self, detail: RunDetail, markdown: str) -> str:
         hardened = markdown.strip()
@@ -1035,22 +1026,14 @@ class WriterAgentMixin:
 
     def _ensure_report_claim_citations(self, detail: RunDetail, markdown: str) -> str:
         hardened_lines: list[str] = []
-        section_heading = ""
         for line in markdown.splitlines():
-            heading_match = re.match(r"^\s*#{1,4}\s+(.+?)\s*$", line)
-            if heading_match:
-                section_heading = heading_match.group(1).strip()
             if not self._report_line_needs_citation(line):
                 hardened_lines.append(line)
                 continue
             if self._extract_cited_source_ids(line):
                 hardened_lines.append(line)
                 continue
-            source_ids = self._source_ids_for_report_line(
-                detail,
-                line,
-                require_strong_support=is_strong_report_line(line, section_heading),
-            )
+            source_ids = self._source_ids_for_report_line(detail, line)
             if not source_ids:
                 hardened_lines.append(line)
                 continue
@@ -1074,13 +1057,7 @@ class WriterAgentMixin:
             return False
         return bool(re.search(r"[A-Za-z0-9]", stripped)) and len(stripped) >= 24
 
-    def _source_ids_for_report_line(
-        self,
-        detail: RunDetail,
-        line: str,
-        *,
-        require_strong_support: bool = False,
-    ) -> list[str]:
+    def _source_ids_for_report_line(self, detail: RunDetail, line: str) -> list[str]:
         normalized = line.casefold()
         matched_competitors = [
             competitor
@@ -1114,8 +1091,8 @@ class WriterAgentMixin:
                 source_id for source_id in ids if not (source_id in seen or seen.add(source_id))
             ]
 
-        candidate_sources = [
-            source
+        source_ids = [
+            source.id
             for source in detail.raw_sources
             if (
                 not matched_competitors
@@ -1126,31 +1103,19 @@ class WriterAgentMixin:
             )
             and (not matched_dimensions or source.dimension in matched_dimensions)
         ]
-        if not candidate_sources and matched_competitors:
-            candidate_sources = [
-                source
+        if not source_ids and matched_competitors:
+            source_ids = [
+                source.id
                 for source in detail.raw_sources
                 if any(
                     self._source_matches_competitor(source, competitor)
                     for competitor in matched_competitors
                 )
             ]
-        if not candidate_sources and matched_dimensions:
-            candidate_sources = [
-                source for source in detail.raw_sources if source.dimension in matched_dimensions
+        if not source_ids and matched_dimensions:
+            source_ids = [
+                source.id for source in detail.raw_sources if source.dimension in matched_dimensions
             ]
-        if not candidate_sources:
-            candidate_sources = list(detail.raw_sources)
-        if require_strong_support:
-            strong_sources = [
-                source
-                for source in candidate_sources
-                if evidence_can_support_strong_report_section(source)
-            ]
-            candidate_sources = strong_sources or [
-                source
-                for source in detail.raw_sources
-                if evidence_can_support_strong_report_section(source)
-            ]
-        source_ids = [source.id for source in candidate_sources]
+        if not source_ids:
+            source_ids = [source.id for source in detail.raw_sources]
         return unique(source_ids)

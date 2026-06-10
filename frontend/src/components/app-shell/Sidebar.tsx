@@ -1,6 +1,7 @@
 import { Link, NavLink } from "react-router-dom";
 import { ChevronLeft, MoreVertical, Radar } from "lucide-react";
 import { navGroups } from "./nav";
+import { useTranslation } from "../../stores/i18n";
 
 export function Sidebar({
   isOpen,
@@ -13,21 +14,22 @@ export function Sidebar({
   systemReady: boolean;
   temporalRouted: boolean;
 }) {
+  const { t } = useTranslation();
   return (
-    <aside aria-label="Product navigation" className={isOpen ? "sidebar open" : "sidebar"}>
+    <aside aria-label={t('sidebar.nav')} className={isOpen ? "sidebar open" : "sidebar"}>
       <div className="sidebar-head">
-        <Link className="brand" to="/" aria-label="Competiscope home" onClick={onClose}>
+        <Link className="brand" to="/" aria-label={t('sidebar.home')} onClick={onClose}>
           <span className="brand-mark">
             <Radar size={18} aria-hidden />
           </span>
           <span>
-            <strong>Competiscope</strong>
-            <small>AI Competitive Intel</small>
+            <strong>{t('sidebar.brand')}</strong>
+            <small>{t('sidebar.brandSub')}</small>
           </span>
         </Link>
       </div>
 
-      <nav className="nav-list" aria-label="Primary">
+      <nav className="nav-list" aria-label={t('sidebar.primary')}>
         {navGroups.map((group) => (
           <section className="nav-section" key={group.label}>
             <strong>{group.label}</strong>
@@ -49,8 +51,8 @@ export function Sidebar({
       <div className="sidebar-system">
         <span className={systemReady ? "system-dot ready" : "system-dot warn"} />
         <div>
-          <strong>{systemReady ? "Ready for real runs" : "Needs attention"}</strong>
-          <small>{temporalRouted ? "Temporal routed" : "Runtime unknown"}</small>
+          <strong>{systemReady ? t('sidebar.ready') : t('sidebar.attention')}</strong>
+          <small>{temporalRouted ? t('sidebar.temporalRouted') : t('sidebar.runtimeUnknown')}</small>
         </div>
       </div>
 
@@ -63,9 +65,9 @@ export function Sidebar({
         <MoreVertical size={15} aria-hidden />
       </div>
 
-      <button className="sidebar-collapse" onClick={onClose} type="button" aria-label="Collapse sidebar">
+      <button className="sidebar-collapse" onClick={onClose} type="button" aria-label={t('sidebar.collapse')}>
         <ChevronLeft size={15} aria-hidden />
-        Collapse
+        {t('sidebar.collapseLabel')}
       </button>
     </aside>
   );

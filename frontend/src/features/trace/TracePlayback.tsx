@@ -1,12 +1,14 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { TraceSpan } from "../../api/types";
+import { useTranslation } from "../../stores/i18n";
 
 interface Props {
   spans: TraceSpan[];
 }
 
 export function TracePlayback({ spans }: Props) {
+  const { t } = useTranslation();
   const ordered = useMemo(() => spans.filter((span) => span.full_input || span.full_output), [spans]);
   const [index, setIndex] = useState(0);
   const activeIndex = Math.min(index, Math.max(ordered.length - 1, 0));
@@ -15,8 +17,8 @@ export function TracePlayback({ spans }: Props) {
   if (ordered.length === 0) {
     return (
       <section className="panel trace-playback-panel">
-        <h2>Trace playback</h2>
-        <p>No replayable span yet.</p>
+        <h2>{t('trace.playback')}</h2>
+        <p>{t('trace.noReplayable')}</p>
       </section>
     );
   }
@@ -24,7 +26,7 @@ export function TracePlayback({ spans }: Props) {
   return (
     <section className="panel trace-playback-panel">
       <div className="panel-heading-row">
-        <h2>Trace playback</h2>
+        <h2>{t('trace.playback')}</h2>
         <span className="muted-text">{activeIndex + 1} / {ordered.length}</span>
       </div>
       <div className="playback-controls">
@@ -69,11 +71,11 @@ export function TracePlayback({ spans }: Props) {
         </div>
         <div className="playback-columns">
           <div>
-            <h3>Input</h3>
+            <h3>{t('trace.input')}</h3>
             <pre>{active.full_input || active.input_preview}</pre>
           </div>
           <div>
-            <h3>Output</h3>
+            <h3>{t('trace.output')}</h3>
             <pre>{active.full_output || active.output_preview}</pre>
           </div>
         </div>

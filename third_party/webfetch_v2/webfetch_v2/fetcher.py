@@ -362,4 +362,3 @@ def _charset_from_content_type(content_type: str) -> str | None:
         if part.lower().startswith("charset="):
             return part.split("=", 1)[1].strip()
     return None
-

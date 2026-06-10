@@ -1,4 +1,5 @@
 import { ShieldCheck } from "lucide-react";
+import { useTranslation } from '../../stores/i18n';
 import type {
   ModelPolicyReport,
   ModelRouteDecision,
@@ -20,21 +21,22 @@ export function RuntimePolicyPanel({
   modelRoute,
   quota,
 }: RuntimePolicyPanelProps) {
+  const { t } = useTranslation();
   return (
-    <Panel className="runtime-policy-panel" title="Runtime policy" icon={<ShieldCheck size={16} aria-hidden />}>
+    <Panel className="runtime-policy-panel" title={t('workbench.runtimePolicy')} icon={<ShieldCheck size={16} aria-hidden />}>
       <div className="governance-status-row">
         <StatusPill tone={modelPolicy?.status === "pass" ? "good" : modelPolicy?.status === "fail" ? "bad" : "warn"}>
           {modelPolicy?.status ?? "n/a"}
         </StatusPill>
-        <strong>{modelRoute?.selected?.model_name ?? modelRoute?.fallback?.model_name ?? "No model route"}</strong>
+        <strong>{modelRoute?.selected?.model_name ?? modelRoute?.fallback?.model_name ?? t('workbench.noModelRoute')}</strong>
         <span>{modelPolicy?.policy_version ?? modelRoute?.routing_policy_version ?? "policy unavailable"}</span>
       </div>
 
       <div className="metric-grid compact">
-        <MetricCard label="Route" value={modelRoute?.status ?? "n/a"} tone={modelRoute?.status === "blocked" ? "warn" : "neutral"} />
-        <MetricCard label="Agent matrix" value={matrix?.status ?? "n/a"} tone={matrix?.status === "blocker" ? "warn" : "good"} />
-        <MetricCard label="Quota" value={quota?.status ?? "n/a"} tone={quota?.allowed === false ? "warn" : "good"} />
-        <MetricCard label="Findings" value={modelPolicy?.finding_count ?? 0} tone={(modelPolicy?.blocker_count ?? 0) > 0 ? "warn" : "neutral"} />
+        <MetricCard label={t('workbench.route')} value={modelRoute?.status ?? "n/a"} tone={modelRoute?.status === "blocked" ? "warn" : "neutral"} />
+        <MetricCard label={t('workbench.agentMatrix')} value={matrix?.status ?? "n/a"} tone={matrix?.status === "blocker" ? "warn" : "good"} />
+        <MetricCard label={t('workbench.quota')} value={quota?.status ?? "n/a"} tone={quota?.allowed === false ? "warn" : "good"} />
+        <MetricCard label={t('compliance.findings')} value={modelPolicy?.finding_count ?? 0} tone={(modelPolicy?.blocker_count ?? 0) > 0 ? "warn" : "neutral"} />
       </div>
 
       <div className="policy-finding-list">

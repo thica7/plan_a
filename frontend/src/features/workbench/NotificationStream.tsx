@@ -1,6 +1,7 @@
 import { Bell } from "lucide-react";
 import type { NotificationRecord, ProjectRecord } from "../../api/types";
 import { EmptyState, Panel, StatusPill } from "../../components/ui";
+import { useTranslation } from "../../stores/i18n";
 import { formatDate } from "./format";
 
 interface NotificationStreamProps {
@@ -9,8 +10,9 @@ interface NotificationStreamProps {
 }
 
 export function NotificationStream({ notifications, project }: NotificationStreamProps) {
+  const { t } = useTranslation();
   return (
-    <Panel className="activity-notification-panel" title="Notification stream" icon={<Bell size={16} aria-hidden />}>
+    <Panel className="activity-notification-panel" title={t("workbench.signals")} icon={<Bell size={16} aria-hidden />}>
       <div className="notification-list redesigned">
         {notifications.map((notification) => {
           const details = summarizeNotification(notification.body);
@@ -45,7 +47,7 @@ export function NotificationStream({ notifications, project }: NotificationStrea
             </article>
           );
         })}
-        {notifications.length === 0 ? <EmptyState title="No notifications">No notifications for {project.name}.</EmptyState> : null}
+        {notifications.length === 0 ? <EmptyState title={t("workbench.noNotifications")}>No notifications for {project.name}.</EmptyState> : null}
       </div>
     </Panel>
   );

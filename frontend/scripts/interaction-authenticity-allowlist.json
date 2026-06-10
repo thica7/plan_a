@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "file": "src/components/AppShell.tsx",
+      "owner": "app-shell",
+      "reason": "Transitional native close control with a real local handler; migrate to ActionButton in the shell cleanup batch.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/components/SourceCard.tsx",
+      "owner": "evidence",
+      "reason": "Transitional native source controls with real handlers/links; migrate after evidence panel audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/components/app-shell/Sidebar.tsx",
+      "owner": "app-shell",
+      "reason": "Native sidebar collapse button has real local behavior and route links are React Router NavLinks.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/crawl/FailedUrlsPanel.tsx",
+      "owner": "crawler",
+      "reason": "Retry buttons call real crawler retry callbacks; migrate with crawler UI audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/crawl/JobQueueTable.tsx",
+      "owner": "crawler",
+      "reason": "Queue row controls update real queue state; migrate with crawler UI audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/crawl/ManualTab.tsx",
+      "owner": "crawler",
+      "reason": "Submit control calls the real crawl submit path; migrate with crawler UI audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/crawl/RssTab.tsx",
+      "owner": "crawler",
+      "reason": "Preview and submit controls call real RSS crawl paths; migrate with crawler UI audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/crawl/SitemapTab.tsx",
+      "owner": "crawler",
+      "reason": "Preview and submit controls call real sitemap crawl paths; migrate with crawler UI audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/hitl/PlanReviewModal.tsx",
+      "owner": "hitl",
+      "reason": "Planner review buttons call real HITL callbacks; migrate with HITL modal audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/hitl/QaReviewModal.tsx",
+      "owner": "hitl",
+      "reason": "QA review buttons call real HITL callbacks; migrate with HITL modal audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/new-run/CompetitorsSection.tsx",
+      "owner": "new-run",
+      "reason": "Segmented controls update real builder state; migrate after readiness precedence hardening.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/new-run/DepthSection.tsx",
+      "owner": "new-run",
+      "reason": "Depth controls update real builder state; migrate after readiness precedence hardening.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/new-run/DimensionsSection.tsx",
+      "owner": "new-run",
+      "reason": "Dimension toggles update real builder state; migrate after readiness precedence hardening.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/new-run/ExecutionModePanel.tsx",
+      "owner": "new-run",
+      "reason": "Execution mode controls update real builder state; migrate after readiness precedence hardening.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/new-run/ScopeSection.tsx",
+      "owner": "new-run",
+      "reason": "Starter preset controls update real builder state; migrate after readiness precedence hardening.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/retrieval/RetrievalParamsDrawer.tsx",
+      "owner": "retrieval",
+      "reason": "Drawer close control and parameter inputs have real local behavior; migrate with retrieval drawer audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/run-detail/CompliancePanel.tsx",
+      "owner": "run-detail",
+      "reason": "Compliance refresh control calls a real handler; migrate with run detail audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/run-detail/ReportReaderWorkspace.tsx",
+      "owner": "run-detail",
+      "reason": "Reader view buttons update local reader state; migrate with report reader audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/run-detail/RunDetailTabs.tsx",
+      "owner": "run-detail",
+      "reason": "Tabs update real run detail view state; migrate with run detail audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/run-detail/RunQaPanel.tsx",
+      "owner": "run-detail",
+      "reason": "QA panel controls call real review callbacks; migrate with run detail audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/run-detail/RunReportReviewStudio.tsx",
+      "owner": "run-detail",
+      "reason": "Report review controls call real review/export callbacks; migrate with report studio audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/run-detail/RunReviewOverview.tsx",
+      "owner": "run-detail",
+      "reason": "Overview controls navigate among real local run-detail views; migrate with run detail audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/trace/TracePlayback.tsx",
+      "owner": "trace",
+      "reason": "Trace controls update real playback state; migrate with trace UI audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/upload/UploadDrawer.tsx",
+      "owner": "knowledge",
+      "reason": "Upload controls call real upload queue operations; migrate with upload drawer audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/version/VersionDrawer.tsx",
+      "owner": "knowledge",
+      "reason": "Version controls call real version refresh/merge operations; migrate with version drawer audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/workbench/ContextInspector.tsx",
+      "owner": "workbench",
+      "reason": "Inspector selection/open controls use real callbacks/URLs; migrate with workbench evidence audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/workbench/EvidenceLedgerPanel.tsx",
+      "owner": "workbench",
+      "reason": "Evidence row action calls a real selection callback; migrate with evidence ledger audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/workbench/GapRepairPanel.tsx",
+      "owner": "workbench",
+      "reason": "Gap repair control calls the real fill-gaps workflow; migrate with gap repair audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/workbench/ProjectRail.tsx",
+      "owner": "workbench",
+      "reason": "Project rail controls update selected project state; migrate with workbench shell audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/workbench/ReportReviewDesk.tsx",
+      "owner": "workbench",
+      "reason": "Review desk row actions select real claims/evidence; migrate with report review audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/features/workbench/ReportVersionPanel.tsx",
+      "owner": "workbench",
+      "reason": "Report version controls select real versions; migrate with report version audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/pages/CrawlPage.tsx",
+      "owner": "crawler",
+      "reason": "Page controls call real crawler store actions; migrate with crawler page audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/pages/KnowledgePage.tsx",
+      "owner": "knowledge",
+      "reason": "Knowledge controls call real drawer, pagination, source, and version handlers; migrate with knowledge page audit.",
+      "expires": "2026-07-15"
+    },
+    {
+      "file": "src/pages/SearchPage.tsx",
+      "owner": "search",
+      "reason": "Search controls call real retrieval/evaluation handlers; migrate with search page audit.",
+      "expires": "2026-07-15"
+    }
+  ]
+}

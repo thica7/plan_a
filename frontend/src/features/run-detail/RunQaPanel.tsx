@@ -1,6 +1,7 @@
 import { RotateCcw } from "lucide-react";
 import type { RunDetail as RunDetailRecord } from "../../api/types";
 import type { ReflectionItem } from "./types";
+import { useTranslation } from '../../stores/i18n';
 
 interface RunQaPanelProps {
   detail: RunDetailRecord;
@@ -17,10 +18,11 @@ export function RunQaPanel({
   redoLimitReached,
   reflectionItems,
 }: RunQaPanelProps) {
+  const { t } = useTranslation();
   return (
     <aside className="qa-panel">
       <div className="panel-heading-row">
-        <h2>QA findings</h2>
+        <h2>{t('runQa.title')}</h2>
         {detail.qa_findings.length > 0 ? (
           <button
             className="icon-text-button"
@@ -30,7 +32,7 @@ export function RunQaPanel({
             type="button"
           >
             <RotateCcw size={15} aria-hidden />
-            {redoLimitReached ? "Limit reached" : "Redo"}
+            {redoLimitReached ? t('runQa.limitReached') : t('runQa.redo')}
           </button>
         ) : null}
       </div>
@@ -40,7 +42,7 @@ export function RunQaPanel({
         </p>
       ) : null}
       {detail.qa_findings.length === 0 ? (
-        <p>No findings yet.</p>
+        <p>{t('runQa.noFindings')}</p>
       ) : (
         detail.qa_findings.map((issue) => (
           <article key={issue.id} className="issue-row">

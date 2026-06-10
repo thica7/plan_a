@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Competiscope v2 任务防重复与产品交互说明</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17202a;
+      --muted: #60707f;
+      --line: #d8e1e8;
+      --panel: #ffffff;
+      --soft: #f5f8fb;
+      --brand: #126f7a;
+      --brand-dark: #0d5059;
+      --accent: #b83f2d;
+      --ok: #18734a;
+      --warn: #9a5a00;
+      --shadow: 0 12px 32px rgba(25, 40, 55, 0.12);
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--soft);
+    }
+
+    header {
+      background: #0f2b35;
+      color: #fff;
+      padding: 42px clamp(20px, 5vw, 72px) 34px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 48px);
+      font-weight: 760;
+      line-height: 1.08;
+    }
+
+    header p {
+      margin: 14px 0 0;
+      max-width: 900px;
+      color: #d7e7eb;
+      font-size: 17px;
+      line-height: 1.65;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px clamp(16px, 3vw, 28px) 54px;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 0;
+      background: rgba(245, 248, 251, 0.95);
+      backdrop-filter: blur(8px);
+    }
+
+    .toolbar button,
+    .primary,
+    .ghost {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 650;
+      padding: 8px 12px;
+    }
+
+    .toolbar button.active,
+    .primary {
+      border-color: var(--brand);
+      background: var(--brand);
+      color: #fff;
+    }
+
+    .section {
+      display: none;
+      margin-top: 18px;
+    }
+
+    .section.active {
+      display: block;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .panel h2,
+    .panel h3 {
+      margin: 0 0 10px;
+    }
+
+    .panel p,
+    .panel li {
+      color: var(--muted);
+      line-height: 1.62;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: #e7f3f4;
+      color: var(--brand-dark);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 10px;
+      counter-reset: flow;
+    }
+
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fff;
+    }
+
+    .step::before {
+      counter-increment: flow;
+      content: counter(flow);
+      display: inline-grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+      background: var(--brand);
+      color: #fff;
+      font-weight: 800;
+    }
+
+    .simulator {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px 11px;
+      color: var(--ink);
+      font: inherit;
+      background: #fff;
+    }
+
+    textarea {
+      min-height: 82px;
+      resize: vertical;
+    }
+
+    .result {
+      min-height: 170px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfdfe;
+      padding: 14px;
+      white-space: pre-wrap;
+      color: var(--ink);
+      line-height: 1.55;
+    }
+
+    .status-ok {
+      color: var(--ok);
+      font-weight: 800;
+    }
+
+    .status-warn {
+      color: var(--warn);
+      font-weight: 800;
+    }
+
+    .status-block {
+      color: var(--accent);
+      font-weight: 800;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #edf4f6;
+      color: #25434b;
+    }
+
+    code {
+      background: #eef3f6;
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+
+    @media (max-width: 760px) {
+      .simulator {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Competiscope v2 任务防重复与产品交互说明</h1>
+    <p>
+      本文件说明当前项目做什么、输入什么会得到什么输出，以及本次为
+      <code>Start run</code> 增加的前端校验与后端活跃任务防重复策略。
+    </p>
+  </header>
+
+  <main>
+    <nav class="toolbar" aria-label="章节切换">
+      <button class="active" data-target="overview" type="button">项目定位</button>
+      <button data-target="io" type="button">输入输出</button>
+      <button data-target="guard" type="button">防重复方案</button>
+      <button data-target="sim" type="button">交互模拟</button>
+      <button data-target="roadmap" type="button">待开发功能</button>
+    </nav>
+
+    <section id="overview" class="section active">
+      <div class="grid">
+        <article class="panel">
+          <h2>当前项目是干什么的</h2>
+          <p>
+            Competiscope v2 是一个竞争情报分析工作台。它把主题、竞品、分析维度、
+            证据采集、知识库检索、Agent 编排、人工审核、报告生成和质量评估串成一个 run。
+          </p>
+          <div class="pill-row">
+            <span class="pill">FastAPI 后端</span>
+            <span class="pill">React/Vite 控制台</span>
+            <span class="pill">RAG/KB</span>
+            <span class="pill">LangGraph/Temporal</span>
+            <span class="pill">QA + Revision</span>
+          </div>
+        </article>
+        <article class="panel">
+          <h2>典型业务价值</h2>
+          <p>
+            给定一个市场主题或竞品列表，系统自动组织证据，输出可引用、可审计、
+            可重跑修复的竞品对比报告，而不是只生成一段不可追踪的普通文本。
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section id="io" class="section">
+      <div class="panel">
+        <h2>输入什么，得到什么</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>输入</th>
+              <th>示例</th>
+              <th>输出</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>分析主题</td>
+              <td><code>Agentic AI IDE competitive analysis</code></td>
+              <td>创建一个 run，生成计划、事件流、分析报告和质量指标。</td>
+            </tr>
+            <tr>
+              <td>竞品模式</td>
+              <td>Auto-discover 或 Cursor, Copilot, Windsurf</td>
+              <td>自动发现或按指定名单生成竞品知识与对比矩阵。</td>
+            </tr>
+            <tr>
+              <td>分析维度</td>
+              <td>pricing, feature, persona, security</td>
+              <td>按维度采集证据、提取事实、生成矩阵单元格。</td>
+            </tr>
+            <tr>
+              <td>执行模式</td>
+              <td>Demo 或 Real API</td>
+              <td>Demo 使用本地/模拟路径；Real API 调用真实 LLM 和搜索配置。</td>
+            </tr>
+            <tr>
+              <td>人工审核选项</td>
+              <td>HITL enabled</td>
+              <td>在 planner/QA 节点暂停，等待人工 accept、modify、redo 或 force pass。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="guard" class="section">
+      <div class="panel">
+        <h2>Start run 防重复方案</h2>
+        <div class="flow">
+          <div class="step">
+            <h3>前端校验</h3>
+            <p>提交前检查主题长度、维度数量、手动竞品数量、Real API 配置和 workspace quota。</p>
+          </div>
+          <div class="step">
+            <h3>幂等 Key</h3>
+            <p>前端仍发送 <code>idempotency_key</code>，同 key 重试会复用同一个 run。</p>
+          </div>
+          <div class="step">
+            <h3>任务指纹</h3>
+            <p>后端规范化 workspace、topic、competitors、dimensions、scenario、mode 后生成指纹。</p>
+          </div>
+          <div class="step">
+            <h3>活跃查重</h3>
+            <p>5 分钟内已有相同指纹且状态为 queued/running/interrupted 时，直接返回已有 run。</p>
+          </div>
+          <div class="step">
+            <h3>完成后可重跑</h3>
+            <p>completed、completed_with_blockers、failed 不会被拦截，允许用户重新分析。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="sim" class="section">
+      <div class="simulator">
+        <form class="panel" id="simForm">
+          <h2>重复提交模拟器</h2>
+          <label>
+            Topic
+            <input id="topic" value="AI research assistant competitive analysis" />
+          </label>
+          <label>
+            Competitors
+            <textarea id="competitors">Perplexity, Claude</textarea>
+          </label>
+          <label>
+            Dimensions
+            <input id="dimensions" value="pricing, feature" />
+          </label>
+          <label>
+            Execution mode
+            <select id="mode">
+              <option value="demo">demo</option>
+              <option value="real">real</option>
+            </select>
+          </label>
+          <button class="primary" type="submit">模拟 Start run</button>
+          <button class="ghost" id="finishRun" type="button">把当前 run 标记为 completed</button>
+          <button class="ghost" id="clearRuns" type="button">清空模拟记录</button>
+        </form>
+        <section class="panel">
+          <h2>模拟结果</h2>
+          <div class="result" id="result">点击“模拟 Start run”查看防重复效果。</div>
+        </section>
+      </div>
+    </section>
+
+    <section id="roadmap" class="section">
+      <div class="grid">
+        <article class="panel">
+          <h2>仍建议开发</h2>
+          <ul>
+            <li>用户/IP 级别的 POST /runs 限流，防止脚本换 payload 大量创建任务。</li>
+            <li>正式 i18n key 管理，目前主要还是硬编码文案。</li>
+            <li>Real API 错误恢复体验，包括可视化重试、原因分层和成本预估。</li>
+            <li>租户、权限、审批流的前端产品化。</li>
+            <li>知识库治理仪表盘，将重复、过期、低质量证据以任务形式呈现。</li>
+          </ul>
+        </article>
+        <article class="panel">
+          <h2>本次已落地</h2>
+          <ul>
+            <li>前端创建任务前校验。</li>
+            <li>后端 active-run fingerprint 防重复。</li>
+            <li>不同 idempotency key 但同任务内容时复用活跃 run。</li>
+            <li>完成后的 run 允许重新创建。</li>
+            <li>针对性后端单元测试和前端构建验证。</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const sections = Array.from(document.querySelectorAll(".section"));
+    const buttons = Array.from(document.querySelectorAll(".toolbar button"));
+    const activeRuns = [];
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const target = button.dataset.target;
+        buttons.forEach((item) => item.classList.toggle("active", item === button));
+        sections.forEach((section) => section.classList.toggle("active", section.id === target));
+      });
+    });
+
+    document.getElementById("simForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const draft = readDraft();
+      const error = validateDraft(draft);
+      if (error) {
+        writeResult("BLOCKED", error, "status-block");
+        return;
+      }
+      const fingerprint = fingerprintDraft(draft);
+      const now = Date.now();
+      const duplicate = activeRuns.find((run) => {
+        return run.fingerprint === fingerprint
+          && ["queued", "running", "interrupted"].includes(run.status)
+          && now - run.createdAt <= 300000;
+      });
+      if (duplicate) {
+        writeResult(
+          "REUSED",
+          `发现 5 分钟内的活跃重复任务，返回已有 run。\n\nrun_id: ${duplicate.id}\nstatus: ${duplicate.status}\nfingerprint: ${fingerprint}`,
+          "status-warn",
+        );
+        return;
+      }
+      const run = {
+        id: `run_${Math.random().toString(36).slice(2, 10)}`,
+        status: "queued",
+        fingerprint,
+        createdAt: now,
+      };
+      activeRuns.unshift(run);
+      writeResult(
+        "CREATED",
+        `创建新任务。\n\nrun_id: ${run.id}\nstatus: ${run.status}\nfingerprint: ${fingerprint}`,
+        "status-ok",
+      );
+    });
+
+    document.getElementById("finishRun").addEventListener("click", () => {
+      if (!activeRuns[0]) {
+        writeResult("EMPTY", "当前没有模拟 run。", "status-warn");
+        return;
+      }
+      activeRuns[0].status = "completed";
+      writeResult("COMPLETED", `已把 ${activeRuns[0].id} 标记为 completed。再次提交相同内容会创建新 run。`, "status-ok");
+    });
+
+    document.getElementById("clearRuns").addEventListener("click", () => {
+      activeRuns.length = 0;
+      writeResult("CLEARED", "模拟记录已清空。", "status-ok");
+    });
+
+    function readDraft() {
+      return {
+        workspaceId: "default-workspace",
+        projectId: "",
+        topic: document.getElementById("topic").value,
+        competitors: splitList(document.getElementById("competitors").value),
+        dimensions: splitList(document.getElementById("dimensions").value),
+        mode: document.getElementById("mode").value,
+      };
+    }
+
+    function splitList(value) {
+      return value.split(",").map((item) => item.trim()).filter(Boolean);
+    }
+
+    function validateDraft(draft) {
+      if (draft.topic.trim().length < 2) return "Topic must be at least 2 characters.";
+      if (draft.dimensions.length === 0) return "Select at least one analysis dimension.";
+      if (draft.dimensions.length > 8) return "Select no more than 8 dimensions.";
+      if (draft.competitors.length > 8) return "Enter no more than 8 competitors.";
+      return "";
+    }
+
+    function fingerprintDraft(draft) {
+      const normalized = [
+        draft.workspaceId.trim().toLowerCase(),
+        draft.projectId.trim().toLowerCase(),
+        draft.topic.trim().toLowerCase().replace(/\s+/g, " "),
+        draft.competitors.map((item) => item.toLowerCase()).sort().join("|"),
+        draft.dimensions.map((item) => item.toLowerCase()).sort().join("|"),
+        draft.mode,
+      ].join("::");
+      let hash = 0;
+      for (let i = 0; i < normalized.length; i += 1) {
+        hash = Math.imul(31, hash) + normalized.charCodeAt(i) | 0;
+      }
+      return `active-run:${Math.abs(hash).toString(16).padStart(8, "0")}`;
+    }
+
+    function writeResult(label, body, className) {
+      document.getElementById("result").innerHTML = `<span class="${className}">${label}</span>\n${escapeHtml(body)}`;
+    }
+
+    function escapeHtml(value) {
+      return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+  </script>
+</body>
+</html>

@@ -1,29 +1,18 @@
 import { Layers3 } from "lucide-react";
+import { useTranslation } from "../../stores/i18n";
 import { SectionHeading } from "./SectionHeading";
 import type { LayerSelection } from "./types";
 
 interface DepthOption {
   layer: LayerSelection;
   label: string;
-  detail: string;
+  detailKey: string;
 }
 
 const depthOptions: DepthOption[] = [
-  {
-    layer: "L1",
-    label: "L1",
-    detail: "Overview",
-  },
-  {
-    layer: "L2",
-    label: "L2",
-    detail: "Deep Dive",
-  },
-  {
-    layer: "L3",
-    label: "L3",
-    detail: "Comprehensive",
-  },
+  { layer: "L1", label: "L1", detailKey: "newRun.overview" },
+  { layer: "L2", label: "L2", detailKey: "newRun.deepDive" },
+  { layer: "L3", label: "L3", detailKey: "newRun.comprehensive" },
 ];
 
 export function DepthSection({
@@ -33,22 +22,23 @@ export function DepthSection({
   selectedLayer: LayerSelection;
   updateSelectedLayer: (layer: LayerSelection) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="form-section depth-section">
       <SectionHeading
         icon={<Layers3 size={17} aria-hidden />}
         index="05"
-        meta="how deep each competitor should be analyzed"
-        title="Depth"
+        meta={t('newRun.depthDesc')}
+        title={t('newRun.depth')}
       />
-      <div className="depth-option-grid" role="radiogroup" aria-label="Competitive depth">
+      <div className="depth-option-grid" role="radiogroup" aria-label={t('newRun.depth')}>
         <button
           className={selectedLayer === "auto" ? "depth-option-card active" : "depth-option-card"}
           onClick={() => updateSelectedLayer("auto")}
           type="button"
         >
-          <strong>Auto</strong>
-          <span>Planner selects</span>
+          <strong>{t('newRun.auto')}</strong>
+          <span>{t('newRun.plannerSelects')}</span>
         </button>
         {depthOptions.map((option) => (
           <button
@@ -58,12 +48,12 @@ export function DepthSection({
             type="button"
           >
             <strong>{option.label}</strong>
-            <span>{option.detail}</span>
+            <span>{t(option.detailKey)}</span>
           </button>
         ))}
       </div>
       <p className="depth-helper">
-        Higher depth increases collection breadth, source validation, and report detail.
+        {t('newRun.depthHint')}
       </p>
     </section>
   );

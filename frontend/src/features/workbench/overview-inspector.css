@@ -125,4 +125,3 @@
   gap: 10px 16px;
   grid-template-columns: auto minmax(160px, 1fr) repeat(3, auto);
 }
-

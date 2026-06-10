@@ -1,5 +1,6 @@
 import { Layers } from "lucide-react";
 import type { ScenarioPack } from "../../api/types";
+import { useTranslation } from '../../stores/i18n';
 import { SectionHeading } from "./SectionHeading";
 import { dynamicScenarioId, type LayerSelection } from "./types";
 
@@ -24,16 +25,17 @@ export function LensSection({
   selectedScenario,
   setScenarioId,
 }: LensSectionProps) {
+  const { t } = useTranslation();
   return (
     <section className="form-section">
       <SectionHeading
         icon={<Layers size={17} aria-hidden />}
         index="02"
         meta="predefined research scenario and scope"
-        title="Scenario"
+        title={t('newRun.scenario')}
       />
       <label>
-        Scenario pack
+        {t('newRun.scenarioPack')}
         <select
           value={scenarioId}
           onChange={(event) => {
@@ -45,8 +47,8 @@ export function LensSection({
             applyScenario(next);
           }}
         >
-          <option value="">Auto scenario</option>
-          <option value={dynamicScenarioId}>Dynamic scenario</option>
+           <option value="">{t('newRun.autoScenario')}</option>
+          <option value={dynamicScenarioId}>{t('newRun.dynamicScenario')}</option>
           {scenarioPacks
             .filter((pack) => selectedLayer === "auto" || pack.competitor_layer === selectedLayer)
             .map((pack) => (
@@ -71,7 +73,7 @@ export function LensSection({
         </div>
       ) : dynamicScenarioSelected ? (
         <div className="scenario-preview">
-          <strong>Dynamic scenario</strong>
+          <strong>{t('newRun.dynamicScenario')}</strong>
           <span>Generated from the selected scope and dimensions.</span>
           <div>
             {selected.map((dimension) => (

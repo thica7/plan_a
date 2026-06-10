@@ -1,5 +1,8 @@
 import { MoreHorizontal, Plus, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { ActionButton } from "../components/interaction/ActionButton";
+import { ActionLink } from "../components/interaction/ActionLink";
+import { useTranslation } from "../stores/i18n";
 import { ProjectHeader, WorkspaceLayout } from "../components/product-shell";
 import { EmptyState, LoadingState } from "../components/ui";
 import { ActiveView } from "../features/workbench/ActiveView";
@@ -15,6 +18,7 @@ import type { EnterpriseView } from "../features/workbench/types";
 
 export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?: EnterpriseView }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const {
     activeView,
     competitorById,
@@ -76,16 +80,43 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
           status={selectedProject ? "Active" : "No project"}
           actions={
             <>
-              <button className="primary-action" type="button" onClick={() => navigate("/")}>
+              <ActionLink
+                className="primary-action"
+                to="/"
+                authenticity={{
+                  actionId: 'workbench.new-run.navigate',
+                  kind: 'route',
+                  description: 'navigates to new research run page'
+                }}
+              >
                 <Plus size={16} aria-hidden />
-                New Run
-              </button>
-              <button className="icon-button" type="button" onClick={refreshProjects} aria-label="Refresh workbench">
+                {t('workbench.newRun')}
+              </ActionLink>
+              <ActionButton
+                className="icon-button"
+                onClick={refreshProjects}
+                aria-label={t('workbench.refresh')}
+                authenticity={{
+                  actionId: 'workbench.refresh',
+                  kind: 'local',
+                  description: 'refreshes project list'
+                }}
+              >
                 <RefreshCw size={16} aria-hidden />
-              </button>
-              <button className="icon-button" type="button" aria-label="More workspace actions">
+              </ActionButton>
+              <ActionButton
+                className="icon-button"
+                aria-label={t('workbench.moreActions')}
+                authenticity={{
+                  actionId: 'workbench.more-actions.disabled',
+                  kind: 'disabled',
+                  description: 'workspace action menu not available in demo'
+                }}
+                disabled
+                disabledReason={t('workbench.moreActions.disabled')}
+              >
                 <MoreHorizontal size={16} aria-hidden />
-              </button>
+              </ActionButton>
             </>
           }
         />

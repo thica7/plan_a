@@ -6,6 +6,7 @@ import type {
   ProjectRecord,
 } from "../../api/types";
 import { Panel } from "../../components/ui";
+import { useTranslation } from "../../stores/i18n";
 import { AuditTrail } from "./AuditTrail";
 import { BenchmarkPanel } from "./BenchmarkPanel";
 import { NotificationStream } from "./NotificationStream";
@@ -23,11 +24,12 @@ export function ActivityCenter({
   notifications,
   project,
 }: ActivityCenterProps) {
+  const { t } = useTranslation();
   return (
     <div className="activity-workbench">
       <main className="activity-main">
         <NotificationStream notifications={notifications} project={project} />
-        <Panel title="Audit trail" icon={<CalendarClock size={16} aria-hidden />}>
+        <Panel title={t('workbench.auditTrail')} icon={<CalendarClock size={16} aria-hidden />}>
           <AuditTrail logs={auditLogs} />
         </Panel>
       </main>

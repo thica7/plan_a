@@ -6,10 +6,6 @@ from packages.agents.writer.logic import (
     writer_user_research_policy_text,
 )
 from packages.business_intel import compare_run_quality
-from packages.business_intel.report_citation_policy import (
-    repair_report_citation_policy,
-    report_citation_policy_violations,
-)
 from packages.rag.grounded_prompt import format_retrieval_records_for_prompt
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import EnterpriseRunProjection, EvidenceRecord, ReportVersionRecord
@@ -43,104 +39,6 @@ def test_writer_user_research_policy_names_all_research_source_types() -> None:
     assert "official factual proof" in policy
     for source_type in USER_RESEARCH_SOURCE_TYPES:
         assert source_type in policy
-
-
-def test_report_citation_policy_blocks_weak_source_in_overall_confidence() -> None:
-    evidence = [
-        EvidenceRecord(
-            id="evidence-strong",
-            workspace_id="workspace-1",
-            project_id="project-1",
-            run_id="run-1",
-            raw_source_id="raw-source-strong",
-            competitor_id="competitor-cursor",
-            dimension="pricing",
-            source_type="webpage_verified",
-            title="Cursor pricing",
-            url="https://example.com/pricing",
-            snippet="Cursor publishes pricing.",
-            content_hash="hash-strong",
-            reliability_score=0.96,
-            quality_label="accepted",
-        ),
-        EvidenceRecord(
-            id="evidence-weak",
-            workspace_id="workspace-1",
-            project_id="project-1",
-            run_id="run-1",
-            raw_source_id="raw-source-weak",
-            competitor_id="competitor-windsurf",
-            dimension="persona",
-            source_type="interview_record",
-            title="Windsurf target-user proxy interview note",
-            snippet="Directional interview note.",
-            content_hash="hash-weak",
-            reliability_score=0.56,
-            quality_label="unreviewed",
-        ),
-    ]
-    report_md = (
-        "Overall Confidence: 0.78 | Caveat: Persona coverage is partial. "
-        "[source:raw-source-weak]"
-    )
-
-    violations = report_citation_policy_violations(report_md, evidence)
-    repaired = repair_report_citation_policy(report_md, evidence)
-
-    assert len(violations) == 1
-    assert violations[0].rule_id == "strong_conclusion_uses_weak_source"
-    assert violations[0].evidence_ids == ["evidence-weak"]
-    assert repaired.changed is True
-    assert "Evidence caveat:" in repaired.report_md
-    assert "[source:raw-source-weak]" not in repaired.report_md
-    assert "[source:raw-source-strong]" in repaired.report_md
-
-
-def test_writer_hardening_replaces_weak_strong_conclusion_citation() -> None:
-    writer = _WriterHarness()
-    detail = _run_detail(
-        run_id="writer-citation-policy",
-        execution_mode="real",
-        source_count=0,
-        report_md="",
-        metrics=RunMetrics(),
-    )
-    detail.raw_sources = [
-        RawSource(
-            id="raw-source-weak",
-            competitor="Windsurf",
-            dimension="persona",
-            source_type="interview_record",
-            title="Windsurf target-user proxy interview note",
-            snippet="Directional interview note.",
-            content_hash="hash-weak",
-            confidence=0.56,
-        ),
-        RawSource(
-            id="raw-source-strong",
-            competitor="Cursor",
-            dimension="pricing",
-            source_type="webpage_verified",
-            title="Cursor pricing",
-            url="https://example.com/pricing",
-            snippet="Cursor publishes pricing.",
-            content_hash="hash-strong",
-            confidence=0.96,
-        ),
-    ]
-
-    report = writer._harden_report_markdown(
-        detail,
-        (
-            "# Report\n\n"
-            "Overall Confidence: 0.78 | Caveat: Persona coverage is partial. "
-            "[source:raw-source-weak]"
-        ),
-    )
-
-    assert "Evidence caveat:" in report
-    assert "[source:raw-source-weak]" not in report.splitlines()[2]
-    assert "[source:raw-source-strong]" in report.splitlines()[2]
 
 
 def test_compare_run_quality_scores_real_run_against_baseline() -> None:

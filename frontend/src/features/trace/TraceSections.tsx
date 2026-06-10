@@ -1,6 +1,7 @@
 import type { RunEvent } from "../../api/sse_types";
 import type { DecisionReplayReport, RunMetrics, TraceSpan } from "../../api/types";
 import { formatDecisionPayload, formatSpanMeta, type ContextRow } from "./traceModel";
+import { useTranslation } from "../../stores/i18n";
 
 export function TraceMetricsBar({
   metrics,
@@ -9,9 +10,10 @@ export function TraceMetricsBar({
   metrics: RunMetrics;
   toolSpanCount: number;
 }) {
+  const { t } = useTranslation();
   const items = [
-    ["Spans", metrics.total_spans],
-    ["Duration", `${metrics.total_duration_ms}ms`],
+    [t("trace.spans"), metrics.total_spans],
+    [t("trace.duration"), `${metrics.total_duration_ms}ms`],
     ["LLM", metrics.llm_calls],
     ["Search", metrics.search_calls],
     ["Fetch", metrics.fetch_calls],
@@ -36,6 +38,7 @@ export function TraceMetricsBar({
 }
 
 export function DecisionReplaySection({ replay }: { replay: DecisionReplayReport | null | undefined }) {
+  const { t } = useTranslation();
   if (!replay) return null;
   const replayEvents = replay.events.slice(0, 12);
   return (
@@ -85,7 +88,7 @@ export function DecisionReplaySection({ replay }: { replay: DecisionReplayReport
           })}
         </ol>
       ) : (
-        <p>No replay events yet.</p>
+        <p>{t("trace.noReplayEvents")}</p>
       )}
     </div>
   );
@@ -146,7 +149,8 @@ export function SpanList({ spans }: { spans: TraceSpan[] }) {
 }
 
 export function EventList({ events }: { events: RunEvent[] }) {
-  if (events.length === 0) return <p>No trace events yet.</p>;
+  const { t } = useTranslation();
+  if (events.length === 0) return <p>{t("trace.noTraceEvents")}</p>;
   return (
     <ol className="trace-list">
       {events.map((event) => (

@@ -1,5 +1,6 @@
 import { AlertTriangle, CheckCircle2, Download, Loader2 } from "lucide-react";
 import type { ArtifactRecord, RunComplianceReport } from "../../api/types";
+import { useTranslation } from '../../stores/i18n';
 import { MetricValue } from "./MetricValue";
 
 interface CompliancePanelProps {
@@ -15,6 +16,8 @@ export function CompliancePanel({
   onExport,
   report,
 }: CompliancePanelProps) {
+  const { t } = useTranslation();
+
   if (!report) {
     return (
       <aside className="qa-panel run-quality-panel">
@@ -31,7 +34,7 @@ export function CompliancePanel({
   return (
     <aside className={`qa-panel run-quality-panel ${report.status}`}>
       <div className="panel-heading-row">
-        <h2>Compliance</h2>
+        <h2>{t('compliance.title')}</h2>
         <button
           className="icon-text-button"
           disabled={isExporting}
@@ -39,12 +42,12 @@ export function CompliancePanel({
           type="button"
         >
           <Download size={15} aria-hidden />
-          {isExporting ? "Exporting" : "Export"}
+          {isExporting ? "Exporting" : t('common.export')}
         </button>
       </div>
       <div className="metric-grid compact">
-        <MetricValue label="Status" value={report.status} />
-        <MetricValue label="Findings" value={String(report.finding_count)} />
+        <MetricValue label={t('compliance.status')} value={report.status} />
+        <MetricValue label={t('compliance.findings')} value={String(report.finding_count)} />
         <MetricValue label="Blockers" value={String(report.blocker_count)} />
         <MetricValue label="Redactions" value={String(report.redaction_count)} />
       </div>
@@ -76,7 +79,7 @@ export function CompliancePanel({
       </div>
       {topFindings.length > 0 ? (
         <div className="reflection-review">
-          <h3>Findings</h3>
+          <h3>{t('compliance.findings')}</h3>
           {topFindings.map((finding) => (
             <article className="issue-row reflection-row" key={finding.id}>
               <strong>{finding.severity}</strong>
@@ -87,7 +90,7 @@ export function CompliancePanel({
           ))}
         </div>
       ) : (
-        <p className="muted-text">No compliance findings.</p>
+        <p className="muted-text">{t('compliance.noFindings')}</p>
       )}
       {exportArtifact ? (
         <p className="muted-text">

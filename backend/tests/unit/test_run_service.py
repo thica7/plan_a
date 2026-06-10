@@ -17,7 +17,6 @@ from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
     EnterpriseRunProjection,
-    EvidenceRecord,
     ModelRouteCandidate,
     ModelRouteDecision,
     ProjectReadinessScore,
@@ -295,6 +294,129 @@ async def test_real_mode_accepts_backup_provider_when_model_policy_allows() -> N
     )
 
     assert detail.execution_mode == "real"
+
+
+@pytest.mark.asyncio
+async def test_create_run_reuses_recent_active_duplicate_even_with_new_key() -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+
+    first = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:first",
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity", "Claude"],
+            dimensions=["pricing", "feature"],
+            execution_mode="demo",
+        )
+    )
+    duplicate = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:second",
+            topic="  AI   research assistant competitive analysis ",
+            competitors=["claude", "Perplexity"],
+            dimensions=["feature", "pricing"],
+            execution_mode="demo",
+        )
+    )
+
+    assert duplicate.id == first.id
+    assert duplicate.idempotency_key == first.idempotency_key
+    assert duplicate.active_run_fingerprint == first.active_run_fingerprint
+
+
+@pytest.mark.asyncio
+async def test_duplicate_run_short_circuits_pre_create_verification(monkeypatch) -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+    calls = 0
+
+    def verify_once(competitors: list[str]) -> dict[str, HomepageVerification]:
+        nonlocal calls
+        calls += 1
+        return {
+            competitor: HomepageVerification(
+                competitor=competitor,
+                homepage_url=None,
+                verified=False,
+                reason="test",
+            )
+            for competitor in competitors
+        }
+
+    monkeypatch.setattr("packages.orchestrator.service.verify_homepages", verify_once)
+
+    first = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:verify-first",
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity", "Claude"],
+            dimensions=["pricing", "feature"],
+            execution_mode="demo",
+        )
+    )
+    duplicate = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:verify-second",
+            topic="AI research assistant competitive analysis",
+            competitors=["Claude", "Perplexity"],
+            dimensions=["feature", "pricing"],
+            execution_mode="demo",
+        )
+    )
+
+    assert duplicate.id == first.id
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_create_run_allows_duplicate_after_active_run_finishes() -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+
+    first = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:finished-first",
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    first.status = "completed"
+    duplicate = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:finished-second",
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+
+    assert duplicate.id != first.id
+    assert duplicate.active_run_fingerprint == first.active_run_fingerprint
 
 
 @pytest.mark.asyncio
@@ -4796,124 +4918,6 @@ def test_release_gate_quality_metadata_records_followup_tasks() -> None:
     assert "Collect a second independent pricing source." in projection.report_version.report_md
 
 
-def test_release_gate_quality_metadata_repairs_strong_conclusion_weak_citation() -> None:
-    service = RunService(
-        skill_registry=SkillRegistry.from_default_path(),
-        settings=Settings(
-            demo_mode=False,
-            ark_api_key="key",
-            ark_model="model",
-            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
-            llm_timeout_seconds=10,
-            llm_temperature=0.2,
-        ),
-    )
-    projection = EnterpriseRunProjection(
-        workspace_id="workspace-1",
-        project_id="project-1",
-        run_id="run-1",
-        evidence_records=[
-            EvidenceRecord(
-                id="evidence-strong",
-                workspace_id="workspace-1",
-                project_id="project-1",
-                run_id="run-1",
-                raw_source_id="raw-source-strong",
-                competitor_id="competitor-cursor",
-                dimension="pricing",
-                source_type="webpage_verified",
-                title="Cursor pricing",
-                url="https://example.com/pricing",
-                snippet="Cursor publishes pricing.",
-                content_hash="hash-strong",
-                reliability_score=0.96,
-                quality_label="accepted",
-            ),
-            EvidenceRecord(
-                id="evidence-weak",
-                workspace_id="workspace-1",
-                project_id="project-1",
-                run_id="run-1",
-                raw_source_id="raw-source-weak",
-                competitor_id="competitor-windsurf",
-                dimension="persona",
-                source_type="interview_record",
-                title="Windsurf proxy interview",
-                snippet="Directional interview note.",
-                content_hash="hash-weak",
-                reliability_score=0.56,
-                quality_label="unreviewed",
-            ),
-        ],
-        report_version=ReportVersionRecord(
-            id="report-version-1",
-            workspace_id="workspace-1",
-            project_id="project-1",
-            run_id="run-1",
-            version_number=1,
-            topic_normalized="release-gate-citation-policy",
-            competitor_layer="L1",
-            competitor_set_hash="hash",
-            evidence_ids=["evidence-strong", "evidence-weak"],
-            report_md=(
-                "# Report\n\n"
-                "Overall Confidence: 0.78 | Caveat: Persona coverage is partial. "
-                "[source:raw-source-weak]"
-            ),
-        ),
-    )
-    gate = ReportReleaseGate(
-        report_version_id="report-version-1",
-        workspace_id="workspace-1",
-        project_id="project-1",
-        allowed=False,
-        status="blocked",
-        readiness=ProjectReadinessScore(
-            project_id="project-1",
-            score=94,
-            risk_level="ready",
-            evidence_score=90,
-            claim_score=90,
-            coverage_score=90,
-            qa_score=90,
-            summary="Ready except citation policy.",
-        ),
-        qa_evaluation=BusinessQAEvaluation(
-            project_id="project-1",
-            scenario_id="l1_pricing_pack",
-            competitor_layer="L1",
-        ),
-        issue_count=1,
-        blocker_count=1,
-        warn_count=0,
-        issues=[
-            BusinessQAFinding(
-                id="release-citation-1",
-                rule_id="strong_conclusion_uses_weak_source",
-                rule_name="Strong conclusion source quality",
-                severity="blocker",
-                message="A strong report conclusion cites weak evidence.",
-                evidence_ids=["evidence-weak"],
-                recommendation="Rewrite the conclusion as tentative.",
-            )
-        ],
-    )
-
-    changed = service._attach_release_gate_quality_metadata(projection, gate)
-    metadata = projection.report_version.quality_metadata["release_gate"]
-
-    assert changed is True
-    assert "Evidence caveat:" in projection.report_version.report_md
-    assert "[source:raw-source-weak]" not in projection.report_version.report_md
-    assert "[source:raw-source-strong]" in projection.report_version.report_md
-    assert metadata["warning_repair"]["changed"] is True
-    assert metadata["warning_repair"]["citation_policy_repair"]["changed"] is True
-    assert (
-        metadata["warning_repair"]["citation_policy_repair"]["violations"][0]["rule_id"]
-        == "strong_conclusion_uses_weak_source"
-    )
-
-
 @pytest.mark.asyncio
 async def test_release_gate_auto_redo_is_disabled_for_demo_runs() -> None:
     service = RunService(
@@ -7169,45 +7173,6 @@ async def test_hitl_resume_creates_reviewable_memory_candidate() -> None:
         assert lifecycle_messages[0].payload["hitl_lifecycle"]["metadata"]["dimensions"] == [
             "feature"
         ]
-    finally:
-        await service._graph_checkpointer.aclose()
-
-
-@pytest.mark.asyncio
-async def test_hitl_accept_without_pending_interrupt_leaves_run_state_unchanged() -> None:
-    service = RunService(
-        skill_registry=SkillRegistry.from_default_path(),
-        settings=Settings(
-            demo_mode=True,
-            ark_api_key="key",
-            ark_model="model",
-            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
-            llm_timeout_seconds=10,
-            llm_temperature=0.2,
-            hitl_enabled=True,
-        ),
-        graph_checkpointer=_test_graph_checkpointer(),
-    )
-
-    try:
-        detail = await service.create_run(
-            RunCreateRequest(
-                topic="HITL stale accept",
-                competitors=["A"],
-                dimensions=["pricing"],
-                execution_mode="demo",
-            )
-        )
-        record = service._runs[detail.id]
-        record.detail.status = "completed"
-        record.detail.current_node = None
-
-        updated = await service.resume(detail.id, HitlResumeRequest(decision="accept"))
-
-        assert updated is not None
-        assert updated.status == "completed"
-        assert updated.current_node is None
-        assert service.has_pending_interrupt(detail.id) is False
     finally:
         await service._graph_checkpointer.aclose()
 

@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { useTranslation } from '../../stores/i18n';
 import type { RunDetail as RunDetailRecord } from "../../api/types";
 
 interface RunDetailHeaderProps {
@@ -7,6 +8,7 @@ interface RunDetailHeaderProps {
 }
 
 export function RunDetailHeader({ detail, recommendedDimensions }: RunDetailHeaderProps) {
+  const { t } = useTranslation();
   return (
     <header className="page-header page-header-split">
       <div>
@@ -16,15 +18,15 @@ export function RunDetailHeader({ detail, recommendedDimensions }: RunDetailHead
           {detail.execution_mode}
         </p>
         <div className="run-meta-row">
-          <span>Layer {detail.plan.competitor_layer}</span>
-          <span>Scenario {detail.plan.scenario_id ?? "auto"}</span>
+          <span>{t('runHeader.layer')} {detail.plan.competitor_layer}</span>
+          <span>{t('runHeader.scenario')} {detail.plan.scenario_id ?? "auto"}</span>
           <span>QA rules {detail.plan.qa_rule_ids.length}</span>
-          <span>Tasks {detail.plan.task_decomposition.length}</span>
+          <span>{t('runHeader.tasks')} {detail.plan.task_decomposition.length}</span>
           {detail.plan.qa_rule_ids.slice(0, 4).map((ruleId) => (
             <span key={ruleId}>{ruleId}</span>
           ))}
           {recommendedDimensions.length > 0 ? (
-            <span>Recommended {recommendedDimensions.join(", ")}</span>
+            <span>{t('runHeader.recommended')} {recommendedDimensions.join(", ")}</span>
           ) : null}
         </div>
       </div>

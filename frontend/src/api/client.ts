@@ -615,6 +615,7 @@ export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) 
     "redo.routed",
     "benchmark.scored",
     "report.ready",
+    "runtime.command",
   ];
   for (const type of eventTypes) {
     source.addEventListener(type, (message) => {

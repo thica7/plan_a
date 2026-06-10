@@ -6,6 +6,7 @@ import type {
   EvidenceRecord,
 } from "../../api/types";
 import { EmptyState, MetricCard, Panel, StatusPill } from "../../components/ui";
+import { useTranslation } from "../../stores/i18n";
 import { formatPercent } from "./format";
 
 interface EvidenceLedgerPanelProps {
@@ -27,13 +28,14 @@ export function EvidenceLedgerPanel({
   selectedEvidenceId,
   setQuery,
 }: EvidenceLedgerPanelProps) {
+  const { t } = useTranslation();
   const verifiedCount = evidence.filter(isVerifiedLikeEvidence).length;
   const acceptedCount = evidence.filter((item) => item.quality_label === "accepted").length;
 
   return (
     <Panel
       className="evidence-ledger-panel"
-      title="Evidence ledger"
+      title={t('workbench.evidenceStatus')}
       icon={<Database size={16} aria-hidden />}
       actions={
         <label className="search-control evidence-search-control">

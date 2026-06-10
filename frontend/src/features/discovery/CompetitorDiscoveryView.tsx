@@ -1,4 +1,5 @@
 import { SearchCheck } from "lucide-react";
+import { useTranslation } from '../../stores/i18n';
 import type { CompetitorDiscovery } from "../../api/types";
 
 interface CompetitorDiscoveryViewProps {
@@ -6,6 +7,8 @@ interface CompetitorDiscoveryViewProps {
 }
 
 export function CompetitorDiscoveryView({ discovery }: CompetitorDiscoveryViewProps) {
+  const { t } = useTranslation();
+
   if (!discovery) {
     return null;
   }
@@ -13,7 +16,7 @@ export function CompetitorDiscoveryView({ discovery }: CompetitorDiscoveryViewPr
   return (
     <section className="panel discovery-panel">
       <div className="panel-heading-row">
-        <h2>Competitor discovery</h2>
+        <h2>{t('discovery.title')}</h2>
         <SearchCheck size={17} aria-hidden />
       </div>
 

@@ -1068,6 +1068,55 @@ class EnterprisePostgresStore:
             conn.commit()
         return evidence
 
+    def upsert_evidence_batch(self, evidence: list[EvidenceRecord]) -> list[EvidenceRecord]:
+        if not evidence:
+            return []
+        stored: list[EvidenceRecord] = []
+        with self._connect(self.database_url, row_factory=self._dict_row) as conn:
+            with conn.cursor() as cur:
+                for item in evidence:
+                    before_row = cur.execute(
+                        "SELECT * FROM evidence_records WHERE id = %s",
+                        (item.id,),
+                    ).fetchone()
+                    item = self._apply_embedding_dedupe(cur, item)
+                    self._upsert_evidence(cur, item)
+                    if item.metadata.get("embedding_duplicate_of"):
+                        self._delete_evidence_embedding(cur, item.id)
+                    else:
+                        self._upsert_evidence_embedding(cur, item)
+                    registry_record = self._upsert_source_registry(
+                        cur,
+                        source_registry_from_evidence(item),
+                    )
+                    self._append_audit_once(
+                        cur,
+                        workspace_id=registry_record.workspace_id,
+                        actor_id=DEFAULT_USER_ID,
+                        action="source_registry.upserted",
+                        resource_type="source_registry",
+                        resource_id=registry_record.id,
+                        after=registry_record.model_dump(mode="json"),
+                    )
+                    self._append_audit(
+                        cur,
+                        workspace_id=item.workspace_id,
+                        actor_id=DEFAULT_USER_ID,
+                        action="evidence.upserted",
+                        resource_type="evidence",
+                        resource_id=item.id,
+                        before=self._model_from_row(
+                            EvidenceRecord,
+                            before_row,
+                        ).model_dump(mode="json")
+                        if before_row
+                        else None,
+                        after=item.model_dump(mode="json"),
+                    )
+                    stored.append(item)
+            conn.commit()
+        return stored
+
     def list_evidence_embeddings(
         self,
         workspace_id: str | None = None,

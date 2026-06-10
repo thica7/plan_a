@@ -601,6 +601,81 @@ class EvidenceSeedRow(BaseModel):
     reliability: float = Field(ge=0.0, le=1.0)
 
 
+# KB crawler 同步到 enterprise evidence 的接口契约，字段保持批量和可过滤，避免一次导入全库。
+class KnowledgeEvidenceSyncRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    crawl_run_id: str | None = None
+    competitors: list[str] = Field(default_factory=list)
+    dimensions: list[str] = Field(default_factory=list)
+    source_types: list[str] = Field(default_factory=list)
+    run_id: str | None = None
+    limit: int = Field(default=200, ge=1, le=2000)
+    offset: int = Field(default=0, ge=0)
+    snippet_chars: int = Field(default=500, ge=120, le=2000)
+    full_text_chars: int = Field(default=6000, ge=0, le=30000)
+    max_selected_chunks: int = Field(default=8, ge=1, le=100)
+    metadata_keys: list[str] = Field(default_factory=list)
+    force_resync: bool = False
+    reindex_embeddings: bool = False
+    reindex_max_documents: int = Field(default=500, ge=1, le=5000)
+    delay_seconds: float = Field(default=0.0, ge=0.0, le=3600.0)
+
+
+class KnowledgeEvidenceSyncResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str
+    project_id: str
+    loaded_count: int = Field(ge=0)
+    ingested_count: int = Field(ge=0)
+    skipped_count: int = Field(default=0, ge=0)
+    chunk_count: int = Field(ge=0)
+    indexed_count: int = Field(ge=0)
+    duplicate_count: int = Field(default=0, ge=0)
+    reindex_skipped: bool = False
+    metric_id: str | None = None
+    elapsed_ms: float = Field(default=0.0, ge=0.0)
+    evidence_ids: list[str] = Field(default_factory=list)
+    crawl_run_ids: list[str] = Field(default_factory=list)
+    competitors: list[str] = Field(default_factory=list)
+    dimensions: list[str] = Field(default_factory=list)
+
+
+class KnowledgeEvidenceSyncMetricRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    workspace_id: str
+    project_id: str
+    status: str
+    started_at: datetime
+    completed_at: datetime
+    duration_ms: float = Field(ge=0.0)
+    loaded_count: int = Field(ge=0)
+    ingested_count: int = Field(ge=0)
+    skipped_count: int = Field(ge=0)
+    chunk_count: int = Field(ge=0)
+    indexed_count: int = Field(ge=0)
+    duplicate_count: int = Field(ge=0)
+    request: dict[str, Any] = Field(default_factory=dict)
+    error: str = ""
+
+
+class KnowledgeEvidenceSyncJobRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    workspace_id: str
+    project_id: str
+    status: Literal["queued", "running", "succeeded", "failed"]
+    request: KnowledgeEvidenceSyncRequest
+    result: KnowledgeEvidenceSyncResult | None = None
+    error: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class EvidenceSeedIngestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

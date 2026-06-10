@@ -4,6 +4,9 @@ import { NewRun } from "./pages/NewRun";
 import { RunDetail } from "./pages/RunDetail";
 import { HistoryPage } from "./pages/History";
 import { EnterpriseWorkbench } from "./pages/EnterpriseWorkbench";
+import KnowledgePage from "./pages/KnowledgePage";
+import SearchPage from "./pages/SearchPage";
+import CrawlPage from "./pages/CrawlPage";
 
 export function App() {
   return (
@@ -12,6 +15,9 @@ export function App() {
         <Route path="/" element={<NewRun />} />
         <Route path="/runs/:runId" element={<RunDetail />} />
         <Route path="/history" element={<HistoryPage />} />
+        <Route path="/knowledge" element={<KnowledgePage />} />
+        <Route path="/search" element={<SearchPage />} />
+        <Route path="/crawl" element={<CrawlPage />} />
         <Route path="/enterprise" element={<EnterpriseWorkbench initialView="overview" />} />
         <Route path="/competitors" element={<EnterpriseWorkbench initialView="competitors" />} />
         <Route path="/evidence" element={<EnterpriseWorkbench initialView="evidence" />} />

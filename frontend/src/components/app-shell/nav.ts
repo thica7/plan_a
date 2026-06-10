@@ -1,5 +1,6 @@
 import {
   Bell,
+  BookOpen,
   Briefcase,
   Database,
   FileText,
@@ -7,7 +8,9 @@ import {
   type LucideIcon,
   Layers,
   PlusCircle,
+  Search,
   ShieldCheck,
+  Workflow,
 } from "lucide-react";
 
 export interface ShellNavItem {
@@ -35,6 +38,9 @@ export const navGroups: ShellNavGroup[] = [
     label: "Evidence",
     items: [
       { to: "/evidence", label: "Sources", icon: Database },
+      { to: "/knowledge", label: "Knowledge", icon: BookOpen },
+      { to: "/search", label: "Search", icon: Search },
+      { to: "/crawl", label: "Crawl", icon: Workflow },
       { to: "/reports", label: "Reports", icon: FileText },
     ],
   },
@@ -59,6 +65,9 @@ export function routeTitle(pathname: string) {
   if (pathname === "/") return "Run setup";
   if (pathname.startsWith("/runs/")) return "Run detail";
   if (pathname.startsWith("/history")) return "Run history";
+  if (pathname.startsWith("/knowledge")) return "Knowledge base";
+  if (pathname.startsWith("/search")) return "Knowledge search";
+  if (pathname.startsWith("/crawl")) return "Crawler";
   if (pathname.startsWith("/competitors")) return "Competitor library";
   if (pathname.startsWith("/evidence")) return "Evidence center";
   if (pathname.startsWith("/reports")) return "Report studio";

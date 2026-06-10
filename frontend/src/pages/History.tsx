@@ -4,8 +4,10 @@ import { RunHistoryFilters, type RunHistoryFilterState } from "../features/histo
 import { RunHistorySummary } from "../features/history/RunHistorySummary";
 import { RunHistoryTable } from "../features/history/RunHistoryTable";
 import { useRunHistory } from "../features/history/useRunHistory";
+import { useTranslation } from "../stores/i18n";
 
 export function HistoryPage() {
+  const { t } = useTranslation();
   const { counts, isLoading, runs } = useRunHistory();
   const [filters, setFilters] = useState<RunHistoryFilterState>({
     mode: "all",
@@ -26,12 +28,12 @@ export function HistoryPage() {
     <section className="work-surface history-page">
       <header className="page-header page-header-split">
         <div>
-          <h1>Run history</h1>
-          <p>Recent intelligence runs from the active orchestration and storage backend.</p>
+          <h1>{t('history.title')}</h1>
+          <p>{t('history.description')}</p>
         </div>
         <div className="header-stat">
           <strong>{counts.total}</strong>
-          <span>runs</span>
+          <span>{t('history.runs')}</span>
         </div>
       </header>
 

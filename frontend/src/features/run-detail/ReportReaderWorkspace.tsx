@@ -1,5 +1,6 @@
 import { FileSearch, GitCompareArrows, PanelRight } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
+import { useTranslation } from '../../stores/i18n';
 import { ReportView } from "../report/ReportView";
 import type { ReportSourceBundle } from "../report/sourceBundle";
 
@@ -14,6 +15,7 @@ export function ReportReaderWorkspace({
   onActiveSourceChange: (sourceId: string | null) => void;
   reportSources: ReportSourceBundle;
 }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
 
   function handleFind(event: KeyboardEvent<HTMLInputElement>) {
@@ -28,20 +30,20 @@ export function ReportReaderWorkspace({
         <div className="report-mode-toggle" aria-label="Report reader mode">
           <button className="active" type="button">
             <PanelRight size={14} aria-hidden />
-            Three pane
+            {t('reportDetail.threePane')}
           </button>
           <button type="button">
             <GitCompareArrows size={14} aria-hidden />
-            Compare
+            {t('reportDetail.compare')}
           </button>
         </div>
         <label className="report-find-control">
           <FileSearch size={14} aria-hidden />
           <input
-            aria-label="Find in report"
+            aria-label={t('reportDetail.findInReport')}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleFind}
-            placeholder="Find in report"
+            placeholder={t('reportDetail.findInReport')}
             type="search"
             value={query}
           />
@@ -53,7 +55,7 @@ export function ReportReaderWorkspace({
         layout="reader"
         markdown={markdown}
         onActiveSourceChange={onActiveSourceChange}
-        readerTitle="Final report"
+        readerTitle={t('reportDetail.finalReport')}
         showSourceTrace={false}
         sourceAliases={reportSources.aliases}
         sources={reportSources.sources}

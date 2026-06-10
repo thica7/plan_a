@@ -16,6 +16,7 @@ from packages.observability.telemetry_contract import (
 )
 from packages.observability.trace_store import TraceStore
 from packages.observability.tracing import (
+    RetrievalObservability,
     build_run_event,
     otel_span_id_for_span,
     sanitize_for_trace,
@@ -29,6 +30,7 @@ __all__ = [
     "DecisionReplayEvent",
     "DecisionReplayReport",
     "OtelTraceExport",
+    "RetrievalObservability",
     "TraceObservabilityReport",
     "TraceStore",
     "TELEMETRY_EVENT_TYPES",

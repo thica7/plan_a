@@ -2,14 +2,16 @@ import { Database } from "lucide-react";
 import type { SourceRegistryRecord } from "../../api/types";
 import { Panel, StatusPill } from "../../components/ui";
 import { formatDate } from "./format";
+import { useTranslation } from "../../stores/i18n";
 
 interface SourceRegistryPanelProps {
   registry: SourceRegistryRecord[];
 }
 
 export function SourceRegistryPanel({ registry }: SourceRegistryPanelProps) {
+  const { t } = useTranslation();
   return (
-    <Panel className="source-registry-panel" title="Source registry" icon={<Database size={16} aria-hidden />}>
+    <Panel className="source-registry-panel" title={t('workbench.sourceRegistry')} icon={<Database size={16} aria-hidden />}>
       <div className="source-registry-summary">
         <RegistryStat label="registered" value={registry.length} />
         <RegistryStat label="approved" value={registry.filter((item) => item.policy_review_status === "approved").length} />
@@ -19,11 +21,11 @@ export function SourceRegistryPanel({ registry }: SourceRegistryPanelProps) {
 
       <div className="data-table source-registry-table">
         <div className="data-table-head">
-          <span>Source</span>
-          <span>Trust</span>
-          <span>Robots</span>
+          <span>{t('workbench.source')}</span>
+          <span>{t('workbench.trust')}</span>
+          <span>{t('workbench.robots')}</span>
           <span>Review</span>
-          <span>Seen</span>
+          <span>{t('workbench.seen')}</span>
         </div>
         {registry.slice(0, 50).map((source) => (
           <article className="data-row" key={source.id}>

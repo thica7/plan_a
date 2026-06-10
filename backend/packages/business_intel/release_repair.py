@@ -4,9 +4,8 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from packages.business_intel.report_citation_policy import repair_report_citation_policy
 from packages.research.models import RepairTask
-from packages.schema.enterprise import BusinessQAFinding, EvidenceRecord, ReportReleaseGate
+from packages.schema.enterprise import BusinessQAFinding, ReportReleaseGate
 
 RELEASE_REPAIR_HEADING = "Release Gate Follow-up Repairs"
 
@@ -37,46 +36,36 @@ class ReleaseReportRepairResult:
     before_issue_count: int
     after_issue_count: int | None
     targets: list[ReleaseRepairTarget]
-    citation_policy_repair: dict[str, object]
 
     def metadata(self) -> dict[str, Any]:
-        citation_target_count = _metadata_int(
-            self.citation_policy_repair.get("target_issue_count")
-        )
         return {
-            "changed": bool(self.targets) or citation_target_count > 0,
+            "changed": bool(self.targets),
             "before_warn_count": self.before_warn_count,
             "after_warn_count": self.after_warn_count,
             "before_issue_count": self.before_issue_count,
             "after_issue_count": self.after_issue_count,
             "target_count": len(self.targets),
             "targets": [asdict(target) for target in self.targets],
-            "citation_policy_repair": self.citation_policy_repair,
         }
 
 
-def apply_release_gate_report_repair(
+def apply_release_gate_warning_report_repair(
     report_md: str,
     *,
     gate: ReportReleaseGate,
     tasks: list[RepairTask],
-    evidence: list[EvidenceRecord] | None = None,
     after_gate: ReportReleaseGate | None = None,
 ) -> ReleaseReportRepairResult:
-    citation_repair = repair_report_citation_policy(report_md, list(evidence or []))
-    citation_repair_metadata = _citation_policy_repair_metadata(citation_repair, gate)
-    working_md = citation_repair.report_md
     targets = release_repair_targets(gate, tasks)
     if not targets:
         return ReleaseReportRepairResult(
-            report_md=working_md,
-            changed=citation_repair.changed,
+            report_md=report_md,
+            changed=False,
             before_warn_count=gate.warn_count,
             after_warn_count=after_gate.warn_count if after_gate is not None else None,
             before_issue_count=gate.issue_count,
             after_issue_count=after_gate.issue_count if after_gate is not None else None,
             targets=[],
-            citation_policy_repair=citation_repair_metadata,
         )
 
     section = release_repair_section(
@@ -84,7 +73,7 @@ def apply_release_gate_report_repair(
         before_warn_count=gate.warn_count,
         after_warn_count=after_gate.warn_count if after_gate is not None else None,
     )
-    repaired = replace_or_insert_section(working_md, RELEASE_REPAIR_HEADING, section)
+    repaired = replace_or_insert_section(report_md, RELEASE_REPAIR_HEADING, section)
     return ReleaseReportRepairResult(
         report_md=repaired,
         changed=repaired != report_md,
@@ -93,24 +82,6 @@ def apply_release_gate_report_repair(
         before_issue_count=gate.issue_count,
         after_issue_count=after_gate.issue_count if after_gate is not None else None,
         targets=targets,
-        citation_policy_repair=citation_repair_metadata,
-    )
-
-
-def apply_release_gate_warning_report_repair(
-    report_md: str,
-    *,
-    gate: ReportReleaseGate,
-    tasks: list[RepairTask],
-    evidence: list[EvidenceRecord] | None = None,
-    after_gate: ReportReleaseGate | None = None,
-) -> ReleaseReportRepairResult:
-    return apply_release_gate_report_repair(
-        report_md,
-        gate=gate,
-        tasks=tasks,
-        evidence=evidence,
-        after_gate=after_gate,
     )
 
 
@@ -127,49 +98,6 @@ def release_repair_targets(
             continue
         targets.append(_target_from_issue_task(issue, task))
     return targets
-
-
-def _citation_policy_repair_metadata(
-    citation_repair: object,
-    gate: ReportReleaseGate,
-) -> dict[str, object]:
-    raw_metadata = citation_repair.metadata()
-    citation_issues = [
-        issue for issue in gate.issues if issue.rule_id == "strong_conclusion_uses_weak_source"
-    ]
-    if not citation_issues:
-        return raw_metadata
-    return {
-        **raw_metadata,
-        "changed": True,
-        "target_issue_count": len(citation_issues),
-        "repaired_line_count": max(
-            _metadata_int(raw_metadata.get("repaired_line_count")),
-            len(citation_issues),
-        ),
-        "violation_count": max(
-            _metadata_int(raw_metadata.get("violation_count")),
-            len(citation_issues),
-        ),
-        "violations": [
-            {
-                "rule_id": issue.rule_id,
-                "severity": issue.severity,
-                "evidence_ids": issue.evidence_ids,
-                "message": issue.message,
-                "recommendation": issue.recommendation,
-            }
-            for issue in citation_issues
-        ],
-    }
-
-
-def _metadata_int(value: object) -> int:
-    if isinstance(value, bool):
-        return 0
-    if isinstance(value, int):
-        return max(0, value)
-    return 0
 
 
 def release_repair_section(

@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { slugReportHeading } from "../report/ReportView";
+import { useTranslation } from "../../stores/i18n";
 
 export interface ReportOutlineItem {
   id: string;
@@ -8,16 +9,17 @@ export interface ReportOutlineItem {
 }
 
 export function ReportOutline({ markdown }: { markdown: string }) {
+  const { t } = useTranslation();
   const items = buildReportOutline(markdown);
 
   return (
     <aside className="report-outline-panel">
       <div className="report-outline-heading">
-        <strong>Report outline</strong>
+        <strong>{t('reportDetail.outline')}</strong>
         <span>{items.length} sections</span>
       </div>
       {items.length > 0 ? (
-        <nav aria-label="Report outline">
+        <nav aria-label={t('reportDetail.outline')}>
           {items.map((item) => (
             <a className={`level-${item.level}`} href={`#${item.id}`} key={`${item.id}-${item.title}`}>
               <ChevronRight size={13} aria-hidden />
@@ -26,7 +28,7 @@ export function ReportOutline({ markdown }: { markdown: string }) {
           ))}
         </nav>
       ) : (
-        <p>No headings found in this report.</p>
+        <p>{t('reportDetail.noHeadings')}</p>
       )}
     </aside>
   );

@@ -1,4 +1,5 @@
 import type { AnalysisPlanTask } from "../../api/types";
+import { useTranslation } from "../../stores/i18n";
 import { MetricValue } from "./MetricValue";
 import {
   summarizeTaskStages,
@@ -7,6 +8,7 @@ import {
 } from "./utils";
 
 export function TaskDecompositionPanel({ tasks }: { tasks: AnalysisPlanTask[] }) {
+  const { t } = useTranslation();
   const stageCounts = summarizeTaskStages(tasks);
   const watchTasks = [...tasks]
     .sort((left, right) => {
@@ -22,12 +24,12 @@ export function TaskDecompositionPanel({ tasks }: { tasks: AnalysisPlanTask[] })
   return (
     <aside className="qa-panel run-quality-panel">
       <div className="panel-heading-row">
-        <h2>Task decomposition</h2>
+        <h2>{t('tasks.title')}</h2>
         <span className="muted-text">{tasks.length} tasks</span>
       </div>
       <div className="metric-grid compact">
-        <MetricValue label="Collector" value={String(stageCounts.collector ?? 0)} />
-        <MetricValue label="Analyst" value={String(stageCounts.analyst ?? 0)} />
+        <MetricValue label={t('tasks.collector')} value={String(stageCounts.collector ?? 0)} />
+        <MetricValue label={t('tasks.analyst')} value={String(stageCounts.analyst ?? 0)} />
         <MetricValue label="Research" value={String(stageCounts.survey_interview ?? 0)} />
         <MetricValue label="High priority" value={String(highPriorityCount)} />
       </div>
@@ -52,7 +54,7 @@ export function TaskDecompositionPanel({ tasks }: { tasks: AnalysisPlanTask[] })
           ))}
         </div>
       ) : (
-        <p className="muted-text">No adaptive tasks have been planned yet.</p>
+        <p className="muted-text">{t('tasks.noTasks')}</p>
       )}
     </aside>
   );

@@ -2,6 +2,7 @@ import { BarChart3 } from "lucide-react";
 
 import type { CompetitorRecord, CompetitorScoreReport, EvidenceRecord } from "../../api/types";
 import { MetricCard, Panel, StatusPill } from "../../components/ui";
+import { useTranslation } from "../../stores/i18n";
 
 interface CompetitorScoreBoardProps {
   competitors: CompetitorRecord[];
@@ -14,6 +15,7 @@ export function CompetitorScoreBoard({
   evidence,
   scores,
 }: CompetitorScoreBoardProps) {
+  const { t } = useTranslation();
   const dimensions = Array.from(new Set(evidence.map((item) => item.dimension).filter(Boolean))).slice(0, 6);
   const topScore = scores?.scores.find((score) => score.competitor_id === scores.top_competitor_id) ?? scores?.scores[0] ?? null;
   const verifiedEvidenceCount = evidence.filter((item) => item.source_type.includes("verified") || item.reliability_score >= 0.72).length;
@@ -22,12 +24,12 @@ export function CompetitorScoreBoard({
     : 0;
 
   return (
-    <Panel className="competitor-score-panel" title="Competitive position" icon={<BarChart3 size={16} aria-hidden />}>
+    <Panel className="competitor-score-panel" title={t('workbench.competitivePosition')} icon={<BarChart3 size={16} aria-hidden />}>
       <div className="competitor-score-grid">
-        <MetricCard label="Competitors" value={competitors.length} />
-        <MetricCard label="Verified evidence" value={verifiedEvidenceCount} tone={verifiedEvidenceCount ? "good" : "warn"} />
-        <MetricCard label="Avg coverage" value={formatScorePercent(averageCoverage)} tone={averageCoverage >= 0.7 ? "good" : "warn"} />
-        <MetricCard label="Current leader" value={topScore?.competitor_name ?? "n/a"} />
+        <MetricCard label={t('workbench.competitors')} value={competitors.length} />
+        <MetricCard label={t('workbench.verifiedEvidence')} value={verifiedEvidenceCount} tone={verifiedEvidenceCount ? "good" : "warn"} />
+        <MetricCard label={t('workbench.avgCoverage')} value={formatScorePercent(averageCoverage)} tone={averageCoverage >= 0.7 ? "good" : "warn"} />
+        <MetricCard label={t('workbench.currentLeader')} value={topScore?.competitor_name ?? "n/a"} />
       </div>
 
       <div className="competitor-rank-list" role="list">
@@ -44,7 +46,7 @@ export function CompetitorScoreBoard({
 
       <div className="competitor-coverage-matrix" aria-label="Competitor evidence coverage">
         <div className="competitor-coverage-head">
-          <span>Competitor</span>
+          <span>{t('workbench.competitors')}</span>
           {dimensions.map((dimension) => <span key={dimension}>{dimension}</span>)}
         </div>
         {competitors.map((competitor) => (

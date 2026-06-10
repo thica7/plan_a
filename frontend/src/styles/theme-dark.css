@@ -1,0 +1,198 @@
+/**
+ * Dark Theme - 暗黑主题
+ * 字节风格暗黑模式，字体权重优化
+ */
+
+.dark-theme {
+  color-scheme: dark;
+
+  /* ============================================
+     Dark Mode Colors - 暗黑模式配色
+     ============================================ */
+
+  /* Background layers */
+  --bg-1: #1f2329;
+  --bg-2: #2e3035;
+  --bg-3: #4e5058;
+  --bg-elevated: #2e3035;
+  --bg-overlay: rgba(0, 0, 0, 0.75);
+
+  /* Gray scale inversion - brightened for WCAG AA contrast on dark backgrounds */
+  --gray-50: #4e5058;
+  --gray-100: #8f959e;
+  --gray-200: #b4b9c4;
+  --gray-300: #c9cdd4;
+  --gray-400: #d4d8df;
+  --gray-500: #e5e6eb;
+  --gray-600: #f0f2f5;
+  --gray-700: #f7f8fa;
+  --gray-800: #fafbfc;
+  --gray-900: #ffffff;
+
+  /* Primary color - slightly brighter in dark mode */
+  --primary-500: #4080ff;
+  --primary-600: #3370ff;
+
+  /* Functional colors - adjusted for dark backgrounds */
+  --success-500: #00d42a;
+  --success-600: #00b42a;
+
+  --warning-500: #ff9500;
+  --warning-600: #ff7d00;
+
+  --error-500: #ff5f57;
+  --error-600: #f53f3f;
+
+  --info-500: #4080ff;
+  --info-600: #3370ff;
+
+  /* Border colors */
+  --border-color: rgba(255, 255, 255, 0.12);
+  --border-color-hover: rgba(255, 255, 255, 0.18);
+
+  /* Shadow - darker and more prominent */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.48), 0 4px 6px rgba(0, 0, 0, 0.32);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.56), 0 10px 10px rgba(0, 0, 0, 0.32);
+
+  /* ============================================
+     Font Weight Adjustments - 字体权重优化
+     暗黑模式下字体需要稍微加粗以保持可读性
+     ============================================ */
+  --font-normal: 450;
+  --font-medium: 550;
+  --font-semibold: 650;
+  --font-bold: 750;
+
+  /* ============================================
+     Component Overrides - 组件覆盖
+     ============================================ */
+
+  /* Sidebar in dark mode */
+  --color-sidebar: #1a1d23;
+  --color-sidebar-muted: #bfc4ce;
+  --color-sidebar-line: rgba(255, 255, 255, 0.08);
+
+  /* Topbar in dark mode */
+  --color-topbar: rgba(31, 35, 41, 0.96);
+
+  /* Text colors - brightened for readability */
+  --color-text: #ffffff;
+  --color-text-soft: #f0f2f5;
+  --color-muted: #d4d8df;
+  --color-muted-2: #b4b9c4;
+
+  /* Focus ring - brighter in dark mode */
+  --focus-ring: 0 0 0 3px rgba(64, 128, 255, 0.3);
+
+  /* Status colors */
+  --color-canvas: #17191d;
+  --color-surface: #1f2329;
+  --color-surface-muted: #2e3035;
+  --color-surface-strong: #4e5058;
+  --color-surface-raised: #2e3035;
+}
+
+/* ============================================
+   Dark Mode Specific Adjustments
+   ============================================ */
+
+.dark-theme {
+  /* Better contrast for disabled elements */
+  button:disabled,
+  button[disabled] {
+    opacity: 0.55;
+  }
+
+  button[data-action-state="disabled"],
+  .context-switcher[disabled] {
+    opacity: 0.4;
+  }
+
+  /* Topbar in dark mode */
+  .topbar {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Status badges in dark mode */
+  .status-badge.good {
+    background: rgba(0, 212, 42, 0.12);
+    color: #00d42a;
+  }
+
+  .status-badge.warn {
+    background: rgba(255, 149, 0, 0.12);
+    color: #ff9500;
+  }
+
+  /* Cards and panels */
+  .panel {
+    background: var(--bg-elevated);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  /* Input fields */
+  input,
+  textarea,
+  select {
+    background: var(--bg-2);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: var(--gray-900);
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    border-color: var(--primary-500);
+  }
+
+  /* Links */
+  a {
+    color: var(--primary-500);
+  }
+
+  /* Selection */
+  ::selection {
+    background: rgba(64, 128, 255, 0.24);
+    color: var(--gray-900);
+  }
+
+  /* Scrollbar styling for dark mode */
+  ::-webkit-scrollbar-track {
+    background: var(--bg-2);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* ============================================
+   Theme Transition - 主题切换动画
+   ============================================ */
+
+:root {
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+body,
+.panel,
+.topbar,
+.sidebar,
+input,
+textarea,
+select,
+button {
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease;
+}

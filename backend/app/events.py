@@ -26,6 +26,7 @@ RunEventType = Literal[
     "redo.routed",
     "benchmark.scored",
     "report.ready",
+    "runtime.command",
 ]
 
 

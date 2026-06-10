@@ -1,4 +1,5 @@
 import { isValidElement, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useTranslation } from '../../stores/i18n';
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { RawSource } from "../../api/types";
@@ -42,6 +43,7 @@ export function ReportView({
   sources,
   sourceAliases = EMPTY_SOURCE_ALIASES,
 }: Props) {
+  const { t } = useTranslation();
   const [internalActiveSourceId, setInternalActiveSourceId] = useState<string | null>(null);
   const activeSourceId =
     controlledActiveSourceId === undefined ? internalActiveSourceId : controlledActiveSourceId;
@@ -134,7 +136,7 @@ export function ReportView({
           </ReactMarkdown>
         </div>
       ) : (
-        <p>The writer has not produced a draft yet.</p>
+        <p>{t('report.noDraft')}</p>
       )}
     </section>
   );
@@ -142,7 +144,7 @@ export function ReportView({
   const sourceTrace = (
     <section className="panel report-source-panel">
       <div className="panel-heading-row">
-        <h2>Source trace</h2>
+        <h2>{t('report.sourceTrace')}</h2>
         <span className={missingSourceGroups.length > 0 ? "report-source-warning" : "report-source-ok"}>
           {missingSourceGroups.length > 0 ? `${missingSourceGroups.length} missing` : "linked"}
         </span>

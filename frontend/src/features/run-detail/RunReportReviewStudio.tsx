@@ -1,5 +1,6 @@
 import { Download, Send, ShieldCheck } from "lucide-react";
 import { useMemo, useState, type MouseEvent } from "react";
+import { useTranslation } from '../../stores/i18n';
 import { exportReportVersion, startReportApprovalWorkflow } from "../../api/client";
 import type { RunDetail as RunDetailRecord } from "../../api/types";
 import { Panel, StatusPill } from "../../components/ui";
@@ -22,6 +23,7 @@ interface RunReportReviewStudioProps {
 type ReviewActionState = "idle" | "pending" | "success" | "error";
 
 export function RunReportReviewStudio({ detail, reportSources }: RunReportReviewStudioProps) {
+  const { t } = useTranslation();
   const markdown = detail.report_md ?? "";
   const wordCount = markdown.trim() ? markdown.trim().split(/\s+/).length : 0;
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
         requested_by: "frontend-review-studio",
       });
       setActionState("success");
-      setActionMessage(`Approval workflow ${response.status}: ${response.workflow_id}`);
+      setActionMessage(`${t('reportStudio.approvalWorkflow')} ${response.status}: ${response.workflow_id}`);
     } catch (err) {
       setActionState("error");
       setActionMessage(err instanceof Error ? err.message : "Unable to request approval");
@@ -112,7 +114,7 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
         <aside className="report-review-inspector">
           <Panel
             className="report-review-source-panel"
-            title="Source trace"
+            title={t('reportStudio.sourceTrace')}
             icon={<ShieldCheck size={16} aria-hidden />}
             actions={
               <StatusPill tone={missingSourceGroups.length ? "warn" : "good"}>
@@ -137,7 +139,7 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
           <Panel className="report-review-actions-panel" title="Review actions">
             <button className="primary-action" disabled={actionDisabled} onClick={handleRequestApproval} type="button">
               <Send size={15} aria-hidden />
-              Request approval
+              {t('reportStudio.requestApproval')}
             </button>
             <div className="report-review-export-grid" aria-label="Report export actions">
               {(["markdown", "html", "csv"] as const).map((format) => (

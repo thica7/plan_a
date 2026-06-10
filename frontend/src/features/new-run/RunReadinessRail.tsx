@@ -15,6 +15,8 @@ import type {
   ScenarioPack,
   WorkspaceQuotaDecision,
 } from "../../api/types";
+import { ActionButton } from "../../components/interaction/ActionButton";
+import { useTranslation } from "../../stores/i18n";
 import { RuntimeLine } from "./RuntimeLine";
 import type { CompetitorMode, ExecutionMode, LayerSelection } from "./types";
 
@@ -55,6 +57,8 @@ export function RunReadinessRail({
   setAutoRedoWarn,
   toggleHitl,
 }: RunReadinessRailProps) {
+  const { t } = useTranslation();
+
   const llmReady = Boolean(
     (runtime?.has_ark_api_key && runtime.has_ark_model) ||
       (runtime?.has_backup_llm_api_key && runtime.has_backup_llm_model),
@@ -71,7 +75,11 @@ export function RunReadinessRail({
     quotaDecision?.allowed !== false,
     selected.length > 0,
   ].filter(Boolean).length;
-  const readinessStatus = runBlockedByQuota ? "Blocked" : readyCount >= 5 ? "Ready" : "Review";
+  const readinessStatus = runBlockedByQuota
+    ? t('run.readiness.blocked')
+    : readyCount >= 5
+      ? t('run.readiness.ready')
+      : t('run.readiness.review');
   const competitorSummary =
     competitorMode === "auto"
       ? "Auto-discover"
@@ -84,8 +92,8 @@ export function RunReadinessRail({
       <section className="panel run-readiness-panel">
         <div className="run-readiness-header">
           <div>
-            <h2>Run Readiness</h2>
-            <p>Runtime, source policy, review gates, and launch state.</p>
+            <h2>{t('run.readiness.title')}</h2>
+            <p>{t('run.readiness.description')}</p>
           </div>
           <span className={runBlockedByQuota ? "flow-status failed" : "flow-status pass"}>
             <CheckCircle2 size={14} aria-hidden />
@@ -117,8 +125,19 @@ export function RunReadinessRail({
 
         <div className="readiness-section">
           <header>
-            <h3>Cost Estimate</h3>
-            <button type="button">Details</button>
+            <h3>{t('run.costEstimate')}</h3>
+            <ActionButton
+              className="ghost-button"
+              authenticity={{
+                actionId: 'new-run.cost-details.disabled',
+                kind: 'disabled',
+                description: 'detailed cost breakdown not available in demo'
+              }}
+              disabled
+              disabledReason={t('run.details.disabled')}
+            >
+              {t('run.details')}
+            </ActionButton>
           </header>
           <strong className="cost-estimate">~$48.60</strong>
           <dl className="readiness-cost-list">
@@ -221,14 +240,28 @@ export function RunReadinessRail({
 
         {error ? <p className="error-line">{error}</p> : null}
 
-        <button
+        <ActionButton
           className="primary-button full-width"
-          disabled={isSubmitting || selected.length === 0 || runBlockedByQuota}
           type="submit"
+          authenticity={{
+            actionId: 'new-run.submit',
+            kind: 'submit',
+            description: 'submits the new run builder form'
+          }}
+          disabled={selected.length === 0 || runBlockedByQuota}
+          disabledReason={
+            runBlockedByQuota
+              ? quotaDecision?.reason || t('run.disabled.quota')
+              : selected.length === 0
+                ? t('run.disabled.dimensions')
+                : undefined
+          }
+          isLoading={isSubmitting}
+          loadingLabel={t('run.submitting')}
         >
           {isSubmitting ? <RefreshCw size={18} aria-hidden /> : <Play size={18} aria-hidden />}
-          Start Run
-        </button>
+          {t('run.submit')}
+        </ActionButton>
       </section>
 
       <section className="panel run-contract-panel">

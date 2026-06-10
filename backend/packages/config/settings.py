@@ -10,6 +10,8 @@ DEFAULT_ENTERPRISE_DATABASE_URL = (
     "postgresql://competiscope:competiscope@127.0.0.1:55432/competiscope?connect_timeout=5"
 )
 
+ENV_FILE_LOADING_FLAG = "COMPETISCOPE_LOAD_ENV_FILES"
+
 
 def _load_env_file(path: Path) -> None:
     if not path.exists():
@@ -177,8 +179,9 @@ class Settings:
 
 @lru_cache
 def get_settings() -> Settings:
-    for path in _env_file_candidates():
-        _load_env_file(path)
+    if _env_bool(ENV_FILE_LOADING_FLAG, True):
+        for path in _env_file_candidates():
+            _load_env_file(path)
     enterprise_backend = os.getenv("ENTERPRISE_STORE_BACKEND", "postgres").strip().lower()
     enterprise_database_url = os.getenv("ENTERPRISE_DATABASE_URL")
     if enterprise_backend == "postgres" and not enterprise_database_url:
@@ -359,3 +362,13 @@ def get_settings() -> Settings:
             maximum=200,
         ),
     )
+
+
+if __name__ == "__main__":
+    import sys
+    if "--print-timeout" in sys.argv:
+        settings = get_settings()
+        print(f"llm_timeout_seconds={settings.llm_timeout_seconds}")
+        print(f"hitl_timeout_seconds={settings.hitl_timeout_seconds}")
+        sys.exit(0)
+

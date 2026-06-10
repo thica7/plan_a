@@ -1,4 +1,5 @@
 import { CalendarClock } from "lucide-react";
+import { useTranslation } from "../../stores/i18n";
 import type {
   AuditLogRecord,
   DataRetentionReport,
@@ -36,6 +37,7 @@ export function GovernanceCenter({
   retention,
   usage,
 }: GovernanceCenterProps) {
+  const { t } = useTranslation();
   return (
     <div className="governance-workbench">
       <div className="governance-summary-row">
@@ -45,7 +47,7 @@ export function GovernanceCenter({
 
       <div className="governance-detail-grid">
         <SourceRegistryPanel registry={registry} />
-        <Panel className="governance-audit-panel" title="Audit trail" icon={<CalendarClock size={16} aria-hidden />}>
+        <Panel className="governance-audit-panel" title={t('workbench.auditTrail')} icon={<CalendarClock size={16} aria-hidden />}>
           <AuditTrail logs={auditLogs} />
         </Panel>
       </div>

@@ -1,4 +1,5 @@
 import type { RunMetrics, TraceSpan } from "../../api/types";
+import { useTranslation } from "../../stores/i18n";
 
 interface Props {
   metrics: RunMetrics;
@@ -6,39 +7,40 @@ interface Props {
 }
 
 export function CostPanel({ metrics, spans }: Props) {
+  const { t } = useTranslation();
   const rows = buildCostRows(spans);
   const maxCost = Math.max(...rows.map((row) => row.cost), 0.000001);
 
   return (
     <section className="panel cost-panel">
       <div className="panel-heading-row">
-        <h2>Cost</h2>
+        <h2>{t('cost.title')}</h2>
         <strong>${metrics.cost_estimate_usd.toFixed(6)}</strong>
       </div>
       <div className="cost-summary">
         <span>
-          Input
+          {t('cost.input')}
           <strong>{metrics.input_tokens_estimate}</strong>
         </span>
         <span>
-          Output
+          {t('cost.output')}
           <strong>{metrics.output_tokens_estimate}</strong>
         </span>
         <span>
-          LLM
+          {t('cost.llm')}
           <strong>{metrics.llm_calls}</strong>
         </span>
       </div>
       <div className="cost-bars">
         {rows.length === 0 ? (
-          <p>No cost traces yet.</p>
+          <p>{t('cost.noTraces')}</p>
         ) : (
           rows.map((row) => (
             <article key={row.agent}>
               <div>
                 <strong>{row.agent}</strong>
                 <span>
-                  ${row.cost.toFixed(6)} / {row.tokens} tokens
+                  ${row.cost.toFixed(6)} / {row.tokens} {t('cost.tokens')}
                 </span>
               </div>
               <meter max={maxCost} min={0} value={row.cost} />
@@ -49,6 +51,7 @@ export function CostPanel({ metrics, spans }: Props) {
     </section>
   );
 }
+
 
 interface CostRow {
   agent: string;
