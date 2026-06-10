@@ -57,7 +57,7 @@ class WriterAgentMixin:
         layer_context = self._writer_layer_context(detail)
         memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
         required_sections = self._writer_required_sections(detail)
-        grounding_prompt = self._writer_grounding_prompt(detail)
+        grounding_prompt = await self._writer_grounding_prompt(detail)
         user_research_policy = writer_user_research_policy_text()
         try:
             timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
@@ -522,7 +522,7 @@ class WriterAgentMixin:
             for index, section in enumerate([*common, *specific, *ending], start=1)
         )
 
-    def _writer_grounding_prompt(self, detail: RunDetail) -> str:
+    async def _writer_grounding_prompt(self, detail: RunDetail) -> str:
         grounding = build_run_grounding_prompt(
             sources=detail.raw_sources,
             qa_findings=detail.qa_findings,
@@ -532,11 +532,12 @@ class WriterAgentMixin:
             from packages.tools.rag_retrieve import rag_retrieve_tool
             query = getattr(detail.plan, "topic", "") or ""
             if query:
-                import asyncio
-                loop = asyncio.get_event_loop()
-                kb_results = loop.run_until_complete(
-                    rag_retrieve_tool.ainvoke({"query": query, "top_k": 5})
-                )
+                kb_results = await rag_retrieve_tool.ainvoke({
+                    "query": query,
+                    "competitors": list(detail.plan.competitors),
+                    "dimensions": list(detail.plan.dimensions),
+                    "top_k": 5,
+                })
                 if kb_results:
                     grounding += "\n\n## Additional KB Evidence\n"
                     for r in kb_results[:5]:

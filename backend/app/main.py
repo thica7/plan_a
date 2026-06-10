@@ -25,7 +25,14 @@ _CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 
 
 def create_app() -> FastAPI:
+    from packages.config.settings import validate_env_vars
+
     app = FastAPI(title="Competiscope v2 API", version="0.1.0")
+
+    @app.on_event("startup")
+    async def startup_event():
+        validate_env_vars()
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_CORS_ORIGINS,

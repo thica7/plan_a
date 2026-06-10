@@ -364,6 +364,23 @@ def get_settings() -> Settings:
     )
 
 
+def validate_env_vars() -> None:
+    """Validate critical environment variables on startup."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    warnings = []
+    if not os.getenv("PPLX_API_KEY"):
+        warnings.append("PPLX_API_KEY not set - online search will be disabled")
+    if not os.getenv("ARK_API_KEY"):
+        warnings.append("ARK_API_KEY not set - primary LLM unavailable")
+    if not os.getenv("BACKUP_LLM_API_KEY"):
+        warnings.append("BACKUP_LLM_API_KEY not set - no LLM fallback")
+
+    for msg in warnings:
+        logger.warning(msg)
+
+
 if __name__ == "__main__":
     import sys
     if "--print-timeout" in sys.argv:
