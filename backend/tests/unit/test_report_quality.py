@@ -22,7 +22,11 @@ from packages.schema.models import (
     RawSource,
     RedoScope,
     ReflectionRecord,
+    ReviewThemeItem,
+    ReviewThemeSummary,
     RunMetrics,
+    SWOTAnalysis,
+    SWOTItem,
     TraceSpan,
 )
 from packages.schema.rag import RetrievalRecord
@@ -1322,6 +1326,140 @@ def test_writer_fallback_puts_core_analysis_before_evidence_support() -> None:
     assert "weaknesses:" in report
     assert "watchouts:" in report
     assert report.index("## Evidence & QA Support") > report.index("## Battlecard")
+
+
+def test_writer_hardening_inserts_review_and_swot_core_sections() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="review-swot-core-sections",
+        execution_mode="real",
+        source_count=4,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.output_language = "en-US"
+    detail.plan.competitor_layer = "L1"
+    detail.plan.dimensions = ["pricing", "review"]
+    detail.comparison_matrix = ComparisonMatrix(
+        competitors=detail.plan.competitors,
+        dimensions=detail.plan.dimensions,
+        cells=[
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="review",
+                value="Users praise speed but need onboarding proof.",
+                source_ids=["source-0"],
+                confidence=0.86,
+            )
+        ],
+        winner_by_dimension={"review": "Cursor"},
+    )
+    detail.competitor_knowledge["Cursor"].review_summary = ReviewThemeSummary(
+        competitor="Cursor",
+        dimension="review",
+        praise_themes=[
+            ReviewThemeItem(
+                theme="Fast workflow",
+                evidence="Users praise fast repository-aware editing.",
+                source_ids=["source-0"],
+                confidence=0.82,
+            )
+        ],
+        complaint_themes=[
+            ReviewThemeItem(
+                theme="Onboarding friction",
+                evidence="Users complain onboarding takes effort.",
+                source_ids=["source-1"],
+                confidence=0.64,
+            )
+        ],
+        adoption_blockers=[
+            ReviewThemeItem(
+                theme="Security review",
+                evidence="Security review slows team adoption.",
+                source_ids=["source-2"],
+                confidence=0.7,
+            )
+        ],
+        switching_triggers=[
+            ReviewThemeItem(
+                theme="Repository context",
+                evidence="Teams switch for repository context.",
+                source_ids=["source-3"],
+                confidence=0.78,
+            )
+        ],
+        source_ids=["source-0", "source-1", "source-2", "source-3"],
+        confidence=0.74,
+    )
+    detail.competitor_knowledge["Cursor"].swot_analysis = SWOTAnalysis(
+        competitor="Cursor",
+        strengths=[
+            SWOTItem(
+                text="Fast workflow is review-backed.",
+                source_ids=["source-0"],
+                confidence=0.82,
+            )
+        ],
+        weaknesses=[
+            SWOTItem(
+                text="Onboarding evidence remains thin.",
+                evidence_gap=True,
+            )
+        ],
+        opportunities=[
+            SWOTItem(
+                text="Repository context can motivate switching.",
+                source_ids=["source-3"],
+                confidence=0.78,
+            )
+        ],
+        threats=[
+            SWOTItem(
+                text="Procurement proof needs more cited evidence.",
+                evidence_gap=True,
+            )
+        ],
+        source_ids=["source-0", "source-3"],
+        confidence=0.74,
+    )
+    markdown = """
+# Cursor vs Copilot
+
+## Competitive Findings
+Cursor has a review-backed workflow signal. [source:source-0]
+
+## Battlecard
+Layer analysis exists before hardening. [source:source-0]
+
+## Source Quality & Coverage
+Source coverage exists. [source:source-0]
+""".strip()
+
+    report = writer._ensure_report_required_sections(detail, markdown)
+
+    review_heading = f"## {report_label('en-US', 'review_theme_summary')}"
+    swot_heading = f"## {report_label('en-US', 'swot_analysis')}"
+    layer_heading = f"## {report_label('en-US', 'battlecard')}"
+    assert f"## {report_label('zh-CN', 'review_theme_summary')}" == "## 用户评价整理"
+    assert f"## {report_label('zh-CN', 'swot_analysis')}" == "## SWOT 分析"
+    _assert_headings_in_order(
+        report,
+        [
+            "## Competitive Findings",
+            review_heading,
+            "## Competitor Deep Dives",
+            swot_heading,
+            layer_heading,
+        ],
+    )
+    assert "Fast workflow" in report
+    assert "Onboarding friction" in report
+    assert "Repository context" in report
+    assert "- Strengths: Fast workflow is review-backed." in report
+    assert "- Weaknesses: Onboarding evidence remains thin. Evidence gap." in report
+    assert "- Opportunities: Repository context can motivate switching." in report
+    assert "- Threats: Procurement proof needs more cited evidence. Evidence gap." in report
 
 
 def test_writer_fallback_keeps_layer_specific_report_floor() -> None:

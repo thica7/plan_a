@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -18,7 +18,7 @@ from packages.rag.grounded_prompt import build_run_grounding_prompt
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
 from packages.schema.api_dto import RunDetail
-from packages.schema.models import FeatureNode, KnowledgeClaim, QCIssue, RawSource
+from packages.schema.models import FeatureNode, KnowledgeClaim, QCIssue, RawSource, SWOTItem
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
@@ -198,6 +198,7 @@ class WriterAgentMixin:
             )
         lines.extend(self._fallback_decision_summary_section(detail, matrix_sources))
         lines.extend(self._fallback_competitive_findings_section(detail))
+        lines.extend(self._fallback_review_theme_section(detail))
         if detail.comparison_matrix is not None:
             lines.extend(["", f"## {report_label(output_language, 'dimension_winners')}"])
             for dimension, winner in detail.comparison_matrix.winner_by_dimension.items():
@@ -215,6 +216,7 @@ class WriterAgentMixin:
                     f"{self._format_source_refs(cell.source_ids)}"
                 )
         lines.extend(self._fallback_competitor_deep_dives_section(detail))
+        lines.extend(self._fallback_swot_section(detail))
         lines.extend(self._fallback_layer_sections(detail, matrix_sources, fallback=False))
         lines.extend(self._fallback_evidence_support_section(detail))
         lines.extend(self._fallback_source_quality_section(detail))
@@ -804,8 +806,16 @@ class WriterAgentMixin:
                 self._fallback_competitive_findings_section(detail),
             ),
             (
+                self._report_label_aliases("review_theme_summary"),
+                self._fallback_review_theme_section(detail),
+            ),
+            (
                 self._report_label_aliases("competitor_deep_dives"),
                 self._fallback_competitor_deep_dives_section(detail),
+            ),
+            (
+                self._report_label_aliases("swot_analysis"),
+                self._fallback_swot_section(detail),
             ),
             (
                 layer_heading_aliases,
@@ -1090,9 +1100,11 @@ class WriterAgentMixin:
             ),
             self._report_label_aliases("decision_summary"),
             self._report_label_aliases("competitive_findings"),
+            self._report_label_aliases("review_theme_summary"),
             self._report_label_aliases("dimension_winners"),
             self._report_label_aliases("comparison_matrix", "side_by_side_matrix"),
             self._report_label_aliases("competitor_deep_dives"),
+            self._report_label_aliases("swot_analysis"),
             self._report_label_aliases(self._layer_section_label_key(detail)),
             *self._support_report_heading_alias_groups(),
         ]
@@ -1152,8 +1164,18 @@ class WriterAgentMixin:
                 "highest-impact dimension findings and implications."
             ),
             (
+                f"{report_label(output_language, 'review_theme_summary')}: summarize cited "
+                "user praise, complaints, adoption blockers, and switching triggers; mark "
+                "missing review evidence as an evidence gap."
+            ),
+            (
                 f"{report_label(output_language, 'competitor_deep_dives')}: cover where "
                 "each competitor wins, has weaknesses, and needs watchouts."
+            ),
+            (
+                f"{report_label(output_language, 'swot_analysis')}: include Strengths, "
+                "Weaknesses, Opportunities, and Threats for each competitor using cited SWOT "
+                "analysis or explicit evidence-gap notes."
             ),
             (
                 f"{report_label(output_language, 'side_by_side_matrix')}: cover every "
@@ -1524,6 +1546,128 @@ class WriterAgentMixin:
         if normalized.startswith("[failure pattern") or "failure pattern" in normalized:
             return "失败模式" if is_zh else "Failure pattern"
         return "指导" if is_zh else "Guidance"
+
+    def _fallback_review_theme_section(self, detail: RunDetail) -> list[str]:
+        summaries = [
+            knowledge.review_summary
+            for knowledge in detail.competitor_knowledge.values()
+            if self._review_summary_has_content(knowledge.review_summary)
+        ]
+        needs_review = self._needs_review_theme_section(detail)
+        if not needs_review and not summaries:
+            return []
+
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        lines = ["", f"## {report_label(detail.output_language, 'review_theme_summary')}"]
+        if not summaries:
+            refs = self._format_source_refs(self._matrix_source_ids(detail))
+            if is_zh:
+                lines.append(
+                    "- 已请求评价、用户或买家维度分析，但尚无可引用的结构化评价主题；"
+                    f"相关结论需保留为 Evidence gap。{refs}"
+                )
+            else:
+                lines.append(
+                    "- Review, user, or buyer analysis was requested, but no cited review "
+                    f"themes are available yet; keep conclusions as Evidence gap.{refs}"
+                )
+            return lines
+
+        category_labels = (
+            ("Praise", "好评主题", "praise_themes"),
+            ("Complaints", "投诉主题", "complaint_themes"),
+            ("Adoption blockers", "采用阻碍", "adoption_blockers"),
+            ("Switching triggers", "切换触发", "switching_triggers"),
+        )
+        for summary in summaries[:4]:
+            competitor = summary.competitor or "Unknown competitor"
+            lines.append(f"### {competitor}")
+            if is_zh:
+                lines.append(f"- 情绪提示: {summary.sentiment_hint}")
+            else:
+                lines.append(f"- Sentiment hint: {summary.sentiment_hint}")
+            for en_label, zh_label, field_name in category_labels:
+                label = zh_label if is_zh else en_label
+                items = getattr(summary, field_name)
+                for item in items[:2]:
+                    refs = self._format_source_refs(item.source_ids or summary.source_ids)
+                    evidence = f" - {item.evidence}" if item.evidence else ""
+                    gap = " Evidence gap." if item.evidence_gap else ""
+                    lines.append(f"- {label}: {item.theme}{evidence}{gap}{refs}")
+        return lines
+
+    def _needs_review_theme_section(self, detail: RunDetail) -> bool:
+        review_hints = (
+            "review",
+            "persona",
+            "user",
+            "customer",
+            "buyer",
+            "feedback",
+        )
+        return any(
+            any(hint in dimension.casefold().replace("-", "_") for hint in review_hints)
+            for dimension in detail.plan.dimensions
+        )
+
+    def _review_summary_has_content(self, summary: object) -> bool:
+        return any(
+            getattr(summary, field_name, None)
+            for field_name in (
+                "praise_themes",
+                "complaint_themes",
+                "adoption_blockers",
+                "switching_triggers",
+            )
+        )
+
+    def _fallback_swot_section(self, detail: RunDetail) -> list[str]:
+        analyses = [
+            knowledge.swot_analysis
+            for knowledge in detail.competitor_knowledge.values()
+            if self._swot_analysis_has_content(knowledge.swot_analysis)
+        ]
+        lines = ["", f"## {report_label(detail.output_language, 'swot_analysis')}"]
+        if not analyses:
+            refs = self._format_source_refs(self._matrix_source_ids(detail))
+            lines.append(
+                f"- Strengths: Evidence gap - no cited SWOT strength is established yet.{refs}"
+            )
+            lines.append(
+                "- Weaknesses: Evidence gap - no cited SWOT weakness is established yet."
+            )
+            lines.append(
+                "- Opportunities: Evidence gap - no cited SWOT opportunity is established yet."
+            )
+            lines.append("- Threats: Evidence gap - no cited SWOT threat is established yet.")
+            return lines
+
+        for analysis in analyses[:4]:
+            lines.append(f"### {analysis.competitor or 'Unknown competitor'}")
+            lines.extend(self._swot_item_lines("Strengths", analysis.strengths))
+            lines.extend(self._swot_item_lines("Weaknesses", analysis.weaknesses))
+            lines.extend(self._swot_item_lines("Opportunities", analysis.opportunities))
+            lines.extend(self._swot_item_lines("Threats", analysis.threats))
+        return lines
+
+    def _swot_analysis_has_content(self, analysis: object) -> bool:
+        return any(
+            getattr(analysis, field_name, None)
+            for field_name in ("strengths", "weaknesses", "opportunities", "threats")
+        )
+
+    def _swot_item_lines(
+        self, label: str, items: Sequence[SWOTItem] | Sequence[object]
+    ) -> list[str]:
+        if not items:
+            return [f"- {label}: Evidence gap - no cited item is established yet."]
+        lines: list[str] = []
+        for item in items[:2]:
+            text = str(getattr(item, "text", "") or "No SWOT item text available.")
+            refs = self._format_source_refs(getattr(item, "source_ids", []))
+            gap = " Evidence gap." if getattr(item, "evidence_gap", False) else ""
+            lines.append(f"- {label}: {text}{gap}{refs}")
+        return lines
 
     def _fallback_user_research_section(self, detail: RunDetail) -> list[str]:
         research_sources = [
