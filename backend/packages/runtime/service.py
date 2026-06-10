@@ -440,6 +440,12 @@ class RuntimeCommandService:
         has_competitor_edits = command.request.competitors is not None or bool(
             command.request.competitor_edits
         )
+        if has_competitor_edits and command.request.decision != "modify_plan":
+            raise RuntimeCommandError(
+                409,
+                "Competitor edits require modify_plan decision.",
+                command_type="resume_review",
+            )
         if has_competitor_edits and not self._run_service.can_modify_plan_competitors(
             command.run_id
         ):

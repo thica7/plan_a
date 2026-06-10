@@ -762,6 +762,42 @@ def test_hitl_router_rejects_competitor_edits_outside_planner_review() -> None:
     assert response.json()["detail"] == "Competitor edits require an active planner review."
 
 
+def test_hitl_router_rejects_competitor_edits_without_modify_plan() -> None:
+    run_service = _memory_run_service(
+        _settings(hitl_enabled=True, ark_api_key="key", ark_model="model")
+    )
+    detail = asyncio.run(
+        run_service.create_run(
+            _request(
+                topic="AI IDE",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+    )
+    run_service._runs[detail.id].pending_interrupts["planner"] = {
+        "stage": "planner",
+        "graph_kind": "real",
+        "thread_id": "thread-plan-review",
+        "interrupt_node": "planner_hitl",
+    }
+    app = create_app()
+    app.dependency_overrides[get_run_service] = lambda: run_service
+    client = TestClient(app)
+
+    response = client.post(
+        f"/api/runs/{detail.id}/resume",
+        json={
+            "decision": "accept",
+            "competitor_edits": [{"action": "add", "name": "Windsurf"}],
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Competitor edits require modify_plan decision."
+
+
 def test_workflow_router_exposes_scheduled_scan_start() -> None:
     class FakeWorkflowService:
         async def start_scheduled_scan(

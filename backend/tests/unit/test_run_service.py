@@ -7332,6 +7332,59 @@ async def test_planner_hitl_resume_updates_competitors_and_discovery() -> None:
 
 
 @pytest.mark.asyncio
+async def test_planner_hitl_rejects_competitor_edits_without_modify_plan() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="AI IDE",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+        service._runs[detail.id].pending_interrupts["planner"] = {
+            "stage": "planner",
+            "graph_kind": "real",
+            "thread_id": "thread-plan-review",
+            "interrupt_node": "planner_hitl",
+        }
+
+        with pytest.raises(ValueError, match="modify_plan"):
+            await service.resume(
+                detail.id,
+                HitlResumeRequest(
+                    decision="accept",
+                    competitors=["Cursor", "Windsurf"],
+                    competitor_edits=[
+                        {
+                            "action": "add",
+                            "name": "Windsurf",
+                            "reason": "Direct buyer comparison.",
+                        }
+                    ],
+                ),
+            )
+
+        assert service._runs[detail.id].detail.plan.competitors == ["Cursor"]
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_planner_hitl_rejects_empty_competitor_edit() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

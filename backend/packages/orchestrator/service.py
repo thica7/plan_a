@@ -804,6 +804,8 @@ class RunService(
             has_competitor_edits = request.competitors is not None or bool(
                 request.competitor_edits
             )
+            if has_competitor_edits and request.decision != "modify_plan":
+                raise ValueError("Competitor edits require modify_plan decision.")
             if has_competitor_edits and stage != "planner":
                 raise ValueError("Competitor edits can only be applied during planner review.")
             hitl_actor_id = (
