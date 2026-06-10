@@ -24,7 +24,7 @@ export function RunDetailTabs({
   ];
 
   return (
-    <nav className="module-tabs run-detail-tabs" aria-label="Run detail sections">
+    <nav className="module-tabs run-detail-tabs" aria-label={t("runDetail.sectionsNav")}>
       {runDetailViews.map((view) => (
         <button
           className={activeView === view.id ? "active" : ""}
@@ -39,4 +39,3 @@ export function RunDetailTabs({
     </nav>
   );
 }
-

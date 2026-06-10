@@ -21,6 +21,7 @@ def build_run_grounding_prompt(
     qa_findings: Iterable[QCIssue] = (),
     max_sources: int = 12,
     max_gap_findings: int = 6,
+    kb_context: str | None = None,
 ) -> str:
     source_lines = _source_lines(sources, max_sources=max_sources)
     gap_lines = _gap_lines(qa_findings, max_gap_findings=max_gap_findings)
@@ -36,7 +37,10 @@ def build_run_grounding_prompt(
     lines.extend(source_lines or ["- none"])
     if gap_lines:
         lines.extend(["", "Open evidence-gap retrieval targets:", *gap_lines])
-    return "\n".join(lines)
+    prompt = "\n".join(lines)
+    if kb_context is not None:
+        prompt += f"\n\n## KB Evidence Context\n{kb_context}"
+    return prompt
 
 
 def build_retrieval_grounding_prompt(

@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, SlidersHorizontal, Upload } from 'lucide-react';
 import { useSearchStore, type RetrievalHit } from '../stores/searchStore';
 import { SourceCard } from '../components/SourceCard';
@@ -29,10 +29,13 @@ interface EvalLabel {
   relevant_chunk_ids?: string[];
 }
 
-function highlightText(text: string, query: string): string {
-  if (!query.trim()) return text;
+function highlightText(text: string, query: string): ReactNode[] {
+  if (!query.trim()) return [text];
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>');
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
+  return parts.map((part, i) =>
+    part.toLowerCase() === query.toLowerCase() ? <mark key={i}>{part}</mark> : part
+  );
 }
 
 function loadParams(): RetrievalParams {
@@ -246,17 +249,17 @@ export default function SearchPage() {
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">RAG Search</h1>
+        <h1 className="text-2xl font-bold">{t('search.title')}</h1>
         <button type="button" className="btn btn-outline btn-sm gap-1" onClick={() => setParamsOpen(true)}>
           <SlidersHorizontal className="h-4 w-4" />
-          Retrieval
+          {t('search.retrieval')}
         </button>
       </div>
 
       <form onSubmit={handleSearch} className="flex gap-2">
         <input
           className="input input-bordered flex-1"
-          placeholder="Search the knowledge base..."
+          placeholder={t('search.placeholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -268,7 +271,7 @@ export default function SearchPage() {
           className={`btn btn-outline btn-sm ${showFilters ? 'btn-active' : ''}`}
           onClick={() => setShowFilters(!showFilters)}
         >
-          Filters
+          {t('search.filters')}
         </button>
       </form>
 
@@ -277,12 +280,12 @@ export default function SearchPage() {
           <div className="flex gap-2 items-center">
             <input
               className="input input-bordered input-sm flex-1"
-              placeholder="Add competitor..."
+              placeholder={t('search.addCompetitor')}
               value={compInput}
               onChange={(e) => setCompInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCompetitor())}
             />
-            <button type="button" className="btn btn-sm" onClick={addCompetitor}>Add</button>
+            <button type="button" className="btn btn-sm" onClick={addCompetitor}>{t('common.add')}</button>
           </div>
           <div className="flex flex-wrap gap-1">
             {competitors.map((c) => (
@@ -295,12 +298,12 @@ export default function SearchPage() {
           <div className="flex gap-2 items-center">
             <input
               className="input input-bordered input-sm flex-1"
-              placeholder="Add dimension..."
+              placeholder={t('search.addDimension')}
               value={dimInput}
               onChange={(e) => setDimInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addDimension())}
             />
-            <button type="button" className="btn btn-sm" onClick={addDimension}>Add</button>
+            <button type="button" className="btn btn-sm" onClick={addDimension}>{t('common.add')}</button>
           </div>
           <div className="flex flex-wrap gap-1">
             {dimensions.map((d) => (
@@ -315,7 +318,7 @@ export default function SearchPage() {
 
       {history.length > 0 && (
         <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-xs text-base-content/50">Recent:</span>
+          <span className="text-xs text-base-content/50">{t('search.recent')}</span>
           {history.map((h) => (
             <button
               key={h}
@@ -334,7 +337,7 @@ export default function SearchPage() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-primary" />
-            <h2 className="font-bold">Retrieval evaluation</h2>
+            <h2 className="font-bold">{t('search.retrievalEvaluation')}</h2>
           </div>
           <div className="flex flex-wrap gap-2">
             <label className="btn btn-outline btn-sm gap-1">
@@ -343,14 +346,14 @@ export default function SearchPage() {
               <input className="hidden" type="file" accept=".jsonl,.json" onChange={handleEvalFile} />
             </label>
             <button type="button" className="btn btn-primary btn-sm" disabled={evalLoading || evalLabels.length === 0} onClick={runEval}>
-              {evalLoading ? `${t('common.running')}...` : 'Run eval'}
+              {evalLoading ? `${t('common.running')}...` : t('search.runEval')}
             </button>
           </div>
         </div>
         {evalError && <div className="alert alert-error mb-3 text-sm">{evalError}</div>}
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="rounded-lg bg-base-200 p-3">
-            <span className="text-xs text-base-content/55">Labels</span>
+            <span className="text-xs text-base-content/55">{t('search.labels')}</span>
             <strong className="block text-lg">{evalLabels.length}</strong>
           </div>
           <div className="rounded-lg bg-base-200 p-3">
@@ -368,7 +371,7 @@ export default function SearchPage() {
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-base-content/60">
           <Sparkline values={recallValues} />
-          <span>{evalRuns.length} recent eval runs</span>
+          <span>{evalRuns.length} {t('search.recentEvalRuns')}</span>
           {evalRuns.slice(0, 3).map((run) => (
             <code key={run.id} className="rounded bg-base-200 px-2 py-1">
               {new Date(run.created_at).toLocaleString()} k={run.top_k}
@@ -389,16 +392,13 @@ export default function SearchPage() {
               score={hit.score}
               rerank_score={hit.rerank_score}
             />
-            <p
-              className="text-xs text-base-content/70 line-clamp-3"
-              dangerouslySetInnerHTML={{
-                __html: highlightText(hit.text.slice(0, 300), query),
-              }}
-            />
+            <p className="text-xs text-base-content/70 line-clamp-3">
+              {highlightText(hit.text.slice(0, 300), query)}
+            </p>
           </div>
         ))}
         {!loading && hits.length === 0 && query && (
-          <p className="text-base-content/50 text-center py-12">No results found.</p>
+          <p className="text-base-content/50 text-center py-12">{t('search.noResults')}</p>
         )}
       </div>
 

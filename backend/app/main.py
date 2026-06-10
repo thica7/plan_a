@@ -1,6 +1,9 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.middleware.auth import AuthMiddleware
 from app.routers import (
     enterprise,
     evals,
@@ -18,16 +21,19 @@ from app.routers import (
 )
 from app.routes import crawl, knowledge
 
+_CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Competiscope v2 API", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_origins=_CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(AuthMiddleware)
     app.include_router(runs.router, prefix="/api", tags=["runs"])
     app.include_router(stream.router, prefix="/api", tags=["stream"])
     app.include_router(hitl.router, prefix="/api", tags=["hitl"])

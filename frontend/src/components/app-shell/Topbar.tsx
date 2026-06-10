@@ -59,7 +59,7 @@ export function Topbar({
         >
           <Building2 size={17} aria-hidden />
           <span>
-            <strong>Acme Corp</strong>
+            <strong>{t('topbar.acmeCorp')}</strong>
             <small>{t('topbar.workspace')}</small>
           </span>
           <ChevronDown size={15} aria-hidden />
@@ -169,7 +169,7 @@ export function Topbar({
 
         <div className="topbar-user">
           <span className="avatar">AC</span>
-          <strong>Acme Admin</strong>
+          <strong>{t('topbar.acmeAdmin')}</strong>
           <ChevronDown size={14} aria-hidden />
         </div>
       </div>

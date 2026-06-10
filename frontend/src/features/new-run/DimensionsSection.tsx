@@ -43,8 +43,8 @@ export function DimensionsSection({
               <span>
                 {locked
                   ? selectedScenario
-                    ? `${skill.description} Required by selected ScenarioPack.`
-                    : `${skill.description} Required schema dimension.`
+                    ? `${skill.description} ${t('newRun.dimensionsRequired')}`
+                    : `${skill.description} ${t('newRun.dimensionRequired')}`
                   : skill.description}
               </span>
             </button>

@@ -15,64 +15,64 @@ import {
 
 export interface ShellNavItem {
   to: string;
-  label: string;
+  labelKey: string;
   icon: LucideIcon;
   end?: boolean;
 }
 
 export interface ShellNavGroup {
-  label: string;
+  labelKey: string;
   items: ShellNavItem[];
 }
 
 export const navGroups: ShellNavGroup[] = [
   {
-    label: "Research",
+    labelKey: "nav.research",
     items: [
-      { to: "/", label: "New Run", icon: PlusCircle, end: true },
-      { to: "/history", label: "Runs", icon: History },
-      { to: "/enterprise", label: "Workbench", icon: Briefcase },
+      { to: "/", labelKey: "nav.newRun", icon: PlusCircle, end: true },
+      { to: "/history", labelKey: "nav.runs", icon: History },
+      { to: "/enterprise", labelKey: "nav.workbench", icon: Briefcase },
     ],
   },
   {
-    label: "Evidence",
+    labelKey: "nav.evidence",
     items: [
-      { to: "/evidence", label: "Sources", icon: Database },
-      { to: "/knowledge", label: "Knowledge", icon: BookOpen },
-      { to: "/search", label: "Search", icon: Search },
-      { to: "/crawl", label: "Crawl", icon: Workflow },
-      { to: "/reports", label: "Reports", icon: FileText },
+      { to: "/evidence", labelKey: "nav.sources", icon: Database },
+      { to: "/knowledge", labelKey: "nav.knowledge", icon: BookOpen },
+      { to: "/search", labelKey: "nav.search", icon: Search },
+      { to: "/crawl", labelKey: "nav.crawl", icon: Workflow },
+      { to: "/reports", labelKey: "nav.reports", icon: FileText },
     ],
   },
   {
-    label: "Analysis",
+    labelKey: "nav.analysis",
     items: [
-      { to: "/competitors", label: "Competitors", icon: Layers },
-      { to: "/activity", label: "Activity", icon: Bell },
+      { to: "/competitors", labelKey: "nav.competitors", icon: Layers },
+      { to: "/activity", labelKey: "nav.activity", icon: Bell },
     ],
   },
   {
-    label: "Quality",
+    labelKey: "nav.quality",
     items: [
-      { to: "/governance", label: "Governance", icon: ShieldCheck },
+      { to: "/governance", labelKey: "nav.governance", icon: ShieldCheck },
     ],
   },
 ];
 
 export const navItems = navGroups.flatMap((group) => group.items);
 
-export function routeTitle(pathname: string) {
-  if (pathname === "/") return "Run setup";
-  if (pathname.startsWith("/runs/")) return "Run detail";
-  if (pathname.startsWith("/history")) return "Run history";
-  if (pathname.startsWith("/knowledge")) return "Knowledge base";
-  if (pathname.startsWith("/search")) return "Knowledge search";
-  if (pathname.startsWith("/crawl")) return "Crawler";
-  if (pathname.startsWith("/competitors")) return "Competitor library";
-  if (pathname.startsWith("/evidence")) return "Evidence center";
-  if (pathname.startsWith("/reports")) return "Report studio";
-  if (pathname.startsWith("/governance")) return "Governance";
-  if (pathname.startsWith("/activity")) return "Activity center";
-  if (pathname.startsWith("/enterprise")) return "Enterprise workbench";
-  return "Workspace";
+export function routeTitleKey(pathname: string) {
+  if (pathname === "/") return "route.runSetup";
+  if (pathname.startsWith("/runs/")) return "route.runDetail";
+  if (pathname.startsWith("/history")) return "route.runHistory";
+  if (pathname.startsWith("/knowledge")) return "route.knowledgeBase";
+  if (pathname.startsWith("/search")) return "route.knowledgeSearch";
+  if (pathname.startsWith("/crawl")) return "route.crawler";
+  if (pathname.startsWith("/competitors")) return "route.competitorLibrary";
+  if (pathname.startsWith("/evidence")) return "route.evidenceCenter";
+  if (pathname.startsWith("/reports")) return "route.reportStudio";
+  if (pathname.startsWith("/governance")) return "route.governance";
+  if (pathname.startsWith("/activity")) return "route.activityCenter";
+  if (pathname.startsWith("/enterprise")) return "route.enterpriseWorkbench";
+  return "route.workspace";
 }

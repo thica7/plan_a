@@ -1393,6 +1393,21 @@ class RunService(
             message_types={"raw_sources_collected"},
         )
         detail.raw_sources = self._normalize_collected_sources(detail, dimensions)
+        # Auto-ingest collected sources into KB
+        try:
+            from packages.tools.ingest_document import ingest_document_tool
+            for source in detail.raw_sources:
+                if source.text:
+                    await ingest_document_tool.ainvoke({
+                        "url": source.url or "",
+                        "title": source.title or "",
+                        "text": source.text[:50000],
+                        "competitor": source.competitor or "",
+                        "dimension": source.dimension or "",
+                        "source_type": source.source_type or "web",
+                    })
+        except Exception:
+            pass  # Non-fatal: KB ingestion should not block pipeline
         self._append_agent_message(
             record,
             from_agent="collect_join",

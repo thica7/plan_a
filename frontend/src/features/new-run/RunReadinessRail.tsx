@@ -82,10 +82,10 @@ export function RunReadinessRail({
       : t('run.readiness.review');
   const competitorSummary =
     competitorMode === "auto"
-      ? "Auto-discover"
+      ? t('newRun.autoDiscover')
       : competitorList.length > 0
-        ? `${competitorList.length} selected`
-        : "Manual";
+        ? `${competitorList.length} ${t('run.selected')}`
+        : t('newRun.manual');
 
   return (
     <aside className="run-builder-rail">
@@ -101,25 +101,25 @@ export function RunReadinessRail({
           </span>
         </div>
 
-        <div className="readiness-checklist" aria-label="Run readiness checklist">
-          <ReadinessItem icon={<ShieldCheck size={15} />} ok={Boolean(quotaDecision?.allowed ?? true)} title="Workspace">
-            {quotaDecision?.allowed === false ? quotaDecision.reason : "Acme Corp"}
+        <div className="readiness-checklist" aria-label={t('run.readiness.checklist')}>
+          <ReadinessItem icon={<ShieldCheck size={15} />} ok={Boolean(quotaDecision?.allowed ?? true)} title={t('run.workspace')}>
+            {quotaDecision?.allowed === false ? quotaDecision.reason : t('run.acmeCorp')}
           </ReadinessItem>
-          <ReadinessItem icon={<FileCheck2 size={15} />} ok={selected.length > 0} title="Dimensions">
-            {selected.length} selected
+          <ReadinessItem icon={<FileCheck2 size={15} />} ok={selected.length > 0} title={t('newRun.dimensions')}>
+            {selected.length} {t('run.selected')}
           </ReadinessItem>
-          <ReadinessItem icon={<Database size={15} />} ok={searchReady} title="Data Sources">
-            {runtime?.has_web_search_key ? `${runtime.web_search_provider}, web, registry` : "Search key missing"}
+          <ReadinessItem icon={<Database size={15} />} ok={searchReady} title={t('run.dataSources')}>
+            {runtime?.has_web_search_key ? `${runtime.web_search_provider}, ${t('run.web')}, ${t('run.registry')}` : t('run.searchKeyMissing')}
           </ReadinessItem>
-          <ReadinessItem icon={<KeyRound size={15} />} ok={llmReady} title="Model Route">
+          <ReadinessItem icon={<KeyRound size={15} />} ok={llmReady} title={t('run.modelRoute')}>
             {runtime?.has_ark_api_key && runtime.has_ark_model
               ? runtime.ark_model
               : runtime?.has_backup_llm_api_key && runtime.has_backup_llm_model
                 ? runtime.backup_llm_model
-                : "Credentials missing"}
+                : t('run.credentialsMissing')}
           </ReadinessItem>
-          <ReadinessItem icon={<UserCheck size={15} />} ok={hitlEnabled || autoRedoWarn} title="Quality Controls">
-            {hitlEnabled ? "Human review enabled" : autoRedoWarn ? "Auto-redo enabled" : "Manual launch"}
+          <ReadinessItem icon={<UserCheck size={15} />} ok={hitlEnabled || autoRedoWarn} title={t('run.qualityControls')}>
+            {hitlEnabled ? t('run.humanReviewEnabled') : autoRedoWarn ? t('run.autoRedoEnabled') : t('run.manualLaunch')}
           </ReadinessItem>
         </div>
 
@@ -142,19 +142,19 @@ export function RunReadinessRail({
           <strong className="cost-estimate">~$48.60</strong>
           <dl className="readiness-cost-list">
             <div>
-              <dt>LLM Calls</dt>
+              <dt>{t('run.llmCalls')}</dt>
               <dd>~$28.20</dd>
             </div>
             <div>
-              <dt>Web Search</dt>
+              <dt>{t('run.webSearch')}</dt>
               <dd>~$12.40</dd>
             </div>
             <div>
-              <dt>Embedding & Vector</dt>
+              <dt>{t('run.embeddingVector')}</dt>
               <dd>~$5.80</dd>
             </div>
             <div>
-              <dt>Storage & Trace</dt>
+              <dt>{t('run.storageTrace')}</dt>
               <dd>~$2.20</dd>
             </div>
           </dl>
@@ -162,56 +162,56 @@ export function RunReadinessRail({
 
         <div className="readiness-section">
           <header>
-            <h3>Source Policy</h3>
-            <span>Strict</span>
+            <h3>{t('run.sourcePolicy')}</h3>
+            <span>{t('run.strict')}</span>
           </header>
           <dl className="readiness-cost-list">
             <div>
-              <dt>Verified Sources Only</dt>
-              <dd>Required</dd>
+              <dt>{t('run.verifiedSourcesOnly')}</dt>
+              <dd>{t('run.required')}</dd>
             </div>
             <div>
-              <dt>Min Domain Authority</dt>
+              <dt>{t('run.minDomainAuthority')}</dt>
               <dd>40</dd>
             </div>
             <div>
-              <dt>Max Sources per Claim</dt>
+              <dt>{t('run.maxSourcesPerClaim')}</dt>
               <dd>5</dd>
             </div>
             <div>
-              <dt>Citation Required</dt>
-              <dd>Yes</dd>
+              <dt>{t('run.citationRequired')}</dt>
+              <dd>{t('common.yes')}</dd>
             </div>
           </dl>
         </div>
 
         <div className="readiness-section">
           <header>
-            <h3>Runtime Signals</h3>
+            <h3>{t('run.runtimeSignals')}</h3>
             <span>{executionMode}</span>
           </header>
           <div className="runtime-lines compact">
             <RuntimeLine ok={searchReady}>
-              {searchReady ? `${runtime?.web_search_provider} search enabled` : "Search credentials missing"}
+              {searchReady ? `${runtime?.web_search_provider} ${t('run.searchEnabled')}` : t('run.searchCredentialsMissing')}
             </RuntimeLine>
             <RuntimeLine ok={temporalReady}>
-              {temporalReady ? `Temporal ${runtime?.temporal_task_queue}` : runtime?.temporal_cutover_reason ?? "Temporal unavailable"}
+              {temporalReady ? `Temporal ${runtime?.temporal_task_queue}` : runtime?.temporal_cutover_reason ?? t('run.temporalUnavailable')}
             </RuntimeLine>
             <RuntimeLine ok={pydanticReady}>
               {pydanticReady
                 ? `Pydantic-AI ${runtime?.pydantic_ai_model_name}`
-                : runtime?.pydantic_ai_model_backed_reason ?? "Pydantic-AI model-backed agent disabled"}
+                : runtime?.pydantic_ai_model_backed_reason ?? t('run.pydanticDisabled')}
             </RuntimeLine>
             <RuntimeLine ok={complianceReady}>
-              {complianceReady ? "Compliance redaction enabled" : "Compliance redaction disabled"}
+              {complianceReady ? t('run.complianceRedactionEnabled') : t('run.complianceRedactionDisabled')}
             </RuntimeLine>
           </div>
         </div>
 
         <div className="readiness-section">
           <header>
-            <h3>HITL Checkpoints</h3>
-            <span>{hitlEnabled ? "Enabled" : "Optional"}</span>
+            <h3>{t('run.hitlCheckpoints')}</h3>
+            <span>{hitlEnabled ? t('common.enabled') : t('common.optional')}</span>
           </header>
           <label className="toggle-row compact">
             <input
@@ -221,8 +221,8 @@ export function RunReadinessRail({
               type="checkbox"
             />
             <span>
-              <strong>Auto-redo warnings</strong>
-              <em>Warn-level QA can trigger targeted redo.</em>
+              <strong>{t('run.autoRedoWarnings')}</strong>
+              <em>{t('run.autoRedoWarningsDesc')}</em>
             </span>
           </label>
           <label className="toggle-row compact">
@@ -232,8 +232,8 @@ export function RunReadinessRail({
               type="checkbox"
             />
             <span>
-              <strong>Human review pauses</strong>
-              <em>Pause at planner and QA checkpoints.</em>
+              <strong>{t('run.humanReviewPauses')}</strong>
+              <em>{t('run.humanReviewPausesDesc')}</em>
             </span>
           </label>
         </div>
@@ -265,18 +265,18 @@ export function RunReadinessRail({
       </section>
 
       <section className="panel run-contract-panel">
-        <h2>Run Contract</h2>
+        <h2>{t('run.runContract')}</h2>
         <dl className="contract-list">
           <div>
-            <dt>Layer</dt>
+            <dt>{t('runHeader.layer')}</dt>
             <dd>{selectedLayer}</dd>
           </div>
           <div>
-            <dt>Scenario</dt>
-            <dd>{selectedScenario?.name ?? (dynamicScenarioSelected ? "Dynamic" : "Auto")}</dd>
+            <dt>{t('runHeader.scenario')}</dt>
+            <dd>{selectedScenario?.name ?? (dynamicScenarioSelected ? t('run.dynamic') : t('newRun.auto'))}</dd>
           </div>
           <div>
-            <dt>Competitors</dt>
+            <dt>{t('newRun.competitors')}</dt>
             <dd>{competitorSummary}</dd>
           </div>
         </dl>

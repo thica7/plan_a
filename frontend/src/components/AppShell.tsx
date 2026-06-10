@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
-import { routeTitle } from "./app-shell/nav";
+import { routeTitleKey } from "./app-shell/nav";
 import { Sidebar } from "./app-shell/Sidebar";
 import { Topbar } from "./app-shell/Topbar";
 import { useRuntimeStatus } from "./app-shell/useRuntimeStatus";
+import { useTranslation } from "../stores/i18n";
 
 interface AppShellProps {
   children: ReactNode;
@@ -13,7 +14,8 @@ export function AppShell({ children }: AppShellProps) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { runtime, systemReady, temporalRouted } = useRuntimeStatus();
-  const routeLabel = useMemo(() => routeTitle(location.pathname), [location.pathname]);
+  const { t } = useTranslation();
+  const routeLabel = useMemo(() => t(routeTitleKey(location.pathname)), [location.pathname, t]);
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -28,7 +30,7 @@ export function AppShell({ children }: AppShellProps) {
         temporalRouted={temporalRouted}
       />
       <button
-        aria-label="Close navigation"
+        aria-label={t('sidebar.closeNavigation')}
         className="shell-backdrop"
         onClick={() => setSidebarOpen(false)}
         type="button"

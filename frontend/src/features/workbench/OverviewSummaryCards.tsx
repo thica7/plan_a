@@ -130,6 +130,7 @@ export function ReportReviewStudioPanel({
   releaseGate: ReportReleaseGate | null;
   selectedVersion: ReportVersionRecord | null;
 }) {
+  const { t } = useTranslation();
   return (
     <Panel
       className="workbench-card report-review-studio-panel"
@@ -145,7 +146,7 @@ export function ReportReviewStudioPanel({
         <div className="report-studio-summary">
           <div className="report-cover-preview">
             <span>CompetiScope</span>
-            <strong>Competitive Intelligence Report</strong>
+            <strong>{t('workbench.competitiveIntelligenceReport')}</strong>
             <em>v{selectedVersion.version_number}</em>
           </div>
           <div className="report-review-facts">

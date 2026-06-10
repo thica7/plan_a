@@ -41,26 +41,26 @@ export function EvidenceLedgerPanel({
         <label className="search-control evidence-search-control">
           <Search size={15} aria-hidden />
           <input
-            aria-label="Search evidence"
+            aria-label={t("workbench.searchEvidence")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search source, dimension, competitor"
+            placeholder={t("workbench.searchEvidencePlaceholder")}
           />
         </label>
       }
     >
       <div className="metric-grid compact evidence-ledger-summary">
-        <MetricCard label="Visible evidence" value={evidence.length} />
+        <MetricCard label={t("workbench.visibleEvidence")} value={evidence.length} />
         <MetricCard
-          label="Verified-like"
+          label={t("workbench.verifiedLike")}
           value={verifiedCount}
           tone={verifiedCount >= evidence.length * 0.7 ? "good" : "warn"}
         />
-        <MetricCard label="Accepted" value={acceptedCount} />
+        <MetricCard label={t("workbench.acceptedCol")} value={acceptedCount} />
       </div>
 
       {evidence.length === 0 ? (
-        <EmptyState title="No evidence found">Try another keyword or collect more project evidence.</EmptyState>
+        <EmptyState title={t("workbench.noEvidenceFound")}>{t("workbench.noEvidenceFoundDesc")}</EmptyState>
       ) : (
         <div className="evidence-ledger-list" role="list">
           {evidence.slice(0, 80).map((item) => (
@@ -78,15 +78,15 @@ export function EvidenceLedgerPanel({
 
               <div className="evidence-source-meta">
                 <span>
-                  <strong>Competitor</strong>
+                  <strong>{t("newRun.competitors")}</strong>
                   <em>{competitorById.get(item.competitor_id)?.name ?? item.competitor_id}</em>
                 </span>
                 <span>
-                  <strong>Dimension</strong>
+                  <strong>{t("kb.dimension")}</strong>
                   <em>{item.dimension}</em>
                 </span>
                 <span>
-                  <strong>Freshness</strong>
+                  <strong>{t("workbench.freshness")}</strong>
                   <em>{formatPercent(item.freshness_score)}</em>
                 </span>
               </div>
@@ -94,14 +94,14 @@ export function EvidenceLedgerPanel({
               <div className="evidence-review-actions">
                 <StatusPill tone={evidenceTone(item)}>{formatPercent(item.reliability_score)}</StatusPill>
                 <select
-                  aria-label={`Quality for ${item.title}`}
+                  aria-label={`${t("workbench.runQuality")} ${item.title}`}
                   value={item.quality_label}
                   onChange={(event) => onEvidenceQuality(item.id, event.target.value as EvidenceQualityLabel)}
                 >
-                  <option value="unreviewed">unreviewed</option>
-                  <option value="accepted">accepted</option>
-                  <option value="rejected">rejected</option>
-                  <option value="stale">stale</option>
+                  <option value="unreviewed">{t("workbench.unreviewed")}</option>
+                  <option value="accepted">{t("workbench.acceptedCol")}</option>
+                  <option value="rejected">{t("workbench.rejected")}</option>
+                  <option value="stale">{t("workbench.stale")}</option>
                 </select>
               </div>
             </article>

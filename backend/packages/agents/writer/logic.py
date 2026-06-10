@@ -523,10 +523,27 @@ class WriterAgentMixin:
         )
 
     def _writer_grounding_prompt(self, detail: RunDetail) -> str:
-        return build_run_grounding_prompt(
+        grounding = build_run_grounding_prompt(
             sources=detail.raw_sources,
             qa_findings=detail.qa_findings,
         )
+        # Enrich with KB retrieval context
+        try:
+            from packages.tools.rag_retrieve import rag_retrieve_tool
+            query = getattr(detail.plan, "topic", "") or ""
+            if query:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                kb_results = loop.run_until_complete(
+                    rag_retrieve_tool.ainvoke({"query": query, "top_k": 5})
+                )
+                if kb_results:
+                    grounding += "\n\n## Additional KB Evidence\n"
+                    for r in kb_results[:5]:
+                        grounding += f"- {r}\n"
+        except Exception:
+            pass  # Non-fatal: RAG enrichment is optional
+        return grounding
 
     def _writer_context_package(self, detail: RunDetail) -> dict[str, object]:
         return {

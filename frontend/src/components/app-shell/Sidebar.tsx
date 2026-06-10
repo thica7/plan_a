@@ -31,15 +31,15 @@ export function Sidebar({
 
       <nav className="nav-list" aria-label={t('sidebar.primary')}>
         {navGroups.map((group) => (
-          <section className="nav-section" key={group.label}>
-            <strong>{group.label}</strong>
+          <section className="nav-section" key={group.labelKey}>
+            <strong>{t(group.labelKey)}</strong>
             <div>
               {group.items.map((item) => {
                 const Icon = item.icon;
                 return (
                   <NavLink end={item.end} key={item.to} onClick={onClose} to={item.to}>
                     <Icon size={17} aria-hidden />
-                    <span>{item.label}</span>
+                    <span>{t(item.labelKey)}</span>
                   </NavLink>
                 );
               })}
@@ -59,7 +59,7 @@ export function Sidebar({
       <div className="sidebar-profile">
         <span className="avatar">AC</span>
         <div>
-          <strong>Acme Admin</strong>
+          <strong>{t('sidebar.acmeAdmin')}</strong>
           <small>admin@workspace</small>
         </div>
         <MoreVertical size={15} aria-hidden />
