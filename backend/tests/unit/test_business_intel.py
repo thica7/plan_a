@@ -821,6 +821,92 @@ Collect feature evidence next. [source:evidence-1]
     assert "report_structure_required" not in rule_ids
 
 
+def test_report_release_gate_accepts_chinese_report_structure() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    structured_zh = """
+# Cursor 直接战报
+
+## 执行摘要
+Cursor 定价信息可用于直接战报评估，结论仍限定在已验证定价证据范围内。 [source:evidence-1]
+该摘要说明置信度、适用边界和后续采购前需要补充的企业安全材料。 [source:evidence-1]
+
+## 来源质量与覆盖
+报告使用已接受的网页证据，并将结论限定在可验证的定价覆盖范围内。 [source:evidence-1]
+来源质量说明区分官方页面、已抓取网页和仍需后续验证的低置信线索。
+该报告避免把搜索摘要当作最终事实。 [source:evidence-1]
+
+## 横向决策矩阵
+| 维度 | Cursor |
+| --- | --- |
+| 定价 | Cursor 发布可核验定价信息。 [source:evidence-1] |
+
+## 场景 QA 清单
+- 场景：l1_pricing_pack；层级：L1；推荐维度：pricing、feature、persona。
+- 分析问题：哪些套餐门槛影响感知价值？
+- 证据要求：定价行必须使用官方或已抓取网页证据。
+- QA 规则：claim_has_evidence、source_reliability_min、homepage_verified。
+
+## 战报
+销售和产品团队可把定价透明度作为第一条战报线索。 [source:evidence-1]
+安全、采购和企业管控主张应保留为后续验证项。 [source:evidence-1]
+该战报不使用绝对赢家表述，而是说明已验证证据支持哪些短期定位。
+采购结论还需要更强来源。 [source:evidence-1]
+
+## 声明校验与证据风险
+定价声明有已接受证据支撑。 [source:evidence-1]
+更广泛的安全、采购或企业控制声明不应在缺少独立来源时发布。 [source:evidence-1]
+风险说明明确列出低置信来源、单一来源结论和需要降级处理的主张。 [source:evidence-1]
+
+## 下一步采集与验证计划
+下一轮应补充官方企业安全文档、当前采购包装和买方异议证据。 [source:evidence-1]
+补充后重新运行声明校验，确认定价、功能和 persona 结论都能映射到高质量来源。 [source:evidence-1]
+
+## 证据附录
+- evidence-1：Cursor pricing，webpage_verified，confidence 0.90。 [source:evidence-1]
+""".strip()
+    report = _report_version(report_md=structured_zh)
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert len(structured_zh) >= 900
+    assert "report_structure_required" not in {issue.rule_id for issue in gate.issues}
+
+
 def test_claim_validator_cross_checks_evidence_support() -> None:
     competitor = _competitor()
     accepted = EvidenceRecord(

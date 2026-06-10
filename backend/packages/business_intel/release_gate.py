@@ -13,6 +13,7 @@ from packages.business_intel.source_reconciliation import (
     normalize_source_token,
     source_tokens,
 )
+from packages.i18n.language import repair_mojibake_text
 from packages.identity import compute_release_gate_issue_id
 from packages.schema.enterprise import (
     BusinessQAFinding,
@@ -449,39 +450,56 @@ def _report_structure_issues(report_version: ReportVersionRecord) -> list[Busine
 
 
 def _report_structure_score(report_version: ReportVersionRecord) -> tuple[float, list[str]]:
+    report_md = repair_mojibake_text(report_version.report_md)
     checks = [
         (
             "Executive Summary",
-            _has_heading(report_version.report_md, ("executive summary", "executive overview")),
+            _has_heading(
+                report_md,
+                ("executive summary", "executive overview", "执行摘要", "执行概览"),
+            ),
         ),
         (
             "Source Quality & Coverage",
-            _has_heading(report_version.report_md, ("source quality", "source coverage")),
+            _has_heading(report_md, ("source quality", "source coverage", "来源质量", "来源覆盖")),
         ),
         (
             "Decision Matrix",
-            _has_heading(report_version.report_md, ("matrix", "dimension winners", "side-by-side")),
+            _has_heading(
+                report_md,
+                ("matrix", "dimension winners", "side-by-side", "决策矩阵", "对比矩阵", "维度结论"),
+            ),
         ),
         (
             "Scenario QA Checklist",
-            _has_heading(report_version.report_md, ("scenario qa", "scenario checklist")),
+            _has_heading(report_md, ("scenario qa", "scenario checklist", "场景 qa", "场景清单")),
         ),
         (
             "Claim Validation & Evidence Risk",
-            _has_heading(report_version.report_md, ("claim validation", "evidence risk")),
+            _has_heading(report_md, ("claim validation", "evidence risk", "声明校验", "证据风险")),
         ),
         (
             "Next Collection / Verification Plan",
             _has_heading(
-                report_version.report_md,
-                ("next collection", "verification plan", "evidence gap"),
+                report_md,
+                (
+                    "next collection",
+                    "verification plan",
+                    "evidence gap",
+                    "下一步采集",
+                    "验证计划",
+                    "证据缺口",
+                ),
             ),
         ),
         (
             "Evidence Appendix",
-            _has_heading(report_version.report_md, ("evidence appendix", "source appendix")),
+            _has_heading(
+                report_md,
+                ("evidence appendix", "source appendix", "证据附录", "来源附录"),
+            ),
         ),
-        ("Layer-Specific Analysis", _has_layer_heading(report_version)),
+        ("Layer-Specific Analysis", _has_layer_heading(report_version, report_md=report_md)),
     ]
     passed = sum(1 for _name, ok in checks if ok)
     missing = [name for name, ok in checks if not ok]
@@ -508,17 +526,28 @@ def _report_depth_issues(report_version: ReportVersionRecord) -> list[BusinessQA
     ]
 
 
-def _has_layer_heading(report_version: ReportVersionRecord) -> bool:
+def _has_layer_heading(
+    report_version: ReportVersionRecord,
+    *,
+    report_md: str | None = None,
+) -> bool:
+    markdown = (
+        report_md if report_md is not None else repair_mojibake_text(report_version.report_md)
+    )
     layer = report_version.competitor_layer
     if layer == "L1":
-        return _has_heading(report_version.report_md, ("battlecard", "sales objection"))
+        return _has_heading(markdown, ("battlecard", "sales objection", "战报", "销售异议"))
     if layer == "L2":
-        return _has_heading(report_version.report_md, ("workflow", "enterprise risk", "switching"))
+        return _has_heading(
+            markdown,
+            ("workflow", "enterprise risk", "switching", "工作流", "企业风险", "替换成本"),
+        )
     if layer == "L3":
         return _has_heading(
-            report_version.report_md, ("market landscape", "segmentation", "benchmark")
+            markdown,
+            ("market landscape", "segmentation", "benchmark", "市场格局", "市场分层", "竞品集群"),
         )
-    return _has_heading(report_version.report_md, ("business implication", "strategy"))
+    return _has_heading(markdown, ("business implication", "strategy", "业务影响", "战略"))
 
 
 def _has_heading(markdown: str, needles: tuple[str, ...]) -> bool:

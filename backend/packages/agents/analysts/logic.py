@@ -1002,6 +1002,61 @@ class AnalystAgentMixin:
             if source.dimension == dimension and self._source_matches_competitor(source, competitor)
         ]
 
+    def _source_ids_for_competitor_dimension(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+    ) -> list[str]:
+        return [
+            source.id
+            for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
+        ]
+
+    def _filter_findings_to_known_source_ids(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        findings: list[str],
+    ) -> list[str]:
+        valid_source_ids = set(
+            self._source_ids_for_competitor_dimension(detail, competitor, dimension)
+        )
+        if not valid_source_ids:
+            return [finding.strip() for finding in findings if finding.strip()]
+        filtered: list[str] = []
+        seen: set[str] = set()
+        for finding in findings:
+            clean = finding.strip()
+            if not clean:
+                continue
+            cited_ids = self._extract_cited_source_ids(clean)
+            unknown_ids = {
+                source_id for source_id in cited_ids if source_id not in valid_source_ids
+            }
+            if cited_ids and unknown_ids == cited_ids:
+                continue
+            if unknown_ids:
+                clean = self._remove_unknown_source_refs(clean, unknown_ids)
+            key = " ".join(clean.split()).casefold()
+            if clean and key not in seen:
+                seen.add(key)
+                filtered.append(clean)
+        return filtered
+
+    def _remove_unknown_source_refs(self, text: str, source_ids: set[str]) -> str:
+        cleaned = text
+        for source_id in source_ids:
+            escaped = re.escape(source_id)
+            cleaned = re.sub(
+                rf"\s*\[source(?:\s+id)?(?::|\s+){escaped}\]",
+                "",
+                cleaned,
+                flags=re.IGNORECASE,
+            )
+        return " ".join(cleaned.split())
+
     def _kb_cache_content_hash(self, detail: RunDetail, competitor: str, dimension: str) -> str:
         sources = self._sources_for_competitor_dimension(detail, competitor, dimension)
         if not sources:
@@ -1018,18 +1073,28 @@ class AnalystAgentMixin:
         return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:24]
 
     def _apply_kb_cache_entry(self, detail: RunDetail, entry: KBCacheEntry) -> None:
+        valid_source_ids = self._source_ids_for_competitor_dimension(
+            detail,
+            entry.competitor,
+            entry.dimension,
+        )
         kb = detail.competitor_kbs.get(entry.competitor) or CompetitorKB(
             competitor=entry.competitor
         )
-        kb.slices[entry.dimension] = entry.kb_slice
-        kb.sources = merge_ordered_refs(kb.sources, entry.source_ids)
+        kb.slices[entry.dimension] = self._filter_findings_to_known_source_ids(
+            detail,
+            entry.competitor,
+            entry.dimension,
+            entry.kb_slice,
+        )
+        kb.sources = merge_ordered_refs(kb.sources, valid_source_ids)
         kb.confidence = entry.confidence
         detail.competitor_kbs[entry.competitor] = kb
 
         knowledge = detail.competitor_knowledge.get(entry.competitor) or CompetitorKnowledge(
             competitor=entry.competitor
         )
-        cached = entry.knowledge
+        cached = entry.knowledge.model_copy(deep=True)
         dimension_key = entry.dimension.casefold()
         if "pricing" in dimension_key:
             knowledge.pricing_model = cached.pricing_model
@@ -1037,11 +1102,20 @@ class AnalystAgentMixin:
             knowledge.user_personas = cached.user_personas
         else:
             knowledge.feature_tree = cached.feature_tree
+        self._sanitize_structured_knowledge_slice_sources(
+            detail,
+            entry.competitor,
+            entry.dimension,
+            knowledge,
+        )
         knowledge.source_ids = merge_ordered_refs(
             knowledge.source_ids,
-            entry.source_ids,
+            valid_source_ids,
             cached.source_ids,
         )
+        knowledge.source_ids = [
+            source_id for source_id in knowledge.source_ids if source_id in valid_source_ids
+        ]
         knowledge.confidence = max(knowledge.confidence, cached.confidence, entry.confidence)
         detail.competitor_knowledge[entry.competitor] = knowledge
 
@@ -1082,6 +1156,12 @@ class AnalystAgentMixin:
             findings = [
                 finding for finding in competitor_findings.get(competitor, []) if finding.strip()
             ]
+            findings = self._filter_findings_to_known_source_ids(
+                detail,
+                competitor,
+                dimension,
+                findings,
+            )
             if not findings:
                 findings = [
                     source.snippet or source.title
@@ -1117,6 +1197,12 @@ class AnalystAgentMixin:
         findings: list[str],
     ) -> None:
         clean_findings = [finding for finding in findings if finding.strip()]
+        clean_findings = self._filter_findings_to_known_source_ids(
+            detail,
+            competitor,
+            dimension,
+            clean_findings,
+        )
         if not clean_findings:
             clean_findings = [
                 source.snippet or source.title
@@ -1179,6 +1265,12 @@ class AnalystAgentMixin:
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
         ]
         knowledge.source_ids = merge_ordered_refs(knowledge.source_ids, source_ids)
+        self._sanitize_structured_knowledge_slice_sources(
+            detail,
+            competitor,
+            dimension,
+            knowledge,
+        )
         source_confidences = [
             source.confidence
             for source in detail.raw_sources
@@ -1240,6 +1332,12 @@ class AnalystAgentMixin:
                     knowledge.feature_tree.nodes = []
                     knowledge.feature_tree.summary_claims = []
 
+        self._sanitize_structured_knowledge_slice_sources(
+            detail,
+            competitor,
+            dimension,
+            knowledge,
+        )
         claims = self._structured_claims_for_dimension(knowledge, dimension)
         knowledge.source_ids = merge_ordered_refs(
             knowledge.source_ids,
@@ -1274,6 +1372,95 @@ class AnalystAgentMixin:
         if not claims:
             return 0.0
         return sum(claim.confidence for claim in claims) / len(claims)
+
+    def _sanitize_structured_knowledge_slice_sources(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        knowledge: CompetitorKnowledge,
+    ) -> None:
+        valid_source_ids = set(
+            self._source_ids_for_competitor_dimension(detail, competitor, dimension)
+        )
+        if not valid_source_ids:
+            return
+        dimension_key = dimension.casefold()
+        if "pricing" in dimension_key:
+            self._sanitize_pricing_model_source_ids(knowledge.pricing_model, valid_source_ids)
+        elif "persona" in dimension_key or "user" in dimension_key:
+            self._sanitize_persona_model_source_ids(knowledge.user_personas, valid_source_ids)
+        else:
+            self._sanitize_feature_tree_source_ids(knowledge.feature_tree, valid_source_ids)
+        knowledge.source_ids = [
+            source_id for source_id in knowledge.source_ids if source_id in valid_source_ids
+        ]
+
+    def _sanitize_pricing_model_source_ids(
+        self,
+        pricing_model: PricingModel,
+        valid_source_ids: set[str],
+    ) -> None:
+        pricing_model.notes = self._claims_with_known_source_ids(
+            pricing_model.notes,
+            valid_source_ids,
+        )
+        for tier in pricing_model.tiers:
+            tier.claims = self._claims_with_known_source_ids(tier.claims, valid_source_ids)
+
+    def _sanitize_persona_model_source_ids(
+        self,
+        personas: UserPersonaModel,
+        valid_source_ids: set[str],
+    ) -> None:
+        personas.summary_claims = self._claims_with_known_source_ids(
+            personas.summary_claims,
+            valid_source_ids,
+        )
+        for segment in personas.segments:
+            segment.claims = self._claims_with_known_source_ids(segment.claims, valid_source_ids)
+
+    def _sanitize_feature_tree_source_ids(
+        self,
+        feature_tree: FeatureTree,
+        valid_source_ids: set[str],
+    ) -> None:
+        feature_tree.summary_claims = self._claims_with_known_source_ids(
+            feature_tree.summary_claims,
+            valid_source_ids,
+        )
+        for node in feature_tree.nodes:
+            self._sanitize_feature_node_source_ids(node, valid_source_ids)
+
+    def _sanitize_feature_node_source_ids(
+        self,
+        node: FeatureNode,
+        valid_source_ids: set[str],
+    ) -> None:
+        node.claims = self._claims_with_known_source_ids(node.claims, valid_source_ids)
+        for child in node.children:
+            self._sanitize_feature_node_source_ids(child, valid_source_ids)
+
+    def _claims_with_known_source_ids(
+        self,
+        claims: list[KnowledgeClaim],
+        valid_source_ids: set[str],
+    ) -> list[KnowledgeClaim]:
+        filtered: list[KnowledgeClaim] = []
+        seen: set[tuple[str, tuple[str, ...]]] = set()
+        for claim in claims:
+            source_ids = [
+                source_id for source_id in claim.source_ids if source_id in valid_source_ids
+            ]
+            if not source_ids:
+                continue
+            claim.source_ids = merge_ordered_refs(source_ids)
+            key = (claim.claim.casefold(), tuple(claim.source_ids))
+            if key in seen:
+                continue
+            seen.add(key)
+            filtered.append(claim)
+        return filtered
 
     def _structured_knowledge_schema_hint(self, dimension: str) -> str:
         claim = {"claim": "factual claim", "source_ids": ["source-id"], "confidence": 0.0}
@@ -1361,12 +1548,24 @@ class AnalystAgentMixin:
             source.id
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
         ]
+        valid_source_ids = set(fallback_source_ids)
         claims: list[KnowledgeClaim] = []
         for finding in findings:
             clean = finding.strip()
             if not clean:
                 continue
-            source_ids = sorted(self._extract_cited_source_ids(clean))
+            cited_source_ids = sorted(self._extract_cited_source_ids(clean))
+            if valid_source_ids:
+                source_ids = [
+                    source_id for source_id in cited_source_ids if source_id in valid_source_ids
+                ]
+                if cited_source_ids and not source_ids:
+                    continue
+                unknown_source_ids = set(cited_source_ids) - valid_source_ids
+                if unknown_source_ids:
+                    clean = self._remove_unknown_source_refs(clean, unknown_source_ids)
+            else:
+                source_ids = cited_source_ids
             if not source_ids:
                 source_ids = fallback_source_ids[:1]
             if not source_ids:

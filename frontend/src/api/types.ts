@@ -8,6 +8,8 @@ export type RunStatus =
   | "completed_with_blockers"
   | "failed";
 
+export type OutputLanguage = "zh-CN" | "en-US";
+
 export interface AnalysisPlan {
   topic: string;
   competitors: string[];
@@ -715,6 +717,7 @@ export interface RunCreateRequest {
   competitor_layer?: "L1" | "L2" | "L3" | null;
   scenario_id?: string | null;
   execution_mode: "auto" | "demo" | "real";
+  output_language?: OutputLanguage;
   auto_redo_warn_enabled?: boolean;
   hitl_enabled?: boolean;
 }
@@ -727,6 +730,7 @@ export interface RunSummary {
   topic: string;
   status: RunStatus;
   execution_mode: "demo" | "real";
+  output_language: OutputLanguage;
   created_at: string;
   updated_at: string;
 }

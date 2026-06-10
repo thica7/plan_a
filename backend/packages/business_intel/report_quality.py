@@ -153,6 +153,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "llm_call_signal": min(float(detail.metrics.llm_calls) / 3.0, 1.0),
         "report_length_score": min(len(detail.report_md) / 2500.0, 1.0),
         "report_structure_score": _report_structure_score(detail),
+        "duplicate_section_count": float(_duplicate_section_count(detail.report_md)),
         "decision_summary_section_score": _decision_summary_section_score(detail.report_md),
         "competitive_findings_section_score": _competitive_findings_section_score(
             detail.report_md
@@ -187,6 +188,9 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "llm_call_signal": values["llm_call_signal"],
         "report_length_score": values["report_length_score"],
         "report_structure_score": values["report_structure_score"],
+        "duplicate_section_count": max(
+            0.0, 1.0 - min(values["duplicate_section_count"] / 3.0, 1.0)
+        ),
         "decision_summary_section_score": values["decision_summary_section_score"],
         "competitive_findings_section_score": values["competitive_findings_section_score"],
         "competitor_deep_dive_section_score": values["competitor_deep_dive_section_score"],
@@ -219,6 +223,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         and values["citation_validity_rate"] >= 0.6
         and values["source_coverage_rate"] >= 0.5
         and values["report_structure_score"] >= 0.7
+        and values["duplicate_section_count"] <= 0
         and values["decision_summary_section_score"] >= 1.0
         and values["competitive_findings_section_score"] >= 1.0
         and values["competitor_deep_dive_section_score"] >= 1.0
@@ -229,6 +234,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         and values["memory_context_section_score"] >= 1.0
         and values["user_research_section_score"] >= 1.0
         and values["rag_gap_fill_section_score"] >= 1.0
+        and values["qa_blocker_count"] <= 0
     )
     return _QualitySnapshot(
         score=max(0, min(100, score)),
@@ -252,8 +258,9 @@ def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower
         ("field_support_rate", 0.03, "higher_is_better"),
         ("validated_claim_rate", 0.03, "higher_is_better"),
         ("llm_call_signal", 0.06, "higher_is_better"),
-        ("report_length_score", 0.01, "higher_is_better"),
+        ("report_length_score", 0.0, "higher_is_better"),
         ("report_structure_score", 0.05, "higher_is_better"),
+        ("duplicate_section_count", 0.01, "lower_is_better"),
         ("decision_summary_section_score", 0.03, "higher_is_better"),
         ("competitive_findings_section_score", 0.03, "higher_is_better"),
         ("competitor_deep_dive_section_score", 0.03, "higher_is_better"),
@@ -354,6 +361,10 @@ def _signal_checks(detail: RunDetail, snapshot: _QualitySnapshot) -> list[RunQua
     ]:
         if snapshot.values[name] < minimum:
             report_blockers.append(name)
+    if snapshot.values["duplicate_section_count"] > 0:
+        report_blockers.append("duplicate_section_count")
+    if snapshot.values["qa_blocker_count"] > 0:
+        report_blockers.append("qa_blocker_count")
 
     return [
         RunQualitySignalCheck(
@@ -389,7 +400,8 @@ def _signal_checks(detail: RunDetail, snapshot: _QualitySnapshot) -> list[RunQua
                 snapshot.report_quality_signal,
                 "Report meets citation, coverage, structure, and review-readiness thresholds.",
                 "Needs a longer cited report with structure, source coverage, claim risk, "
-                "scenario QA, core analysis, and RAG gap-fill coverage when collector gaps exist.",
+                "scenario QA, core analysis, no duplicate sections, no QA blockers, and RAG "
+                "gap-fill coverage when collector gaps exist.",
             ),
             blocking_metric_names=report_blockers,
         ),
@@ -635,6 +647,124 @@ SUPPORT_SECTION_NEEDLES = (
     "retrieval",
 )
 
+DUPLICATE_SECTION_ALIAS_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "executive_takeaway",
+        _report_label_aliases("executive_takeaway", "executive_summary", "executive_overview"),
+    ),
+    ("decision_summary", _report_label_aliases("decision_summary")),
+    ("competitive_findings", _report_label_aliases("competitive_findings")),
+    ("dimension_winners", _report_label_aliases("dimension_winners")),
+    (
+        "comparison_matrix",
+        (
+            *_report_label_aliases("comparison_matrix", "side_by_side_matrix"),
+            "Decision Matrix",
+        ),
+    ),
+    (
+        "competitor_deep_dives",
+        (
+            *_report_label_aliases("competitor_deep_dives"),
+            "Competitor Deep Dive",
+        ),
+    ),
+    (
+        "battlecard",
+        (
+            *_report_label_aliases("battlecard"),
+            "Direct Battlecard",
+            "Sales Objection",
+        ),
+    ),
+    (
+        "workflow_enterprise_risk",
+        (
+            *_report_label_aliases("workflow_enterprise_risk"),
+            "Workflow",
+            "Enterprise Risk",
+            "Switching",
+        ),
+    ),
+    (
+        "market_landscape",
+        (
+            *_report_label_aliases("market_landscape"),
+            "Market Landscape",
+            "Segmentation",
+            "Benchmark",
+        ),
+    ),
+    (
+        "business_implications",
+        (
+            *_report_label_aliases("business_implications"),
+            "Strategy",
+        ),
+    ),
+    ("evidence_support", _report_label_aliases("evidence_support")),
+    (
+        "source_quality",
+        (
+            *_report_label_aliases("source_quality"),
+            "Source Coverage",
+        ),
+    ),
+    ("memory_context", _report_label_aliases("memory_context")),
+    (
+        "user_research_evidence",
+        (
+            *_report_label_aliases("user_research_evidence"),
+            "Buyer Research",
+        ),
+    ),
+    (
+        "rag_gap_fill",
+        (
+            *_report_label_aliases("rag_gap_fill"),
+            "Evidence Gap Fill",
+            "Retrieval",
+        ),
+    ),
+    (
+        "scenario_checklist",
+        (
+            *_report_label_aliases("scenario_checklist"),
+            "Scenario QA",
+            "Scenario Checklist",
+        ),
+    ),
+    (
+        "knowledge_coverage",
+        _report_label_aliases("knowledge_coverage"),
+    ),
+    ("confidence_notes", _report_label_aliases("confidence_notes")),
+    (
+        "claim_risk",
+        (
+            *_report_label_aliases("claim_risk"),
+            "Claim Validation",
+            "Evidence Risk",
+        ),
+    ),
+    (
+        "next_collection",
+        (
+            *_report_label_aliases("next_collection"),
+            "Verification Plan",
+            "Evidence Gap",
+        ),
+    ),
+    (
+        "evidence_appendix",
+        (
+            *_report_label_aliases("evidence_appendix"),
+            "Source Appendix",
+        ),
+    ),
+    ("generation_notes", _report_label_aliases("generation_notes")),
+)
+
 
 def _decision_summary_section_score(markdown: str) -> float:
     return _core_section_score(markdown, _report_label_aliases("decision_summary"))
@@ -740,7 +870,14 @@ def _clean_heading(heading: str) -> str:
 
 
 def _normalize_heading(heading: str) -> str:
-    return _clean_heading(heading).casefold()
+    cleaned = _clean_heading(heading)
+    cleaned = re.sub(
+        r"^(?:section\s+)?(?:\d+(?:\.\d+)*|[ivxlcdm]+)[\.)]\s+",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    return cleaned.casefold()
 
 
 def _heading_matches(heading: str, aliases: tuple[str, ...]) -> bool:
@@ -750,6 +887,32 @@ def _heading_matches(heading: str, aliases: tuple[str, ...]) -> bool:
         if normalized_heading == normalized_alias or normalized_alias in normalized_heading:
             return True
     return False
+
+
+def _duplicate_section_count(markdown: str) -> int:
+    report_md = repair_mojibake_text(markdown)
+    seen: set[str] = set()
+    duplicate_count = 0
+    for match in re.finditer(
+        r"^\s*#{2,4}\s+(.+?)\s*#*\s*$",
+        report_md,
+        flags=re.MULTILINE,
+    ):
+        section_key = _canonical_report_section_key(match.group(1))
+        if section_key is None:
+            continue
+        if section_key in seen:
+            duplicate_count += 1
+        else:
+            seen.add(section_key)
+    return duplicate_count
+
+
+def _canonical_report_section_key(heading: str) -> str | None:
+    for section_key, aliases in DUPLICATE_SECTION_ALIAS_GROUPS:
+        if _heading_matches(heading, aliases):
+            return section_key
+    return None
 
 
 def _section_has_substantive_body(section: _ReportSection) -> bool:
@@ -902,10 +1065,11 @@ def _has_layer_heading(detail: RunDetail, *, report_md: str | None = None) -> bo
 
 def _has_heading(markdown: str, needles: tuple[str, ...]) -> bool:
     headings = [
-        match.group(1).casefold()
+        _normalize_heading(match.group(1))
         for match in re.finditer(r"^\s*#{1,4}\s+(.+?)\s*$", markdown, flags=re.MULTILINE)
     ]
-    return any(any(needle in heading for needle in needles) for heading in headings)
+    normalized_needles = tuple(_normalize_heading(needle) for needle in needles)
+    return any(any(needle in heading for needle in normalized_needles) for heading in headings)
 
 
 def _claim_risk_section_score(markdown: str) -> float:
@@ -1026,6 +1190,7 @@ def _regression_gate(
             "field_support_rate",
             "validated_claim_rate",
             "report_structure_score",
+            "duplicate_section_count",
             "decision_summary_section_score",
             "competitive_findings_section_score",
             "competitor_deep_dive_section_score",
@@ -1076,6 +1241,15 @@ def _clean_recommendations(
         recommendations.append(
             "Increase report depth, citation coverage, and competitor coverage so conclusions are "
             "supported by an evidence chain."
+        )
+    if target.values.get("duplicate_section_count", 0.0) > 0:
+        recommendations.append(
+            "Remove duplicate semantic report sections so the core analysis and evidence support "
+            "appear once in a clear review order."
+        )
+    if target.values.get("qa_blocker_count", 0.0) > 0:
+        recommendations.append(
+            "Resolve QA blockers before treating the report as release-ready."
         )
     if any(
         target.values.get(name, 0.0) < 1.0

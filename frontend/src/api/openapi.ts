@@ -1562,6 +1562,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/projects/{project_id}/evidence/kb-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sync Project Knowledge Evidence */
+        post: operations["sync_project_knowledge_evidence_api_enterprise_projects__project_id__evidence_kb_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/projects/{project_id}/evidence/kb-sync/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Project Knowledge Evidence Sync Job */
+        post: operations["start_project_knowledge_evidence_sync_job_api_enterprise_projects__project_id__evidence_kb_sync_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/projects/{project_id}/evidence/kb-sync/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Project Knowledge Evidence Sync Metrics */
+        get: operations["list_project_knowledge_evidence_sync_metrics_api_enterprise_projects__project_id__evidence_kb_sync_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enterprise/projects/{project_id}/evidence/kb-sync/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project Knowledge Evidence Sync Job */
+        get: operations["get_project_knowledge_evidence_sync_job_api_enterprise_projects__project_id__evidence_kb_sync_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/evidence": {
         parameters: {
             query?: never;
@@ -2607,13 +2675,7 @@ export interface components {
         BatchIngestRequest: {
             /** Items */
             items: components["schemas"]["BatchIngestItem"][];
-            /**
-             * @default {
-             *       "max_concurrent": 4,
-             *       "fail_fast": false
-             *     }
-             */
-            options: components["schemas"]["BatchIngestOptions"];
+            options?: components["schemas"]["BatchIngestOptions"];
         };
         /** BatchIngestResponse */
         BatchIngestResponse: {
@@ -4671,6 +4733,186 @@ export interface components {
             /** Parent Document Id */
             parent_document_id?: string | null;
         };
+        /** KnowledgeEvidenceSyncJobRecord */
+        KnowledgeEvidenceSyncJobRecord: {
+            /** Id */
+            id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed";
+            request: components["schemas"]["KnowledgeEvidenceSyncRequest"];
+            result?: components["schemas"]["KnowledgeEvidenceSyncResult"] | null;
+            /**
+             * Error
+             * @default
+             */
+            error: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at?: string;
+        };
+        /** KnowledgeEvidenceSyncMetricRecord */
+        KnowledgeEvidenceSyncMetricRecord: {
+            /** Id */
+            id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Status */
+            status: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Completed At
+             * Format: date-time
+             */
+            completed_at: string;
+            /** Duration Ms */
+            duration_ms: number;
+            /** Loaded Count */
+            loaded_count: number;
+            /** Ingested Count */
+            ingested_count: number;
+            /** Skipped Count */
+            skipped_count: number;
+            /** Chunk Count */
+            chunk_count: number;
+            /** Indexed Count */
+            indexed_count: number;
+            /** Duplicate Count */
+            duplicate_count: number;
+            /** Request */
+            request?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Error
+             * @default
+             */
+            error: string;
+        };
+        /** KnowledgeEvidenceSyncRequest */
+        KnowledgeEvidenceSyncRequest: {
+            /** Crawl Run Id */
+            crawl_run_id?: string | null;
+            /** Competitors */
+            competitors?: string[];
+            /** Dimensions */
+            dimensions?: string[];
+            /** Source Types */
+            source_types?: string[];
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Limit
+             * @default 200
+             */
+            limit: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Snippet Chars
+             * @default 500
+             */
+            snippet_chars: number;
+            /**
+             * Full Text Chars
+             * @default 6000
+             */
+            full_text_chars: number;
+            /**
+             * Max Selected Chunks
+             * @default 8
+             */
+            max_selected_chunks: number;
+            /** Metadata Keys */
+            metadata_keys?: string[];
+            /**
+             * Force Resync
+             * @default false
+             */
+            force_resync: boolean;
+            /**
+             * Reindex Embeddings
+             * @default false
+             */
+            reindex_embeddings: boolean;
+            /**
+             * Reindex Max Documents
+             * @default 500
+             */
+            reindex_max_documents: number;
+            /**
+             * Delay Seconds
+             * @default 0
+             */
+            delay_seconds: number;
+        };
+        /** KnowledgeEvidenceSyncResult */
+        KnowledgeEvidenceSyncResult: {
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Loaded Count */
+            loaded_count: number;
+            /** Ingested Count */
+            ingested_count: number;
+            /**
+             * Skipped Count
+             * @default 0
+             */
+            skipped_count: number;
+            /** Chunk Count */
+            chunk_count: number;
+            /** Indexed Count */
+            indexed_count: number;
+            /**
+             * Duplicate Count
+             * @default 0
+             */
+            duplicate_count: number;
+            /**
+             * Reindex Skipped
+             * @default false
+             */
+            reindex_skipped: boolean;
+            /** Metric Id */
+            metric_id?: string | null;
+            /**
+             * Elapsed Ms
+             * @default 0
+             */
+            elapsed_ms: number;
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Crawl Run Ids */
+            crawl_run_ids?: string[];
+            /** Competitors */
+            competitors?: string[];
+            /** Dimensions */
+            dimensions?: string[];
+        };
         /** KnowledgeGraphEdge */
         KnowledgeGraphEdge: {
             /** Id */
@@ -6274,16 +6516,10 @@ export interface components {
             query: string;
             /** Preset */
             preset?: string | null;
-            /**
-             * Competitors
-             * @default []
-             */
-            competitors: string[];
-            /**
-             * Dimensions
-             * @default []
-             */
-            dimensions: string[];
+            /** Competitors */
+            competitors?: string[];
+            /** Dimensions */
+            dimensions?: string[];
             /**
              * Top K
              * @default 20
@@ -6451,6 +6687,12 @@ export interface components {
              * @enum {string}
              */
             execution_mode: "auto" | "demo" | "real";
+            /**
+             * Output Language
+             * @default zh-CN
+             * @enum {string}
+             */
+            output_language: "zh-CN" | "en-US";
             /** Auto Redo Warn Enabled */
             auto_redo_warn_enabled?: boolean | null;
             /** Hitl Enabled */
@@ -6485,6 +6727,12 @@ export interface components {
              */
             execution_mode: "demo" | "real";
             /**
+             * Output Language
+             * @default zh-CN
+             * @enum {string}
+             */
+            output_language: "zh-CN" | "en-US";
+            /**
              * Created At
              * Format: date-time
              */
@@ -6510,6 +6758,8 @@ export interface components {
              * @default false
              */
             hitl_enabled: boolean;
+            /** Active Run Fingerprint */
+            active_run_fingerprint?: string | null;
             /**
              * Report Md
              * @default
@@ -6559,7 +6809,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "run_created" | "node_started" | "node_completed" | "interrupt" | "qa_issue" | "report_updated" | "revision_recorded" | "run_completed" | "run_failed" | "agent.started" | "agent.finished" | "tool.called" | "rag.retrieved" | "self_consistency.sampled" | "memory.recalled" | "memory.feedback_captured" | "hitl.reviewed" | "claim.validated" | "qa.blocked" | "redo.routed" | "benchmark.scored" | "report.ready";
+            type: "run_created" | "node_started" | "node_completed" | "interrupt" | "qa_issue" | "report_updated" | "revision_recorded" | "run_completed" | "run_failed" | "agent.started" | "agent.finished" | "tool.called" | "rag.retrieved" | "self_consistency.sampled" | "memory.recalled" | "memory.feedback_captured" | "hitl.reviewed" | "claim.validated" | "qa.blocked" | "redo.routed" | "benchmark.scored" | "report.ready" | "runtime.command";
             /** Agent */
             agent?: string | null;
             /** Subagent */
@@ -6809,6 +7059,12 @@ export interface components {
              * @enum {string}
              */
             execution_mode: "demo" | "real";
+            /**
+             * Output Language
+             * @default zh-CN
+             * @enum {string}
+             */
+            output_language: "zh-CN" | "en-US";
             /**
              * Created At
              * Format: date-time
@@ -9025,7 +9281,11 @@ export interface operations {
                 limit?: number;
                 offset?: number;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9054,7 +9314,11 @@ export interface operations {
     get_knowledge_document_api_knowledge_documents__document_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 document_id: string;
             };
@@ -9085,7 +9349,11 @@ export interface operations {
     delete_knowledge_document_api_knowledge_documents__document_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 document_id: string;
             };
@@ -9114,7 +9382,11 @@ export interface operations {
     get_knowledge_document_versions_api_knowledge_documents__document_id__versions_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 document_id: string;
             };
@@ -9147,7 +9419,11 @@ export interface operations {
             query: {
                 against: string;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 document_id: string;
             };
@@ -9178,7 +9454,11 @@ export interface operations {
     merge_knowledge_document_version_api_knowledge_documents__document_id__merge_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 document_id: string;
             };
@@ -9213,7 +9493,11 @@ export interface operations {
     search_knowledge_api_knowledge_search_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9266,7 +9550,11 @@ export interface operations {
     evaluate_knowledge_api_knowledge_eval_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9302,7 +9590,11 @@ export interface operations {
                 limit?: number;
                 offset?: number;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9331,7 +9623,11 @@ export interface operations {
     get_knowledge_eval_run_api_knowledge_eval_runs__run_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -9362,7 +9658,11 @@ export interface operations {
     get_knowledge_stats_api_knowledge_stats_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9377,6 +9677,15 @@ export interface operations {
                     "application/json": components["schemas"]["KnowledgeStatsResponse"];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     list_knowledge_crawl_jobs_api_knowledge_crawl_jobs_get: {
@@ -9386,7 +9695,11 @@ export interface operations {
                 limit?: number;
                 offset?: number;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9415,7 +9728,11 @@ export interface operations {
     create_knowledge_crawl_job_api_knowledge_crawl_jobs_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9448,7 +9765,11 @@ export interface operations {
     get_knowledge_crawl_job_api_knowledge_crawl_jobs__job_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 job_id: string;
             };
@@ -9479,7 +9800,11 @@ export interface operations {
     list_knowledge_crawl_runs_api_knowledge_crawl_runs_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9494,12 +9819,25 @@ export interface operations {
                     "application/json": components["schemas"]["CrawlRunSummary"][];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     create_knowledge_batch_api_knowledge_batch_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9532,7 +9870,11 @@ export interface operations {
     get_knowledge_ingest_job_api_knowledge_ingest_jobs__job_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 job_id: string;
             };
@@ -9566,7 +9908,11 @@ export interface operations {
                 limit?: number;
                 offset?: number;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9599,7 +9945,11 @@ export interface operations {
                 limit?: number;
                 offset?: number;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9628,7 +9978,11 @@ export interface operations {
     create_crawl_job_api_crawl_jobs_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9661,7 +10015,11 @@ export interface operations {
     list_crawl_sources_api_crawl_sources_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9676,12 +10034,25 @@ export interface operations {
                     "application/json": components["schemas"]["CrawlSource"][];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     create_crawl_source_api_crawl_sources_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9714,7 +10085,11 @@ export interface operations {
     get_crawl_source_api_crawl_sources__source_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 source_id: string;
             };
@@ -9745,7 +10120,11 @@ export interface operations {
     delete_crawl_source_api_crawl_sources__source_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 source_id: string;
             };
@@ -9774,7 +10153,11 @@ export interface operations {
     retry_crawl_source_api_crawl_sources__source_id__retry_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 source_id: string;
             };
@@ -9805,7 +10188,11 @@ export interface operations {
     get_crawl_frontier_stats_api_crawl_frontier_stats_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9820,12 +10207,25 @@ export interface operations {
                     "application/json": components["schemas"]["CrawlFrontierStats"];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     get_crawl_job_api_crawl_jobs__job_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 job_id: string;
             };
@@ -9856,7 +10256,11 @@ export interface operations {
     stream_crawl_job_api_crawl_jobs__job_id__stream_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 job_id: string;
             };
@@ -11578,6 +11982,157 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvidenceSeedIngestResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_project_knowledge_evidence_api_enterprise_projects__project_id__evidence_kb_sync_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeEvidenceSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeEvidenceSyncResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_project_knowledge_evidence_sync_job_api_enterprise_projects__project_id__evidence_kb_sync_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeEvidenceSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeEvidenceSyncJobRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_project_knowledge_evidence_sync_metrics_api_enterprise_projects__project_id__evidence_kb_sync_metrics_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeEvidenceSyncMetricRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_knowledge_evidence_sync_job_api_enterprise_projects__project_id__evidence_kb_sync_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                project_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeEvidenceSyncJobRecord"];
                 };
             };
             /** @description Validation Error */

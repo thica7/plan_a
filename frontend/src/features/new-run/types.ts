@@ -7,3 +7,4 @@ export const dynamicScenarioId = "dynamic_adaptive";
 export type LayerSelection = "auto" | Extract<CompetitorLayer, "L1" | "L2" | "L3">;
 export type CompetitorMode = "auto" | "manual";
 export type ExecutionMode = "demo" | "real";
+export type OutputLanguage = "zh-CN" | "en-US";

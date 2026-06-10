@@ -737,12 +737,9 @@ class WriterAgentMixin:
         ]
 
     def _report_has_heading(self, markdown: str, heading: str) -> bool:
-        return bool(
-            re.search(
-                rf"^#+\s+{re.escape(heading)}\s*$",
-                markdown,
-                flags=re.IGNORECASE | re.MULTILINE,
-            )
+        return any(
+            self._report_heading_matches(match.group(1), heading)
+            for match in self._iter_report_headings(markdown)
         )
 
     def _report_has_any_heading(self, markdown: str, headings: Iterable[str]) -> bool:
@@ -751,19 +748,38 @@ class WriterAgentMixin:
     def _first_report_heading_index(
         self, markdown: str, headings: Iterable[str]
     ) -> int | None:
+        heading_list = list(headings)
         positions = [
             match.start()
-            for heading in headings
-            for match in [
-                re.search(
-                    rf"^#+\s+{re.escape(heading)}\s*$",
-                    markdown,
-                    flags=re.IGNORECASE | re.MULTILINE,
-                )
-            ]
-            if match is not None
+            for match in self._iter_report_headings(markdown)
+            if any(
+                self._report_heading_matches(match.group(1), heading)
+                for heading in heading_list
+            )
         ]
         return min(positions) if positions else None
+
+    def _iter_report_headings(self, markdown: str) -> Iterable[re.Match[str]]:
+        return re.finditer(
+            r"^\s*#{1,6}\s+(.+?)\s*#*\s*$",
+            markdown,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+
+    def _report_heading_matches(self, heading: str, alias: str) -> bool:
+        normalized_heading = self._normalize_report_heading_text(heading)
+        normalized_alias = self._normalize_report_heading_text(alias)
+        return normalized_heading == normalized_alias or normalized_alias in normalized_heading
+
+    def _normalize_report_heading_text(self, heading: str) -> str:
+        cleaned = re.sub(r"\s+", " ", heading.strip().strip("#").strip())
+        cleaned = re.sub(
+            r"^(?:section\s+)?(?:\d+(?:\.\d+)*|[ivxlcdm]+)[\.)]\s+",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        return cleaned.casefold()
 
     def _normalize_report_section_order(self, detail: RunDetail, markdown: str) -> str:
         matches = list(
@@ -777,21 +793,24 @@ class WriterAgentMixin:
             return markdown
 
         heading_groups = self._ordered_report_heading_groups(detail)
-        heading_order = {
-            heading.casefold(): index
+        heading_order = [
+            (index, heading)
             for index, group in enumerate(heading_groups)
             for heading in group
-        }
-        support_heading_aliases = {
-            heading.casefold()
+        ]
+        support_heading_aliases = [
+            heading
             for group in self._support_report_heading_alias_groups()
             for heading in group
-        }
+        ]
         first_support_start = min(
             (
                 match.start()
                 for match in matches
-                if match.group(1).strip().casefold() in support_heading_aliases
+                if any(
+                    self._report_heading_matches(match.group(1).strip(), heading)
+                    for heading in support_heading_aliases
+                )
             ),
             default=None,
         )
@@ -802,7 +821,14 @@ class WriterAgentMixin:
             section_end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
             heading = match.group(1).strip()
             section = markdown[match.start() : section_end].strip()
-            order_index = heading_order.get(heading.casefold())
+            order_index = next(
+                (
+                    index
+                    for index, known_heading in heading_order
+                    if self._report_heading_matches(heading, known_heading)
+                ),
+                None,
+            )
             if order_index is None:
                 if first_support_start is not None and match.start() < first_support_start:
                     pre_support_unknown_sections.append(section)

@@ -8,7 +8,7 @@ from packages.agents import SubagentContext
 from packages.business_intel.homepage import HomepageVerification
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
-from packages.memory import PreferenceMemoryStore
+from packages.memory import PreferenceMemoryStore, RunJournal
 from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
@@ -33,6 +33,7 @@ from packages.schema.models import (
     CompetitorKB,
     CompetitorKnowledge,
     KnowledgeClaim,
+    PricingTier,
     QCIssue,
     RawSource,
     RedoScope,
@@ -1563,6 +1564,7 @@ def test_final_qa_sync_adds_rag_gap_fill_for_collector_warnings() -> None:
         topic="Test",
         status="running",
         execution_mode="real",
+        output_language="en-US",
         created_at="2026-05-23T00:00:00",
         updated_at="2026-05-23T00:00:00",
         plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
@@ -1659,6 +1661,149 @@ def test_qa_marks_phantom_citation_as_writer_only_blocker() -> None:
     assert len(phantom) == 1
     assert phantom[0].severity == "blocker"
     assert phantom[0].redo_scope.kind == "writer_only"
+
+
+def test_analyst_slice_merge_discards_unknown_source_citations() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        output_language="en-US",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://example.com/pricing",
+                snippet="A costs $10.",
+                content_hash="abc",
+                confidence=0.8,
+            )
+        ],
+    )
+
+    service._merge_competitor_kb_slice(
+        detail,
+        "A",
+        "pricing",
+        [
+            "A publishes a $10 monthly plan [source:pricing-1].",
+            "A pricing row copied from another product [source:pricing-404].",
+        ],
+    )
+
+    assert detail.competitor_kbs["A"].slices["pricing"] == [
+        "A publishes a $10 monthly plan [source:pricing-1]."
+    ]
+    claims = service._structured_claims_for_dimension(
+        detail.competitor_knowledge["A"],
+        "pricing",
+    )
+    assert any("pricing-1" in claim.source_ids for claim in claims)
+    assert all("pricing-404" not in claim.source_ids for claim in claims)
+
+
+def test_final_qa_deduplicates_repeated_unknown_source_findings() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    knowledge = CompetitorKnowledge(competitor="A")
+    unknown_claim = KnowledgeClaim(
+        claim="A pricing row copied from another product.",
+        source_ids=["pricing-404"],
+        confidence=0.7,
+    )
+    knowledge.pricing_model.notes = [unknown_claim, unknown_claim.model_copy(deep=True)]
+    knowledge.pricing_model.tiers = [
+        PricingTier(
+            name="Pro",
+            price="$10",
+            billing_cycle="monthly",
+            claims=[unknown_claim.model_copy(deep=True)],
+        )
+    ]
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        output_language="en-US",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://example.com/pricing",
+                snippet="A costs $10.",
+                content_hash="abc",
+                confidence=0.8,
+            )
+        ],
+        competitor_kbs={
+            "A": CompetitorKB(
+                competitor="A",
+                slices={
+                    "pricing": [
+                        "A pricing row copied from another product [source:pricing-404].",
+                        "A pricing row copied from another product [source:pricing-404].",
+                    ]
+                },
+                sources=["pricing-404"],
+                confidence=0.7,
+            )
+        },
+        competitor_knowledge={"A": knowledge},
+        report_md="A pricing is $10 [source:pricing-1].",
+        comparison_matrix=ComparisonMatrix(
+            competitors=["A"],
+            dimensions=["pricing"],
+            cells=[
+                ComparisonCell(
+                    competitor="A",
+                    dimension="pricing",
+                    value="A pricing is $10.",
+                    source_ids=["pricing-1"],
+                    confidence=0.8,
+                )
+            ],
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    unknown_source_issues = [issue for issue in issues if "pricing-404" in issue.problem]
+    assert len(unknown_source_issues) == 2
+    assert {issue.detected_by for issue in unknown_source_issues} == {"citation", "schema"}
 
 
 def test_qa_flags_report_text_noise_as_writer_only_blocker() -> None:
@@ -3015,6 +3160,48 @@ async def test_collect_join_normalizes_covered_competitors_and_dedupes() -> None
 
 
 @pytest.mark.asyncio
+async def test_collect_join_preserves_explicit_partial_cross_source_coverage() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Collect join partial coverage",
+            competitors=["A", "B", "C"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-ab",
+            competitor="Cross-model all 3 competitors",
+            covered_competitors=["A", "B"],
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A vs B pricing",
+            url="https://example.com/ab",
+            snippet="A and B pricing comparison.",
+            content_hash="ab-hash",
+            confidence=0.8,
+        )
+    ]
+
+    await service._real_collect_join_step(record, ["pricing"])
+
+    assert record.detail.raw_sources[0].covered_competitors == ["A", "B"]
+
+
+@pytest.mark.asyncio
 async def test_collect_join_skips_cross_search_when_branch_coverage_is_complete() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -3079,6 +3266,122 @@ async def test_collect_join_skips_cross_search_when_branch_coverage_is_complete(
     assert skipped.payload["reason"] == "branch_coverage_complete"
     assert skipped.payload["covered_competitors"] == ["A", "B"]
     assert len(record.detail.raw_sources) == 2
+
+
+@pytest.mark.asyncio
+async def test_cross_competitor_search_rejects_unmatched_single_product_result() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            web_search_provider="perplexity",
+            pplx_api_key="pplx-key",
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding agent",
+            competitors=["Claude Code", "OpenAI Codex"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    async def fake_trace_search(*args, **kwargs):  # noqa: ANN202
+        return [
+            SearchResult(
+                title="Bolt pricing",
+                url="https://bolt.new/pricing",
+                snippet="Bolt pricing has Pro and Team plans for browser coding.",
+            )
+        ]
+
+    async def fake_source_from_search_result(*args, **kwargs):  # noqa: ANN202
+        return RawSource(
+            id="pricing-bolt",
+            competitor="Cross-model all 2 competitors",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Bolt pricing",
+            url="https://bolt.new/pricing",
+            snippet="Bolt pricing has Pro and Team plans for browser coding.",
+            content_hash="bolt-hash",
+            confidence=0.98,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._source_from_search_result = fake_source_from_search_result  # type: ignore[method-assign]
+
+    await service._collect_cross_competitor_evidence(record, ["pricing"])
+
+    assert record.detail.raw_sources == []
+    assert not [
+        message
+        for message in record.detail.agent_messages
+        if message.message_type == "cross_competitor_sources_collected"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_cross_competitor_search_marks_only_mentioned_competitors() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            web_search_provider="perplexity",
+            pplx_api_key="pplx-key",
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding agent",
+            competitors=["Cursor", "Claude Code", "OpenAI Codex"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    async def fake_trace_search(*args, **kwargs):  # noqa: ANN202
+        return [
+            SearchResult(
+                title="Cursor vs Claude Code pricing comparison",
+                url="https://example.com/compare",
+                snippet="Cursor and Claude Code pricing are compared for coding teams.",
+            )
+        ]
+
+    async def fake_source_from_search_result(*args, **kwargs):  # noqa: ANN202
+        return RawSource(
+            id="pricing-compare",
+            competitor="Cross-model all 3 competitors",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor vs Claude Code pricing comparison",
+            url="https://example.com/compare",
+            snippet="Cursor and Claude Code pricing are compared for coding teams.",
+            content_hash="compare-hash",
+            confidence=0.98,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._source_from_search_result = fake_source_from_search_result  # type: ignore[method-assign]
+
+    await service._collect_cross_competitor_evidence(record, ["pricing"])
+
+    assert len(record.detail.raw_sources) == 1
+    assert record.detail.raw_sources[0].covered_competitors == ["Cursor", "Claude Code"]
 
 
 def test_qa_marks_matrix_unknown_source_for_comparator_redo() -> None:
@@ -3435,6 +3738,7 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
             competitors=["A"],
             dimensions=["pricing"],
             execution_mode="real",
+            output_language="en-US",
         )
     )
     record = service._runs[detail.id]
@@ -3512,6 +3816,7 @@ async def test_writer_budget_timeout_generates_deterministic_report() -> None:
             competitors=["A"],
             dimensions=["pricing"],
             execution_mode="real",
+            output_language="en-US",
         )
     )
     record = service._runs[detail.id]
@@ -3620,7 +3925,7 @@ async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
     await service._real_writer_step(record)
 
     assert "Writer Context JSON:" in captured_user
-    assert "under 4,500 characters" in captured_user
+    assert "around 5,500 characters" in captured_user
     assert "Competitor KB JSON:" not in captured_user
     assert "Competitor Knowledge Schema JSON:" not in captured_user
     assert len(captured_user) < 15000
@@ -7382,6 +7687,67 @@ async def test_planner_hitl_rejects_competitor_edits_without_modify_plan() -> No
         assert service._runs[detail.id].detail.plan.competitors == ["Cursor"]
     finally:
         await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_journal_hydrates_planner_hitl_pending_interrupt_after_restart(tmp_path) -> None:
+    journal = RunJournal(tmp_path / "run_journal.db")
+    settings = Settings(
+        demo_mode=False,
+        ark_api_key="key",
+        ark_model="model",
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+        hitl_enabled=True,
+    )
+    original = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=settings,
+        journal=journal,
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await original.create_run(
+            RunCreateRequest(
+                topic="AI IDE",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+        record = original._runs[detail.id]
+        record.detail.status = "interrupted"
+        record.detail.current_node = "planner_hitl"
+        original._persist_run(detail.id)
+    finally:
+        await original._graph_checkpointer.aclose()
+
+    reloaded = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=settings,
+        journal=journal,
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    async def fake_resume_graph(run_id, request):  # noqa: ANN001, ANN202
+        return None
+
+    reloaded._resume_interrupted_graph = fake_resume_graph  # type: ignore[method-assign]
+
+    try:
+        assert reloaded.has_pending_interrupt(detail.id) is True
+
+        updated = await reloaded.resume(
+            detail.id,
+            HitlResumeRequest(decision="accept", note="Continue after restart."),
+        )
+
+        assert updated is not None
+        assert updated.status == "running"
+    finally:
+        await reloaded._graph_checkpointer.aclose()
 
 
 @pytest.mark.asyncio

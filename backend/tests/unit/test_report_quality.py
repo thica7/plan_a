@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 
 from packages.agents.writer.logic import (
@@ -463,6 +464,60 @@ documentation, current procurement packaging, and buyer objection evidence for b
     assert "decision_summary_section_score" in report_check.blocking_metric_names
     assert "competitor_deep_dive_section_score" in report_check.blocking_metric_names
     assert "core_analysis_depth_score" in report_check.blocking_metric_names
+
+
+def test_compare_run_quality_blocks_duplicate_semantic_report_sections() -> None:
+    report_md = (
+        _structured_report_md()
+        + """
+
+## 1. Decision Summary
+Duplicated decision summary text should be treated as a structural defect, not as additional
+analysis depth. [source:source-0]
+
+## 2. Source Quality & Coverage
+Duplicated source quality support should be treated as a structural defect. [source:source-1]
+""".rstrip()
+    )
+    detail = _run_detail(
+        run_id="duplicate-section-run",
+        execution_mode="real",
+        source_count=4,
+        report_md=report_md,
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+
+    comparison = compare_run_quality(detail)
+    duplicate_metric = next(
+        (metric for metric in comparison.metrics if metric.name == "duplicate_section_count"),
+        None,
+    )
+    report_check = next(
+        check for check in comparison.signal_checks if check.signal == "report_quality"
+    )
+
+    assert duplicate_metric is not None
+    assert duplicate_metric.target_value == 2.0
+    assert duplicate_metric.direction == "lower_is_better"
+    assert comparison.report_quality_signal is False
+    assert "duplicate_section_count" in report_check.blocking_metric_names
 
 
 def test_compare_run_quality_rejects_empty_core_headings_after_appendix() -> None:
@@ -1857,6 +1912,86 @@ Battlecard body. [source:source-2]
     assert "Nested rationale should stay attached to decision summary." in report
 
 
+def test_writer_hardening_treats_numbered_headings_as_existing_sections() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="numbered-headings",
+        execution_mode="real",
+        source_count=4,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.output_language = "en-US"
+    detail.plan.competitor_layer = "L1"
+    detail.plan.dimensions = ["pricing", "feature"]
+    markdown = """
+# Cursor vs Copilot
+
+## 1. Executive Takeaway
+The executive decision is already present. [source:source-0]
+
+## 2. Decision Summary
+Recommended action: keep the L1 message focused on pricing clarity while preserving procurement
+caveats for security and bundling. [source:source-0] [source:source-1]
+
+## 3. Competitive Findings
+- Cursor has pricing transparency evidence. [source:source-0]
+- Copilot has distribution evidence. [source:source-1]
+
+## 4. Competitor Deep Dives
+Cursor wins on transparent pricing but needs deeper security validation. Copilot wins on bundled
+distribution but is harder to compare directly. [source:source-0] [source:source-1]
+
+## 5. Direct Battlecard
+Use pricing clarity as the first sales response and keep bundled distribution as the objection
+handling path. [source:source-0] [source:source-1]
+
+## 6. Evidence & QA Support
+Evidence support is already present. [source:source-0]
+
+### 7. Source Quality & Coverage
+Source quality is already present. [source:source-0] [source:source-1]
+
+### 8. Scenario QA Checklist
+- Scenario: l1_pricing_pack
+- QA rules: claim_has_evidence, source_reliability_min
+
+### 9. Claim Validation & Evidence Risk
+No unresolved blocker claims are asserted as final proof. [source:source-0]
+
+### 10. Next Collection / Verification Plan
+Collect procurement and security proof before publication. [source:source-2]
+
+### 11. Evidence Appendix
+- source-0: Cursor pricing [source:source-0]
+- source-1: Copilot pricing [source:source-1]
+""".strip()
+
+    report = writer._harden_report_markdown(detail, markdown)
+    headings = [
+        match.group(1).strip()
+        for match in re.finditer(r"^\s*#{2,3}\s+(.+?)\s*$", report, flags=re.MULTILINE)
+    ]
+
+    for expected in [
+        "Executive Takeaway",
+        "Decision Summary",
+        "Competitive Findings",
+        "Competitor Deep Dives",
+        "Battlecard",
+        "Evidence & QA Support",
+        "Source Quality & Coverage",
+        "Scenario QA Checklist",
+        "Claim Validation & Evidence Risk",
+        "Next Collection / Verification Plan",
+        "Evidence Appendix",
+    ]:
+        assert sum(expected in heading for heading in headings) == 1
+    assert "This report is structured as decision analysis first" not in report
+    assert "## Battlecard" not in report
+    assert "## Source Quality & Coverage" not in report
+
+
 def test_writer_repairs_dimension_named_source_tokens() -> None:
     writer = _WriterHarness()
     detail = _run_detail(
@@ -1927,8 +2062,15 @@ def test_compare_run_quality_exposes_normalized_metric_score_for_deductions() ->
 
     comparison = compare_run_quality(detail)
     qa_metric = next(metric for metric in comparison.metrics if metric.name == "qa_blocker_count")
+    report_check = next(
+        check for check in comparison.signal_checks if check.signal == "report_quality"
+    )
 
     assert comparison.target_score < 100
+    assert comparison.report_quality_signal is False
+    assert comparison.verdict == "warn"
+    assert comparison.regression_gate_status == "fail"
+    assert "qa_blocker_count" in report_check.blocking_metric_names
     assert qa_metric.target_value == 1.0
     assert qa_metric.target_normalized_score == 0.6667
     assert qa_metric.direction == "lower_is_better"

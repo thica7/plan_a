@@ -3,6 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
+from packages.i18n.language import DEFAULT_OUTPUT_LANGUAGE, OutputLanguage
 from packages.schema.enterprise import EnterpriseRunProjection
 from packages.schema.models import (
     AgentMessage,
@@ -42,6 +43,7 @@ class RunCreateRequest(BaseModel):
     competitor_layer: Literal["L1", "L2", "L3"] | None = None
     scenario_id: str | None = Field(default=None, min_length=1, max_length=120)
     execution_mode: Literal["auto", "demo", "real"] = "auto"
+    output_language: OutputLanguage = DEFAULT_OUTPUT_LANGUAGE
     auto_redo_warn_enabled: bool | None = None
     hitl_enabled: bool | None = None
 
@@ -76,6 +78,7 @@ class RunSummary(BaseModel):
     topic: str
     status: RunStatus
     execution_mode: Literal["demo", "real"]
+    output_language: OutputLanguage = DEFAULT_OUTPUT_LANGUAGE
     created_at: datetime
     updated_at: datetime
 

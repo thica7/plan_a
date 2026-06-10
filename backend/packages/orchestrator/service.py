@@ -47,6 +47,7 @@ from packages.hitl import (
     lifecycle_stage_for_resume_decision,
     review_kind_for_stage,
 )
+from packages.i18n.language import report_label
 from packages.identity import (
     compute_competitor_set_hash,
     compute_content_hash,
@@ -157,6 +158,7 @@ def _active_run_fingerprint(
     competitor_layer: str | None,
     scenario_id: str | None,
     execution_mode: str,
+    output_language: str,
     auto_redo_warn_enabled: bool,
     hitl_enabled: bool,
 ) -> str:
@@ -169,6 +171,7 @@ def _active_run_fingerprint(
         "competitor_layer": competitor_layer or "auto",
         "scenario_id": scenario_id or "auto",
         "execution_mode": execution_mode,
+        "output_language": output_language,
         "auto_redo_warn_enabled": auto_redo_warn_enabled,
         "hitl_enabled": hitl_enabled,
     }
@@ -313,6 +316,7 @@ class RunService(
             competitor_layer=request.competitor_layer,
             scenario_id=request.scenario_id,
             execution_mode=execution_mode,
+            output_language=request.output_language,
             auto_redo_warn_enabled=auto_redo_warn_enabled,
             hitl_enabled=hitl_enabled,
         )
@@ -396,6 +400,7 @@ class RunService(
             topic=request.topic,
             status="queued",
             execution_mode=execution_mode,
+            output_language=request.output_language,
             created_at=now,
             updated_at=now,
             plan=plan,
@@ -2762,10 +2767,12 @@ class RunService(
         if self._journal is None:
             return
         for detail in self._journal.load_runs():
-            self._runs[detail.id] = RunRecord(
+            record = RunRecord(
                 detail=detail,
                 events=self._journal.load_events(detail.id),
             )
+            self._hydrate_pending_interrupt_from_detail(record)
+            self._runs[detail.id] = record
 
     def _refresh_runs_from_journal(self) -> None:
         if self._journal is None:
@@ -2788,10 +2795,39 @@ class RunService(
         if record is None:
             record = RunRecord(detail=detail, events=events)
             self._runs[detail.id] = record
+            self._hydrate_pending_interrupt_from_detail(record)
             return record
         record.detail = detail
         record.events = events
+        self._hydrate_pending_interrupt_from_detail(record)
         return record
+
+    def _hydrate_pending_interrupt_from_detail(self, record: RunRecord) -> None:
+        detail = record.detail
+        if detail.status != "interrupted" or record.pending_interrupts:
+            return
+        stage = None
+        if detail.current_node == "planner_hitl":
+            stage = "planner"
+        elif detail.current_node == "qa_hitl":
+            stage = "qa"
+        if stage is None:
+            return
+        graph_kind: Literal["real", "demo", "scoped_redo"] = (
+            "demo" if detail.execution_mode == "demo" else "real"
+        )
+        thread_id = (
+            compute_graph_thread_id(detail.id, "demo") if graph_kind == "demo" else detail.id
+        )
+        record.active_graph_kind = graph_kind
+        record.active_thread_id = thread_id
+        record.pending_interrupts[stage] = {
+            "stage": stage,
+            "graph_kind": graph_kind,
+            "thread_id": thread_id,
+            "interrupt_node": detail.current_node,
+            "hydrated_from": "run_journal",
+        }
 
     def _persist_run(self, run_id: str) -> None:
         if self._journal is None:
@@ -3781,34 +3817,34 @@ class RunService(
         memory_section = self._demo_memory_section(detail)
         return (
             f"# {detail.plan.topic}\n\n"
-            "## Executive Summary\n"
+            f"## {report_label(detail.output_language, 'executive_summary')}\n"
             f"This demo run covers {competitors} across {dimensions} and proves that "
             "events, sources, reflections, QA findings, and report markdown flow through "
             f"structured DTOs.{source_refs}\n\n"
-            "## Source Quality & Coverage\n"
+            f"## {report_label(detail.output_language, 'source_quality')}\n"
             "Demo evidence is projected into the enterprise EvidenceRecord model with source "
             f"IDs preserved for release-gate and report-view traceability.{source_refs}\n\n"
             f"{memory_section}"
-            "## Side-by-Side Decision Matrix\n"
+            f"## {report_label(detail.output_language, 'side_by_side_matrix')}\n"
             "| Dimension | Competitors |\n"
             "| --- | --- |\n"
             f"| {dimensions} | {competitors} {source_refs} |\n\n"
-            "## Scenario QA Checklist\n"
+            f"## {report_label(detail.output_language, 'scenario_checklist')}\n"
             f"- Scenario: {detail.plan.scenario_id or 'auto'}; layer: "
             f"{detail.plan.competitor_layer}; recommended dimensions: "
             f"{', '.join(detail.plan.scenario_recommended_dimensions or detail.plan.dimensions)}.\n"
             f"- QA rules: {', '.join(detail.plan.qa_rule_ids) or 'default schema checks'}\n\n"
-            "## Battlecard\n"
+            f"## {report_label(detail.output_language, 'battlecard')}\n"
             "Use this demo report as a direct battlecard scaffold: verify pricing, feature, "
             f"and persona claims before using it as a publishable recommendation.{source_refs}\n\n"
-            "## Claim Validation & Evidence Risk\n"
+            f"## {report_label(detail.output_language, 'claim_risk')}\n"
             "Demo conclusions are contract checks, not final market recommendations. Treat "
             "low-confidence or synthetic evidence as review-gated until current official "
             f"sources and claim validation are attached.{source_refs}\n\n"
-            "## Next Collection / Verification Plan\n"
+            f"## {report_label(detail.output_language, 'next_collection')}\n"
             "Replace demo evidence with current official webpages, then rerun claim validation "
             f"and release gate review before publication.{source_refs}\n\n"
-            "## Evidence Appendix\n"
+            f"## {report_label(detail.output_language, 'evidence_appendix')}\n"
             + "\n".join(
                 f"- {source.id}: {source.title} / {source.source_type} [source:{source.id}]"
                 for source in detail.raw_sources[:8]
