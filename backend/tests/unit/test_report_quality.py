@@ -1507,6 +1507,45 @@ Layer analysis exists. [source:source-0]
     assert "Evidence gap" in review_body
 
 
+def test_writer_hardening_does_not_cite_explicit_swot_gap_lines() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="swot-gap-lines-uncited",
+        execution_mode="real",
+        source_count=2,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.output_language = "en-US"
+    detail.plan.competitor_layer = "L1"
+    detail.plan.dimensions = ["pricing", "feature"]
+    markdown = """
+# Cursor vs Copilot
+
+## Competitive Findings
+Pricing and feature evidence exists. [source:source-0]
+
+## Competitor Deep Dives
+Cursor and Copilot have cited deep dives. [source:source-1]
+
+## Battlecard
+Layer analysis exists. [source:source-0]
+""".strip()
+
+    report = writer._harden_report_markdown(detail, markdown)
+
+    swot_heading = f"## {report_label('en-US', 'swot_analysis')}"
+    layer_heading = f"## {report_label('en-US', 'battlecard')}"
+    swot_body = report[report.index(swot_heading) : report.index(layer_heading)]
+    gap_lines = [
+        line
+        for line in swot_body.splitlines()
+        if "Evidence gap" in line or "no cited SWOT" in line
+    ]
+    assert gap_lines
+    assert all("[source:" not in line for line in gap_lines)
+
+
 def test_writer_hardening_generates_chinese_review_and_swot_headings() -> None:
     writer = _WriterHarness()
     detail = _run_detail(
@@ -1527,6 +1566,11 @@ def test_writer_hardening_generates_chinese_review_and_swot_headings() -> None:
 
     assert "## 用户评价整理" in report
     assert "## SWOT 分析" in report
+    assert "优势" in report
+    assert "劣势" in report
+    assert "机会" in report
+    assert "威胁" in report
+    assert "证据缺口（Evidence gap）" in report
 
 
 def test_writer_fallback_keeps_layer_specific_report_floor() -> None:

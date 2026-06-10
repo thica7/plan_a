@@ -1637,27 +1637,69 @@ class WriterAgentMixin:
             for knowledge in detail.competitor_knowledge.values()
             if self._swot_analysis_has_content(knowledge.swot_analysis)
         ]
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = ["", f"## {report_label(detail.output_language, 'swot_analysis')}"]
         if not analyses:
-            refs = self._format_source_refs(self._matrix_source_ids(detail))
-            lines.append(
-                f"- Strengths: Evidence gap - no cited SWOT strength is established yet.{refs}"
-            )
-            lines.append(
-                "- Weaknesses: Evidence gap - no cited SWOT weakness is established yet."
-            )
-            lines.append(
-                "- Opportunities: Evidence gap - no cited SWOT opportunity is established yet."
-            )
-            lines.append("- Threats: Evidence gap - no cited SWOT threat is established yet.")
+            if is_zh:
+                lines.append("- 优势: 证据缺口（Evidence gap）：尚无可引用的 SWOT 优势证据。")
+                lines.append("- 劣势: 证据缺口（Evidence gap）：尚无可引用的 SWOT 劣势证据。")
+                lines.append("- 机会: 证据缺口（Evidence gap）：尚无可引用的 SWOT 机会证据。")
+                lines.append("- 威胁: 证据缺口（Evidence gap）：尚无可引用的 SWOT 威胁证据。")
+            else:
+                lines.append(
+                    "- Strengths: Evidence gap - no cited SWOT strength is established yet."
+                )
+                lines.append(
+                    "- Weaknesses: Evidence gap - no cited SWOT weakness is established yet."
+                )
+                lines.append(
+                    "- Opportunities: Evidence gap - no cited SWOT opportunity is established yet."
+                )
+                lines.append(
+                    "- Threats: Evidence gap - no cited SWOT threat is established yet."
+                )
             return lines
 
         for analysis in analyses[:4]:
             lines.append(f"### {analysis.competitor or 'Unknown competitor'}")
-            lines.extend(self._swot_item_lines("Strengths", analysis.strengths))
-            lines.extend(self._swot_item_lines("Weaknesses", analysis.weaknesses))
-            lines.extend(self._swot_item_lines("Opportunities", analysis.opportunities))
-            lines.extend(self._swot_item_lines("Threats", analysis.threats))
+            if is_zh:
+                lines.extend(
+                    self._swot_item_lines(
+                        "优势",
+                        analysis.strengths,
+                        gap_text="证据缺口（Evidence gap）。",
+                        empty_gap_text="证据缺口（Evidence gap）：尚无可引用条目。",
+                    )
+                )
+                lines.extend(
+                    self._swot_item_lines(
+                        "劣势",
+                        analysis.weaknesses,
+                        gap_text="证据缺口（Evidence gap）。",
+                        empty_gap_text="证据缺口（Evidence gap）：尚无可引用条目。",
+                    )
+                )
+                lines.extend(
+                    self._swot_item_lines(
+                        "机会",
+                        analysis.opportunities,
+                        gap_text="证据缺口（Evidence gap）。",
+                        empty_gap_text="证据缺口（Evidence gap）：尚无可引用条目。",
+                    )
+                )
+                lines.extend(
+                    self._swot_item_lines(
+                        "威胁",
+                        analysis.threats,
+                        gap_text="证据缺口（Evidence gap）。",
+                        empty_gap_text="证据缺口（Evidence gap）：尚无可引用条目。",
+                    )
+                )
+            else:
+                lines.extend(self._swot_item_lines("Strengths", analysis.strengths))
+                lines.extend(self._swot_item_lines("Weaknesses", analysis.weaknesses))
+                lines.extend(self._swot_item_lines("Opportunities", analysis.opportunities))
+                lines.extend(self._swot_item_lines("Threats", analysis.threats))
         return lines
 
     def _swot_analysis_has_content(self, analysis: object) -> bool:
@@ -1667,15 +1709,20 @@ class WriterAgentMixin:
         )
 
     def _swot_item_lines(
-        self, label: str, items: Sequence[SWOTItem] | Sequence[object]
+        self,
+        label: str,
+        items: Sequence[SWOTItem] | Sequence[object],
+        *,
+        gap_text: str = "Evidence gap.",
+        empty_gap_text: str = "Evidence gap - no cited item is established yet.",
     ) -> list[str]:
         if not items:
-            return [f"- {label}: Evidence gap - no cited item is established yet."]
+            return [f"- {label}: {empty_gap_text}"]
         lines: list[str] = []
         for item in items[:2]:
             text = str(getattr(item, "text", "") or "No SWOT item text available.")
             refs = self._format_source_refs(getattr(item, "source_ids", []))
-            gap = " Evidence gap." if getattr(item, "evidence_gap", False) else ""
+            gap = f" {gap_text}" if getattr(item, "evidence_gap", False) else ""
             lines.append(f"- {label}: {text}{gap}{refs}")
         return lines
 
@@ -2045,7 +2092,23 @@ class WriterAgentMixin:
             return False
         if re.fullmatch(r"\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?", stripped):
             return False
+        if self._report_line_is_explicit_gap_statement(stripped):
+            return False
         return bool(re.search(r"[A-Za-z0-9]", stripped)) and len(stripped) >= 24
+
+    def _report_line_is_explicit_gap_statement(self, line: str) -> bool:
+        normalized = line.casefold()
+        return any(
+            marker in normalized
+            for marker in (
+                "evidence gap",
+                "no cited swot",
+                "no cited item",
+                "no cited user-review",
+                "证据缺口",
+                "尚无可引用",
+            )
+        )
 
     def _source_ids_for_report_line(self, detail: RunDetail, line: str) -> list[str]:
         normalized = line.casefold()
