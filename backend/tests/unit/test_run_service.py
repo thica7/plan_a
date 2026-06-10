@@ -6975,6 +6975,41 @@ async def test_demo_pipeline_uses_same_langgraph_fanout_shape() -> None:
         await service._graph_checkpointer.aclose()
 
 
+def test_hitl_resume_request_accepts_competitor_edits() -> None:
+    request = HitlResumeRequest(
+        decision="modify_plan",
+        dimensions=["pricing", "feature"],
+        competitors=["Cursor", "GitHub Copilot", "Windsurf"],
+        competitor_edits=[
+            {
+                "action": "rename",
+                "name": "Replit",
+                "new_name": "Windsurf",
+                "reason": "Windsurf is the direct AI IDE competitor.",
+                "source_note": "Reviewer correction",
+            },
+            {
+                "action": "remove",
+                "name": "Replit",
+                "reason": "Adjacent market, not target market.",
+            },
+        ],
+    )
+
+    assert request.competitors == ["Cursor", "GitHub Copilot", "Windsurf"]
+    assert request.competitor_edits[0].action == "rename"
+    assert request.competitor_edits[0].new_name == "Windsurf"
+    assert request.competitor_edits[1].action == "remove"
+
+
+def test_hitl_resume_request_keeps_existing_payload_compatible() -> None:
+    request = HitlResumeRequest(decision="modify_plan", dimensions=["feature"])
+
+    assert request.dimensions == ["feature"]
+    assert request.competitors is None
+    assert request.competitor_edits == []
+
+
 @pytest.mark.asyncio
 async def test_hitl_uses_langgraph_command_resume_and_updates_plan() -> None:
     service = RunService(
