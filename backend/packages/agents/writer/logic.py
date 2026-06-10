@@ -8,6 +8,12 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from packages.business_intel.scenarios import get_scenario_pack
+from packages.i18n.language import (
+    language_instruction,
+    normalize_output_language,
+    repair_mojibake_text,
+    report_label,
+)
 from packages.rag.grounded_prompt import build_run_grounding_prompt
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
@@ -59,6 +65,7 @@ class WriterAgentMixin:
         required_sections = self._writer_required_sections(detail)
         grounding_prompt = self._writer_grounding_prompt(detail)
         user_research_policy = writer_user_research_policy_text()
+        language_guidance = language_instruction(detail.output_language)
         try:
             timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
             report_md = await asyncio.wait_for(
@@ -70,11 +77,15 @@ class WriterAgentMixin:
                     system=(
                         "You are a senior enterprise competitive-intelligence analyst. "
                         "Produce a concise decision-grade markdown first draft, not a short "
-                        "summary. Write with consulting depth: executive recommendation, "
-                        "source quality, "
-                        "side-by-side matrices, dimension analysis, risks, buying implications, "
-                        "and explicit next validation tasks. Cite factual claims with existing "
-                        "source IDs using [source:ID]. Do not invent source IDs. "
+                        "summary. Use an analysis-first structure: lead with an executive "
+                        "takeaway, decision summary, competitive findings, competitor deep "
+                        "dives, and the selected layer-specific analysis. Put source quality, "
+                        "scenario QA, claim risk, RAG gap-fill, verification tasks, and the "
+                        "evidence appendix after the core analysis as support material. Write "
+                        "with consulting depth: side-by-side matrices, dimension analysis, "
+                        "risks, buying implications, and explicit next validation tasks. Cite "
+                        "factual claims with existing source IDs using [source:ID]. Do not "
+                        "invent source IDs. "
                         "Do not use web_search_result or confidence < 0.75 as the sole support "
                         "for a winner, legal/security certification, pricing, or procurement "
                         "recommendation. If evidence is incomplete, say the conclusion is "
@@ -82,6 +93,7 @@ class WriterAgentMixin:
                         "verified when any source_type is web_search_result or "
                         "llm_public_knowledge. "
                         "Follow the Grounded Evidence Contract exactly. "
+                        f"{language_guidance} "
                         f"{user_research_policy} "
                         "Honor confirmed memory guidance when it does not conflict with evidence, "
                         "schema requirements, or compliance policy. "
@@ -103,8 +115,9 @@ class WriterAgentMixin:
                         f"{grounding_prompt}\n"
                         f"Writer Context JSON: {writer_context_json}\n\n"
                         f"Required sections:\n{required_sections}\n"
-                        "Keep the first draft under 4,500 characters with compact bullets and "
-                        "tables; prioritize cited conclusions over narrative polish."
+                        "Keep the first draft around 5,500 characters. Spend most of the body "
+                        "on cited analysis and implications; keep evidence and QA support "
+                        "concise but complete."
                     ),
                 ),
                 timeout=timeout_seconds,
@@ -164,19 +177,29 @@ class WriterAgentMixin:
 
     def _fallback_report_markdown(self, detail: RunDetail, reason: str) -> str:
         layer_label = self._writer_layer_label(detail)
+        output_language = detail.output_language
+        is_zh = normalize_output_language(output_language) == "zh-CN"
         lines = [
             f"# {detail.topic} {layer_label}",
             "",
-            "## Executive Overview",
+            f"## {report_label(output_language, 'executive_takeaway')}",
         ]
         matrix_sources = self._matrix_source_ids(detail)
-        lines.append(
-            "This evidence-indexed report summarizes the latest structured knowledge "
-            "and comparison matrix while preserving explicit uncertainty."
-            + self._format_source_refs(matrix_sources)
-        )
+        if is_zh:
+            lines.append(
+                "这份基于证据索引的报告汇总最新结构化知识和对比矩阵，并保留明确的不确定性说明。"
+                + self._format_source_refs(matrix_sources)
+            )
+        else:
+            lines.append(
+                "This evidence-indexed report summarizes the latest structured knowledge "
+                "and comparison matrix while preserving explicit uncertainty."
+                + self._format_source_refs(matrix_sources)
+            )
+        lines.extend(self._fallback_decision_summary_section(detail, matrix_sources))
+        lines.extend(self._fallback_competitive_findings_section(detail))
         if detail.comparison_matrix is not None:
-            lines.extend(["", "## Dimension Winners"])
+            lines.extend(["", f"## {report_label(output_language, 'dimension_winners')}"])
             for dimension, winner in detail.comparison_matrix.winner_by_dimension.items():
                 source_ids = [
                     source_id
@@ -185,16 +208,18 @@ class WriterAgentMixin:
                     for source_id in cell.source_ids
                 ]
                 lines.append(f"- {dimension}: {winner}{self._format_source_refs(source_ids)}")
-            lines.extend(["", "## Comparison Matrix"])
+            lines.extend(["", f"## {report_label(output_language, 'comparison_matrix')}"])
             for cell in detail.comparison_matrix.cells:
                 lines.append(
                     f"- {cell.competitor} / {cell.dimension}: {cell.value}"
                     f"{self._format_source_refs(cell.source_ids)}"
                 )
+        lines.extend(self._fallback_competitor_deep_dives_section(detail))
         lines.extend(self._fallback_layer_sections(detail, matrix_sources, fallback=False))
+        lines.extend(self._fallback_evidence_support_section(detail))
         lines.extend(self._fallback_source_quality_section(detail))
         lines.extend(self._fallback_scenario_checklist_section(detail))
-        lines.extend(["", "## Knowledge Coverage"])
+        lines.extend(["", f"## {report_label(output_language, 'knowledge_coverage')}"])
         for competitor in detail.plan.competitors:
             knowledge = detail.competitor_knowledge.get(competitor)
             source_ids = knowledge.source_ids if knowledge is not None else []
@@ -204,7 +229,7 @@ class WriterAgentMixin:
             )
         if detail.reflections:
             latest = detail.reflections[-1]
-            lines.extend(["", "## Confidence Notes"])
+            lines.extend(["", f"## {report_label(output_language, 'confidence_notes')}"])
             notes = [
                 *latest.coverage_gaps[:3],
                 *latest.confidence_outliers[:2],
@@ -218,8 +243,10 @@ class WriterAgentMixin:
         lines.extend(
             [
                 "",
-                "## Generation Notes",
-                (
+                f"## {report_label(output_language, 'generation_notes')}",
+                "- 确定性写作器因叙事写作器未完成，已基于结构化证据生成本报告。"
+                if is_zh
+                else (
                     "- The deterministic writer generated this report from structured "
                     "evidence because the narrative writer could not complete."
                 ),
@@ -303,17 +330,160 @@ class WriterAgentMixin:
             f"- {implication}{refs}",
         ]
 
+    def _fallback_decision_summary_section(
+        self, detail: RunDetail, source_ids: list[str]
+    ) -> list[str]:
+        refs = self._format_source_refs(source_ids)
+        dimensions = ", ".join(detail.plan.dimensions) or "the requested dimensions"
+        competitors = ", ".join(detail.plan.competitors) or detail.topic
+        if detail.comparison_matrix is not None and detail.comparison_matrix.winner_by_dimension:
+            winners = ", ".join(
+                f"{dimension}: {winner}"
+                for dimension, winner in detail.comparison_matrix.winner_by_dimension.items()
+            )
+        else:
+            winners = "no scored winner yet; use source coverage and QA status as constraints"
+        return [
+            "",
+            f"## {report_label(detail.output_language, 'decision_summary')}",
+            (
+                f"- Recommended action: use this {self._writer_layer_label(detail)} to compare "
+                f"{competitors} on {dimensions}; anchor the decision on {winners}.{refs}"
+            ),
+            (
+                "- Decision posture: prioritize dimensions with verified, high-confidence "
+                f"evidence and route weak cells into the verification plan.{refs}"
+            ),
+            (
+                "- Do not overstate matrix winners, procurement readiness, security posture, "
+                f"or pricing conclusions when evidence is single-source or search-only.{refs}"
+            ),
+        ]
+
+    def _fallback_competitive_findings_section(self, detail: RunDetail) -> list[str]:
+        lines = [
+            "",
+            f"## {report_label(detail.output_language, 'competitive_findings')}",
+        ]
+        if detail.comparison_matrix is None:
+            source_ids = self._matrix_source_ids(detail)
+            lines.append(
+                "- Structured comparison data is still thin; treat source coverage, QA "
+                "findings, and layer context as the main decision constraints."
+                f"{self._format_source_refs(source_ids)}"
+            )
+            return lines
+
+        for dimension in detail.plan.dimensions:
+            cells = [
+                cell for cell in detail.comparison_matrix.cells if cell.dimension == dimension
+            ]
+            source_ids = [source_id for cell in cells for source_id in cell.source_ids]
+            winner = detail.comparison_matrix.winner_by_dimension.get(dimension)
+            if winner:
+                lines.append(
+                    f"- {dimension}: {winner} leads this dimension, but the implication "
+                    "should stay tied to the cited cells and confidence levels."
+                    f"{self._format_source_refs(source_ids)}"
+                )
+            elif cells:
+                lines.append(
+                    f"- {dimension}: evidence exists for comparison, but no clear winner "
+                    "should be asserted without another validation pass."
+                    f"{self._format_source_refs(source_ids)}"
+                )
+        if len(lines) == 2:
+            lines.append(
+                "- No dimension-level findings are available yet; use collection tasks before "
+                "making a competitive recommendation."
+                f"{self._format_source_refs(self._matrix_source_ids(detail))}"
+            )
+        return lines
+
+    def _fallback_competitor_deep_dives_section(self, detail: RunDetail) -> list[str]:
+        lines = [
+            "",
+            f"## {report_label(detail.output_language, 'competitor_deep_dives')}",
+        ]
+        matrix = detail.comparison_matrix
+        for competitor in detail.plan.competitors:
+            if matrix is None:
+                source_ids = [
+                    source.id for source in detail.raw_sources if source.competitor == competitor
+                ][:4]
+                lines.append(
+                    f"- {competitor} wins: not established yet; use verified evidence before "
+                    f"claiming advantage.{self._format_source_refs(source_ids)}"
+                )
+                lines.append(
+                    f"- {competitor} weaknesses: under-covered dimensions remain unresolved "
+                    f"until more sources are linked.{self._format_source_refs(source_ids)}"
+                )
+                lines.append(
+                    f"- {competitor} watchouts: avoid absolute claims until QA and source "
+                    f"coverage improve.{self._format_source_refs(source_ids)}"
+                )
+                continue
+
+            competitor_cells = [
+                cell for cell in matrix.cells if cell.competitor == competitor
+            ]
+            source_ids = [source_id for cell in competitor_cells for source_id in cell.source_ids]
+            winning_dimensions = [
+                dimension
+                for dimension, winner in matrix.winner_by_dimension.items()
+                if winner == competitor
+            ]
+            weaker_dimensions = [
+                dimension
+                for dimension, winner in matrix.winner_by_dimension.items()
+                if winner and winner != competitor
+            ]
+            wins = ", ".join(winning_dimensions) or "no confirmed dimension winner yet"
+            weaknesses = ", ".join(weaker_dimensions) or "no explicit matrix loss yet"
+            lines.append(
+                f"- {competitor} wins: {wins}; keep the claim scoped to the cited "
+                f"dimension evidence.{self._format_source_refs(source_ids)}"
+            )
+            lines.append(
+                f"- {competitor} weaknesses: {weaknesses}; verify whether gaps are real "
+                "competitive disadvantages or collection limits."
+                f"{self._format_source_refs(source_ids)}"
+            )
+            lines.append(
+                f"- {competitor} watchouts: monitor pricing, packaging, feature, and buyer "
+                "objection claims before turning this into external messaging."
+                f"{self._format_source_refs(source_ids)}"
+            )
+        return lines
+
+    def _fallback_evidence_support_section(self, detail: RunDetail) -> list[str]:
+        refs = self._format_source_refs(self._matrix_source_ids(detail))
+        return [
+            "",
+            f"## {report_label(detail.output_language, 'evidence_support')}",
+            (
+                "- Use the following support sections to audit source quality, scenario QA, "
+                f"knowledge coverage, claim risk, and remaining verification tasks.{refs}"
+            ),
+            (
+                "- Keep support material concise and complete so the decision analysis above "
+                f"remains the primary readout.{refs}"
+            ),
+        ]
+
     def _fallback_source_quality_section(self, detail: RunDetail) -> list[str]:
+        heading = report_label(detail.output_language, "source_quality")
         if not detail.raw_sources:
             return [
                 "",
-                "## Source Quality & Coverage",
+                f"## {heading}",
                 "- No raw sources are available, so all conclusions require collection before use.",
             ]
         by_type: dict[str, list[tuple[str, float]]] = {}
         for source in detail.raw_sources:
             by_type.setdefault(source.source_type, []).append((source.id, source.confidence))
-        lines = ["", "## Source Quality & Coverage"]
+        lines = ["", f"## {heading}"]
         for source_type, values in sorted(by_type.items()):
             source_ids = [source_id for source_id, _confidence in values]
             avg_confidence = sum(confidence for _source_id, confidence in values) / len(values)
@@ -329,7 +499,7 @@ class WriterAgentMixin:
         recommended = detail.plan.scenario_recommended_dimensions or detail.plan.dimensions
         lines = [
             "",
-            "## Scenario QA Checklist",
+            f"## {report_label(detail.output_language, 'scenario_checklist')}",
             (
                 f"- Scenario: {scenario_id}; layer: {detail.plan.competitor_layer}; "
                 f"recommended dimensions: {', '.join(recommended) or 'none'}."
@@ -346,7 +516,7 @@ class WriterAgentMixin:
         return lines
 
     def _fallback_next_collection_plan(self, detail: RunDetail) -> list[str]:
-        lines = ["", "## Next Collection / Verification Plan"]
+        lines = ["", f"## {report_label(detail.output_language, 'next_collection')}"]
         source_ids_by_dimension: dict[str, list[str]] = {}
         for source in detail.raw_sources:
             source_ids_by_dimension.setdefault(source.dimension, []).append(source.id)
@@ -370,7 +540,7 @@ class WriterAgentMixin:
         return lines
 
     def _fallback_evidence_appendix(self, detail: RunDetail) -> list[str]:
-        lines = ["", "## Evidence Appendix"]
+        lines = ["", f"## {report_label(detail.output_language, 'evidence_appendix')}"]
         if not detail.raw_sources:
             lines.append("- No evidence records are attached to this report draft.")
             return lines
@@ -385,11 +555,12 @@ class WriterAgentMixin:
         return lines
 
     def _harden_report_markdown(self, detail: RunDetail, markdown: str) -> str:
+        repaired = repair_mojibake_text(markdown)
         return self._ensure_report_claim_citations(
             detail,
             self._repair_report_source_tokens(
                 detail,
-                self._ensure_report_required_sections(detail, markdown),
+                self._ensure_report_required_sections(detail, repaired),
             ),
         )
 
@@ -398,33 +569,172 @@ class WriterAgentMixin:
         if not hardened:
             hardened = self._fallback_report_markdown(detail, "empty writer output")
         source_ids = self._matrix_source_ids(detail)
-        section_groups = [
-            ("Source Quality & Coverage", self._fallback_source_quality_section(detail)),
+        executive_headings = self._report_label_aliases(
+            "executive_takeaway",
+            "executive_summary",
+            "executive_overview",
+        )
+        layer_heading_aliases = self._report_label_aliases(
+            self._layer_section_label_key(detail)
+        )
+        core_section_groups = [
             (
-                self._layer_section_heading(detail, fallback=False),
+                executive_headings,
+                [
+                    "",
+                    f"## {report_label(detail.output_language, 'executive_takeaway')}",
+                    (
+                        "This report is structured as decision analysis first, with evidence "
+                        "and QA support after the core competitive readout."
+                        f"{self._format_source_refs(source_ids)}"
+                    ),
+                ],
+            ),
+            (
+                self._report_label_aliases("decision_summary"),
+                self._fallback_decision_summary_section(detail, source_ids),
+            ),
+            (
+                self._report_label_aliases("competitive_findings"),
+                self._fallback_competitive_findings_section(detail),
+            ),
+            (
+                self._report_label_aliases("competitor_deep_dives"),
+                self._fallback_competitor_deep_dives_section(detail),
+            ),
+            (
+                layer_heading_aliases,
                 self._fallback_layer_sections(detail, source_ids, fallback=False),
             ),
-            ("Memory Context", self._fallback_memory_context_section(detail)),
-            ("User Research Evidence", self._fallback_user_research_section(detail)),
-            ("RAG Gap Fill", self._fallback_rag_gap_fill_section(detail)),
-            ("Scenario QA Checklist", self._fallback_scenario_checklist_section(detail)),
-            ("Claim Validation & Evidence Risk", self._fallback_claim_validation_section(detail)),
-            ("Next Collection / Verification Plan", self._fallback_next_collection_plan(detail)),
-            ("Evidence Appendix", self._fallback_evidence_appendix(detail)),
         ]
-        for heading, lines in section_groups:
-            if lines and not self._report_has_heading(hardened, heading):
-                hardened = f"{hardened}\n\n{self._section_body(lines)}"
-        return hardened
+        core_blocks = [
+            self._section_body(lines)
+            for headings, lines in core_section_groups
+            if lines and not self._report_has_any_heading(hardened, headings)
+        ]
+        if core_blocks:
+            support_headings = [
+                heading
+                for aliases in self._support_report_heading_alias_groups()
+                for heading in aliases
+            ]
+            insert_at = self._first_report_heading_index(hardened, support_headings)
+            core_block = "\n\n".join(core_blocks)
+            if insert_at is None:
+                hardened = f"{hardened}\n\n{core_block}"
+            else:
+                hardened = (
+                    f"{hardened[:insert_at].rstrip()}\n\n{core_block}\n\n"
+                    f"{hardened[insert_at:].lstrip()}"
+                )
+
+        support_section_groups = [
+            (
+                report_label(detail.output_language, "evidence_support"),
+                self._report_label_aliases("evidence_support"),
+                self._fallback_evidence_support_section(detail),
+            ),
+            (
+                report_label(detail.output_language, "source_quality"),
+                self._report_label_aliases("source_quality"),
+                self._fallback_source_quality_section(detail),
+            ),
+            (
+                report_label(detail.output_language, "memory_context"),
+                self._report_label_aliases("memory_context"),
+                self._fallback_memory_context_section(detail),
+            ),
+            (
+                report_label(detail.output_language, "user_research_evidence"),
+                self._report_label_aliases("user_research_evidence"),
+                self._fallback_user_research_section(detail),
+            ),
+            (
+                report_label(detail.output_language, "rag_gap_fill"),
+                self._report_label_aliases("rag_gap_fill"),
+                self._fallback_rag_gap_fill_section(detail),
+            ),
+            (
+                report_label(detail.output_language, "scenario_checklist"),
+                self._report_label_aliases("scenario_checklist"),
+                self._fallback_scenario_checklist_section(detail),
+            ),
+            (
+                report_label(detail.output_language, "claim_risk"),
+                self._report_label_aliases("claim_risk"),
+                self._fallback_claim_validation_section(detail),
+            ),
+            (
+                report_label(detail.output_language, "next_collection"),
+                self._report_label_aliases("next_collection"),
+                self._fallback_next_collection_plan(detail),
+            ),
+            (
+                report_label(detail.output_language, "evidence_appendix"),
+                self._report_label_aliases("evidence_appendix"),
+                self._fallback_evidence_appendix(detail),
+            ),
+        ]
+        support_order_heading_groups = self._support_report_heading_alias_groups()
+        for heading, heading_aliases, lines in support_section_groups:
+            if lines and not self._report_has_any_heading(hardened, heading_aliases):
+                support_index = next(
+                    index
+                    for index, aliases in enumerate(support_order_heading_groups)
+                    if heading in aliases
+                )
+                later_headings = [
+                    later_heading
+                    for aliases in support_order_heading_groups[support_index + 1 :]
+                    for later_heading in aliases
+                ]
+                insert_at = self._first_report_heading_index(hardened, later_headings)
+                section_body = self._section_body(lines)
+                if insert_at is None:
+                    hardened = f"{hardened}\n\n{section_body}"
+                else:
+                    hardened = (
+                        f"{hardened[:insert_at].rstrip()}\n\n{section_body}\n\n"
+                        f"{hardened[insert_at:].lstrip()}"
+                    )
+        return self._normalize_report_section_order(detail, hardened)
 
     def _layer_section_heading(self, detail: RunDetail, *, fallback: bool = True) -> str:
+        return report_label(detail.output_language, self._layer_section_label_key(detail))
+
+    def _layer_section_label_key(self, detail: RunDetail) -> str:
         if detail.plan.competitor_layer == "L1":
-            return "Battlecard"
+            return "battlecard"
         if detail.plan.competitor_layer == "L2":
-            return "Workflow & Enterprise Risk"
+            return "workflow_enterprise_risk"
         if detail.plan.competitor_layer == "L3":
-            return "Market Landscape"
-        return "Business Implications"
+            return "market_landscape"
+        return "business_implications"
+
+    def _report_label_aliases(self, *keys: str) -> list[str]:
+        labels: list[str] = []
+        for key in keys:
+            for output_language in ("en-US", "zh-CN"):
+                label = report_label(output_language, key)
+                if label not in labels:
+                    labels.append(label)
+        return labels
+
+    def _support_report_heading_alias_groups(self) -> list[list[str]]:
+        return [
+            self._report_label_aliases("evidence_support"),
+            self._report_label_aliases("source_quality"),
+            self._report_label_aliases("memory_context"),
+            self._report_label_aliases("user_research_evidence"),
+            self._report_label_aliases("rag_gap_fill"),
+            self._report_label_aliases("scenario_checklist"),
+            self._report_label_aliases("knowledge_coverage"),
+            self._report_label_aliases("confidence_notes"),
+            self._report_label_aliases("claim_risk"),
+            self._report_label_aliases("next_collection"),
+            self._report_label_aliases("evidence_appendix"),
+            self._report_label_aliases("generation_notes"),
+        ]
 
     def _report_has_heading(self, markdown: str, heading: str) -> bool:
         return bool(
@@ -435,17 +745,129 @@ class WriterAgentMixin:
             )
         )
 
+    def _report_has_any_heading(self, markdown: str, headings: Iterable[str]) -> bool:
+        return any(self._report_has_heading(markdown, heading) for heading in headings)
+
+    def _first_report_heading_index(
+        self, markdown: str, headings: Iterable[str]
+    ) -> int | None:
+        positions = [
+            match.start()
+            for heading in headings
+            for match in [
+                re.search(
+                    rf"^#+\s+{re.escape(heading)}\s*$",
+                    markdown,
+                    flags=re.IGNORECASE | re.MULTILINE,
+                )
+            ]
+            if match is not None
+        ]
+        return min(positions) if positions else None
+
+    def _normalize_report_section_order(self, detail: RunDetail, markdown: str) -> str:
+        matches = list(
+            re.finditer(
+                r"^##\s+(.+?)\s*$",
+                markdown,
+                flags=re.MULTILINE,
+            )
+        )
+        if not matches:
+            return markdown
+
+        heading_groups = self._ordered_report_heading_groups(detail)
+        heading_order = {
+            heading.casefold(): index
+            for index, group in enumerate(heading_groups)
+            for heading in group
+        }
+        support_heading_aliases = {
+            heading.casefold()
+            for group in self._support_report_heading_alias_groups()
+            for heading in group
+        }
+        first_support_start = min(
+            (
+                match.start()
+                for match in matches
+                if match.group(1).strip().casefold() in support_heading_aliases
+            ),
+            default=None,
+        )
+        known_sections: dict[int, list[str]] = {}
+        pre_support_unknown_sections: list[str] = []
+        tail_unknown_sections: list[str] = []
+        for index, match in enumerate(matches):
+            section_end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
+            heading = match.group(1).strip()
+            section = markdown[match.start() : section_end].strip()
+            order_index = heading_order.get(heading.casefold())
+            if order_index is None:
+                if first_support_start is not None and match.start() < first_support_start:
+                    pre_support_unknown_sections.append(section)
+                else:
+                    tail_unknown_sections.append(section)
+            else:
+                known_sections.setdefault(order_index, []).append(section)
+
+        if not known_sections:
+            return markdown
+
+        preamble = markdown[: matches[0].start()].strip()
+        support_start_index = len(heading_groups) - len(
+            self._support_report_heading_alias_groups()
+        )
+        core_sections = [
+            section
+            for index in range(support_start_index)
+            for section in known_sections.get(index, [])
+        ]
+        support_sections = [
+            section
+            for index in range(support_start_index, len(heading_groups))
+            for section in known_sections.get(index, [])
+        ]
+        return "\n\n".join(
+            part
+            for part in [
+                preamble,
+                *core_sections,
+                *pre_support_unknown_sections,
+                *support_sections,
+                *tail_unknown_sections,
+            ]
+            if part
+        )
+
+    def _ordered_report_heading_groups(self, detail: RunDetail) -> list[list[str]]:
+        return [
+            self._report_label_aliases(
+                "executive_takeaway",
+                "executive_summary",
+                "executive_overview",
+            ),
+            self._report_label_aliases("decision_summary"),
+            self._report_label_aliases("competitive_findings"),
+            self._report_label_aliases("dimension_winners"),
+            self._report_label_aliases("comparison_matrix", "side_by_side_matrix"),
+            self._report_label_aliases("competitor_deep_dives"),
+            self._report_label_aliases(self._layer_section_label_key(detail)),
+            *self._support_report_heading_alias_groups(),
+        ]
+
     def _section_body(self, lines: list[str]) -> str:
         return "\n".join(lines).strip()
 
     def _writer_layer_label(self, detail: RunDetail) -> str:
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         if detail.plan.competitor_layer == "L1":
-            return "Direct Battlecard"
+            return "直接战报" if is_zh else "Direct Battlecard"
         if detail.plan.competitor_layer == "L2":
-            return "Adjacent Workflow Review"
+            return "相邻工作流评估" if is_zh else "Adjacent Workflow Review"
         if detail.plan.competitor_layer == "L3":
-            return "Market Landscape"
-        return "Competitive Analysis Report"
+            return "市场格局" if is_zh else "Market Landscape"
+        return "竞品分析报告" if is_zh else "Competitive Analysis Report"
 
     def _writer_layer_context(self, detail: RunDetail) -> str:
         layer = detail.plan.competitor_layer
@@ -474,52 +896,109 @@ class WriterAgentMixin:
         return f"{focus} Scenario={scenario}. Recommended dimensions={recommended}."
 
     def _writer_required_sections(self, detail: RunDetail) -> str:
-        common = [
-            "Executive Summary with confidence level and caveats before recommendations.",
+        output_language = detail.output_language
+        analysis_sections = [
             (
-                "Source Quality & Coverage, separating official/fetched sources from "
-                "search-only leads."
+                f"{report_label(output_language, 'executive_takeaway')}: lead with the "
+                "decision-grade takeaway and confidence caveats."
             ),
-            "Side-by-Side Decision Matrix covering every competitor and dimension.",
-            "Evidence-backed Deep Dives with no unsupported winner claims.",
             (
-                "Scenario QA Checklist tying the selected ScenarioPack to analyst "
-                "questions, evidence requirements, and QA rules."
+                f"{report_label(output_language, 'decision_summary')}: state the recommended "
+                "action, decision posture, and what not to overstate."
+            ),
+            (
+                f"{report_label(output_language, 'competitive_findings')}: summarize the "
+                "highest-impact dimension findings and implications."
+            ),
+            (
+                f"{report_label(output_language, 'competitor_deep_dives')}: cover where "
+                "each competitor wins, has weaknesses, and needs watchouts."
+            ),
+            (
+                f"{report_label(output_language, 'side_by_side_matrix')}: cover every "
+                "competitor and dimension with cited cells."
             ),
         ]
         layer = detail.plan.competitor_layer
         if layer == "L1":
-            specific = [
-                "Battlecard: where each competitor wins, loses, and is vulnerable.",
-                "Pricing, packaging, and sales objection handling.",
-                "Recommended product or go-to-market response.",
+            layer_sections = [
+                (
+                    f"{report_label(output_language, 'battlecard')}: where each competitor "
+                    "wins, loses, is vulnerable, and how to handle objections."
+                ),
+                "Pricing, packaging, feature parity, switching triggers, and sales response.",
+                "Recommended product or go-to-market response with evidence limits.",
             ]
         elif layer == "L2":
-            specific = [
-                "Workflow overlap and ecosystem leverage.",
-                "Enterprise buying risks, switching costs, and integration exposure.",
-                "Strategic watchlist: what would make this adjacent competitor more dangerous.",
+            layer_sections = [
+                (
+                    f"{report_label(output_language, 'workflow_enterprise_risk')}: workflow "
+                    "overlap, ecosystem leverage, and enterprise-risk implications."
+                ),
+                "Enterprise buying risks, switching costs, integration exposure, and controls.",
+                "Strategic watchlist for adjacent competitors that could absorb the workflow.",
             ]
         elif layer == "L3":
-            specific = [
-                "Market segmentation and competitor clusters.",
+            layer_sections = [
+                (
+                    f"{report_label(output_language, 'market_landscape')}: market "
+                    "segmentation, competitor clusters, and category strategy."
+                ),
                 "Trend and benchmark signals by category segment.",
                 "Strategic options with uncertainty and evidence gaps clearly separated.",
             ]
         else:
-            specific = ["Business implications and next validation tasks."]
-        ending = [
-            "Risks, Unknowns, and Evidence Gaps, including unresolved QA findings.",
+            layer_sections = [
+                (
+                    f"{report_label(output_language, 'business_implications')}: business "
+                    "implications and next validation tasks."
+                )
+            ]
+        support_sections = [
             (
-                "Claim Validation & Evidence Risk, listing weak claims, low-confidence "
-                "sources, and any single-source high-risk conclusions."
+                f"{report_label(output_language, 'evidence_support')}: place source quality, "
+                "QA, RAG gap-fill, claim risk, verification, and appendices after the core "
+                "analysis."
             ),
-            "Next Collection / Verification Plan.",
-            "Evidence Appendix listing important source IDs with type and confidence.",
+            (
+                f"{report_label(output_language, 'source_quality')}: separate official or "
+                "verified sources from search-only or low-confidence leads."
+            ),
+            (
+                f"{report_label(output_language, 'memory_context')}: include confirmed memory "
+                "guidance only when present and not conflicting with evidence."
+            ),
+            (
+                f"{report_label(output_language, 'user_research_evidence')}: treat surveys, "
+                "interviews, and manual notes as directional signals, not official proof."
+            ),
+            (
+                f"{report_label(output_language, 'rag_gap_fill')}: list retrieval gaps that "
+                "must be closed before publication."
+            ),
+            (
+                f"{report_label(output_language, 'scenario_checklist')}: tie the selected "
+                "ScenarioPack to analyst questions, evidence requirements, and QA rules."
+            ),
+            (
+                f"{report_label(output_language, 'claim_risk')}: list weak claims, "
+                "low-confidence sources, and single-source high-risk conclusions."
+            ),
+            (
+                f"{report_label(output_language, 'next_collection')}: next collection and "
+                "verification tasks."
+            ),
+            (
+                f"{report_label(output_language, 'evidence_appendix')}: important source IDs "
+                "with type and confidence."
+            ),
         ]
         return "\n".join(
             f"{index}. {section}"
-            for index, section in enumerate([*common, *specific, *ending], start=1)
+            for index, section in enumerate(
+                [*analysis_sections, *layer_sections, *support_sections],
+                start=1,
+            )
         )
 
     def _writer_grounding_prompt(self, detail: RunDetail) -> str:
@@ -750,7 +1229,7 @@ class WriterAgentMixin:
         candidate_ids = ", ".join(detail.plan.memory_candidate_ids) or "none"
         lines = [
             "",
-            "## Memory Context",
+            f"## {report_label(detail.output_language, 'memory_context')}",
             (
                 "Confirmed MemoryAgent guidance was used as planning and writing context; "
                 "any remembered domain fact still needs current evidence before publication."
@@ -788,7 +1267,7 @@ class WriterAgentMixin:
             return []
         lines = [
             "",
-            "## User Research Evidence",
+            f"## {report_label(detail.output_language, 'user_research_evidence')}",
             (
                 "Survey, interview, and manual-note inputs are treated as directional "
                 "buyer or user signals, not as official factual proof."
@@ -818,7 +1297,7 @@ class WriterAgentMixin:
             return []
         lines = [
             "",
-            "## RAG Gap Fill",
+            f"## {report_label(detail.output_language, 'rag_gap_fill')}",
             (
                 "Collector evidence gaps should be closed through retrieval before this "
                 "report is published or used as a final decision artifact."
@@ -853,7 +1332,7 @@ class WriterAgentMixin:
         return " ".join(query.split())[:180]
 
     def _fallback_claim_validation_section(self, detail: RunDetail) -> list[str]:
-        lines = ["", "## Claim Validation & Evidence Risk"]
+        lines = ["", f"## {report_label(detail.output_language, 'claim_risk')}"]
         source_by_id = {source.id: source for source in detail.raw_sources}
         claims = self._knowledge_claims(detail)
         issue_counts = {
