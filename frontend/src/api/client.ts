@@ -18,6 +18,7 @@ import type {
   EvidenceGapFillResult,
   EvidenceGapReport,
   EvidenceRecord,
+  HitlResumePayload,
   KnowledgeGraphReadModel,
   MemoryCandidate,
   MemoryCandidateStatus,
@@ -237,14 +238,7 @@ export function getToolCallMessages(runId: string) {
   return request<ToolCallMessage[]>(`/runs/${runId}/trace/tool-calls`);
 }
 
-export function resumeRun(
-  runId: string,
-  payload: {
-    decision: "accept" | "modify_plan" | "force_pass" | "redo";
-    note?: string;
-    dimensions?: string[];
-  },
-) {
+export function resumeRun(runId: string, payload: HitlResumePayload) {
   return request<RunDetail>(`/runs/${runId}/resume`, {
     method: "POST",
     body: JSON.stringify(payload),
