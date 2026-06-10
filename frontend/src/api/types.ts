@@ -130,11 +130,53 @@ export interface UserPersonaModel {
   summary_claims: KnowledgeClaim[];
 }
 
+export type ReviewSentimentHint = "positive" | "mixed" | "negative" | "unknown";
+
+export interface ReviewThemeItem {
+  theme: string;
+  evidence: string;
+  source_ids: string[];
+  confidence: number;
+  evidence_gap: boolean;
+}
+
+export interface ReviewThemeSummary {
+  competitor: string;
+  dimension: string;
+  praise_themes: ReviewThemeItem[];
+  complaint_themes: ReviewThemeItem[];
+  adoption_blockers: ReviewThemeItem[];
+  switching_triggers: ReviewThemeItem[];
+  persona_segments: string[];
+  sentiment_hint: ReviewSentimentHint;
+  source_ids: string[];
+  confidence: number;
+}
+
+export interface SWOTItem {
+  text: string;
+  source_ids: string[];
+  confidence: number;
+  evidence_gap: boolean;
+}
+
+export interface SWOTAnalysis {
+  competitor: string;
+  strengths: SWOTItem[];
+  weaknesses: SWOTItem[];
+  opportunities: SWOTItem[];
+  threats: SWOTItem[];
+  source_ids: string[];
+  confidence: number;
+}
+
 export interface CompetitorKnowledge {
   competitor: string;
   feature_tree: FeatureTree;
   pricing_model: PricingModel;
   user_personas: UserPersonaModel;
+  review_summary: ReviewThemeSummary;
+  swot_analysis: SWOTAnalysis;
   source_ids: string[];
   confidence: number;
 }
