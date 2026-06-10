@@ -194,3 +194,80 @@ def test_swot_builder_uses_persona_claim_for_opportunity_when_review_trigger_mis
         "Developer teams adopt Cursor for repository-aware coding."
     )
     assert swot.opportunities[0].source_ids == ["persona-1"]
+
+
+def test_swot_builder_ignores_unknown_and_tie_matrix_winners_for_weaknesses() -> None:
+    harness = ComparatorHarness()
+    cursor = CompetitorKnowledge(competitor="Cursor")
+    copilot = CompetitorKnowledge(competitor="Copilot")
+    detail = RunDetail(
+        id="run-swot-unknown-winner",
+        idempotency_key="",
+        workspace_id="default-workspace",
+        project_id=None,
+        topic="AI coding assistant reviews",
+        status="running",
+        execution_mode="demo",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["review", "pricing", "enterprise"],
+        ),
+        competitor_knowledge={"Cursor": cursor, "Copilot": copilot},
+        comparison_matrix=ComparisonMatrix(
+            competitors=["Cursor", "Copilot"],
+            dimensions=["review", "pricing", "enterprise"],
+            cells=[
+                ComparisonCell(
+                    competitor="Cursor",
+                    dimension="review",
+                    value="Review evidence is inconclusive.",
+                    source_ids=["matrix-review-1"],
+                    confidence=0.52,
+                ),
+                ComparisonCell(
+                    competitor="Cursor",
+                    dimension="pricing",
+                    value="Pricing evidence is tied.",
+                    source_ids=["matrix-pricing-1"],
+                    confidence=0.58,
+                ),
+                ComparisonCell(
+                    competitor="Cursor",
+                    dimension="enterprise",
+                    value="Enterprise evidence is also tied.",
+                    source_ids=["matrix-enterprise-1"],
+                    confidence=0.6,
+                ),
+                ComparisonCell(
+                    competitor="Copilot",
+                    dimension="review",
+                    value="Review evidence is inconclusive.",
+                    source_ids=["matrix-review-2"],
+                    confidence=0.52,
+                ),
+            ],
+            winner_by_dimension={
+                "review": "HallucinatedVendor",
+                "pricing": " tie ",
+                "enterprise": "TIE",
+            },
+        ),
+    )
+
+    harness._refresh_swot_analyses(detail)
+
+    cursor_weaknesses = detail.competitor_knowledge["Cursor"].swot_analysis.weaknesses
+    assert cursor_weaknesses == []
+    swot_text = " ".join(
+        item.text
+        for item in (
+            detail.competitor_knowledge["Cursor"].swot_analysis.strengths
+            + detail.competitor_knowledge["Cursor"].swot_analysis.weaknesses
+            + detail.competitor_knowledge["Cursor"].swot_analysis.opportunities
+            + detail.competitor_knowledge["Cursor"].swot_analysis.threats
+        )
+    )
+    assert "HallucinatedVendor" not in swot_text

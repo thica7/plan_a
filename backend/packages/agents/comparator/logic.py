@@ -179,6 +179,7 @@ class ComparatorAgentMixin:
             if knowledge is None:
                 continue
 
+            valid_competitors = set(detail.plan.competitors)
             strengths: list[SWOTItem] = []
             weaknesses: list[SWOTItem] = []
             opportunities: list[SWOTItem] = []
@@ -189,7 +190,9 @@ class ComparatorAgentMixin:
                 cell = cell_by_dimension.get(dimension)
                 if cell is None:
                     continue
-                if winner == competitor:
+                normalized_winner = winner.strip()
+                is_tie = normalized_winner.casefold() == "tie"
+                if normalized_winner == competitor:
                     strengths.append(
                         self._swot_item(
                             f"Wins {dimension} comparison: {cell.value}",
@@ -197,10 +200,15 @@ class ComparatorAgentMixin:
                             cell.confidence,
                         )
                     )
-                elif winner and winner != "tie":
+                elif (
+                    normalized_winner in valid_competitors
+                    and normalized_winner != competitor
+                    and not is_tie
+                ):
                     weaknesses.append(
                         self._swot_item(
-                            f"Loses {dimension} comparison to {winner}: {cell.value}",
+                            f"Loses {dimension} comparison to {normalized_winner}: "
+                            f"{cell.value}",
                             cell.source_ids,
                             cell.confidence,
                         )
