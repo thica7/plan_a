@@ -1426,13 +1426,23 @@ class AnalystAgentMixin:
 
         review_section = raw.get("review_summary")
         if isinstance(review_section, dict):
-            try:
-                knowledge.review_summary = ReviewThemeSummary.model_validate(review_section)
-            except Exception:
-                knowledge.review_summary = ReviewThemeSummary(
-                    competitor=competitor,
-                    dimension=dimension,
+            knowledge.review_summary = self._review_summary_from_dict(
+                review_section,
+                competitor=competitor,
+                dimension=dimension,
+            )
+        elif self._dimension_uses_review_summary(dimension):
+            review_sources = [
+                source.model_dump(mode="json")
+                for source in self._sources_for_competitor_dimension(
+                    detail, competitor, dimension
                 )
+            ]
+            knowledge.review_summary = self._build_review_summary_from_source_dicts(
+                competitor=competitor,
+                dimension=dimension,
+                sources=review_sources,
+            )
 
         self._sanitize_structured_knowledge_slice_sources(
             detail,
@@ -1485,7 +1495,9 @@ class AnalystAgentMixin:
         valid_source_ids = set(
             self._source_ids_for_competitor_dimension(detail, competitor, dimension)
         )
-        if self._dimension_uses_review_summary(dimension):
+        if self._dimension_uses_review_summary(dimension) or self._review_summary_has_content(
+            knowledge.review_summary
+        ):
             self._sanitize_review_summary_source_ids(knowledge.review_summary, valid_source_ids)
         if not valid_source_ids:
             return
@@ -1527,6 +1539,16 @@ class AnalystAgentMixin:
             item.source_ids = self._known_source_ids(item.source_ids, valid_source_ids)
             if had_source_ids and not item.source_ids:
                 item.evidence_gap = True
+
+    def _review_summary_has_content(self, review_summary: ReviewThemeSummary) -> bool:
+        return bool(
+            review_summary.source_ids
+            or review_summary.praise_themes
+            or review_summary.complaint_themes
+            or review_summary.adoption_blockers
+            or review_summary.switching_triggers
+            or review_summary.persona_segments
+        )
 
     def _known_source_ids(
         self,
@@ -1605,6 +1627,25 @@ class AnalystAgentMixin:
 
     def _structured_knowledge_schema_hint(self, dimension: str) -> str:
         claim = {"claim": "factual claim", "source_ids": ["source-id"], "confidence": 0.0}
+        review_item = {
+            "theme": "review theme",
+            "evidence": "short cited evidence",
+            "source_ids": ["source-id"],
+            "confidence": 0.0,
+            "evidence_gap": False,
+        }
+        review_summary = {
+            "competitor": "competitor name",
+            "dimension": dimension,
+            "praise_themes": [review_item],
+            "complaint_themes": [review_item],
+            "adoption_blockers": [review_item],
+            "switching_triggers": [review_item],
+            "persona_segments": ["segment"],
+            "sentiment_hint": "positive|mixed|negative|unknown",
+            "source_ids": ["source-id"],
+            "confidence": 0.0,
+        }
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
             return json.dumps(
@@ -1624,23 +1665,26 @@ class AnalystAgentMixin:
                 }
             )
         if "persona" in dimension_key or "user" in dimension_key:
-            return json.dumps(
-                {
-                    "user_personas": {
-                        "segments": [
-                            {
-                                "name": "segment",
-                                "role": "role or unknown",
-                                "company_size": "size or unknown",
-                                "pain_points": ["pain"],
-                                "use_cases": ["case"],
-                                "claims": [claim],
-                            }
-                        ],
-                        "summary_claims": [claim],
-                    }
+            hint = {
+                "user_personas": {
+                    "segments": [
+                        {
+                            "name": "segment",
+                            "role": "role or unknown",
+                            "company_size": "size or unknown",
+                            "pain_points": ["pain"],
+                            "use_cases": ["case"],
+                            "claims": [claim],
+                        }
+                    ],
+                    "summary_claims": [claim],
                 }
-            )
+            }
+            if self._dimension_uses_review_summary(dimension):
+                hint["review_summary"] = review_summary
+            return json.dumps(hint)
+        if self._dimension_uses_review_summary(dimension):
+            return json.dumps({"review_summary": review_summary})
         return json.dumps(
             {
                 "feature_tree": {
@@ -1666,12 +1710,12 @@ class AnalystAgentMixin:
             return []
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
-            return [
+            claims = [
                 *knowledge.pricing_model.notes,
                 *[claim for tier in knowledge.pricing_model.tiers for claim in tier.claims],
             ]
-        if "persona" in dimension_key or "user" in dimension_key:
-            return [
+        elif "persona" in dimension_key or "user" in dimension_key:
+            claims = [
                 *knowledge.user_personas.summary_claims,
                 *[
                     claim
@@ -1679,10 +1723,95 @@ class AnalystAgentMixin:
                     for claim in segment.claims
                 ],
             ]
-        return [
-            *knowledge.feature_tree.summary_claims,
-            *[claim for node in knowledge.feature_tree.nodes for claim in node.claims],
-        ]
+        else:
+            claims = [
+                *knowledge.feature_tree.summary_claims,
+                *[claim for node in knowledge.feature_tree.nodes for claim in node.claims],
+            ]
+        if self._dimension_uses_review_summary(dimension):
+            claims = [*claims, *self._review_summary_claims(knowledge.review_summary)]
+        return claims
+
+    def _review_summary_claims(
+        self,
+        review_summary: ReviewThemeSummary,
+    ) -> list[KnowledgeClaim]:
+        claims: list[KnowledgeClaim] = []
+        seen: set[tuple[str, tuple[str, ...]]] = set()
+        for item in (
+            *review_summary.praise_themes,
+            *review_summary.complaint_themes,
+            *review_summary.adoption_blockers,
+            *review_summary.switching_triggers,
+        ):
+            if not item.source_ids:
+                continue
+            source_ids = merge_ordered_refs(item.source_ids)
+            claim_text = self._review_theme_claim_text(item)
+            key = (claim_text.casefold(), tuple(source_ids))
+            if key in seen:
+                continue
+            seen.add(key)
+            claims.append(
+                KnowledgeClaim(
+                    claim=claim_text,
+                    source_ids=source_ids,
+                    confidence=item.confidence,
+                )
+            )
+        return claims
+
+    def _review_theme_claim_text(self, item: ReviewThemeItem) -> str:
+        theme = " ".join((item.theme or "").split())
+        evidence = " ".join((item.evidence or "").split())
+        if theme and evidence:
+            return f"{theme}: {evidence}"
+        return theme or evidence or "Review theme"
+
+    def _review_summary_from_dict(
+        self,
+        raw: dict[str, Any],
+        *,
+        competitor: str,
+        dimension: str,
+    ) -> ReviewThemeSummary:
+        try:
+            repaired = self._repair_uncited_review_theme_items(raw)
+            return ReviewThemeSummary.model_validate(repaired)
+        except Exception:
+            return ReviewThemeSummary(competitor=competitor, dimension=dimension)
+
+    def _repair_uncited_review_theme_items(
+        self,
+        raw: dict[str, Any],
+    ) -> dict[str, Any]:
+        repaired = dict(raw)
+        for field in (
+            "praise_themes",
+            "complaint_themes",
+            "adoption_blockers",
+            "switching_triggers",
+        ):
+            items = repaired.get(field)
+            if not isinstance(items, list):
+                continue
+            repaired_items: list[Any] = []
+            for item in items:
+                if not isinstance(item, dict):
+                    repaired_items.append(item)
+                    continue
+                item_data = dict(item)
+                if not self._raw_review_item_has_source_ids(item_data):
+                    item_data["evidence_gap"] = True
+                repaired_items.append(item_data)
+            repaired[field] = repaired_items
+        return repaired
+
+    def _raw_review_item_has_source_ids(self, raw: dict[str, Any]) -> bool:
+        source_ids = raw.get("source_ids")
+        if not isinstance(source_ids, list):
+            return False
+        return any(str(source_id).strip() for source_id in source_ids)
 
     def _claims_from_structured_payload(
         self, payload: dict[str, Any], dimension: str
@@ -1701,6 +1830,13 @@ class AnalystAgentMixin:
                 probe.user_personas = UserPersonaModel.model_validate(raw["user_personas"])
             elif isinstance(raw.get("feature_tree"), dict):
                 probe.feature_tree = FeatureTree.model_validate(raw["feature_tree"])
+            review_section = raw.get("review_summary")
+            if isinstance(review_section, dict):
+                probe.review_summary = self._review_summary_from_dict(
+                    review_section,
+                    competitor="probe",
+                    dimension=dimension,
+                )
             return self._structured_claims_for_dimension(probe, dimension)
         except Exception:
             return []
