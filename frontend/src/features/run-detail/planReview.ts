@@ -49,6 +49,7 @@ export interface CompetitorReviewRow {
   originalName: string | null;
   name: string;
   decision: CompetitorReviewDecision;
+  initialDecision?: CompetitorReviewDecision;
   confidenceLabel: string;
   rationale: string;
   evidenceUrls: string[];
@@ -95,11 +96,13 @@ export function buildCompetitorReviewRows(
     const selected = new Set(discovery.selected_competitors.map(normalizeCompetitorName));
     return discovery.candidates.map((candidate, index) => {
       const isSelected = selected.has(normalizeCompetitorName(candidate.name)) || candidate.selected;
+      const decision = isSelected ? "keep" : "remove";
       return {
         id: reviewRowId("candidate", index, candidate.name),
         originalName: candidate.name,
         name: candidate.name,
-        decision: isSelected ? "keep" : "remove",
+        decision,
+        initialDecision: decision,
         confidenceLabel: confidenceLabel(candidate.confidence),
         rationale: candidate.rationale,
         evidenceUrls: candidate.evidence_urls,
@@ -115,6 +118,7 @@ export function buildCompetitorReviewRows(
     originalName: name,
     name,
     decision: "keep",
+    initialDecision: "keep",
     confidenceLabel: "",
     rationale: "",
     evidenceUrls: [],
@@ -136,9 +140,9 @@ export function updateCompetitorRowDecision(
   rows: CompetitorReviewRow[],
   id: string,
   decision: CompetitorReviewDecision,
-  note = "",
+  note?: string,
 ): CompetitorReviewRow[] {
-  return rows.map((row) => (row.id === id ? { ...row, decision, note } : row));
+  return rows.map((row) => (row.id === id ? { ...row, decision, note: note ?? row.note } : row));
 }
 
 export function serializeCompetitorReview(rows: CompetitorReviewRow[]): {
@@ -182,6 +186,7 @@ export function serializeCompetitorReview(rows: CompetitorReviewRow[]): {
     }
 
     if (!editName) continue;
+    if (!row.manual && row.decision === (row.initialDecision ?? "keep")) continue;
     competitor_edits.push({
       action: row.decision,
       name: editName,

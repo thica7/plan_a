@@ -12,7 +12,7 @@ export function RunDetail() {
   const { t } = useTranslation();
   const {
     activeView,
-    canApplyPlanDimensionChanges,
+    canApplyPlanReviewChanges,
     citedClaimRate,
     complianceExport,
     complianceReport,
@@ -21,6 +21,11 @@ export function RunDetail() {
     error,
     events,
     handleExportCompliance,
+    handleAddCompetitor,
+    handleCompetitorDecisionChange,
+    handleCompetitorNameChange,
+    handleCompetitorNoteChange,
+    handleDeleteCompetitor,
     handleHitl,
     handleRedo,
     interruptStage,
@@ -28,6 +33,7 @@ export function RunDetail() {
     isRedoing,
     latestInterrupt,
     planDimensions,
+    competitorRows,
     qualityBaselineRunId,
     qualityComparison,
     recommendedDimensions,
@@ -77,11 +83,17 @@ export function RunDetail() {
       {detail.status === "interrupted" && latestInterrupt ? (
         interruptStage === "planner" ? (
           <PlanReviewModal
-            canApplyDimensions={canApplyPlanDimensionChanges}
+            canApplyChanges={canApplyPlanReviewChanges}
+            competitorRows={competitorRows}
             dimensions={planDimensions}
             message={latestInterrupt.message}
+            onAddCompetitor={handleAddCompetitor}
             onAccept={() => handleHitl("accept")}
             onApply={() => handleHitl("modify_plan")}
+            onCompetitorDecisionChange={handleCompetitorDecisionChange}
+            onCompetitorNameChange={handleCompetitorNameChange}
+            onCompetitorNoteChange={handleCompetitorNoteChange}
+            onDeleteCompetitor={handleDeleteCompetitor}
             onDimensionsChange={setPlanDimensions}
           />
         ) : (

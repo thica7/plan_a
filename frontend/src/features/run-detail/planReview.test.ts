@@ -77,6 +77,7 @@ describe("competitor review helpers", () => {
         originalName: "Cursor",
         name: "Cursor",
         decision: "keep",
+        initialDecision: "keep",
         confidenceLabel: "91%",
         rationale: "Direct AI IDE",
         evidenceUrls: ["https://cursor.com"],
@@ -89,6 +90,7 @@ describe("competitor review helpers", () => {
         originalName: "Replit",
         name: "Replit",
         decision: "keep",
+        initialDecision: "keep",
         confidenceLabel: "55%",
         rationale: "Adjacent platform",
         evidenceUrls: ["https://replit.com"],
@@ -128,6 +130,7 @@ describe("competitor review helpers", () => {
         originalName: null,
         name: "Windsurf",
         decision: "keep",
+        initialDecision: "keep",
         confidenceLabel: "",
         rationale: "",
         evidenceUrls: [],
@@ -192,6 +195,16 @@ describe("competitor review helpers", () => {
     });
   });
 
+  it("preserves reviewer notes when changing a row decision without a new note", () => {
+    const rows = buildCompetitorReviewRows(discovery, []).map((row) =>
+      row.id === "candidate-2-replit" ? { ...row, note: "Already reviewed" } : row,
+    );
+
+    expect(updateCompetitorRowDecision(rows, "candidate-2-replit", "remove")[1].note).toBe(
+      "Already reviewed",
+    );
+  });
+
   it("enables save only when review changes produce competitors or dimension changes exist", () => {
     const rows = buildCompetitorReviewRows(discovery, []);
 
@@ -205,6 +218,41 @@ describe("competitor review helpers", () => {
 
     const editedRows = updateCompetitorRowDecision(rows, "candidate-2-replit", "remove", "Not a fit");
     expect(canSavePlanReview(editedRows, ["Cursor", "Replit"], false)).toBe(true);
+  });
+
+  it("does not treat initially unselected discovery candidates as reviewer edits", () => {
+    const rows = buildCompetitorReviewRows(
+      {
+        ...discovery,
+        selected_competitors: ["Cursor"],
+        candidates: [
+          discovery.candidates[0],
+          { ...discovery.candidates[1], selected: false },
+        ],
+      },
+      ["Cursor"],
+    );
+
+    expect(serializeCompetitorReview(rows)).toEqual({
+      competitors: ["Cursor"],
+      competitor_edits: [],
+    });
+    expect(canSavePlanReview(rows, ["Cursor"], false)).toBe(false);
+
+    const unrelatedRows = updateCompetitorRowDecision(
+      rows,
+      "candidate-2-replit",
+      "mark_unrelated",
+      "Not in target market",
+    );
+    expect(serializeCompetitorReview(unrelatedRows).competitor_edits).toEqual([
+      {
+        action: "mark_unrelated",
+        name: "Replit",
+        reason: "Not in target market",
+        source_note: "",
+      },
+    ]);
   });
 
   it("keeps row ids unique when candidate names slugify to the same value", () => {
