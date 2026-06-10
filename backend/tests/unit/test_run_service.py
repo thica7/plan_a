@@ -2340,34 +2340,49 @@ def test_review_dimension_produces_review_summary_swot_and_report_sections() -> 
 
     review_summary = detail.competitor_knowledge["Cursor"].review_summary
     assert review_summary.competitor == "Cursor"
-    assert review_summary.source_ids or any(
-        [
-            review_summary.praise_themes,
-            review_summary.complaint_themes,
-            review_summary.adoption_blockers,
-            review_summary.switching_triggers,
-        ]
-    )
+    assert review_summary.source_ids == ["review-cursor-1"]
+    assert review_summary.praise_themes
+    assert review_summary.complaint_themes
+    assert review_summary.adoption_blockers
+    assert review_summary.switching_triggers
+    review_items = [
+        *review_summary.praise_themes,
+        *review_summary.complaint_themes,
+        *review_summary.adoption_blockers,
+        *review_summary.switching_triggers,
+    ]
+    assert all(item.source_ids == ["review-cursor-1"] for item in review_items)
+    assert all(item.evidence_gap is False for item in review_items)
 
     swot_analysis = detail.competitor_knowledge["Cursor"].swot_analysis
     assert swot_analysis.competitor == "Cursor"
     assert swot_analysis.strengths
+    assert swot_analysis.weaknesses
     assert swot_analysis.opportunities
     assert swot_analysis.threats
+    review_friction_themes = {
+        item.theme
+        for item in [
+            *review_summary.complaint_themes,
+            *review_summary.adoption_blockers,
+        ]
+    }
+    assert any(
+        item.source_ids == ["review-cursor-1"] and item.text in review_friction_themes
+        for item in swot_analysis.weaknesses
+    )
     assert all(
         item.evidence_gap and not item.source_ids
-        for item in [
-            *swot_analysis.strengths,
-            *swot_analysis.weaknesses,
-            *swot_analysis.opportunities,
-            *swot_analysis.threats,
-        ]
-        if not item.source_ids
+        for item in swot_analysis.threats
     )
     assert "User Review Themes" in detail.report_md
     assert "SWOT" in detail.report_md
     for quadrant in ("Strengths", "Weaknesses", "Opportunities", "Threats"):
         assert quadrant in detail.report_md
+    assert any(
+        line.startswith("- Threats:") and "Evidence gap" in line
+        for line in detail.report_md.splitlines()
+    )
 
     comparison = compare_run_quality(detail)
     metrics = {metric.name: metric for metric in comparison.metrics}
