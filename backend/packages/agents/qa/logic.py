@@ -636,10 +636,10 @@ class QualityAgentMixin:
             return bool(
                 knowledge.user_personas.summary_claims
                 or any(segment.claims for segment in knowledge.user_personas.segments)
-                or self._review_summary_has_cited_items(knowledge)
+                or self._qa_review_summary_has_cited_items(knowledge)
             )
         if self._dimension_uses_review_summary(dimension):
-            return self._review_summary_has_cited_items(knowledge)
+            return self._qa_review_summary_has_cited_items(knowledge)
         return bool(
             knowledge.feature_tree.summary_claims
             or any(node.claims for node in knowledge.feature_tree.nodes)
@@ -803,7 +803,7 @@ class QualityAgentMixin:
             field_path = f"competitor_knowledge[{competitor}].user_personas.segments"
         elif (
             self._dimension_uses_review_summary(dimension)
-            and not self._review_summary_has_cited_items(knowledge)
+            and not self._qa_review_summary_has_cited_items(knowledge)
         ):
             problem = (
                 f"{competitor} review schema has claims but no cited review_summary themes."
@@ -872,17 +872,17 @@ class QualityAgentMixin:
                 *[claim for node in knowledge.feature_tree.nodes for claim in node.claims],
             ]
         if self._dimension_uses_review_summary(dimension):
-            claims = [*claims, *self._review_summary_claims(knowledge)]
+            claims = [*claims, *self._qa_review_summary_claims(knowledge)]
         return claims
 
     def _dimension_uses_review_summary(self, dimension: str) -> bool:
         key = dimension.casefold().replace("-", "_")
         return any(hint in key for hint in REVIEW_SUMMARY_DIMENSION_HINTS)
 
-    def _review_summary_has_cited_items(self, knowledge: CompetitorKnowledge) -> bool:
-        return bool(self._review_summary_claims(knowledge))
+    def _qa_review_summary_has_cited_items(self, knowledge: CompetitorKnowledge) -> bool:
+        return bool(self._qa_review_summary_claims(knowledge))
 
-    def _review_summary_claims(self, knowledge: CompetitorKnowledge) -> list[KnowledgeClaim]:
+    def _qa_review_summary_claims(self, knowledge: CompetitorKnowledge) -> list[KnowledgeClaim]:
         claims: list[KnowledgeClaim] = []
         seen: set[tuple[str, tuple[str, ...]]] = set()
         for item in (
@@ -896,7 +896,7 @@ class QualityAgentMixin:
             source_ids = self._ordered_source_ids(item.source_ids)
             if not source_ids:
                 continue
-            claim_text = self._review_theme_claim_text(item)
+            claim_text = self._qa_review_theme_claim_text(item)
             key = (claim_text.casefold(), tuple(source_ids))
             if key in seen:
                 continue
@@ -910,7 +910,7 @@ class QualityAgentMixin:
             )
         return claims
 
-    def _review_theme_claim_text(self, item: ReviewThemeItem) -> str:
+    def _qa_review_theme_claim_text(self, item: ReviewThemeItem) -> str:
         theme = " ".join((item.theme or "").split())
         evidence = " ".join((item.evidence or "").split())
         if theme and evidence:

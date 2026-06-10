@@ -17,9 +17,8 @@ class AnalystHarness(AnalystAgentMixin):
     pass
 
 
-class QualityHarness(QualityAgentMixin):
-    def _source_matches_competitor(self, source: RawSource, competitor: str) -> bool:
-        return source.competitor.casefold() == competitor.casefold()
+class AnalystQualityHarness(AnalystAgentMixin, QualityAgentMixin):
+    pass
 
 
 def test_review_payload_builds_praise_complaints_and_switching() -> None:
@@ -412,7 +411,7 @@ def test_qa_accepts_review_summary_without_requiring_feature_tree_nodes() -> Non
         ],
     )
 
-    issues = QualityHarness()._build_structured_knowledge_issues(detail, [])
+    issues = AnalystQualityHarness()._build_structured_knowledge_issues(detail, [])
 
     assert not any("feature_tree.nodes" in issue.problem for issue in issues)
     assert not any(
