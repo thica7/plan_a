@@ -1317,6 +1317,166 @@ def test_report_quality_blocks_without_swot_section() -> None:
     assert any("SWOT Analysis" in item for item in missing.recommendations)
 
 
+def test_report_quality_rejects_swot_placeholder_prose() -> None:
+    placeholder_swot = (
+        f"## {report_label('en-US', 'swot_analysis')}\n"
+        "This SWOT must include Strengths, Weaknesses, Opportunities, and Threats before "
+        "publication. [source:source-0]"
+    )
+    detail = _run_detail(
+        run_id="placeholder-swot",
+        execution_mode="real",
+        source_count=4,
+        report_md=_replace_report_section(
+            _structured_report_md(),
+            report_label("en-US", "swot_analysis"),
+            placeholder_swot,
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[_llm_trace_span()],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    blockers = {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert metrics["swot_section_score"].target_value == 0.5
+    assert "swot_section_score" in blockers
+    assert comparison.report_quality_signal is False
+
+
+def test_report_quality_accepts_structured_english_swot_quadrant_rows() -> None:
+    structured_swot = (
+        f"## {report_label('en-US', 'swot_analysis')}\n"
+        "- Strengths: Cursor pricing clarity gives sales a concrete first proof point. "
+        "[source:source-0]\n"
+        "- Weaknesses: Enterprise security and procurement proof remains incomplete. "
+        "[source:source-2]\n"
+        "- Opportunities: Buyer education can focus on standalone value and workflow speed. "
+        "[source:source-0]\n"
+        "- Threats: Copilot can defend through bundled Microsoft procurement paths. "
+        "[source:source-1]"
+    )
+    detail = _run_detail(
+        run_id="structured-english-swot",
+        execution_mode="real",
+        source_count=4,
+        report_md=_replace_report_section(
+            _structured_report_md(),
+            report_label("en-US", "swot_analysis"),
+            structured_swot,
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[_llm_trace_span()],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["swot_section_score"].target_value == 1.0
+    assert comparison.report_quality_signal is True
+
+
+def test_report_quality_accepts_structured_chinese_swot_quadrant_rows() -> None:
+    structured_swot = (
+        f"## {report_label('zh-CN', 'swot_analysis')}\n"
+        "- 优势：Cursor 价格透明度让销售沟通有清晰证据。 [source:source-0]\n"
+        "- 劣势：企业安全与采购证明仍需补强。 [source:source-2]\n"
+        "- 机会：买方教育可以聚焦独立价值和工作流速度。 [source:source-0]\n"
+        "- 威胁：Copilot 可通过微软采购路径防守。 [source:source-1]"
+    )
+    detail = _run_detail(
+        run_id="structured-chinese-swot",
+        execution_mode="real",
+        source_count=4,
+        report_md=_replace_report_section(
+            _structured_report_md(),
+            report_label("en-US", "swot_analysis"),
+            structured_swot,
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[_llm_trace_span()],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["swot_section_score"].target_value == 1.0
+    assert comparison.report_quality_signal is True
+
+
+def test_report_quality_does_not_count_swot_or_review_child_headings_as_duplicates() -> None:
+    nested_sections = (
+        f"## {report_label('en-US', 'review_theme_summary')}\n"
+        "Review themes are organized by competitor without duplicating the parent section. "
+        "[source:source-0]\n"
+        "### Cursor Review Themes\n"
+        "- Pricing clarity supports fast buyer evaluation. [source:source-0]\n"
+        "### Copilot Review Themes\n"
+        "- Existing Microsoft familiarity supports adoption. [source:source-1]\n\n"
+        f"## {report_label('en-US', 'swot_analysis')}\n"
+        "### Cursor SWOT\n"
+        "- Strengths: Cursor pricing clarity gives sales a concrete proof point. "
+        "[source:source-0]\n"
+        "- Weaknesses: Enterprise security and procurement proof remains incomplete. "
+        "[source:source-2]\n"
+        "### Copilot SWOT\n"
+        "- Opportunities: Buyer education can focus on standalone value and workflow speed. "
+        "[source:source-0]\n"
+        "- Threats: Copilot can defend through bundled Microsoft procurement paths. "
+        "[source:source-1]"
+    )
+    detail = _run_detail(
+        run_id="nested-review-swot-headings",
+        execution_mode="real",
+        source_count=4,
+        report_md=_replace_report_sections(
+            _structured_report_md(),
+            {
+                report_label("en-US", "review_theme_summary"): "",
+                report_label("en-US", "swot_analysis"): nested_sections,
+            },
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[_llm_trace_span()],
+        source_types=["webpage_verified", "review_site"],
+    )
+    detail.plan.dimensions = ["pricing", "review"]
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["duplicate_section_count"].target_value == 0.0
+    assert metrics["review_theme_section_score"].target_value == 1.0
+    assert metrics["swot_section_score"].target_value == 1.0
+    assert comparison.report_quality_signal is True
+
+
 def test_report_quality_accepts_review_and_swot_sections() -> None:
     detail = _run_detail(
         run_id="review-and-swot",
@@ -2835,6 +2995,38 @@ def _remove_report_section(markdown: str, heading: str) -> str:
         "",
         markdown,
         flags=re.DOTALL,
+    )
+
+
+def _replace_report_section(markdown: str, heading: str, replacement: str) -> str:
+    return re.sub(
+        rf"\n\n## {re.escape(heading)}\n.*?(?=\n\n## |\Z)",
+        f"\n\n{replacement}",
+        markdown,
+        flags=re.DOTALL,
+    )
+
+
+def _replace_report_sections(markdown: str, replacements: dict[str, str]) -> str:
+    updated = markdown
+    for heading, replacement in replacements.items():
+        if replacement:
+            updated = _replace_report_section(updated, heading, replacement)
+        else:
+            updated = _remove_report_section(updated, heading)
+    return updated
+
+
+def _llm_trace_span() -> TraceSpan:
+    return TraceSpan(
+        id="span-llm-1",
+        kind="llm",
+        agent="writer",
+        name="real writer",
+        status="ok",
+        model="deepseek/deepseek-v4-pro",
+        provider="openrouter",
+        duration_ms=120,
     )
 
 

@@ -949,7 +949,7 @@ def _duplicate_section_count(markdown: str) -> int:
     seen: set[str] = set()
     duplicate_count = 0
     for match in re.finditer(
-        r"^\s*#{2,4}\s+(.+?)\s*#*\s*$",
+        r"^\s*##(?!#)\s+(.+?)\s*#*\s*$",
         report_md,
         flags=re.MULTILINE,
     ):
@@ -1176,7 +1176,7 @@ def _swot_section_score(detail: RunDetail) -> float:
     section = _find_section_before_support(detail.report_md, _swot_section_aliases())
     if section is None:
         return 0.0
-    if all(_body_mentions_any(section.body, aliases) for aliases in _swot_quadrant_aliases()):
+    if _has_structured_swot_quadrants(section.body):
         return 1.0
     return 0.5
 
@@ -1246,22 +1246,97 @@ def _needs_review_theme_section(detail: RunDetail) -> bool:
     )
 
 
-def _body_mentions_any(body: str, aliases: tuple[str, ...]) -> bool:
-    normalized_body = _normalize_heading(repair_mojibake_text(body))
-    compact_body = _compact_heading_text(body)
-    return any(
-        _normalize_heading(alias) in normalized_body
-        or _compact_heading_text(alias) in compact_body
-        for alias in aliases
-    )
+def _has_structured_swot_quadrants(body: str) -> bool:
+    found: set[str] = set()
+    lines = repair_mojibake_text(body).splitlines()
+    for index, line in enumerate(lines):
+        quadrant = _swot_quadrant_from_structured_line(line)
+        if quadrant is not None:
+            found.add(quadrant)
+            continue
+        heading_quadrant = _swot_quadrant_from_heading(line)
+        if heading_quadrant is not None and _heading_has_following_body(lines, index):
+            found.add(heading_quadrant)
+    return found == {key for key, _ in _swot_quadrant_aliases()}
 
 
-def _swot_quadrant_aliases() -> tuple[tuple[str, ...], ...]:
+def _swot_quadrant_from_structured_line(line: str) -> str | None:
+    stripped = line.strip()
+    if not stripped:
+        return None
+    table_cells = _table_cells(stripped)
+    if table_cells:
+        return _swot_quadrant_from_table_cells(table_cells)
+    bullet_match = re.match(r"^\s*[-*]\s*(.+?)\s*[:：]\s*(.+)$", stripped)
+    if bullet_match is None:
+        return None
+    label = bullet_match.group(1)
+    content = bullet_match.group(2)
+    if not _is_substantive_quadrant_content(content):
+        return None
+    return _swot_quadrant_from_label(label)
+
+
+def _swot_quadrant_from_table_cells(cells: list[str]) -> str | None:
+    if len(cells) < 2:
+        return None
+    quadrant = _swot_quadrant_from_label(cells[0])
+    if quadrant is None:
+        return None
+    if any(_is_substantive_quadrant_content(cell) for cell in cells[1:]):
+        return quadrant
+    return None
+
+
+def _swot_quadrant_from_heading(line: str) -> str | None:
+    match = re.match(r"^\s*#{3,6}\s+(.+?)\s*#*\s*$", line)
+    if match is None:
+        return None
+    return _swot_quadrant_from_label(match.group(1))
+
+
+def _swot_quadrant_from_label(label: str) -> str | None:
+    normalized_label = _normalize_heading(label)
+    compact_label = _compact_heading_text(label)
+    for key, aliases in _swot_quadrant_aliases():
+        if any(
+            normalized_label == _normalize_heading(alias)
+            or compact_label == _compact_heading_text(alias)
+            for alias in aliases
+        ):
+            return key
+    return None
+
+
+def _table_cells(line: str) -> list[str]:
+    if not line.startswith("|") or not line.endswith("|"):
+        return []
+    cells = [cell.strip() for cell in line.strip("|").split("|")]
+    if not cells or all(re.fullmatch(r"[-:\s]+", cell) for cell in cells):
+        return []
+    return cells
+
+
+def _heading_has_following_body(lines: list[str], heading_index: int) -> bool:
+    for line in lines[heading_index + 1 :]:
+        if re.match(r"^\s*#{1,6}\s+", line):
+            return False
+        if _is_substantive_quadrant_content(line):
+            return True
+    return False
+
+
+def _is_substantive_quadrant_content(content: str) -> bool:
+    cleaned = _clean_body_line(content)
+    return len(cleaned) >= 4 and re.search(r"\w", cleaned) is not None
+
+
+def _swot_quadrant_aliases() -> tuple[tuple[str, tuple[str, ...]], ...]:
     return (
-        ("strengths", "strength", "优势", "優勢", "浼樺娍"),
-        ("weaknesses", "weakness", "劣势", "劣勢", "鍔ｅ娍"),
-        ("opportunities", "opportunity", "机会", "機會", "鏈轰細"),
-        ("threats", "threat", "威胁", "威脅", "濞佽儊"),
+        ("strengths", ("strengths", "strength", "优势", "優勢", "浼樺娍")),
+        ("weaknesses", ("weaknesses", "weakness", "劣势", "劣勢", "鍔ｅ娍")),
+        ("opportunities", ("opportunities", "opportunity", "机会", "機會", "鏈轰細")),
+        ("threats", ("threats", "threat", "威胁", "威脅", "濞佽儊")),
     )
 
 
