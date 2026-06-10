@@ -176,8 +176,9 @@ export function rejectReportWorkflow(
   );
 }
 
-export function getRun(runId: string) {
-  return request<RunDetail>(`/runs/${runId}`);
+export function getRun(runId: string, options: { includeTracePayloads?: boolean } = {}) {
+  const params = options.includeTracePayloads ? "?include_trace_payloads=true" : "";
+  return request<RunDetail>(`/runs/${runId}${params}`);
 }
 
 export function getRunQualityComparison(runId: string, baselineRunId?: string) {

@@ -872,7 +872,7 @@ def _clean_heading(heading: str) -> str:
 def _normalize_heading(heading: str) -> str:
     cleaned = _clean_heading(heading)
     cleaned = re.sub(
-        r"^(?:section\s+)?(?:\d+(?:\.\d+)*|[ivxlcdm]+)[\.)]\s+",
+        r"^(?:section\s+)?(?:\d+(?:\.\d+)*|[ivxlcdm]+)[\.)]\s*",
         "",
         cleaned,
         flags=re.IGNORECASE,
@@ -880,11 +880,19 @@ def _normalize_heading(heading: str) -> str:
     return cleaned.casefold()
 
 
+def _compact_heading_text(heading: str) -> str:
+    return re.sub(r"\s+", "", _normalize_heading(heading))
+
+
 def _heading_matches(heading: str, aliases: tuple[str, ...]) -> bool:
     normalized_heading = _normalize_heading(heading)
+    compact_heading = _compact_heading_text(heading)
     for alias in aliases:
         normalized_alias = _normalize_heading(alias)
+        compact_alias = _compact_heading_text(alias)
         if normalized_heading == normalized_alias or normalized_alias in normalized_heading:
+            return True
+        if compact_heading == compact_alias or compact_alias in compact_heading:
             return True
     return False
 
@@ -1105,9 +1113,20 @@ def _user_research_section_score(detail: RunDetail) -> float:
 def _rag_gap_fill_section_score(detail: RunDetail) -> float:
     if not _needs_rag_gap_fill_section(detail):
         return 1.0
-    if not _has_heading(detail.report_md, ("rag gap fill", "evidence gap fill", "retrieval")):
+    report_md = repair_mojibake_text(detail.report_md)
+    if not _has_heading(
+        report_md,
+        (
+            "rag gap fill",
+            "evidence gap fill",
+            "retrieval",
+            "RAG 缺口补全",
+            "RAG缺口补全",
+            "证据缺口补全",
+        ),
+    ):
         return 0.0
-    normalized = detail.report_md.casefold()
+    normalized = report_md.casefold()
     if any(
         phrase in normalized
         for phrase in (
@@ -1115,6 +1134,10 @@ def _rag_gap_fill_section_score(detail: RunDetail) -> float:
             "retrieval context",
             "grounded context",
             "retrieval candidate",
+            "建议的检索查询",
+            "检索查询",
+            "检索上下文",
+            "已填补的差距",
         )
     ):
         return 1.0

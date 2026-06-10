@@ -11,7 +11,7 @@ from packages.enterprise import EnterpriseMemoryStore
 from packages.memory import PreferenceMemoryStore, RunJournal
 from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
-from packages.orchestrator.service import RunService
+from packages.orchestrator.service import RunRecord, RunService
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
@@ -25,6 +25,7 @@ from packages.schema.enterprise import (
     UserFeedbackRecord,
 )
 from packages.schema.models import (
+    AgentMessage,
     AnalysisPlan,
     ComparisonCell,
     ComparisonMatrix,
@@ -39,6 +40,8 @@ from packages.schema.models import (
     RedoScope,
     ReflectionRecord,
     RevisionRecord,
+    ToolCallMessage,
+    TraceSpan,
 )
 from packages.search import SearchResult
 from packages.skills.registry import SkillRegistry
@@ -333,6 +336,41 @@ async def test_create_run_reuses_recent_active_duplicate_even_with_new_key() -> 
     assert duplicate.id == first.id
     assert duplicate.idempotency_key == first.idempotency_key
     assert duplicate.active_run_fingerprint == first.active_run_fingerprint
+
+
+@pytest.mark.asyncio
+async def test_ensure_run_visible_reuses_recent_active_duplicate() -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+
+    first = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:visible-first",
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity", "Claude"],
+            dimensions=["pricing", "feature"],
+            execution_mode="demo",
+        )
+    )
+    duplicate = await service.ensure_run_visible(
+        RunCreateRequest(
+            idempotency_key="ui-run:visible-second",
+            topic="AI research assistant competitive analysis",
+            competitors=["Claude", "Perplexity"],
+            dimensions=["feature", "pricing"],
+            execution_mode="demo",
+        )
+    )
+
+    assert duplicate.id == first.id
+    assert duplicate.idempotency_key == first.idempotency_key
 
 
 @pytest.mark.asyncio
@@ -7637,6 +7675,220 @@ async def test_planner_hitl_resume_updates_competitors_and_discovery() -> None:
 
 
 @pytest.mark.asyncio
+async def test_resume_uses_current_hitl_node_when_stale_pending_interrupt_exists() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    async def fake_resume_graph(run_id, request):  # noqa: ANN001, ANN202
+        return None
+
+    service._resume_interrupted_graph = fake_resume_graph  # type: ignore[method-assign]
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Stale HITL pending",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+        record = service._runs[detail.id]
+        record.detail.status = "interrupted"
+        record.detail.current_node = "qa_hitl"
+        record.pending_interrupts["planner"] = {
+            "stage": "planner",
+            "graph_kind": "real",
+            "thread_id": detail.id,
+            "interrupt_node": "planner_hitl",
+        }
+        record.pending_interrupts["qa"] = {
+            "stage": "qa",
+            "graph_kind": "real",
+            "thread_id": detail.id,
+            "interrupt_node": "qa_hitl",
+        }
+
+        await service.resume(detail.id, HitlResumeRequest(decision="accept"))
+
+        lifecycle_messages = [
+            message
+            for message in record.detail.agent_messages
+            if message.message_type == "hitl_lifecycle"
+        ]
+        assert lifecycle_messages[-2].payload["hitl_lifecycle"]["stage"] == "qa"
+        assert lifecycle_messages[-2].payload["hitl_lifecycle"]["review_kind"] == "qa_review"
+        assert (
+            lifecycle_messages[-2].payload["hitl_lifecycle"]["metadata"]["pending_interrupt"][
+                "interrupt_node"
+            ]
+            == "qa_hitl"
+        )
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_resume_marks_interrupt_as_in_progress_before_graph_consumes_it() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+    resume_calls = 0
+
+    async def fake_resume_graph(run_id, request):  # noqa: ANN001, ANN202
+        nonlocal resume_calls
+        resume_calls += 1
+        await asyncio.sleep(0)
+
+    service._resume_interrupted_graph = fake_resume_graph  # type: ignore[method-assign]
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Duplicate HITL resume",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+        record = service._runs[detail.id]
+        record.detail.status = "interrupted"
+        record.detail.current_node = "qa_hitl"
+        record.pending_interrupts["qa"] = {
+            "stage": "qa",
+            "graph_kind": "real",
+            "thread_id": detail.id,
+            "interrupt_node": "qa_hitl",
+        }
+
+        await service.resume(detail.id, HitlResumeRequest(decision="accept"))
+        assert service.has_pending_interrupt(detail.id) is False
+
+        await service.resume(detail.id, HitlResumeRequest(decision="accept"))
+        await asyncio.sleep(0)
+
+        assert resume_calls == 1
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stale_hitl_timeout_does_not_resume_non_current_interrupt() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+            hitl_timeout_seconds=0.01,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+    resume_calls = 0
+
+    async def fake_resume(run_id, request):  # noqa: ANN001, ANN202
+        nonlocal resume_calls
+        resume_calls += 1
+        return None
+
+    service.resume = fake_resume  # type: ignore[method-assign]
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Stale HITL timeout",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+        record = service._runs[detail.id]
+        record.detail.status = "interrupted"
+        record.detail.current_node = "qa_hitl"
+        record.pending_interrupts["planner"] = {
+            "stage": "planner",
+            "graph_kind": "real",
+            "thread_id": detail.id,
+            "interrupt_node": "planner_hitl",
+        }
+
+        service._schedule_hitl_timeout(record, "planner")
+        await asyncio.sleep(0.05)
+
+        assert resume_calls == 0
+        assert "planner" not in record.pending_interrupts
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_get_run_repairs_running_hitl_node_to_interrupted() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Stale running HITL status",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+        record = service._runs[detail.id]
+        record.detail.status = "running"
+        record.detail.current_node = "qa_hitl"
+        record.pending_interrupts.clear()
+        service._persist_run(detail.id)
+
+        repaired = service.get_run(detail.id)
+
+        assert repaired is not None
+        assert repaired.status == "interrupted"
+        assert repaired.current_node == "qa_hitl"
+        assert service.has_pending_interrupt(detail.id) is True
+        assert service._runs[detail.id].pending_interrupts["qa"]["interrupt_node"] == "qa_hitl"
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_planner_hitl_rejects_competitor_edits_without_modify_plan() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -7970,3 +8222,75 @@ async def test_hitl_timeout_auto_accepts_interrupt() -> None:
         assert lifecycle_stages[:3] == ["requested", "timed_out", "resumed"]
     finally:
         await service._graph_checkpointer.aclose()
+
+
+def test_get_run_can_return_compact_detail_without_trace_payloads() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-compact",
+        topic="Compact detail",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="Compact detail", competitors=["A"], dimensions=["pricing"]),
+        trace_spans=[
+            TraceSpan(
+                id="span-1",
+                kind="llm",
+                agent="collector",
+                name="collect",
+                status="ok",
+                duration_ms=12,
+                input_preview="short input",
+                output_preview="short output",
+                full_input="large input" * 1000,
+                full_output="large output" * 1000,
+            )
+        ],
+        agent_messages=[
+            AgentMessage(
+                id="message-1",
+                run_id="run-compact",
+                from_agent="collector",
+                to_agent="analyst",
+                message_type="collected",
+                payload_schema="TestPayload",
+                payload={"body": "large payload" * 1000},
+            )
+        ],
+        tool_call_messages=[
+            ToolCallMessage(
+                id="tool-1",
+                run_id="run-compact",
+                agent="collector",
+                tool_name="fetch_page",
+                status="ok",
+                result={"body": "large tool result" * 1000},
+            )
+        ],
+    )
+    service._runs[detail.id] = RunRecord(detail=detail)
+
+    compact = service.get_run(detail.id, include_trace_payloads=False)
+    full = service.get_run(detail.id)
+
+    assert compact is not None
+    assert compact.trace_spans[0].input_preview == "short input"
+    assert compact.trace_spans[0].full_input == ""
+    assert compact.trace_spans[0].full_output == ""
+    assert compact.agent_messages == []
+    assert compact.tool_call_messages == []
+    assert full is not None
+    assert full.trace_spans[0].full_input.startswith("large input")
+    assert full.agent_messages[0].payload["body"].startswith("large payload")

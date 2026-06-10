@@ -1,10 +1,13 @@
 import type {
   ArtifactRecord,
+  AgentMessage,
   DecisionReplayReport,
   RunComplianceReport,
   RunDetail as RunDetailRecord,
   RunQualityComparison,
   RunSummary,
+  ToolCallMessage,
+  TraceSpan,
 } from "../../api/types";
 import { CostPanel } from "../cost/CostPanel";
 import { AgentMessagesView } from "../messages/AgentMessagesView";
@@ -39,6 +42,9 @@ interface RunDetailContentProps {
   reflectionItems: ReflectionItem[];
   reportSources: ReportSourceBundle;
   runHistory: RunSummary[];
+  traceSpans: TraceSpan[] | null;
+  agentMessages: AgentMessage[] | null;
+  toolCallMessages: ToolCallMessage[] | null;
 }
 
 export function RunDetailContent({
@@ -60,8 +66,14 @@ export function RunDetailContent({
   reflectionItems,
   reportSources,
   runHistory,
+  traceSpans,
+  agentMessages,
+  toolCallMessages,
 }: RunDetailContentProps) {
   const { t } = useTranslation();
+  const renderedTraceSpans = traceSpans ?? detail.trace_spans;
+  const renderedAgentMessages = agentMessages ?? detail.agent_messages;
+  const renderedToolCallMessages = toolCallMessages ?? detail.tool_call_messages;
   if (activeView === "report") {
     return <RunReportReviewStudio detail={detail} reportSources={reportSources} />;
   }
@@ -69,13 +81,13 @@ export function RunDetailContent({
   if (activeView === "agents") {
     return (
       <div className="detail-grid agents-detail-grid">
-        <TracePlayback spans={detail.trace_spans} />
-        <AgentMessagesView messages={detail.agent_messages} toolCalls={detail.tool_call_messages} />
+        <TracePlayback spans={renderedTraceSpans} />
+        <AgentMessagesView messages={renderedAgentMessages} toolCalls={renderedToolCallMessages} />
         <TraceList
           events={events}
           metrics={detail.metrics}
           replay={decisionReplay}
-          spans={detail.trace_spans}
+          spans={renderedTraceSpans}
         />
       </div>
     );

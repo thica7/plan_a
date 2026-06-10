@@ -72,8 +72,9 @@ async def list_runs(service: RunServiceDep) -> list[RunSummary]:
 async def get_run(
     run_id: str,
     service: RunServiceDep,
+    include_trace_payloads: bool = Query(default=False),
 ) -> RunDetail:
-    detail = service.get_run(run_id)
+    detail = service.get_run(run_id, include_trace_payloads=include_trace_payloads)
     if detail is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return detail

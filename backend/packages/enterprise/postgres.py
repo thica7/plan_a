@@ -573,7 +573,6 @@ class EnterprisePostgresStore:
         period_start, period_end = _usage_period(period_start, period_end)
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
             with conn.cursor() as cur:
-                self._upsert_workspace(cur, workspace_id)
                 workspace_row = cur.execute(
                     "SELECT * FROM workspaces WHERE id = %s",
                     (workspace_id,),
@@ -623,7 +622,11 @@ class EnterprisePostgresStore:
                     (workspace_id, period_start, period_end),
                 ).fetchone()
             conn.commit()
-        workspace = WorkspaceRecord.model_validate(dict(workspace_row))
+        workspace = (
+            WorkspaceRecord.model_validate(dict(workspace_row))
+            if workspace_row is not None
+            else _default_workspace_record(workspace_id)
+        )
         usage = dict(usage_row or {})
         return build_workspace_usage_summary(
             workspace,
@@ -655,7 +658,11 @@ class EnterprisePostgresStore:
                 "SELECT * FROM workspaces WHERE id = %s",
                 (workspace_id,),
             ).fetchone()
-        workspace = self._model_from_row(WorkspaceRecord, row)
+        workspace = (
+            self._model_from_row(WorkspaceRecord, row)
+            if row is not None
+            else _default_workspace_record(workspace_id)
+        )
         return build_quota_decision(usage, workspace.quota_enforcement)
 
     def list_notifications(
@@ -2595,6 +2602,14 @@ def _usage_period(
 ) -> tuple[datetime, datetime]:
     default_start, default_end = current_month_window()
     return period_start or default_start, period_end or default_end
+
+
+def _default_workspace_record(workspace_id: str) -> WorkspaceRecord:
+    return WorkspaceRecord(
+        id=workspace_id,
+        name=_title_from_id(workspace_id),
+        description="Phase 1 workspace.",
+    )
 
 
 def _embedding_dedupe_key(evidence: EvidenceRecord) -> str:

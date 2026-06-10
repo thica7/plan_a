@@ -271,8 +271,14 @@ class WriterAgentMixin:
                     "",
                     f"## {self._layer_section_heading(detail, fallback=fallback)}",
                     f"- 直接使用定位：在更强证据改变矩阵之前，将此视为近期替代决策。{refs}",
-                    f"- 反对意见处理：在销售或产品响应中，优先考虑定价、包装、功能对齐以及切换触发因素。{refs}",
-                    f"- 行动偏向：使用置信度最高的维度赢家作为初始战报核心，在发布前验证薄弱单元格。{refs}",
+                    (
+                        "- 反对意见处理：在销售或产品响应中，优先考虑定价、包装、"
+                        f"功能对齐以及切换触发因素。{refs}"
+                    ),
+                    (
+                        "- 行动偏向：使用置信度最高的维度赢家作为初始战报核心，"
+                        f"在发布前验证薄弱单元格。{refs}"
+                    ),
                 ]
             return [
                 "",
@@ -296,8 +302,14 @@ class WriterAgentMixin:
                     "",
                     f"## {self._layer_section_heading(detail, fallback=fallback)}",
                     f"- 相邻工作流威胁：通过工作流重叠、集成杠杆和切换成本暴露来解读矩阵。{refs}",
-                    f"- 购买风险：在提出采购建议之前，将已证实的组织控制措施与仅限搜索或低置信度的声明区分开来。{refs}",
-                    f"- 监视列表：监控相邻竞品只需一次集成或打包更改即可吞并目标工作流的维度。{refs}",
+                    (
+                        "- 购买风险：在提出采购建议之前，将已证实的组织控制措施"
+                        f"与仅限搜索或低置信度的声明区分开来。{refs}"
+                    ),
+                    (
+                        "- 监视列表：监控相邻竞品只需一次集成或打包更改即可"
+                        f"吞并目标工作流的维度。{refs}"
+                    ),
                 ]
             return [
                 "",
@@ -320,7 +332,10 @@ class WriterAgentMixin:
                 return [
                     "",
                     f"## {self._layer_section_heading(detail, fallback=fallback)}",
-                    f"- 类别视角：避免单一直接赢家，按细分市场、趋势信号和基准强度对竞品进行分组。{refs}",
+                    (
+                        "- 类别视角：避免单一直接赢家，按细分市场、趋势信号"
+                        f"和基准强度对竞品进行分组。{refs}"
+                    ),
                     f"- 战略视角：在证据广度仍低于景观级覆盖率时，将建议视为投资组合选项。{refs}",
                     f"- 不确定性视角：在做出类别范围的声明之前，优先增加竞品和市场级来源。{refs}",
                 ]
@@ -369,7 +384,9 @@ class WriterAgentMixin:
     ) -> list[str]:
         refs = self._format_source_refs(source_ids)
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
-        dimensions = ", ".join(detail.plan.dimensions) or ("所请求的维度" if is_zh else "the requested dimensions")
+        dimensions = ", ".join(detail.plan.dimensions) or (
+            "所请求的维度" if is_zh else "the requested dimensions"
+        )
         competitors = ", ".join(detail.plan.competitors) or detail.topic
         if detail.comparison_matrix is not None and detail.comparison_matrix.winner_by_dimension:
             winners = ", ".join(
@@ -377,7 +394,11 @@ class WriterAgentMixin:
                 for dimension, winner in detail.comparison_matrix.winner_by_dimension.items()
             )
         else:
-            winners = "尚无评分赢家；将来源覆盖率和 QA 状态作为约束条件" if is_zh else "no scored winner yet; use source coverage and QA status as constraints"
+            winners = (
+                "尚无评分赢家；将来源覆盖率和 QA 状态作为约束条件"
+                if is_zh
+                else "no scored winner yet; use source coverage and QA status as constraints"
+            )
         if is_zh:
             return [
                 "",
@@ -387,7 +408,8 @@ class WriterAgentMixin:
                     f"{competitors} 在 {dimensions} 上的表现；决策锚定在 {winners}。{refs}"
                 ),
                 (
-                    "- 决策姿态：优先考虑具有已证实、高置信度证据的维度，并将薄弱单元格路由到验证计划中。"
+                    "- 决策姿态：优先考虑具有已证实、高置信度证据的维度，"
+                    "并将薄弱单元格路由到验证计划中。"
                     f"{refs}"
                 ),
                 (
@@ -442,7 +464,8 @@ class WriterAgentMixin:
             if winner:
                 if is_zh:
                     lines.append(
-                        f"- {dimension}：{winner} 在该维度领先，但其含义应与引用的单元格和置信水平保持一致。"
+                        f"- {dimension}：{winner} 在该维度领先，"
+                        "但其含义应与引用的单元格和置信水平保持一致。"
                         f"{self._format_source_refs(source_ids)}"
                     )
                 else:
@@ -454,7 +477,8 @@ class WriterAgentMixin:
             elif cells:
                 if is_zh:
                     lines.append(
-                        f"- {dimension}：存在用于对比的证据，但在进行另一次验证之前，不应断言明确的赢家。"
+                        f"- {dimension}：存在用于对比的证据，"
+                        "但在进行另一次验证之前，不应断言明确的赢家。"
                         f"{self._format_source_refs(source_ids)}"
                     )
                 else:
@@ -543,7 +567,8 @@ class WriterAgentMixin:
                     f"{self._format_source_refs(source_ids)}"
                 )
                 lines.append(
-                    f"- {competitor} 注意事项：在将这些转为外部宣传信息之前，监控定价、包装、功能和买家反对意见声明。"
+                    f"- {competitor} 注意事项：在将这些转为外部宣传信息之前，"
+                    "监控定价、包装、功能和买家反对意见声明。"
                     f"{self._format_source_refs(source_ids)}"
                 )
             else:
@@ -572,7 +597,10 @@ class WriterAgentMixin:
             return [
                 "",
                 f"## {report_label(detail.output_language, 'evidence_support')}",
-                f"- 使用以下支持部分来审计来源质量、场景 QA、知识覆盖、声明风险以及剩余的验证任务。{refs}",
+                (
+                    "- 使用以下支持部分来审计来源质量、场景 QA、知识覆盖、"
+                    f"声明风险以及剩余的验证任务。{refs}"
+                ),
                 f"- 保持支持材料简洁且完整，以便上面的决策分析仍为主要读取内容。{refs}",
             ]
         return [
@@ -595,7 +623,14 @@ class WriterAgentMixin:
             return [
                 "",
                 f"## {heading}",
-                "- 没有可用的原始来源，因此所有结论在使用前都需要进行收集。" if is_zh else "- No raw sources are available, so all conclusions require collection before use.",
+                (
+                    "- 没有可用的原始来源，因此所有结论在使用前都需要进行收集。"
+                    if is_zh
+                    else (
+                        "- No raw sources are available, so all conclusions require "
+                        "collection before use."
+                    )
+                ),
             ]
         by_type: dict[str, list[tuple[str, float]]] = {}
         for source in detail.raw_sources:
@@ -939,17 +974,27 @@ class WriterAgentMixin:
     def _report_heading_matches(self, heading: str, alias: str) -> bool:
         normalized_heading = self._normalize_report_heading_text(heading)
         normalized_alias = self._normalize_report_heading_text(alias)
-        return normalized_heading == normalized_alias or normalized_alias in normalized_heading
+        compact_heading = self._compact_report_heading_text(heading)
+        compact_alias = self._compact_report_heading_text(alias)
+        return (
+            normalized_heading == normalized_alias
+            or normalized_alias in normalized_heading
+            or compact_heading == compact_alias
+            or compact_alias in compact_heading
+        )
 
     def _normalize_report_heading_text(self, heading: str) -> str:
         cleaned = re.sub(r"\s+", " ", heading.strip().strip("#").strip())
         cleaned = re.sub(
-            r"^(?:section\s+)?(?:\d+(?:\.\d+)*|[ivxlcdm]+)[\.)]\s+",
+            r"^(?:section\s+)?(?:\d+(?:\.\d+)*|[ivxlcdm]+)[\.)]\s*",
             "",
             cleaned,
             flags=re.IGNORECASE,
         )
         return cleaned.casefold()
+
+    def _compact_report_heading_text(self, heading: str) -> str:
+        return re.sub(r"\s+", "", self._normalize_report_heading_text(heading))
 
     def _normalize_report_section_order(self, detail: RunDetail, markdown: str) -> str:
         matches = list(
@@ -1503,7 +1548,8 @@ class WriterAgentMixin:
             ]
             if not research_sources:
                 lines.append(
-                    "- 已请求用户画像或评论分析，但尚未附加用户研究来源；将画像结论保持在证据差距通道中。"
+                    "- 已请求用户画像或评论分析，但尚未附加用户研究来源；"
+                    "将画像结论保持在证据差距通道中。"
                     f"{self._format_source_refs(self._matrix_source_ids(detail))}"
                 )
                 return lines
@@ -1564,7 +1610,8 @@ class WriterAgentMixin:
                     f"建议的检索查询：{query}。{sources}"
                 )
             lines.append(
-                "- 运行“证据差距填补”操作以检索、重排并附加已证实的证据。生成的草案版本应链接已填补的差距 ID 和检索上下文。"
+                "- 运行“证据差距填补”操作以检索、重排并附加已证实的证据。"
+                "生成的草案版本应链接已填补的差距 ID 和检索上下文。"
             )
         else:
             lines = [
@@ -1639,7 +1686,11 @@ class WriterAgentMixin:
             for claim in weak_claims[:5]:
                 labels = []
                 if claim.confidence < 0.65:
-                    labels.append(f"置信度 {claim.confidence:.2f}" if is_zh else f"confidence {claim.confidence:.2f}")
+                    labels.append(
+                        f"置信度 {claim.confidence:.2f}"
+                        if is_zh
+                        else f"confidence {claim.confidence:.2f}"
+                    )
                 if self._claim_has_weak_sources(claim.source_ids, source_by_id):
                     labels.append("弱来源组合" if is_zh else "weak source mix")
                 if self._claim_needs_triangulation(claim.claim, claim.source_ids):
@@ -1662,7 +1713,8 @@ class WriterAgentMixin:
                 )
             else:
                 lines.append(
-                    "- No low-confidence or single-source high-risk structured claims were detected."
+                    "- No low-confidence or single-source high-risk structured claims were "
+                    "detected."
                     f"{self._format_source_refs(self._matrix_source_ids(detail))}"
                 )
 

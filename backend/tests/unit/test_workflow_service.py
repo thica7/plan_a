@@ -490,12 +490,16 @@ def test_runs_router_can_cut_over_to_temporal_backend() -> None:
     assert visible.json()["status"] == "queued"
 
 
-def test_runs_router_generates_visible_new_run_keys_for_temporal_cutover() -> None:
+def test_runs_router_reuses_active_duplicate_for_temporal_cutover() -> None:
     class FakeWorkflowService:
+        def __init__(self) -> None:
+            self.started_count = 0
+
         async def start_competitive_intel(
             self,
             request: RunCreateRequest,
         ) -> WorkflowStartResponse:
+            self.started_count += 1
             assert request.idempotency_key is not None
             return WorkflowStartResponse(
                 workflow_id=f"competitive-intel-{request.idempotency_key}",
@@ -509,7 +513,8 @@ def test_runs_router_generates_visible_new_run_keys_for_temporal_cutover() -> No
     app.dependency_overrides[get_app_settings] = lambda: _settings(
         run_orchestration_backend="temporal"
     )
-    app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    fake_workflow_service = FakeWorkflowService()
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: fake_workflow_service
     run_service = _memory_run_service(_settings(run_orchestration_backend="temporal"))
     app.dependency_overrides[get_run_service] = lambda: run_service
     client = TestClient(app)
@@ -524,17 +529,18 @@ def test_runs_router_generates_visible_new_run_keys_for_temporal_cutover() -> No
     second = client.post("/api/runs", json=payload)
 
     assert first.status_code == 202
-    assert second.status_code == 202
+    assert second.status_code == 201
     assert first.headers["X-Runtime-Command-Id"].startswith("runtime-command-")
     assert first.headers["X-Runtime-Audit-Correlation-Id"].startswith("audit-correlation-")
     assert first.headers["X-Run-Orchestration-Route"] == "temporal"
+    assert second.headers["X-Run-Orchestration-Route"] == "none"
     first_body = first.json()
     second_body = second.json()
     assert first_body["idempotency_key"].startswith("ui-run:")
-    assert second_body["idempotency_key"].startswith("ui-run:")
-    assert first_body["run_id"] != second_body["run_id"]
+    assert second_body["id"] == first_body["run_id"]
+    assert fake_workflow_service.started_count == 1
     assert client.get(f"/api/runs/{first_body['run_id']}").status_code == 200
-    assert client.get(f"/api/runs/{second_body['run_id']}").status_code == 200
+    assert client.get(f"/api/runs/{second_body['id']}").status_code == 200
 
 
 def test_runs_router_blocks_real_temporal_cutover_when_model_policy_denies() -> None:

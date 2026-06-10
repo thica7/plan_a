@@ -20,6 +20,7 @@ export function RunDetail() {
     detail,
     error,
     events,
+    activeHitlDecision,
     handleExportCompliance,
     handleAddCompetitor,
     handleCompetitorDecisionChange,
@@ -30,6 +31,7 @@ export function RunDetail() {
     handleRedo,
     interruptStage,
     isExportingCompliance,
+    isHitlSubmitting,
     isRedoing,
     latestInterrupt,
     planDimensions,
@@ -45,6 +47,9 @@ export function RunDetail() {
     setPlanDimensions,
     setQualityBaselineRunId,
     sourceCoverageRate,
+    traceSpans,
+    agentMessages,
+    toolCallMessages,
     verifiedSourceRate,
   } = useRunDetailController();
 
@@ -98,6 +103,14 @@ export function RunDetail() {
           />
         ) : (
           <QaReviewModal
+            activeDecision={
+              activeHitlDecision === "accept" ||
+              activeHitlDecision === "force_pass" ||
+              activeHitlDecision === "redo"
+                ? activeHitlDecision
+                : null
+            }
+            isSubmitting={isHitlSubmitting}
             isRedoing={isRedoing}
             message={latestInterrupt.message}
             onAccept={() => handleHitl("accept")}
@@ -129,6 +142,9 @@ export function RunDetail() {
         reflectionItems={reflectionItems}
         reportSources={reportSources}
         runHistory={runHistory}
+        traceSpans={traceSpans}
+        agentMessages={agentMessages}
+        toolCallMessages={toolCallMessages}
       />
     </section>
   );

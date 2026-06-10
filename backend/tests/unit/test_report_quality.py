@@ -520,6 +520,63 @@ Duplicated source quality support should be treated as a structural defect. [sou
     assert "duplicate_section_count" in report_check.blocking_metric_names
 
 
+def test_compare_run_quality_blocks_numbered_chinese_duplicate_support_sections() -> None:
+    report_md = (
+        _structured_report_md()
+        + """
+
+## 9. 证据与QA支撑
+重复的证据与 QA 支撑应该被识别为结构缺陷。 [source:source-0]
+
+## 证据与 QA 支撑
+第二个证据支撑区块不应该绕过重复章节检测。 [source:source-1]
+
+## 13. RAG缺口补全
+- 差距 `gap-pricing`: 建议的检索查询：PC 品牌定价 官方页面。 [source:source-2]
+
+## RAG 缺口补全
+- 差距 `gap-pricing`: 建议的检索查询：PC 品牌定价 官方页面。 [source:source-3]
+
+## 14. 场景QA清单
+- 场景 QA 条目重复。 [source:source-0]
+
+## 场景 QA 清单
+- 场景 QA 条目再次重复。 [source:source-1]
+""".rstrip()
+    )
+    detail = _run_detail(
+        run_id="duplicate-chinese-section-run",
+        execution_mode="real",
+        source_count=4,
+        report_md=report_md,
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+
+    comparison = compare_run_quality(detail)
+    duplicate_metric = next(
+        metric for metric in comparison.metrics if metric.name == "duplicate_section_count"
+    )
+
+    assert duplicate_metric.target_value == 4.0
+
+
 def test_compare_run_quality_rejects_empty_core_headings_after_appendix() -> None:
     long_report_with_late_empty_core = (
         """
@@ -1129,6 +1186,61 @@ def test_compare_run_quality_requires_rag_gap_fill_section_for_collector_gaps() 
     repaired_metrics = {metric.name: metric for metric in repaired.metrics}
 
     assert repaired_metrics["rag_gap_fill_section_score"].target_value == 1.0
+
+
+def test_compare_run_quality_accepts_chinese_rag_gap_fill_section() -> None:
+    detail = _run_detail(
+        run_id="localized-rag-gap-fill",
+        execution_mode="real",
+        source_count=4,
+        report_md=(
+            f"{_structured_report_md()}\n\n"
+            "## RAG 缺口补全\n"
+            "- 差距 `gap-security-evidence`：建议的检索查询：Cursor 安全合规 官方文档。"
+            " [source:source-0]\n"
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+    detail.qa_findings.append(
+        QCIssue(
+            id="gap-security-evidence",
+            severity="warn",
+            detected_by="coverage",
+            target_agent="collector",
+            target_subagent="security",
+            target_competitor="Cursor",
+            field_path="raw_sources[security][Cursor]",
+            problem="Missing official security evidence.",
+            redo_scope=RedoScope(
+                kind="collector",
+                target_subagent="security",
+                target_competitor="Cursor",
+                rationale="Collect official security evidence.",
+            ),
+        )
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["rag_gap_fill_section_score"].target_value == 1.0
 
 
 def _assert_headings_in_order(markdown: str, headings: list[str]) -> None:
@@ -1792,6 +1904,71 @@ def test_writer_hardening_uses_localized_support_headings_once_for_zh_cn() -> No
     assert "## User Research Evidence" not in report
     assert "## RAG Gap Fill" not in report
     assert "## Claim Validation & Evidence Risk" not in report
+
+
+def test_writer_hardening_recognizes_compact_chinese_support_headings() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="zh-compact-support-headings",
+        execution_mode="real",
+        source_count=4,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.output_language = "zh-CN"
+    detail.plan.competitor_layer = "L1"
+    detail.plan.dimensions = ["pricing", "feature"]
+    detail.qa_findings.append(
+        QCIssue(
+            id="gap-pricing-evidence",
+            severity="warn",
+            detected_by="coverage",
+            target_agent="collector",
+            target_subagent="pricing",
+            target_competitor="Cursor",
+            field_path="raw_sources[pricing][Cursor]",
+            problem="Missing official pricing evidence.",
+            redo_scope=RedoScope(
+                kind="collector",
+                target_subagent="pricing",
+                target_competitor="Cursor",
+                rationale="Collect official pricing evidence.",
+            ),
+        )
+    )
+    markdown = """
+# Cursor vs Copilot
+
+## 1. 执行摘要
+核心判断已经存在。 [source:source-0]
+
+## 2. 决策摘要
+建议先围绕定价透明度组织战报。 [source:source-0]
+
+## 3. 竞争发现
+- Cursor 在定价表达上更清晰。 [source:source-0]
+
+## 4. 竞品深挖
+Cursor 与 Copilot 的优劣势已经覆盖。 [source:source-0] [source:source-1]
+
+## 5. 战报
+销售响应应保持在已验证证据范围内。 [source:source-0]
+
+## 9. 证据与QA支撑
+证据支撑父区块已经存在。 [source:source-0]
+
+## 13. RAG缺口补全
+- 差距 `gap-pricing-evidence`：建议的检索查询：Cursor 定价 官方页面。 [source:source-1]
+
+## 14. 场景QA清单
+- 场景：l1_pricing_pack。 [source:source-2]
+""".strip()
+
+    report = writer._harden_report_markdown(detail, markdown)
+
+    assert "## 证据与 QA 支撑" not in report
+    assert "## RAG 缺口补全" not in report
+    assert "## 场景 QA 清单" not in report
 
 
 def test_writer_hardening_treats_english_headings_as_zh_cn_aliases() -> None:
