@@ -617,6 +617,14 @@ class RunService(
         record = self._runs.get(run_id)
         return bool(record and record.pending_interrupts)
 
+    def can_modify_plan_competitors(self, run_id: str) -> bool:
+        record = self._runs.get(run_id)
+        return bool(
+            record
+            and record.detail.status == "interrupted"
+            and "planner" in record.pending_interrupts
+        )
+
     def _refresh_task_decomposition(self, plan: AnalysisPlan) -> None:
         plan.task_decomposition = self._build_task_decomposition(plan)
 
@@ -791,7 +799,10 @@ class RunService(
             return None
         if record.pending_interrupts:
             stage = next(iter(record.pending_interrupts))
-            if request.competitors is not None and stage != "planner":
+            has_competitor_edits = request.competitors is not None or bool(
+                request.competitor_edits
+            )
+            if has_competitor_edits and stage != "planner":
                 raise ValueError("Competitor edits can only be applied during planner review.")
             hitl_actor_id = (
                 "system"

@@ -732,6 +732,36 @@ def test_hitl_router_delegates_manual_redo_guard_to_runtime_command() -> None:
     assert response.json()["detail"] == "No eligible QA findings or redo limit reached."
 
 
+def test_hitl_router_rejects_competitor_edits_outside_planner_review() -> None:
+    run_service = _memory_run_service(
+        _settings(hitl_enabled=True, ark_api_key="key", ark_model="model")
+    )
+    detail = asyncio.run(
+        run_service.create_run(
+            _request(
+                topic="AI IDE",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+    )
+    app = create_app()
+    app.dependency_overrides[get_run_service] = lambda: run_service
+    client = TestClient(app)
+
+    response = client.post(
+        f"/api/runs/{detail.id}/resume",
+        json={
+            "decision": "modify_plan",
+            "competitor_edits": [{"action": "add", "name": "Windsurf"}],
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Competitor edits require an active planner review."
+
+
 def test_workflow_router_exposes_scheduled_scan_start() -> None:
     class FakeWorkflowService:
         async def start_scheduled_scan(
