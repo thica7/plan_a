@@ -349,7 +349,17 @@ class QualityAgentMixin:
         issues.extend(self._build_text_quality_issues(detail))
         issues.extend(self._build_matrix_consistency_issues(detail))
         issues.extend(self._build_reflector_qa_issues(detail))
-        return issues
+        return self._dedupe_qa_issues(issues)
+
+    def _dedupe_qa_issues(self, issues: list[QCIssue]) -> list[QCIssue]:
+        deduped: list[QCIssue] = []
+        seen_ids: set[str] = set()
+        for issue in issues:
+            if issue.id in seen_ids:
+                continue
+            seen_ids.add(issue.id)
+            deduped.append(issue)
+        return deduped
 
     def _missing_dimensions(self, detail: RunDetail) -> list[str]:
         return [

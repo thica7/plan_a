@@ -1,9 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useI18n } from "../../stores/i18n";
 import { ViewSwitcher } from "./ViewSwitcher";
 
 describe("ViewSwitcher", () => {
+  beforeEach(() => {
+    useI18n.getState().setLocale("en-US");
+  });
+
   it("switches to a real workbench view state", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

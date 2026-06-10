@@ -28,6 +28,7 @@ from packages.enterprise import (
     build_report_scope,
     build_report_version_diff,
 )
+from packages.i18n.language import report_label
 from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.service import RunService
 from packages.refs import audit_relationship_resource_id
@@ -1221,9 +1222,9 @@ async def test_run_service_applies_confirmed_memory_to_plan() -> None:
     assert created.plan.memory_recall_score >= 70
     assert any("battlecard" in item for item in created.plan.memory_prompt_context)
     report_md = service._demo_report(created)
-    assert "## Memory Context" in report_md
-    assert "## Scenario QA Checklist" in report_md
-    assert "## Claim Validation & Evidence Risk" in report_md
+    assert f"## {report_label(created.output_language, 'memory_context')}" in report_md
+    assert f"## {report_label(created.output_language, 'scenario_checklist')}" in report_md
+    assert f"## {report_label(created.output_language, 'claim_risk')}" in report_md
     assert created.plan.memory_candidate_ids[0] in report_md
     assert "Confirmed MemoryAgent guidance" in report_md
 

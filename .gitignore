@@ -3,7 +3,10 @@ runs/
 logs/
 backups/
 .claude/
+.superpowers/
 .ccg/
+.worktrees/
+dev-*.log
 backend/.test-artifacts/
 dev_plan_final/
 docs/superpowers/
@@ -33,6 +36,7 @@ frontend/vite.config.js
 frontend/vite.config.d.ts
 
 review/*.html
+review/
 review/*_review_*.md
 review/*_review_*.html
 review/**/*.html

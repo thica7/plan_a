@@ -246,6 +246,12 @@ const translations: Record<Locale, Record<string, string>> = {
     'newRun.builder': '运行构建器',
     'newRun.advancedOptions': '高级选项',
     'newRun.advancedDesc': '附加的数据源策略和工作流控制在就绪栏中执行。',
+    'newRun.outputLanguage': '报告语言',
+    'newRun.outputLanguageDesc': '生成内容的语言',
+    'newRun.outputChinese': '简体中文',
+    'newRun.outputChineseDesc': '默认中文报告和建议',
+    'newRun.outputEnglish': 'English',
+    'newRun.outputEnglishDesc': '生成英文报告',
 
     // ─── Run Detail ───
     'runDetail.loading': '加载运行中',
@@ -1025,6 +1031,12 @@ const translations: Record<Locale, Record<string, string>> = {
     'newRun.builder': 'Run builder',
     'newRun.advancedOptions': 'Advanced Options',
     'newRun.advancedDesc': 'Additional source policy and workflow controls are enforced in the readiness rail.',
+    'newRun.outputLanguage': 'Report language',
+    'newRun.outputLanguageDesc': 'language for generated content',
+    'newRun.outputChinese': 'Simplified Chinese',
+    'newRun.outputChineseDesc': 'Default Chinese reports and recommendations',
+    'newRun.outputEnglish': 'English',
+    'newRun.outputEnglishDesc': 'Generate English reports',
 
     // ─── Run Detail ───
     'runDetail.loading': 'Loading run',
@@ -1579,7 +1591,7 @@ const translations: Record<Locale, Record<string, string>> = {
 export const useI18n = create<I18nState>()(
   persist(
     (set, get) => ({
-      locale: 'en-US',
+      locale: 'zh-CN',
       setLocale: (locale) => set({ locale }),
       toggleLocale: () =>
         set((state) => ({

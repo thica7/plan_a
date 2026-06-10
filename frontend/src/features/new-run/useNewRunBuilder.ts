@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createRun, getRuntime, getWorkspaceQuotaDecision, listScenarioPacks, listSkills } from "../../api/client";
 import type {
+  RunCreateRequest,
   RuntimeConfig,
   ScenarioPack,
   SkillSpec,
@@ -23,6 +24,7 @@ import {
   type CompetitorMode,
   type ExecutionMode,
   type LayerSelection,
+  type OutputLanguage,
 } from "./types";
 
 export function useNewRunBuilder() {
@@ -38,6 +40,7 @@ export function useNewRunBuilder() {
   const [quotaDecision, setQuotaDecision] = useState<WorkspaceQuotaDecision | null>(null);
   const [selected, setSelected] = useState<string[]>(coreDimensions);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("demo");
+  const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>("zh-CN");
   const [autoRedoWarn, setAutoRedoWarn] = useState(false);
   const [hitlEnabled, setHitlEnabled] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
@@ -163,7 +166,7 @@ export function useNewRunBuilder() {
     setSubmitting(true);
     setError(null);
     try {
-      const run = await createRun({
+      const payload: RunCreateRequest = {
         idempotency_key: newRunIdempotencyKey(),
         topic,
         competitors: competitorList,
@@ -171,9 +174,11 @@ export function useNewRunBuilder() {
         competitor_layer: selectedLayer === "auto" ? null : selectedLayer,
         scenario_id: scenarioId || null,
         execution_mode: executionMode,
+        output_language: outputLanguage,
         auto_redo_warn_enabled: autoRedoWarn,
         hitl_enabled: hitlEnabled,
-      });
+      };
+      const run = await createRun(payload);
       navigate(`/runs/${"id" in run ? run.id : run.run_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create run");
@@ -195,6 +200,7 @@ export function useNewRunBuilder() {
     hitlEnabled,
     isSubmitting,
     lockedDimensions,
+    outputLanguage,
     quotaDecision,
     runBlockedByQuota,
     runtime,
@@ -208,6 +214,7 @@ export function useNewRunBuilder() {
     setCompetitors,
     setError,
     setExecutionMode,
+    setOutputLanguage,
     setScenarioId,
     setSelected,
     setTopic,

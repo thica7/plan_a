@@ -2013,7 +2013,9 @@ class CollectorAgentMixin:
             if scoped_dimensions and source.dimension not in scoped_dimensions:
                 normalized.append(source)
                 continue
-            covered_competitors = self._normalize_covered_competitors(detail, source.competitor)
+            covered_competitors = source.covered_competitors or self._normalize_covered_competitors(
+                detail, source.competitor
+            )
             url_key = str(source.url) if source.url else ""
             key = (
                 source.dimension,
@@ -2102,7 +2104,10 @@ class CollectorAgentMixin:
                 )
                 if source is None:
                     continue
-                source.covered_competitors = list(detail.plan.competitors)
+                covered = self._cross_source_covered_competitors(detail, source)
+                if len(covered) < 2:
+                    continue
+                source.covered_competitors = covered
                 detail.raw_sources.append(source)
                 self._append_agent_message(
                     record,
@@ -2117,6 +2122,77 @@ class CollectorAgentMixin:
                     },
                 )
                 break
+
+    def _cross_source_covered_competitors(
+        self,
+        detail: RunDetail,
+        source: RawSource,
+    ) -> list[str]:
+        text = " ".join(
+            [
+                source.competitor,
+                source.title,
+                str(source.url or ""),
+                source.snippet,
+            ]
+        )
+        return [
+            competitor
+            for competitor in detail.plan.competitors
+            if self._source_text_mentions_competitor(text, competitor)
+        ]
+
+    def _source_text_mentions_competitor(self, text: str, competitor: str) -> bool:
+        haystack = " ".join(text.casefold().split())
+        for term in self._competitor_mention_terms(competitor):
+            if self._term_appears_in_text(term, haystack):
+                return True
+        return False
+
+    def _competitor_mention_terms(self, competitor: str) -> list[str]:
+        generic = {
+            "ai",
+            "agent",
+            "assistant",
+            "code",
+            "coding",
+            "desktop",
+            "editor",
+            "model",
+            "models",
+            "openai",
+            "tool",
+            "tools",
+        }
+        terms: list[str] = []
+        raw_terms = [
+            competitor,
+            re.sub(r"\([^)]*\)", "", competitor),
+            *re.findall(r"\(([^)]*)\)", competitor),
+            *identity_terms_for_competitor(competitor),
+        ]
+        raw_terms.extend(re.split(r"[\s/()&+-]+", competitor))
+        seen: set[str] = set()
+        for value in raw_terms:
+            term = " ".join(str(value).casefold().split()).strip(" -_/")
+            if not term or len(term) < 4 or term in generic:
+                continue
+            if term in seen:
+                continue
+            seen.add(term)
+            terms.append(term)
+        return terms
+
+    def _term_appears_in_text(self, term: str, haystack: str) -> bool:
+        if any(separator in term for separator in (".", "/")):
+            return term in haystack
+        parts = [part for part in re.split(r"[\s._/-]+", term) if part]
+        if not parts:
+            return False
+        pattern = r"(?<![a-z0-9])" + r"[\s._/-]+".join(
+            re.escape(part) for part in parts
+        ) + r"(?![a-z0-9])"
+        return re.search(pattern, haystack, flags=re.IGNORECASE) is not None
 
     def _has_cross_competitor_source(self, detail: RunDetail, dimension: str) -> bool:
         expected = set(detail.plan.competitors)

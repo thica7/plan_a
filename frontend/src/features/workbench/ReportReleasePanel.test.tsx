@@ -1,8 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReportReleaseGate, ReportVersionRecord } from "../../api/types";
+import { useI18n } from "../../stores/i18n";
 import { ReportReleasePanel } from "./ReportReleasePanel";
 
 const draftVersion = {
@@ -61,6 +62,10 @@ function renderPanel(
 }
 
 describe("ReportReleasePanel", () => {
+  beforeEach(() => {
+    useI18n.getState().setLocale("en-US");
+  });
+
   it("starts review through a real report action", async () => {
     const user = userEvent.setup();
     const { onReportAction } = renderPanel();

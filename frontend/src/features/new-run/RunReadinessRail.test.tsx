@@ -56,14 +56,14 @@ describe("RunReadinessRail", () => {
   it("submits only when required dimensions are selected", () => {
     renderRail({ selected: [] });
 
-    expect(screen.getByRole("button", { name: /start run/i })).toBeDisabled();
-    expect(screen.getByText("Select at least one analysis dimension before starting a run")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /开始运行/i })).toBeDisabled();
+    expect(screen.getByText("开始运行前至少选择一个分析维度")).toBeInTheDocument();
   });
 
   it("locks launch while submitting", () => {
     renderRail({ isSubmitting: true });
 
-    const button = screen.getByRole("button", { name: /starting run/i });
+    const button = screen.getByRole("button", { name: /正在启动运行/i });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("data-action-state", "loading");
   });
@@ -73,7 +73,9 @@ describe("RunReadinessRail", () => {
     const toggleHitl = vi.fn();
     renderRail({ toggleHitl });
 
-    await user.click(screen.getByRole("checkbox", { name: /human review pauses/i }));
+    await user.click(
+      screen.getByRole("checkbox", { name: /human review pauses|人工审核暂停/i }),
+    );
 
     expect(toggleHitl).toHaveBeenCalledWith(true);
   });

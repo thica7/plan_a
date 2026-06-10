@@ -1,8 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeConfig } from "../../api/types";
+import { useI18n } from "../../stores/i18n";
 import { Topbar } from "./Topbar";
 
 const runtime = {
@@ -22,6 +23,10 @@ function renderTopbar(onMenuClick = vi.fn()) {
 }
 
 describe("Topbar", () => {
+  beforeEach(() => {
+    useI18n.getState().setLocale("en-US");
+  });
+
   it("opens mobile navigation through a real local action", async () => {
     const user = userEvent.setup();
     const { onMenuClick } = renderTopbar();

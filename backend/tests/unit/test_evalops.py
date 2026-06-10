@@ -689,11 +689,35 @@ Cursor has clearer standalone pricing evidence, while Copilot benefits from broa
 distribution. The recommendation is evidence-backed but still requires security and procurement
 verification before publication. [source:source-0] [source:source-1]
 
-## Source Quality & Coverage
-The report uses verified webpages for both competitors and separates direct evidence from
-remaining validation tasks. Cursor pricing and Copilot pricing are both represented in scoped
-sources, and the confidence profile is strong enough for a draft release gate review.
-[source:source-0] [source:source-1]
+## Decision Summary
+- Choose Cursor when the buyer values a focused AI coding workspace, transparent standalone
+  pricing, and low-friction workflow adoption for product-engineering pods. [source:source-0]
+- Choose Copilot when enterprise distribution, IDE familiarity, and procurement leverage matter
+  more than a dedicated AI-native editor path. [source:source-1]
+- The release recommendation is a gated Cursor-first battlecard with Copilot positioned as the
+  low-change incumbent option until security and procurement evidence is refreshed. [source:source-2]
+
+## Competitive Findings
+- Pricing evidence is direct enough to support a draft recommendation, but procurement packaging
+  and enterprise discounting remain follow-up checks before publication. [source:source-0]
+- Feature differentiation is strongest around daily workflow focus for Cursor and ecosystem
+  breadth for Copilot, so the buyer narrative should avoid absolute productivity claims.
+  [source:source-2] [source:source-3]
+- Risk language should stay caveated because security, SSO, and buyer validation evidence are
+  not yet sufficient for a final external claim. [source:source-1]
+
+## Competitor Deep Dives
+| Competitor | Strength | Watchout |
+| --- | --- | --- |
+| Cursor | Clear AI coding workflow and pricing story for teams evaluating a dedicated editor. [source:source-0] | Needs current security and procurement validation before final recommendation. [source:source-2] |
+| Copilot | Broad enterprise distribution and familiar IDE adoption path. [source:source-1] | Bundled packaging can obscure direct buyer value comparisons. [source:source-3] |
+
+## Battlecard
+Sales should lead with pricing clarity, workflow focus, and switching objections, then keep the
+recommendation framed as draft-ready rather than fully publishable. The strongest wedge is Cursor's
+single-purpose AI workflow, while the strongest Copilot defense is enterprise familiarity and
+procurement coverage. Use this battlecard to guide buyer questions, not to make unsupported claims
+about productivity, security posture, or total cost. [source:source-0] [source:source-2]
 
 ## Side-by-Side Decision Matrix
 | Dimension | Cursor | Copilot |
@@ -701,16 +725,17 @@ sources, and the confidence profile is strong enough for a draft release gate re
 | Pricing | clear price [source:source-0] | bundled path [source:source-1] |
 | Feature | focused AI workflow [source:source-2] | broad IDE ecosystem [source:source-3] |
 
+## Source Quality & Coverage
+The report uses verified webpages for both competitors and separates direct evidence from
+remaining validation tasks. Cursor pricing and Copilot pricing are both represented in scoped
+sources, and the confidence profile is strong enough for a draft release gate review.
+[source:source-0] [source:source-1]
+
 ## Scenario QA Checklist
 - Scenario: l1_pricing_pack; layer: L1; recommended dimensions: pricing, feature, persona.
 - Analyst question: Which plan gates drive perceived value?
 - Evidence requirement: Pricing rows require official pricing-page evidence.
 - QA rules: claim_has_evidence, source_reliability_min
-
-## Battlecard
-Sales should lead with pricing clarity, workflow focus, and switching objections. The battlecard
-should avoid absolute claims until enterprise security controls, procurement packaging, and buyer
-risk evidence are verified. [source:source-0] [source:source-2]
 
 ## Claim Validation & Evidence Risk
 Structured claims are cited and no blocker claim-validation risk is open for this draft. Security

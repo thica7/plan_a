@@ -17,7 +17,7 @@ export function ExecutionModePanel({
     <section className="form-section execution-section">
       <SectionHeading
         icon={<Zap size={17} aria-hidden />}
-        index="06"
+        index="07"
         meta={t('newRun.executionModeDesc')}
         title={t('newRun.executionMode')}
       />

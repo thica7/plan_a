@@ -4,6 +4,7 @@ import { DepthSection } from "../features/new-run/DepthSection";
 import { DimensionsSection } from "../features/new-run/DimensionsSection";
 import { ExecutionModePanel } from "../features/new-run/ExecutionModePanel";
 import { LensSection } from "../features/new-run/LensSection";
+import { OutputLanguageSection } from "../features/new-run/OutputLanguageSection";
 import { RunReadinessRail } from "../features/new-run/RunReadinessRail";
 import { ScopeSection } from "../features/new-run/ScopeSection";
 import { useNewRunBuilder } from "../features/new-run/useNewRunBuilder";
@@ -62,6 +63,10 @@ export function NewRun() {
           <DepthSection
             selectedLayer={builder.selectedLayer}
             updateSelectedLayer={builder.updateSelectedLayer}
+          />
+          <OutputLanguageSection
+            outputLanguage={builder.outputLanguage}
+            setOutputLanguage={builder.setOutputLanguage}
           />
           <ExecutionModePanel
             executionMode={builder.executionMode}
