@@ -807,6 +807,7 @@ def test_writer_hardens_report_with_rag_gap_fill_context() -> None:
 
 
 def test_writer_grounding_prompt_lists_allowed_sources_and_gap_queries() -> None:
+    import asyncio
     writer = _WriterHarness()
     detail = _run_detail(
         run_id="writer-grounding-contract",
@@ -836,7 +837,7 @@ def test_writer_grounding_prompt_lists_allowed_sources_and_gap_queries() -> None
         )
     )
 
-    prompt = writer._writer_grounding_prompt(detail)
+    prompt = asyncio.run(writer._writer_grounding_prompt(detail))
 
     assert "Grounded evidence contract" in prompt
     assert "[source:source-0]" in prompt
