@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from packages.schema.models import (
     CompetitorKnowledge,
     ReviewThemeItem,
@@ -35,6 +38,16 @@ def test_review_theme_summary_requires_cited_items() -> None:
     assert summary.sentiment_hint == "positive"
 
 
+def test_review_theme_items_mark_uncited_claims_as_gaps() -> None:
+    with pytest.raises(ValidationError):
+        ReviewThemeItem(theme="Uncited")
+
+    gap = ReviewThemeItem(theme="Uncited", evidence_gap=True)
+
+    assert gap.source_ids == []
+    assert gap.evidence_gap is True
+
+
 def test_swot_items_mark_uncited_claims_as_gaps() -> None:
     cited = SWOTItem(
         text="Clear pricing supports direct comparison.",
@@ -50,3 +63,13 @@ def test_swot_items_mark_uncited_claims_as_gaps() -> None:
     assert swot.strengths[0].evidence_gap is False
     assert swot.weaknesses[0].source_ids == []
     assert swot.weaknesses[0].evidence_gap is True
+
+
+def test_swot_items_reject_uncited_non_gap_claims() -> None:
+    with pytest.raises(ValidationError):
+        SWOTItem(text="Uncited")
+
+    gap = SWOTItem(text="Uncited", evidence_gap=True)
+
+    assert gap.source_ids == []
+    assert gap.evidence_gap is True

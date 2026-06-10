@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 
 class RedoScope(BaseModel):
@@ -185,6 +185,12 @@ class ReviewThemeItem(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     evidence_gap: bool = False
 
+    @model_validator(mode="after")
+    def require_gap_for_uncited_item(self) -> ReviewThemeItem:
+        if not self.source_ids and not self.evidence_gap:
+            raise ValueError("uncited review theme items must set evidence_gap=True")
+        return self
+
 
 class ReviewThemeSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -208,6 +214,12 @@ class SWOTItem(BaseModel):
     source_ids: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     evidence_gap: bool = False
+
+    @model_validator(mode="after")
+    def require_gap_for_uncited_item(self) -> SWOTItem:
+        if not self.source_ids and not self.evidence_gap:
+            raise ValueError("uncited SWOT items must set evidence_gap=True")
+        return self
 
 
 class SWOTAnalysis(BaseModel):
