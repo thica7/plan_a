@@ -1,12 +1,25 @@
 from datetime import datetime
 
 from packages.agents.analysts.logic import AnalystAgentMixin
+from packages.agents.qa.logic import QualityAgentMixin
 from packages.schema.api_dto import RunDetail
-from packages.schema.models import AnalysisPlan, CompetitorKnowledge, RawSource
+from packages.schema.models import (
+    AnalysisPlan,
+    CompetitorKB,
+    CompetitorKnowledge,
+    RawSource,
+    ReviewThemeItem,
+    ReviewThemeSummary,
+)
 
 
 class AnalystHarness(AnalystAgentMixin):
     pass
+
+
+class QualityHarness(QualityAgentMixin):
+    def _source_matches_competitor(self, source: RawSource, competitor: str) -> bool:
+        return source.competitor.casefold() == competitor.casefold()
 
 
 def test_review_payload_builds_praise_complaints_and_switching() -> None:
@@ -341,3 +354,70 @@ def test_merge_repairs_uncited_review_items_before_validation() -> None:
     assert item.theme == "Uncited praise"
     assert item.source_ids == []
     assert item.evidence_gap is True
+
+
+def test_qa_accepts_review_summary_without_requiring_feature_tree_nodes() -> None:
+    detail = RunDetail(
+        id="run-review-qa",
+        idempotency_key="",
+        workspace_id="default-workspace",
+        project_id=None,
+        topic="AI coding assistant user reviews",
+        status="running",
+        execution_mode="demo",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["review"]),
+        competitor_kbs={
+            "Cursor": CompetitorKB(
+                competitor="Cursor",
+                slices={"review": ["Users praise speed. [source:review-1]"]},
+                sources=["review-1"],
+                confidence=0.82,
+            )
+        },
+        competitor_knowledge={
+            "Cursor": CompetitorKnowledge(
+                competitor="Cursor",
+                review_summary=ReviewThemeSummary(
+                    competitor="Cursor",
+                    dimension="review",
+                    praise_themes=[
+                        ReviewThemeItem(
+                            theme="Speed",
+                            evidence="Users praise speed.",
+                            source_ids=["review-1"],
+                            confidence=0.82,
+                        )
+                    ],
+                    source_ids=["review-1"],
+                    sentiment_hint="positive",
+                    confidence=0.82,
+                ),
+                source_ids=["review-1"],
+                confidence=0.82,
+            )
+        },
+        raw_sources=[
+            RawSource(
+                id="review-1",
+                competitor="Cursor",
+                dimension="review",
+                source_type="review_site",
+                title="Cursor reviews",
+                snippet="Users praise speed.",
+                content_hash="reviewhash",
+                confidence=0.82,
+            )
+        ],
+    )
+
+    issues = QualityHarness()._build_structured_knowledge_issues(detail, [])
+
+    assert not any("feature_tree.nodes" in issue.problem for issue in issues)
+    assert not any(
+        issue.severity == "blocker"
+        and issue.detected_by == "schema"
+        and issue.target_subagent == "review"
+        for issue in issues
+    )
