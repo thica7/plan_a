@@ -1462,6 +1462,73 @@ Source coverage exists. [source:source-0]
     assert "- Threats: Procurement proof needs more cited evidence. Evidence gap." in report
 
 
+def test_writer_hardening_inserts_review_gap_without_review_evidence() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="review-gap-core-section",
+        execution_mode="real",
+        source_count=2,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.output_language = "en-US"
+    detail.plan.competitor_layer = "L1"
+    detail.plan.dimensions = ["pricing", "feature"]
+    markdown = """
+# Cursor vs Copilot
+
+## Competitive Findings
+Pricing and feature evidence exists. [source:source-0]
+
+## Competitor Deep Dives
+Cursor and Copilot have cited deep dives. [source:source-1]
+
+## Battlecard
+Layer analysis exists. [source:source-0]
+""".strip()
+
+    report = writer._ensure_report_required_sections(detail, markdown)
+
+    review_heading = f"## {report_label('en-US', 'review_theme_summary')}"
+    swot_heading = f"## {report_label('en-US', 'swot_analysis')}"
+    _assert_headings_in_order(
+        report,
+        [
+            "## Competitive Findings",
+            review_heading,
+            "## Competitor Deep Dives",
+            swot_heading,
+            "## Battlecard",
+        ],
+    )
+    review_body = report[
+        report.index(review_heading) : report.index("## Competitor Deep Dives")
+    ]
+    assert "Evidence gap" in review_body
+
+
+def test_writer_hardening_generates_chinese_review_and_swot_headings() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="zh-review-swot-headings",
+        execution_mode="real",
+        source_count=2,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.output_language = "zh-CN"
+    detail.plan.competitor_layer = "L1"
+    detail.plan.dimensions = ["pricing", "feature"]
+
+    report = writer._ensure_report_required_sections(
+        detail,
+        "# Cursor vs Copilot\n\n## 竞争发现\n已有竞争发现。[source:source-0]",
+    )
+
+    assert "## 用户评价整理" in report
+    assert "## SWOT 分析" in report
+
+
 def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
     writer = _WriterHarness()
     expected_sections = {

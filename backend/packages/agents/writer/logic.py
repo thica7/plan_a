@@ -1554,23 +1554,33 @@ class WriterAgentMixin:
             if self._review_summary_has_content(knowledge.review_summary)
         ]
         needs_review = self._needs_review_theme_section(detail)
-        if not needs_review and not summaries:
-            return []
 
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = ["", f"## {report_label(detail.output_language, 'review_theme_summary')}"]
         if not summaries:
             refs = self._format_source_refs(self._matrix_source_ids(detail))
             if is_zh:
-                lines.append(
-                    "- 已请求评价、用户或买家维度分析，但尚无可引用的结构化评价主题；"
-                    f"相关结论需保留为 Evidence gap。{refs}"
-                )
+                if needs_review:
+                    lines.append(
+                        "- 已请求评价、用户或买家维度分析，但尚无可引用的结构化评价主题；"
+                        f"相关结论需保留为 Evidence gap。{refs}"
+                    )
+                else:
+                    lines.append(
+                        "- 本核心报告节尚无可引用的用户评价主题；"
+                        f"不要编造评价结论，需标记为 Evidence gap。{refs}"
+                    )
             else:
-                lines.append(
-                    "- Review, user, or buyer analysis was requested, but no cited review "
-                    f"themes are available yet; keep conclusions as Evidence gap.{refs}"
-                )
+                if needs_review:
+                    lines.append(
+                        "- Review, user, or buyer analysis was requested, but no cited review "
+                        f"themes are available yet; keep conclusions as Evidence gap.{refs}"
+                    )
+                else:
+                    lines.append(
+                        "- This required core report section has no cited user-review themes "
+                        f"yet; do not invent review conclusions. Evidence gap.{refs}"
+                    )
             return lines
 
         category_labels = (
