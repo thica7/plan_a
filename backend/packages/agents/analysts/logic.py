@@ -25,11 +25,34 @@ from packages.schema.models import (
     PricingModel,
     PricingTier,
     RawSource,
+    ReviewThemeItem,
+    ReviewThemeSummary,
     UserPersonaModel,
     UserPersonaSegment,
 )
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+REVIEW_SUMMARY_DIMENSION_HINTS = (
+    "review",
+    "persona",
+    "user",
+    "customer",
+    "buyer",
+    "feedback",
+    "adoption",
+    "switching",
+)
+POSITIVE_REVIEW_TERMS = ("praise", "like", "liked", "love", "fast", "easy", "strong")
+NEGATIVE_REVIEW_TERMS = (
+    "complain",
+    "complaint",
+    "friction",
+    "difficult",
+    "slow",
+    "confusing",
+    "expensive",
+)
+SWITCHING_REVIEW_TERMS = ("switch", "migrate", "replace", "alternative")
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
@@ -761,11 +784,21 @@ class AnalystAgentMixin:
         dimension: str,
         dimension_sources: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        uses_review_summary = self._dimension_uses_review_summary(dimension)
         usable_sources = [
             source
             for source in dimension_sources
             if str(source.get("id") or "").strip()
-            and source_business_snippet(source, dimension=dimension)
+            and (
+                source_business_snippet(source, dimension=dimension)
+                or (
+                    uses_review_summary
+                    and any(
+                        str(source.get(key) or "").strip()
+                        for key in ("summary", "snippet", "text")
+                    )
+                )
+            )
         ][:3]
         claims = [
             {
@@ -787,6 +820,15 @@ class AnalystAgentMixin:
                     "confidence": 0.0,
                 }
             ]
+        review_summary = (
+            self._build_review_summary_from_source_dicts(
+                competitor=competitor,
+                dimension=dimension,
+                sources=usable_sources,
+            )
+            if uses_review_summary
+            else None
+        )
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
             claim_models = [
@@ -815,7 +857,7 @@ class AnalystAgentMixin:
                 if claim.get("source_ids")
             ]
             claim_text = " ".join(claim.claim for claim in claim_models)
-            return {
+            payload = {
                 "user_personas": {
                     "segments": [
                         segment.model_dump(mode="json")
@@ -828,6 +870,11 @@ class AnalystAgentMixin:
                     "summary_claims": claims,
                 }
             }
+            if review_summary is not None:
+                payload["review_summary"] = review_summary.model_dump(mode="json")
+            return payload
+        if review_summary is not None:
+            return {"review_summary": review_summary.model_dump(mode="json")}
         claim_models = [
             KnowledgeClaim.model_validate(claim)
             for claim in claims
@@ -1001,6 +1048,39 @@ class AnalystAgentMixin:
             for source in detail.raw_sources
             if source.dimension == dimension and self._source_matches_competitor(source, competitor)
         ]
+
+    def _source_matches_competitor(self, source: RawSource, competitor: str) -> bool:
+        if source.covered_competitors:
+            return competitor in source.covered_competitors
+        return self._competitor_label_matches(source.competitor, competitor)
+
+    def _competitor_label_matches(self, source_competitor: str, competitor: str) -> bool:
+        source_competitor = source_competitor.strip()
+        source_key = source_competitor.casefold()
+        competitor_key = competitor.strip().casefold()
+        if source_key == competitor_key:
+            return True
+        if self._competitor_label_means_all(source_key):
+            return True
+        parts = [
+            part.strip().casefold()
+            for part in re.split(r",|;|/|\||\s+and\s+|\s*&\s*", source_competitor)
+            if part.strip()
+        ]
+        if competitor_key in parts:
+            return True
+        return competitor_key in source_key
+
+    def _competitor_label_means_all(self, source_key: str) -> bool:
+        return bool(
+            source_key.startswith("all ")
+            or "all target" in source_key
+            or "all competitors" in source_key
+            or "all models" in source_key
+            or "cross-model all" in source_key
+            or "cross model all" in source_key
+            or re.search(r"\ball\s+\d+\s+(?:target\s+)?(?:models|competitors|llms)\b", source_key)
+        )
 
     def _source_ids_for_competitor_dimension(
         self,
@@ -1260,6 +1340,18 @@ class AnalystAgentMixin:
             knowledge.feature_tree.nodes = self._feature_nodes_from_text(
                 " ".join(claim.claim for claim in claims), claims
             )
+        if self._dimension_uses_review_summary(dimension):
+            review_sources = [
+                source.model_dump(mode="json")
+                for source in self._sources_for_competitor_dimension(
+                    detail, competitor, dimension
+                )
+            ]
+            knowledge.review_summary = self._build_review_summary_from_source_dicts(
+                competitor=competitor,
+                dimension=dimension,
+                sources=review_sources,
+            )
         source_ids = [
             source.id
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
@@ -1331,6 +1423,13 @@ class AnalystAgentMixin:
                 except Exception:
                     knowledge.feature_tree.nodes = []
                     knowledge.feature_tree.summary_claims = []
+
+        review_section = raw.get("review_summary")
+        if isinstance(review_section, dict):
+            try:
+                knowledge.review_summary = ReviewThemeSummary.model_validate(review_section)
+            except Exception:
+                knowledge.review_summary = ReviewThemeSummary(competitor=competitor, dimension=dimension)
 
         self._sanitize_structured_knowledge_slice_sources(
             detail,
@@ -1515,6 +1614,33 @@ class AnalystAgentMixin:
                 }
             }
         )
+
+    def _structured_claims_for_dimension(
+        self,
+        knowledge: CompetitorKnowledge | None,
+        dimension: str,
+    ) -> list[KnowledgeClaim]:
+        if knowledge is None:
+            return []
+        dimension_key = dimension.casefold()
+        if "pricing" in dimension_key:
+            return [
+                *knowledge.pricing_model.notes,
+                *[claim for tier in knowledge.pricing_model.tiers for claim in tier.claims],
+            ]
+        if "persona" in dimension_key or "user" in dimension_key:
+            return [
+                *knowledge.user_personas.summary_claims,
+                *[
+                    claim
+                    for segment in knowledge.user_personas.segments
+                    for claim in segment.claims
+                ],
+            ]
+        return [
+            *knowledge.feature_tree.summary_claims,
+            *[claim for node in knowledge.feature_tree.nodes for claim in node.claims],
+        ]
 
     def _claims_from_structured_payload(
         self, payload: dict[str, Any], dimension: str
@@ -2083,6 +2209,124 @@ class AnalystAgentMixin:
 
     def _any_pattern_matches(self, text: str, patterns: list[str]) -> bool:
         return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
+
+    def _dimension_uses_review_summary(self, dimension: str) -> bool:
+        key = dimension.casefold().replace("-", "_")
+        return any(hint in key for hint in REVIEW_SUMMARY_DIMENSION_HINTS)
+
+    def _build_review_summary_from_source_dicts(
+        self,
+        *,
+        competitor: str,
+        dimension: str,
+        sources: list[dict[str, Any]],
+    ) -> ReviewThemeSummary:
+        source_ids = [
+            str(source.get("id") or "").strip()
+            for source in sources
+            if str(source.get("id") or "").strip()
+        ]
+        text = " ".join(
+            " ".join(
+                str(source.get(key) or "")
+                for key in ("title", "summary", "snippet", "text")
+            )
+            for source in sources
+        )
+        confidence = max(
+            (
+                float(source.get("confidence") or 0.0)
+                for source in sources
+                if str(source.get("id") or "").strip()
+            ),
+            default=0.0,
+        )
+        praise = []
+        complaints = []
+        blockers = []
+        switching = []
+        if any(term in text.casefold() for term in POSITIVE_REVIEW_TERMS):
+            praise.append(
+                self._review_theme_item(
+                    "Praised workflow or value theme",
+                    text,
+                    source_ids,
+                    confidence,
+                )
+            )
+        if any(term in text.casefold() for term in NEGATIVE_REVIEW_TERMS):
+            item = self._review_theme_item(
+                "Complaint or adoption friction theme",
+                text,
+                source_ids,
+                confidence,
+            )
+            complaints.append(item)
+            blockers.append(item)
+        if any(term in text.casefold() for term in SWITCHING_REVIEW_TERMS):
+            switching.append(
+                self._review_theme_item(
+                    "Switching or migration trigger",
+                    text,
+                    source_ids,
+                    confidence,
+                )
+            )
+        return ReviewThemeSummary(
+            competitor=competitor,
+            dimension=dimension,
+            praise_themes=praise,
+            complaint_themes=complaints,
+            adoption_blockers=blockers,
+            switching_triggers=switching,
+            persona_segments=self._review_persona_segments(text),
+            sentiment_hint=self._review_sentiment_hint(bool(praise), bool(complaints)),
+            source_ids=source_ids,
+            confidence=confidence,
+        )
+
+    def _review_theme_item(
+        self,
+        theme: str,
+        text: str,
+        source_ids: list[str],
+        confidence: float,
+    ) -> ReviewThemeItem:
+        evidence = self._compact_review_evidence(text)
+        return ReviewThemeItem(
+            theme=theme,
+            evidence=evidence,
+            source_ids=source_ids,
+            confidence=confidence,
+            evidence_gap=not source_ids,
+        )
+
+    def _compact_review_evidence(self, text: str, limit: int = 220) -> str:
+        compact = " ".join(text.split())
+        if len(compact) <= limit:
+            return compact
+        return f"{compact[: limit - 1].rstrip()}..."
+
+    def _review_persona_segments(self, text: str) -> list[str]:
+        normalized = text.casefold()
+        segments: list[str] = []
+        for label, terms in (
+            ("developers", ("developer", "engineer", "coding")),
+            ("enterprise buyers", ("enterprise", "buyer", "procurement")),
+            ("teams", ("team", "workspace", "organization")),
+        ):
+            if any(term in normalized for term in terms):
+                segments.append(label)
+        return segments[:4]
+
+    def _review_sentiment_hint(self, has_praise: bool, has_complaint: bool) -> str:
+        if has_praise and has_complaint:
+            return "mixed"
+        if has_praise:
+            return "positive"
+        if has_complaint:
+            return "negative"
+        return "unknown"
 
     def _enrich_persona_model_from_sources(
         self,
