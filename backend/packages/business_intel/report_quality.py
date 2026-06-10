@@ -47,6 +47,20 @@ USER_RESEARCH_DIMENSION_HINTS = {
     "use_case",
     "use case",
 }
+REVIEW_THEME_SOURCE_TYPES = {
+    "review_site",
+    *USER_RESEARCH_SOURCE_TYPES,
+}
+REVIEW_THEME_DIMENSION_HINTS = {
+    "review",
+    "persona",
+    "user",
+    "customer",
+    "buyer",
+    "feedback",
+    "adoption",
+    "switching",
+}
 
 
 @dataclass(frozen=True)
@@ -169,6 +183,8 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         ),
         "memory_context_section_score": _memory_context_section_score(detail),
         "user_research_section_score": _user_research_section_score(detail),
+        "review_theme_section_score": _review_theme_section_score(detail),
+        "swot_section_score": _swot_section_score(detail),
         "rag_gap_fill_section_score": _rag_gap_fill_section_score(detail),
         "qa_blocker_count": float(
             len([finding for finding in detail.qa_findings if finding.severity == "blocker"])
@@ -200,6 +216,8 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "scenario_checklist_section_score": values["scenario_checklist_section_score"],
         "memory_context_section_score": values["memory_context_section_score"],
         "user_research_section_score": values["user_research_section_score"],
+        "review_theme_section_score": values["review_theme_section_score"],
+        "swot_section_score": values["swot_section_score"],
         "rag_gap_fill_section_score": values["rag_gap_fill_section_score"],
         "qa_blocker_count": max(0.0, 1.0 - min(values["qa_blocker_count"] / 3.0, 1.0)),
         "warning_count": max(0.0, 1.0 - min(values["warning_count"] / 12.0, 1.0)),
@@ -233,6 +251,8 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         and values["scenario_checklist_section_score"] >= 1.0
         and values["memory_context_section_score"] >= 1.0
         and values["user_research_section_score"] >= 1.0
+        and values["review_theme_section_score"] >= 1.0
+        and values["swot_section_score"] >= 1.0
         and values["rag_gap_fill_section_score"] >= 1.0
         and values["qa_blocker_count"] <= 0
     )
@@ -250,10 +270,10 @@ def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower
     return [
         ("evidence_count", 0.05, "higher_is_better"),
         ("source_coverage_rate", 0.07, "higher_is_better"),
-        ("verified_source_rate", 0.09, "higher_is_better"),
+        ("verified_source_rate", 0.07, "higher_is_better"),
         ("claim_citation_rate", 0.08, "higher_is_better"),
         ("citation_validity_rate", 0.08, "higher_is_better"),
-        ("real_source_rate", 0.09, "higher_is_better"),
+        ("real_source_rate", 0.07, "higher_is_better"),
         ("gap_resolution_rate", 0.03, "higher_is_better"),
         ("field_support_rate", 0.03, "higher_is_better"),
         ("validated_claim_rate", 0.03, "higher_is_better"),
@@ -270,6 +290,8 @@ def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower
         ("scenario_checklist_section_score", 0.02, "higher_is_better"),
         ("memory_context_section_score", 0.02, "higher_is_better"),
         ("user_research_section_score", 0.02, "higher_is_better"),
+        ("review_theme_section_score", 0.02, "higher_is_better"),
+        ("swot_section_score", 0.02, "higher_is_better"),
         ("rag_gap_fill_section_score", 0.02, "higher_is_better"),
         ("qa_blocker_count", 0.05, "lower_is_better"),
         ("warning_count", 0.01, "lower_is_better"),
@@ -357,6 +379,8 @@ def _signal_checks(detail: RunDetail, snapshot: _QualitySnapshot) -> list[RunQua
         ("scenario_checklist_section_score", 1.0),
         ("memory_context_section_score", 1.0),
         ("user_research_section_score", 1.0),
+        ("review_theme_section_score", 1.0),
+        ("swot_section_score", 1.0),
         ("rag_gap_fill_section_score", 1.0),
     ]:
         if snapshot.values[name] < minimum:
@@ -620,6 +644,27 @@ def _report_label_aliases(*keys: str) -> tuple[str, ...]:
     )
 
 
+def _review_theme_section_aliases() -> tuple[str, ...]:
+    return (
+        *_report_label_aliases("review_theme_summary"),
+        "User Review Themes",
+        "Review Themes",
+        "Customer Review Themes",
+        "用户评价整理",
+        "鐢ㄦ埛璇勪环鏁寸悊",
+    )
+
+
+def _swot_section_aliases() -> tuple[str, ...]:
+    return (
+        *_report_label_aliases("swot_analysis"),
+        "SWOT Analysis",
+        "SWOT",
+        "SWOT 分析",
+        "SWOT 鍒嗘瀽",
+    )
+
+
 SUPPORT_SECTION_NEEDLES = (
     *_report_label_aliases(
         "evidence_support",
@@ -669,6 +714,8 @@ DUPLICATE_SECTION_ALIAS_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "Competitor Deep Dive",
         ),
     ),
+    ("review_theme_summary", _review_theme_section_aliases()),
+    ("swot_analysis", _swot_section_aliases()),
     (
         "battlecard",
         (
@@ -967,6 +1014,8 @@ def _known_core_analysis_aliases() -> tuple[str, ...]:
             "decision_summary",
             "competitive_findings",
             "competitor_deep_dives",
+            "review_theme_summary",
+            "swot_analysis",
             "battlecard",
             "workflow_enterprise_risk",
             "market_landscape",
@@ -977,6 +1026,10 @@ def _known_core_analysis_aliases() -> tuple[str, ...]:
         ),
         "Competitor Deep Dive",
         "Sales Objection",
+        "User Review Themes",
+        "Review Themes",
+        "Customer Review Themes",
+        "SWOT",
         "Enterprise Risk",
         "Switching",
         "Segmentation",
@@ -1058,6 +1111,8 @@ def _report_structure_score(detail: RunDetail) -> float:
         _has_heading(report_md, ("evidence appendix", "source appendix", "证据附录", "来源附录")),
         _memory_context_section_score(detail) >= 1.0,
         _user_research_section_score(detail) >= 1.0,
+        _review_theme_section_score(detail) >= 1.0,
+        _swot_section_score(detail) >= 1.0,
         _has_layer_heading(detail, report_md=report_md),
     ]
     return sum(1 for item in checks if item) / len(checks)
@@ -1110,6 +1165,22 @@ def _user_research_section_score(detail: RunDetail) -> float:
     return 1.0 if _has_heading(report_md, ("user research", "buyer research", "用户研究")) else 0.0
 
 
+def _review_theme_section_score(detail: RunDetail) -> float:
+    if not _needs_review_theme_section(detail):
+        return 1.0
+    section = _find_section_before_support(detail.report_md, _review_theme_section_aliases())
+    return 1.0 if section is not None and _section_has_substantive_body(section) else 0.0
+
+
+def _swot_section_score(detail: RunDetail) -> float:
+    section = _find_section_before_support(detail.report_md, _swot_section_aliases())
+    if section is None:
+        return 0.0
+    if all(_body_mentions_any(section.body, aliases) for aliases in _swot_quadrant_aliases()):
+        return 1.0
+    return 0.5
+
+
 def _rag_gap_fill_section_score(detail: RunDetail) -> float:
     if not _needs_rag_gap_fill_section(detail):
         return 1.0
@@ -1160,6 +1231,37 @@ def _needs_user_research_section(detail: RunDetail) -> bool:
             for hint in USER_RESEARCH_DIMENSION_HINTS
         )
         for dimension in detail.plan.dimensions
+    )
+
+
+def _needs_review_theme_section(detail: RunDetail) -> bool:
+    if any(source.source_type in REVIEW_THEME_SOURCE_TYPES for source in detail.raw_sources):
+        return True
+    return any(
+        any(
+            hint in dimension.casefold().replace("-", "_")
+            for hint in REVIEW_THEME_DIMENSION_HINTS
+        )
+        for dimension in detail.plan.dimensions
+    )
+
+
+def _body_mentions_any(body: str, aliases: tuple[str, ...]) -> bool:
+    normalized_body = _normalize_heading(repair_mojibake_text(body))
+    compact_body = _compact_heading_text(body)
+    return any(
+        _normalize_heading(alias) in normalized_body
+        or _compact_heading_text(alias) in compact_body
+        for alias in aliases
+    )
+
+
+def _swot_quadrant_aliases() -> tuple[tuple[str, ...], ...]:
+    return (
+        ("strengths", "strength", "优势", "優勢", "浼樺娍"),
+        ("weaknesses", "weakness", "劣势", "劣勢", "鍔ｅ娍"),
+        ("opportunities", "opportunity", "机会", "機會", "鏈轰細"),
+        ("threats", "threat", "威胁", "威脅", "濞佽儊"),
     )
 
 
@@ -1219,6 +1321,8 @@ def _regression_gate(
             "competitor_deep_dive_section_score",
             "layer_analysis_section_score",
             "core_analysis_depth_score",
+            "review_theme_section_score",
+            "swot_section_score",
             "qa_blocker_count",
         }
         and metric.normalized_score_delta is not None
@@ -1311,6 +1415,16 @@ def _clean_recommendations(
         recommendations.append(
             "Add a User Research Evidence section so survey, interview, or manual-note signals "
             "are separated from official factual proof."
+        )
+    if target.values.get("review_theme_section_score", 1.0) < 1.0:
+        recommendations.append(
+            "Add a User Review Themes section so buyer feedback, review signals, adoption "
+            "blockers, and switching cues are visible in the core analysis."
+        )
+    if target.values.get("swot_section_score", 1.0) < 1.0:
+        recommendations.append(
+            "Add a SWOT Analysis section with Strengths, Weaknesses, Opportunities, and Threats "
+            "so strategic implications are complete."
         )
     if target.values.get("rag_gap_fill_section_score", 1.0) < 1.0:
         recommendations.append(

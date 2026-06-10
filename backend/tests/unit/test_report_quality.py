@@ -1012,7 +1012,9 @@ def test_compare_run_quality_excludes_user_research_from_factual_source_rates() 
         run_id="mixed-research-and-official-sources",
         execution_mode="real",
         source_count=4,
-        report_md=_structured_report_md(),
+        report_md=_remove_report_section(
+            _structured_report_md(), report_label("en-US", "user_research_evidence")
+        ),
         metrics=RunMetrics(llm_calls=3, claim_citation_rate=1.0),
         trace_spans=[
             TraceSpan(
@@ -1081,7 +1083,9 @@ def test_compare_run_quality_flags_missing_memory_and_user_research_sections() -
         run_id="missing-memory-research",
         execution_mode="real",
         source_count=4,
-        report_md=_structured_report_md(),
+        report_md=_remove_report_section(
+            _structured_report_md(), report_label("en-US", "user_research_evidence")
+        ),
         metrics=RunMetrics(
             llm_calls=3,
             source_coverage_rate=1.0,
@@ -1190,6 +1194,206 @@ def test_compare_run_quality_requires_rag_gap_fill_section_for_collector_gaps() 
     repaired_metrics = {metric.name: metric for metric in repaired.metrics}
 
     assert repaired_metrics["rag_gap_fill_section_score"].target_value == 1.0
+
+
+def test_report_quality_blocks_review_run_without_review_theme_section() -> None:
+    detail = _run_detail(
+        run_id="missing-review-themes",
+        execution_mode="real",
+        source_count=4,
+        report_md=_remove_report_section(
+            _structured_report_md(), report_label("en-US", "review_theme_summary")
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+        source_types=["webpage_verified", "review_site"],
+    )
+    detail.plan.dimensions = ["pricing", "review"]
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    blockers = {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert metrics["review_theme_section_score"].target_value == 0.0
+    assert comparison.report_quality_signal is False
+    assert "review_theme_section_score" in blockers
+    assert any("User Review Themes" in item for item in comparison.recommendations)
+
+
+def test_report_quality_blocks_without_swot_section() -> None:
+    without_swot = _remove_report_section(
+        _structured_report_md(), report_label("en-US", "swot_analysis")
+    )
+    incomplete_swot = (
+        f"## {report_label('en-US', 'swot_analysis')}\n"
+        "The report introduces SWOT but omits quadrant coverage. [source:source-0]"
+    )
+    heading_only = without_swot.replace(
+        "\n\n## Battlecard",
+        f"\n\n{incomplete_swot}\n\n## Battlecard",
+    )
+    missing_detail = _run_detail(
+        run_id="missing-swot",
+        execution_mode="real",
+        source_count=4,
+        report_md=without_swot,
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+    incomplete_detail = _run_detail(
+        run_id="incomplete-swot",
+        execution_mode="real",
+        source_count=4,
+        report_md=heading_only,
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=missing_detail.trace_spans,
+    )
+
+    missing = compare_run_quality(missing_detail)
+    incomplete = compare_run_quality(incomplete_detail)
+    missing_blockers = {
+        name
+        for check in missing.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+    incomplete_blockers = {
+        name
+        for check in incomplete.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert {metric.name: metric for metric in missing.metrics}[
+        "swot_section_score"
+    ].target_value == 0.0
+    assert {metric.name: metric for metric in incomplete.metrics}[
+        "swot_section_score"
+    ].target_value == 0.5
+    assert "swot_section_score" in missing_blockers
+    assert "swot_section_score" in incomplete_blockers
+    assert any("SWOT Analysis" in item for item in missing.recommendations)
+
+
+def test_report_quality_accepts_review_and_swot_sections() -> None:
+    detail = _run_detail(
+        run_id="review-and-swot",
+        execution_mode="real",
+        source_count=4,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+        source_types=["webpage_verified", "review_site"],
+    )
+    detail.plan.dimensions = ["pricing", "review"]
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["review_theme_section_score"].target_value == 1.0
+    assert metrics["swot_section_score"].target_value == 1.0
+    assert comparison.report_quality_signal is True
+
+
+def test_report_quality_does_not_require_review_section_for_non_review_run() -> None:
+    detail = _run_detail(
+        run_id="non-review-missing-review-themes",
+        execution_mode="real",
+        source_count=4,
+        report_md=_remove_report_section(
+            _structured_report_md(), report_label("en-US", "review_theme_summary")
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    blockers = {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert metrics["review_theme_section_score"].target_value == 1.0
+    assert metrics["swot_section_score"].target_value == 1.0
+    assert "review_theme_section_score" not in blockers
+    assert comparison.report_quality_signal is True
 
 
 def test_compare_run_quality_accepts_chinese_rag_gap_fill_section() -> None:
@@ -2625,6 +2829,15 @@ def test_compare_run_quality_deduplicates_release_gate_warning_count() -> None:
     assert warning_metric.target_value == 2.0
 
 
+def _remove_report_section(markdown: str, heading: str) -> str:
+    return re.sub(
+        rf"\n\n## {re.escape(heading)}\n.*?(?=\n\n## |\Z)",
+        "",
+        markdown,
+        flags=re.DOTALL,
+    )
+
+
 def _structured_report_md() -> str:
     return """
 # Cursor vs Copilot Direct Battlecard
@@ -2656,6 +2869,21 @@ readiness until trust-center evidence is linked; implication: use it as the clar
 directly; watchouts: separate bundled value from standalone feature parity; implication: treat it
 as the incumbent workflow defense. [source:source-1] [source:source-3]
 
+## User Review Themes
+User review themes show Cursor is easier to explain during procurement, while Copilot benefits
+from existing Microsoft workflow familiarity. [source:source-0] [source:source-1]
+- Customer theme: pricing clarity supports fast evaluation. [source:source-0]
+- Adoption blocker: security review and procurement packaging still need deeper evidence.
+[source:source-2]
+
+## SWOT Analysis
+- Strengths: Cursor has pricing clarity that sales can explain quickly. [source:source-0]
+- Weaknesses: Enterprise procurement proof remains incomplete. [source:source-2]
+- Opportunities: Buyer education can focus on standalone value and workflow speed.
+[source:source-0]
+- Threats: Copilot can defend through Microsoft distribution and bundled procurement.
+[source:source-1]
+
 ## Battlecard
 Sales should use pricing transparency and switching objections as the first battlecard line.
 [source:source-0]
@@ -2670,6 +2898,10 @@ The source set separates verified webpages from lower-confidence leads, so the r
 does not treat search snippets as final proof. Cursor pricing is supported by a direct verified
 page, while Copilot evidence is treated as adequate for comparison but still needs procurement
 review before publication. [source:source-0] [source:source-1]
+
+## User Research Evidence
+Review and buyer-feedback inputs are treated as directional demand evidence, not official factual
+proof. [source:source-0] [source:source-1]
 
 ## Side-by-Side Decision Matrix
 | Dimension | Cursor | Copilot |
