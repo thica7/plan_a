@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -55,7 +56,19 @@ def deterministic_claim_text_from_source(
 
 
 def publishable_text_noise_problem(text: str) -> str | None:
+    if _is_markdown_table_separator(text):
+        return None
     return text_noise_problem(text)
+
+
+def _is_markdown_table_separator(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        return False
+    cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+    if len(cells) < 2:
+        return False
+    return all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells)
 
 
 def _source_field(source: object, field: str) -> str:

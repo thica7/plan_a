@@ -2004,6 +2004,42 @@ def test_qa_flags_report_text_noise_as_writer_only_blocker() -> None:
     assert issues[0].redo_scope.kind == "writer_only"
 
 
+def test_qa_does_not_flag_markdown_table_separators_as_text_noise() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        report_md=(
+            "# Report\n\n"
+            "| Dimension | A | Source |\n"
+            "| :--- | :--- | :--- |\n"
+            "| Pricing | $10 per seat | [source:pricing-1] |\n\n"
+            "| 维度 | Cursor | GitHub Copilot | Claude Code | 来源/置信度 |\n"
+            "| :--- | :--- | :--- | :--- | :--- |\n"
+            "| 定价模式 | API 用量制 | 席位制 | API 用量制 | verified |\n"
+        ),
+    )
+
+    issues = service._build_report_text_quality_issues(detail)
+
+    assert issues == []
+
+
 def test_qa_flags_structured_claim_text_noise_as_analyst_blocker() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
