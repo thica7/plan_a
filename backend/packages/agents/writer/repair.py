@@ -64,9 +64,9 @@ def build_writer_repair_plan(
     if upstream_data_changed:
         return WriterRepairPlan(
             mode="full",
-            reason="upstream data changed; full rewrite allowed with anti-regression guard",
+            reason="upstream data changed; full rewrite allowed",
             previous_report_protectable=protectable,
-            anti_regression_required=protectable,
+            anti_regression_required=False,
         )
     if not protectable:
         return WriterRepairPlan(

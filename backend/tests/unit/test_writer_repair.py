@@ -40,6 +40,17 @@ def test_writer_repair_requires_full_rewrite_for_poor_report() -> None:
     assert "report is not protectable" in plan.reason
 
 
+def test_writer_repair_upstream_changed_allows_full_without_anti_regression() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issues = [_report_line_issue(line_number=8, problem="stale pricing evidence")]
+
+    plan = build_writer_repair_plan(detail, issues, upstream_data_changed=True)
+
+    assert plan.mode == "full"
+    assert plan.previous_report_protectable is True
+    assert plan.anti_regression_required is False
+
+
 def test_apply_line_repair_removes_only_still_noisy_lines() -> None:
     markdown = "good opening\nbad line \ufffd\nkeep this cited line [source:pricing-1]\n"
     issues = [_report_line_issue(line_number=2, problem="non-publishable text noise")]

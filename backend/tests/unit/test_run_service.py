@@ -4940,6 +4940,74 @@ async def test_writer_upstream_changed_allows_full_rewrite_with_guard_metadata()
     assert "Cursor has updated pricing transparency" in record.detail.report_md
     assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
     assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+    assert record.detail.agent_messages[-1].payload["anti_regression_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_writer_upstream_changed_accepts_thinner_full_rewrite() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return (
+            "# Cursor vs Copilot Pricing Update\n\n"
+            "## Executive Summary\n"
+            "Cursor has updated pricing transparency for this refreshed collector pass. "
+            "[source:pricing-1]\n\n"
+            "## Decision Summary\n"
+            "Use the updated Cursor pricing transparency evidence as the current sales "
+            "talk track, while treating older comparison depth as superseded. "
+            "[source:pricing-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer upstream thin rewrite",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    scope = RedoScope(
+        kind="collector",
+        target_subagent="pricing",
+        target_competitor="Cursor",
+        rationale="new pricing evidence changed upstream data",
+    )
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="collector",
+        redo_scope=scope,
+        redo_scopes=[scope],
+        before_md=record.detail.report_md,
+        issue_ids=["collector-pricing-changed"],
+        qa_issue_ids_before=["collector-pricing-changed"],
+        issue_count_before=1,
+    )
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert "Cursor has updated pricing transparency" in record.detail.report_md
+    assert "Customer theme: pricing clarity supports fast evaluation" not in record.detail.report_md
+    assert payload["writer_repair_mode"] == "full"
+    assert payload["previous_report_protected"] is True
+    assert payload["anti_regression_reason"] is None
 
 
 @pytest.mark.asyncio
