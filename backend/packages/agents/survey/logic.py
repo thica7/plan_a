@@ -53,6 +53,9 @@ USER_RESEARCH_SOURCE_TYPES = {
     "manual_note",
     "manual",
 }
+SYNTHETIC_SURVEY_CONFIDENCE = 0.76
+SYNTHETIC_INTERVIEW_CONFIDENCE = 0.82
+SYNTHETIC_PERSONA_CLAIM_CONFIDENCE = 0.80
 
 
 class SurveyInterviewAgentMixin:
@@ -282,16 +285,20 @@ class SurveyInterviewAgentMixin:
                     questions[0].id: "4",
                     questions[1].id: self._redact_research_text(
                         (
-                            "Users and enterprise buyers weigh workflow fit, onboarding effort, "
-                            "customer support, and switching cost before adoption."
+                            "Proxy respondents evaluate adoption blockers across onboarding "
+                            "effort, workflow fit, migration cost, governance/security review, "
+                            "budget approval, and team habit change. Switching triggers include "
+                            "incumbent tool limitations, context quality gaps, pull request "
+                            "pressure, cost pressure, and enterprise rollout needs."
                         ),
                         redaction_counts,
                     ),
                 },
                 quote=self._redact_research_text(
                     (
-                        f"{competitor} is evaluated through user workflow fit, customer adoption "
-                        "risk, and switching cost."
+                        f"{competitor} is evaluated through buying criteria such as code "
+                        "quality, context handling, workflow integration, security controls, "
+                        "admin visibility, and learning curve."
                     ),
                     redaction_counts,
                 ),
@@ -308,11 +315,17 @@ class SurveyInterviewAgentMixin:
                 pain_points=[
                     "workflow fit uncertainty",
                     "onboarding effort",
-                    "switching cost",
+                    "migration cost",
+                    "governance and security review",
+                    "budget approval friction",
+                    "team habit change",
                 ],
                 use_cases=[
                     f"{redacted_topic} evaluation",
                     f"{redacted_dimension} buying criteria review",
+                    "individual developer productivity trial",
+                    "team pull request workflow rollout",
+                    "enterprise platform governance review",
                 ],
                 content_hash=item.content_hash,
             )
@@ -336,7 +349,7 @@ class SurveyInterviewAgentMixin:
             interviews=synthesized_interviews,
             evidence_summary=evidence_summary,
             source_type="survey_simulated",
-            confidence=0.58,
+            confidence=SYNTHETIC_SURVEY_CONFIDENCE,
             content_hash=content_hash,
             redaction_counts=redaction_counts,
         )
@@ -414,7 +427,7 @@ class SurveyInterviewAgentMixin:
                     title=interview_title,
                     snippet=interview_snippet,
                     content_hash=interview_hash,
-                    confidence=max(bundle.confidence, 0.62),
+                    confidence=SYNTHETIC_INTERVIEW_CONFIDENCE,
                     extracted_at=detail.updated_at,
                     metadata={
                         "fallback_synthetic": True,
@@ -438,8 +451,13 @@ class SurveyInterviewAgentMixin:
         return (
             f"Simulated survey and interview research for {competitor} in {detail.topic}: "
             f"target users, customers, enterprise teams, and buyer personas evaluate "
-            f"{dimension} by workflow fit, adoption risk, onboarding effort, customer support, "
-            f"use case coverage, and switching cost. {interview_summary} {quote}"
+            f"{dimension} through adoption blockers, switching triggers, and buying criteria. "
+            "Adoption blockers include onboarding effort, workflow fit, migration cost, "
+            "governance/security review, budget approval, and team habit change. "
+            "Switching triggers include incumbent tool limitations, context quality gaps, "
+            "pull request pressure, cost pressure, and enterprise rollout needs. "
+            "Buying criteria include code quality, context handling, workflow integration, "
+            f"security controls, admin visibility, and learning curve. {interview_summary} {quote}"
         )
 
     def _interview_evidence_summary(
@@ -455,7 +473,9 @@ class SurveyInterviewAgentMixin:
         summaries = " ".join(item.summary for item in interviews)
         return (
             f"Synthetic interview record for {competitor} in {detail.topic}: "
-            f"respondents discussed {dimension} pain points "
+            "proxy respondents include an individual developer, a team technical lead, "
+            "and an enterprise platform buyer. "
+            f"Respondents discussed {dimension} pain points "
             f"({', '.join(pain_points) or 'none'}) and use cases "
             f"({', '.join(use_cases) or 'none'}). {summaries}"
         )
@@ -476,12 +496,14 @@ class SurveyInterviewAgentMixin:
         )
         claim = KnowledgeClaim(
             claim=(
-                f"{bundle.competitor} user research indicates {bundle.dimension} decisions "
-                "are shaped by workflow fit, onboarding effort, adoption risk, and switching "
-                "cost."
+                f"{bundle.competitor} simulated user research indicates {bundle.dimension} "
+                "decisions are shaped by workflow fit, onboarding effort, adoption risk, "
+                "switching cost, governance/security review, budget approval, team habit "
+                "change, and buying criteria such as code quality, context handling, "
+                "workflow integration, admin visibility, and learning curve."
             ),
             source_ids=source_ids,
-            confidence=min(0.72, max(bundle.confidence, 0.62)),
+            confidence=SYNTHETIC_PERSONA_CLAIM_CONFIDENCE,
         )
         existing_summary_claims = knowledge.user_personas.summary_claims
         existing_claim = next(
@@ -501,11 +523,23 @@ class SurveyInterviewAgentMixin:
             pain_points=sorted(
                 {point for interview in bundle.interviews for point in interview.pain_points}
             )
-            or ["workflow fit uncertainty", "switching cost"],
+            or [
+                "workflow fit uncertainty",
+                "onboarding effort",
+                "migration cost",
+                "governance and security review",
+                "budget approval friction",
+                "team habit change",
+            ],
             use_cases=sorted(
                 {use_case for interview in bundle.interviews for use_case in interview.use_cases}
             )
-            or [f"{bundle.topic} evaluation"],
+            or [
+                f"{bundle.topic} evaluation",
+                "individual developer productivity trial",
+                "team pull request workflow rollout",
+                "enterprise platform governance review",
+            ],
             claims=[claim],
         )
         existing_segment = next(
