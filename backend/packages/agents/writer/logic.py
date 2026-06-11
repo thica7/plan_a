@@ -91,16 +91,24 @@ class WriterAgentMixin:
         redo_issues = list(redo_issue_by_id.values())
         redo_source_message_ids = [message.id for message in redo_messages]
         if pending_issue_ids:
+            writer_only_messages_without_issue_ids: list[str] = []
             for message in record.detail.agent_messages:
                 if message.message_type != "redo_request":
                     continue
-                message_issue_ids = set(message.payload.get("issue_ids", []))
+                raw_issue_ids = message.payload.get("issue_ids", [])
+                if raw_issue_ids:
+                    message_issue_ids = set(raw_issue_ids)
+                    if message_issue_ids & pending_issue_ids:
+                        redo_source_message_ids.append(message.id)
+                    continue
                 redo_scope = message.payload.get("redo_scope", {})
                 redo_scope_kind = (
                     redo_scope.get("kind") if isinstance(redo_scope, dict) else None
                 )
-                if message_issue_ids & pending_issue_ids or redo_scope_kind == "writer_only":
-                    redo_source_message_ids.append(message.id)
+                if redo_scope_kind == "writer_only":
+                    writer_only_messages_without_issue_ids.append(message.id)
+            if len(writer_only_messages_without_issue_ids) == 1:
+                redo_source_message_ids.append(writer_only_messages_without_issue_ids[0])
         redo_source_message_ids = list(dict.fromkeys(redo_source_message_ids))
         if redo_issues:
             repair_plan = build_writer_repair_plan(detail, redo_issues)

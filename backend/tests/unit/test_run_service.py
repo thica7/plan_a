@@ -4329,6 +4329,33 @@ async def test_writer_line_repair_preserves_protectable_report_without_llm() -> 
         problem=f"Report line {noisy_line_number} contains non-publishable text noise.",
         redo_scope=RedoScope(kind="writer_only", rationale="repair noisy report line"),
     )
+    stale_issue = QCIssue(
+        id="issue-stale-writer-only",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        field_path="report_md.line[1]",
+        problem="Older writer-only issue should not be linked to this repair.",
+        redo_scope=RedoScope(kind="writer_only", rationale="stale writer-only repair"),
+    )
+    stale_message = service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": stale_issue.redo_scope.model_dump(mode="json"),
+            "issues": [stale_issue.model_dump(mode="json")],
+            "issue_ids": [stale_issue.id],
+        },
+    )
+    service._consume_queued_agent_messages(
+        record,
+        to_agent="writer_only",
+        consumer_agent="redo_router",
+        message_types={"redo_request"},
+    )
     record.detail.qa_findings = [issue]
     record.pending_graph_redo = PendingGraphRedo(
         iteration=1,
@@ -4369,6 +4396,7 @@ async def test_writer_line_repair_preserves_protectable_report_without_llm() -> 
     assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "line"
     assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
     assert redo_message.id in record.detail.agent_messages[-1].source_message_ids
+    assert stale_message.id not in record.detail.agent_messages[-1].source_message_ids
 
 
 @pytest.mark.asyncio
