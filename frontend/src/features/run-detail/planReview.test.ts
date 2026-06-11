@@ -11,6 +11,7 @@ import {
   serializeCompetitorReview,
   updateCompetitorRowDecision,
   updateCompetitorRowName,
+  visibleHitlInterruptForRun,
   type CompetitorReviewRow,
 } from "./planReview";
 
@@ -66,6 +67,32 @@ describe("plan review dimension helpers", () => {
     expect(hitlStageFromCurrentNode("writer")).toBeNull();
     expect(fallbackHitlMessage("planner")).toBe("Planner is ready for review.");
     expect(fallbackHitlMessage("qa")).toBe("QA review is ready.");
+  });
+
+  it("ignores stale planner interrupts when the persisted node is QA review", () => {
+    const interrupt = visibleHitlInterruptForRun("interrupted", "qa_hitl", [
+      {
+        type: "interrupt",
+        message: "Planner is ready for review.",
+        payload: { interrupt_node: "planner_hitl", stage: "planner" },
+      },
+    ]);
+
+    expect(interrupt?.payload.stage).toBe("qa");
+    expect(interrupt?.payload.interrupt_node).toBe("qa_hitl");
+    expect(interrupt?.message).toBe("QA review is ready.");
+  });
+
+  it("hides stale interrupts once the run is no longer interrupted", () => {
+    expect(
+      visibleHitlInterruptForRun("running", "qa_hitl", [
+        {
+          type: "interrupt",
+          message: "QA review is ready.",
+          payload: { interrupt_node: "qa_hitl", stage: "qa" },
+        },
+      ]),
+    ).toBeUndefined();
   });
 });
 

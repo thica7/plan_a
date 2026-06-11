@@ -3,9 +3,12 @@ import { useParams, useSearchParams } from "react-router-dom";
 import {
   exportRunComplianceReport,
   getDecisionReplay,
+  getAgentMessages,
   getRun,
   getRunComplianceReport,
   getRunQualityComparison,
+  getToolCallMessages,
+  getTraceSpans,
   listRuns,
   redoRun,
   resumeRun,
@@ -13,11 +16,14 @@ import {
 } from "../../api/client";
 import type {
   ArtifactRecord,
+  AgentMessage,
   DecisionReplayReport,
   RunComplianceReport,
   RunQualityComparison,
   RunStatus,
   RunSummary,
+  ToolCallMessage,
+  TraceSpan,
 } from "../../api/types";
 import { buildReportSourceBundle } from "../report/sourceBundle";
 import { useRunStore } from "../../stores/run";
@@ -30,9 +36,8 @@ import {
   serializeCompetitorReview,
   updateCompetitorRowDecision,
   updateCompetitorRowName,
-  fallbackHitlMessage,
-  hitlStageFromCurrentNode,
   parsePlanDimensionsInput,
+  visibleHitlInterruptForRun,
   type CompetitorReviewDecision,
   type CompetitorReviewRow,
 } from "./planReview";
@@ -48,6 +53,7 @@ export function useRunDetailController() {
   );
   const [error, setError] = useState<string | null>(null);
   const [isRedoing, setRedoing] = useState(false);
+  const [activeHitlDecision, setActiveHitlDecision] = useState<HitlDecision | null>(null);
   const [planDimensions, setPlanDimensions] = useState("");
   const [competitorRows, setCompetitorRows] = useState<CompetitorReviewRow[]>([]);
   const [qualityComparison, setQualityComparison] = useState<RunQualityComparison | null>(null);
@@ -57,6 +63,9 @@ export function useRunDetailController() {
   const [complianceReport, setComplianceReport] = useState<RunComplianceReport | null>(null);
   const [complianceExport, setComplianceExport] = useState<ArtifactRecord | null>(null);
   const [isExportingCompliance, setExportingCompliance] = useState(false);
+  const [traceSpans, setTraceSpans] = useState<TraceSpan[] | null>(null);
+  const [agentMessages, setAgentMessages] = useState<AgentMessage[] | null>(null);
+  const [toolCallMessages, setToolCallMessages] = useState<ToolCallMessage[] | null>(null);
 
   const redoLimitReached = detail ? detail.revisions.length >= detail.max_iterations : false;
   const canApplyPlanDimensionChanges = detail
@@ -65,25 +74,10 @@ export function useRunDetailController() {
   const canApplyPlanReviewChanges = detail
     ? canSavePlanReview(competitorRows, detail.plan.competitors, canApplyPlanDimensionChanges)
     : false;
-  const latestInterrupt = useMemo(
-    () => [...events].reverse().find((event) => event.type === "interrupt"),
-    [events],
+  const visibleInterrupt = useMemo(
+    () => visibleHitlInterruptForRun(detail?.status, detail?.current_node, events),
+    [detail?.current_node, detail?.status, events],
   );
-  const visibleInterrupt = useMemo(() => {
-    if (latestInterrupt || detail?.status !== "interrupted") return latestInterrupt;
-    const stage = hitlStageFromCurrentNode(detail.current_node);
-    if (!stage) return undefined;
-    if (stage === "planner") {
-      return {
-        message: fallbackHitlMessage(stage),
-        payload: { interrupt_node: "planner_hitl", stage: "planner" },
-      };
-    }
-    return {
-      message: fallbackHitlMessage(stage),
-      payload: { interrupt_node: "qa_hitl", stage: "qa" },
-    };
-  }, [detail?.current_node, detail?.status, latestInterrupt]);
   const reportSources = useMemo(() => {
     const projection = detail?.enterprise_projection;
     if (!projection) {
@@ -133,6 +127,9 @@ export function useRunDetailController() {
     setDecisionReplay(null);
     setComplianceReport(null);
     setComplianceExport(null);
+    setTraceSpans(null);
+    setAgentMessages(null);
+    setToolCallMessages(null);
 
     const load = (attempt: number) => {
       getRun(runId)
@@ -208,7 +205,11 @@ export function useRunDetailController() {
   useEffect(() => {
     if (!runId) return;
     if (events.some((event) => ["interrupt", "run_completed", "run_failed"].includes(event.type))) {
-      getRun(runId).then(setDetail).catch((err: Error) => setError(err.message));
+      getRun(runId).then(setDetail).catch((err: Error) => {
+        if (!useRunStore.getState().detail) {
+          setError(err.message);
+        }
+      });
       getRunQualityComparison(runId, qualityBaselineRunId || undefined)
         .then(setQualityComparison)
         .catch(() => setQualityComparison(null));
@@ -220,6 +221,27 @@ export function useRunDetailController() {
         .catch(() => setComplianceReport(null));
     }
   }, [events, qualityBaselineRunId, runId, setDetail]);
+
+  useEffect(() => {
+    if (!runId || activeView !== "agents") return;
+    let cancelled = false;
+    Promise.all([getTraceSpans(runId), getAgentMessages(runId), getToolCallMessages(runId)])
+      .then(([loadedSpans, loadedAgentMessages, loadedToolCalls]) => {
+        if (cancelled) return;
+        setTraceSpans(loadedSpans);
+        setAgentMessages(loadedAgentMessages);
+        setToolCallMessages(loadedToolCalls);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTraceSpans(null);
+        setAgentMessages(null);
+        setToolCallMessages(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView, runId]);
 
   useEffect(() => {
     if (detail) {
@@ -253,6 +275,8 @@ export function useRunDetailController() {
 
   async function handleHitl(decision: HitlDecision) {
     if (!runId) return;
+    if (activeHitlDecision) return;
+    setActiveHitlDecision(decision);
     setRedoing(decision === "redo");
     setError(null);
     try {
@@ -274,6 +298,7 @@ export function useRunDetailController() {
       setError(err instanceof Error ? err.message : "Unable to resume run");
     } finally {
       setRedoing(false);
+      setActiveHitlDecision(null);
     }
   }
 
@@ -347,6 +372,7 @@ export function useRunDetailController() {
     detail,
     error,
     events,
+    activeHitlDecision,
     handleExportCompliance,
     handleAddCompetitor,
     handleCompetitorDecisionChange,
@@ -357,6 +383,7 @@ export function useRunDetailController() {
     handleRedo,
     interruptStage,
     isExportingCompliance,
+    isHitlSubmitting: activeHitlDecision !== null,
     isRedoing,
     latestInterrupt: visibleInterrupt,
     planDimensions,
@@ -372,6 +399,9 @@ export function useRunDetailController() {
     setPlanDimensions,
     setQualityBaselineRunId,
     sourceCoverageRate,
+    traceSpans,
+    agentMessages,
+    toolCallMessages,
     verifiedSourceRate,
   };
 }

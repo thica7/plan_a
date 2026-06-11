@@ -747,6 +747,15 @@ def test_quote_quality_rejects_truncated_fragments() -> None:
     assert reason == "quote_truncated_fragment"
 
 
+def test_quote_quality_accepts_chinese_business_sentence() -> None:
+    reason = quote_quality_problem(
+        "最高影响维度结论：该产品定价方案按月计费，企业客户可以按席位购买并控制预算。",
+        dimension="pricing",
+    )
+
+    assert reason is None
+
+
 @pytest.mark.asyncio
 async def test_capture_cache_reuses_page_while_rebinding_candidate_lineage() -> None:
     cache = CaptureCache()

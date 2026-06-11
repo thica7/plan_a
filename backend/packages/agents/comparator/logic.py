@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 from collections import Counter
+from collections.abc import Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from packages.refs import merge_ordered_refs
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     ComparisonCell,
@@ -14,6 +16,8 @@ from packages.schema.models import (
     FeatureTree,
     PricingModel,
     RawSource,
+    SWOTAnalysis,
+    SWOTItem,
     UserPersonaModel,
 )
 
@@ -78,6 +82,7 @@ class ComparatorAgentMixin:
                 "deterministic_fallback": True,
             }
         detail.comparison_matrix = self._build_comparison_matrix(detail, payload)
+        self._refresh_swot_analyses(detail)
         self._append_agent_message(
             record,
             from_agent="comparator",
@@ -158,6 +163,157 @@ class ComparatorAgentMixin:
                 *vote_summary,
             ],
         )
+
+    def _refresh_swot_analyses(self, detail: RunDetail) -> None:
+        matrix = detail.comparison_matrix
+        if matrix is None:
+            return
+        cells_by_competitor: dict[str, list[ComparisonCell]] = {
+            competitor: [] for competitor in detail.plan.competitors
+        }
+        for cell in matrix.cells:
+            cells_by_competitor.setdefault(cell.competitor, []).append(cell)
+
+        for competitor in detail.plan.competitors:
+            knowledge = detail.competitor_knowledge.get(competitor)
+            if knowledge is None:
+                continue
+
+            valid_competitors = set(detail.plan.competitors)
+            strengths: list[SWOTItem] = []
+            weaknesses: list[SWOTItem] = []
+            opportunities: list[SWOTItem] = []
+
+            competitor_cells = cells_by_competitor.get(competitor, [])
+            cell_by_dimension = {cell.dimension: cell for cell in competitor_cells}
+            for dimension, winner in matrix.winner_by_dimension.items():
+                cell = cell_by_dimension.get(dimension)
+                if cell is None:
+                    continue
+                normalized_winner = winner.strip()
+                is_tie = normalized_winner.casefold() == "tie"
+                if normalized_winner == competitor:
+                    strengths.append(
+                        self._swot_item(
+                            f"Wins {dimension} comparison: {cell.value}",
+                            cell.source_ids,
+                            cell.confidence,
+                        )
+                    )
+                elif (
+                    normalized_winner in valid_competitors
+                    and normalized_winner != competitor
+                    and not is_tie
+                ):
+                    weaknesses.append(
+                        self._swot_item(
+                            f"Loses {dimension} comparison to {normalized_winner}: "
+                            f"{cell.value}",
+                            cell.source_ids,
+                            cell.confidence,
+                        )
+                    )
+
+            review_summary = knowledge.review_summary
+            for item in review_summary.praise_themes:
+                strengths.append(
+                    self._swot_item(item.theme, item.source_ids, item.confidence)
+                )
+            for item in [
+                *review_summary.complaint_themes,
+                *review_summary.adoption_blockers,
+            ]:
+                weaknesses.append(
+                    self._swot_item(item.theme, item.source_ids, item.confidence)
+                )
+            for item in review_summary.switching_triggers:
+                opportunities.append(
+                    self._swot_item(item.theme, item.source_ids, item.confidence)
+                )
+
+            if not opportunities:
+                persona_claim = next(
+                    (
+                        claim
+                        for claim in knowledge.user_personas.summary_claims
+                        if claim.source_ids
+                    ),
+                    None,
+                )
+                if persona_claim is not None:
+                    opportunities.append(
+                        self._swot_item(
+                            persona_claim.claim,
+                            persona_claim.source_ids,
+                            persona_claim.confidence,
+                        )
+                    )
+
+            threats = [
+                self._swot_item(
+                    "Threat requires more competitor or adjacent-workflow evidence."
+                )
+            ]
+            all_items = [*strengths, *weaknesses, *opportunities, *threats]
+            kb_sources = detail.competitor_kbs.get(competitor)
+            knowledge.swot_analysis = SWOTAnalysis(
+                competitor=competitor,
+                strengths=strengths,
+                weaknesses=weaknesses,
+                opportunities=opportunities,
+                threats=threats,
+                source_ids=merge_ordered_refs(
+                    knowledge.source_ids,
+                    kb_sources.sources if kb_sources is not None else [],
+                    *(cell.source_ids for cell in competitor_cells),
+                    review_summary.source_ids,
+                    *(item.source_ids for item in all_items),
+                ),
+                confidence=self._average_swot_confidence(
+                    all_items,
+                    [
+                        self._average_cell_confidence(competitor_cells),
+                        review_summary.confidence,
+                        knowledge.confidence,
+                    ],
+                ),
+            )
+
+    def _swot_item(
+        self,
+        text: str,
+        source_ids: Sequence[str] | None = None,
+        confidence: float = 0.0,
+    ) -> SWOTItem:
+        merged_source_ids = merge_ordered_refs(source_ids or [])
+        return SWOTItem(
+            text=" ".join(text.split()),
+            source_ids=merged_source_ids,
+            confidence=max(0.0, min(1.0, confidence)),
+            evidence_gap=not merged_source_ids,
+        )
+
+    def _average_cell_confidence(self, cells: Sequence[ComparisonCell]) -> float:
+        confidences = [cell.confidence for cell in cells if cell.confidence > 0]
+        if not confidences:
+            return 0.0
+        return max(0.0, min(1.0, sum(confidences) / len(confidences)))
+
+    def _average_swot_confidence(
+        self,
+        items: Sequence[SWOTItem],
+        fallback_confidences: Sequence[float] | None = None,
+    ) -> float:
+        confidences = [
+            item.confidence
+            for item in items
+            if item.source_ids and not item.evidence_gap and item.confidence > 0
+        ]
+        if not confidences and fallback_confidences is not None:
+            confidences = [value for value in fallback_confidences if value > 0]
+        if not confidences:
+            return 0.0
+        return max(0.0, min(1.0, sum(confidences) / len(confidences)))
 
     def _structured_matrix_value(
         self, detail: RunDetail, competitor: str, dimension: str

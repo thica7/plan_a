@@ -1,5 +1,7 @@
+from datetime import datetime
 from importlib.util import find_spec
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -211,6 +213,21 @@ def test_postgres_store_filters_generated_columns_when_validating_rows() -> None
     assert not hasattr(evidence, "search_vector")
 
 
+def test_postgres_workspace_usage_read_path_does_not_upsert_workspace() -> None:
+    store = object.__new__(EnterprisePostgresStore)
+    store.database_url = "postgresql://user:pass@localhost:5432/db"
+    store._dict_row = object()
+    fake_conn = _FakeWorkspaceUsageConnection()
+    store._connect = lambda *args, **kwargs: fake_conn  # noqa: ARG005
+
+    usage = store.get_workspace_usage("workspace-a")
+
+    assert usage.workspace_id == "workspace-a"
+    assert usage.run_count == 2
+    assert not any("INSERT INTO workspaces" in sql for sql, _ in fake_conn.cursor_obj.executed)
+    assert not any("INSERT INTO workspace_members" in sql for sql, _ in fake_conn.cursor_obj.executed)
+
+
 def test_postgres_sanitizer_removes_nul_and_control_chars_from_text() -> None:
     assert sanitize_postgres_text("alpha\x00beta\x18gamma") == "alphabeta gamma"
 
@@ -254,3 +271,71 @@ class _FakePostgresConnection:
     ) -> "_FakePostgresConnection":
         self.executed.append((sql, params or ()))
         return self
+
+
+class _FakeWorkspaceUsageConnection:
+    def __init__(self) -> None:
+        self.cursor_obj = _FakeWorkspaceUsageCursor()
+        self.committed = False
+
+    def __enter__(self) -> "_FakeWorkspaceUsageConnection":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def cursor(self) -> "_FakeWorkspaceUsageCursor":
+        return self.cursor_obj
+
+    def commit(self) -> None:
+        self.committed = True
+
+
+class _FakeWorkspaceUsageCursor:
+    def __init__(self) -> None:
+        self.executed: list[tuple[str, tuple[Any, ...]]] = []
+        self._next_row: dict[str, Any] | None = None
+
+    def __enter__(self) -> "_FakeWorkspaceUsageCursor":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def execute(
+        self,
+        sql: str,
+        params: tuple[Any, ...] | None = None,
+    ) -> "_FakeWorkspaceUsageCursor":
+        self.executed.append((sql, params or ()))
+        if "INSERT INTO workspaces" in sql or "INSERT INTO workspace_members" in sql:
+            raise AssertionError("workspace usage reads must not upsert workspace records")
+        if "SELECT * FROM workspaces" in sql:
+            self._next_row = {
+                "id": "workspace-a",
+                "name": "Workspace A",
+                "description": "",
+                "is_active": True,
+                "monthly_run_quota": 1000,
+                "monthly_token_quota": 2_000_000,
+                "monthly_cost_quota_usd": 100.0,
+                "quota_enforcement": "block",
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+            }
+        elif "FROM runs" in sql:
+            self._next_row = {
+                "run_count": 2,
+                "completed_run_count": 1,
+                "failed_run_count": 0,
+                "interrupted_run_count": 0,
+                "input_tokens_estimate": 100,
+                "output_tokens_estimate": 50,
+                "cost_estimate_usd": 0.01,
+            }
+        else:
+            self._next_row = None
+        return self
+
+    def fetchone(self) -> dict[str, Any] | None:
+        return self._next_row

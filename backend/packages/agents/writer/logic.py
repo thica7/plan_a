@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -18,7 +18,7 @@ from packages.rag.grounded_prompt import build_run_grounding_prompt
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
 from packages.schema.api_dto import RunDetail
-from packages.schema.models import FeatureNode, KnowledgeClaim, QCIssue, RawSource
+from packages.schema.models import FeatureNode, KnowledgeClaim, QCIssue, RawSource, SWOTItem
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
@@ -198,6 +198,7 @@ class WriterAgentMixin:
             )
         lines.extend(self._fallback_decision_summary_section(detail, matrix_sources))
         lines.extend(self._fallback_competitive_findings_section(detail))
+        lines.extend(self._fallback_review_theme_section(detail))
         if detail.comparison_matrix is not None:
             lines.extend(["", f"## {report_label(output_language, 'dimension_winners')}"])
             for dimension, winner in detail.comparison_matrix.winner_by_dimension.items():
@@ -215,6 +216,7 @@ class WriterAgentMixin:
                     f"{self._format_source_refs(cell.source_ids)}"
                 )
         lines.extend(self._fallback_competitor_deep_dives_section(detail))
+        lines.extend(self._fallback_swot_section(detail))
         lines.extend(self._fallback_layer_sections(detail, matrix_sources, fallback=False))
         lines.extend(self._fallback_evidence_support_section(detail))
         lines.extend(self._fallback_source_quality_section(detail))
@@ -271,8 +273,14 @@ class WriterAgentMixin:
                     "",
                     f"## {self._layer_section_heading(detail, fallback=fallback)}",
                     f"- 直接使用定位：在更强证据改变矩阵之前，将此视为近期替代决策。{refs}",
-                    f"- 反对意见处理：在销售或产品响应中，优先考虑定价、包装、功能对齐以及切换触发因素。{refs}",
-                    f"- 行动偏向：使用置信度最高的维度赢家作为初始战报核心，在发布前验证薄弱单元格。{refs}",
+                    (
+                        "- 反对意见处理：在销售或产品响应中，优先考虑定价、包装、"
+                        f"功能对齐以及切换触发因素。{refs}"
+                    ),
+                    (
+                        "- 行动偏向：使用置信度最高的维度赢家作为初始战报核心，"
+                        f"在发布前验证薄弱单元格。{refs}"
+                    ),
                 ]
             return [
                 "",
@@ -296,8 +304,14 @@ class WriterAgentMixin:
                     "",
                     f"## {self._layer_section_heading(detail, fallback=fallback)}",
                     f"- 相邻工作流威胁：通过工作流重叠、集成杠杆和切换成本暴露来解读矩阵。{refs}",
-                    f"- 购买风险：在提出采购建议之前，将已证实的组织控制措施与仅限搜索或低置信度的声明区分开来。{refs}",
-                    f"- 监视列表：监控相邻竞品只需一次集成或打包更改即可吞并目标工作流的维度。{refs}",
+                    (
+                        "- 购买风险：在提出采购建议之前，将已证实的组织控制措施"
+                        f"与仅限搜索或低置信度的声明区分开来。{refs}"
+                    ),
+                    (
+                        "- 监视列表：监控相邻竞品只需一次集成或打包更改即可"
+                        f"吞并目标工作流的维度。{refs}"
+                    ),
                 ]
             return [
                 "",
@@ -320,7 +334,10 @@ class WriterAgentMixin:
                 return [
                     "",
                     f"## {self._layer_section_heading(detail, fallback=fallback)}",
-                    f"- 类别视角：避免单一直接赢家，按细分市场、趋势信号和基准强度对竞品进行分组。{refs}",
+                    (
+                        "- 类别视角：避免单一直接赢家，按细分市场、趋势信号"
+                        f"和基准强度对竞品进行分组。{refs}"
+                    ),
                     f"- 战略视角：在证据广度仍低于景观级覆盖率时，将建议视为投资组合选项。{refs}",
                     f"- 不确定性视角：在做出类别范围的声明之前，优先增加竞品和市场级来源。{refs}",
                 ]
@@ -369,7 +386,9 @@ class WriterAgentMixin:
     ) -> list[str]:
         refs = self._format_source_refs(source_ids)
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
-        dimensions = ", ".join(detail.plan.dimensions) or ("所请求的维度" if is_zh else "the requested dimensions")
+        dimensions = ", ".join(detail.plan.dimensions) or (
+            "所请求的维度" if is_zh else "the requested dimensions"
+        )
         competitors = ", ".join(detail.plan.competitors) or detail.topic
         if detail.comparison_matrix is not None and detail.comparison_matrix.winner_by_dimension:
             winners = ", ".join(
@@ -377,7 +396,11 @@ class WriterAgentMixin:
                 for dimension, winner in detail.comparison_matrix.winner_by_dimension.items()
             )
         else:
-            winners = "尚无评分赢家；将来源覆盖率和 QA 状态作为约束条件" if is_zh else "no scored winner yet; use source coverage and QA status as constraints"
+            winners = (
+                "尚无评分赢家；将来源覆盖率和 QA 状态作为约束条件"
+                if is_zh
+                else "no scored winner yet; use source coverage and QA status as constraints"
+            )
         if is_zh:
             return [
                 "",
@@ -387,7 +410,8 @@ class WriterAgentMixin:
                     f"{competitors} 在 {dimensions} 上的表现；决策锚定在 {winners}。{refs}"
                 ),
                 (
-                    "- 决策姿态：优先考虑具有已证实、高置信度证据的维度，并将薄弱单元格路由到验证计划中。"
+                    "- 决策姿态：优先考虑具有已证实、高置信度证据的维度，"
+                    "并将薄弱单元格路由到验证计划中。"
                     f"{refs}"
                 ),
                 (
@@ -442,7 +466,8 @@ class WriterAgentMixin:
             if winner:
                 if is_zh:
                     lines.append(
-                        f"- {dimension}：{winner} 在该维度领先，但其含义应与引用的单元格和置信水平保持一致。"
+                        f"- {dimension}：{winner} 在该维度领先，"
+                        "但其含义应与引用的单元格和置信水平保持一致。"
                         f"{self._format_source_refs(source_ids)}"
                     )
                 else:
@@ -454,7 +479,8 @@ class WriterAgentMixin:
             elif cells:
                 if is_zh:
                     lines.append(
-                        f"- {dimension}：存在用于对比的证据，但在进行另一次验证之前，不应断言明确的赢家。"
+                        f"- {dimension}：存在用于对比的证据，"
+                        "但在进行另一次验证之前，不应断言明确的赢家。"
                         f"{self._format_source_refs(source_ids)}"
                     )
                 else:
@@ -543,7 +569,8 @@ class WriterAgentMixin:
                     f"{self._format_source_refs(source_ids)}"
                 )
                 lines.append(
-                    f"- {competitor} 注意事项：在将这些转为外部宣传信息之前，监控定价、包装、功能和买家反对意见声明。"
+                    f"- {competitor} 注意事项：在将这些转为外部宣传信息之前，"
+                    "监控定价、包装、功能和买家反对意见声明。"
                     f"{self._format_source_refs(source_ids)}"
                 )
             else:
@@ -572,7 +599,10 @@ class WriterAgentMixin:
             return [
                 "",
                 f"## {report_label(detail.output_language, 'evidence_support')}",
-                f"- 使用以下支持部分来审计来源质量、场景 QA、知识覆盖、声明风险以及剩余的验证任务。{refs}",
+                (
+                    "- 使用以下支持部分来审计来源质量、场景 QA、知识覆盖、"
+                    f"声明风险以及剩余的验证任务。{refs}"
+                ),
                 f"- 保持支持材料简洁且完整，以便上面的决策分析仍为主要读取内容。{refs}",
             ]
         return [
@@ -595,7 +625,14 @@ class WriterAgentMixin:
             return [
                 "",
                 f"## {heading}",
-                "- 没有可用的原始来源，因此所有结论在使用前都需要进行收集。" if is_zh else "- No raw sources are available, so all conclusions require collection before use.",
+                (
+                    "- 没有可用的原始来源，因此所有结论在使用前都需要进行收集。"
+                    if is_zh
+                    else (
+                        "- No raw sources are available, so all conclusions require "
+                        "collection before use."
+                    )
+                ),
             ]
         by_type: dict[str, list[tuple[str, float]]] = {}
         for source in detail.raw_sources:
@@ -769,8 +806,16 @@ class WriterAgentMixin:
                 self._fallback_competitive_findings_section(detail),
             ),
             (
+                self._report_label_aliases("review_theme_summary"),
+                self._fallback_review_theme_section(detail),
+            ),
+            (
                 self._report_label_aliases("competitor_deep_dives"),
                 self._fallback_competitor_deep_dives_section(detail),
+            ),
+            (
+                self._report_label_aliases("swot_analysis"),
+                self._fallback_swot_section(detail),
             ),
             (
                 layer_heading_aliases,
@@ -939,17 +984,27 @@ class WriterAgentMixin:
     def _report_heading_matches(self, heading: str, alias: str) -> bool:
         normalized_heading = self._normalize_report_heading_text(heading)
         normalized_alias = self._normalize_report_heading_text(alias)
-        return normalized_heading == normalized_alias or normalized_alias in normalized_heading
+        compact_heading = self._compact_report_heading_text(heading)
+        compact_alias = self._compact_report_heading_text(alias)
+        return (
+            normalized_heading == normalized_alias
+            or normalized_alias in normalized_heading
+            or compact_heading == compact_alias
+            or compact_alias in compact_heading
+        )
 
     def _normalize_report_heading_text(self, heading: str) -> str:
         cleaned = re.sub(r"\s+", " ", heading.strip().strip("#").strip())
         cleaned = re.sub(
-            r"^(?:section\s+)?(?:\d+(?:\.\d+)*|[ivxlcdm]+)[\.)]\s+",
+            r"^(?:section\s+)?(?:\d+(?:\.\d+)*|[ivxlcdm]+)[\.)]\s*",
             "",
             cleaned,
             flags=re.IGNORECASE,
         )
         return cleaned.casefold()
+
+    def _compact_report_heading_text(self, heading: str) -> str:
+        return re.sub(r"\s+", "", self._normalize_report_heading_text(heading))
 
     def _normalize_report_section_order(self, detail: RunDetail, markdown: str) -> str:
         matches = list(
@@ -1045,9 +1100,11 @@ class WriterAgentMixin:
             ),
             self._report_label_aliases("decision_summary"),
             self._report_label_aliases("competitive_findings"),
+            self._report_label_aliases("review_theme_summary"),
             self._report_label_aliases("dimension_winners"),
             self._report_label_aliases("comparison_matrix", "side_by_side_matrix"),
             self._report_label_aliases("competitor_deep_dives"),
+            self._report_label_aliases("swot_analysis"),
             self._report_label_aliases(self._layer_section_label_key(detail)),
             *self._support_report_heading_alias_groups(),
         ]
@@ -1107,8 +1164,18 @@ class WriterAgentMixin:
                 "highest-impact dimension findings and implications."
             ),
             (
+                f"{report_label(output_language, 'review_theme_summary')}: summarize cited "
+                "user praise, complaints, adoption blockers, and switching triggers; mark "
+                "missing review evidence as an evidence gap."
+            ),
+            (
                 f"{report_label(output_language, 'competitor_deep_dives')}: cover where "
                 "each competitor wins, has weaknesses, and needs watchouts."
+            ),
+            (
+                f"{report_label(output_language, 'swot_analysis')}: include Strengths, "
+                "Weaknesses, Opportunities, and Threats for each competitor using cited SWOT "
+                "analysis or explicit evidence-gap notes."
             ),
             (
                 f"{report_label(output_language, 'side_by_side_matrix')}: cover every "
@@ -1480,6 +1547,185 @@ class WriterAgentMixin:
             return "失败模式" if is_zh else "Failure pattern"
         return "指导" if is_zh else "Guidance"
 
+    def _fallback_review_theme_section(self, detail: RunDetail) -> list[str]:
+        summaries = [
+            knowledge.review_summary
+            for knowledge in detail.competitor_knowledge.values()
+            if self._review_summary_has_content(knowledge.review_summary)
+        ]
+        needs_review = self._needs_review_theme_section(detail)
+
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        lines = ["", f"## {report_label(detail.output_language, 'review_theme_summary')}"]
+        if not summaries:
+            refs = self._format_source_refs(self._matrix_source_ids(detail))
+            if is_zh:
+                if needs_review:
+                    lines.append(
+                        "- 已请求评价、用户或买家维度分析，但尚无可引用的结构化评价主题；"
+                        f"相关结论需保留为 Evidence gap。{refs}"
+                    )
+                else:
+                    lines.append(
+                        "- 本核心报告节尚无可引用的用户评价主题；"
+                        f"不要编造评价结论，需标记为 Evidence gap。{refs}"
+                    )
+            else:
+                if needs_review:
+                    lines.append(
+                        "- Review, user, or buyer analysis was requested, but no cited review "
+                        f"themes are available yet; keep conclusions as Evidence gap.{refs}"
+                    )
+                else:
+                    lines.append(
+                        "- This required core report section has no cited user-review themes "
+                        f"yet; do not invent review conclusions. Evidence gap.{refs}"
+                    )
+            return lines
+
+        category_labels = (
+            ("Praise", "好评主题", "praise_themes"),
+            ("Complaints", "投诉主题", "complaint_themes"),
+            ("Adoption blockers", "采用阻碍", "adoption_blockers"),
+            ("Switching triggers", "切换触发", "switching_triggers"),
+        )
+        for summary in summaries[:4]:
+            competitor = summary.competitor or "Unknown competitor"
+            lines.append(f"### {competitor}")
+            if is_zh:
+                lines.append(f"- 情绪提示: {summary.sentiment_hint}")
+            else:
+                lines.append(f"- Sentiment hint: {summary.sentiment_hint}")
+            for en_label, zh_label, field_name in category_labels:
+                label = zh_label if is_zh else en_label
+                items = getattr(summary, field_name)
+                for item in items[:2]:
+                    refs = self._format_source_refs(item.source_ids or summary.source_ids)
+                    evidence = f" - {item.evidence}" if item.evidence else ""
+                    gap = " Evidence gap." if item.evidence_gap else ""
+                    lines.append(f"- {label}: {item.theme}{evidence}{gap}{refs}")
+        return lines
+
+    def _needs_review_theme_section(self, detail: RunDetail) -> bool:
+        review_hints = (
+            "review",
+            "persona",
+            "user",
+            "customer",
+            "buyer",
+            "feedback",
+        )
+        return any(
+            any(hint in dimension.casefold().replace("-", "_") for hint in review_hints)
+            for dimension in detail.plan.dimensions
+        )
+
+    def _review_summary_has_content(self, summary: object) -> bool:
+        return any(
+            getattr(summary, field_name, None)
+            for field_name in (
+                "praise_themes",
+                "complaint_themes",
+                "adoption_blockers",
+                "switching_triggers",
+            )
+        )
+
+    def _fallback_swot_section(self, detail: RunDetail) -> list[str]:
+        analyses = [
+            knowledge.swot_analysis
+            for knowledge in detail.competitor_knowledge.values()
+            if self._swot_analysis_has_content(knowledge.swot_analysis)
+        ]
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        lines = ["", f"## {report_label(detail.output_language, 'swot_analysis')}"]
+        if not analyses:
+            if is_zh:
+                lines.append("- 优势: 证据缺口（Evidence gap）：尚无可引用的 SWOT 优势证据。")
+                lines.append("- 劣势: 证据缺口（Evidence gap）：尚无可引用的 SWOT 劣势证据。")
+                lines.append("- 机会: 证据缺口（Evidence gap）：尚无可引用的 SWOT 机会证据。")
+                lines.append("- 威胁: 证据缺口（Evidence gap）：尚无可引用的 SWOT 威胁证据。")
+            else:
+                lines.append(
+                    "- Strengths: Evidence gap - no cited SWOT strength is established yet."
+                )
+                lines.append(
+                    "- Weaknesses: Evidence gap - no cited SWOT weakness is established yet."
+                )
+                lines.append(
+                    "- Opportunities: Evidence gap - no cited SWOT opportunity is established yet."
+                )
+                lines.append(
+                    "- Threats: Evidence gap - no cited SWOT threat is established yet."
+                )
+            return lines
+
+        for analysis in analyses[:4]:
+            lines.append(f"### {analysis.competitor or 'Unknown competitor'}")
+            if is_zh:
+                lines.extend(
+                    self._swot_item_lines(
+                        "优势",
+                        analysis.strengths,
+                        gap_text="证据缺口（Evidence gap）。",
+                        empty_gap_text="证据缺口（Evidence gap）：尚无可引用条目。",
+                    )
+                )
+                lines.extend(
+                    self._swot_item_lines(
+                        "劣势",
+                        analysis.weaknesses,
+                        gap_text="证据缺口（Evidence gap）。",
+                        empty_gap_text="证据缺口（Evidence gap）：尚无可引用条目。",
+                    )
+                )
+                lines.extend(
+                    self._swot_item_lines(
+                        "机会",
+                        analysis.opportunities,
+                        gap_text="证据缺口（Evidence gap）。",
+                        empty_gap_text="证据缺口（Evidence gap）：尚无可引用条目。",
+                    )
+                )
+                lines.extend(
+                    self._swot_item_lines(
+                        "威胁",
+                        analysis.threats,
+                        gap_text="证据缺口（Evidence gap）。",
+                        empty_gap_text="证据缺口（Evidence gap）：尚无可引用条目。",
+                    )
+                )
+            else:
+                lines.extend(self._swot_item_lines("Strengths", analysis.strengths))
+                lines.extend(self._swot_item_lines("Weaknesses", analysis.weaknesses))
+                lines.extend(self._swot_item_lines("Opportunities", analysis.opportunities))
+                lines.extend(self._swot_item_lines("Threats", analysis.threats))
+        return lines
+
+    def _swot_analysis_has_content(self, analysis: object) -> bool:
+        return any(
+            getattr(analysis, field_name, None)
+            for field_name in ("strengths", "weaknesses", "opportunities", "threats")
+        )
+
+    def _swot_item_lines(
+        self,
+        label: str,
+        items: Sequence[SWOTItem] | Sequence[object],
+        *,
+        gap_text: str = "Evidence gap.",
+        empty_gap_text: str = "Evidence gap - no cited item is established yet.",
+    ) -> list[str]:
+        if not items:
+            return [f"- {label}: {empty_gap_text}"]
+        lines: list[str] = []
+        for item in items[:2]:
+            text = str(getattr(item, "text", "") or "No SWOT item text available.")
+            refs = self._format_source_refs(getattr(item, "source_ids", []))
+            gap = f" {gap_text}" if getattr(item, "evidence_gap", False) else ""
+            lines.append(f"- {label}: {text}{gap}{refs}")
+        return lines
+
     def _fallback_user_research_section(self, detail: RunDetail) -> list[str]:
         research_sources = [
             source
@@ -1503,7 +1749,8 @@ class WriterAgentMixin:
             ]
             if not research_sources:
                 lines.append(
-                    "- 已请求用户画像或评论分析，但尚未附加用户研究来源；将画像结论保持在证据差距通道中。"
+                    "- 已请求用户画像或评论分析，但尚未附加用户研究来源；"
+                    "将画像结论保持在证据差距通道中。"
                     f"{self._format_source_refs(self._matrix_source_ids(detail))}"
                 )
                 return lines
@@ -1564,7 +1811,8 @@ class WriterAgentMixin:
                     f"建议的检索查询：{query}。{sources}"
                 )
             lines.append(
-                "- 运行“证据差距填补”操作以检索、重排并附加已证实的证据。生成的草案版本应链接已填补的差距 ID 和检索上下文。"
+                "- 运行“证据差距填补”操作以检索、重排并附加已证实的证据。"
+                "生成的草案版本应链接已填补的差距 ID 和检索上下文。"
             )
         else:
             lines = [
@@ -1639,7 +1887,11 @@ class WriterAgentMixin:
             for claim in weak_claims[:5]:
                 labels = []
                 if claim.confidence < 0.65:
-                    labels.append(f"置信度 {claim.confidence:.2f}" if is_zh else f"confidence {claim.confidence:.2f}")
+                    labels.append(
+                        f"置信度 {claim.confidence:.2f}"
+                        if is_zh
+                        else f"confidence {claim.confidence:.2f}"
+                    )
                 if self._claim_has_weak_sources(claim.source_ids, source_by_id):
                     labels.append("弱来源组合" if is_zh else "weak source mix")
                 if self._claim_needs_triangulation(claim.claim, claim.source_ids):
@@ -1662,7 +1914,8 @@ class WriterAgentMixin:
                 )
             else:
                 lines.append(
-                    "- No low-confidence or single-source high-risk structured claims were detected."
+                    "- No low-confidence or single-source high-risk structured claims were "
+                    "detected."
                     f"{self._format_source_refs(self._matrix_source_ids(detail))}"
                 )
 
@@ -1839,7 +2092,23 @@ class WriterAgentMixin:
             return False
         if re.fullmatch(r"\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?", stripped):
             return False
+        if self._report_line_is_explicit_gap_statement(stripped):
+            return False
         return bool(re.search(r"[A-Za-z0-9]", stripped)) and len(stripped) >= 24
+
+    def _report_line_is_explicit_gap_statement(self, line: str) -> bool:
+        normalized = line.casefold()
+        return any(
+            marker in normalized
+            for marker in (
+                "evidence gap",
+                "no cited swot",
+                "no cited item",
+                "no cited user-review",
+                "证据缺口",
+                "尚无可引用",
+            )
+        )
 
     def _source_ids_for_report_line(self, detail: RunDetail, line: str) -> list[str]:
         normalized = line.casefold()

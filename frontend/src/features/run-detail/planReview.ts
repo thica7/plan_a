@@ -42,6 +42,66 @@ export function fallbackHitlMessage(stage: HitlReviewStage): string {
   return stage === "planner" ? "Planner is ready for review." : "QA review is ready.";
 }
 
+export interface HitlInterruptEventLike {
+  type: string;
+  message: string;
+  payload: {
+    interrupt_node?: unknown;
+    stage?: unknown;
+    [key: string]: unknown;
+  };
+}
+
+export interface VisibleHitlInterrupt {
+  message: string;
+  payload: {
+    interrupt_node: "planner_hitl" | "qa_hitl";
+    stage: HitlReviewStage;
+    [key: string]: unknown;
+  };
+}
+
+function interruptNodeForStage(stage: HitlReviewStage): "planner_hitl" | "qa_hitl" {
+  return stage === "planner" ? "planner_hitl" : "qa_hitl";
+}
+
+function interruptMatchesStage(event: HitlInterruptEventLike, stage: HitlReviewStage): boolean {
+  return event.payload.stage === stage || event.payload.interrupt_node === interruptNodeForStage(stage);
+}
+
+export function visibleHitlInterruptForRun(
+  status: string | null | undefined,
+  currentNode: string | null | undefined,
+  events: HitlInterruptEventLike[],
+): VisibleHitlInterrupt | undefined {
+  if (status !== "interrupted") return undefined;
+  const stage = hitlStageFromCurrentNode(currentNode);
+  if (!stage) return undefined;
+
+  const matchingInterrupt = [...events]
+    .reverse()
+    .find((event) => event.type === "interrupt" && interruptMatchesStage(event, stage));
+  const interruptNode = interruptNodeForStage(stage);
+  if (matchingInterrupt) {
+    return {
+      message: matchingInterrupt.message,
+      payload: {
+        ...matchingInterrupt.payload,
+        interrupt_node: interruptNode,
+        stage,
+      },
+    };
+  }
+
+  return {
+    message: fallbackHitlMessage(stage),
+    payload: {
+      interrupt_node: interruptNode,
+      stage,
+    },
+  };
+}
+
 export type CompetitorReviewDecision = "keep" | "remove" | "mark_unrelated";
 
 export interface CompetitorReviewRow {

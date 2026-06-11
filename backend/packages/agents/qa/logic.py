@@ -13,6 +13,7 @@ from packages.schema.models import (
     KnowledgeClaim,
     QCIssue,
     RedoScope,
+    ReviewThemeItem,
 )
 from packages.sources import (
     malformed_source_tokens,
@@ -21,6 +22,16 @@ from packages.sources import (
 )
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+REVIEW_SUMMARY_DIMENSION_HINTS = (
+    "review",
+    "persona",
+    "user",
+    "customer",
+    "buyer",
+    "feedback",
+    "adoption",
+    "switching",
+)
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
@@ -625,7 +636,10 @@ class QualityAgentMixin:
             return bool(
                 knowledge.user_personas.summary_claims
                 or any(segment.claims for segment in knowledge.user_personas.segments)
+                or self._qa_review_summary_has_cited_items(knowledge)
             )
+        if self._dimension_uses_review_summary(dimension):
+            return self._qa_review_summary_has_cited_items(knowledge)
         return bool(
             knowledge.feature_tree.summary_claims
             or any(node.claims for node in knowledge.feature_tree.nodes)
@@ -788,9 +802,18 @@ class QualityAgentMixin:
             )
             field_path = f"competitor_knowledge[{competitor}].user_personas.segments"
         elif (
+            self._dimension_uses_review_summary(dimension)
+            and not self._qa_review_summary_has_cited_items(knowledge)
+        ):
+            problem = (
+                f"{competitor} review schema has claims but no cited review_summary themes."
+            )
+            field_path = f"competitor_knowledge[{competitor}].review_summary"
+        elif (
             "pricing" not in dimension_key
             and "persona" not in dimension_key
             and "user" not in dimension_key
+            and not self._dimension_uses_review_summary(dimension)
             and not knowledge.feature_tree.nodes
         ):
             problem = f"{competitor} feature schema has claims but no feature_tree.nodes entries."
@@ -828,12 +851,12 @@ class QualityAgentMixin:
             return []
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
-            return [
+            claims = [
                 *knowledge.pricing_model.notes,
                 *[claim for tier in knowledge.pricing_model.tiers for claim in tier.claims],
             ]
-        if "persona" in dimension_key or "user" in dimension_key:
-            return [
+        elif "persona" in dimension_key or "user" in dimension_key:
+            claims = [
                 *knowledge.user_personas.summary_claims,
                 *[
                     claim
@@ -841,10 +864,68 @@ class QualityAgentMixin:
                     for claim in segment.claims
                 ],
             ]
-        return [
-            *knowledge.feature_tree.summary_claims,
-            *[claim for node in knowledge.feature_tree.nodes for claim in node.claims],
-        ]
+        elif self._dimension_uses_review_summary(dimension):
+            claims = []
+        else:
+            claims = [
+                *knowledge.feature_tree.summary_claims,
+                *[claim for node in knowledge.feature_tree.nodes for claim in node.claims],
+            ]
+        if self._dimension_uses_review_summary(dimension):
+            claims = [*claims, *self._qa_review_summary_claims(knowledge)]
+        return claims
+
+    def _dimension_uses_review_summary(self, dimension: str) -> bool:
+        key = dimension.casefold().replace("-", "_")
+        return any(hint in key for hint in REVIEW_SUMMARY_DIMENSION_HINTS)
+
+    def _qa_review_summary_has_cited_items(self, knowledge: CompetitorKnowledge) -> bool:
+        return bool(self._qa_review_summary_claims(knowledge))
+
+    def _qa_review_summary_claims(self, knowledge: CompetitorKnowledge) -> list[KnowledgeClaim]:
+        claims: list[KnowledgeClaim] = []
+        seen: set[tuple[str, tuple[str, ...]]] = set()
+        for item in (
+            *knowledge.review_summary.praise_themes,
+            *knowledge.review_summary.complaint_themes,
+            *knowledge.review_summary.adoption_blockers,
+            *knowledge.review_summary.switching_triggers,
+        ):
+            if not item.source_ids:
+                continue
+            source_ids = self._ordered_source_ids(item.source_ids)
+            if not source_ids:
+                continue
+            claim_text = self._qa_review_theme_claim_text(item)
+            key = (claim_text.casefold(), tuple(source_ids))
+            if key in seen:
+                continue
+            seen.add(key)
+            claims.append(
+                KnowledgeClaim(
+                    claim=claim_text,
+                    source_ids=source_ids,
+                    confidence=item.confidence,
+                )
+            )
+        return claims
+
+    def _qa_review_theme_claim_text(self, item: ReviewThemeItem) -> str:
+        theme = " ".join((item.theme or "").split())
+        evidence = " ".join((item.evidence or "").split())
+        if theme and evidence:
+            return f"{theme}: {evidence}"
+        return theme or evidence or "Review theme"
+
+    def _ordered_source_ids(self, source_ids: list[str]) -> list[str]:
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for source_id in source_ids:
+            clean = str(source_id).strip()
+            if clean and clean not in seen:
+                seen.add(clean)
+                ordered.append(clean)
+        return ordered
 
     def _build_empty_analyst_issues(
         self,

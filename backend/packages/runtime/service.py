@@ -116,6 +116,25 @@ class RuntimeCommandService:
             "temporal_cutover_bucket": cutover.bucket,
             "temporal_cutover_reason": cutover.reason,
         }
+        duplicate = await self._run_service.find_active_duplicate_run(request)
+        if duplicate is not None:
+            return _result(
+                command_id=command_id,
+                command_type="create_run",
+                status="accepted",
+                resource_type="run",
+                resource_id=duplicate.id,
+                workspace_id=duplicate.workspace_id,
+                project_id=duplicate.project_id,
+                run_id=duplicate.id,
+                route="none",
+                payload=duplicate,
+                metadata={
+                    **metadata,
+                    "active_duplicate_reused": True,
+                    "active_duplicate_run_id": duplicate.id,
+                },
+            )
         if cutover.route == "temporal":
             try:
                 result = await self._workflow_service.start_competitive_intel(request)

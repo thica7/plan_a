@@ -200,6 +200,21 @@ def _factual_quality_sources(sources: list[RawSource]) -> list[RawSource]:
     ]
 
 
+def _compact_run_detail(detail: RunDetail) -> RunDetail:
+    """Return UI-friendly run detail without replay-heavy trace payloads."""
+    compact_spans = [
+        span.model_copy(update={"full_input": "", "full_output": ""})
+        for span in detail.trace_spans
+    ]
+    return detail.model_copy(
+        update={
+            "trace_spans": compact_spans,
+            "agent_messages": [],
+            "tool_call_messages": [],
+        }
+    )
+
+
 @dataclass
 class PendingGraphRedo:
     iteration: int
@@ -453,15 +468,55 @@ class RunService(
         return detail
 
     async def ensure_run_visible(self, request: RunCreateRequest) -> RunDetail:
-        detail = await self.create_run(request, skip_active_duplicate_check=True)
+        detail = await self.create_run(request)
         self._persist_run(detail.id)
         return detail
+
+    async def find_active_duplicate_run(self, request: RunCreateRequest) -> RunDetail | None:
+        execution_mode = self._resolve_execution_mode(request.execution_mode)
+        competitors = self._normalize_competitor_names(request.competitors)
+        if not competitors:
+            competitors = self._scenario_seed_competitors(request.scenario_id)
+        valid_dimensions = self._normalize_requested_dimensions(
+            request.dimensions,
+            require_core_schema=not competitors,
+        )
+        auto_redo_warn_enabled = (
+            self._settings.auto_redo_warn_enabled
+            if request.auto_redo_warn_enabled is None
+            else request.auto_redo_warn_enabled
+        )
+        hitl_enabled = self._resolve_hitl_enabled(
+            request,
+            execution_mode=execution_mode,
+            requested_competitors=request.competitors,
+        )
+        fingerprint = _active_run_fingerprint(
+            workspace_id=request.workspace_id,
+            project_id=request.project_id,
+            topic=request.topic,
+            competitors=competitors,
+            dimensions=valid_dimensions,
+            competitor_layer=request.competitor_layer,
+            scenario_id=request.scenario_id,
+            execution_mode=execution_mode,
+            output_language=request.output_language,
+            auto_redo_warn_enabled=auto_redo_warn_enabled,
+            hitl_enabled=hitl_enabled,
+        )
+        async with self._lock:
+            duplicate = self._find_active_duplicate_run(fingerprint, datetime.utcnow())
+        return duplicate.detail if duplicate is not None else None
 
     def ensure_workspace_quota_allows_run(self, workspace_id: str) -> None:
         self._ensure_workspace_quota_allows_run(workspace_id)
 
     def list_runs(self) -> list[RunSummary]:
-        self._refresh_runs_from_journal()
+        for record in self._runs.values():
+            self._repair_inconsistent_hitl_status(record)
+            self._hydrate_pending_interrupt_from_detail(record)
+        if self._journal is not None:
+            return self._journal.load_run_summaries()
         return [
             RunSummary(
                 id=record.detail.id,
@@ -481,11 +536,28 @@ class RunService(
             )
         ]
 
-    def get_run(self, run_id: str) -> RunDetail | None:
+    def get_run(
+        self,
+        run_id: str,
+        *,
+        include_trace_payloads: bool = True,
+    ) -> RunDetail | None:
         record = self._load_run_record(run_id)
         if record is None:
             return None
-        return self._with_enterprise_projection(record.detail)
+        self._repair_inconsistent_hitl_status(record)
+        self._hydrate_pending_interrupt_from_detail(record)
+        detail = self._with_enterprise_projection(record.detail)
+        if include_trace_payloads:
+            return detail
+        return _compact_run_detail(detail)
+
+    def run_exists(self, run_id: str) -> bool:
+        if run_id in self._runs:
+            return True
+        if self._journal is None:
+            return False
+        return self._journal.run_exists(run_id)
 
     def _find_active_duplicate_run(
         self,
@@ -622,14 +694,22 @@ class RunService(
 
     def has_pending_interrupt(self, run_id: str) -> bool:
         record = self._runs.get(run_id)
-        return bool(record and record.pending_interrupts)
+        return bool(
+            record
+            and any(
+                not pending.get("resume_in_progress")
+                for pending in record.pending_interrupts.values()
+            )
+        )
 
     def can_modify_plan_competitors(self, run_id: str) -> bool:
         record = self._runs.get(run_id)
+        pending = record.pending_interrupts.get("planner") if record else None
         return bool(
             record
             and record.detail.status == "interrupted"
-            and "planner" in record.pending_interrupts
+            and pending
+            and not pending.get("resume_in_progress")
         )
 
     def _refresh_task_decomposition(self, plan: AnalysisPlan) -> None:
@@ -805,7 +885,12 @@ class RunService(
         if record is None:
             return None
         if record.pending_interrupts:
-            stage = next(iter(record.pending_interrupts))
+            stage = self._active_pending_interrupt_stage(record) or next(
+                iter(record.pending_interrupts)
+            )
+            pending = record.pending_interrupts.get(stage, {})
+            if pending.get("resume_in_progress"):
+                return record.detail
             has_competitor_edits = request.competitors is not None or bool(
                 request.competitor_edits
             )
@@ -830,6 +915,9 @@ class RunService(
             memory_feedback_payload = self._capture_hitl_memory_feedback(record, request)
             if memory_feedback_payload is not None:
                 self._refresh_quality_metrics(record.detail)
+            pending["resume_in_progress"] = True
+            pending["resume_decision"] = request.decision
+            record.pending_interrupts[stage] = pending
             await self._record_hitl_lifecycle_event(
                 record,
                 lifecycle_stage=lifecycle_stage_for_resume_decision(
@@ -1743,6 +1831,9 @@ class RunService(
             pending = current.pending_interrupts.get(stage)
             if not pending or current.detail.status != "interrupted":
                 return
+            if not self._pending_interrupt_matches_current_node(current, stage, pending):
+                current.pending_interrupts.pop(stage, None)
+                return
             await self.emit(
                 run_id,
                 "node_completed",
@@ -1777,6 +1868,26 @@ class RunService(
             if task is None or task.done() or task is current_task:
                 continue
             task.cancel()
+
+    def _active_pending_interrupt_stage(self, record: RunRecord) -> str | None:
+        for stage, pending in record.pending_interrupts.items():
+            if self._pending_interrupt_matches_current_node(record, stage, pending):
+                return stage
+        return None
+
+    def _pending_interrupt_matches_current_node(
+        self,
+        record: RunRecord,
+        stage: str,
+        pending: dict[str, Any],
+    ) -> bool:
+        current_node = record.detail.current_node
+        if current_node is None:
+            return False
+        interrupt_node = pending.get("interrupt_node")
+        if interrupt_node == current_node:
+            return True
+        return stage in {"planner", "qa"} and current_node == f"{stage}_hitl"
 
     async def _run_real_scoped_redo(self, record: RunRecord, scope: RedoScope) -> None:
         detail = record.detail
@@ -2818,6 +2929,7 @@ class RunService(
         return record
 
     def _hydrate_pending_interrupt_from_detail(self, record: RunRecord) -> None:
+        self._repair_inconsistent_hitl_status(record)
         detail = record.detail
         if detail.status != "interrupted" or record.pending_interrupts:
             return
@@ -2843,6 +2955,16 @@ class RunService(
             "interrupt_node": detail.current_node,
             "hydrated_from": "run_journal",
         }
+
+    def _repair_inconsistent_hitl_status(self, record: RunRecord) -> None:
+        detail = record.detail
+        if detail.status != "running":
+            return
+        if detail.current_node not in {"planner_hitl", "qa_hitl"}:
+            return
+        detail.status = "interrupted"
+        detail.updated_at = datetime.utcnow()
+        self._persist_run(detail.id)
 
     def _persist_run(self, run_id: str) -> None:
         if self._journal is None:

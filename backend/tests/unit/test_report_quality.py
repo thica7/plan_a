@@ -22,7 +22,11 @@ from packages.schema.models import (
     RawSource,
     RedoScope,
     ReflectionRecord,
+    ReviewThemeItem,
+    ReviewThemeSummary,
     RunMetrics,
+    SWOTAnalysis,
+    SWOTItem,
     TraceSpan,
 )
 from packages.schema.rag import RetrievalRecord
@@ -520,6 +524,63 @@ Duplicated source quality support should be treated as a structural defect. [sou
     assert "duplicate_section_count" in report_check.blocking_metric_names
 
 
+def test_compare_run_quality_blocks_numbered_chinese_duplicate_support_sections() -> None:
+    report_md = (
+        _structured_report_md()
+        + """
+
+## 9. 证据与QA支撑
+重复的证据与 QA 支撑应该被识别为结构缺陷。 [source:source-0]
+
+## 证据与 QA 支撑
+第二个证据支撑区块不应该绕过重复章节检测。 [source:source-1]
+
+## 13. RAG缺口补全
+- 差距 `gap-pricing`: 建议的检索查询：PC 品牌定价 官方页面。 [source:source-2]
+
+## RAG 缺口补全
+- 差距 `gap-pricing`: 建议的检索查询：PC 品牌定价 官方页面。 [source:source-3]
+
+## 14. 场景QA清单
+- 场景 QA 条目重复。 [source:source-0]
+
+## 场景 QA 清单
+- 场景 QA 条目再次重复。 [source:source-1]
+""".rstrip()
+    )
+    detail = _run_detail(
+        run_id="duplicate-chinese-section-run",
+        execution_mode="real",
+        source_count=4,
+        report_md=report_md,
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+
+    comparison = compare_run_quality(detail)
+    duplicate_metric = next(
+        metric for metric in comparison.metrics if metric.name == "duplicate_section_count"
+    )
+
+    assert duplicate_metric.target_value == 4.0
+
+
 def test_compare_run_quality_rejects_empty_core_headings_after_appendix() -> None:
     long_report_with_late_empty_core = (
         """
@@ -951,7 +1012,9 @@ def test_compare_run_quality_excludes_user_research_from_factual_source_rates() 
         run_id="mixed-research-and-official-sources",
         execution_mode="real",
         source_count=4,
-        report_md=_structured_report_md(),
+        report_md=_remove_report_section(
+            _structured_report_md(), report_label("en-US", "user_research_evidence")
+        ),
         metrics=RunMetrics(llm_calls=3, claim_citation_rate=1.0),
         trace_spans=[
             TraceSpan(
@@ -1020,7 +1083,9 @@ def test_compare_run_quality_flags_missing_memory_and_user_research_sections() -
         run_id="missing-memory-research",
         execution_mode="real",
         source_count=4,
-        report_md=_structured_report_md(),
+        report_md=_remove_report_section(
+            _structured_report_md(), report_label("en-US", "user_research_evidence")
+        ),
         metrics=RunMetrics(
             llm_calls=3,
             source_coverage_rate=1.0,
@@ -1131,6 +1196,421 @@ def test_compare_run_quality_requires_rag_gap_fill_section_for_collector_gaps() 
     assert repaired_metrics["rag_gap_fill_section_score"].target_value == 1.0
 
 
+def test_report_quality_blocks_review_run_without_review_theme_section() -> None:
+    detail = _run_detail(
+        run_id="missing-review-themes",
+        execution_mode="real",
+        source_count=4,
+        report_md=_remove_report_section(
+            _structured_report_md(), report_label("en-US", "review_theme_summary")
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+        source_types=["webpage_verified", "review_site"],
+    )
+    detail.plan.dimensions = ["pricing", "review"]
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    blockers = {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert metrics["review_theme_section_score"].target_value == 0.0
+    assert comparison.report_quality_signal is False
+    assert "review_theme_section_score" in blockers
+    assert any("User Review Themes" in item for item in comparison.recommendations)
+
+
+def test_report_quality_blocks_without_swot_section() -> None:
+    without_swot = _remove_report_section(
+        _structured_report_md(), report_label("en-US", "swot_analysis")
+    )
+    incomplete_swot = (
+        f"## {report_label('en-US', 'swot_analysis')}\n"
+        "The report introduces SWOT but omits quadrant coverage. [source:source-0]"
+    )
+    heading_only = without_swot.replace(
+        "\n\n## Battlecard",
+        f"\n\n{incomplete_swot}\n\n## Battlecard",
+    )
+    missing_detail = _run_detail(
+        run_id="missing-swot",
+        execution_mode="real",
+        source_count=4,
+        report_md=without_swot,
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+    incomplete_detail = _run_detail(
+        run_id="incomplete-swot",
+        execution_mode="real",
+        source_count=4,
+        report_md=heading_only,
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=missing_detail.trace_spans,
+    )
+
+    missing = compare_run_quality(missing_detail)
+    incomplete = compare_run_quality(incomplete_detail)
+    missing_blockers = {
+        name
+        for check in missing.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+    incomplete_blockers = {
+        name
+        for check in incomplete.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert {metric.name: metric for metric in missing.metrics}[
+        "swot_section_score"
+    ].target_value == 0.0
+    assert {metric.name: metric for metric in incomplete.metrics}[
+        "swot_section_score"
+    ].target_value == 0.5
+    assert "swot_section_score" in missing_blockers
+    assert "swot_section_score" in incomplete_blockers
+    assert any("SWOT Analysis" in item for item in missing.recommendations)
+
+
+def test_report_quality_rejects_swot_placeholder_prose() -> None:
+    placeholder_swot = (
+        f"## {report_label('en-US', 'swot_analysis')}\n"
+        "This SWOT must include Strengths, Weaknesses, Opportunities, and Threats before "
+        "publication. [source:source-0]"
+    )
+    detail = _run_detail(
+        run_id="placeholder-swot",
+        execution_mode="real",
+        source_count=4,
+        report_md=_replace_report_section(
+            _structured_report_md(),
+            report_label("en-US", "swot_analysis"),
+            placeholder_swot,
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[_llm_trace_span()],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    blockers = {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert metrics["swot_section_score"].target_value == 0.5
+    assert "swot_section_score" in blockers
+    assert comparison.report_quality_signal is False
+
+
+def test_report_quality_accepts_structured_english_swot_quadrant_rows() -> None:
+    structured_swot = (
+        f"## {report_label('en-US', 'swot_analysis')}\n"
+        "- Strengths: Cursor pricing clarity gives sales a concrete first proof point. "
+        "[source:source-0]\n"
+        "- Weaknesses: Enterprise security and procurement proof remains incomplete. "
+        "[source:source-2]\n"
+        "- Opportunities: Buyer education can focus on standalone value and workflow speed. "
+        "[source:source-0]\n"
+        "- Threats: Copilot can defend through bundled Microsoft procurement paths. "
+        "[source:source-1]"
+    )
+    detail = _run_detail(
+        run_id="structured-english-swot",
+        execution_mode="real",
+        source_count=4,
+        report_md=_replace_report_section(
+            _structured_report_md(),
+            report_label("en-US", "swot_analysis"),
+            structured_swot,
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[_llm_trace_span()],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["swot_section_score"].target_value == 1.0
+    assert comparison.report_quality_signal is True
+
+
+def test_report_quality_accepts_structured_chinese_swot_quadrant_rows() -> None:
+    structured_swot = (
+        f"## {report_label('zh-CN', 'swot_analysis')}\n"
+        "- 优势：Cursor 价格透明度让销售沟通有清晰证据。 [source:source-0]\n"
+        "- 劣势：企业安全与采购证明仍需补强。 [source:source-2]\n"
+        "- 机会：买方教育可以聚焦独立价值和工作流速度。 [source:source-0]\n"
+        "- 威胁：Copilot 可通过微软采购路径防守。 [source:source-1]"
+    )
+    detail = _run_detail(
+        run_id="structured-chinese-swot",
+        execution_mode="real",
+        source_count=4,
+        report_md=_replace_report_section(
+            _structured_report_md(),
+            report_label("en-US", "swot_analysis"),
+            structured_swot,
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[_llm_trace_span()],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["swot_section_score"].target_value == 1.0
+    assert comparison.report_quality_signal is True
+
+
+def test_report_quality_does_not_count_swot_or_review_child_headings_as_duplicates() -> None:
+    nested_sections = (
+        f"## {report_label('en-US', 'review_theme_summary')}\n"
+        "Review themes are organized by competitor without duplicating the parent section. "
+        "[source:source-0]\n"
+        "### Cursor Review Themes\n"
+        "- Pricing clarity supports fast buyer evaluation. [source:source-0]\n"
+        "### Copilot Review Themes\n"
+        "- Existing Microsoft familiarity supports adoption. [source:source-1]\n\n"
+        f"## {report_label('en-US', 'swot_analysis')}\n"
+        "### Cursor SWOT\n"
+        "- Strengths: Cursor pricing clarity gives sales a concrete proof point. "
+        "[source:source-0]\n"
+        "- Weaknesses: Enterprise security and procurement proof remains incomplete. "
+        "[source:source-2]\n"
+        "### Copilot SWOT\n"
+        "- Opportunities: Buyer education can focus on standalone value and workflow speed. "
+        "[source:source-0]\n"
+        "- Threats: Copilot can defend through bundled Microsoft procurement paths. "
+        "[source:source-1]"
+    )
+    detail = _run_detail(
+        run_id="nested-review-swot-headings",
+        execution_mode="real",
+        source_count=4,
+        report_md=_replace_report_sections(
+            _structured_report_md(),
+            {
+                report_label("en-US", "review_theme_summary"): "",
+                report_label("en-US", "swot_analysis"): nested_sections,
+            },
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[_llm_trace_span()],
+        source_types=["webpage_verified", "review_site"],
+    )
+    detail.plan.dimensions = ["pricing", "review"]
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["duplicate_section_count"].target_value == 0.0
+    assert metrics["review_theme_section_score"].target_value == 1.0
+    assert metrics["swot_section_score"].target_value == 1.0
+    assert comparison.report_quality_signal is True
+
+
+def test_report_quality_accepts_review_and_swot_sections() -> None:
+    detail = _run_detail(
+        run_id="review-and-swot",
+        execution_mode="real",
+        source_count=4,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+        source_types=["webpage_verified", "review_site"],
+    )
+    detail.plan.dimensions = ["pricing", "review"]
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["review_theme_section_score"].target_value == 1.0
+    assert metrics["swot_section_score"].target_value == 1.0
+    assert comparison.report_quality_signal is True
+
+
+def test_report_quality_does_not_require_review_section_for_non_review_run() -> None:
+    detail = _run_detail(
+        run_id="non-review-missing-review-themes",
+        execution_mode="real",
+        source_count=4,
+        report_md=_remove_report_section(
+            _structured_report_md(), report_label("en-US", "review_theme_summary")
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    blockers = {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert metrics["review_theme_section_score"].target_value == 1.0
+    assert metrics["swot_section_score"].target_value == 1.0
+    assert "review_theme_section_score" not in blockers
+    assert comparison.report_quality_signal is True
+
+
+def test_compare_run_quality_accepts_chinese_rag_gap_fill_section() -> None:
+    detail = _run_detail(
+        run_id="localized-rag-gap-fill",
+        execution_mode="real",
+        source_count=4,
+        report_md=(
+            f"{_structured_report_md()}\n\n"
+            "## RAG 缺口补全\n"
+            "- 差距 `gap-security-evidence`：建议的检索查询：Cursor 安全合规 官方文档。"
+            " [source:source-0]\n"
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+    detail.qa_findings.append(
+        QCIssue(
+            id="gap-security-evidence",
+            severity="warn",
+            detected_by="coverage",
+            target_agent="collector",
+            target_subagent="security",
+            target_competitor="Cursor",
+            field_path="raw_sources[security][Cursor]",
+            problem="Missing official security evidence.",
+            redo_scope=RedoScope(
+                kind="collector",
+                target_subagent="security",
+                target_competitor="Cursor",
+                rationale="Collect official security evidence.",
+            ),
+        )
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["rag_gap_fill_section_score"].target_value == 1.0
+
+
 def _assert_headings_in_order(markdown: str, headings: list[str]) -> None:
     positions = [markdown.index(heading) for heading in headings]
     assert positions == sorted(positions)
@@ -1210,6 +1690,251 @@ def test_writer_fallback_puts_core_analysis_before_evidence_support() -> None:
     assert "weaknesses:" in report
     assert "watchouts:" in report
     assert report.index("## Evidence & QA Support") > report.index("## Battlecard")
+
+
+def test_writer_hardening_inserts_review_and_swot_core_sections() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="review-swot-core-sections",
+        execution_mode="real",
+        source_count=4,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.output_language = "en-US"
+    detail.plan.competitor_layer = "L1"
+    detail.plan.dimensions = ["pricing", "review"]
+    detail.comparison_matrix = ComparisonMatrix(
+        competitors=detail.plan.competitors,
+        dimensions=detail.plan.dimensions,
+        cells=[
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="review",
+                value="Users praise speed but need onboarding proof.",
+                source_ids=["source-0"],
+                confidence=0.86,
+            )
+        ],
+        winner_by_dimension={"review": "Cursor"},
+    )
+    detail.competitor_knowledge["Cursor"].review_summary = ReviewThemeSummary(
+        competitor="Cursor",
+        dimension="review",
+        praise_themes=[
+            ReviewThemeItem(
+                theme="Fast workflow",
+                evidence="Users praise fast repository-aware editing.",
+                source_ids=["source-0"],
+                confidence=0.82,
+            )
+        ],
+        complaint_themes=[
+            ReviewThemeItem(
+                theme="Onboarding friction",
+                evidence="Users complain onboarding takes effort.",
+                source_ids=["source-1"],
+                confidence=0.64,
+            )
+        ],
+        adoption_blockers=[
+            ReviewThemeItem(
+                theme="Security review",
+                evidence="Security review slows team adoption.",
+                source_ids=["source-2"],
+                confidence=0.7,
+            )
+        ],
+        switching_triggers=[
+            ReviewThemeItem(
+                theme="Repository context",
+                evidence="Teams switch for repository context.",
+                source_ids=["source-3"],
+                confidence=0.78,
+            )
+        ],
+        source_ids=["source-0", "source-1", "source-2", "source-3"],
+        confidence=0.74,
+    )
+    detail.competitor_knowledge["Cursor"].swot_analysis = SWOTAnalysis(
+        competitor="Cursor",
+        strengths=[
+            SWOTItem(
+                text="Fast workflow is review-backed.",
+                source_ids=["source-0"],
+                confidence=0.82,
+            )
+        ],
+        weaknesses=[
+            SWOTItem(
+                text="Onboarding evidence remains thin.",
+                evidence_gap=True,
+            )
+        ],
+        opportunities=[
+            SWOTItem(
+                text="Repository context can motivate switching.",
+                source_ids=["source-3"],
+                confidence=0.78,
+            )
+        ],
+        threats=[
+            SWOTItem(
+                text="Procurement proof needs more cited evidence.",
+                evidence_gap=True,
+            )
+        ],
+        source_ids=["source-0", "source-3"],
+        confidence=0.74,
+    )
+    markdown = """
+# Cursor vs Copilot
+
+## Competitive Findings
+Cursor has a review-backed workflow signal. [source:source-0]
+
+## Battlecard
+Layer analysis exists before hardening. [source:source-0]
+
+## Source Quality & Coverage
+Source coverage exists. [source:source-0]
+""".strip()
+
+    report = writer._ensure_report_required_sections(detail, markdown)
+
+    review_heading = f"## {report_label('en-US', 'review_theme_summary')}"
+    swot_heading = f"## {report_label('en-US', 'swot_analysis')}"
+    layer_heading = f"## {report_label('en-US', 'battlecard')}"
+    assert f"## {report_label('zh-CN', 'review_theme_summary')}" == "## 用户评价整理"
+    assert f"## {report_label('zh-CN', 'swot_analysis')}" == "## SWOT 分析"
+    _assert_headings_in_order(
+        report,
+        [
+            "## Competitive Findings",
+            review_heading,
+            "## Competitor Deep Dives",
+            swot_heading,
+            layer_heading,
+        ],
+    )
+    assert "Fast workflow" in report
+    assert "Onboarding friction" in report
+    assert "Repository context" in report
+    assert "- Strengths: Fast workflow is review-backed." in report
+    assert "- Weaknesses: Onboarding evidence remains thin. Evidence gap." in report
+    assert "- Opportunities: Repository context can motivate switching." in report
+    assert "- Threats: Procurement proof needs more cited evidence. Evidence gap." in report
+
+
+def test_writer_hardening_inserts_review_gap_without_review_evidence() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="review-gap-core-section",
+        execution_mode="real",
+        source_count=2,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.output_language = "en-US"
+    detail.plan.competitor_layer = "L1"
+    detail.plan.dimensions = ["pricing", "feature"]
+    markdown = """
+# Cursor vs Copilot
+
+## Competitive Findings
+Pricing and feature evidence exists. [source:source-0]
+
+## Competitor Deep Dives
+Cursor and Copilot have cited deep dives. [source:source-1]
+
+## Battlecard
+Layer analysis exists. [source:source-0]
+""".strip()
+
+    report = writer._ensure_report_required_sections(detail, markdown)
+
+    review_heading = f"## {report_label('en-US', 'review_theme_summary')}"
+    swot_heading = f"## {report_label('en-US', 'swot_analysis')}"
+    _assert_headings_in_order(
+        report,
+        [
+            "## Competitive Findings",
+            review_heading,
+            "## Competitor Deep Dives",
+            swot_heading,
+            "## Battlecard",
+        ],
+    )
+    review_body = report[
+        report.index(review_heading) : report.index("## Competitor Deep Dives")
+    ]
+    assert "Evidence gap" in review_body
+
+
+def test_writer_hardening_does_not_cite_explicit_swot_gap_lines() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="swot-gap-lines-uncited",
+        execution_mode="real",
+        source_count=2,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.output_language = "en-US"
+    detail.plan.competitor_layer = "L1"
+    detail.plan.dimensions = ["pricing", "feature"]
+    markdown = """
+# Cursor vs Copilot
+
+## Competitive Findings
+Pricing and feature evidence exists. [source:source-0]
+
+## Competitor Deep Dives
+Cursor and Copilot have cited deep dives. [source:source-1]
+
+## Battlecard
+Layer analysis exists. [source:source-0]
+""".strip()
+
+    report = writer._harden_report_markdown(detail, markdown)
+
+    swot_heading = f"## {report_label('en-US', 'swot_analysis')}"
+    layer_heading = f"## {report_label('en-US', 'battlecard')}"
+    swot_body = report[report.index(swot_heading) : report.index(layer_heading)]
+    gap_lines = [
+        line
+        for line in swot_body.splitlines()
+        if "Evidence gap" in line or "no cited SWOT" in line
+    ]
+    assert gap_lines
+    assert all("[source:" not in line for line in gap_lines)
+
+
+def test_writer_hardening_generates_chinese_review_and_swot_headings() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="zh-review-swot-headings",
+        execution_mode="real",
+        source_count=2,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.output_language = "zh-CN"
+    detail.plan.competitor_layer = "L1"
+    detail.plan.dimensions = ["pricing", "feature"]
+
+    report = writer._ensure_report_required_sections(
+        detail,
+        "# Cursor vs Copilot\n\n## 竞争发现\n已有竞争发现。[source:source-0]",
+    )
+
+    assert "## 用户评价整理" in report
+    assert "## SWOT 分析" in report
+    assert "优势" in report
+    assert "劣势" in report
+    assert "机会" in report
+    assert "威胁" in report
+    assert "证据缺口（Evidence gap）" in report
 
 
 def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
@@ -1794,6 +2519,71 @@ def test_writer_hardening_uses_localized_support_headings_once_for_zh_cn() -> No
     assert "## Claim Validation & Evidence Risk" not in report
 
 
+def test_writer_hardening_recognizes_compact_chinese_support_headings() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="zh-compact-support-headings",
+        execution_mode="real",
+        source_count=4,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.output_language = "zh-CN"
+    detail.plan.competitor_layer = "L1"
+    detail.plan.dimensions = ["pricing", "feature"]
+    detail.qa_findings.append(
+        QCIssue(
+            id="gap-pricing-evidence",
+            severity="warn",
+            detected_by="coverage",
+            target_agent="collector",
+            target_subagent="pricing",
+            target_competitor="Cursor",
+            field_path="raw_sources[pricing][Cursor]",
+            problem="Missing official pricing evidence.",
+            redo_scope=RedoScope(
+                kind="collector",
+                target_subagent="pricing",
+                target_competitor="Cursor",
+                rationale="Collect official pricing evidence.",
+            ),
+        )
+    )
+    markdown = """
+# Cursor vs Copilot
+
+## 1. 执行摘要
+核心判断已经存在。 [source:source-0]
+
+## 2. 决策摘要
+建议先围绕定价透明度组织战报。 [source:source-0]
+
+## 3. 竞争发现
+- Cursor 在定价表达上更清晰。 [source:source-0]
+
+## 4. 竞品深挖
+Cursor 与 Copilot 的优劣势已经覆盖。 [source:source-0] [source:source-1]
+
+## 5. 战报
+销售响应应保持在已验证证据范围内。 [source:source-0]
+
+## 9. 证据与QA支撑
+证据支撑父区块已经存在。 [source:source-0]
+
+## 13. RAG缺口补全
+- 差距 `gap-pricing-evidence`：建议的检索查询：Cursor 定价 官方页面。 [source:source-1]
+
+## 14. 场景QA清单
+- 场景：l1_pricing_pack。 [source:source-2]
+""".strip()
+
+    report = writer._harden_report_markdown(detail, markdown)
+
+    assert "## 证据与 QA 支撑" not in report
+    assert "## RAG 缺口补全" not in report
+    assert "## 场景 QA 清单" not in report
+
+
 def test_writer_hardening_treats_english_headings_as_zh_cn_aliases() -> None:
     writer = _WriterHarness()
     detail = _run_detail(
@@ -2199,6 +2989,47 @@ def test_compare_run_quality_deduplicates_release_gate_warning_count() -> None:
     assert warning_metric.target_value == 2.0
 
 
+def _remove_report_section(markdown: str, heading: str) -> str:
+    return re.sub(
+        rf"\n\n## {re.escape(heading)}\n.*?(?=\n\n## |\Z)",
+        "",
+        markdown,
+        flags=re.DOTALL,
+    )
+
+
+def _replace_report_section(markdown: str, heading: str, replacement: str) -> str:
+    return re.sub(
+        rf"\n\n## {re.escape(heading)}\n.*?(?=\n\n## |\Z)",
+        f"\n\n{replacement}",
+        markdown,
+        flags=re.DOTALL,
+    )
+
+
+def _replace_report_sections(markdown: str, replacements: dict[str, str]) -> str:
+    updated = markdown
+    for heading, replacement in replacements.items():
+        if replacement:
+            updated = _replace_report_section(updated, heading, replacement)
+        else:
+            updated = _remove_report_section(updated, heading)
+    return updated
+
+
+def _llm_trace_span() -> TraceSpan:
+    return TraceSpan(
+        id="span-llm-1",
+        kind="llm",
+        agent="writer",
+        name="real writer",
+        status="ok",
+        model="deepseek/deepseek-v4-pro",
+        provider="openrouter",
+        duration_ms=120,
+    )
+
+
 def _structured_report_md() -> str:
     return """
 # Cursor vs Copilot Direct Battlecard
@@ -2230,6 +3061,21 @@ readiness until trust-center evidence is linked; implication: use it as the clar
 directly; watchouts: separate bundled value from standalone feature parity; implication: treat it
 as the incumbent workflow defense. [source:source-1] [source:source-3]
 
+## User Review Themes
+User review themes show Cursor is easier to explain during procurement, while Copilot benefits
+from existing Microsoft workflow familiarity. [source:source-0] [source:source-1]
+- Customer theme: pricing clarity supports fast evaluation. [source:source-0]
+- Adoption blocker: security review and procurement packaging still need deeper evidence.
+[source:source-2]
+
+## SWOT Analysis
+- Strengths: Cursor has pricing clarity that sales can explain quickly. [source:source-0]
+- Weaknesses: Enterprise procurement proof remains incomplete. [source:source-2]
+- Opportunities: Buyer education can focus on standalone value and workflow speed.
+[source:source-0]
+- Threats: Copilot can defend through Microsoft distribution and bundled procurement.
+[source:source-1]
+
 ## Battlecard
 Sales should use pricing transparency and switching objections as the first battlecard line.
 [source:source-0]
@@ -2244,6 +3090,10 @@ The source set separates verified webpages from lower-confidence leads, so the r
 does not treat search snippets as final proof. Cursor pricing is supported by a direct verified
 page, while Copilot evidence is treated as adequate for comparison but still needs procurement
 review before publication. [source:source-0] [source:source-1]
+
+## User Research Evidence
+Review and buyer-feedback inputs are treated as directional demand evidence, not official factual
+proof. [source:source-0] [source:source-1]
 
 ## Side-by-Side Decision Matrix
 | Dimension | Cursor | Copilot |
