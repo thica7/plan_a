@@ -11,6 +11,7 @@ from packages.agents.writer.repair import (
     apply_line_repair,
     build_writer_repair_plan,
     replace_markdown_section,
+    report_regression_problem,
 )
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.i18n.language import (
@@ -177,6 +178,11 @@ class WriterAgentMixin:
                     )
                     writer_mode = "deterministic fallback after writer error"
         else:
+            if repair_plan is not None and repair_plan.mode == "full":
+                writer_repair_mode = repair_plan.mode
+                writer_repair_sections = repair_plan.sections
+                writer_repair_decision = repair_plan.reason
+                previous_report_protected = repair_plan.previous_report_protectable
             writer_context_json = json.dumps(
                 self._writer_context_package(detail),
                 ensure_ascii=False,
@@ -242,7 +248,53 @@ class WriterAgentMixin:
                     ),
                     timeout=timeout_seconds,
                 )
-                detail.report_md = self._harden_report_markdown(detail, report_md)
+                hardened_report = self._harden_report_markdown(detail, report_md)
+                if (
+                    previous_report.strip()
+                    and repair_plan is not None
+                    and repair_plan.anti_regression_required
+                ):
+                    repair_comparison_metrics = detail.metrics.model_copy(
+                        update={
+                            "llm_calls": max(detail.metrics.llm_calls, 1),
+                            "source_coverage_rate": max(
+                                detail.metrics.source_coverage_rate, 1.0
+                            ),
+                            "claim_citation_rate": max(
+                                detail.metrics.claim_citation_rate, 1.0
+                            ),
+                        }
+                    )
+                    previous_detail = detail.model_copy(
+                        update={
+                            "report_md": previous_report,
+                            "qa_findings": [],
+                            "metrics": repair_comparison_metrics,
+                        }
+                    )
+                    candidate_detail = detail.model_copy(
+                        update={
+                            "report_md": hardened_report,
+                            "qa_findings": [],
+                            "metrics": repair_comparison_metrics,
+                        }
+                    )
+                    protected_sections = repair_plan.sections or [
+                        "review_theme_summary",
+                        "swot_analysis",
+                        "competitor_deep_dives",
+                        self._layer_section_label_key(detail),
+                    ]
+                    anti_regression_reason = report_regression_problem(
+                        previous_detail,
+                        candidate_detail,
+                        protected_sections=protected_sections,
+                    )
+                if anti_regression_reason:
+                    detail.report_md = previous_report
+                    writer_mode = "preserved previous report after writer anti-regression"
+                else:
+                    detail.report_md = hardened_report
             except TimeoutError as exc:
                 timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
                 writer_error = timeout_reason

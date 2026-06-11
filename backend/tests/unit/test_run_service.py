@@ -4651,7 +4651,87 @@ async def test_writer_section_repair_prompt_includes_localized_heading() -> None
 
 
 @pytest.mark.asyncio
-async def test_writer_full_repair_plan_uses_normal_writer_metadata() -> None:
+async def test_writer_full_rewrite_rejects_collapsed_review_section_when_previous_is_protectable() -> None:  # noqa: E501
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return _writer_repair_protectable_report().replace(
+            (
+                "User review themes show Cursor is easier to explain during procurement, "
+                "while Copilot "
+                "benefits from\nexisting Microsoft workflow familiarity. [source:pricing-1]\n"
+                "- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]\n"
+                "- Adoption blocker: security review and procurement packaging still need "
+                "deeper evidence.\n"
+                "[source:feature-1]"
+            ),
+            "Existing evidence does not provide verified user reviews.",
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer full rewrite guard",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-broad-writer",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        field_path="report_md",
+        problem="Broad writer refresh requested.",
+        redo_scope=RedoScope(kind="writer_only", rationale="refresh writer output"),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert (
+        "Existing evidence does not provide verified user reviews."
+        not in record.detail.report_md
+    )
+    assert "- Customer theme: pricing clarity supports fast evaluation." in record.detail.report_md
+    assert (
+        record.detail.agent_messages[-1].payload["writer_mode"]
+        == "preserved previous report after writer anti-regression"
+    )
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
+    assert record.detail.agent_messages[-1].payload["anti_regression_reason"]
+
+
+@pytest.mark.asyncio
+async def test_writer_full_repair_plan_uses_full_rewrite_metadata() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -4669,13 +4749,9 @@ async def test_writer_full_repair_plan_uses_normal_writer_metadata() -> None:
     async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
         nonlocal llm_calls
         llm_calls += 1
-        return (
-            "# Cursor vs Copilot Direct Battlecard\n\n"
-            "## Executive Summary\n"
-            "Normal writer refresh. [source:pricing-1]\n\n"
-            "## User Review Themes\n"
-            "Normal writer handles non-line repair until section repair exists. "
-            "[source:pricing-1]\n"
+        return _writer_repair_protectable_report().replace(
+            "Cursor has stronger pricing transparency",
+            "Normal writer refresh keeps Cursor's stronger pricing transparency",
         )
 
     service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
@@ -4739,8 +4815,11 @@ async def test_writer_full_repair_plan_uses_normal_writer_metadata() -> None:
 
     assert llm_calls == 1
     assert record.detail.agent_messages[-1].payload["writer_mode"] == "real LLM call"
-    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "none"
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
     assert record.detail.agent_messages[-1].payload["writer_repair_sections"] == []
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+    assert record.detail.agent_messages[-1].payload["anti_regression_reason"] is None
+    assert "Normal writer refresh" in record.detail.report_md
 
 
 @pytest.mark.asyncio
