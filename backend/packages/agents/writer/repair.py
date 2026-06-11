@@ -247,12 +247,23 @@ def _section_aliases(section_key: str, output_language: str) -> tuple[str, ...]:
 
 def _heading_matches(heading: str, aliases: tuple[str, ...]) -> bool:
     normalized = _normalize_heading(heading)
-    normalized_aliases = [_normalize_heading(alias) for alias in aliases]
-    return any(alias and alias in normalized for alias in normalized_aliases)
+    compact = _compact_heading(heading)
+    for alias in aliases:
+        normalized_alias = _normalize_heading(alias)
+        compact_alias = _compact_heading(alias)
+        if not normalized_alias:
+            continue
+        if normalized_alias in normalized or (compact_alias and compact_alias in compact):
+            return True
+    return False
 
 
 def _normalize_heading(value: str) -> str:
-    return re.sub(r"[^0-9a-zA-Z]+", " ", value).strip().casefold()
+    return re.sub(r"\s+", " ", value).strip().casefold()
+
+
+def _compact_heading(value: str) -> str:
+    return re.sub(r"\s+", "", _normalize_heading(value))
 
 
 def _normalize_section_replacement(replacement_markdown: str) -> str:

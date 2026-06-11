@@ -80,6 +80,35 @@ def test_replace_markdown_section_preserves_unrelated_sections() -> None:
     assert "Thin." not in updated
 
 
+def test_replace_markdown_section_replaces_zh_cn_heading_without_duplicate() -> None:
+    original = (
+        "# 报告\n\n"
+        "## 执行摘要\n"
+        "保留摘要内容。 [source:pricing-1]\n\n"
+        "## 用户评价整理\n"
+        "旧的用户评价内容。\n\n"
+        "## SWOT 分析\n"
+        "- 保留 SWOT 内容。 [source:feature-1]\n"
+    )
+    replacement = (
+        "## 用户评价整理\n"
+        "- 新评价: 买家关注定价透明度。 [source:pricing-1]\n"
+    )
+
+    updated = replace_markdown_section(
+        original,
+        "review_theme_summary",
+        "zh-CN",
+        replacement,
+    )
+
+    assert updated.count("## 用户评价整理") == 1
+    assert "旧的用户评价内容" not in updated
+    assert "- 新评价: 买家关注定价透明度。 [source:pricing-1]" in updated
+    assert "保留摘要内容。 [source:pricing-1]" in updated
+    assert "- 保留 SWOT 内容。 [source:feature-1]" in updated
+
+
 def test_report_regression_detects_collapsed_review_section() -> None:
     previous = _detail(report_md=_protectable_report())
     candidate = _detail(
@@ -100,6 +129,39 @@ def test_report_regression_detects_collapsed_review_section() -> None:
     problem = report_regression_problem(
         previous, candidate, protected_sections=["review_theme_summary"]
     )
+
+    assert problem is not None
+    assert "review_theme_summary" in problem
+
+
+def test_report_regression_detects_collapsed_zh_cn_review_section() -> None:
+    previous_body = (
+        "用户评价整理显示，采购团队更容易理解 Cursor 的定价透明度，也会继续比较 "
+        "Copilot 在微软工作流中的熟悉度。 [source:pricing-1]\n"
+        "- 客户主题: 定价清晰度帮助销售团队更快完成评估。 [source:pricing-1]\n"
+        "- 采用阻碍: 安全审查和采购包装仍需要更深证据。 [source:feature-1]\n"
+        "- 转换触发: 当团队需要更直接的开发流程说明时，Cursor 更容易被提出。 "
+        "[source:pricing-1]\n"
+        "- 采购语境: 团队还会比较上线培训、合规审查和现有微软采购路径，"
+        "因此评价摘要必须保留这些有证据的购买阻力。 [source:feature-1]"
+    )
+    previous = _detail(
+        report_md=(
+            "# Cursor vs Copilot\n\n"
+            "## 用户评价整理\n"
+            f"{previous_body}\n\n"
+            "## SWOT 分析\n"
+            "- 优势: 保留 SWOT 内容。 [source:feature-1]\n"
+        )
+    )
+    candidate = _detail(
+        report_md=previous.report_md.replace(
+            previous_body,
+            "现有证据不足以提供已验证的用户评价。",
+        )
+    )
+
+    problem = report_regression_problem(previous, candidate, ["review_theme_summary"])
 
     assert problem is not None
     assert "review_theme_summary" in problem
