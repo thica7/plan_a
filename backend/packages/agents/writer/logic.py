@@ -78,6 +78,7 @@ class WriterAgentMixin:
                 issue = QCIssue.model_validate(item)
                 redo_issue_by_id.setdefault(issue.id, issue)
         pending_redo = record.pending_graph_redo
+        pending_issue_ids: set[str] = set()
         if (
             pending_redo is not None
             and pending_redo.redo_scope.kind == "writer_only"
@@ -89,16 +90,28 @@ class WriterAgentMixin:
                     redo_issue_by_id.setdefault(issue.id, issue)
         redo_issues = list(redo_issue_by_id.values())
         redo_source_message_ids = [message.id for message in redo_messages]
+        if pending_issue_ids:
+            for message in record.detail.agent_messages:
+                if message.message_type != "redo_request":
+                    continue
+                message_issue_ids = set(message.payload.get("issue_ids", []))
+                redo_scope = message.payload.get("redo_scope", {})
+                redo_scope_kind = (
+                    redo_scope.get("kind") if isinstance(redo_scope, dict) else None
+                )
+                if message_issue_ids & pending_issue_ids or redo_scope_kind == "writer_only":
+                    redo_source_message_ids.append(message.id)
+        redo_source_message_ids = list(dict.fromkeys(redo_source_message_ids))
         if redo_issues:
             repair_plan = build_writer_repair_plan(detail, redo_issues)
-            writer_repair_mode = repair_plan.mode
-            writer_repair_sections = repair_plan.sections
-            writer_repair_decision = repair_plan.reason
-            previous_report_protected = repair_plan.previous_report_protectable
         else:
             repair_plan = None
         timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
         if repair_plan is not None and repair_plan.mode == "line":
+            writer_repair_mode = repair_plan.mode
+            writer_repair_sections = repair_plan.sections
+            writer_repair_decision = repair_plan.reason
+            previous_report_protected = repair_plan.previous_report_protectable
             detail.report_md = self._harden_report_markdown(
                 detail,
                 apply_line_repair(previous_report, redo_issues),

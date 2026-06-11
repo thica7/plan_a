@@ -4340,7 +4340,7 @@ async def test_writer_line_repair_preserves_protectable_report_without_llm() -> 
         qa_issue_ids_before=[issue.id],
         issue_count_before=1,
     )
-    service._append_agent_message(
+    redo_message = service._append_agent_message(
         record,
         from_agent="qa",
         to_agent="writer_only",
@@ -4368,6 +4368,100 @@ async def test_writer_line_repair_preserves_protectable_report_without_llm() -> 
     assert record.detail.agent_messages[-1].payload["writer_mode"] == "writer repair: line"
     assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "line"
     assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+    assert redo_message.id in record.detail.agent_messages[-1].source_message_ids
+
+
+@pytest.mark.asyncio
+async def test_writer_non_line_repair_plan_uses_normal_writer_metadata() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return (
+            "# Cursor vs Copilot Direct Battlecard\n\n"
+            "## Executive Summary\n"
+            "Normal writer refresh. [source:pricing-1]\n\n"
+            "## User Review Themes\n"
+            "Normal writer handles non-line repair until section repair exists. "
+            "[source:pricing-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-section-review",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section needs repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review theme section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="writer_only",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+    service._consume_queued_agent_messages(
+        record,
+        to_agent="writer_only",
+        consumer_agent="redo_router",
+        message_types={"redo_request"},
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 1
+    assert record.detail.agent_messages[-1].payload["writer_mode"] == "real LLM call"
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "none"
+    assert record.detail.agent_messages[-1].payload["writer_repair_sections"] == []
 
 
 @pytest.mark.asyncio
