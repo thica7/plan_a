@@ -794,6 +794,12 @@ async def test_survey_interview_enrichment_emits_research_evidence_payload() -> 
     assert "Synthetic interview record" in interview_source.snippet
     assert survey_source.covered_competitors == ["Cursor"]
     assert interview_source.covered_competitors == ["Cursor"]
+    assert survey_source.confidence == 0.76
+    assert interview_source.confidence == 0.82
+    assert survey_source.metadata["fallback_synthetic"] is True
+    assert survey_source.metadata["survey_interview_synthetic"] is True
+    assert interview_source.metadata["fallback_synthetic"] is True
+    assert interview_source.metadata["survey_interview_synthetic"] is True
     assert record.detail.competitor_knowledge["Cursor"].user_personas.summary_claims
     completed = next(
         event
