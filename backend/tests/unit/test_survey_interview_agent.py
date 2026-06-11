@@ -146,6 +146,48 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
 
 
 @pytest.mark.asyncio
+async def test_survey_interview_enrichment_caps_non_persona_claim_confidence() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant user adoption comparison",
+            competitors=["Acme"],
+            dimensions=["adoption"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+
+    await service._run_survey_interview_enrichment(record, ["adoption"], ["Acme"])
+
+    survey_source = next(
+        source for source in record.detail.raw_sources if source.source_type == "survey_simulated"
+    )
+    interview_source = next(
+        source for source in record.detail.raw_sources if source.source_type == "interview_record"
+    )
+    assert survey_source.dimension == "adoption"
+    assert survey_source.confidence == 0.76
+    assert interview_source.dimension == "adoption"
+    assert interview_source.confidence == 0.82
+
+    knowledge = record.detail.competitor_knowledge["Acme"]
+    assert knowledge.user_personas.summary_claims[0].confidence == 0.72
+    assert knowledge.user_personas.segments[0].claims[0].confidence == 0.72
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("source_type", ["survey_response", "manual_note"])
 async def test_survey_interview_enrichment_reuses_attached_user_research(
     source_type: str,
@@ -444,6 +486,7 @@ async def test_user_research_import_redacts_and_projects_claim_links() -> None:
     assert source.id == result.source_ids[0]
     assert source.source_type == "manual_transcript"
     assert source.metadata["imported_user_research"] is True
+    assert source.confidence == 0.86
     assert "jane.buyer@example.com" not in source.snippet
     assert RAW_NOTE_OPENROUTER_KEY not in source.snippet
     assert "[redacted:email]" in source.snippet
@@ -451,7 +494,9 @@ async def test_user_research_import_redacts_and_projects_claim_links() -> None:
     knowledge = service.get_run(detail.id).competitor_knowledge["Acme"]  # type: ignore[union-attr]
     assert knowledge.user_personas.summary_claims
     assert knowledge.user_personas.summary_claims[0].source_ids == [source.id]
+    assert knowledge.user_personas.summary_claims[0].confidence == 0.86
     assert knowledge.user_personas.segments[0].claims[0].source_ids == [source.id]
+    assert knowledge.user_personas.segments[0].claims[0].confidence == 0.86
     projection = service.get_enterprise_projection(detail.id)
     assert projection is not None
     evidence = projection.evidence_records[0]

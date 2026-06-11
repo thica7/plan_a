@@ -56,6 +56,7 @@ USER_RESEARCH_SOURCE_TYPES = {
 SYNTHETIC_SURVEY_CONFIDENCE = 0.76
 SYNTHETIC_INTERVIEW_CONFIDENCE = 0.82
 SYNTHETIC_PERSONA_CLAIM_CONFIDENCE = 0.80
+EXPLICIT_PERSONA_DIMENSION_HINTS = ("persona", "user", "customer", "buyer")
 
 
 class SurveyInterviewAgentMixin:
@@ -494,6 +495,7 @@ class SurveyInterviewAgentMixin:
         knowledge = detail.competitor_knowledge.get(competitor) or CompetitorKnowledge(
             competitor=competitor
         )
+        claim_confidence = self._survey_bundle_claim_confidence(bundle, dimension)
         claim = KnowledgeClaim(
             claim=(
                 f"{bundle.competitor} simulated user research indicates {bundle.dimension} "
@@ -503,7 +505,7 @@ class SurveyInterviewAgentMixin:
                 "workflow integration, admin visibility, and learning curve."
             ),
             source_ids=source_ids,
-            confidence=SYNTHETIC_PERSONA_CLAIM_CONFIDENCE,
+            confidence=claim_confidence,
         )
         existing_summary_claims = knowledge.user_personas.summary_claims
         existing_claim = next(
@@ -591,6 +593,21 @@ class SurveyInterviewAgentMixin:
         kb.sources = merge_ordered_refs(kb.sources, source_ids)
         kb.confidence = max(kb.confidence, claim.confidence)
         detail.competitor_kbs[competitor] = kb
+
+    def _survey_bundle_claim_confidence(
+        self,
+        bundle: SurveyEvidenceBundle,
+        dimension: str,
+    ) -> float:
+        if bundle.source_type != "survey_simulated":
+            return bundle.confidence
+        if self._dimension_has_explicit_persona_signal(dimension):
+            return SYNTHETIC_PERSONA_CLAIM_CONFIDENCE
+        return min(0.72, max(bundle.confidence, 0.62))
+
+    def _dimension_has_explicit_persona_signal(self, dimension: str) -> bool:
+        normalized_dimension = dimension.lower()
+        return any(hint in normalized_dimension for hint in EXPLICIT_PERSONA_DIMENSION_HINTS)
 
     def _redact_research_text(self, text: str, counts: dict[str, int]) -> str:
         policy = compliance_policy_from_settings(getattr(self, "_settings", object()))
