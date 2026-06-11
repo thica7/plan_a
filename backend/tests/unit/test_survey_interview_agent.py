@@ -117,10 +117,10 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
     ]
     assert "workflow fit" in knowledge.user_personas.summary_claims[0].claim
     assert knowledge.user_personas.summary_claims[0].confidence == 0.8
+    assert knowledge.user_personas.segments
     assert knowledge.user_personas.segments[0].claims[0].confidence == 0.8
     assert "adoption risk" in knowledge.user_personas.summary_claims[0].claim
     assert "buying criteria" in knowledge.user_personas.summary_claims[0].claim
-    assert knowledge.user_personas.segments
     assert knowledge.user_personas.segments[0].claims[0].source_ids == [
         survey_source.id,
         interview_source.id,
