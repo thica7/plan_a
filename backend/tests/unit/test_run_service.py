@@ -80,6 +80,94 @@ def _collector_issue(issue_id: str, subagent: str, competitor: str) -> QCIssue:
     )
 
 
+def _writer_repair_sources() -> list[RawSource]:
+    return [
+        RawSource(
+            id="pricing-1",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://example.com/cursor-pricing",
+            snippet="Cursor pricing is published.",
+            content_hash="pricing-1",
+            confidence=0.9,
+        ),
+        RawSource(
+            id="feature-1",
+            competitor="Copilot",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="Copilot feature",
+            url="https://example.com/copilot-feature",
+            snippet="Copilot has IDE integration.",
+            content_hash="feature-1",
+            confidence=0.9,
+        ),
+    ]
+
+
+def _writer_repair_protectable_report() -> str:
+    return """# Cursor vs Copilot Direct Battlecard
+
+## Executive Summary
+Cursor has stronger pricing transparency, while Copilot has integration breadth.
+[source:pricing-1] [source:feature-1]
+
+## Decision Summary
+Recommended action: use Cursor's pricing clarity as the initial L1 battlecard point while
+keeping Copilot's bundled distribution as the procurement counter-position.
+[source:pricing-1] [source:feature-1]
+
+## Competitive Findings
+- Pricing: Cursor has clearer standalone pricing evidence, which makes the sales response easier.
+[source:pricing-1]
+- Feature: Copilot has broad IDE integration evidence, which gives it a defensible adoption path.
+[source:feature-1]
+
+## Competitor Deep Dives
+- Cursor wins on pricing clarity and focused workflow; watchouts remain procurement and
+security proof.
+[source:pricing-1]
+- Copilot wins on distribution and IDE breadth; watchouts remain direct packaging comparison.
+[source:feature-1]
+
+## User Review Themes
+User review themes show Cursor is easier to explain during procurement, while Copilot benefits from
+existing Microsoft workflow familiarity. [source:pricing-1]
+- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]
+- Adoption blocker: security review and procurement packaging still need deeper evidence.
+[source:feature-1]
+
+## SWOT Analysis
+- Strengths: Cursor has pricing clarity that sales can explain quickly. [source:pricing-1]
+- Weaknesses: Enterprise procurement proof remains incomplete. [source:feature-1]
+- Opportunities: Buyer education can focus on standalone value. [source:pricing-1]
+- Threats: Copilot can defend through Microsoft distribution. [source:feature-1]
+
+## Battlecard
+Sales should use pricing transparency and switching objections as the first battlecard line.
+[source:pricing-1] [source:feature-1]
+
+## Source Quality & Coverage
+The run uses verified pages for both target competitors. [source:pricing-1] [source:feature-1]
+
+## User Research Evidence
+Review and buyer-feedback inputs are directional demand evidence. [source:pricing-1]
+
+## Scenario QA Checklist
+- Scenario: l1_pricing_pack; layer: L1; recommended dimensions: pricing, feature, persona.
+
+## Claim Validation & Evidence Risk
+No unresolved blocker claims were detected, but security and procurement claims remain gated.
+[source:pricing-1] [source:feature-1]
+
+## Evidence Appendix
+- pricing-1: Cursor pricing [source:pricing-1]
+- feature-1: Copilot feature [source:feature-1]
+"""
+
+
 def _blocked_release_gate() -> ReportReleaseGate:
     return ReportReleaseGate(
         report_version_id="report-version-1",
@@ -4191,6 +4279,79 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
     assert record.detail.agent_messages[-1].trace_span_ids
     assert record.detail.trace_spans[-2].agent == "writer"
     assert record.detail.trace_spans[-2].status == "error"
+
+
+@pytest.mark.asyncio
+async def test_writer_line_repair_preserves_protectable_report_without_llm() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return "# Replacement should not be used"
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer line repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    noisy_report = _writer_repair_protectable_report().replace(
+        "## SWOT Analysis",
+        "bad line \ufffd\n\n## SWOT Analysis",
+    )
+    record.detail.report_md = noisy_report
+    noisy_line_number = noisy_report.splitlines().index("bad line \ufffd") + 1
+    issue = QCIssue(
+        id="issue-line-noise",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        field_path=f"report_md.line[{noisy_line_number}]",
+        problem=f"Report line {noisy_line_number} contains non-publishable text noise.",
+        redo_scope=RedoScope(kind="writer_only", rationale="repair noisy report line"),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 0
+    assert "bad line" not in record.detail.report_md
+    assert "## User Review Themes" in record.detail.report_md
+    assert "## SWOT Analysis" in record.detail.report_md
+    assert record.detail.agent_messages[-1].payload["writer_mode"] == "writer repair: line"
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "line"
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
 
 
 @pytest.mark.asyncio
