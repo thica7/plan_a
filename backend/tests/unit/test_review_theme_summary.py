@@ -299,6 +299,116 @@ def test_non_review_payload_sanitizes_supplied_review_summary_source_ids() -> No
     assert summary.complaint_themes[0].evidence_gap is True
 
 
+def test_non_review_payload_preserves_existing_review_summary_citations() -> None:
+    harness = AnalystHarness()
+    detail = RunDetail(
+        id="run-feature-after-persona",
+        idempotency_key="",
+        workspace_id="default-workspace",
+        project_id=None,
+        topic="AI coding assistant",
+        status="running",
+        execution_mode="demo",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding",
+            competitors=["Cursor"],
+            dimensions=["persona", "feature"],
+        ),
+        competitor_knowledge={"Cursor": CompetitorKnowledge(competitor="Cursor")},
+        raw_sources=[
+            RawSource(
+                id="persona-1",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="review_site",
+                title="Cursor persona reviews",
+                snippet="Developers praise Cursor for fast coding workflow.",
+                content_hash="personahash",
+                confidence=0.82,
+            ),
+            RawSource(
+                id="feature-1",
+                competitor="Cursor",
+                dimension="feature",
+                source_type="vendor_docs",
+                title="Cursor features",
+                snippet="Cursor provides repository context.",
+                content_hash="featurehash",
+                confidence=0.76,
+            ),
+        ],
+    )
+    persona_payload = {
+        "user_personas": {
+            "segments": [
+                {
+                    "name": "Developers",
+                    "role": "Developer",
+                    "company_size": "Team",
+                    "pain_points": [],
+                    "use_cases": ["coding workflow"],
+                    "claims": [
+                        {
+                            "claim": "Developers use Cursor for faster coding workflow.",
+                            "source_ids": ["persona-1"],
+                            "confidence": 0.82,
+                        }
+                    ],
+                }
+            ],
+            "summary_claims": [],
+        },
+        "review_summary": {
+            "competitor": "Cursor",
+            "dimension": "persona",
+            "praise_themes": [
+                {
+                    "theme": "Fast coding workflow",
+                    "evidence": "Developers praise Cursor for fast coding workflow.",
+                    "source_ids": ["persona-1"],
+                    "confidence": 0.82,
+                }
+            ],
+            "complaint_themes": [],
+            "adoption_blockers": [],
+            "switching_triggers": [],
+            "persona_segments": ["Developers"],
+            "sentiment_hint": "positive",
+            "source_ids": ["persona-1"],
+            "confidence": 0.82,
+        },
+    }
+    feature_payload = {
+        "feature_tree": {
+            "nodes": [
+                {
+                    "name": "Repository context",
+                    "description": "Cursor provides repository context.",
+                    "claims": [
+                        {
+                            "claim": "Cursor provides repository context.",
+                            "source_ids": ["feature-1"],
+                            "confidence": 0.76,
+                        }
+                    ],
+                    "children": [],
+                }
+            ],
+            "summary_claims": [],
+        }
+    }
+
+    harness._merge_structured_knowledge_payload(detail, "Cursor", "persona", persona_payload)
+    harness._merge_structured_knowledge_payload(detail, "Cursor", "feature", feature_payload)
+
+    item = detail.competitor_knowledge["Cursor"].review_summary.praise_themes[0]
+    assert item.source_ids == ["persona-1"]
+    assert item.evidence_gap is False
+    assert detail.competitor_knowledge["Cursor"].review_summary.source_ids == ["persona-1"]
+
+
 def test_merge_repairs_uncited_review_items_before_validation() -> None:
     harness = AnalystHarness()
     detail = RunDetail(

@@ -485,8 +485,8 @@ def competitor_identity_problem(source: RawSource) -> str | None:
     for term in confusion_terms_for_competitor(source.competitor):
         if (
             key == "windsurf"
-            and term == "devin.ai"
-            and is_windsurf_docs_redirect_source(source, haystack)
+            and term in {"devin.ai", "devin desktop"}
+            and is_windsurf_devin_redirect_source(source, haystack)
         ):
             continue
         if term in haystack:
@@ -503,14 +503,21 @@ def competitor_identity_problem(source: RawSource) -> str | None:
     return None
 
 
-def is_windsurf_docs_redirect_source(source: RawSource, haystack: str) -> bool:
+def is_windsurf_devin_redirect_source(source: RawSource, haystack: str) -> bool:
     url = str(source.url or "").casefold()
-    return (
+    docs_redirect = (
         any(path in url for path in ("docs.devin.ai/desktop", "docs.devin.ai/windsurf"))
         and "windsurf" in haystack
         and "devin desktop" not in haystack
         and "cognition devin" not in haystack
     )
+    pricing_rebrand = (
+        "devin.ai/pricing" in url
+        and "windsurf is now devin desktop" in haystack
+        and has_dimension_specific_fact("pricing", haystack)
+        and "cognition devin" not in haystack
+    )
+    return docs_redirect or pricing_rebrand
 
 
 def dimension_terms_present(dimension: str, normalized_text: str) -> bool:

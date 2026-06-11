@@ -4612,7 +4612,7 @@ def test_collector_rejects_product_identity_confusion_sources() -> None:
         source_type="webpage_verified",
         title="Devin pricing",
         url="https://devin.ai/pricing",
-        snippet="Devin Desktop pricing includes a Team plan and Enterprise plan.",
+        snippet="Devin agent pricing includes Team and Enterprise plans for software teams.",
         content_hash="hash-windsurf",
         confidence=0.96,
     )
@@ -4718,6 +4718,37 @@ def test_collector_accepts_windsurf_feature_docs_redirect_sources() -> None:
         ),
         content_hash="windsurf-feature-docs-hash",
         confidence=0.84,
+    )
+
+    assert service._source_quality_problem(source) is None
+
+
+def test_collector_accepts_windsurf_pricing_rebrand_redirect_source() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    source = RawSource(
+        id="pricing-windsurf-devin-rebrand",
+        competitor="Windsurf",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Plans and Pricing | Devin",
+        url="https://devin.ai/pricing",
+        snippet=(
+            "Windsurf is now Devin Desktop. Plans and Pricing include an "
+            "Individual Free plan, Pro at $20 per month, Teams at $30 per user "
+            "per month, and Enterprise contact sales options."
+        ),
+        content_hash="windsurf-devin-pricing-hash",
+        confidence=0.96,
     )
 
     assert service._source_quality_problem(source) is None

@@ -1425,12 +1425,14 @@ class AnalystAgentMixin:
                     knowledge.feature_tree.summary_claims = []
 
         review_section = raw.get("review_summary")
+        review_summary_changed = False
         if isinstance(review_section, dict):
             knowledge.review_summary = self._review_summary_from_dict(
                 review_section,
                 competitor=competitor,
                 dimension=dimension,
             )
+            review_summary_changed = True
         elif self._dimension_uses_review_summary(dimension):
             review_sources = [
                 source.model_dump(mode="json")
@@ -1443,12 +1445,14 @@ class AnalystAgentMixin:
                 dimension=dimension,
                 sources=review_sources,
             )
+            review_summary_changed = True
 
         self._sanitize_structured_knowledge_slice_sources(
             detail,
             competitor,
             dimension,
             knowledge,
+            sanitize_review_summary=review_summary_changed,
         )
         claims = self._structured_claims_for_dimension(knowledge, dimension)
         knowledge.source_ids = merge_ordered_refs(
@@ -1491,13 +1495,13 @@ class AnalystAgentMixin:
         competitor: str,
         dimension: str,
         knowledge: CompetitorKnowledge,
+        *,
+        sanitize_review_summary: bool = False,
     ) -> None:
         valid_source_ids = set(
             self._source_ids_for_competitor_dimension(detail, competitor, dimension)
         )
-        if self._dimension_uses_review_summary(dimension) or self._review_summary_has_content(
-            knowledge.review_summary
-        ):
+        if sanitize_review_summary:
             self._sanitize_review_summary_source_ids(knowledge.review_summary, valid_source_ids)
         if not valid_source_ids:
             return
