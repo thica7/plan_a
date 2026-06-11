@@ -98,7 +98,7 @@ class SurveyInterviewAgentMixin:
         added_sources: list[RawSource] = []
         for dimension in target_dimensions:
             for competitor in competitors:
-                if self._has_user_research_source(detail, dimension, competitor):
+                if self._has_strong_user_research_source(detail, dimension, competitor):
                     continue
                 qa_feedback = self._qa_feedback_for_branch(
                     detail,
@@ -209,6 +209,18 @@ class SurveyInterviewAgentMixin:
             and self._source_matches_competitor(source, competitor)
             for source in detail.raw_sources
         )
+
+    def _has_strong_user_research_source(
+        self,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+    ) -> bool:
+        if not self._has_user_research_source(detail, dimension, competitor):
+            return False
+        if not self._dimension_needs_persona_strength_gate(dimension):
+            return True
+        return not self._persona_evidence_strength(detail, dimension, competitor).is_weak
 
     def _build_survey_interview_bundle(
         self,
@@ -362,6 +374,11 @@ class SurveyInterviewAgentMixin:
                 content_hash=bundle.content_hash,
                 confidence=bundle.confidence,
                 extracted_at=detail.updated_at,
+                metadata={
+                    "fallback_synthetic": True,
+                    "survey_interview_synthetic": True,
+                    "source_role": "survey",
+                },
             )
         ]
         if bundle.interviews:
@@ -399,6 +416,11 @@ class SurveyInterviewAgentMixin:
                     content_hash=interview_hash,
                     confidence=max(bundle.confidence, 0.62),
                     extracted_at=detail.updated_at,
+                    metadata={
+                        "fallback_synthetic": True,
+                        "survey_interview_synthetic": True,
+                        "source_role": "interview",
+                    },
                 )
             )
         return sources

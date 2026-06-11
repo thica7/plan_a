@@ -1008,6 +1008,123 @@ def test_real_collect_qa_blocks_unverified_url_evidence_without_memory_policy() 
     assert "not fetched webpage evidence" in issues[0].problem
 
 
+def test_collect_qa_blocks_single_low_confidence_persona_proxy() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-weak-persona",
+        topic="AI coding assistant persona comparison",
+        status="running",
+        execution_mode="real",
+        created_at="2026-06-11T00:00:00",
+        updated_at="2026-06-11T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant persona comparison",
+            competitors=["Windsurf"],
+            dimensions=["persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="raw-source-windsurf-persona-proxy",
+                competitor="Windsurf",
+                covered_competitors=["Windsurf"],
+                dimension="persona",
+                source_type="interview_record",
+                title="Windsurf persona interview proxy",
+                snippet=(
+                    "Proxy interview mentions workflow fit, onboarding effort, "
+                    "and switching risk."
+                ),
+                content_hash="windsurf-persona-proxy-hash",
+                confidence=0.62,
+                metadata={"fallback_synthetic": True},
+            )
+        ],
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+
+    weak_issue = next(issue for issue in issues if "persona evidence is weak" in issue.problem)
+    assert weak_issue.severity == "blocker"
+    assert weak_issue.target_agent == "collector"
+    assert weak_issue.target_subagent == "persona"
+    assert weak_issue.target_competitor == "Windsurf"
+    assert weak_issue.redo_scope.kind == "collector"
+    assert weak_issue.redo_scope.target_subagent == "persona"
+    assert weak_issue.redo_scope.target_competitor == "Windsurf"
+
+
+def test_collect_qa_accepts_public_and_interview_persona_evidence() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-strong-persona",
+        topic="AI coding assistant persona comparison",
+        status="running",
+        execution_mode="real",
+        created_at="2026-06-11T00:00:00",
+        updated_at="2026-06-11T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant persona comparison",
+            competitors=["Cursor"],
+            dimensions=["persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-customer-story",
+                competitor="Cursor",
+                covered_competitors=["Cursor"],
+                dimension="persona",
+                source_type="webpage_verified",
+                title="Cursor customer story for engineering teams",
+                url="https://www.cursor.com/customers/example",
+                snippet=(
+                    "Engineering teams and developers adopted Cursor for workflow fit, "
+                    "onboarding, and AI coding use cases."
+                ),
+                content_hash="cursor-customer-story-hash",
+                confidence=0.92,
+            ),
+            RawSource(
+                id="cursor-interview",
+                competitor="Cursor",
+                covered_competitors=["Cursor"],
+                dimension="persona",
+                source_type="interview_record",
+                title="Cursor buyer interview",
+                snippet=(
+                    "Developer teams cited customer adoption, switching cost, "
+                    "and workflow fit."
+                ),
+                content_hash="cursor-interview-hash",
+                confidence=0.78,
+            ),
+        ],
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+
+    assert not [issue for issue in issues if "persona evidence is weak" in issue.problem]
+
+
 def test_feature_collection_uses_known_official_source_registry() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -3536,6 +3653,98 @@ async def test_cross_competitor_search_marks_only_mentioned_competitors() -> Non
     assert record.detail.raw_sources[0].covered_competitors == ["Cursor", "Claude Code"]
 
 
+@pytest.mark.asyncio
+async def test_cross_competitor_persona_search_runs_when_branch_coverage_is_weak() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            web_search_provider="perplexity",
+            pplx_api_key="pplx-key",
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant persona comparison",
+            competitors=["Cursor", "Windsurf"],
+            dimensions=["persona"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources.extend(
+        [
+            RawSource(
+                id="cursor-persona-public",
+                competitor="Cursor",
+                covered_competitors=["Cursor"],
+                dimension="persona",
+                source_type="webpage_verified",
+                title="Cursor customer story",
+                url="https://www.cursor.com/customers/example",
+                snippet="Developer teams adopted Cursor for workflow fit and onboarding.",
+                content_hash="cursor-persona-public-hash",
+                confidence=0.92,
+            ),
+            RawSource(
+                id="windsurf-persona-proxy",
+                competitor="Windsurf",
+                covered_competitors=["Windsurf"],
+                dimension="persona",
+                source_type="interview_record",
+                title="Windsurf persona proxy",
+                snippet="Proxy interview mentions workflow fit and switching risk.",
+                content_hash="windsurf-persona-proxy-hash",
+                confidence=0.62,
+                metadata={"fallback_synthetic": True},
+            ),
+        ]
+    )
+    search_queries: list[str] = []
+
+    async def fake_trace_search(*args, **kwargs):  # noqa: ANN202
+        search_queries.append(kwargs["query"])
+        return [
+            SearchResult(
+                title="Cursor vs Windsurf user adoption comparison",
+                url="https://example.com/adoption-comparison",
+                snippet=(
+                    "Cursor and Windsurf are compared by developer adoption, "
+                    "workflow fit, onboarding, and switching risk."
+                ),
+            )
+        ]
+
+    async def fake_source_from_search_result(*args, **kwargs):  # noqa: ANN202
+        return RawSource(
+            id="persona-compare",
+            competitor="Cross-model all 2 competitors",
+            dimension="persona",
+            source_type="webpage_verified",
+            title="Cursor vs Windsurf user adoption comparison",
+            url="https://example.com/adoption-comparison",
+            snippet=(
+                "Cursor and Windsurf developer adoption, workflow fit, onboarding, "
+                "and switching risk are compared."
+            ),
+            content_hash="persona-compare-hash",
+            confidence=0.9,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._source_from_search_result = fake_source_from_search_result  # type: ignore[method-assign]
+
+    await service._collect_cross_competitor_evidence(record, ["persona"])
+
+    assert search_queries
+    assert any(source.id == "persona-compare" for source in record.detail.raw_sources)
+
+
 def test_qa_marks_matrix_unknown_source_for_comparator_redo() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -4754,6 +4963,46 @@ def test_collector_accepts_windsurf_pricing_rebrand_redirect_source() -> None:
     assert service._source_quality_problem(source) is None
 
 
+def test_persona_web_search_query_uses_customer_adoption_terms() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-persona-query",
+        topic="AI coding assistant",
+        status="running",
+        execution_mode="real",
+        created_at="2026-06-11T00:00:00",
+        updated_at="2026-06-11T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant",
+            competitors=["Windsurf"],
+            dimensions=["persona"],
+        ),
+    )
+
+    query = service._web_search_query(detail, "Windsurf", "persona").casefold()
+
+    for term in [
+        "customers",
+        "case studies",
+        "developer adoption",
+        "user reviews",
+        "onboarding",
+        "switching",
+        "workflow fit",
+    ]:
+        assert term in query
+
+
 def test_collector_rejects_pricing_pages_as_persona_evidence() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -5182,6 +5431,134 @@ async def test_collect_qa_blocks_and_retries_collector_before_analyst() -> None:
                 topic="Collect gate",
                 competitors=["A"],
                 dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+
+        await service.run_pipeline(detail.id)
+
+        assert order == [
+            "planner",
+            "collector:1",
+            "collector:2",
+            "analyst",
+            "comparator",
+            "reflector",
+            "writer",
+            "qa",
+        ]
+        updated = service.get_run(detail.id)
+        assert updated is not None
+        assert updated.status == "completed"
+        assert updated.qa_findings == []
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_weak_persona_collect_qa_retries_collector_before_analyst() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            max_iterations=2,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+    order: list[str] = []
+    collector_calls = 0
+
+    async def fake_planner(record):  # noqa: ANN001, ANN202
+        order.append("planner")
+
+    async def fake_collector(record, dimension, competitor):  # noqa: ANN001, ANN202
+        nonlocal collector_calls
+        collector_calls += 1
+        order.append(f"collector:{collector_calls}")
+        if collector_calls == 1:
+            record.detail.raw_sources.append(
+                RawSource(
+                    id="windsurf-persona-proxy",
+                    competitor=competitor,
+                    covered_competitors=[competitor],
+                    dimension=dimension,
+                    source_type="interview_record",
+                    title="Windsurf persona proxy",
+                    snippet="Proxy interview mentions workflow fit and switching risk.",
+                    content_hash="windsurf-persona-proxy-hash",
+                    confidence=0.62,
+                    metadata={"fallback_synthetic": True},
+                )
+            )
+            return
+        record.detail.raw_sources.append(
+            RawSource(
+                id="windsurf-persona-customer-story",
+                competitor=competitor,
+                covered_competitors=[competitor],
+                dimension=dimension,
+                source_type="webpage_verified",
+                title="Windsurf customer adoption story",
+                url="https://windsurf.com/customers/example",
+                snippet=(
+                    "Developers and engineering teams adopted Windsurf for workflow fit, "
+                    "onboarding, and switching cost reduction."
+                ),
+                content_hash="windsurf-persona-customer-story-hash",
+                confidence=0.92,
+            )
+        )
+
+    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+        order.append("analyst")
+        service._merge_competitor_kb_slice(
+            record.detail,
+            competitor,
+            dimension,
+            [
+                (
+                    "Windsurf serves developer teams evaluating workflow fit. "
+                    "[source:windsurf-persona-customer-story]"
+                )
+            ],
+        )
+
+    async def fake_comparator(record):  # noqa: ANN001, ANN202
+        order.append("comparator")
+        record.detail.comparison_matrix = service._build_comparison_matrix(record.detail, {})
+
+    async def fake_reflector(record):  # noqa: ANN001, ANN202
+        order.append("reflector")
+
+    async def fake_writer(record):  # noqa: ANN001, ANN202
+        order.append("writer")
+        record.detail.report_md = (
+            "Windsurf targets developer teams. [source:windsurf-persona-customer-story]"
+        )
+
+    async def fake_qa(record):  # noqa: ANN001, ANN202
+        order.append("qa")
+        record.detail.qa_findings = []
+
+    service._real_planner_step = fake_planner  # type: ignore[method-assign]
+    service._real_collector_branch_step = fake_collector  # type: ignore[method-assign]
+    service._real_analyst_branch_step = fake_analyst  # type: ignore[method-assign]
+    service._real_comparator_step = fake_comparator  # type: ignore[method-assign]
+    service._real_reflector_step = fake_reflector  # type: ignore[method-assign]
+    service._real_writer_step = fake_writer  # type: ignore[method-assign]
+    service._real_qa_step = fake_qa  # type: ignore[method-assign]
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Persona collect gate",
+                competitors=["Windsurf"],
+                dimensions=["persona"],
                 execution_mode="real",
             )
         )

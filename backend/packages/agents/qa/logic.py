@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
@@ -12,6 +13,7 @@ from packages.schema.models import (
     CompetitorKnowledge,
     KnowledgeClaim,
     QCIssue,
+    RawSource,
     RedoScope,
     ReviewThemeItem,
 )
@@ -32,9 +34,62 @@ REVIEW_SUMMARY_DIMENSION_HINTS = (
     "adoption",
     "switching",
 )
+PERSONA_EVIDENCE_DIMENSION_HINTS = (
+    "persona",
+    "user",
+    "customer",
+    "buyer",
+    "review",
+    "feedback",
+    "adoption",
+    "switching",
+)
+PERSONA_SYNTHETIC_SOURCE_TYPES = {"survey_simulated"}
+PERSONA_QUALITATIVE_SOURCE_TYPES = {
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+    "manual_note",
+    "manual",
+}
+PERSONA_PUBLIC_SOURCE_TYPES = {"webpage_verified"}
+PERSONA_SIGNAL_TERMS = (
+    "persona",
+    "target user",
+    "customer",
+    "customers",
+    "buyer",
+    "developer",
+    "developers",
+    "engineering team",
+    "enterprise team",
+    "team",
+    "case study",
+    "customer story",
+    "review",
+    "feedback",
+    "adoption",
+    "onboarding",
+    "switching",
+    "workflow fit",
+    "use case",
+    "pain point",
+)
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
+
+
+@dataclass(frozen=True)
+class PersonaEvidenceStrength:
+    source_count: int
+    verified_count: int
+    qualitative_count: int
+    synthetic_count: int
+    persona_signal_count: int
+    has_independent_public_signal: bool
+    is_weak: bool
+    reason: str
 
 
 class QualityAgentMixin:
@@ -379,6 +434,86 @@ class QualityAgentMixin:
             if not any(source.dimension == dimension for source in detail.raw_sources)
         ]
 
+    def _dimension_needs_persona_strength_gate(self, dimension: str) -> bool:
+        normalized = dimension.casefold().replace("-", "_")
+        return any(hint in normalized for hint in PERSONA_EVIDENCE_DIMENSION_HINTS)
+
+    def _persona_source_text(self, source: RawSource) -> str:
+        return " ".join([source.title, str(source.url or ""), source.snippet]).casefold()
+
+    def _persona_source_is_synthetic(self, source: RawSource) -> bool:
+        return source.source_type in PERSONA_SYNTHETIC_SOURCE_TYPES or bool(
+            source.metadata.get("fallback_synthetic")
+            or source.metadata.get("synthetic_fallback")
+            or source.metadata.get("survey_interview_synthetic")
+        )
+
+    def _source_has_persona_signal(self, source: RawSource) -> bool:
+        text = self._persona_source_text(source)
+        return any(term in text for term in PERSONA_SIGNAL_TERMS)
+
+    def _persona_evidence_strength(
+        self,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+    ) -> PersonaEvidenceStrength:
+        sources = [
+            source
+            for source in detail.raw_sources
+            if source.dimension == dimension and self._source_matches_competitor(source, competitor)
+        ]
+        verified_count = sum(
+            1 for source in sources if source.source_type in PERSONA_PUBLIC_SOURCE_TYPES
+        )
+        qualitative_count = sum(
+            1 for source in sources if source.source_type in PERSONA_QUALITATIVE_SOURCE_TYPES
+        )
+        synthetic_count = sum(1 for source in sources if self._persona_source_is_synthetic(source))
+        signal_count = sum(1 for source in sources if self._source_has_persona_signal(source))
+        public_signal = any(
+            source.source_type in PERSONA_PUBLIC_SOURCE_TYPES
+            and not self._persona_source_is_synthetic(source)
+            and self._source_has_persona_signal(source)
+            for source in sources
+        )
+        if not sources:
+            reason = "no_sources"
+        elif len(sources) == 1 and self._persona_source_is_synthetic(sources[0]):
+            reason = "single_low_confidence_synthetic"
+        elif (
+            len(sources) == 1
+            and sources[0].source_type in PERSONA_QUALITATIVE_SOURCE_TYPES
+            and sources[0].confidence < 0.7
+        ):
+            reason = "single_low_confidence_qualitative"
+        elif (
+            len(sources) == 1
+            and sources[0].source_type in PERSONA_QUALITATIVE_SOURCE_TYPES
+            and sources[0].confidence >= 0.8
+            and signal_count > 0
+            and not self._persona_source_is_synthetic(sources[0])
+        ):
+            reason = "strong"
+        elif synthetic_count == len(sources):
+            reason = "synthetic_only"
+        elif signal_count == 0:
+            reason = "no_persona_signal"
+        elif not public_signal and len(sources) < 2:
+            reason = "too_few_sources"
+        else:
+            reason = "strong"
+        return PersonaEvidenceStrength(
+            source_count=len(sources),
+            verified_count=verified_count,
+            qualitative_count=qualitative_count,
+            synthetic_count=synthetic_count,
+            persona_signal_count=signal_count,
+            has_independent_public_signal=public_signal,
+            is_weak=reason != "strong",
+            reason=reason,
+        )
+
     def _build_collect_qa_issues(self, detail: RunDetail) -> list[QCIssue]:
         issues: list[QCIssue] = []
         missing_dimensions = self._missing_dimensions(detail)
@@ -462,6 +597,7 @@ class QualityAgentMixin:
 
         issues.extend(self._build_source_quality_issues(detail))
         issues.extend(self._build_source_coverage_issues(detail, missing_dimensions))
+        issues.extend(self._build_persona_evidence_strength_issues(detail, missing_dimensions))
         return issues
 
     def _build_source_quality_issues(self, detail: RunDetail) -> list[QCIssue]:
@@ -600,6 +736,56 @@ class QualityAgentMixin:
                         self_found=False,
                     )
                 )
+        return issues
+
+    def _build_persona_evidence_strength_issues(
+        self,
+        detail: RunDetail,
+        missing_dimensions: list[str],
+    ) -> list[QCIssue]:
+        issues: list[QCIssue] = []
+        for dimension in detail.plan.dimensions:
+            if dimension in missing_dimensions:
+                continue
+            if not self._dimension_needs_persona_strength_gate(dimension):
+                continue
+            for competitor in detail.plan.competitors:
+                strength = self._persona_evidence_strength(detail, dimension, competitor)
+                if not strength.is_weak or strength.reason == "no_sources":
+                    continue
+                field_path = f"raw_sources[{dimension}][{competitor}]"
+                problem = (
+                    f"{competitor} {dimension} evidence is weak: "
+                    f"{strength.reason.replace('_', ' ')} with {strength.source_count} "
+                    f"source(s), {strength.verified_count} verified public source(s), and "
+                    f"{strength.persona_signal_count} persona signal source(s)."
+                )
+                issue = QCIssue(
+                    id=stable_prefixed_id(
+                        "qc-issue",
+                        "weak-persona-evidence",
+                        dimension,
+                        competitor,
+                        strength.reason,
+                        length=16,
+                    ),
+                    severity="blocker" if detail.execution_mode == "real" else "warn",
+                    detected_by="coverage",
+                    target_agent="collector",
+                    target_subagent=dimension,
+                    target_competitor=competitor,
+                    field_path=field_path,
+                    problem=problem,
+                    redo_scope=RedoScope(
+                        kind="collector",
+                        target_subagent=dimension,
+                        target_competitor=competitor,
+                        rationale=f"Collect stronger public {dimension} evidence for {competitor}.",
+                    ),
+                    self_found=False,
+                )
+                issue.redo_scope = assign_redo_scope(issue)
+                issues.append(issue)
         return issues
 
     def _build_analyst_qa_issues(

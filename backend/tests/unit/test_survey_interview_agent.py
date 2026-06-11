@@ -175,6 +175,56 @@ async def test_survey_interview_enrichment_reuses_attached_user_research(
     assert record.detail.agent_messages[-1].payload["bundles"] == []
 
 
+@pytest.mark.asyncio
+async def test_survey_interview_enrichment_runs_for_weak_existing_persona_source() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant user adoption comparison",
+            competitors=["Windsurf"],
+            dimensions=["persona"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources.append(
+        RawSource(
+            id="windsurf-persona-proxy",
+            competitor="Windsurf",
+            covered_competitors=["Windsurf"],
+            dimension="persona",
+            source_type="interview_record",
+            title="Windsurf persona proxy",
+            snippet="Proxy interview mentions workflow fit and switching risk.",
+            content_hash="windsurf-persona-proxy-hash",
+            confidence=0.62,
+            metadata={"fallback_synthetic": True},
+        )
+    )
+
+    await service._run_survey_interview_enrichment(record, ["persona"], ["Windsurf"])
+
+    assert len(record.detail.raw_sources) == 3
+    added = [
+        source
+        for source in record.detail.raw_sources
+        if source.id != "windsurf-persona-proxy"
+    ]
+    assert {source.source_type for source in added} == {"survey_simulated", "interview_record"}
+    assert all(source.metadata["fallback_synthetic"] is True for source in added)
+
+
 def test_survey_evidence_projects_as_synthetic_enterprise_source() -> None:
     store = EnterpriseMemoryStore()
     detail = RunDetail(
