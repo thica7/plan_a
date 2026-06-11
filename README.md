@@ -9,12 +9,12 @@ data boundaries, and Docker-first deployment scaffolding.
 Docker deployment:
 
 ```powershell
-Copy-Item .env.example .env
-powershell -ExecutionPolicy Bypass -File scripts\docker_deploy.ps1 -Build
+docker compose up -d
 ```
 
-Then open `http://localhost:8080`. See `docs/docker_deployment.md` for the
-deployment contract and production notes.
+Then open `http://localhost:8080`. Demo mode works without a local `.env`; copy
+`.env.example` to `.env` only when you need real provider keys. See
+`docs/docker_deployment.md` for the deployment contract and production notes.
 
 Windows one-command development startup:
 

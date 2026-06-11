@@ -19,6 +19,8 @@ ENV PIP_NO_CACHE_DIR=1 \
     WEBFETCH_V2_ROOT=/app/third_party/webfetch_v2
 
 COPY third_party/webfetch_v2 ./third_party/webfetch_v2
+COPY data ./data
+COPY eval ./eval
 COPY backend/pyproject.toml backend/README.md ./
 COPY backend/app ./app
 COPY backend/db ./db
