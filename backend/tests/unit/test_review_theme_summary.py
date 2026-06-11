@@ -465,6 +465,191 @@ def test_merge_repairs_uncited_review_items_before_validation() -> None:
     assert item.evidence_gap is True
 
 
+def test_merge_replaces_empty_persona_review_summary_with_source_theme() -> None:
+    harness = AnalystHarness()
+    detail = RunDetail(
+        id="run-windsurf-empty-review-summary",
+        idempotency_key="",
+        workspace_id="default-workspace",
+        project_id=None,
+        topic="AI coding assistant persona",
+        status="running",
+        execution_mode="demo",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Windsurf"], dimensions=["persona"]),
+        competitor_knowledge={"Windsurf": CompetitorKnowledge(competitor="Windsurf")},
+        raw_sources=[
+            RawSource(
+                id="persona-1",
+                competitor="Windsurf",
+                dimension="persona",
+                source_type="interview_record",
+                title="Windsurf target-user proxy interview note",
+                snippet=(
+                    "Buyers evaluate persona through fit with workflow, onboarding effort, "
+                    "and switching risk."
+                ),
+                content_hash="windsurf-persona-hash",
+                confidence=0.56,
+            )
+        ],
+    )
+    payload = {
+        "user_personas": {
+            "segments": [
+                {
+                    "name": "Windsurf Cascade IDE developers",
+                    "role": "technical buyer",
+                    "company_size": "unknown",
+                    "pain_points": ["developer onboarding"],
+                    "use_cases": ["agentic coding"],
+                    "claims": [
+                        {
+                            "claim": (
+                                "Buyers evaluate Windsurf through workflow fit, "
+                                "onboarding effort, and switching risk."
+                            ),
+                            "source_ids": ["persona-1"],
+                            "confidence": 0.56,
+                        }
+                    ],
+                }
+            ],
+            "summary_claims": [],
+        },
+        "review_summary": {
+            "competitor": "Windsurf",
+            "dimension": "persona",
+            "praise_themes": [],
+            "complaint_themes": [],
+            "adoption_blockers": [],
+            "switching_triggers": [],
+            "persona_segments": [],
+            "sentiment_hint": "unknown",
+            "source_ids": ["persona-1"],
+            "confidence": 0.56,
+        },
+    }
+
+    harness._merge_structured_knowledge_payload(detail, "Windsurf", "persona", payload)
+
+    summary = detail.competitor_knowledge["Windsurf"].review_summary
+    cited_items = [
+        item
+        for item in [
+            *summary.praise_themes,
+            *summary.complaint_themes,
+            *summary.adoption_blockers,
+            *summary.switching_triggers,
+        ]
+        if item.source_ids
+    ]
+    assert cited_items
+    assert any(item.source_ids == ["persona-1"] for item in cited_items)
+
+
+def test_merge_empty_persona_review_summary_uses_all_persona_sources() -> None:
+    harness = AnalystHarness()
+    detail = RunDetail(
+        id="run-cursor-empty-review-summary",
+        idempotency_key="",
+        workspace_id="default-workspace",
+        project_id=None,
+        topic="AI coding assistant persona",
+        status="running",
+        execution_mode="demo",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        competitor_knowledge={"Cursor": CompetitorKnowledge(competitor="Cursor")},
+        raw_sources=[
+            RawSource(
+                id="homepage-1",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="webpage_verified",
+                title="Cursor: AI coding agent",
+                snippet="Cursor is used by teams and enterprise engineers.",
+                content_hash="homepage-hash",
+                confidence=0.96,
+            ),
+            RawSource(
+                id="customers-1",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="webpage_verified",
+                title="Cursor customers",
+                snippet="Cursor has become the preferred IDE for most Coinbase developers.",
+                content_hash="customers-hash",
+                confidence=0.96,
+            ),
+            RawSource(
+                id="interview-1",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="interview_record",
+                title="Cursor persona interview synthesis",
+                snippet=(
+                    "Respondents discussed onboarding effort, workflow fit uncertainty, "
+                    "and switching cost."
+                ),
+                content_hash="interview-hash",
+                confidence=0.62,
+            ),
+        ],
+    )
+    payload = {
+        "user_personas": {
+            "segments": [
+                {
+                    "name": "Enterprise engineering teams",
+                    "role": "Engineer",
+                    "company_size": "Enterprise",
+                    "pain_points": [],
+                    "use_cases": ["coding"],
+                    "claims": [
+                        {
+                            "claim": "Cursor is used by teams and enterprise engineers.",
+                            "source_ids": ["homepage-1"],
+                            "confidence": 0.96,
+                        }
+                    ],
+                }
+            ],
+            "summary_claims": [],
+        },
+        "review_summary": {
+            "competitor": "Cursor",
+            "dimension": "persona",
+            "praise_themes": [],
+            "complaint_themes": [],
+            "adoption_blockers": [],
+            "switching_triggers": [],
+            "persona_segments": ["teams", "enterprise"],
+            "sentiment_hint": "unknown",
+            "source_ids": ["homepage-1"],
+            "confidence": 0.0,
+        },
+    }
+
+    harness._merge_structured_knowledge_payload(detail, "Cursor", "persona", payload)
+
+    summary = detail.competitor_knowledge["Cursor"].review_summary
+    source_ids = {
+        source_id
+        for item in [
+            *summary.praise_themes,
+            *summary.complaint_themes,
+            *summary.adoption_blockers,
+            *summary.switching_triggers,
+        ]
+        for source_id in item.source_ids
+    }
+    assert "customers-1" in source_ids
+    assert "interview-1" in source_ids
+
+
 def test_qa_accepts_review_summary_without_requiring_feature_tree_nodes() -> None:
     detail = RunDetail(
         id="run-review-qa",
