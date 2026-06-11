@@ -4400,7 +4400,106 @@ async def test_writer_line_repair_preserves_protectable_report_without_llm() -> 
 
 
 @pytest.mark.asyncio
-async def test_writer_non_line_repair_plan_uses_normal_writer_metadata() -> None:
+async def test_writer_section_repair_replaces_only_target_section() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    captured_user = ""
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal captured_user
+        captured_user = user
+        return (
+            "## User Review Themes\n"
+            "- Praise: Cursor is easier to explain in initial evaluation because pricing is "
+            "direct. "
+            "[source:pricing-1]\n"
+            "- Blocker: Copilot can defend with existing Microsoft workflow familiarity. "
+            "[source:feature-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report().replace(
+        (
+            "User review themes show Cursor is easier to explain during procurement, while Copilot "
+            "benefits from\nexisting Microsoft workflow familiarity. [source:pricing-1]\n"
+            "- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]\n"
+            "- Adoption blocker: security review and procurement packaging still need deeper "
+            "evidence.\n"
+            "[source:feature-1]"
+        ),
+        "Existing evidence does not provide verified user reviews.",
+    )
+    issue = QCIssue(
+        id="issue-review-thin",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section is too thin.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert "Repair only these sections: review_theme_summary" in captured_user
+    assert "return only the requested section markdown" in captured_user
+    assert "preserve existing [source:ID] syntax" in captured_user
+    assert "## Executive Summary" in record.detail.report_md
+    assert "## SWOT Analysis" in record.detail.report_md
+    assert "- Praise: Cursor is easier to explain" in record.detail.report_md
+    assert (
+        "Existing evidence does not provide verified user reviews."
+        not in record.detail.report_md
+    )
+    assert record.detail.agent_messages[-1].payload["writer_mode"] == "writer repair: section"
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "section"
+    assert record.detail.agent_messages[-1].payload["writer_repair_sections"] == [
+        "review_theme_summary"
+    ]
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+
+
+@pytest.mark.asyncio
+async def test_writer_full_repair_plan_uses_normal_writer_metadata() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -4430,7 +4529,7 @@ async def test_writer_non_line_repair_plan_uses_normal_writer_metadata() -> None
     service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
     detail = await service.create_run(
         RunCreateRequest(
-            topic="Writer section repair",
+            topic="Writer full repair",
             competitors=["Cursor", "Copilot"],
             dimensions=["pricing", "feature", "persona"],
             execution_mode="real",
@@ -4441,17 +4540,17 @@ async def test_writer_non_line_repair_plan_uses_normal_writer_metadata() -> None
     record.detail.raw_sources = _writer_repair_sources()
     record.detail.report_md = _writer_repair_protectable_report()
     issue = QCIssue(
-        id="issue-section-review",
+        id="issue-broad-writer",
         severity="blocker",
         detected_by="text_quality",
         target_agent="writer",
-        target_subagent="review_theme_summary",
-        field_path="report_md.section[review_theme_summary]",
-        problem="User Review Themes section needs repair.",
+        target_subagent="narrative_quality",
+        field_path="report_md",
+        problem="Report needs broad narrative quality repair.",
         redo_scope=RedoScope(
             kind="writer_only",
-            target_subagent="review_theme_summary",
-            rationale="repair review theme section",
+            target_subagent="narrative_quality",
+            rationale="repair broad writer quality",
         ),
     )
     record.detail.qa_findings = [issue]

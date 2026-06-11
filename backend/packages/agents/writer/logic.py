@@ -7,7 +7,11 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from packages.agents.writer.repair import apply_line_repair, build_writer_repair_plan
+from packages.agents.writer.repair import (
+    apply_line_repair,
+    build_writer_repair_plan,
+    replace_markdown_section,
+)
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.i18n.language import (
     language_instruction,
@@ -125,6 +129,53 @@ class WriterAgentMixin:
                 apply_line_repair(previous_report, redo_issues),
             )
             writer_mode = "writer repair: line"
+        elif repair_plan is not None and repair_plan.mode == "section":
+            try:
+                report_md = previous_report
+                for section in repair_plan.sections:
+                    section_md = await asyncio.wait_for(
+                        self._writer_section_repair_markdown(
+                            record,
+                            sections=[section],
+                            previous_report=previous_report,
+                        ),
+                        timeout=timeout_seconds,
+                    )
+                    report_md = replace_markdown_section(
+                        report_md,
+                        section,
+                        detail.output_language,
+                        section_md,
+                    )
+                detail.report_md = self._harden_report_markdown(detail, report_md)
+                writer_mode = "writer repair: section"
+                writer_repair_mode = repair_plan.mode
+                writer_repair_sections = repair_plan.sections
+                writer_repair_decision = repair_plan.reason
+                previous_report_protected = repair_plan.previous_report_protectable
+            except TimeoutError as exc:
+                timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
+                writer_error = timeout_reason
+                if previous_report.strip():
+                    detail.report_md = previous_report
+                    writer_mode = "preserved previous report after writer error"
+                else:
+                    detail.report_md = self._harden_report_markdown(
+                        detail,
+                        self._fallback_report_markdown(detail, writer_error),
+                    )
+                    writer_mode = "deterministic fallback after writer error"
+            except Exception as exc:  # noqa: BLE001 - writer fallback keeps long runs demo-safe.
+                writer_error = str(exc)
+                if previous_report.strip():
+                    detail.report_md = previous_report
+                    writer_mode = "preserved previous report after writer error"
+                else:
+                    detail.report_md = self._harden_report_markdown(
+                        detail,
+                        self._fallback_report_markdown(detail, writer_error),
+                    )
+                    writer_mode = "deterministic fallback after writer error"
         else:
             writer_context_json = json.dumps(
                 self._writer_context_package(detail),
@@ -253,6 +304,42 @@ class WriterAgentMixin:
             },
         )
         await self.emit(detail.id, "node_completed", "writer", None, "Writer completed.")
+
+    async def _writer_section_repair_markdown(
+        self,
+        record: RunRecord,
+        *,
+        sections: Sequence[str],
+        previous_report: str,
+    ) -> str:
+        detail = record.detail
+        writer_context_json = json.dumps(
+            self._writer_context_package(detail),
+            ensure_ascii=False,
+        )
+        return await self._trace_llm_text(
+            record,
+            agent="writer",
+            subagent=None,
+            name="report_section_repair",
+            system=(
+                "You are a senior enterprise competitive-intelligence analyst repairing "
+                "one section of an existing markdown report. Return only the requested "
+                "section markdown. Preserve existing [source:ID] syntax, never invent "
+                "source IDs, and cite factual claims with available source IDs."
+            ),
+            user=(
+                f"Topic: {detail.topic}\n"
+                f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                f"Repair only these sections: {', '.join(sections)}\n"
+                "return only the requested section markdown; do not rewrite unrelated "
+                "sections or include commentary outside the section.\n"
+                "You must preserve existing [source:ID] syntax.\n"
+                f"Writer Context JSON: {writer_context_json}\n\n"
+                f"Previous report:\n{previous_report}"
+            ),
+        )
 
     def _fallback_report_markdown(self, detail: RunDetail, reason: str) -> str:
         layer_label = self._writer_layer_label(detail)
