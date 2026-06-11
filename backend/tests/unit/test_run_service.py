@@ -9,6 +9,7 @@ from packages.business_intel.homepage import HomepageVerification
 from packages.business_intel.report_quality import compare_run_quality
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
+from packages.i18n.language import report_label
 from packages.memory import PreferenceMemoryStore, RunJournal
 from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
@@ -4496,6 +4497,157 @@ async def test_writer_section_repair_replaces_only_target_section() -> None:
         "review_theme_summary"
     ]
     assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_failure_reports_attempted_metadata() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        raise RuntimeError("section repair failed")
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer section repair failure",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    previous_report = _writer_repair_protectable_report()
+    record.detail.report_md = previous_report
+    issue = QCIssue(
+        id="issue-review-failure",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section needs section repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert record.detail.report_md == previous_report
+    assert payload["writer_mode"] == "preserved previous report after writer error"
+    assert payload["writer_repair_mode"] == "section"
+    assert payload["writer_repair_sections"] == ["review_theme_summary"]
+    assert (
+        payload["writer_repair_decision"]
+        == "small set of section findings on protectable report"
+    )
+    assert payload["previous_report_protected"] is True
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_prompt_includes_localized_heading() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    captured_system = ""
+    captured_user = ""
+    localized_heading = report_label("zh-CN", "review_theme_summary")
+
+    async def fake_complete_text(*, system: str, user: str) -> str:
+        nonlocal captured_system, captured_user
+        captured_system = system
+        captured_user = user
+        return (
+            f"## {localized_heading}\n"
+            "- 表扬：Cursor 的定价透明度更容易支持初始评估。 [source:pricing-1]\n"
+            "- 阻力：Copilot 可以依靠 Microsoft 工作流熟悉度防守。 [source:feature-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer localized section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="zh-CN",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-review-zh",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section needs localized section repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    prompt = f"{captured_system}\n{captured_user}"
+    assert "Use Simplified Chinese" in prompt
+    assert f"review_theme_summary -> ## {localized_heading}" in captured_user
+    assert f"## {localized_heading}" in record.detail.report_md
 
 
 @pytest.mark.asyncio

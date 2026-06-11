@@ -130,6 +130,10 @@ class WriterAgentMixin:
             )
             writer_mode = "writer repair: line"
         elif repair_plan is not None and repair_plan.mode == "section":
+            writer_repair_mode = repair_plan.mode
+            writer_repair_sections = repair_plan.sections
+            writer_repair_decision = repair_plan.reason
+            previous_report_protected = repair_plan.previous_report_protectable
             try:
                 report_md = previous_report
                 for section in repair_plan.sections:
@@ -149,10 +153,6 @@ class WriterAgentMixin:
                     )
                 detail.report_md = self._harden_report_markdown(detail, report_md)
                 writer_mode = "writer repair: section"
-                writer_repair_mode = repair_plan.mode
-                writer_repair_sections = repair_plan.sections
-                writer_repair_decision = repair_plan.reason
-                previous_report_protected = repair_plan.previous_report_protectable
             except TimeoutError as exc:
                 timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
                 writer_error = timeout_reason
@@ -317,6 +317,10 @@ class WriterAgentMixin:
             self._writer_context_package(detail),
             ensure_ascii=False,
         )
+        language_guidance = language_instruction(detail.output_language)
+        section_headings = "\n".join(
+            self._writer_section_heading_instruction(detail, section) for section in sections
+        )
         return await self._trace_llm_text(
             record,
             agent="writer",
@@ -326,20 +330,30 @@ class WriterAgentMixin:
                 "You are a senior enterprise competitive-intelligence analyst repairing "
                 "one section of an existing markdown report. Return only the requested "
                 "section markdown. Preserve existing [source:ID] syntax, never invent "
-                "source IDs, and cite factual claims with available source IDs."
+                "source IDs, and cite factual claims with available source IDs. "
+                f"{language_guidance}"
             ),
             user=(
                 f"Topic: {detail.topic}\n"
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
                 f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
                 f"Repair only these sections: {', '.join(sections)}\n"
+                f"Expected section headings:\n{section_headings}\n"
                 "return only the requested section markdown; do not rewrite unrelated "
                 "sections or include commentary outside the section.\n"
+                "Use the exact requested level-2 heading for each returned section.\n"
                 "You must preserve existing [source:ID] syntax.\n"
                 f"Writer Context JSON: {writer_context_json}\n\n"
                 f"Previous report:\n{previous_report}"
             ),
         )
+
+    def _writer_section_heading_instruction(self, detail: RunDetail, section: str) -> str:
+        try:
+            heading = report_label(detail.output_language, section)
+        except KeyError:
+            heading = section
+        return f"{section} -> ## {heading}"
 
     def _fallback_report_markdown(self, detail: RunDetail, reason: str) -> str:
         layer_label = self._writer_layer_label(detail)
