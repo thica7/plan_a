@@ -82,11 +82,24 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
     assert survey_source.dimension == "persona"
     assert "target users" in survey_source.snippet
     assert "buyer personas" in survey_source.snippet
-    assert survey_source.confidence == 0.58
+    assert "adoption blockers" in survey_source.snippet
+    assert "switching triggers" in survey_source.snippet
+    assert "buying criteria" in survey_source.snippet
+    assert survey_source.confidence == 0.76
+    assert survey_source.metadata["fallback_synthetic"] is True
+    assert survey_source.metadata["survey_interview_synthetic"] is True
+    assert survey_source.metadata["source_role"] == "survey"
+
     assert interview_source.competitor == "Acme"
     assert interview_source.dimension == "persona"
     assert "pain points" in interview_source.snippet
-    assert interview_source.confidence == 0.62
+    assert "individual developer" in interview_source.snippet
+    assert "team technical lead" in interview_source.snippet
+    assert "enterprise platform buyer" in interview_source.snippet
+    assert interview_source.confidence == 0.82
+    assert interview_source.metadata["fallback_synthetic"] is True
+    assert interview_source.metadata["survey_interview_synthetic"] is True
+    assert interview_source.metadata["source_role"] == "interview"
     assert "jane.buyer@example.com" not in survey_source.snippet
     assert OPENROUTER_PREFIX + "redacted" not in survey_source.snippet
     assert "jane.buyer@example.com" not in interview_source.snippet
@@ -103,6 +116,10 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
         interview_source.id,
     ]
     assert "workflow fit" in knowledge.user_personas.summary_claims[0].claim
+    assert knowledge.user_personas.summary_claims[0].confidence == 0.8
+    assert knowledge.user_personas.segments[0].claims[0].confidence == 0.8
+    assert "adoption risk" in knowledge.user_personas.summary_claims[0].claim
+    assert "buying criteria" in knowledge.user_personas.summary_claims[0].claim
     assert knowledge.user_personas.segments
     assert knowledge.user_personas.segments[0].claims[0].source_ids == [
         survey_source.id,
