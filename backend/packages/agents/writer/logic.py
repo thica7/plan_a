@@ -115,8 +115,20 @@ class WriterAgentMixin:
             if len(writer_only_messages_without_issue_ids) == 1:
                 redo_source_message_ids.append(writer_only_messages_without_issue_ids[0])
         redo_source_message_ids = list(dict.fromkeys(redo_source_message_ids))
-        if redo_issues:
-            repair_plan = build_writer_repair_plan(detail, redo_issues)
+        upstream_redo_stages = {"collector", "analyst", "comparator", "full"}
+        upstream_data_changed = (
+            pending_redo is not None
+            and (
+                pending_redo.stage in upstream_redo_stages
+                or pending_redo.redo_scope.kind in upstream_redo_stages
+            )
+        )
+        if redo_issues or upstream_data_changed:
+            repair_plan = build_writer_repair_plan(
+                detail,
+                redo_issues,
+                upstream_data_changed=upstream_data_changed,
+            )
         else:
             repair_plan = None
         timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))

@@ -4401,6 +4401,68 @@ async def test_writer_line_repair_preserves_protectable_report_without_llm() -> 
 
 
 @pytest.mark.asyncio
+async def test_writer_poor_previous_report_allows_full_rewrite() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return _writer_repair_protectable_report()
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer poor draft rewrite",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = "# Report\n\nbad line \ufffd"
+    issue = QCIssue(
+        id="issue-poor-line",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        field_path="report_md.line[3]",
+        problem="Report line 3 contains non-publishable text noise.",
+        redo_scope=RedoScope(kind="writer_only", rationale="repair poor report"),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert "bad line" not in record.detail.report_md
+    assert "## Decision Summary" in record.detail.report_md
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is False
+
+
+@pytest.mark.asyncio
 async def test_writer_section_repair_replaces_only_target_section() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -4820,6 +4882,64 @@ async def test_writer_full_repair_plan_uses_full_rewrite_metadata() -> None:
     assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
     assert record.detail.agent_messages[-1].payload["anti_regression_reason"] is None
     assert "Normal writer refresh" in record.detail.report_md
+
+
+@pytest.mark.asyncio
+async def test_writer_upstream_changed_allows_full_rewrite_with_guard_metadata() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return _writer_repair_protectable_report().replace(
+            "Cursor has stronger pricing transparency",
+            "Cursor has updated pricing transparency",
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer upstream rewrite",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    scope = RedoScope(
+        kind="collector",
+        target_subagent="pricing",
+        target_competitor="Cursor",
+        rationale="new pricing evidence",
+    )
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="collector",
+        redo_scope=scope,
+        redo_scopes=[scope],
+        before_md=record.detail.report_md,
+        issue_ids=["collector-issue"],
+        qa_issue_ids_before=["collector-issue"],
+        issue_count_before=1,
+    )
+
+    await service._real_writer_step(record)
+
+    assert "Cursor has updated pricing transparency" in record.detail.report_md
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
 
 
 @pytest.mark.asyncio
