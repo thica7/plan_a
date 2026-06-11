@@ -53,12 +53,16 @@ class WriterAgentMixin:
             consumer_agent="writer",
             message_types={"reflection_ready"},
         )
-        redo_messages = self._consume_queued_agent_messages(
-            record,
-            to_agent="writer",
-            consumer_agent="writer",
-            message_types={"redo_request"},
-        )
+        redo_messages = []
+        for to_agent in ("writer", "writer_only"):
+            redo_messages.extend(
+                self._consume_queued_agent_messages(
+                    record,
+                    to_agent=to_agent,
+                    consumer_agent="writer",
+                    message_types={"redo_request"},
+                )
+            )
         await self.emit(detail.id, "node_started", "writer", None, "Calling report writer.")
         previous_report = detail.report_md
         writer_mode = "real LLM call"
@@ -68,11 +72,22 @@ class WriterAgentMixin:
         writer_repair_decision = ""
         anti_regression_reason: str | None = None
         previous_report_protected = False
-        redo_issues = [
-            QCIssue.model_validate(item)
-            for message in redo_messages
-            for item in message.payload.get("issues", [])
-        ]
+        redo_issue_by_id: dict[str, QCIssue] = {}
+        for message in redo_messages:
+            for item in message.payload.get("issues", []):
+                issue = QCIssue.model_validate(item)
+                redo_issue_by_id.setdefault(issue.id, issue)
+        pending_redo = record.pending_graph_redo
+        if (
+            pending_redo is not None
+            and pending_redo.redo_scope.kind == "writer_only"
+            and pending_redo.issue_ids
+        ):
+            pending_issue_ids = set(pending_redo.issue_ids)
+            for issue in detail.qa_findings:
+                if issue.id in pending_issue_ids:
+                    redo_issue_by_id.setdefault(issue.id, issue)
+        redo_issues = list(redo_issue_by_id.values())
         redo_source_message_ids = [message.id for message in redo_messages]
         if redo_issues:
             repair_plan = build_writer_repair_plan(detail, redo_issues)

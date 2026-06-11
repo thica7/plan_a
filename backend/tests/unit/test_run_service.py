@@ -12,7 +12,7 @@ from packages.enterprise import EnterpriseMemoryStore
 from packages.memory import PreferenceMemoryStore, RunJournal
 from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
-from packages.orchestrator.service import RunRecord, RunService
+from packages.orchestrator.service import PendingGraphRedo, RunRecord, RunService
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
@@ -4330,10 +4330,20 @@ async def test_writer_line_repair_preserves_protectable_report_without_llm() -> 
         redo_scope=RedoScope(kind="writer_only", rationale="repair noisy report line"),
     )
     record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="writer_only",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=noisy_report,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
     service._append_agent_message(
         record,
         from_agent="qa",
-        to_agent="writer",
+        to_agent="writer_only",
         message_type="redo_request",
         payload_schema="RedoRequestPayload",
         payload={
@@ -4341,6 +4351,12 @@ async def test_writer_line_repair_preserves_protectable_report_without_llm() -> 
             "issues": [issue.model_dump(mode="json")],
             "issue_ids": [issue.id],
         },
+    )
+    service._consume_queued_agent_messages(
+        record,
+        to_agent="writer_only",
+        consumer_agent="redo_router",
+        message_types={"redo_request"},
     )
 
     await service._real_writer_step(record)
