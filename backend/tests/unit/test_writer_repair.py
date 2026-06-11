@@ -105,6 +105,29 @@ def test_report_regression_detects_collapsed_review_section() -> None:
     assert "review_theme_summary" in problem
 
 
+def test_writer_repair_helpers_accept_approved_positional_api() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issues = [_report_line_issue(line_number=8, problem="non-publishable text noise")]
+
+    plan = build_writer_repair_plan(detail, issues)
+
+    assert plan.mode == "line"
+
+    updated = replace_markdown_section(
+        "# Report\n\n## User Review Themes\nThin.\n",
+        "review_theme_summary",
+        "en-US",
+        "## User Review Themes\nCited replacement. [source:pricing-1]\n",
+    )
+
+    assert "Cited replacement. [source:pricing-1]" in updated
+    assert "Thin." not in updated
+
+    problem = report_regression_problem(detail, detail, ["review_theme_summary"])
+
+    assert problem is None
+
+
 def _report_line_issue(*, line_number: int, problem: str) -> QCIssue:
     field_path = f"report_md.line[{line_number}]"
     return QCIssue(

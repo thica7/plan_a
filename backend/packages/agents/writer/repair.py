@@ -58,8 +58,7 @@ class MarkdownSection:
 def build_writer_repair_plan(
     detail: RunDetail,
     issues: list[QCIssue],
-    *,
-    upstream_data_changed: bool,
+    upstream_data_changed: bool = False,
 ) -> WriterRepairPlan:
     protectable = _previous_report_is_protectable(detail)
     if upstream_data_changed:
@@ -122,7 +121,6 @@ def apply_line_repair(markdown: str, issues: list[QCIssue]) -> str:
 
 def replace_markdown_section(
     markdown: str,
-    *,
     target_section: str,
     output_language: str,
     replacement_markdown: str,
@@ -139,7 +137,6 @@ def replace_markdown_section(
 def report_regression_problem(
     previous: RunDetail,
     candidate: RunDetail,
-    *,
     protected_sections: list[str],
 ) -> str | None:
     for section_key in protected_sections:
