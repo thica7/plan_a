@@ -408,6 +408,31 @@ def test_report_regression_detects_whole_report_collapse() -> None:
     assert "report regressed" in problem
 
 
+def test_report_regression_quality_comparison_can_be_disabled_for_section_repair() -> None:
+    previous = _detail(report_md=_protectable_report())
+    candidate = previous.model_copy(
+        update={
+            "metrics": previous.metrics.model_copy(update={"llm_calls": 0}),
+        }
+    )
+
+    default_problem = report_regression_problem(
+        previous,
+        candidate,
+        protected_sections=["review_theme_summary"],
+    )
+    section_only_problem = report_regression_problem(
+        previous,
+        candidate,
+        protected_sections=["review_theme_summary"],
+        include_quality_comparison=False,
+    )
+
+    assert default_problem is not None
+    assert "real_llm signal is missing" in default_problem
+    assert section_only_problem is None
+
+
 def test_writer_repair_helpers_accept_approved_positional_api() -> None:
     detail = _detail(report_md=_protectable_report())
     issues = [_report_line_issue(line_number=8, problem="non-publishable text noise")]

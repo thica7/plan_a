@@ -201,6 +201,7 @@ class WriterAgentMixin:
                         previous_detail,
                         candidate_detail,
                         protected_sections=repair_plan.sections,
+                        include_quality_comparison=False,
                     )
                 if anti_regression_reason:
                     detail.report_md = self._preserve_hardened_previous_report(

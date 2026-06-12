@@ -4969,7 +4969,6 @@ async def test_writer_section_repair_failure_reports_attempted_metadata() -> Non
     await service._real_writer_step(record)
 
     payload = record.detail.agent_messages[-1].payload
-    assert record.detail.report_md == previous_report
     assert payload["writer_mode"] == "preserved previous report after writer error"
     assert payload["writer_repair_mode"] == "section"
     assert payload["writer_repair_sections"] == ["review_theme_summary"]
@@ -4978,6 +4977,11 @@ async def test_writer_section_repair_failure_reports_attempted_metadata() -> Non
         == "small set of section findings on protectable report"
     )
     assert payload["previous_report_protected"] is True
+    assert record.detail.report_md.strip()
+    assert "[source:pricing-1]" in record.detail.report_md
+    assert "[source:feature-1]" in record.detail.report_md
+    assert "- Customer theme: pricing clarity supports fast evaluation." in record.detail.report_md
+    assert "Cursor has stronger pricing transparency" in record.detail.report_md
 
 
 @pytest.mark.asyncio
@@ -5006,6 +5010,10 @@ async def test_writer_section_repair_prompt_includes_localized_heading() -> None
             f"## {localized_heading}\n"
             "- 表扬：Cursor 的定价透明度更容易支持初始评估。 [source:pricing-1]\n"
             "- 阻力：Copilot 可以依靠 Microsoft 工作流熟悉度防守。 [source:feature-1]\n"
+            "- 采购语境：团队仍会比较上线培训、合规审查和现有微软采购路径，"
+            "因此评价摘要需要保留这些已验证的购买阻力。 [source:feature-1]\n"
+            "- 转换触发：当团队需要更直接的开发流程说明时，Cursor 更容易被提出，"
+            "但仍要把结论限定在已收集证据范围内。 [source:pricing-1]\n"
         )
 
     service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]

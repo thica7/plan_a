@@ -232,6 +232,8 @@ def report_regression_problem(
     previous: RunDetail,
     candidate: RunDetail,
     protected_sections: list[str],
+    *,
+    include_quality_comparison: bool = True,
 ) -> str | None:
     for section_key in protected_sections:
         previous_chars = _section_content_chars(
@@ -282,9 +284,10 @@ def report_regression_problem(
             f"{candidate_report_chars} substantive characters"
         )
 
-    comparison = compare_run_quality(candidate, baseline=previous)
-    if comparison.regression_gate_status == "fail":
-        return "; ".join(comparison.regression_gate_reasons)
+    if include_quality_comparison:
+        comparison = compare_run_quality(candidate, baseline=previous)
+        if comparison.regression_gate_status == "fail":
+            return "; ".join(comparison.regression_gate_reasons)
     return None
 
 
