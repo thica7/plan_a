@@ -168,6 +168,16 @@ the buyer needs bundled familiarity or a focused coding workflow proof. [source:
 - Follow-up: request security, onboarding, and procurement evidence before making an absolute
 replacement claim. [source:pricing-1] [source:feature-1]
 
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Copilot |
+| --- | --- | --- |
+| Pricing | clearer standalone price [source:pricing-1] | bundled context [source:feature-1] |
+| Feature | focused workflow proof [source:pricing-1] | IDE breadth [source:feature-1] |
+| Persona | direct evaluator path [source:pricing-1] | platform continuity [source:feature-1] |
+| Security | qualify readiness [source:feature-1] | verify governance [source:feature-1] |
+| Procurement | lead with clarity [source:pricing-1] | separate bundle value [source:feature-1] |
+| Follow-up | collect objections [source:pricing-1] | gather rollout proof [source:feature-1] |
+
 ## Source Quality & Coverage
 The run uses verified pages for both target competitors. [source:pricing-1] [source:feature-1]
 
