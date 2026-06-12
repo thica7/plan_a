@@ -118,6 +118,10 @@ Cursor has stronger pricing transparency, while Copilot has integration breadth.
 ## Decision Summary
 Recommended action: use Cursor's pricing clarity as the initial L1 battlecard point while
 keeping Copilot's bundled distribution as the procurement counter-position.
+- Do not overstate a winner beyond pricing and workflow evidence; enterprise security proof
+still needs direct validation before procurement guidance becomes firm. [source:feature-1]
+- Immediate next move: collect one current trust-center source and one buyer-objection source
+so sales can separate pricing clarity from rollout risk. [source:pricing-1]
 [source:pricing-1] [source:feature-1]
 
 ## Competitive Findings
@@ -125,6 +129,9 @@ keeping Copilot's bundled distribution as the procurement counter-position.
 [source:pricing-1]
 - Feature: Copilot has broad IDE integration evidence, which gives it a defensible adoption path.
 [source:feature-1]
+- Persona: developer evaluators can understand Cursor's focused value faster, while platform
+buyers may still prefer Copilot's Microsoft adjacency for governance and procurement continuity.
+[source:pricing-1] [source:feature-1]
 
 ## Competitor Deep Dives
 - Cursor wins on pricing clarity and focused workflow; watchouts remain procurement and
@@ -132,6 +139,11 @@ security proof.
 [source:pricing-1]
 - Copilot wins on distribution and IDE breadth; watchouts remain direct packaging comparison.
 [source:feature-1]
+- Cursor weakness: the available evidence does not yet prove enterprise rollout readiness, so
+sales should keep security claims qualified until a verified trust source is collected.
+[source:feature-1]
+- Copilot weakness: bundled familiarity can obscure standalone value comparison, so evaluators
+need pricing and onboarding proof before accepting it as the default choice. [source:pricing-1]
 
 ## User Review Themes
 User review themes show Cursor is easier to explain during procurement, while Copilot benefits from
@@ -149,6 +161,12 @@ existing Microsoft workflow familiarity. [source:pricing-1]
 ## Battlecard
 Sales should use pricing transparency and switching objections as the first battlecard line.
 [source:pricing-1] [source:feature-1]
+- Response guidance: lead with Cursor's transparent evaluation path when buyers ask for direct
+developer workflow value. [source:pricing-1]
+- Objection handling: acknowledge Copilot's Microsoft distribution advantage, then ask whether
+the buyer needs bundled familiarity or a focused coding workflow proof. [source:feature-1]
+- Follow-up: request security, onboarding, and procurement evidence before making an absolute
+replacement claim. [source:pricing-1] [source:feature-1]
 
 ## Source Quality & Coverage
 The run uses verified pages for both target competitors. [source:pricing-1] [source:feature-1]
@@ -4559,6 +4577,77 @@ async def test_writer_section_repair_replaces_only_target_section() -> None:
         "review_theme_summary"
     ]
     assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+
+
+@pytest.mark.asyncio
+async def test_writer_only_thin_core_finding_uses_section_repair() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer thin core section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue.model_construct(
+        id="issue-competitive-findings-thin",
+        severity="blocker",
+        detected_by="report_quality",
+        target_agent="writer",
+        field_path="report_quality.core_section_depth_score",
+        problem="Competitive Findings section is too thin for decision-grade reporting.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Expand Competitive Findings."),
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="writer_only",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=["issue-competitive-findings-thin"],
+        qa_issue_ids_before=["issue-competitive-findings-thin"],
+        issue_count_before=1,
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        assert "Competitive Findings" in user
+        return (
+            "## Competitive Findings\n"
+            "- Cursor has clearer pricing evaluation signals for buyers comparing direct "
+            "developer workflow tools. [source:pricing-1]\n"
+            "- Copilot retains enterprise familiarity through Microsoft workflow adjacency, "
+            "but this creates a different buying motion. [source:feature-1]\n"
+            "- The decision implication is to test pricing transparency and onboarding proof "
+            "before treating either product as the default winner. [source:pricing-1]"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+
+    await service._real_writer_step(record)
+
+    message = record.detail.agent_messages[-1]
+    assert message.payload["writer_repair_mode"] == "section"
+    assert message.payload["writer_repair_sections"] == ["competitive_findings"]
+    assert (
+        "The decision implication is to test pricing transparency"
+        in record.detail.report_md
+    )
 
 
 @pytest.mark.asyncio

@@ -23,15 +23,31 @@ PROTECTABLE_MINIMUMS = {
     "citation_validity_rate": 0.6,
 }
 SECTION_REPAIR_HINTS: dict[str, tuple[str, ...]] = {
+    "decision_summary": (
+        "decision summary",
+        "recommended action",
+        "decision posture",
+        "immediate next move",
+    ),
+    "competitive_findings": (
+        "competitive findings",
+        "dimension findings",
+        "highest-impact finding",
+        "findings section",
+    ),
     "review_theme_summary": (
         "review",
         "user review",
         "review_theme",
         "user_research",
+        "adoption blocker",
+        "switching trigger",
     ),
     "swot_analysis": ("swot", "strength", "weakness", "opportunit", "threat"),
-    "competitor_deep_dives": ("competitor deep", "deep_dive"),
-    "battlecard": ("battlecard", "response guidance"),
+    "competitor_deep_dives": ("competitor deep", "deep_dive", "wins", "watchouts"),
+    "battlecard": ("battlecard", "response guidance", "sales response", "objection"),
+    "workflow_enterprise_risk": ("workflow", "enterprise risk", "switching cost"),
+    "market_landscape": ("market landscape", "category strategy", "competitor clusters"),
     "claim_risk": ("claim risk", "claim_validation", "evidence risk"),
     "rag_gap_fill": ("rag", "gap fill", "retrieval"),
 }

@@ -51,6 +51,42 @@ def test_writer_repair_upstream_changed_allows_full_without_anti_regression() ->
     assert plan.anti_regression_required is False
 
 
+def test_writer_repair_maps_thin_competitive_findings_to_section_repair() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue.model_construct(
+        id="issue-competitive-findings-thin",
+        severity="blocker",
+        detected_by="report_quality",
+        target_agent="writer",
+        field_path="report_quality.core_section_depth_score",
+        problem="Competitive Findings section is too thin for decision-grade reporting.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Expand Competitive Findings."),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["competitive_findings"]
+
+
+def test_writer_repair_maps_thin_decision_summary_to_section_repair() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue.model_construct(
+        id="issue-decision-summary-thin",
+        severity="blocker",
+        detected_by="report_quality",
+        target_agent="writer",
+        field_path="report_quality.core_section_depth_score",
+        problem="Decision Summary section needs recommended action and immediate next move.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Expand Decision Summary."),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["decision_summary"]
+
+
 def test_apply_line_repair_removes_only_still_noisy_lines() -> None:
     markdown = "good opening\nbad line \ufffd\nkeep this cited line [source:pricing-1]\n"
     issues = [_report_line_issue(line_number=2, problem="non-publishable text noise")]
@@ -268,6 +304,10 @@ Cursor has stronger pricing transparency, while Copilot has integration breadth.
 ## Decision Summary
 Recommended action: use Cursor's pricing clarity as the initial L1 battlecard point while
 keeping Copilot's bundled distribution as the procurement counter-position.
+- Do not overstate a winner beyond pricing and workflow evidence; enterprise security proof
+still needs direct validation before procurement guidance becomes firm. [source:feature-1]
+- Immediate next move: collect one current trust-center source and one buyer-objection source
+so sales can separate pricing clarity from rollout risk. [source:pricing-1]
 [source:pricing-1] [source:feature-1]
 
 ## Competitive Findings
@@ -275,6 +315,9 @@ keeping Copilot's bundled distribution as the procurement counter-position.
 [source:pricing-1]
 - Feature: Copilot has broad IDE integration evidence, which gives it a defensible adoption path.
 [source:feature-1]
+- Persona: developer evaluators can understand Cursor's focused value faster, while platform
+buyers may still prefer Copilot's Microsoft adjacency for governance and procurement continuity.
+[source:pricing-1] [source:feature-1]
 
 ## Competitor Deep Dives
 - Cursor wins on pricing clarity and focused workflow; watchouts remain procurement and
@@ -282,6 +325,11 @@ security proof.
 [source:pricing-1]
 - Copilot wins on distribution and IDE breadth; watchouts remain direct packaging comparison.
 [source:feature-1]
+- Cursor weakness: the available evidence does not yet prove enterprise rollout readiness, so
+sales should keep security claims qualified until a verified trust source is collected.
+[source:feature-1]
+- Copilot weakness: bundled familiarity can obscure standalone value comparison, so evaluators
+need pricing and onboarding proof before accepting it as the default choice. [source:pricing-1]
 
 ## User Review Themes
 User review themes show Cursor is easier to explain during procurement, while Copilot benefits from
@@ -299,6 +347,12 @@ existing Microsoft workflow familiarity. [source:pricing-1]
 ## Battlecard
 Sales should use pricing transparency and switching objections as the first battlecard line.
 [source:pricing-1] [source:feature-1]
+- Response guidance: lead with Cursor's transparent evaluation path when buyers ask for direct
+developer workflow value. [source:pricing-1]
+- Objection handling: acknowledge Copilot's Microsoft distribution advantage, then ask whether
+the buyer needs bundled familiarity or a focused coding workflow proof. [source:feature-1]
+- Follow-up: request security, onboarding, and procurement evidence before making an absolute
+replacement claim. [source:pricing-1] [source:feature-1]
 
 ## Source Quality & Coverage
 The run uses verified pages for both target competitors. [source:pricing-1] [source:feature-1]
