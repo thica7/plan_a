@@ -320,6 +320,63 @@ def test_report_regression_detects_collapsed_zh_cn_review_section() -> None:
     assert "review_theme_summary" in problem
 
 
+def test_report_regression_detects_large_review_section_collapse() -> None:
+    rich_review = "\n".join(
+        f"- User research theme {index}: buyer feedback explains adoption blocker "
+        f"and switching trigger for Cursor and Copilot. [source:pricing-1]"
+        for index in range(12)
+    )
+    previous = _detail(
+        report_md=_protectable_report().replace(
+            (
+                "User review themes show Cursor is easier to explain during procurement, "
+                "while Copilot benefits from\n"
+                "existing Microsoft workflow familiarity. [source:pricing-1]\n"
+                "- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]\n"
+                "- Adoption blocker: security review and procurement packaging still need "
+                "deeper evidence.\n"
+                "[source:feature-1]"
+            ),
+            rich_review,
+        )
+    )
+    candidate = _detail(
+        report_md=previous.report_md.replace(
+            rich_review,
+            "Existing evidence does not provide verified user reviews.",
+        )
+    )
+
+    problem = report_regression_problem(
+        previous,
+        candidate,
+        protected_sections=["review_theme_summary"],
+    )
+
+    assert problem is not None
+    assert "review_theme_summary" in problem
+
+
+def test_report_regression_detects_whole_report_collapse() -> None:
+    previous_report = _protectable_report() + "\n\n" + "\n".join(
+        f"Detailed cited analysis line {index} explains buyer impact, risk, and next action. "
+        f"[source:pricing-1]"
+        for index in range(220)
+    )
+    candidate_report = _protectable_report()
+    previous = _detail(report_md=previous_report)
+    candidate = _detail(report_md=candidate_report)
+
+    problem = report_regression_problem(
+        previous,
+        candidate,
+        protected_sections=["review_theme_summary", "swot_analysis"],
+    )
+
+    assert problem is not None
+    assert "report regressed" in problem
+
+
 def test_writer_repair_helpers_accept_approved_positional_api() -> None:
     detail = _detail(report_md=_protectable_report())
     issues = [_report_line_issue(line_number=8, problem="non-publishable text noise")]

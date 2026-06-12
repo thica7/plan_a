@@ -23,6 +23,13 @@ PROTECTABLE_MINIMUMS = {
     "core_analysis_depth_score": 0.6,
     "citation_validity_rate": 0.6,
 }
+SECTION_COLLAPSE_RULES = {
+    "review_theme_summary": (700, 600, 0.60),
+    "swot_analysis": (900, 700, 0.60),
+    "competitor_deep_dives": (900, 700, 0.60),
+}
+WHOLE_REPORT_COLLAPSE_MIN_CHARS = 12_000
+WHOLE_REPORT_COLLAPSE_RATIO = 0.70
 SECTION_REPAIR_HINTS: dict[str, tuple[str, ...]] = {
     "decision_summary": (
         "decision summary",
@@ -229,6 +236,38 @@ def report_regression_problem(
                 f"{candidate_chars} substantive characters"
             )
 
+    for section_key, collapse_rule in SECTION_COLLAPSE_RULES.items():
+        previous_minimum, candidate_floor, ratio = collapse_rule
+        previous_chars = _section_content_chars(
+            previous.report_md,
+            section_key,
+            previous.output_language,
+        )
+        candidate_chars = _section_content_chars(
+            candidate.report_md,
+            section_key,
+            candidate.output_language,
+        )
+        if previous_chars >= previous_minimum and candidate_chars < max(
+            candidate_floor,
+            previous_chars * ratio,
+        ):
+            return (
+                f"{section_key} section regressed from {previous_chars} to "
+                f"{candidate_chars} substantive characters"
+            )
+
+    previous_report_chars = _substantive_report_chars(previous.report_md)
+    candidate_report_chars = _substantive_report_chars(candidate.report_md)
+    if (
+        previous_report_chars >= WHOLE_REPORT_COLLAPSE_MIN_CHARS
+        and candidate_report_chars < previous_report_chars * WHOLE_REPORT_COLLAPSE_RATIO
+    ):
+        return (
+            f"report regressed from {previous_report_chars} to "
+            f"{candidate_report_chars} substantive characters"
+        )
+
     comparison = compare_run_quality(candidate, baseline=previous)
     if comparison.regression_gate_status == "fail":
         return "; ".join(comparison.regression_gate_reasons)
@@ -342,6 +381,12 @@ def _compact_heading(value: str) -> str:
 
 def _normalize_section_replacement(replacement_markdown: str) -> str:
     return replacement_markdown.strip()
+
+
+def _substantive_report_chars(markdown: str) -> int:
+    body = re.sub(r"\[source:[^\]]+\]", "", markdown)
+    body = re.sub(r"\s+", " ", body).strip()
+    return len(body)
 
 
 def _section_content_chars(
