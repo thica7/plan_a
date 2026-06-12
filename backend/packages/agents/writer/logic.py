@@ -84,11 +84,7 @@ class WriterAgentMixin:
                 redo_issue_by_id.setdefault(issue.id, issue)
         pending_redo = record.pending_graph_redo
         pending_issue_ids: set[str] = set()
-        if (
-            pending_redo is not None
-            and pending_redo.redo_scope.kind == "writer_only"
-            and pending_redo.issue_ids
-        ):
+        if pending_redo is not None and pending_redo.issue_ids:
             pending_issue_ids = set(pending_redo.issue_ids)
             for issue in detail.qa_findings:
                 if issue.id in pending_issue_ids:
@@ -170,7 +166,10 @@ class WriterAgentMixin:
                 timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
                 writer_error = timeout_reason
                 if previous_report.strip():
-                    detail.report_md = previous_report
+                    detail.report_md = self._preserve_hardened_previous_report(
+                        detail,
+                        previous_report,
+                    )
                     writer_mode = "preserved previous report after writer error"
                 else:
                     detail.report_md = self._harden_report_markdown(
@@ -181,7 +180,10 @@ class WriterAgentMixin:
             except Exception as exc:  # noqa: BLE001 - writer fallback keeps long runs demo-safe.
                 writer_error = str(exc)
                 if previous_report.strip():
-                    detail.report_md = previous_report
+                    detail.report_md = self._preserve_hardened_previous_report(
+                        detail,
+                        previous_report,
+                    )
                     writer_mode = "preserved previous report after writer error"
                 else:
                     detail.report_md = self._harden_report_markdown(
@@ -307,7 +309,10 @@ class WriterAgentMixin:
                         protected_sections=protected_sections,
                     )
                 if anti_regression_reason:
-                    detail.report_md = previous_report
+                    detail.report_md = self._preserve_hardened_previous_report(
+                        detail,
+                        previous_report,
+                    )
                     writer_mode = "preserved previous report after writer anti-regression"
                 else:
                     detail.report_md = hardened_report
@@ -315,7 +320,10 @@ class WriterAgentMixin:
                 timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
                 writer_error = timeout_reason
                 if previous_report.strip():
-                    detail.report_md = previous_report
+                    detail.report_md = self._preserve_hardened_previous_report(
+                        detail,
+                        previous_report,
+                    )
                     writer_mode = "preserved previous report after writer error"
                 else:
                     detail.report_md = self._harden_report_markdown(
@@ -326,7 +334,10 @@ class WriterAgentMixin:
             except Exception as exc:  # noqa: BLE001 - writer fallback keeps long runs demo-safe.
                 writer_error = str(exc)
                 if previous_report.strip():
-                    detail.report_md = previous_report
+                    detail.report_md = self._preserve_hardened_previous_report(
+                        detail,
+                        previous_report,
+                    )
                     writer_mode = "preserved previous report after writer error"
                 else:
                     detail.report_md = self._harden_report_markdown(
@@ -1018,6 +1029,13 @@ class WriterAgentMixin:
                 self._ensure_report_required_sections(detail, repaired),
             ),
         )
+
+    def _preserve_hardened_previous_report(
+        self,
+        detail: RunDetail,
+        previous_report: str,
+    ) -> str:
+        return self._harden_report_markdown(detail, previous_report)
 
     def _ensure_report_required_sections(self, detail: RunDetail, markdown: str) -> str:
         hardened = markdown.strip()

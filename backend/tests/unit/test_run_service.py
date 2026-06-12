@@ -4590,6 +4590,82 @@ async def test_writer_section_repair_replaces_only_target_section() -> None:
 
 
 @pytest.mark.asyncio
+async def test_writer_upstream_persona_change_uses_section_repair() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return (
+            "## User Review Themes\n"
+            "- Persona refresh: simulated survey and interview signals show buyers compare "
+            "pricing clarity with Microsoft workflow familiarity. [source:pricing-1]\n"
+            "- Adoption blocker: procurement and rollout proof still need validation. "
+            "[source:feature-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer upstream persona section",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-upstream-persona",
+        severity="warn",
+        detected_by="coverage",
+        target_agent="collector",
+        target_subagent="persona",
+        target_competitor="Copilot",
+        field_path="raw_sources[persona]",
+        problem="Copilot persona review themes need stronger survey and interview evidence.",
+        redo_scope=RedoScope(
+            kind="collector",
+            target_subagent="persona",
+            target_competitor="Copilot",
+            rationale="Collect persona survey and interview evidence for Copilot.",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="collector",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_mode"] == "writer repair: section"
+    assert payload["writer_repair_mode"] == "section"
+    assert payload["writer_repair_sections"] == ["review_theme_summary"]
+    assert payload["previous_report_protected"] is True
+    assert "## SWOT Analysis" in record.detail.report_md
+    assert "Persona refresh" in record.detail.report_md
+
+
+@pytest.mark.asyncio
 async def test_writer_only_thin_core_finding_uses_section_repair() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -4892,6 +4968,94 @@ async def test_writer_full_rewrite_rejects_collapsed_review_section_when_previou
 
 
 @pytest.mark.asyncio
+async def test_writer_preserved_previous_report_is_hardened_after_anti_regression() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return (
+            "# Thin Candidate\n\n"
+            "## Executive Summary\n"
+            "Existing evidence does not provide verified user reviews. [source:pricing-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer preserved hardening",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    previous_report = _writer_repair_protectable_report().replace(
+        "[source:pricing-1]",
+        "[source:pricing]",
+        1,
+    )
+    record.detail.report_md = previous_report
+    issue = QCIssue(
+        id="issue-broad-writer-collapse",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        field_path="report_md",
+        problem="Report needs broad narrative quality repair.",
+        redo_scope=RedoScope(kind="writer_only", rationale="repair broad writer quality"),
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="writer_only",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+    service._consume_queued_agent_messages(
+        record,
+        to_agent="writer_only",
+        consumer_agent="redo_router",
+        message_types={"redo_request"},
+    )
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_mode"] == "preserved previous report after writer anti-regression"
+    assert payload["anti_regression_reason"]
+    assert "[source:pricing]" not in record.detail.report_md
+    assert "[source:pricing-1]" in record.detail.report_md
+
+
+@pytest.mark.asyncio
 async def test_writer_full_repair_plan_uses_full_rewrite_metadata() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -5102,11 +5266,15 @@ async def test_writer_upstream_changed_accepts_thinner_full_rewrite() -> None:
     await service._real_writer_step(record)
 
     payload = record.detail.agent_messages[-1].payload
-    assert "Cursor has updated pricing transparency" in record.detail.report_md
-    assert "Customer theme: pricing clarity supports fast evaluation" not in record.detail.report_md
+    assert "Cursor has updated pricing transparency" not in record.detail.report_md
+    assert "Customer theme: pricing clarity supports fast evaluation" in record.detail.report_md
     assert payload["writer_repair_mode"] == "full"
     assert payload["previous_report_protected"] is True
-    assert payload["anti_regression_reason"] is None
+    assert payload["anti_regression_reason"]
+    assert (
+        payload["writer_mode"]
+        == "preserved previous report after writer anti-regression"
+    )
 
 
 @pytest.mark.asyncio
