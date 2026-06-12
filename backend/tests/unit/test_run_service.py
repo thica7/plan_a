@@ -4590,6 +4590,81 @@ async def test_writer_section_repair_replaces_only_target_section() -> None:
 
 
 @pytest.mark.asyncio
+async def test_writer_section_repair_rejects_collapsed_target_section() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return (
+            "## User Review Themes\n"
+            "Existing evidence does not provide verified user reviews. [source:pricing-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer section repair guard",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-review-collapse",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section is too thin.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_mode"] == "preserved previous report after writer anti-regression"
+    assert payload["writer_repair_mode"] == "section"
+    assert payload["anti_regression_reason"]
+    assert (
+        "Existing evidence does not provide verified user reviews."
+        not in record.detail.report_md
+    )
+    assert "- Customer theme: pricing clarity supports fast evaluation." in record.detail.report_md
+
+
+@pytest.mark.asyncio
 async def test_writer_upstream_persona_change_uses_section_repair() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -4611,6 +4686,9 @@ async def test_writer_upstream_persona_change_uses_section_repair() -> None:
             "pricing clarity with Microsoft workflow familiarity. [source:pricing-1]\n"
             "- Adoption blocker: procurement and rollout proof still need validation. "
             "[source:feature-1]\n"
+            "- Switching trigger: developer evaluators respond to direct value framing, while "
+            "platform buyers still ask for governance and onboarding evidence. "
+            "[source:pricing-1] [source:feature-1]\n"
         )
 
     service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
@@ -5299,7 +5377,7 @@ async def test_writer_upstream_changed_allows_full_rewrite_with_guard_metadata()
 
 
 @pytest.mark.asyncio
-async def test_writer_upstream_changed_accepts_thinner_full_rewrite() -> None:
+async def test_writer_upstream_changed_rejects_thinner_full_rewrite() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(

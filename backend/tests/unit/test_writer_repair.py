@@ -68,6 +68,37 @@ def test_writer_repair_upstream_persona_change_routes_to_section_repair() -> Non
     assert "upstream data changed" in plan.reason
 
 
+def test_writer_repair_upstream_pricing_change_routes_to_section_repair() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-pricing-upstream",
+        severity="warn",
+        detected_by="coverage",
+        target_agent="collector",
+        target_subagent="pricing",
+        target_competitor="Cursor",
+        field_path="raw_sources[pricing]",
+        problem=(
+            "Cursor pricing, packaging, and per-seat enterprise evidence need stronger support."
+        ),
+        redo_scope=RedoScope(
+            kind="collector",
+            target_subagent="pricing",
+            target_competitor="Cursor",
+            rationale="Collect pricing, packaging, seat, and enterprise evidence for Cursor.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=True)
+
+    assert plan.mode == "section"
+    assert plan.previous_report_protectable is True
+    assert plan.anti_regression_required is True
+    assert "decision_summary" in plan.sections
+    assert "battlecard" in plan.sections
+    assert len(plan.sections) <= 4
+
+
 def test_writer_repair_upstream_broad_change_uses_full_with_anti_regression() -> None:
     detail = _detail(report_md=_protectable_report())
     issue = QCIssue(

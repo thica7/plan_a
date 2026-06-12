@@ -170,8 +170,47 @@ class WriterAgentMixin:
                         detail.output_language,
                         section_md,
                     )
-                detail.report_md = self._harden_report_markdown(detail, report_md)
-                writer_mode = "writer repair: section"
+                hardened_report = self._harden_report_markdown(detail, report_md)
+                if previous_report.strip() and repair_plan.anti_regression_required:
+                    repair_comparison_metrics = detail.metrics.model_copy(
+                        update={
+                            "llm_calls": max(detail.metrics.llm_calls, 1),
+                            "source_coverage_rate": max(
+                                detail.metrics.source_coverage_rate, 1.0
+                            ),
+                            "claim_citation_rate": max(
+                                detail.metrics.claim_citation_rate, 1.0
+                            ),
+                        }
+                    )
+                    previous_detail = detail.model_copy(
+                        update={
+                            "report_md": previous_report,
+                            "qa_findings": [],
+                            "metrics": repair_comparison_metrics,
+                        }
+                    )
+                    candidate_detail = detail.model_copy(
+                        update={
+                            "report_md": hardened_report,
+                            "qa_findings": [],
+                            "metrics": repair_comparison_metrics,
+                        }
+                    )
+                    anti_regression_reason = report_regression_problem(
+                        previous_detail,
+                        candidate_detail,
+                        protected_sections=repair_plan.sections,
+                    )
+                if anti_regression_reason:
+                    detail.report_md = self._preserve_hardened_previous_report(
+                        detail,
+                        previous_report,
+                    )
+                    writer_mode = "preserved previous report after writer anti-regression"
+                else:
+                    detail.report_md = hardened_report
+                    writer_mode = "writer repair: section"
             except TimeoutError as exc:
                 timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
                 writer_error = timeout_reason
