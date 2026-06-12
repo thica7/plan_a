@@ -4666,6 +4666,98 @@ async def test_writer_upstream_persona_change_uses_section_repair() -> None:
 
 
 @pytest.mark.asyncio
+async def test_writer_upstream_persona_rehydrates_consumed_redo_issue_for_section_repair() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return (
+            "## User Review Themes\n"
+            "- Historical persona refresh: consumed redo context still routes the writer to "
+            "repair simulated survey and interview themes. [source:pricing-1]\n"
+            "- Adoption blocker: procurement proof remains the validation priority after "
+            "the scoped collector rerun. [source:feature-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer upstream persona historical redo",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-upstream-persona-consumed",
+        severity="warn",
+        detected_by="coverage",
+        target_agent="collector",
+        target_subagent="persona",
+        target_competitor="Copilot",
+        field_path="raw_sources[persona]",
+        problem="Copilot persona review themes need stronger survey and interview evidence.",
+        redo_scope=RedoScope(
+            kind="collector",
+            target_subagent="persona",
+            target_competitor="Copilot",
+            rationale="Collect persona survey and interview evidence for Copilot.",
+        ),
+    )
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="collector",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+    service._consume_queued_agent_messages(
+        record,
+        to_agent="collector",
+        consumer_agent="redo_router",
+        message_types={"redo_request"},
+    )
+    record.detail.qa_findings = []
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="collector",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_mode"] == "writer repair: section"
+    assert payload["writer_repair_mode"] == "section"
+    assert payload["writer_repair_sections"] == ["review_theme_summary"]
+    assert "Historical persona refresh" in record.detail.report_md
+
+
+@pytest.mark.asyncio
 async def test_writer_only_thin_core_finding_uses_section_repair() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
