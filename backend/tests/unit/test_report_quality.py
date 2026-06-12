@@ -470,6 +470,113 @@ documentation, current procurement packaging, and buyer objection evidence for b
     assert "core_analysis_depth_score" in report_check.blocking_metric_names
 
 
+def test_compare_run_quality_rejects_support_heavy_report_with_thin_core_sections() -> None:
+    long_support = (
+        "## Evidence Appendix\n"
+        + "\n".join(
+            f"- source-{index}: supporting audit detail that should not outweigh "
+            "the core analysis. "
+            f"[source:source-{index % 4}]"
+            for index in range(40)
+        )
+    )
+    report_md = _structured_report_md()
+    report_md = _replace_report_section(
+        report_md,
+        report_label("en-US", "decision_summary"),
+        "## Decision Summary\nCursor is stronger. [source:source-0]",
+    )
+    report_md = _replace_report_section(
+        report_md,
+        report_label("en-US", "competitive_findings"),
+        "## Competitive Findings\nCursor has a cited edge. [source:source-0]",
+    )
+    report_md = _replace_report_section(
+        report_md,
+        report_label("en-US", "competitor_deep_dives"),
+        "## Competitor Deep Dives\nCursor is ahead. [source:source-0]",
+    )
+    report_md = _replace_report_section(
+        report_md,
+        report_label("en-US", "evidence_appendix"),
+        long_support,
+    )
+    detail = _run_detail(
+        run_id="support-heavy-thin-core",
+        execution_mode="real",
+        source_count=4,
+        report_md=report_md,
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    blockers = {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert metrics["core_section_depth_score"].target_value < 1.0
+    assert metrics["core_support_balance_score"].target_value < 1.0
+    assert comparison.report_quality_signal is False
+    assert "core_section_depth_score" in blockers
+    assert "core_support_balance_score" in blockers
+    assert any("core section depth" in item for item in comparison.recommendations)
+
+
+def test_compare_run_quality_accepts_substantive_core_with_concise_support() -> None:
+    detail = _run_detail(
+        run_id="substantive-core-concise-support",
+        execution_mode="real",
+        source_count=4,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["core_section_depth_score"].target_value == 1.0
+    assert metrics["core_support_balance_score"].target_value == 1.0
+    assert comparison.report_quality_signal is True
+
+
 def test_compare_run_quality_blocks_duplicate_semantic_report_sections() -> None:
     report_md = (
         _structured_report_md()
@@ -1399,6 +1506,9 @@ def test_report_quality_accepts_structured_chinese_swot_quadrant_rows() -> None:
         "- 劣势：企业安全与采购证明仍需补强。 [source:source-2]\n"
         "- 机会：买方教育可以聚焦独立价值和工作流速度。 [source:source-0]\n"
         "- 威胁：Copilot 可通过微软采购路径防守。 [source:source-1]"
+        "\nThe decision implication is to lead with Cursor clarity, qualify Copilot procurement "
+        "defense separately, and keep enterprise readiness caveated until stronger evidence "
+        "is collected. [source:source-0] [source:source-1]"
     )
     detail = _run_detail(
         run_id="structured-chinese-swot",
@@ -1429,11 +1539,16 @@ def test_report_quality_does_not_count_swot_or_review_child_headings_as_duplicat
     nested_sections = (
         f"## {report_label('en-US', 'review_theme_summary')}\n"
         "Review themes are organized by competitor without duplicating the parent section. "
+        "The decision implication is to separate explainable pricing interest from Microsoft "
+        "workflow familiarity before treating either theme as a universal preference. "
         "[source:source-0]\n"
         "### Cursor Review Themes\n"
-        "- Pricing clarity supports fast buyer evaluation. [source:source-0]\n"
+        "- Pricing clarity supports fast buyer evaluation and gives sales a concrete discovery "
+        "question for direct-tool buyers. [source:source-0]\n"
         "### Copilot Review Themes\n"
-        "- Existing Microsoft familiarity supports adoption. [source:source-1]\n\n"
+        "- Existing Microsoft familiarity supports adoption, but should be tested against "
+        "standalone value perception before assuming lower switching friction. "
+        "[source:source-1]\n\n"
         f"## {report_label('en-US', 'swot_analysis')}\n"
         "### Cursor SWOT\n"
         "- Strengths: Cursor pricing clarity gives sales a concrete proof point. "
@@ -3042,6 +3157,9 @@ Cursor has stronger pricing transparency, while Copilot has integration breadth.
 Recommended action: use Cursor's pricing transparency as the initial L1 battlecard point, while
 keeping Copilot's bundled distribution as the procurement counter-position. Do not publish an
 absolute winner claim until security, SSO, and procurement evidence are separately verified.
+Immediate next move: run the buyer conversation with Cursor as the clarity-led challenger and
+Copilot as the bundled incumbent, then collect procurement proof for whichever path the account
+prefers before turning the recommendation into a deployment decision.
 [source:source-0] [source:source-1]
 
 ## Competitive Findings
@@ -3051,6 +3169,9 @@ easier to explain. [source:source-0]
 inside Microsoft-oriented accounts. [source:source-3]
 - Buyer implication: The comparison should be framed as pricing clarity versus bundled workflow
 reach, not as a universal product winner. [source:source-0] [source:source-3]
+- Decision guardrail: if the buyer values explainable standalone spend, Cursor gets the first
+proof point; if the buyer values Microsoft adjacency, Copilot needs a separate total-cost
+comparison before the analyst calls the account winnable. [source:source-0] [source:source-1]
 
 ## Competitor Deep Dives
 - Cursor wins: pricing transparency and focused agent workflow; weaknesses: procurement and
@@ -3067,6 +3188,9 @@ from existing Microsoft workflow familiarity. [source:source-0] [source:source-1
 - Customer theme: pricing clarity supports fast evaluation. [source:source-0]
 - Adoption blocker: security review and procurement packaging still need deeper evidence.
 [source:source-2]
+- Switching trigger: teams that need a visible standalone buying path can treat Cursor as easier
+to trial, while teams already standardized on Microsoft need proof that incremental workflow
+speed outweighs procurement simplicity. [source:source-0] [source:source-1]
 
 ## SWOT Analysis
 - Strengths: Cursor has pricing clarity that sales can explain quickly. [source:source-0]
@@ -3083,6 +3207,16 @@ The battlecard should avoid absolute winner language until security, SSO, and pr
 are independently verified. Cursor is easier to explain on standalone pricing, while Copilot can
 defend through bundled distribution and existing Microsoft procurement paths.
 [source:source-0] [source:source-1]
+The practical talk track is to lead with a verified pricing contrast, ask whether the buyer wants
+a standalone workflow change or a Microsoft-adjacent default, and escalate only the unresolved
+security and procurement proof as follow-up work. [source:source-0] [source:source-2]
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Copilot |
+| --- | --- | --- |
+| Pricing | transparent pricing [source:source-0] | bundled enterprise offer [source:source-1] |
+| Feature | focused agent workflow [source:source-2] | broad IDE integration [source:source-3] |
+| Persona | direct evaluation [source:source-0] | workflow defense [source:source-1] |
 
 ## Source Quality & Coverage
 The run uses verified pages for both target competitors. [source:source-0] [source:source-1]
@@ -3094,12 +3228,6 @@ review before publication. [source:source-0] [source:source-1]
 ## User Research Evidence
 Review and buyer-feedback inputs are treated as directional demand evidence, not official factual
 proof. [source:source-0] [source:source-1]
-
-## Side-by-Side Decision Matrix
-| Dimension | Cursor | Copilot |
-| --- | --- | --- |
-| Pricing | transparent pricing [source:source-0] | bundled enterprise offer [source:source-1] |
-| Feature | focused agent workflow [source:source-2] | broad IDE integration [source:source-3] |
 
 ## Scenario QA Checklist
 - Scenario: l1_pricing_pack; layer: L1; recommended dimensions: pricing, feature, persona.

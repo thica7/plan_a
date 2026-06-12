@@ -177,6 +177,8 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         ),
         "layer_analysis_section_score": _layer_analysis_section_score(detail),
         "core_analysis_depth_score": _core_analysis_depth_score(detail.report_md),
+        "core_section_depth_score": _core_section_depth_score(detail),
+        "core_support_balance_score": _core_support_balance_score(detail.report_md),
         "claim_risk_section_score": _claim_risk_section_score(detail.report_md),
         "scenario_checklist_section_score": _scenario_checklist_section_score(
             detail.report_md
@@ -212,6 +214,8 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "competitor_deep_dive_section_score": values["competitor_deep_dive_section_score"],
         "layer_analysis_section_score": values["layer_analysis_section_score"],
         "core_analysis_depth_score": values["core_analysis_depth_score"],
+        "core_section_depth_score": values["core_section_depth_score"],
+        "core_support_balance_score": values["core_support_balance_score"],
         "claim_risk_section_score": values["claim_risk_section_score"],
         "scenario_checklist_section_score": values["scenario_checklist_section_score"],
         "memory_context_section_score": values["memory_context_section_score"],
@@ -247,6 +251,8 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         and values["competitor_deep_dive_section_score"] >= 1.0
         and values["layer_analysis_section_score"] >= 1.0
         and values["core_analysis_depth_score"] >= 0.6
+        and values["core_section_depth_score"] >= 1.0
+        and values["core_support_balance_score"] >= 1.0
         and values["claim_risk_section_score"] >= 1.0
         and values["scenario_checklist_section_score"] >= 1.0
         and values["memory_context_section_score"] >= 1.0
@@ -279,13 +285,15 @@ def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower
         ("validated_claim_rate", 0.03, "higher_is_better"),
         ("llm_call_signal", 0.06, "higher_is_better"),
         ("report_length_score", 0.0, "higher_is_better"),
-        ("report_structure_score", 0.05, "higher_is_better"),
+        ("report_structure_score", 0.03, "higher_is_better"),
         ("duplicate_section_count", 0.01, "lower_is_better"),
         ("decision_summary_section_score", 0.03, "higher_is_better"),
         ("competitive_findings_section_score", 0.03, "higher_is_better"),
         ("competitor_deep_dive_section_score", 0.03, "higher_is_better"),
         ("layer_analysis_section_score", 0.02, "higher_is_better"),
-        ("core_analysis_depth_score", 0.04, "higher_is_better"),
+        ("core_analysis_depth_score", 0.02, "higher_is_better"),
+        ("core_section_depth_score", 0.02, "higher_is_better"),
+        ("core_support_balance_score", 0.02, "higher_is_better"),
         ("claim_risk_section_score", 0.04, "higher_is_better"),
         ("scenario_checklist_section_score", 0.02, "higher_is_better"),
         ("memory_context_section_score", 0.02, "higher_is_better"),
@@ -375,6 +383,8 @@ def _signal_checks(detail: RunDetail, snapshot: _QualitySnapshot) -> list[RunQua
         ("competitor_deep_dive_section_score", 1.0),
         ("layer_analysis_section_score", 1.0),
         ("core_analysis_depth_score", 0.6),
+        ("core_section_depth_score", 1.0),
+        ("core_support_balance_score", 1.0),
         ("claim_risk_section_score", 1.0),
         ("scenario_checklist_section_score", 1.0),
         ("memory_context_section_score", 1.0),
@@ -848,6 +858,63 @@ def _core_analysis_depth_score(markdown: str) -> float:
         char_count += section_char_count
         bullet_or_table_rows += section_row_count
     return min(1.0, max(char_count / 1000.0, bullet_or_table_rows / 10.0))
+
+
+def _core_section_depth_score(detail: RunDetail) -> float:
+    specs = [
+        (_report_label_aliases("decision_summary"), 180, 2),
+        (_report_label_aliases("competitive_findings"), 320, 3),
+        (
+            (
+                *_report_label_aliases("competitor_deep_dives"),
+                "Competitor Deep Dive",
+            ),
+            320,
+            max(3, len(detail.plan.competitors)),
+        ),
+        (_swot_section_aliases(), 240, 4),
+        (_layer_section_aliases(detail), 240, 3),
+    ]
+    if _needs_review_theme_section(detail):
+        specs.insert(2, (_review_theme_section_aliases(), 220, 3))
+    scores: list[float] = []
+    swot_aliases = _swot_section_aliases()
+    for aliases, min_chars, min_rows in specs:
+        section = _find_section_before_support(detail.report_md, aliases)
+        if section is None:
+            scores.append(0.0)
+            continue
+        chars, rows = _body_content_summary(section.body)
+        score = max(
+            min(chars / float(min_chars), 1.0),
+            min(rows / float(min_rows), 1.0),
+        )
+        if aliases == swot_aliases and not _has_structured_swot_quadrants(section.body):
+            score = min(score, 0.5)
+        scores.append(score)
+    return min(scores) if scores else 0.0
+
+
+def _core_support_balance_score(markdown: str) -> float:
+    report_md = repair_mojibake_text(markdown)
+    sections = _report_sections(report_md)
+    first_support = _first_support_section(sections)
+    if first_support is None:
+        core_markdown = report_md
+        support_markdown = ""
+    else:
+        core_markdown = report_md[: first_support.start]
+        support_markdown = report_md[first_support.start :]
+    core_chars, core_rows = _body_content_summary(core_markdown)
+    support_chars, support_rows = _body_content_summary(support_markdown)
+    core_units = core_chars + core_rows * 60
+    support_units = support_chars + support_rows * 60
+    if core_units <= 0:
+        return 0.0
+    if support_units <= 0:
+        return 1.0
+    core_ratio = core_units / float(core_units + support_units)
+    return min(1.0, core_ratio / 0.65)
 
 
 def _markdown_before_support_sections(markdown: str) -> str:
@@ -1396,6 +1463,8 @@ def _regression_gate(
             "competitor_deep_dive_section_score",
             "layer_analysis_section_score",
             "core_analysis_depth_score",
+            "core_section_depth_score",
+            "core_support_balance_score",
             "review_theme_section_score",
             "swot_section_score",
             "qa_blocker_count",
@@ -1470,6 +1539,17 @@ def _clean_recommendations(
         recommendations.append(
             "Expand the core analysis before support sections so the report gives enough business "
             "guidance before source QA, validation, and appendix material."
+        )
+    if target.values.get("core_section_depth_score", 0.0) < 1.0:
+        recommendations.append(
+            "Expand core section depth so Decision Summary, Competitive Findings, User Review "
+            "Themes, Competitor Deep Dives, SWOT, and layer analysis contain decision-useful "
+            "substance rather than one-line placeholders."
+        )
+    if target.values.get("core_support_balance_score", 0.0) < 1.0:
+        recommendations.append(
+            "Move report weight back to core analysis and keep evidence, QA, risk, and appendix "
+            "sections concise support material."
         )
     if target.values.get("claim_risk_section_score", 0.0) < 1.0:
         recommendations.append(
