@@ -540,7 +540,7 @@ def test_compare_run_quality_rejects_support_heavy_report_with_thin_core_section
     assert comparison.report_quality_signal is False
     assert "core_section_depth_score" in blockers
     assert "core_support_balance_score" in blockers
-    assert any("core section depth" in item for item in comparison.recommendations)
+    assert any("required core sections" in item for item in comparison.recommendations)
 
 
 def test_compare_run_quality_accepts_substantive_core_with_concise_support() -> None:

@@ -1542,9 +1542,8 @@ def _clean_recommendations(
         )
     if target.values.get("core_section_depth_score", 0.0) < 1.0:
         recommendations.append(
-            "Expand core section depth so Decision Summary, Competitive Findings, User Review "
-            "Themes, Competitor Deep Dives, SWOT, and layer analysis contain decision-useful "
-            "substance rather than one-line placeholders."
+            "Expand required core sections so they contain decision-useful substance rather than "
+            "one-line placeholders."
         )
     if target.values.get("core_support_balance_score", 0.0) < 1.0:
         recommendations.append(
