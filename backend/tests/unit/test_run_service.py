@@ -4299,7 +4299,8 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
 
     await service._real_writer_step(record)
 
-    assert record.detail.report_md == "Previous report. [source:pricing-1]"
+    assert record.detail.report_md.startswith("Previous report. [source:pricing-1]")
+    assert "## Executive Takeaway" in record.detail.report_md
     assert record.detail.metrics.revision_count == 1
     assert (
         record.detail.agent_messages[-1].payload["writer_mode"]
