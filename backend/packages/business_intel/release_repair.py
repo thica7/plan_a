@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -107,34 +108,34 @@ def release_repair_section(
     after_warn_count: int | None,
 ) -> str:
     after_label = str(after_warn_count) if after_warn_count is not None else "pending"
+    rule_counts = Counter(target.rule_id for target in targets)
+    section_counts = Counter(target.target_section for target in targets)
+    action_counts = Counter(target.required_action for target in targets)
     lines = [
         f"## {RELEASE_REPAIR_HEADING}",
         (
             f"- Warning repair status: {before_warn_count} warning(s) before targeted "
             f"repair; {after_label} warning(s) after re-evaluation."
         ),
+        f"- Follow-up targets: {len(targets)} warning(s) grouped for reviewer attention.",
         (
-            "- Scope: non-blocking release-gate findings are retained with explicit "
-            "rationale until new evidence, claim rewrite, or human review closes them."
+            "- Scope: detailed release-gate issue rationale, claim IDs, evidence IDs, "
+            "and acceptance rules are retained in release_gate.warning_repair metadata."
         ),
+        "- By rule: " + _format_counts(rule_counts) + ".",
+        "- By target section: " + _format_counts(section_counts) + ".",
+        "- By required action: " + _format_counts(action_counts) + ".",
     ]
-    for target in targets:
-        lines.extend(
-            [
-                (
-                    f"- [{target.severity}] {target.rule_id} -> {target.required_action} "
-                    f"for {target.competitor or 'report'} / {target.dimension}."
-                ),
-                f"  - Target section: {target.target_section}.",
-                f"  - Rationale: {target.rationale}",
-                f"  - Acceptance: {target.acceptance_rule}",
-            ]
-        )
-        if target.claim_ids:
-            lines.append(f"  - Claims: {', '.join(target.claim_ids)}.")
-        if target.evidence_ids:
-            lines.append(f"  - Evidence: {', '.join(target.evidence_ids)}.")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _format_counts(counts: Counter[str]) -> str:
+    if not counts:
+        return "none"
+    return ", ".join(
+        f"{label or 'unspecified'}: {count} warning(s)"
+        for label, count in sorted(counts.items())
+    )
 
 
 def replace_or_insert_section(report_md: str, heading: str, section_md: str) -> str:

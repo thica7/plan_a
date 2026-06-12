@@ -1576,7 +1576,7 @@ class WriterAgentMixin:
 
     def _writer_source_digest(self, sources: list[RawSource]) -> list[dict[str, object]]:
         digests: list[dict[str, object]] = []
-        for source in sources[:24]:
+        for source in sources:
             snippet = source_business_snippet(source, dimension=source.dimension, limit=240)
             digest = {
                 "id": source.id,

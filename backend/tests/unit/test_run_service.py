@@ -6808,10 +6808,18 @@ def test_release_gate_quality_metadata_records_followup_tasks() -> None:
     assert metadata["warning_repair"]["before_warn_count"] == 1
     assert metadata["warning_repair"]["target_count"] == 1
     assert metadata["warning_repair"]["targets"][0]["target_section"] == "Pricing Analysis"
+    assert (
+        metadata["warning_repair"]["targets"][0]["acceptance_rule"]
+        == "Collect a second independent pricing source."
+    )
     assert metadata["redo_scopes"][0]["target_subagent"] == "pricing"
     assert "## Release Gate Follow-up Repairs" in projection.report_version.report_md
     assert projection.report_version.report_md.count("## Release Gate Follow-up Repairs") == 1
-    assert "Collect a second independent pricing source." in projection.report_version.report_md
+    assert "- Follow-up targets: 1 warning(s) grouped for reviewer attention." in (
+        projection.report_version.report_md
+    )
+    assert "claim_self_consistency_required: 1 warning(s)" in projection.report_version.report_md
+    assert "Collect a second independent pricing source." not in projection.report_version.report_md
 
 
 @pytest.mark.asyncio
@@ -7676,6 +7684,42 @@ def test_writer_source_digest_omits_noisy_snippet() -> None:
 
     assert digest[0]["snippet"] == ""
     assert digest[0]["snippet_quality"] == "omitted_no_clean_business_snippet"
+
+
+def test_writer_source_digest_includes_all_raw_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    sources = [
+        RawSource(
+            id=f"raw-source-{index:02d}",
+            competitor="A",
+            dimension="persona" if index > 24 else "pricing",
+            source_type="interview_record" if index > 24 else "webpage_verified",
+            title=f"A source {index}",
+            url=None,
+            snippet=(
+                f"Source {index} contains decision-relevant buyer, pricing, and adoption "
+                "evidence for the report writer."
+            ),
+            content_hash=f"source-{index}-hash",
+            confidence=0.9,
+        )
+        for index in range(1, 31)
+    ]
+
+    digest = service._writer_source_digest(sources)
+
+    assert len(digest) == 30
+    assert digest[-1]["id"] == "raw-source-30"
 
 
 def test_deterministic_payload_uses_normalized_fields_before_noisy_snippet() -> None:
