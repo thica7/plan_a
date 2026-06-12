@@ -350,7 +350,7 @@ def test_report_regression_detects_large_review_section_collapse() -> None:
     problem = report_regression_problem(
         previous,
         candidate,
-        protected_sections=["review_theme_summary"],
+        protected_sections=[],
     )
 
     assert problem is not None
