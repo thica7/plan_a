@@ -870,6 +870,12 @@ class CollectorAgentMixin:
             query = template.format(competitor=competitor)
         else:
             query = f"{competitor} {dimension}"
+        if self._dimension_needs_persona_strength_gate(dimension):
+            persona_terms = (
+                "customers case studies developer adoption user reviews "
+                "onboarding switching workflow fit"
+            )
+            query = f"{query} {persona_terms}"
         qualifier = self._competitor_search_qualifier(competitor)
         if qualifier and qualifier.casefold() not in query.casefold():
             query = f"{query} {qualifier}"
@@ -890,8 +896,23 @@ class CollectorAgentMixin:
                 "scim",
                 "audit",
             ]
-        if "persona" in normalized:
-            return ["persona", "customer", "user", "buyer", "case study"]
+        if "persona" in normalized or "user" in normalized:
+            return [
+                "persona",
+                "customer",
+                "customers",
+                "user",
+                "buyer",
+                "case study",
+                "case studies",
+                "customer story",
+                "developer adoption",
+                "review",
+                "feedback",
+                "workflow fit",
+                "onboarding",
+                "switching",
+            ]
         return [normalized, "feature", "docs"]
 
     def _official_registry_key(self, competitor: str) -> str:
@@ -970,6 +991,21 @@ class CollectorAgentMixin:
                 "privacy",
                 "indemnity",
             ]
+        if "persona" in normalized or "user" in normalized:
+            return [
+                "developer",
+                "developers",
+                "engineering team",
+                "enterprise team",
+                "customer adoption",
+                "user reviews",
+                "buyer persona",
+                "workflow fit",
+                "onboarding effort",
+                "switching cost",
+                "use case",
+                "pain point",
+            ]
         return []
 
     def _dimension_window_score(self, text: str, dimension: str) -> int:
@@ -1026,7 +1062,20 @@ class CollectorAgentMixin:
         if "persona" in dimension_key or "user" in dimension_key:
             return any(
                 term in normalized_text
-                for term in ["developer", "customer", "enterprise", "team", "user"]
+                for term in [
+                    "developer",
+                    "customer",
+                    "enterprise",
+                    "team",
+                    "user",
+                    "adoption",
+                    "review",
+                    "feedback",
+                    "workflow fit",
+                    "onboarding",
+                    "switching",
+                    "use case",
+                ]
             )
         return any(
             term in normalized_text for term in ["model", "api", "feature", "coding", "reasoning"]
@@ -1103,7 +1152,8 @@ class CollectorAgentMixin:
                 re.search(
                     r"(?:target(?:ed)?\s+(?:user|customer|persona)|for\s+(?:developers|teams|enterprises|"
                     r"engineering|marketing|sales)|case stud(?:y|ies)|customer|"
-                    r"enterprise|adoption|use case)",
+                    r"enterprise|adoption|use case|user reviews?|feedback|workflow fit|"
+                    r"onboarding|switching|pain point)",
                     normalized_text,
                 )
             )
@@ -1235,7 +1285,16 @@ class CollectorAgentMixin:
                 "target",
                 "use case",
                 "case study",
+                "case studies",
+                "customer story",
                 "organization",
+                "adoption",
+                "review",
+                "feedback",
+                "workflow fit",
+                "onboarding",
+                "switching",
+                "pain point",
             ]
         elif "review" in dimension_key or "feedback" in dimension_key:
             terms = [
@@ -2049,7 +2108,11 @@ class CollectorAgentMixin:
             if self._has_cross_competitor_source(detail, dimension):
                 continue
             covered_competitors = self._branch_covered_competitors(detail, dimension)
-            if len(covered_competitors) >= len(detail.plan.competitors):
+            weak_persona_competitors = self._weak_persona_branch_competitors(detail, dimension)
+            if (
+                len(covered_competitors) >= len(detail.plan.competitors)
+                and not weak_persona_competitors
+            ):
                 await self.emit(
                     detail.id,
                     "node_completed",
@@ -2062,6 +2125,7 @@ class CollectorAgentMixin:
                     {
                         "dimension": dimension,
                         "covered_competitors": sorted(covered_competitors),
+                        "weak_persona_competitors": weak_persona_competitors,
                         "skipped": True,
                         "reason": "branch_coverage_complete",
                     },
@@ -2214,6 +2278,20 @@ class CollectorAgentMixin:
                 return True
         return False
 
+    def _weak_persona_branch_competitors(
+        self,
+        detail: RunDetail,
+        dimension: str,
+    ) -> list[str]:
+        if not self._dimension_needs_persona_strength_gate(dimension):
+            return []
+        weak: list[str] = []
+        for competitor in detail.plan.competitors:
+            strength = self._persona_evidence_strength(detail, dimension, competitor)
+            if strength.is_weak and strength.reason != "no_sources":
+                weak.append(competitor)
+        return weak
+
     def _branch_covered_competitors(self, detail: RunDetail, dimension: str) -> set[str]:
         covered: set[str] = set()
         for source in detail.raw_sources:
@@ -2231,7 +2309,10 @@ class CollectorAgentMixin:
         if dimension == "pricing":
             focus = "pricing comparison API cost per token tiers"
         elif dimension == "persona":
-            focus = "target users customers personas use cases comparison"
+            focus = (
+                "target users customers personas use cases developer adoption user reviews "
+                "onboarding switching workflow fit comparison"
+            )
         else:
             focus = "feature benchmark capabilities comparison"
         return f"{detail.topic} {competitors} {focus} source"

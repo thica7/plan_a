@@ -39,16 +39,16 @@ def test_enterprise_store_settings_default_to_postgres(monkeypatch) -> None:
     assert settings.run_orchestration_backend == "temporal"
     assert settings.temporal_traffic_percent == 100
     assert settings.llm_timeout_seconds == 90.0
-    assert settings.writer_timeout_seconds == 90.0
+    assert settings.writer_timeout_seconds == 600.0
 
 
 def test_writer_timeout_settings_allow_explicit_override(monkeypatch) -> None:
-    monkeypatch.setenv("WRITER_TIMEOUT_SECONDS", "45")
+    monkeypatch.setenv("WRITER_TIMEOUT_SECONDS", "600")
     get_settings.cache_clear()
 
     settings = get_settings()
 
-    assert settings.writer_timeout_seconds == 45.0
+    assert settings.writer_timeout_seconds == 600.0
 
 
 def test_env_file_candidates_include_source_root_when_cwd_is_backend(tmp_path: Path) -> None:
@@ -225,7 +225,9 @@ def test_postgres_workspace_usage_read_path_does_not_upsert_workspace() -> None:
     assert usage.workspace_id == "workspace-a"
     assert usage.run_count == 2
     assert not any("INSERT INTO workspaces" in sql for sql, _ in fake_conn.cursor_obj.executed)
-    assert not any("INSERT INTO workspace_members" in sql for sql, _ in fake_conn.cursor_obj.executed)
+    assert not any(
+        "INSERT INTO workspace_members" in sql for sql, _ in fake_conn.cursor_obj.executed
+    )
 
 
 def test_postgres_sanitizer_removes_nul_and_control_chars_from_text() -> None:

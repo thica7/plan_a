@@ -42,7 +42,19 @@ REVIEW_SUMMARY_DIMENSION_HINTS = (
     "adoption",
     "switching",
 )
-POSITIVE_REVIEW_TERMS = ("praise", "like", "liked", "love", "fast", "easy", "strong")
+POSITIVE_REVIEW_TERMS = (
+    "praise",
+    "like",
+    "liked",
+    "love",
+    "fast",
+    "easy",
+    "strong",
+    "preferred",
+    "adopted",
+    "productive",
+    "accelerate",
+)
 NEGATIVE_REVIEW_TERMS = (
     "complain",
     "complaint",
@@ -51,8 +63,23 @@ NEGATIVE_REVIEW_TERMS = (
     "slow",
     "confusing",
     "expensive",
+    "risk",
+    "cost",
+    "onboarding",
+    "effort",
+    "uncertainty",
+    "blocker",
+    "concern",
+    "pain",
 )
-SWITCHING_REVIEW_TERMS = ("switch", "migrate", "replace", "alternative")
+SWITCHING_REVIEW_TERMS = (
+    "switch",
+    "switching",
+    "migrate",
+    "migration",
+    "replace",
+    "alternative",
+)
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
@@ -1447,6 +1474,24 @@ class AnalystAgentMixin:
             )
             review_summary_changed = True
 
+        if self._dimension_uses_review_summary(
+            dimension
+        ) and not self._review_summary_has_theme_items(knowledge.review_summary):
+            review_sources = [
+                source.model_dump(mode="json")
+                for source in self._sources_for_competitor_dimension(
+                    detail, competitor, dimension
+                )
+            ]
+            fallback_review_summary = self._build_review_summary_from_source_dicts(
+                competitor=competitor,
+                dimension=dimension,
+                sources=review_sources,
+            )
+            if self._review_summary_has_cited_items(fallback_review_summary):
+                knowledge.review_summary = fallback_review_summary
+                review_summary_changed = True
+
         self._sanitize_structured_knowledge_slice_sources(
             detail,
             competitor,
@@ -1553,6 +1598,22 @@ class AnalystAgentMixin:
             or review_summary.switching_triggers
             or review_summary.persona_segments
         )
+
+    def _review_summary_theme_items(
+        self, review_summary: ReviewThemeSummary
+    ) -> list[ReviewThemeItem]:
+        return [
+            *review_summary.praise_themes,
+            *review_summary.complaint_themes,
+            *review_summary.adoption_blockers,
+            *review_summary.switching_triggers,
+        ]
+
+    def _review_summary_has_theme_items(self, review_summary: ReviewThemeSummary) -> bool:
+        return bool(self._review_summary_theme_items(review_summary))
+
+    def _review_summary_has_cited_items(self, review_summary: ReviewThemeSummary) -> bool:
+        return any(item.source_ids for item in self._review_summary_theme_items(review_summary))
 
     def _known_source_ids(
         self,

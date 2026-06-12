@@ -9,10 +9,11 @@ from packages.business_intel.homepage import HomepageVerification
 from packages.business_intel.report_quality import compare_run_quality
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
+from packages.i18n.language import report_label
 from packages.memory import PreferenceMemoryStore, RunJournal
 from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
-from packages.orchestrator.service import RunRecord, RunService
+from packages.orchestrator.service import PendingGraphRedo, RunRecord, RunService
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
@@ -78,6 +79,122 @@ def _collector_issue(issue_id: str, subagent: str, competitor: str) -> QCIssue:
             rationale=f"Collect verified {subagent} evidence for {competitor}.",
         ),
     )
+
+
+def _writer_repair_sources() -> list[RawSource]:
+    return [
+        RawSource(
+            id="pricing-1",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://example.com/cursor-pricing",
+            snippet="Cursor pricing is published.",
+            content_hash="pricing-1",
+            confidence=0.9,
+        ),
+        RawSource(
+            id="feature-1",
+            competitor="Copilot",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="Copilot feature",
+            url="https://example.com/copilot-feature",
+            snippet="Copilot has IDE integration.",
+            content_hash="feature-1",
+            confidence=0.9,
+        ),
+    ]
+
+
+def _writer_repair_protectable_report() -> str:
+    return """# Cursor vs Copilot Direct Battlecard
+
+## Executive Summary
+Cursor has stronger pricing transparency, while Copilot has integration breadth.
+[source:pricing-1] [source:feature-1]
+
+## Decision Summary
+Recommended action: use Cursor's pricing clarity as the initial L1 battlecard point while
+keeping Copilot's bundled distribution as the procurement counter-position.
+- Do not overstate a winner beyond pricing and workflow evidence; enterprise security proof
+still needs direct validation before procurement guidance becomes firm. [source:feature-1]
+- Immediate next move: collect one current trust-center source and one buyer-objection source
+so sales can separate pricing clarity from rollout risk. [source:pricing-1]
+[source:pricing-1] [source:feature-1]
+
+## Competitive Findings
+- Pricing: Cursor has clearer standalone pricing evidence, which makes the sales response easier.
+[source:pricing-1]
+- Feature: Copilot has broad IDE integration evidence, which gives it a defensible adoption path.
+[source:feature-1]
+- Persona: developer evaluators can understand Cursor's focused value faster, while platform
+buyers may still prefer Copilot's Microsoft adjacency for governance and procurement continuity.
+[source:pricing-1] [source:feature-1]
+
+## Competitor Deep Dives
+- Cursor wins on pricing clarity and focused workflow; watchouts remain procurement and
+security proof.
+[source:pricing-1]
+- Copilot wins on distribution and IDE breadth; watchouts remain direct packaging comparison.
+[source:feature-1]
+- Cursor weakness: the available evidence does not yet prove enterprise rollout readiness, so
+sales should keep security claims qualified until a verified trust source is collected.
+[source:feature-1]
+- Copilot weakness: bundled familiarity can obscure standalone value comparison, so evaluators
+need pricing and onboarding proof before accepting it as the default choice. [source:pricing-1]
+
+## User Review Themes
+User review themes show Cursor is easier to explain during procurement, while Copilot benefits from
+existing Microsoft workflow familiarity. [source:pricing-1]
+- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]
+- Adoption blocker: security review and procurement packaging still need deeper evidence.
+[source:feature-1]
+
+## SWOT Analysis
+- Strengths: Cursor has pricing clarity that sales can explain quickly. [source:pricing-1]
+- Weaknesses: Enterprise procurement proof remains incomplete. [source:feature-1]
+- Opportunities: Buyer education can focus on standalone value. [source:pricing-1]
+- Threats: Copilot can defend through Microsoft distribution. [source:feature-1]
+
+## Battlecard
+Sales should use pricing transparency and switching objections as the first battlecard line.
+[source:pricing-1] [source:feature-1]
+- Response guidance: lead with Cursor's transparent evaluation path when buyers ask for direct
+developer workflow value. [source:pricing-1]
+- Objection handling: acknowledge Copilot's Microsoft distribution advantage, then ask whether
+the buyer needs bundled familiarity or a focused coding workflow proof. [source:feature-1]
+- Follow-up: request security, onboarding, and procurement evidence before making an absolute
+replacement claim. [source:pricing-1] [source:feature-1]
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Copilot |
+| --- | --- | --- |
+| Pricing | clearer standalone price [source:pricing-1] | bundled context [source:feature-1] |
+| Feature | focused workflow proof [source:pricing-1] | IDE breadth [source:feature-1] |
+| Persona | direct evaluator path [source:pricing-1] | platform continuity [source:feature-1] |
+| Security | qualify readiness [source:feature-1] | verify governance [source:feature-1] |
+| Procurement | lead with clarity [source:pricing-1] | separate bundle value [source:feature-1] |
+| Follow-up | collect objections [source:pricing-1] | gather rollout proof [source:feature-1] |
+
+## Source Quality & Coverage
+The run uses verified pages for both target competitors. [source:pricing-1] [source:feature-1]
+
+## User Research Evidence
+Review and buyer-feedback inputs are directional demand evidence. [source:pricing-1]
+
+## Scenario QA Checklist
+- Scenario: l1_pricing_pack; layer: L1; recommended dimensions: pricing, feature, persona.
+
+## Claim Validation & Evidence Risk
+No unresolved blocker claims were detected, but security and procurement claims remain gated.
+[source:pricing-1] [source:feature-1]
+
+## Evidence Appendix
+- pricing-1: Cursor pricing [source:pricing-1]
+- feature-1: Copilot feature [source:feature-1]
+"""
 
 
 def _blocked_release_gate() -> ReportReleaseGate:
@@ -794,6 +911,12 @@ async def test_survey_interview_enrichment_emits_research_evidence_payload() -> 
     assert "Synthetic interview record" in interview_source.snippet
     assert survey_source.covered_competitors == ["Cursor"]
     assert interview_source.covered_competitors == ["Cursor"]
+    assert survey_source.confidence == 0.76
+    assert interview_source.confidence == 0.82
+    assert survey_source.metadata["fallback_synthetic"] is True
+    assert survey_source.metadata["survey_interview_synthetic"] is True
+    assert interview_source.metadata["fallback_synthetic"] is True
+    assert interview_source.metadata["survey_interview_synthetic"] is True
     assert record.detail.competitor_knowledge["Cursor"].user_personas.summary_claims
     completed = next(
         event
@@ -1006,6 +1129,123 @@ def test_real_collect_qa_blocks_unverified_url_evidence_without_memory_policy() 
     assert issues
     assert issues[0].severity == "blocker"
     assert "not fetched webpage evidence" in issues[0].problem
+
+
+def test_collect_qa_blocks_single_low_confidence_persona_proxy() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-weak-persona",
+        topic="AI coding assistant persona comparison",
+        status="running",
+        execution_mode="real",
+        created_at="2026-06-11T00:00:00",
+        updated_at="2026-06-11T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant persona comparison",
+            competitors=["Windsurf"],
+            dimensions=["persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="raw-source-windsurf-persona-proxy",
+                competitor="Windsurf",
+                covered_competitors=["Windsurf"],
+                dimension="persona",
+                source_type="interview_record",
+                title="Windsurf persona interview proxy",
+                snippet=(
+                    "Proxy interview mentions workflow fit, onboarding effort, "
+                    "and switching risk."
+                ),
+                content_hash="windsurf-persona-proxy-hash",
+                confidence=0.62,
+                metadata={"fallback_synthetic": True},
+            )
+        ],
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+
+    weak_issue = next(issue for issue in issues if "persona evidence is weak" in issue.problem)
+    assert weak_issue.severity == "blocker"
+    assert weak_issue.target_agent == "collector"
+    assert weak_issue.target_subagent == "persona"
+    assert weak_issue.target_competitor == "Windsurf"
+    assert weak_issue.redo_scope.kind == "collector"
+    assert weak_issue.redo_scope.target_subagent == "persona"
+    assert weak_issue.redo_scope.target_competitor == "Windsurf"
+
+
+def test_collect_qa_accepts_public_and_interview_persona_evidence() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-strong-persona",
+        topic="AI coding assistant persona comparison",
+        status="running",
+        execution_mode="real",
+        created_at="2026-06-11T00:00:00",
+        updated_at="2026-06-11T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant persona comparison",
+            competitors=["Cursor"],
+            dimensions=["persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-customer-story",
+                competitor="Cursor",
+                covered_competitors=["Cursor"],
+                dimension="persona",
+                source_type="webpage_verified",
+                title="Cursor customer story for engineering teams",
+                url="https://www.cursor.com/customers/example",
+                snippet=(
+                    "Engineering teams and developers adopted Cursor for workflow fit, "
+                    "onboarding, and AI coding use cases."
+                ),
+                content_hash="cursor-customer-story-hash",
+                confidence=0.92,
+            ),
+            RawSource(
+                id="cursor-interview",
+                competitor="Cursor",
+                covered_competitors=["Cursor"],
+                dimension="persona",
+                source_type="interview_record",
+                title="Cursor buyer interview",
+                snippet=(
+                    "Developer teams cited customer adoption, switching cost, "
+                    "and workflow fit."
+                ),
+                content_hash="cursor-interview-hash",
+                confidence=0.78,
+            ),
+        ],
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+
+    assert not [issue for issue in issues if "persona evidence is weak" in issue.problem]
 
 
 def test_feature_collection_uses_known_official_source_registry() -> None:
@@ -1879,6 +2119,42 @@ def test_qa_flags_report_text_noise_as_writer_only_blocker() -> None:
     assert issues[0].detected_by == "text_quality"
     assert issues[0].target_agent == "writer"
     assert issues[0].redo_scope.kind == "writer_only"
+
+
+def test_qa_does_not_flag_markdown_table_separators_as_text_noise() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        report_md=(
+            "# Report\n\n"
+            "| Dimension | A | Source |\n"
+            "| :--- | :--- | :--- |\n"
+            "| Pricing | $10 per seat | [source:pricing-1] |\n\n"
+            "| 维度 | Cursor | GitHub Copilot | Claude Code | 来源/置信度 |\n"
+            "| :--- | :--- | :--- | :--- | :--- |\n"
+            "| 定价模式 | API 用量制 | 席位制 | API 用量制 | verified |\n"
+        ),
+    )
+
+    issues = service._build_report_text_quality_issues(detail)
+
+    assert issues == []
 
 
 def test_qa_flags_structured_claim_text_noise_as_analyst_blocker() -> None:
@@ -3536,6 +3812,98 @@ async def test_cross_competitor_search_marks_only_mentioned_competitors() -> Non
     assert record.detail.raw_sources[0].covered_competitors == ["Cursor", "Claude Code"]
 
 
+@pytest.mark.asyncio
+async def test_cross_competitor_persona_search_runs_when_branch_coverage_is_weak() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            web_search_provider="perplexity",
+            pplx_api_key="pplx-key",
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant persona comparison",
+            competitors=["Cursor", "Windsurf"],
+            dimensions=["persona"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources.extend(
+        [
+            RawSource(
+                id="cursor-persona-public",
+                competitor="Cursor",
+                covered_competitors=["Cursor"],
+                dimension="persona",
+                source_type="webpage_verified",
+                title="Cursor customer story",
+                url="https://www.cursor.com/customers/example",
+                snippet="Developer teams adopted Cursor for workflow fit and onboarding.",
+                content_hash="cursor-persona-public-hash",
+                confidence=0.92,
+            ),
+            RawSource(
+                id="windsurf-persona-proxy",
+                competitor="Windsurf",
+                covered_competitors=["Windsurf"],
+                dimension="persona",
+                source_type="interview_record",
+                title="Windsurf persona proxy",
+                snippet="Proxy interview mentions workflow fit and switching risk.",
+                content_hash="windsurf-persona-proxy-hash",
+                confidence=0.62,
+                metadata={"fallback_synthetic": True},
+            ),
+        ]
+    )
+    search_queries: list[str] = []
+
+    async def fake_trace_search(*args, **kwargs):  # noqa: ANN202
+        search_queries.append(kwargs["query"])
+        return [
+            SearchResult(
+                title="Cursor vs Windsurf user adoption comparison",
+                url="https://example.com/adoption-comparison",
+                snippet=(
+                    "Cursor and Windsurf are compared by developer adoption, "
+                    "workflow fit, onboarding, and switching risk."
+                ),
+            )
+        ]
+
+    async def fake_source_from_search_result(*args, **kwargs):  # noqa: ANN202
+        return RawSource(
+            id="persona-compare",
+            competitor="Cross-model all 2 competitors",
+            dimension="persona",
+            source_type="webpage_verified",
+            title="Cursor vs Windsurf user adoption comparison",
+            url="https://example.com/adoption-comparison",
+            snippet=(
+                "Cursor and Windsurf developer adoption, workflow fit, onboarding, "
+                "and switching risk are compared."
+            ),
+            content_hash="persona-compare-hash",
+            confidence=0.9,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._source_from_search_result = fake_source_from_search_result  # type: ignore[method-assign]
+
+    await service._collect_cross_competitor_evidence(record, ["persona"])
+
+    assert search_queries
+    assert any(source.id == "persona-compare" for source in record.detail.raw_sources)
+
+
 def test_qa_marks_matrix_unknown_source_for_comparator_redo() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -3943,6 +4311,805 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
 
 
 @pytest.mark.asyncio
+async def test_writer_line_repair_preserves_protectable_report_without_llm() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return "# Replacement should not be used"
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer line repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    noisy_report = _writer_repair_protectable_report().replace(
+        "## SWOT Analysis",
+        "bad line \ufffd\n\n## SWOT Analysis",
+    )
+    record.detail.report_md = noisy_report
+    noisy_line_number = noisy_report.splitlines().index("bad line \ufffd") + 1
+    issue = QCIssue(
+        id="issue-line-noise",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        field_path=f"report_md.line[{noisy_line_number}]",
+        problem=f"Report line {noisy_line_number} contains non-publishable text noise.",
+        redo_scope=RedoScope(kind="writer_only", rationale="repair noisy report line"),
+    )
+    stale_issue = QCIssue(
+        id="issue-stale-writer-only",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        field_path="report_md.line[1]",
+        problem="Older writer-only issue should not be linked to this repair.",
+        redo_scope=RedoScope(kind="writer_only", rationale="stale writer-only repair"),
+    )
+    stale_message = service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": stale_issue.redo_scope.model_dump(mode="json"),
+            "issues": [stale_issue.model_dump(mode="json")],
+            "issue_ids": [stale_issue.id],
+        },
+    )
+    service._consume_queued_agent_messages(
+        record,
+        to_agent="writer_only",
+        consumer_agent="redo_router",
+        message_types={"redo_request"},
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="writer_only",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=noisy_report,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+    redo_message = service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+    service._consume_queued_agent_messages(
+        record,
+        to_agent="writer_only",
+        consumer_agent="redo_router",
+        message_types={"redo_request"},
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 0
+    assert "bad line" not in record.detail.report_md
+    assert "## User Review Themes" in record.detail.report_md
+    assert "## SWOT Analysis" in record.detail.report_md
+    assert record.detail.agent_messages[-1].payload["writer_mode"] == "writer repair: line"
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "line"
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+    assert redo_message.id in record.detail.agent_messages[-1].source_message_ids
+    assert stale_message.id not in record.detail.agent_messages[-1].source_message_ids
+
+
+@pytest.mark.asyncio
+async def test_writer_poor_previous_report_allows_full_rewrite() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return _writer_repair_protectable_report()
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer poor draft rewrite",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = "# Report\n\nbad line \ufffd"
+    issue = QCIssue(
+        id="issue-poor-line",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        field_path="report_md.line[3]",
+        problem="Report line 3 contains non-publishable text noise.",
+        redo_scope=RedoScope(kind="writer_only", rationale="repair poor report"),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert "bad line" not in record.detail.report_md
+    assert "## Decision Summary" in record.detail.report_md
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is False
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_replaces_only_target_section() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    captured_user = ""
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal captured_user
+        captured_user = user
+        return (
+            "## User Review Themes\n"
+            "- Praise: Cursor is easier to explain in initial evaluation because pricing is "
+            "direct. "
+            "[source:pricing-1]\n"
+            "- Blocker: Copilot can defend with existing Microsoft workflow familiarity. "
+            "[source:feature-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report().replace(
+        (
+            "User review themes show Cursor is easier to explain during procurement, while Copilot "
+            "benefits from\nexisting Microsoft workflow familiarity. [source:pricing-1]\n"
+            "- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]\n"
+            "- Adoption blocker: security review and procurement packaging still need deeper "
+            "evidence.\n"
+            "[source:feature-1]"
+        ),
+        "Existing evidence does not provide verified user reviews.",
+    )
+    issue = QCIssue(
+        id="issue-review-thin",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section is too thin.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert "Repair only these sections: review_theme_summary" in captured_user
+    assert "return only the requested section markdown" in captured_user
+    assert "preserve existing [source:ID] syntax" in captured_user
+    assert "## Executive Summary" in record.detail.report_md
+    assert "## SWOT Analysis" in record.detail.report_md
+    assert "- Praise: Cursor is easier to explain" in record.detail.report_md
+    assert (
+        "Existing evidence does not provide verified user reviews."
+        not in record.detail.report_md
+    )
+    assert record.detail.agent_messages[-1].payload["writer_mode"] == "writer repair: section"
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "section"
+    assert record.detail.agent_messages[-1].payload["writer_repair_sections"] == [
+        "review_theme_summary"
+    ]
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+
+
+@pytest.mark.asyncio
+async def test_writer_only_thin_core_finding_uses_section_repair() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer thin core section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-competitive-findings-thin",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        field_path="report_quality.core_section_depth_score",
+        problem="Competitive Findings section is too thin for decision-grade reporting.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Expand Competitive Findings."),
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="writer_only",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=["issue-competitive-findings-thin"],
+        qa_issue_ids_before=["issue-competitive-findings-thin"],
+        issue_count_before=1,
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        assert "Competitive Findings" in user
+        return (
+            "## Competitive Findings\n"
+            "- Cursor has clearer pricing evaluation signals for buyers comparing direct "
+            "developer workflow tools. [source:pricing-1]\n"
+            "- Copilot retains enterprise familiarity through Microsoft workflow adjacency, "
+            "but this creates a different buying motion. [source:feature-1]\n"
+            "- The decision implication is to test pricing transparency and onboarding proof "
+            "before treating either product as the default winner. [source:pricing-1]"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+
+    await service._real_writer_step(record)
+
+    message = record.detail.agent_messages[-1]
+    assert message.payload["writer_repair_mode"] == "section"
+    assert message.payload["writer_repair_sections"] == ["competitive_findings"]
+    assert (
+        "The decision implication is to test pricing transparency"
+        in record.detail.report_md
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_failure_reports_attempted_metadata() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        raise RuntimeError("section repair failed")
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer section repair failure",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    previous_report = _writer_repair_protectable_report()
+    record.detail.report_md = previous_report
+    issue = QCIssue(
+        id="issue-review-failure",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section needs section repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert record.detail.report_md == previous_report
+    assert payload["writer_mode"] == "preserved previous report after writer error"
+    assert payload["writer_repair_mode"] == "section"
+    assert payload["writer_repair_sections"] == ["review_theme_summary"]
+    assert (
+        payload["writer_repair_decision"]
+        == "small set of section findings on protectable report"
+    )
+    assert payload["previous_report_protected"] is True
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_prompt_includes_localized_heading() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    captured_system = ""
+    captured_user = ""
+    localized_heading = report_label("zh-CN", "review_theme_summary")
+
+    async def fake_complete_text(*, system: str, user: str) -> str:
+        nonlocal captured_system, captured_user
+        captured_system = system
+        captured_user = user
+        return (
+            f"## {localized_heading}\n"
+            "- 表扬：Cursor 的定价透明度更容易支持初始评估。 [source:pricing-1]\n"
+            "- 阻力：Copilot 可以依靠 Microsoft 工作流熟悉度防守。 [source:feature-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer localized section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="zh-CN",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-review-zh",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section needs localized section repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    prompt = f"{captured_system}\n{captured_user}"
+    assert "Use Simplified Chinese" in prompt
+    assert f"review_theme_summary -> ## {localized_heading}" in captured_user
+    assert f"## {localized_heading}" in record.detail.report_md
+
+
+@pytest.mark.asyncio
+async def test_writer_full_rewrite_rejects_collapsed_review_section_when_previous_is_protectable() -> None:  # noqa: E501
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return _writer_repair_protectable_report().replace(
+            (
+                "User review themes show Cursor is easier to explain during procurement, "
+                "while Copilot "
+                "benefits from\nexisting Microsoft workflow familiarity. [source:pricing-1]\n"
+                "- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]\n"
+                "- Adoption blocker: security review and procurement packaging still need "
+                "deeper evidence.\n"
+                "[source:feature-1]"
+            ),
+            "Existing evidence does not provide verified user reviews.",
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer full rewrite guard",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-broad-writer",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        field_path="report_md",
+        problem="Broad writer refresh requested.",
+        redo_scope=RedoScope(kind="writer_only", rationale="refresh writer output"),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert (
+        "Existing evidence does not provide verified user reviews."
+        not in record.detail.report_md
+    )
+    assert "- Customer theme: pricing clarity supports fast evaluation." in record.detail.report_md
+    assert (
+        record.detail.agent_messages[-1].payload["writer_mode"]
+        == "preserved previous report after writer anti-regression"
+    )
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
+    assert record.detail.agent_messages[-1].payload["anti_regression_reason"]
+
+
+@pytest.mark.asyncio
+async def test_writer_full_repair_plan_uses_full_rewrite_metadata() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return _writer_repair_protectable_report().replace(
+            "Cursor has stronger pricing transparency",
+            "Normal writer refresh keeps Cursor's stronger pricing transparency",
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer full repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-broad-writer",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        target_subagent="narrative_quality",
+        field_path="report_md",
+        problem="Report needs broad narrative quality repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="narrative_quality",
+            rationale="repair broad writer quality",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="writer_only",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+    service._consume_queued_agent_messages(
+        record,
+        to_agent="writer_only",
+        consumer_agent="redo_router",
+        message_types={"redo_request"},
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 1
+    assert record.detail.agent_messages[-1].payload["writer_mode"] == "real LLM call"
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
+    assert record.detail.agent_messages[-1].payload["writer_repair_sections"] == []
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+    assert record.detail.agent_messages[-1].payload["anti_regression_reason"] is None
+    assert "Normal writer refresh" in record.detail.report_md
+
+
+@pytest.mark.asyncio
+async def test_writer_upstream_changed_allows_full_rewrite_with_guard_metadata() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return _writer_repair_protectable_report().replace(
+            "Cursor has stronger pricing transparency",
+            "Cursor has updated pricing transparency",
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer upstream rewrite",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    scope = RedoScope(
+        kind="collector",
+        target_subagent="pricing",
+        target_competitor="Cursor",
+        rationale="new pricing evidence",
+    )
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="collector",
+        redo_scope=scope,
+        redo_scopes=[scope],
+        before_md=record.detail.report_md,
+        issue_ids=["collector-issue"],
+        qa_issue_ids_before=["collector-issue"],
+        issue_count_before=1,
+    )
+
+    await service._real_writer_step(record)
+
+    assert "Cursor has updated pricing transparency" in record.detail.report_md
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+    assert record.detail.agent_messages[-1].payload["anti_regression_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_writer_upstream_changed_accepts_thinner_full_rewrite() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return (
+            "# Cursor vs Copilot Pricing Update\n\n"
+            "## Executive Summary\n"
+            "Cursor has updated pricing transparency for this refreshed collector pass. "
+            "[source:pricing-1]\n\n"
+            "## Decision Summary\n"
+            "Use the updated Cursor pricing transparency evidence as the current sales "
+            "talk track, while treating older comparison depth as superseded. "
+            "[source:pricing-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer upstream thin rewrite",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    scope = RedoScope(
+        kind="collector",
+        target_subagent="pricing",
+        target_competitor="Cursor",
+        rationale="new pricing evidence changed upstream data",
+    )
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="collector",
+        redo_scope=scope,
+        redo_scopes=[scope],
+        before_md=record.detail.report_md,
+        issue_ids=["collector-pricing-changed"],
+        qa_issue_ids_before=["collector-pricing-changed"],
+        issue_count_before=1,
+    )
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert "Cursor has updated pricing transparency" in record.detail.report_md
+    assert "Customer theme: pricing clarity supports fast evaluation" not in record.detail.report_md
+    assert payload["writer_repair_mode"] == "full"
+    assert payload["previous_report_protected"] is True
+    assert payload["anti_regression_reason"] is None
+
+
+@pytest.mark.asyncio
 async def test_writer_budget_timeout_generates_deterministic_report() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -4077,10 +5244,14 @@ async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
     await service._real_writer_step(record)
 
     assert "Writer Context JSON:" in captured_user
-    assert "around 5,500 characters" in captured_user
+    assert "around 5,500 characters" not in captured_user
+    assert "8,500-10,000 characters" in captured_user
+    assert "65-75%" in captured_user
+    assert "Core analysis layer" in captured_user
+    assert "Support/audit layer" in captured_user
     assert "Competitor KB JSON:" not in captured_user
     assert "Competitor Knowledge Schema JSON:" not in captured_user
-    assert len(captured_user) < 15000
+    assert len(captured_user) < 16500
     assert captured_user.count("long-context-token") < 80
     assert record.detail.agent_messages[-1].payload["writer_mode"] == "real LLM call"
 
@@ -4754,6 +5925,46 @@ def test_collector_accepts_windsurf_pricing_rebrand_redirect_source() -> None:
     assert service._source_quality_problem(source) is None
 
 
+def test_persona_web_search_query_uses_customer_adoption_terms() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-persona-query",
+        topic="AI coding assistant",
+        status="running",
+        execution_mode="real",
+        created_at="2026-06-11T00:00:00",
+        updated_at="2026-06-11T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant",
+            competitors=["Windsurf"],
+            dimensions=["persona"],
+        ),
+    )
+
+    query = service._web_search_query(detail, "Windsurf", "persona").casefold()
+
+    for term in [
+        "customers",
+        "case studies",
+        "developer adoption",
+        "user reviews",
+        "onboarding",
+        "switching",
+        "workflow fit",
+    ]:
+        assert term in query
+
+
 def test_collector_rejects_pricing_pages_as_persona_evidence() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -5207,6 +6418,134 @@ async def test_collect_qa_blocks_and_retries_collector_before_analyst() -> None:
 
 
 @pytest.mark.asyncio
+async def test_weak_persona_collect_qa_retries_collector_before_analyst() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            max_iterations=2,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+    order: list[str] = []
+    collector_calls = 0
+
+    async def fake_planner(record):  # noqa: ANN001, ANN202
+        order.append("planner")
+
+    async def fake_collector(record, dimension, competitor):  # noqa: ANN001, ANN202
+        nonlocal collector_calls
+        collector_calls += 1
+        order.append(f"collector:{collector_calls}")
+        if collector_calls == 1:
+            record.detail.raw_sources.append(
+                RawSource(
+                    id="windsurf-persona-proxy",
+                    competitor=competitor,
+                    covered_competitors=[competitor],
+                    dimension=dimension,
+                    source_type="interview_record",
+                    title="Windsurf persona proxy",
+                    snippet="Proxy interview mentions workflow fit and switching risk.",
+                    content_hash="windsurf-persona-proxy-hash",
+                    confidence=0.62,
+                    metadata={"fallback_synthetic": True},
+                )
+            )
+            return
+        record.detail.raw_sources.append(
+            RawSource(
+                id="windsurf-persona-customer-story",
+                competitor=competitor,
+                covered_competitors=[competitor],
+                dimension=dimension,
+                source_type="webpage_verified",
+                title="Windsurf customer adoption story",
+                url="https://windsurf.com/customers/example",
+                snippet=(
+                    "Developers and engineering teams adopted Windsurf for workflow fit, "
+                    "onboarding, and switching cost reduction."
+                ),
+                content_hash="windsurf-persona-customer-story-hash",
+                confidence=0.92,
+            )
+        )
+
+    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+        order.append("analyst")
+        service._merge_competitor_kb_slice(
+            record.detail,
+            competitor,
+            dimension,
+            [
+                (
+                    "Windsurf serves developer teams evaluating workflow fit. "
+                    "[source:windsurf-persona-customer-story]"
+                )
+            ],
+        )
+
+    async def fake_comparator(record):  # noqa: ANN001, ANN202
+        order.append("comparator")
+        record.detail.comparison_matrix = service._build_comparison_matrix(record.detail, {})
+
+    async def fake_reflector(record):  # noqa: ANN001, ANN202
+        order.append("reflector")
+
+    async def fake_writer(record):  # noqa: ANN001, ANN202
+        order.append("writer")
+        record.detail.report_md = (
+            "Windsurf targets developer teams. [source:windsurf-persona-customer-story]"
+        )
+
+    async def fake_qa(record):  # noqa: ANN001, ANN202
+        order.append("qa")
+        record.detail.qa_findings = []
+
+    service._real_planner_step = fake_planner  # type: ignore[method-assign]
+    service._real_collector_branch_step = fake_collector  # type: ignore[method-assign]
+    service._real_analyst_branch_step = fake_analyst  # type: ignore[method-assign]
+    service._real_comparator_step = fake_comparator  # type: ignore[method-assign]
+    service._real_reflector_step = fake_reflector  # type: ignore[method-assign]
+    service._real_writer_step = fake_writer  # type: ignore[method-assign]
+    service._real_qa_step = fake_qa  # type: ignore[method-assign]
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Persona collect gate",
+                competitors=["Windsurf"],
+                dimensions=["persona"],
+                execution_mode="real",
+            )
+        )
+
+        await service.run_pipeline(detail.id)
+
+        assert order == [
+            "planner",
+            "collector:1",
+            "collector:2",
+            "analyst",
+            "comparator",
+            "reflector",
+            "writer",
+            "qa",
+        ]
+        updated = service.get_run(detail.id)
+        assert updated is not None
+        assert updated.status == "completed"
+        assert updated.qa_findings == []
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_real_pipeline_auto_runs_scoped_redo_for_qa_findings() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -5469,10 +6808,18 @@ def test_release_gate_quality_metadata_records_followup_tasks() -> None:
     assert metadata["warning_repair"]["before_warn_count"] == 1
     assert metadata["warning_repair"]["target_count"] == 1
     assert metadata["warning_repair"]["targets"][0]["target_section"] == "Pricing Analysis"
+    assert (
+        metadata["warning_repair"]["targets"][0]["acceptance_rule"]
+        == "Collect a second independent pricing source."
+    )
     assert metadata["redo_scopes"][0]["target_subagent"] == "pricing"
     assert "## Release Gate Follow-up Repairs" in projection.report_version.report_md
     assert projection.report_version.report_md.count("## Release Gate Follow-up Repairs") == 1
-    assert "Collect a second independent pricing source." in projection.report_version.report_md
+    assert "- Follow-up targets: 1 warning(s) grouped for reviewer attention." in (
+        projection.report_version.report_md
+    )
+    assert "claim_self_consistency_required: 1 warning(s)" in projection.report_version.report_md
+    assert "Collect a second independent pricing source." not in projection.report_version.report_md
 
 
 @pytest.mark.asyncio
@@ -6337,6 +7684,42 @@ def test_writer_source_digest_omits_noisy_snippet() -> None:
 
     assert digest[0]["snippet"] == ""
     assert digest[0]["snippet_quality"] == "omitted_no_clean_business_snippet"
+
+
+def test_writer_source_digest_includes_all_raw_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    sources = [
+        RawSource(
+            id=f"raw-source-{index:02d}",
+            competitor="A",
+            dimension="persona" if index > 24 else "pricing",
+            source_type="interview_record" if index > 24 else "webpage_verified",
+            title=f"A source {index}",
+            url=None,
+            snippet=(
+                f"Source {index} contains decision-relevant buyer, pricing, and adoption "
+                "evidence for the report writer."
+            ),
+            content_hash=f"source-{index}-hash",
+            confidence=0.9,
+        )
+        for index in range(1, 31)
+    ]
+
+    digest = service._writer_source_digest(sources)
+
+    assert len(digest) == 30
+    assert digest[-1]["id"] == "raw-source-30"
 
 
 def test_deterministic_payload_uses_normalized_fields_before_noisy_snippet() -> None:

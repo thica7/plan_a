@@ -7,6 +7,12 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from packages.agents.writer.repair import (
+    apply_line_repair,
+    build_writer_repair_plan,
+    replace_markdown_section,
+    report_regression_problem,
+)
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.i18n.language import (
     language_instruction,
@@ -52,100 +58,289 @@ class WriterAgentMixin:
             consumer_agent="writer",
             message_types={"reflection_ready"},
         )
+        redo_messages = []
+        for to_agent in ("writer", "writer_only"):
+            redo_messages.extend(
+                self._consume_queued_agent_messages(
+                    record,
+                    to_agent=to_agent,
+                    consumer_agent="writer",
+                    message_types={"redo_request"},
+                )
+            )
         await self.emit(detail.id, "node_started", "writer", None, "Calling report writer.")
         previous_report = detail.report_md
         writer_mode = "real LLM call"
         writer_error: str | None = None
-        writer_context_json = json.dumps(
-            self._writer_context_package(detail),
-            ensure_ascii=False,
-        )
-        layer_context = self._writer_layer_context(detail)
-        memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
-        required_sections = self._writer_required_sections(detail)
-        grounding_prompt = await self._writer_grounding_prompt(detail)
-        user_research_policy = writer_user_research_policy_text()
-        language_guidance = language_instruction(detail.output_language)
-        try:
-            timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
-            report_md = await asyncio.wait_for(
-                self._trace_llm_text(
-                    record,
-                    agent="writer",
-                    subagent=None,
-                    name="report_writer",
-                    system=(
-                        "You are a senior enterprise competitive-intelligence analyst. "
-                        "Produce a concise decision-grade markdown first draft, not a short "
-                        "summary. Use an analysis-first structure: lead with an executive "
-                        "takeaway, decision summary, competitive findings, competitor deep "
-                        "dives, and the selected layer-specific analysis. Put source quality, "
-                        "scenario QA, claim risk, RAG gap-fill, verification tasks, and the "
-                        "evidence appendix after the core analysis as support material. Write "
-                        "with consulting depth: side-by-side matrices, dimension analysis, "
-                        "risks, buying implications, and explicit next validation tasks. Cite "
-                        "factual claims with existing source IDs using [source:ID]. Do not "
-                        "invent source IDs. "
-                        "Do not use web_search_result or confidence < 0.75 as the sole support "
-                        "for a winner, legal/security certification, pricing, or procurement "
-                        "recommendation. If evidence is incomplete, say the conclusion is "
-                        "tentative and list the exact evidence gap. Do not claim all sources are "
-                        "verified when any source_type is web_search_result or "
-                        "llm_public_knowledge. "
-                        "Follow the Grounded Evidence Contract exactly. "
-                        f"{language_guidance} "
-                        f"{user_research_policy} "
-                        "Honor confirmed memory guidance when it does not conflict with evidence, "
-                        "schema requirements, or compliance policy. "
-                        "Use the requested competitive layer to choose the report shape: L1 is a "
-                        "direct battlecard, L2 is adjacent workflow and enterprise-risk analysis, "
-                        "and L3 is market landscape and category strategy."
-                    ),
-                    user=(
-                        f"Topic: {detail.topic}\n"
-                        f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                        f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                        f"Competitive Layer: {detail.plan.competitor_layer}\n"
-                        f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
-                        "Scenario Recommended Dimensions: "
-                        f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
-                        f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
-                        f"Confirmed Memory Preferences:\n{memory_context}\n"
-                        f"Layer Report Context: {layer_context}\n"
-                        f"{grounding_prompt}\n"
-                        f"Writer Context JSON: {writer_context_json}\n\n"
-                        f"Required sections:\n{required_sections}\n"
-                        "Keep the first draft around 5,500 characters. Spend most of the body "
-                        "on cited analysis and implications; keep evidence and QA support "
-                        "concise but complete."
-                    ),
-                ),
-                timeout=timeout_seconds,
+        writer_repair_mode = "none"
+        writer_repair_sections: list[str] = []
+        writer_repair_decision = ""
+        anti_regression_reason: str | None = None
+        previous_report_protected = False
+        redo_issue_by_id: dict[str, QCIssue] = {}
+        for message in redo_messages:
+            for item in message.payload.get("issues", []):
+                issue = QCIssue.model_validate(item)
+                redo_issue_by_id.setdefault(issue.id, issue)
+        pending_redo = record.pending_graph_redo
+        pending_issue_ids: set[str] = set()
+        if (
+            pending_redo is not None
+            and pending_redo.redo_scope.kind == "writer_only"
+            and pending_redo.issue_ids
+        ):
+            pending_issue_ids = set(pending_redo.issue_ids)
+            for issue in detail.qa_findings:
+                if issue.id in pending_issue_ids:
+                    redo_issue_by_id.setdefault(issue.id, issue)
+        redo_issues = list(redo_issue_by_id.values())
+        redo_source_message_ids = [message.id for message in redo_messages]
+        if pending_issue_ids:
+            writer_only_messages_without_issue_ids: list[str] = []
+            for message in record.detail.agent_messages:
+                if message.message_type != "redo_request":
+                    continue
+                raw_issue_ids = message.payload.get("issue_ids", [])
+                if raw_issue_ids:
+                    message_issue_ids = set(raw_issue_ids)
+                    if message_issue_ids & pending_issue_ids:
+                        redo_source_message_ids.append(message.id)
+                    continue
+                redo_scope = message.payload.get("redo_scope", {})
+                redo_scope_kind = (
+                    redo_scope.get("kind") if isinstance(redo_scope, dict) else None
+                )
+                if redo_scope_kind == "writer_only":
+                    writer_only_messages_without_issue_ids.append(message.id)
+            if len(writer_only_messages_without_issue_ids) == 1:
+                redo_source_message_ids.append(writer_only_messages_without_issue_ids[0])
+        redo_source_message_ids = list(dict.fromkeys(redo_source_message_ids))
+        upstream_redo_stages = {"collector", "analyst", "comparator", "full"}
+        upstream_data_changed = (
+            pending_redo is not None
+            and (
+                pending_redo.stage in upstream_redo_stages
+                or pending_redo.redo_scope.kind in upstream_redo_stages
             )
-            detail.report_md = self._harden_report_markdown(detail, report_md)
-        except TimeoutError as exc:
-            timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
-            writer_error = timeout_reason
-            if previous_report.strip():
-                detail.report_md = previous_report
-                writer_mode = "preserved previous report after writer error"
-            else:
-                detail.report_md = self._harden_report_markdown(
-                    detail,
-                    self._fallback_report_markdown(detail, writer_error),
+        )
+        if redo_issues or upstream_data_changed:
+            repair_plan = build_writer_repair_plan(
+                detail,
+                redo_issues,
+                upstream_data_changed=upstream_data_changed,
+            )
+        else:
+            repair_plan = None
+        timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
+        if repair_plan is not None and repair_plan.mode == "line":
+            writer_repair_mode = repair_plan.mode
+            writer_repair_sections = repair_plan.sections
+            writer_repair_decision = repair_plan.reason
+            previous_report_protected = repair_plan.previous_report_protectable
+            detail.report_md = self._harden_report_markdown(
+                detail,
+                apply_line_repair(previous_report, redo_issues),
+            )
+            writer_mode = "writer repair: line"
+        elif repair_plan is not None and repair_plan.mode == "section":
+            writer_repair_mode = repair_plan.mode
+            writer_repair_sections = repair_plan.sections
+            writer_repair_decision = repair_plan.reason
+            previous_report_protected = repair_plan.previous_report_protectable
+            try:
+                report_md = previous_report
+                for section in repair_plan.sections:
+                    section_md = await asyncio.wait_for(
+                        self._writer_section_repair_markdown(
+                            record,
+                            sections=[section],
+                            previous_report=previous_report,
+                        ),
+                        timeout=timeout_seconds,
+                    )
+                    report_md = replace_markdown_section(
+                        report_md,
+                        section,
+                        detail.output_language,
+                        section_md,
+                    )
+                detail.report_md = self._harden_report_markdown(detail, report_md)
+                writer_mode = "writer repair: section"
+            except TimeoutError as exc:
+                timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
+                writer_error = timeout_reason
+                if previous_report.strip():
+                    detail.report_md = previous_report
+                    writer_mode = "preserved previous report after writer error"
+                else:
+                    detail.report_md = self._harden_report_markdown(
+                        detail,
+                        self._fallback_report_markdown(detail, writer_error),
+                    )
+                    writer_mode = "deterministic fallback after writer error"
+            except Exception as exc:  # noqa: BLE001 - writer fallback keeps long runs demo-safe.
+                writer_error = str(exc)
+                if previous_report.strip():
+                    detail.report_md = previous_report
+                    writer_mode = "preserved previous report after writer error"
+                else:
+                    detail.report_md = self._harden_report_markdown(
+                        detail,
+                        self._fallback_report_markdown(detail, writer_error),
+                    )
+                    writer_mode = "deterministic fallback after writer error"
+        else:
+            if repair_plan is not None and repair_plan.mode == "full":
+                writer_repair_mode = repair_plan.mode
+                writer_repair_sections = repair_plan.sections
+                writer_repair_decision = repair_plan.reason
+                previous_report_protected = repair_plan.previous_report_protectable
+            writer_context_json = json.dumps(
+                self._writer_context_package(detail),
+                ensure_ascii=False,
+            )
+            layer_context = self._writer_layer_context(detail)
+            memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
+            required_sections = self._writer_required_sections(detail)
+            grounding_prompt = await self._writer_grounding_prompt(detail)
+            user_research_policy = writer_user_research_policy_text()
+            language_guidance = language_instruction(detail.output_language)
+            try:
+                report_md = await asyncio.wait_for(
+                    self._trace_llm_text(
+                        record,
+                        agent="writer",
+                        subagent=None,
+                        name="report_writer",
+                        system=(
+                            "You are a senior enterprise competitive-intelligence analyst. "
+                            "Produce a concise decision-grade markdown first draft, not a short "
+                            "summary. Use an analysis-first structure: lead with an executive "
+                            "takeaway, decision summary, competitive findings, competitor deep "
+                            "dives, and the selected layer-specific analysis. Put source quality, "
+                            "scenario QA, claim risk, RAG gap-fill, verification tasks, and the "
+                            "evidence appendix after the core analysis as support material. Write "
+                            "with consulting depth: side-by-side matrices, dimension analysis, "
+                            "risks, buying implications, and explicit next validation tasks. Cite "
+                            "factual claims with existing source IDs using [source:ID]. Do not "
+                            "invent source IDs. "
+                            "Do not use web_search_result or confidence < 0.75 as the sole support "
+                            "for a winner, legal/security certification, pricing, or procurement "
+                            "recommendation. If evidence is incomplete, say the conclusion is "
+                            "tentative and list the exact evidence gap. Do not claim all sources "
+                            "are verified when any source_type is web_search_result or "
+                            "llm_public_knowledge. "
+                            "Follow the Grounded Evidence Contract exactly. "
+                            f"{language_guidance} "
+                            f"{user_research_policy} "
+                            "Honor confirmed memory guidance when it does not conflict with "
+                            "evidence, schema requirements, or compliance policy. "
+                            "Use the requested competitive layer to choose the report shape: L1 "
+                            "is a direct battlecard, L2 is adjacent workflow and enterprise-risk "
+                            "analysis, and L3 is market landscape and category strategy."
+                        ),
+                        user=(
+                            f"Topic: {detail.topic}\n"
+                            f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                            f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                            f"Competitive Layer: {detail.plan.competitor_layer}\n"
+                            f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
+                            "Scenario Recommended Dimensions: "
+                            f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
+                            f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
+                            f"Confirmed Memory Preferences:\n{memory_context}\n"
+                            f"Layer Report Context: {layer_context}\n"
+                            f"{grounding_prompt}\n"
+                            f"Writer Context JSON: {writer_context_json}\n\n"
+                            f"Required sections:\n{required_sections}\n"
+                            "Target 8,500-10,000 characters for the first draft. Use about "
+                            "65-75% of the report on the Core analysis layer: decision summary, "
+                            "competitive findings, user review themes, competitor deep dives, "
+                            "SWOT, matrix interpretation, and layer-specific implications. Keep "
+                            "the Support/audit layer concise and complete; it is the audit trail, "
+                            "not the main readout. Prefer deeper cited analysis and decision "
+                            "implications over repeated source IDs or QA boilerplate."
+                        ),
+                    ),
+                    timeout=timeout_seconds,
                 )
-                writer_mode = "deterministic fallback after writer error"
-        except Exception as exc:  # noqa: BLE001 - writer fallback keeps long runs demo-safe.
-            writer_error = str(exc)
-            if previous_report.strip():
-                detail.report_md = previous_report
-                writer_mode = "preserved previous report after writer error"
-            else:
-                detail.report_md = self._harden_report_markdown(
-                    detail,
-                    self._fallback_report_markdown(detail, writer_error),
-                )
-                writer_mode = "deterministic fallback after writer error"
+                hardened_report = self._harden_report_markdown(detail, report_md)
+                if (
+                    previous_report.strip()
+                    and repair_plan is not None
+                    and repair_plan.anti_regression_required
+                ):
+                    repair_comparison_metrics = detail.metrics.model_copy(
+                        update={
+                            "llm_calls": max(detail.metrics.llm_calls, 1),
+                            "source_coverage_rate": max(
+                                detail.metrics.source_coverage_rate, 1.0
+                            ),
+                            "claim_citation_rate": max(
+                                detail.metrics.claim_citation_rate, 1.0
+                            ),
+                        }
+                    )
+                    previous_detail = detail.model_copy(
+                        update={
+                            "report_md": previous_report,
+                            "qa_findings": [],
+                            "metrics": repair_comparison_metrics,
+                        }
+                    )
+                    candidate_detail = detail.model_copy(
+                        update={
+                            "report_md": hardened_report,
+                            "qa_findings": [],
+                            "metrics": repair_comparison_metrics,
+                        }
+                    )
+                    protected_sections = repair_plan.sections or [
+                        "review_theme_summary",
+                        "swot_analysis",
+                        "competitor_deep_dives",
+                        self._layer_section_label_key(detail),
+                    ]
+                    anti_regression_reason = report_regression_problem(
+                        previous_detail,
+                        candidate_detail,
+                        protected_sections=protected_sections,
+                    )
+                if anti_regression_reason:
+                    detail.report_md = previous_report
+                    writer_mode = "preserved previous report after writer anti-regression"
+                else:
+                    detail.report_md = hardened_report
+            except TimeoutError as exc:
+                timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
+                writer_error = timeout_reason
+                if previous_report.strip():
+                    detail.report_md = previous_report
+                    writer_mode = "preserved previous report after writer error"
+                else:
+                    detail.report_md = self._harden_report_markdown(
+                        detail,
+                        self._fallback_report_markdown(detail, writer_error),
+                    )
+                    writer_mode = "deterministic fallback after writer error"
+            except Exception as exc:  # noqa: BLE001 - writer fallback keeps long runs demo-safe.
+                writer_error = str(exc)
+                if previous_report.strip():
+                    detail.report_md = previous_report
+                    writer_mode = "preserved previous report after writer error"
+                else:
+                    detail.report_md = self._harden_report_markdown(
+                        detail,
+                        self._fallback_report_markdown(detail, writer_error),
+                    )
+                    writer_mode = "deterministic fallback after writer error"
+        repair_metadata = {
+            "writer_repair_mode": writer_repair_mode,
+            "writer_repair_sections": writer_repair_sections,
+            "writer_repair_decision": writer_repair_decision,
+            "anti_regression_reason": anti_regression_reason,
+            "previous_report_protected": previous_report_protected,
+        }
         self._append_agent_message(
             record,
             from_agent="writer",
@@ -156,7 +351,9 @@ class WriterAgentMixin:
                 "report_md": detail.report_md,
                 "writer_mode": writer_mode,
                 "error": writer_error,
+                **repair_metadata,
             },
+            source_message_ids=redo_source_message_ids,
         )
         detail.updated_at = datetime.utcnow()
         projection = self._sync_enterprise_projection(record)
@@ -170,10 +367,61 @@ class WriterAgentMixin:
                 "report_md": detail.report_md,
                 "writer_mode": writer_mode,
                 "error": writer_error,
+                **repair_metadata,
                 **self._enterprise_projection_payload(projection),
             },
         )
         await self.emit(detail.id, "node_completed", "writer", None, "Writer completed.")
+
+    async def _writer_section_repair_markdown(
+        self,
+        record: RunRecord,
+        *,
+        sections: Sequence[str],
+        previous_report: str,
+    ) -> str:
+        detail = record.detail
+        writer_context_json = json.dumps(
+            self._writer_context_package(detail),
+            ensure_ascii=False,
+        )
+        language_guidance = language_instruction(detail.output_language)
+        section_headings = "\n".join(
+            self._writer_section_heading_instruction(detail, section) for section in sections
+        )
+        return await self._trace_llm_text(
+            record,
+            agent="writer",
+            subagent=None,
+            name="report_section_repair",
+            system=(
+                "You are a senior enterprise competitive-intelligence analyst repairing "
+                "one section of an existing markdown report. Return only the requested "
+                "section markdown. Preserve existing [source:ID] syntax, never invent "
+                "source IDs, and cite factual claims with available source IDs. "
+                f"{language_guidance}"
+            ),
+            user=(
+                f"Topic: {detail.topic}\n"
+                f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                f"Repair only these sections: {', '.join(sections)}\n"
+                f"Expected section headings:\n{section_headings}\n"
+                "return only the requested section markdown; do not rewrite unrelated "
+                "sections or include commentary outside the section.\n"
+                "Use the exact requested level-2 heading for each returned section.\n"
+                "You must preserve existing [source:ID] syntax.\n"
+                f"Writer Context JSON: {writer_context_json}\n\n"
+                f"Previous report:\n{previous_report}"
+            ),
+        )
+
+    def _writer_section_heading_instruction(self, detail: RunDetail, section: str) -> str:
+        try:
+            heading = report_label(detail.output_language, section)
+        except KeyError:
+            heading = section
+        return f"{section} -> ## {heading}"
 
     def _fallback_report_markdown(self, detail: RunDetail, reason: str) -> str:
         layer_label = self._writer_layer_label(detail)
@@ -1256,13 +1504,23 @@ class WriterAgentMixin:
                 "with type and confidence."
             ),
         ]
-        return "\n".join(
-            f"{index}. {section}"
-            for index, section in enumerate(
-                [*analysis_sections, *layer_sections, *support_sections],
-                start=1,
-            )
-        )
+        core_lines = [
+            "Core analysis layer (target 65-75% of the report body):",
+            *(
+                f"{index}. {section}"
+                for index, section in enumerate(
+                    [*analysis_sections, *layer_sections], start=1
+                )
+            ),
+        ]
+        support_lines = [
+            "Support/audit layer (concise audit trail after core analysis):",
+            *(
+                f"{index}. {section}"
+                for index, section in enumerate(support_sections, start=1)
+            ),
+        ]
+        return "\n".join([*core_lines, *support_lines])
 
     async def _writer_grounding_prompt(self, detail: RunDetail) -> str:
         grounding = build_run_grounding_prompt(
@@ -1318,7 +1576,7 @@ class WriterAgentMixin:
 
     def _writer_source_digest(self, sources: list[RawSource]) -> list[dict[str, object]]:
         digests: list[dict[str, object]] = []
-        for source in sources[:24]:
+        for source in sources:
             snippet = source_business_snippet(source, dimension=source.dimension, limit=240)
             digest = {
                 "id": source.id,

@@ -82,11 +82,24 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
     assert survey_source.dimension == "persona"
     assert "target users" in survey_source.snippet
     assert "buyer personas" in survey_source.snippet
-    assert survey_source.confidence == 0.58
+    assert "adoption blockers" in survey_source.snippet
+    assert "switching triggers" in survey_source.snippet
+    assert "buying criteria" in survey_source.snippet
+    assert survey_source.confidence == 0.76
+    assert survey_source.metadata["fallback_synthetic"] is True
+    assert survey_source.metadata["survey_interview_synthetic"] is True
+    assert survey_source.metadata["source_role"] == "survey"
+
     assert interview_source.competitor == "Acme"
     assert interview_source.dimension == "persona"
     assert "pain points" in interview_source.snippet
-    assert interview_source.confidence == 0.62
+    assert "individual developer" in interview_source.snippet
+    assert "team technical lead" in interview_source.snippet
+    assert "enterprise platform buyer" in interview_source.snippet
+    assert interview_source.confidence == 0.82
+    assert interview_source.metadata["fallback_synthetic"] is True
+    assert interview_source.metadata["survey_interview_synthetic"] is True
+    assert interview_source.metadata["source_role"] == "interview"
     assert "jane.buyer@example.com" not in survey_source.snippet
     assert OPENROUTER_PREFIX + "redacted" not in survey_source.snippet
     assert "jane.buyer@example.com" not in interview_source.snippet
@@ -103,7 +116,11 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
         interview_source.id,
     ]
     assert "workflow fit" in knowledge.user_personas.summary_claims[0].claim
+    assert knowledge.user_personas.summary_claims[0].confidence == 0.8
     assert knowledge.user_personas.segments
+    assert knowledge.user_personas.segments[0].claims[0].confidence == 0.8
+    assert "adoption risk" in knowledge.user_personas.summary_claims[0].claim
+    assert "buying criteria" in knowledge.user_personas.summary_claims[0].claim
     assert knowledge.user_personas.segments[0].claims[0].source_ids == [
         survey_source.id,
         interview_source.id,
@@ -126,6 +143,48 @@ async def test_survey_interview_enrichment_adds_typed_research_evidence() -> Non
     assert OPENROUTER_PREFIX + "redacted" not in span.full_output
     assert "[redacted:email]" in span.full_output
     assert "[redacted:api_key]" in span.full_output
+
+
+@pytest.mark.asyncio
+async def test_survey_interview_enrichment_caps_non_persona_claim_confidence() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant user adoption comparison",
+            competitors=["Acme"],
+            dimensions=["adoption"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+
+    await service._run_survey_interview_enrichment(record, ["adoption"], ["Acme"])
+
+    survey_source = next(
+        source for source in record.detail.raw_sources if source.source_type == "survey_simulated"
+    )
+    interview_source = next(
+        source for source in record.detail.raw_sources if source.source_type == "interview_record"
+    )
+    assert survey_source.dimension == "adoption"
+    assert survey_source.confidence == 0.76
+    assert interview_source.dimension == "adoption"
+    assert interview_source.confidence == 0.82
+
+    knowledge = record.detail.competitor_knowledge["Acme"]
+    assert knowledge.user_personas.summary_claims[0].confidence == 0.72
+    assert knowledge.user_personas.segments[0].claims[0].confidence == 0.72
 
 
 @pytest.mark.asyncio
@@ -173,6 +232,56 @@ async def test_survey_interview_enrichment_reuses_attached_user_research(
     assert record.detail.agent_messages[-1].message_type == "survey_interview_evidence_collected"
     assert record.detail.agent_messages[-1].payload["source_ids"] == []
     assert record.detail.agent_messages[-1].payload["bundles"] == []
+
+
+@pytest.mark.asyncio
+async def test_survey_interview_enrichment_runs_for_weak_existing_persona_source() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant user adoption comparison",
+            competitors=["Windsurf"],
+            dimensions=["persona"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources.append(
+        RawSource(
+            id="windsurf-persona-proxy",
+            competitor="Windsurf",
+            covered_competitors=["Windsurf"],
+            dimension="persona",
+            source_type="interview_record",
+            title="Windsurf persona proxy",
+            snippet="Proxy interview mentions workflow fit and switching risk.",
+            content_hash="windsurf-persona-proxy-hash",
+            confidence=0.62,
+            metadata={"fallback_synthetic": True},
+        )
+    )
+
+    await service._run_survey_interview_enrichment(record, ["persona"], ["Windsurf"])
+
+    assert len(record.detail.raw_sources) == 3
+    added = [
+        source
+        for source in record.detail.raw_sources
+        if source.id != "windsurf-persona-proxy"
+    ]
+    assert {source.source_type for source in added} == {"survey_simulated", "interview_record"}
+    assert all(source.metadata["fallback_synthetic"] is True for source in added)
 
 
 def test_survey_evidence_projects_as_synthetic_enterprise_source() -> None:
@@ -377,6 +486,7 @@ async def test_user_research_import_redacts_and_projects_claim_links() -> None:
     assert source.id == result.source_ids[0]
     assert source.source_type == "manual_transcript"
     assert source.metadata["imported_user_research"] is True
+    assert source.confidence == 0.86
     assert "jane.buyer@example.com" not in source.snippet
     assert RAW_NOTE_OPENROUTER_KEY not in source.snippet
     assert "[redacted:email]" in source.snippet
@@ -384,7 +494,9 @@ async def test_user_research_import_redacts_and_projects_claim_links() -> None:
     knowledge = service.get_run(detail.id).competitor_knowledge["Acme"]  # type: ignore[union-attr]
     assert knowledge.user_personas.summary_claims
     assert knowledge.user_personas.summary_claims[0].source_ids == [source.id]
+    assert knowledge.user_personas.summary_claims[0].confidence == 0.86
     assert knowledge.user_personas.segments[0].claims[0].source_ids == [source.id]
+    assert knowledge.user_personas.segments[0].claims[0].confidence == 0.86
     projection = service.get_enterprise_projection(detail.id)
     assert projection is not None
     evidence = projection.evidence_records[0]
