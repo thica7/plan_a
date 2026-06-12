@@ -105,6 +105,27 @@ def test_writer_repair_maps_rationale_only_decision_summary_to_section_repair() 
     assert plan.sections == ["decision_summary"]
 
 
+def test_writer_repair_claim_risk_review_wording_does_not_target_user_reviews() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-claim-risk-publication-review",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        field_path="report_quality.claim_risk_section_score",
+        problem="Claim Validation & Evidence Risk section needs review before publication.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="Expand claim risk review before publication.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["claim_risk"]
+
+
 def test_writer_repair_maps_battlecard_watchouts_to_battlecard_only() -> None:
     detail = _detail(report_md=_protectable_report())
     issue = QCIssue(
@@ -389,6 +410,16 @@ developer workflow value. [source:pricing-1]
 the buyer needs bundled familiarity or a focused coding workflow proof. [source:feature-1]
 - Follow-up: request security, onboarding, and procurement evidence before making an absolute
 replacement claim. [source:pricing-1] [source:feature-1]
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Copilot |
+| --- | --- | --- |
+| Price | clearer price [source:pricing-1] | bundled context [source:feature-1] |
+| Feature | focused workflow [source:pricing-1] | IDE breadth [source:feature-1] |
+| Persona | direct evaluation [source:pricing-1] | platform continuity [source:feature-1] |
+| Security | qualify readiness [source:feature-1] | verify governance [source:feature-1] |
+| Procurement | lead with clarity [source:pricing-1] | separate value [source:feature-1] |
+| Follow-up | collect objections [source:pricing-1] | onboarding proof [source:feature-1] |
 
 ## Source Quality & Coverage
 The run uses verified pages for both target competitors. [source:pricing-1] [source:feature-1]

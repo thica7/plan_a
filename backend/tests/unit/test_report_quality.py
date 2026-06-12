@@ -543,6 +543,40 @@ def test_compare_run_quality_rejects_support_heavy_report_with_thin_core_section
     assert any("required core sections" in item for item in comparison.recommendations)
 
 
+def test_compare_run_quality_rejects_placeholder_matrix_core_section() -> None:
+    report_md = _replace_report_section(
+        _structured_report_md(),
+        report_label("en-US", "side_by_side_matrix"),
+        "## Side-by-Side Decision Matrix\nMatrix placeholder. [source:source-0]",
+    )
+    detail = _run_detail(
+        run_id="placeholder-matrix-core",
+        execution_mode="real",
+        source_count=4,
+        report_md=report_md,
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[_llm_trace_span()],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    blockers = {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert metrics["core_section_depth_score"].target_value < 1.0
+    assert comparison.report_quality_signal is False
+    assert "core_section_depth_score" in blockers
+
+
 def test_compare_run_quality_accepts_substantive_core_with_concise_support() -> None:
     detail = _run_detail(
         run_id="substantive-core-concise-support",
@@ -3217,6 +3251,7 @@ security and procurement proof as follow-up work. [source:source-0] [source:sour
 | Pricing | transparent pricing [source:source-0] | bundled enterprise offer [source:source-1] |
 | Feature | focused agent workflow [source:source-2] | broad IDE integration [source:source-3] |
 | Persona | direct evaluation [source:source-0] | workflow defense [source:source-1] |
+| Risk | security proof gated [source:source-2] | total-cost proof needed [source:source-1] |
 
 ## Source Quality & Coverage
 The run uses verified pages for both target competitors. [source:source-0] [source:source-1]

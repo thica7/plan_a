@@ -874,6 +874,15 @@ def _core_section_depth_score(detail: RunDetail) -> float:
         ),
         (_swot_section_aliases(), 240, 4),
         (_layer_section_aliases(detail), 240, 3),
+        (
+            (
+                *_report_label_aliases("side_by_side_matrix", "comparison_matrix"),
+                "Side-by-Side Decision Matrix",
+                "Decision Matrix",
+            ),
+            260,
+            max(3, len(detail.plan.competitors) * max(1, min(len(detail.plan.dimensions), 3))),
+        ),
     ]
     if _needs_review_theme_section(detail):
         specs.insert(2, (_review_theme_section_aliases(), 220, 3))

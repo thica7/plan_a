@@ -36,8 +36,10 @@ SECTION_REPAIR_HINTS: dict[str, tuple[str, ...]] = {
         "findings section",
     ),
     "review_theme_summary": (
-        "review",
         "user review",
+        "review themes",
+        "customer review",
+        "buyer feedback",
         "review_theme",
         "user_research",
         "adoption blocker",
