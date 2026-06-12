@@ -5145,10 +5145,14 @@ async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
     await service._real_writer_step(record)
 
     assert "Writer Context JSON:" in captured_user
-    assert "around 5,500 characters" in captured_user
+    assert "around 5,500 characters" not in captured_user
+    assert "8,500-10,000 characters" in captured_user
+    assert "65-75%" in captured_user
+    assert "Core analysis layer" in captured_user
+    assert "Support/audit layer" in captured_user
     assert "Competitor KB JSON:" not in captured_user
     assert "Competitor Knowledge Schema JSON:" not in captured_user
-    assert len(captured_user) < 15000
+    assert len(captured_user) < 16500
     assert captured_user.count("long-context-token") < 80
     assert record.detail.agent_messages[-1].payload["writer_mode"] == "real LLM call"
 

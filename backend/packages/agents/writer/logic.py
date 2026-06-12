@@ -253,9 +253,13 @@ class WriterAgentMixin:
                             f"{grounding_prompt}\n"
                             f"Writer Context JSON: {writer_context_json}\n\n"
                             f"Required sections:\n{required_sections}\n"
-                            "Keep the first draft around 5,500 characters. Spend most of the body "
-                            "on cited analysis and implications; keep evidence and QA support "
-                            "concise but complete."
+                            "Target 8,500-10,000 characters for the first draft. Use about "
+                            "65-75% of the report on the Core analysis layer: decision summary, "
+                            "competitive findings, user review themes, competitor deep dives, "
+                            "SWOT, matrix interpretation, and layer-specific implications. Keep "
+                            "the Support/audit layer concise and complete; it is the audit trail, "
+                            "not the main readout. Prefer deeper cited analysis and decision "
+                            "implications over repeated source IDs or QA boilerplate."
                         ),
                     ),
                     timeout=timeout_seconds,
@@ -1500,13 +1504,23 @@ class WriterAgentMixin:
                 "with type and confidence."
             ),
         ]
-        return "\n".join(
-            f"{index}. {section}"
-            for index, section in enumerate(
-                [*analysis_sections, *layer_sections, *support_sections],
-                start=1,
-            )
-        )
+        core_lines = [
+            "Core analysis layer (target 65-75% of the report body):",
+            *(
+                f"{index}. {section}"
+                for index, section in enumerate(
+                    [*analysis_sections, *layer_sections], start=1
+                )
+            ),
+        ]
+        support_lines = [
+            "Support/audit layer (concise audit trail after core analysis):",
+            *(
+                f"{index}. {section}"
+                for index, section in enumerate(support_sections, start=1)
+            ),
+        ]
+        return "\n".join([*core_lines, *support_lines])
 
     async def _writer_grounding_prompt(self, detail: RunDetail) -> str:
         grounding = build_run_grounding_prompt(
