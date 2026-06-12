@@ -35,6 +35,8 @@ from packages.schema.models import (
     CompetitorDiscovery,
     CompetitorKB,
     CompetitorKnowledge,
+    FeatureNode,
+    FeatureTree,
     KnowledgeClaim,
     PricingTier,
     QCIssue,
@@ -4232,6 +4234,138 @@ def test_redo_issue_selection_batches_largest_competitor_gap_cluster() -> None:
         "pricing",
     ]
     assert {issue.redo_scope.target_competitor for issue in selected} == {"A", "B", "C"}
+
+
+def test_collector_redo_removing_cross_source_clears_all_dependent_feature_outputs() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-cross-redo-cleanup",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor", "GitHub Copilot", "Claude Code", "Windsurf"],
+            dimensions=["pricing", "feature", "persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cross-feature-old",
+                competitor="Cross-model all 4 competitors",
+                covered_competitors=["Cursor", "GitHub Copilot", "Claude Code", "Windsurf"],
+                dimension="feature",
+                source_type="webpage_verified",
+                title="Cross feature comparison",
+                snippet="Compares feature capabilities across all four competitors.",
+                content_hash="cross-feature-old-hash",
+                confidence=0.9,
+            ),
+            RawSource(
+                id="claude-pricing",
+                competitor="Claude Code",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Claude pricing",
+                snippet="Claude pricing evidence.",
+                content_hash="claude-pricing-hash",
+                confidence=0.96,
+            ),
+        ],
+        competitor_kbs={
+            "Claude Code": CompetitorKB(
+                competitor="Claude Code",
+                slices={"feature": ["Claude feature claim [source:cross-feature-old]"]},
+                sources=["cross-feature-old"],
+            ),
+            "Windsurf": CompetitorKB(
+                competitor="Windsurf",
+                slices={"feature": ["Windsurf feature claim [source:cross-feature-old]"]},
+                sources=["cross-feature-old"],
+            ),
+        },
+        competitor_knowledge={
+            "Claude Code": CompetitorKnowledge(
+                competitor="Claude Code",
+                feature_tree=FeatureTree(
+                    nodes=[
+                        FeatureNode(
+                            name="Agentic coding",
+                            description="Agentic coding support.",
+                            claims=[
+                                KnowledgeClaim(
+                                    claim="Claude Code has agentic coding.",
+                                    source_ids=["cross-feature-old"],
+                                    confidence=0.9,
+                                )
+                            ],
+                        )
+                    ],
+                    summary_claims=[
+                        KnowledgeClaim(
+                            claim="Claude Code feature summary.",
+                            source_ids=["cross-feature-old"],
+                            confidence=0.9,
+                        )
+                    ],
+                ),
+                source_ids=["cross-feature-old"],
+            ),
+            "Windsurf": CompetitorKnowledge(
+                competitor="Windsurf",
+                feature_tree=FeatureTree(
+                    nodes=[
+                        FeatureNode(
+                            name="Cascade",
+                            description="Cascade feature.",
+                            claims=[
+                                KnowledgeClaim(
+                                    claim="Windsurf has Cascade.",
+                                    source_ids=["cross-feature-old"],
+                                    confidence=0.9,
+                                )
+                            ],
+                        )
+                    ],
+                    summary_claims=[
+                        KnowledgeClaim(
+                            claim="Windsurf feature summary.",
+                            source_ids=["cross-feature-old"],
+                            confidence=0.9,
+                        )
+                    ],
+                ),
+                source_ids=["cross-feature-old"],
+            ),
+        },
+    )
+    scope = RedoScope(
+        kind="collector",
+        target_subagent="feature",
+        target_competitor="Windsurf",
+        rationale="redo Windsurf feature evidence",
+    )
+
+    dimensions, target_competitors = service._prepare_redo_scope_inputs(detail, scope)
+
+    assert dimensions == ["feature"]
+    assert target_competitors == ["Windsurf"]
+    assert [source.id for source in detail.raw_sources] == ["claude-pricing"]
+    assert "feature" not in detail.competitor_kbs["Claude Code"].slices
+    assert "feature" not in detail.competitor_kbs["Windsurf"].slices
+    assert detail.competitor_knowledge["Claude Code"].feature_tree.nodes == []
+    assert detail.competitor_knowledge["Windsurf"].feature_tree.nodes == []
 
 
 @pytest.mark.asyncio

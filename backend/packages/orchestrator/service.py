@@ -77,7 +77,7 @@ from packages.orchestrator.graph import (
     build_real_analysis_graph,
     build_scoped_redo_graph,
 )
-from packages.refs import normalize_dimension_refs
+from packages.refs import merge_ordered_refs, normalize_dimension_refs
 from packages.research.evaluation import quality_gaps_from_release_gate
 from packages.research.repair import (
     repair_task_to_redo_scope,
@@ -1936,18 +1936,19 @@ class RunService(
             if scope.kind == "collector":
                 if scoped_competitors:
                     target_competitors = scoped_competitors
-                    detail.raw_sources = [
-                        source
-                        for source in detail.raw_sources
-                        if not (
-                            source.dimension == dimension
-                            and any(
-                                self._source_matches_competitor(source, competitor)
-                                for competitor in scoped_competitors
-                            )
-                        )
-                    ]
-                    for competitor in scoped_competitors:
+                    removed_source_ids = self._remove_sources_for_collector_redo(
+                        detail,
+                        dimension=dimension,
+                        scoped_competitors=scoped_competitors,
+                    )
+                    dependent_competitors = self._competitors_with_removed_source_dependency(
+                        detail,
+                        dimension=dimension,
+                        removed_source_ids=removed_source_ids,
+                    )
+                    for competitor in merge_ordered_refs(
+                        [*scoped_competitors, *dependent_competitors]
+                    ):
                         self._clear_competitor_dimension_output(detail, competitor, dimension)
                 else:
                     detail.raw_sources = [
@@ -1975,6 +1976,51 @@ class RunService(
         detail.updated_at = datetime.utcnow()
         self._persist_run(detail.id)
         return dimensions, target_competitors
+
+    def _remove_sources_for_collector_redo(
+        self,
+        detail: RunDetail,
+        *,
+        dimension: str,
+        scoped_competitors: list[str],
+    ) -> set[str]:
+        removed_source_ids: set[str] = set()
+        retained_sources: list[RawSource] = []
+        for source in detail.raw_sources:
+            should_remove = source.dimension == dimension and any(
+                self._source_matches_competitor(source, competitor)
+                for competitor in scoped_competitors
+            )
+            if should_remove:
+                removed_source_ids.add(source.id)
+                continue
+            retained_sources.append(source)
+        detail.raw_sources = retained_sources
+        return removed_source_ids
+
+    def _competitors_with_removed_source_dependency(
+        self,
+        detail: RunDetail,
+        *,
+        dimension: str,
+        removed_source_ids: set[str],
+    ) -> list[str]:
+        if not removed_source_ids:
+            return []
+        dependent: list[str] = []
+        for competitor in detail.plan.competitors:
+            kb = detail.competitor_kbs.get(competitor)
+            knowledge = detail.competitor_knowledge.get(competitor)
+            serialized = json.dumps(
+                {
+                    "kb_slice": kb.slices.get(dimension, []) if kb else [],
+                    "knowledge": knowledge.model_dump(mode="json") if knowledge else {},
+                },
+                ensure_ascii=False,
+            )
+            if any(source_id in serialized for source_id in removed_source_ids):
+                dependent.append(competitor)
+        return dependent
 
     async def _prepare_graph_redo_from_qa(self, record: RunRecord) -> dict[str, object]:
         detail = record.detail
