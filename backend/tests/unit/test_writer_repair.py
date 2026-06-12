@@ -105,6 +105,24 @@ def test_writer_repair_maps_rationale_only_decision_summary_to_section_repair() 
     assert plan.sections == ["decision_summary"]
 
 
+def test_writer_repair_maps_battlecard_watchouts_to_battlecard_only() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-battlecard-watchouts",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        field_path="report_md.section[battlecard]",
+        problem="Battlecard watchouts section needs clearer objection handling.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Expand Battlecard watchouts."),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["battlecard"]
+
+
 def test_apply_line_repair_removes_only_still_noisy_lines() -> None:
     markdown = "good opening\nbad line \ufffd\nkeep this cited line [source:pricing-1]\n"
     issues = [_report_line_issue(line_number=2, problem="non-publishable text noise")]
