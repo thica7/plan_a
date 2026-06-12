@@ -40,15 +40,64 @@ def test_writer_repair_requires_full_rewrite_for_poor_report() -> None:
     assert "report is not protectable" in plan.reason
 
 
-def test_writer_repair_upstream_changed_allows_full_without_anti_regression() -> None:
+def test_writer_repair_upstream_persona_change_routes_to_section_repair() -> None:
     detail = _detail(report_md=_protectable_report())
-    issues = [_report_line_issue(line_number=8, problem="stale pricing evidence")]
+    issue = QCIssue(
+        id="issue-persona-upstream",
+        severity="warn",
+        detected_by="coverage",
+        target_agent="collector",
+        target_subagent="persona",
+        target_competitor="Copilot",
+        field_path="raw_sources[persona]",
+        problem="Copilot persona evidence needs stronger review themes and interview signal.",
+        redo_scope=RedoScope(
+            kind="collector",
+            target_subagent="persona",
+            target_competitor="Copilot",
+            rationale="Collect persona survey and interview evidence for Copilot.",
+        ),
+    )
 
-    plan = build_writer_repair_plan(detail, issues, upstream_data_changed=True)
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=True)
+
+    assert plan.mode == "section"
+    assert plan.previous_report_protectable is True
+    assert plan.sections == ["review_theme_summary"]
+    assert plan.anti_regression_required is True
+    assert "upstream data changed" in plan.reason
+
+
+def test_writer_repair_upstream_broad_change_uses_full_with_anti_regression() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-broad-upstream",
+        severity="warn",
+        detected_by="coverage",
+        target_agent="collector",
+        field_path="raw_sources",
+        problem="Broad upstream evidence changed without a section-specific mapping.",
+        redo_scope=RedoScope(kind="collector", rationale="Refresh broad evidence."),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=True)
 
     assert plan.mode == "full"
     assert plan.previous_report_protectable is True
+    assert plan.anti_regression_required is True
+    assert "anti-regression" in plan.reason
+
+
+def test_writer_repair_upstream_poor_previous_report_uses_full_without_guard() -> None:
+    detail = _detail(report_md="# Report\n\nthin")
+    issue = _report_line_issue(line_number=3, problem="stale upstream evidence")
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=True)
+
+    assert plan.mode == "full"
+    assert plan.previous_report_protectable is False
     assert plan.anti_regression_required is False
+    assert "not protectable" in plan.reason
 
 
 def test_writer_repair_maps_thin_competitive_findings_to_section_repair() -> None:
