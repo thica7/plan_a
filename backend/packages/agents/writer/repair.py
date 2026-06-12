@@ -212,6 +212,7 @@ def _target_sections(issues: list[QCIssue]) -> list[str]:
                 issue.problem,
                 issue.target_subagent or "",
                 issue.redo_scope.target_subagent or "",
+                issue.redo_scope.rationale,
             ]
             if value
         ).casefold()

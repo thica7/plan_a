@@ -53,10 +53,10 @@ def test_writer_repair_upstream_changed_allows_full_without_anti_regression() ->
 
 def test_writer_repair_maps_thin_competitive_findings_to_section_repair() -> None:
     detail = _detail(report_md=_protectable_report())
-    issue = QCIssue.model_construct(
+    issue = QCIssue(
         id="issue-competitive-findings-thin",
         severity="blocker",
-        detected_by="report_quality",
+        detected_by="citation",
         target_agent="writer",
         field_path="report_quality.core_section_depth_score",
         problem="Competitive Findings section is too thin for decision-grade reporting.",
@@ -71,13 +71,31 @@ def test_writer_repair_maps_thin_competitive_findings_to_section_repair() -> Non
 
 def test_writer_repair_maps_thin_decision_summary_to_section_repair() -> None:
     detail = _detail(report_md=_protectable_report())
-    issue = QCIssue.model_construct(
+    issue = QCIssue(
         id="issue-decision-summary-thin",
         severity="blocker",
-        detected_by="report_quality",
+        detected_by="citation",
         target_agent="writer",
         field_path="report_quality.core_section_depth_score",
         problem="Decision Summary section needs recommended action and immediate next move.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Expand Decision Summary."),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["decision_summary"]
+
+
+def test_writer_repair_maps_rationale_only_decision_summary_to_section_repair() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-generic-thin-core",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        field_path="report_quality.core_section_depth_score",
+        problem="Core section is too thin for decision-grade reporting.",
         redo_scope=RedoScope(kind="writer_only", rationale="Expand Decision Summary."),
     )
 

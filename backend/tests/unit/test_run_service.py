@@ -4604,10 +4604,10 @@ async def test_writer_only_thin_core_finding_uses_section_repair() -> None:
     record = service._runs[detail.id]
     record.detail.raw_sources = _writer_repair_sources()
     record.detail.report_md = _writer_repair_protectable_report()
-    issue = QCIssue.model_construct(
+    issue = QCIssue(
         id="issue-competitive-findings-thin",
         severity="blocker",
-        detected_by="report_quality",
+        detected_by="citation",
         target_agent="writer",
         field_path="report_quality.core_section_depth_score",
         problem="Competitive Findings section is too thin for decision-grade reporting.",
