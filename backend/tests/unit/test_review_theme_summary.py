@@ -1,7 +1,11 @@
+import json
 from datetime import datetime
 
 from packages.agents.analysts.logic import AnalystAgentMixin
 from packages.agents.qa.logic import QualityAgentMixin
+from packages.config import Settings
+from packages.memory import KBCacheEntry
+from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     AnalysisPlan,
@@ -11,6 +15,7 @@ from packages.schema.models import (
     ReviewThemeItem,
     ReviewThemeSummary,
 )
+from packages.skills.registry import SkillRegistry
 
 
 class AnalystHarness(AnalystAgentMixin):
@@ -165,6 +170,103 @@ def test_merge_structured_payload_sanitizes_review_summary_source_ids() -> None:
     assert summary.praise_themes[0].source_ids == ["review-1"]
     assert summary.complaint_themes[0].source_ids == []
     assert summary.complaint_themes[0].evidence_gap is True
+
+
+def test_kb_cache_hit_rebuilds_review_summary_when_cached_user_research_ids_are_stale() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-cache-current-sources",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="cursor-current-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="Cursor persona survey synthesis",
+                snippet=(
+                    "Simulated survey and interview research for Cursor: buyers cite "
+                    "budget approval, workflow fit, migration cost, governance review, "
+                    "context quality, and switching risk."
+                ),
+                content_hash="cursor-current-survey-hash",
+                confidence=0.76,
+            ),
+            RawSource(
+                id="cursor-current-interview",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="interview_record",
+                title="Cursor persona interview synthesis",
+                snippet=(
+                    "Synthetic interview record for Cursor: individual developers, team "
+                    "technical leads, and enterprise buyers discuss onboarding effort, "
+                    "pull request pressure, context quality gaps, and switching triggers."
+                ),
+                content_hash="cursor-current-interview-hash",
+                confidence=0.82,
+            ),
+        ],
+    )
+    stale_summary = ReviewThemeSummary(
+        competitor="Cursor",
+        dimension="persona",
+        praise_themes=[
+            ReviewThemeItem(
+                theme="Stale praise",
+                evidence="Old cached praise from another run.",
+                source_ids=["old-survey-id"],
+                confidence=0.76,
+            )
+        ],
+        source_ids=["old-survey-id"],
+    )
+    entry = KBCacheEntry(
+        competitor="Cursor",
+        dimension="persona",
+        content_hash="cache-hit",
+        kb_slice=["Old cached finding [source:old-survey-id]"],
+        knowledge=CompetitorKnowledge(
+            competitor="Cursor",
+            review_summary=stale_summary,
+            source_ids=["old-survey-id"],
+            confidence=0.76,
+        ),
+        confidence=0.76,
+        created_at=datetime.utcnow(),
+    )
+
+    service._apply_kb_cache_entry(detail, entry)
+
+    summary = detail.competitor_knowledge["Cursor"].review_summary
+    all_ids = {
+        source_id
+        for item in [
+            *summary.praise_themes,
+            *summary.complaint_themes,
+            *summary.adoption_blockers,
+            *summary.switching_triggers,
+        ]
+        for source_id in item.source_ids
+    }
+    assert "old-survey-id" not in json.dumps(summary.model_dump(mode="json"))
+    assert {"cursor-current-survey", "cursor-current-interview"} & all_ids
+    assert summary.source_ids == ["cursor-current-survey", "cursor-current-interview"]
 
 
 def test_review_summary_only_payload_counts_as_structured_claims() -> None:

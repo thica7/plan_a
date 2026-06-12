@@ -1202,6 +1202,25 @@ class AnalystAgentMixin:
             competitor=entry.competitor
         )
         cached = entry.knowledge.model_copy(deep=True)
+        cached_review_summary = cached.review_summary.model_copy(deep=True)
+        uses_review_summary = self._dimension_uses_review_summary(entry.dimension)
+        if uses_review_summary:
+            self._sanitize_review_summary_source_ids(cached_review_summary, set(valid_source_ids))
+            if not self._review_summary_has_cited_items(cached_review_summary):
+                rebuilt_review_summary = self._build_review_summary_from_source_dicts(
+                    competitor=entry.competitor,
+                    dimension=entry.dimension,
+                    sources=[
+                        source.model_dump(mode="json")
+                        for source in self._sources_for_competitor_dimension(
+                            detail,
+                            entry.competitor,
+                            entry.dimension,
+                        )
+                    ],
+                )
+                if self._review_summary_has_cited_items(rebuilt_review_summary):
+                    cached_review_summary = rebuilt_review_summary
         dimension_key = entry.dimension.casefold()
         if "pricing" in dimension_key:
             knowledge.pricing_model = cached.pricing_model
@@ -1209,11 +1228,14 @@ class AnalystAgentMixin:
             knowledge.user_personas = cached.user_personas
         else:
             knowledge.feature_tree = cached.feature_tree
+        if uses_review_summary:
+            knowledge.review_summary = cached_review_summary
         self._sanitize_structured_knowledge_slice_sources(
             detail,
             entry.competitor,
             entry.dimension,
             knowledge,
+            sanitize_review_summary=uses_review_summary,
         )
         knowledge.source_ids = merge_ordered_refs(
             knowledge.source_ids,
