@@ -180,6 +180,24 @@ def report_regression_problem(
                 f"{candidate_chars} substantive characters"
             )
 
+    if "review_theme_summary" in protected_sections:
+        user_research_ids = _user_research_source_ids(previous)
+        previous_review_ids = _section_cited_source_ids(
+            previous.report_md,
+            "review_theme_summary",
+            previous.output_language,
+        )
+        candidate_review_ids = _section_cited_source_ids(
+            candidate.report_md,
+            "review_theme_summary",
+            candidate.output_language,
+        )
+        if (
+            previous_review_ids & user_research_ids
+            and not candidate_review_ids & user_research_ids
+        ):
+            return "review_theme_summary lost user research source citations"
+
     comparison = compare_run_quality(candidate, baseline=previous)
     if comparison.regression_gate_status == "fail":
         return "; ".join(comparison.regression_gate_reasons)
@@ -293,6 +311,36 @@ def _compact_heading(value: str) -> str:
 
 def _normalize_section_replacement(replacement_markdown: str) -> str:
     return replacement_markdown.strip()
+
+
+USER_RESEARCH_SOURCE_TYPES = {
+    "survey_simulated",
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+    "manual_user_note",
+    "manual_note",
+    "manual",
+}
+
+
+def _section_cited_source_ids(
+    markdown: str,
+    section_key: str,
+    output_language: str,
+) -> set[str]:
+    section = _find_section(markdown, section_key, output_language)
+    if section is None:
+        return set()
+    return set(re.findall(r"\[source:([A-Za-z0-9_.:#-]+)\]", section.body))
+
+
+def _user_research_source_ids(detail: RunDetail) -> set[str]:
+    return {
+        source.id
+        for source in detail.raw_sources
+        if source.source_type in USER_RESEARCH_SOURCE_TYPES
+    }
 
 
 def _section_content_chars(

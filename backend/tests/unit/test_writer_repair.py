@@ -271,6 +271,49 @@ def test_report_regression_detects_collapsed_zh_cn_review_section() -> None:
     assert "review_theme_summary" in problem
 
 
+def test_report_regression_detects_review_section_losing_user_research_sources() -> None:
+    previous = RunDetail(
+        id="run-prev",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="cursor-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="Cursor survey",
+                snippet="Survey with adoption blockers.",
+                content_hash="cursor-survey-hash",
+                confidence=0.76,
+            )
+        ],
+        report_md=(
+            "# Report\n\n"
+            "## User Review Themes\n"
+            "Survey and interview signals describe adoption blockers. [source:cursor-survey]\n"
+        ),
+    )
+    candidate = previous.model_copy(
+        update={
+            "report_md": (
+                "# Report\n\n"
+                "## User Review Themes\n"
+                "User evidence is summarized from pricing pages. [source:pricing-1]\n"
+            )
+        }
+    )
+
+    problem = report_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert problem is not None
+    assert "user research source" in problem
+
+
 def test_writer_repair_helpers_accept_approved_positional_api() -> None:
     detail = _detail(report_md=_protectable_report())
     issues = [_report_line_issue(line_number=8, problem="non-publishable text noise")]

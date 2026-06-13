@@ -4724,6 +4724,121 @@ async def test_writer_section_repair_replaces_only_target_section() -> None:
 
 
 @pytest.mark.asyncio
+async def test_writer_section_repair_preserves_previous_when_review_loses_user_research_sources() -> None:  # noqa: E501
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return (
+            "## User Review Themes\n"
+            "User feedback is thin and mostly inferred from pricing pages. [source:pricing-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer review source preservation",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-1",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor pricing page.",
+            content_hash="pricing-1-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="feature-1",
+            competitor="Copilot",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="Copilot feature",
+            snippet="Copilot feature page.",
+            content_hash="feature-1-hash",
+            confidence=0.9,
+        ),
+        RawSource(
+            id="cursor-survey",
+            competitor="Cursor",
+            dimension="persona",
+            source_type="survey_simulated",
+            title="Cursor survey",
+            snippet="Survey with adoption blockers and switching triggers.",
+            content_hash="cursor-survey-hash",
+            confidence=0.76,
+        ),
+    ]
+    record.detail.report_md = _writer_repair_protectable_report().replace(
+        (
+            "User review themes show Cursor is easier to explain during procurement, while Copilot "
+            "benefits from\nexisting Microsoft workflow familiarity. [source:pricing-1]\n"
+            "- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]\n"
+            "- Adoption blocker: security review and procurement packaging still need deeper "
+            "evidence.\n"
+            "[source:feature-1]"
+        ),
+        "Survey signals show adoption blockers and switching triggers. [source:cursor-survey]",
+    )
+    issue = QCIssue(
+        id="issue-review-repair",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section needs repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert "Survey signals show adoption blockers" in record.detail.report_md
+    assert "[source:cursor-survey]" in record.detail.report_md
+    assert record.detail.agent_messages[-1].payload["writer_mode"] == (
+        "preserved previous report after writer anti-regression"
+    )
+    assert "user research source" in record.detail.agent_messages[-1].payload[
+        "anti_regression_reason"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_writer_only_thin_core_finding_uses_section_repair() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
