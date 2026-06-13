@@ -3929,13 +3929,26 @@ class RunService(
             f"{detail.id}:{competitor}:{dimension}:{len(detail.raw_sources) + 1}"
         )[:16]
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        title = (
+            f"{competitor} {dimension} 证据固定装置"
+            if is_zh
+            else f"{competitor} {dimension} evidence fixture"
+        )
+        snippet = (
+            f"在 Demo 运行中，为 {competitor} {dimension} 提取的具体结构化证据。"
+            if is_zh
+            else (
+                f"Demo evidence fixture for {competitor} {dimension} "
+                "with a concrete structured claim."
+            )
+        )
         source_id = compute_raw_source_id(
             source_type="webpage_verified",
             competitor=competitor,
             dimension=dimension,
             url=f"https://example.com/{self._issue_id_fragment(competitor)}/{dimension}",
             content_hash=content_hash,
-            title=f"{competitor} {dimension} 证据固定装置" if is_zh else f"{competitor} {dimension} evidence fixture",
+            title=title,
             run_id=detail.id,
             source_role="demo",
         )
@@ -3945,13 +3958,9 @@ class RunService(
             covered_competitors=[competitor],
             dimension=dimension,
             source_type="webpage_verified",
-            title=f"{competitor} {dimension} 证据固定装置" if is_zh else f"{competitor} {dimension} evidence fixture",
+            title=title,
             url=f"https://example.com/{self._issue_id_fragment(competitor)}/{dimension}",
-            snippet=(
-                f"在 Demo 运行中，为 {competitor} {dimension} 提取的具体结构化证据。"
-                if is_zh
-                else f"Demo evidence fixture for {competitor} {dimension} with a concrete structured claim."
-            ),
+            snippet=snippet,
             content_hash=content_hash,
             confidence=0.82,
         )
@@ -3996,10 +4005,15 @@ class RunService(
 
     def _demo_issue(self, detail: RunDetail, dimension: str) -> QCIssue:
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        rationale = (
+            f"{dimension} 证据覆盖不完整。"
+            if is_zh
+            else f"{dimension.title()} evidence coverage is incomplete."
+        )
         scope = RedoScope(
             kind="collector",
             target_subagent=dimension,
-            rationale=f"{dimension} 证据覆盖不完整。" if is_zh else f"{dimension.title()} evidence coverage is incomplete.",
+            rationale=rationale,
         )
         return QCIssue(
             id=stable_prefixed_id("qc-demo", dimension, "coverage", length=16),
@@ -4025,6 +4039,9 @@ class RunService(
             source_refs = ""
         memory_section = self._demo_memory_section(detail)
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        scenario_dimensions = ", ".join(
+            detail.plan.scenario_recommended_dimensions or detail.plan.dimensions
+        )
         if is_zh:
             return (
                 f"# {detail.plan.topic}\n\n"
@@ -4043,7 +4060,7 @@ class RunService(
                 f"## {report_label(detail.output_language, 'scenario_checklist')}\n"
                 f"- 场景：{detail.plan.scenario_id or 'auto'}；竞品层："
                 f"{detail.plan.competitor_layer}；推荐维度："
-                f"{', '.join(detail.plan.scenario_recommended_dimensions or detail.plan.dimensions)}。\n"
+                f"{scenario_dimensions}。\n"
                 f"- QA 规则：{', '.join(detail.plan.qa_rule_ids) or '默认架构检查'}\n\n"
                 f"## {report_label(detail.output_language, 'battlecard')}\n"
                 "将此 Demo 报告用作直接的战报脚手架：在用作可发布建议之前，"
@@ -4060,7 +4077,8 @@ class RunService(
                     for source in detail.raw_sources[:8]
                 )
                 + "\n\n"
-                "本次 Demo 运行证明了契约：事件、来源、反思、QA 发现和报告 Markdown 均流畅地通过结构化 DTO 传输。"
+                "本次 Demo 运行证明了契约：事件、来源、反思、QA 发现和报告 "
+                "Markdown 均流畅地通过结构化 DTO 传输。"
             )
         return (
             f"# {detail.plan.topic}\n\n"

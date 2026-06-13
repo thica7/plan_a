@@ -8321,7 +8321,7 @@ def test_writer_source_ids_for_english_pricing_user_overlap_keeps_pricing_first(
     assert source_ids[0] == "github-pricing"
 
 
-def test_writer_source_ids_for_chinese_pricing_persona_overlap_ranks_pricing_before_earlier_persona_sources() -> None:
+def test_writer_chinese_pricing_persona_overlap_ranks_pricing_first() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -8387,7 +8387,7 @@ def test_writer_source_ids_for_chinese_pricing_persona_overlap_ranks_pricing_bef
     assert "[source:github-pricing]" in hardened
 
 
-def test_writer_source_ids_for_feature_persona_overlap_ranks_feature_before_earlier_persona_sources() -> None:
+def test_writer_feature_persona_overlap_ranks_feature_first() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
