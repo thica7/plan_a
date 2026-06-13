@@ -1644,6 +1644,7 @@ class QualityAgentMixin:
             review_summary.adoption_blockers,
             review_summary.switching_triggers,
         ):
+            retained_items: list[ReviewThemeItem] = []
             for item in items:
                 had_source_ids = bool(item.source_ids)
                 item.source_ids = self._ordered_source_ids(
@@ -1651,8 +1652,10 @@ class QualityAgentMixin:
                 )
                 if item.source_ids:
                     has_cited_theme = True
-                elif had_source_ids:
-                    item.evidence_gap = True
+                    retained_items.append(item)
+                elif not had_source_ids:
+                    retained_items.append(item)
+            items[:] = retained_items
         if not review_summary.source_ids and not has_cited_theme:
             knowledge.review_summary = ReviewThemeSummary(
                 competitor=competitor,

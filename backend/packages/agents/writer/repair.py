@@ -480,11 +480,11 @@ USER_RESEARCH_SOURCE_TOKEN_HINTS = (
 USER_RESEARCH_EVIDENCE_GAP_PATTERNS = (
     r"\bno\s+(?:cited\s+|verified\s+|current\s+)?"
     r"(?:user[-\s]+research|user[-\s]+review(?:s| themes?)?|reviews?|"
-    r"customer[-\s]+feedback|buyer[-\s]+feedback)"
+    r"review[-\s]+themes?|customer[-\s]+feedback|buyer[-\s]+feedback)"
     r"(?:\s+or\s+reviews?)?\s+(?:is\s+|are\s+)?"
     r"(?:available|found|collected|provided|present|included|yet)\b",
     r"\b(?:user[-\s]+research|user[-\s]+reviews?|reviews?|"
-    r"customer[-\s]+feedback|buyer[-\s]+feedback)\s+"
+    r"review[-\s]+themes?|customer[-\s]+feedback|buyer[-\s]+feedback)\s+"
     r"(?:is|are|was|were)\s+(?:not\s+available|unavailable|missing|absent)\b",
 )
 

@@ -4423,7 +4423,15 @@ def test_collector_redo_clears_removed_review_summary_source_ids(dimension: str)
                 review_summary=ReviewThemeSummary(
                     competitor="Cursor",
                     dimension=dimension,
-                    source_ids=[f"old-{dimension}-survey"],
+                    source_ids=[f"old-{dimension}-survey", "cursor-pricing"],
+                    praise_themes=[
+                        ReviewThemeItem(
+                            theme="Packaging clarity",
+                            evidence="Current pricing evidence remains valid.",
+                            source_ids=["cursor-pricing"],
+                            confidence=0.91,
+                        )
+                    ],
                     complaint_themes=[
                         ReviewThemeItem(
                             theme="Onboarding friction",
@@ -4448,6 +4456,16 @@ def test_collector_redo_clears_removed_review_summary_source_ids(dimension: str)
 
     review_summary = detail.competitor_knowledge["Cursor"].review_summary
     removed_source_id = f"old-{dimension}-survey"
+    theme_texts = [
+        item.theme
+        for items in (
+            review_summary.praise_themes,
+            review_summary.complaint_themes,
+            review_summary.adoption_blockers,
+            review_summary.switching_triggers,
+        )
+        for item in items
+    ]
     theme_source_ids = [
         source_id
         for items in (
@@ -4462,6 +4480,9 @@ def test_collector_redo_clears_removed_review_summary_source_ids(dimension: str)
     assert dimensions == [dimension]
     assert target_competitors == ["Cursor"]
     assert [source.id for source in detail.raw_sources] == ["cursor-pricing"]
+    assert review_summary.source_ids == ["cursor-pricing"]
+    assert "Packaging clarity" in theme_texts
+    assert "Onboarding friction" not in theme_texts
     assert removed_source_id not in review_summary.source_ids
     assert removed_source_id not in theme_source_ids
 
