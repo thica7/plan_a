@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from packages.community.raw_sources import (
+    reclassify_community_source,
+    snippet_only_source_from_candidate,
+)
 from packages.community.source_classifier import classify_community_source
 from packages.research.models import SourceCandidate
+from packages.schema.models import RawSource
 
 
 def test_classifies_reddit_thread() -> None:
@@ -101,3 +106,113 @@ def test_community_search_candidate_origin_is_accepted() -> None:
     )
 
     assert candidate.origin == "community_search"
+
+
+def test_reclassify_community_source_updates_type_id_and_metadata() -> None:
+    source = RawSource(
+        id="old-webpage-id",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor forum pricing",
+        url="https://forum.cursor.com/t/pricing-limits/1",
+        snippet="A staff member says users should check current usage limits.",
+        content_hash="hash",
+        confidence=0.76,
+    )
+
+    updated = reclassify_community_source(source, run_id="run-1")
+
+    assert updated.id != source.id
+    assert updated.source_type == "community_forum"
+    assert updated.metadata["community_evidence"] is True
+    assert updated.metadata["community_source_type"] == "community_forum"
+    assert updated.metadata["community_authority_signal"] == "staff"
+    assert updated.confidence == 0.88
+
+
+def test_snippet_only_source_is_capped_and_marked() -> None:
+    candidate = SourceCandidate(
+        title="Cursor pricing reddit",
+        url="https://reddit.com/r/cursor/comments/abc",
+        snippet="Cursor Pro is reported as $20 per month by several users.",
+        origin="community_search",
+        competitor="Cursor",
+        dimension="pricing",
+        confidence=0.74,
+        rank=1,
+        query="Cursor pricing usage limit reddit",
+    )
+
+    source = snippet_only_source_from_candidate(candidate, run_id="run-1")
+
+    assert source is not None
+    assert source.source_type == "snippet_only"
+    assert source.confidence == 0.55
+    assert source.metadata["community_evidence"] is True
+    assert source.metadata["snippet_only"] is True
+    assert source.metadata["community_source_type"] == "reddit_thread"
+
+
+def test_snippet_only_source_rejects_invalid_community_url() -> None:
+    for url in (
+        "ftp://reddit.com/r/cursor/comments/abc",
+        "//reddit.com/r/cursor/comments/abc",
+    ):
+        candidate = SourceCandidate(
+            title="Cursor pricing reddit",
+            url=url,
+            snippet="Cursor Pro is reported as $20 per month by several users.",
+            origin="community_search",
+            competitor="Cursor",
+            dimension="pricing",
+            confidence=0.74,
+        )
+
+        assert snippet_only_source_from_candidate(candidate, run_id="run-1") is None
+
+
+def test_snippet_only_source_rejects_malformed_http_community_url() -> None:
+    for url in (
+        "https://reddit.com:bad/r/cursor/comments/abc",
+        "https://[reddit.com/r",
+    ):
+        candidate = SourceCandidate(
+            title="Cursor pricing reddit",
+            url=url,
+            snippet="Cursor Pro is reported as $20 per month by several users.",
+            origin="community_search",
+            competitor="Cursor",
+            dimension="pricing",
+            confidence=0.74,
+        )
+
+        assert snippet_only_source_from_candidate(candidate, run_id="run-1") is None
+
+
+def test_snippet_only_source_rejects_weak_community_snippet() -> None:
+    candidate = SourceCandidate(
+        title="Cursor pricing reddit",
+        url="https://reddit.com/r/cursor/comments/abc",
+        snippet="General discussion thread.",
+        origin="community_search",
+        competitor="Cursor",
+        dimension="pricing",
+        confidence=0.74,
+    )
+
+    assert snippet_only_source_from_candidate(candidate, run_id="run-1") is None
+
+
+def test_snippet_only_source_rejects_non_community_candidate() -> None:
+    candidate = SourceCandidate(
+        title="Official docs",
+        url="https://docs.github.com/en/copilot",
+        snippet="Official product docs.",
+        origin="community_search",
+        competitor="GitHub Copilot",
+        dimension="feature",
+        confidence=0.74,
+    )
+
+    assert snippet_only_source_from_candidate(candidate, run_id="run-1") is None
