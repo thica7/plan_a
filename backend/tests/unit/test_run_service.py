@@ -11309,3 +11309,465 @@ def test_get_run_can_return_compact_detail_without_trace_payloads() -> None:
     assert full is not None
     assert full.trace_spans[0].full_input.startswith("large input")
     assert full.agent_messages[0].payload["body"].startswith("large payload")
+
+
+def test_collect_join_annotates_community_claim_clusters() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-clusters",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+    )
+    record = RunRecord(detail=detail)
+    record.detail.raw_sources = [
+        RawSource(
+            id="reddit-cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="reddit_thread",
+            title="Cursor pricing reddit",
+            url="https://reddit.com/r/cursor/comments/abc",
+            snippet="Cursor Pro is $20 per month.",
+            content_hash="reddit-hash",
+            confidence=0.62,
+            metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+        ),
+        RawSource(
+            id="forum-cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="community_forum",
+            title="Cursor pricing forum",
+            url="https://forum.cursor.com/t/pricing/1",
+            snippet="Cursor Pro price is $20 per month.",
+            content_hash="forum-hash",
+            confidence=0.78,
+            metadata={"community_evidence": True, "community_source_type": "community_forum"},
+        ),
+    ]
+
+    service._annotate_community_claim_clusters(record.detail, ["pricing"])
+
+    clusters = record.detail.raw_sources[0].metadata["community_claim_clusters"]
+    assert clusters[0]["label"] == "community_triangulated"
+    assert clusters[0]["confidence"] >= 0.70
+    assert clusters[0]["source_ids"] == ["reddit-cursor-pricing", "forum-cursor-pricing"]
+
+
+def test_collect_join_marks_community_cluster_official_confirmed_when_values_match() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-official-confirmed",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-official-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="official-hash",
+                confidence=0.92,
+            ),
+            RawSource(
+                id="reddit-cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/abc",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="reddit-hash",
+                confidence=0.62,
+                metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+            ),
+        ],
+    )
+
+    service._annotate_community_claim_clusters(detail, ["pricing"])
+
+    clusters = detail.raw_sources[1].metadata["community_claim_clusters"]
+    assert clusters[0]["label"] == "official_confirmed"
+    assert clusters[0]["confidence"] >= 0.95
+    assert clusters[0]["official_source_ids"] == ["cursor-official-pricing"]
+    assert clusters[0]["source_ids"] == ["reddit-cursor-pricing", "cursor-official-pricing"]
+
+
+def test_collect_join_does_not_official_confirm_generic_usage_limit_claims() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-generic-usage-limit",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-official-limits",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor limits",
+                url="https://cursor.com/pricing",
+                snippet="Cursor usage limits are documented for paid plans.",
+                content_hash="official-limits-hash",
+                confidence=0.91,
+            ),
+            RawSource(
+                id="cursor-reddit-limits",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor usage limits reddit",
+                url="https://reddit.com/r/cursor/comments/limits",
+                snippet="Users report usage limits.",
+                content_hash="reddit-limits-hash",
+                confidence=0.64,
+                metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+            ),
+        ],
+    )
+
+    service._annotate_community_claim_clusters(detail, ["pricing"])
+
+    clusters = detail.raw_sources[1].metadata["community_claim_clusters"]
+    usage_limit_cluster = next(
+        cluster for cluster in clusters if cluster["kind"] == "usage_limit"
+    )
+    assert usage_limit_cluster["label"] != "official_confirmed"
+    assert "official_source_ids" not in usage_limit_cluster
+
+
+def test_comparison_matrix_keeps_community_sources_out_of_official_winner_signal() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-comparator-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Users report Cursor Pro pricing and usage-limit caveats.",
+                content_hash="cursor-reddit-hash",
+                confidence=0.90,
+                metadata={
+                    "community_evidence": True,
+                    "community_source_type": "reddit_thread",
+                    "community_claim_clusters": [
+                        {
+                            "kind": "pricing",
+                            "label": "community_triangulated",
+                            "claim": "Community sources report pricing caveats.",
+                            "source_ids": ["cursor-reddit-pricing", "cursor-forum-pricing"],
+                            "confidence": 0.90,
+                            "evidence": ["Users report Cursor pricing caveats."],
+                        }
+                    ],
+                },
+            ),
+            RawSource(
+                id="cursor-forum-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="community_forum",
+                title="Cursor pricing forum",
+                url="https://forum.cursor.com/t/pricing",
+                snippet="Forum users discuss pricing caveats and quotas.",
+                content_hash="cursor-forum-hash",
+                confidence=0.88,
+                metadata={"community_evidence": True, "community_source_type": "community_forum"},
+            ),
+            RawSource(
+                id="copilot-official-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                url="https://github.com/features/copilot#pricing",
+                snippet="GitHub Copilot official pricing is published.",
+                content_hash="copilot-official-hash",
+                confidence=0.84,
+            ),
+        ],
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+
+    assert matrix.winner_by_dimension["pricing"] == "GitHub Copilot"
+    assert any("[community-adjusted:pricing]" in item for item in matrix.summary)
+    assert any("community_triangulated" in item for item in matrix.summary)
+
+
+def test_comparison_matrix_ignores_community_only_kb_findings_for_official_winner() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-kb-finding-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing"],
+        ),
+        competitor_kbs={
+            "Cursor": CompetitorKB(
+                competitor="Cursor",
+                slices={
+                    "pricing": [
+                        "Community pricing caveat [source:cursor-reddit-pricing]",
+                        "Community quota caveat [source:cursor-reddit-pricing]",
+                    ]
+                },
+                sources=["cursor-reddit-pricing"],
+                confidence=0.9,
+            ),
+            "GitHub Copilot": CompetitorKB(
+                competitor="GitHub Copilot",
+                slices={
+                    "pricing": [
+                        "Official pricing is published [source:copilot-official-pricing]"
+                    ]
+                },
+                sources=["copilot-official-pricing"],
+                confidence=0.84,
+            ),
+        },
+        raw_sources=[
+            RawSource(
+                id="cursor-reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Users report pricing caveats.",
+                content_hash="cursor-reddit-pricing-hash",
+                confidence=0.9,
+                metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+            ),
+            RawSource(
+                id="copilot-official-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                url="https://github.com/features/copilot#pricing",
+                snippet="GitHub Copilot official pricing is published.",
+                content_hash="copilot-official-pricing-hash",
+                confidence=0.84,
+            ),
+        ],
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+
+    assert matrix.winner_by_dimension["pricing"] == "GitHub Copilot"
+
+
+def test_comparison_matrix_ignores_mismatched_official_finding_citations() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-mismatched-official-finding-citation",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing"],
+        ),
+        competitor_kbs={
+            "Cursor": CompetitorKB(
+                competitor="Cursor",
+                slices={
+                    "pricing": [
+                        "Archived pricing detail [source:cursor-official-archive]"
+                    ]
+                },
+                sources=["cursor-official-archive"],
+                confidence=0.9,
+            )
+        },
+        raw_sources=[
+            RawSource(
+                id="cursor-official-archive",
+                competitor="Cursor",
+                dimension="pricing_archive",
+                source_type="webpage_verified",
+                title="Cursor archived pricing",
+                url="https://cursor.com/pricing/archive",
+                snippet="Cursor archived official pricing is published.",
+                content_hash="cursor-official-archive-hash",
+                confidence=0.91,
+            )
+        ],
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+
+    assert matrix.winner_by_dimension["pricing"] == "tie"
+
+
+def test_comparison_matrix_ignores_community_only_llm_winner_signal() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-llm-winner-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["review"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-reddit-review",
+                competitor="Cursor",
+                dimension="review",
+                source_type="reddit_thread",
+                title="Cursor review reddit",
+                url="https://reddit.com/r/cursor/comments/review",
+                snippet="Users report pricing confusion and adoption friction.",
+                content_hash="cursor-reddit-review-hash",
+                confidence=0.76,
+                metadata={
+                    "community_evidence": True,
+                    "community_source_type": "reddit_thread",
+                    "community_claim_clusters": [
+                        {
+                            "kind": "complaint",
+                            "label": "community_observed",
+                            "claim": "Users report pricing confusion.",
+                            "source_ids": ["cursor-reddit-review"],
+                            "confidence": 0.76,
+                            "evidence": ["Users report pricing confusion."],
+                        }
+                    ],
+                },
+            )
+        ],
+    )
+
+    matrix = service._build_comparison_matrix(
+        detail,
+        {"winner_by_dimension": {"review": "Cursor"}, "matrix_summary": []},
+    )
+
+    assert matrix.winner_by_dimension["review"] == "tie"
+    assert any("[community-adjusted:review]" in item for item in matrix.summary)

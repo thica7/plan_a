@@ -17,12 +17,16 @@ from packages.business_intel.entity_resolver import (
     search_qualifier_for_competitor,
 )
 from packages.community import (
+    CommunityClaimCluster,
     build_community_queries,
+    cluster_community_claims,
+    extract_community_claims_from_source,
     reclassify_community_source,
     snippet_only_source_from_candidate,
 )
 from packages.community.source_classifier import classify_community_source
 from packages.identity import compute_raw_source_id
+from packages.refs import merge_ordered_refs
 from packages.research.discovery import (
     homepage_candidates,
     trusted_registry_candidates,
@@ -2211,6 +2215,7 @@ class CollectorAgentMixin:
             },
         )
         detail.raw_sources = self._normalize_collected_sources(detail, dimensions)
+        self._annotate_community_claim_clusters(detail, dimensions)
         normalized_count = len(detail.raw_sources)
         # Auto-ingest collected sources into global KB
         try:
@@ -2286,6 +2291,79 @@ class CollectorAgentMixin:
                 source.model_copy(update={"covered_competitors": covered_competitors})
             )
         return normalized
+
+    def _annotate_community_claim_clusters(
+        self,
+        detail: RunDetail,
+        dimensions: list[str],
+    ) -> None:
+        scoped_dimensions = set(dimensions)
+        claims = [
+            claim
+            for source in detail.raw_sources
+            if (not scoped_dimensions or source.dimension in scoped_dimensions)
+            for claim in extract_community_claims_from_source(source)
+        ]
+        clusters = cluster_community_claims(claims)
+        clusters_by_source_id: dict[str, list[dict[str, object]]] = {}
+        for cluster in clusters:
+            payload = cluster.model_dump(mode="json")
+            if (
+                payload.get("label") == "community_observed"
+                and cluster.independent_domain_count >= 2
+                and len(cluster.source_ids) >= 2
+                and cluster.confidence >= 0.70
+            ):
+                payload["label"] = "community_triangulated"
+            official_source_ids = self._official_confirmation_source_ids(detail, cluster)
+            if official_source_ids:
+                payload["label"] = "official_confirmed"
+                payload["confidence"] = max(float(payload.get("confidence") or 0.0), 0.95)
+                payload["official_source_ids"] = official_source_ids
+                payload["source_ids"] = merge_ordered_refs(
+                    cluster.source_ids,
+                    official_source_ids,
+                )
+            for source_id in cluster.source_ids:
+                clusters_by_source_id.setdefault(source_id, []).append(payload)
+        updated_sources: list[RawSource] = []
+        for source in detail.raw_sources:
+            source_clusters = clusters_by_source_id.get(source.id)
+            if not source_clusters:
+                updated_sources.append(source)
+                continue
+            metadata = dict(source.metadata)
+            metadata["community_claim_clusters"] = source_clusters
+            updated_sources.append(source.model_copy(update={"metadata": metadata}))
+        detail.raw_sources = updated_sources
+
+    def _official_confirmation_source_ids(
+        self,
+        detail: RunDetail,
+        cluster: CommunityClaimCluster,
+    ) -> list[str]:
+        if not self._cluster_has_concrete_official_confirmation_value(cluster):
+            return []
+        normalized_value = cluster.normalized_value.casefold()
+        return [
+            source.id
+            for source in detail.raw_sources
+            if source.competitor == cluster.competitor
+            and source.dimension == cluster.dimension
+            and source.source_type == "webpage_verified"
+            and normalized_value in source.snippet.casefold()
+        ]
+
+    def _cluster_has_concrete_official_confirmation_value(
+        self,
+        cluster: CommunityClaimCluster,
+    ) -> bool:
+        normalized_value = cluster.normalized_value.strip()
+        if cluster.kind != "pricing" or not normalized_value:
+            return False
+        return normalized_value.startswith("$") or any(
+            character.isdigit() for character in normalized_value
+        )
 
     async def _collect_cross_competitor_evidence(
         self, record: RunRecord, dimensions: list[str]

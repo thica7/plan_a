@@ -817,3 +817,146 @@ def test_qa_accepts_review_summary_without_requiring_feature_tree_nodes() -> Non
         and issue.target_subagent == "review"
         for issue in issues
     )
+
+
+def test_review_summary_uses_community_clusters_for_review_dimension() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-review-summary",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["review"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-complaint",
+                competitor="Cursor",
+                dimension="review",
+                source_type="reddit_thread",
+                title="Cursor complaint thread",
+                url="https://reddit.com/r/cursor/comments/complaint",
+                snippet="Users complain about pricing confusion and adoption friction.",
+                content_hash="reddit-complaint-hash",
+                confidence=0.68,
+                metadata={
+                    "community_evidence": True,
+                    "community_claim_clusters": [
+                        {
+                            "kind": "complaint",
+                            "label": "community_observed",
+                            "claim": "Users report pricing confusion.",
+                            "source_ids": ["reddit-complaint"],
+                            "confidence": 0.68,
+                            "evidence": ["Users complain about pricing confusion."],
+                        }
+                    ],
+                },
+            )
+        ],
+    )
+
+    service._merge_structured_knowledge_slice(
+        detail,
+        competitor="Cursor",
+        dimension="review",
+        findings=["Users report pricing confusion. [source:reddit-complaint]"],
+    )
+
+    summary = detail.competitor_knowledge["Cursor"].review_summary
+    assert summary.complaint_themes
+    assert summary.complaint_themes[0].theme == "Users report pricing confusion."
+    assert summary.complaint_themes[0].source_ids == ["reddit-complaint"]
+    assert summary.complaint_themes[0].confidence == 0.68
+
+
+def test_review_summary_dedupes_repeated_community_clusters() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    cluster = {
+        "kind": "complaint",
+        "label": "community_triangulated",
+        "claim": "Users report pricing confusion.",
+        "source_ids": ["reddit-a", "forum-a"],
+        "confidence": 0.7,
+        "evidence": ["Users report pricing confusion."],
+    }
+    detail = RunDetail(
+        id="run-community-review-dedupe",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["review"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-a",
+                competitor="Cursor",
+                dimension="review",
+                source_type="reddit_thread",
+                title="Cursor complaint reddit",
+                url="https://reddit.com/r/cursor/comments/a",
+                snippet="Users report pricing confusion.",
+                content_hash="reddit-a-hash",
+                confidence=0.7,
+                metadata={
+                    "community_evidence": True,
+                    "community_claim_clusters": [cluster],
+                },
+            ),
+            RawSource(
+                id="forum-a",
+                competitor="Cursor",
+                dimension="review",
+                source_type="community_forum",
+                title="Cursor complaint forum",
+                url="https://forum.cursor.com/t/a",
+                snippet="Users report pricing confusion.",
+                content_hash="forum-a-hash",
+                confidence=0.7,
+                metadata={
+                    "community_evidence": True,
+                    "community_claim_clusters": [cluster],
+                },
+            ),
+        ],
+    )
+
+    service._merge_structured_knowledge_slice(
+        detail,
+        competitor="Cursor",
+        dimension="review",
+        findings=["Users report pricing confusion. [source:reddit-a]"],
+    )
+
+    summary = detail.competitor_knowledge["Cursor"].review_summary
+    assert len(summary.complaint_themes) == 1

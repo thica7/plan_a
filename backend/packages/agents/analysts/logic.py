@@ -1396,11 +1396,19 @@ class AnalystAgentMixin:
                     detail, competitor, dimension
                 )
             ]
-            knowledge.review_summary = self._build_review_summary_from_source_dicts(
+            community_summary = self._build_review_summary_from_community_clusters(
                 competitor=competitor,
                 dimension=dimension,
                 sources=review_sources,
             )
+            if self._review_summary_has_cited_items(community_summary):
+                knowledge.review_summary = community_summary
+            else:
+                knowledge.review_summary = self._build_review_summary_from_source_dicts(
+                    competitor=competitor,
+                    dimension=dimension,
+                    sources=review_sources,
+                )
         source_ids = [
             source.id
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
@@ -1489,11 +1497,19 @@ class AnalystAgentMixin:
                     detail, competitor, dimension
                 )
             ]
-            knowledge.review_summary = self._build_review_summary_from_source_dicts(
+            community_summary = self._build_review_summary_from_community_clusters(
                 competitor=competitor,
                 dimension=dimension,
                 sources=review_sources,
             )
+            if self._review_summary_has_cited_items(community_summary):
+                knowledge.review_summary = community_summary
+            else:
+                knowledge.review_summary = self._build_review_summary_from_source_dicts(
+                    competitor=competitor,
+                    dimension=dimension,
+                    sources=review_sources,
+                )
             review_summary_changed = True
 
         if self._dimension_uses_review_summary(
@@ -1505,11 +1521,17 @@ class AnalystAgentMixin:
                     detail, competitor, dimension
                 )
             ]
-            fallback_review_summary = self._build_review_summary_from_source_dicts(
+            fallback_review_summary = self._build_review_summary_from_community_clusters(
                 competitor=competitor,
                 dimension=dimension,
                 sources=review_sources,
             )
+            if not self._review_summary_has_cited_items(fallback_review_summary):
+                fallback_review_summary = self._build_review_summary_from_source_dicts(
+                    competitor=competitor,
+                    dimension=dimension,
+                    sources=review_sources,
+                )
             if self._review_summary_has_cited_items(fallback_review_summary):
                 knowledge.review_summary = fallback_review_summary
                 review_summary_changed = True
@@ -2548,6 +2570,96 @@ class AnalystAgentMixin:
             sentiment_hint=self._review_sentiment_hint(bool(praise), bool(complaints)),
             source_ids=source_ids,
             confidence=confidence,
+        )
+
+    def _build_review_summary_from_community_clusters(
+        self,
+        *,
+        competitor: str,
+        dimension: str,
+        sources: list[dict[str, Any]],
+    ) -> ReviewThemeSummary:
+        summary = ReviewThemeSummary(competitor=competitor, dimension=dimension)
+        seen_cluster_keys: set[tuple[str, str, str, str, tuple[str, ...]]] = set()
+        for source in sources:
+            metadata = source.get("metadata")
+            if not isinstance(metadata, dict):
+                continue
+            clusters = metadata.get("community_claim_clusters")
+            if not isinstance(clusters, list):
+                continue
+            for cluster in clusters:
+                if not isinstance(cluster, dict):
+                    continue
+                kind = str(cluster.get("kind") or "")
+                raw_source_ids = cluster.get("source_ids", [])
+                source_ids = (
+                    tuple(
+                        str(source_id).strip()
+                        for source_id in raw_source_ids
+                        if str(source_id).strip()
+                    )
+                    if isinstance(raw_source_ids, list)
+                    else ()
+                )
+                key = (
+                    kind,
+                    str(cluster.get("normalized_value") or ""),
+                    str(cluster.get("label") or ""),
+                    str(cluster.get("claim") or ""),
+                    source_ids,
+                )
+                if key in seen_cluster_keys:
+                    continue
+                seen_cluster_keys.add(key)
+                item = self._community_review_theme_item(cluster)
+                if kind == "praise":
+                    summary.praise_themes.append(item)
+                elif kind == "complaint":
+                    summary.complaint_themes.append(item)
+                elif kind == "adoption_blocker":
+                    summary.adoption_blockers.append(item)
+                elif kind == "switching_trigger":
+                    summary.switching_triggers.append(item)
+                elif kind in {"usage_limit", "feature_limitation"}:
+                    summary.complaint_themes.append(item)
+        theme_items = [
+            *summary.praise_themes,
+            *summary.complaint_themes,
+            *summary.adoption_blockers,
+            *summary.switching_triggers,
+        ]
+        summary.source_ids = merge_ordered_refs(
+            source_id for item in theme_items for source_id in item.source_ids
+        )
+        confidences = [item.confidence for item in theme_items]
+        if confidences:
+            summary.confidence = max(confidences)
+            summary.sentiment_hint = self._review_sentiment_hint(
+                bool(summary.praise_themes),
+                bool(summary.complaint_themes or summary.adoption_blockers),
+            )
+        return summary
+
+    def _community_review_theme_item(self, cluster: dict[str, Any]) -> ReviewThemeItem:
+        raw_source_ids = cluster.get("source_ids", [])
+        source_ids = [
+            str(source_id)
+            for source_id in raw_source_ids
+            if str(source_id).strip()
+        ] if isinstance(raw_source_ids, list) else []
+        evidence_list = cluster.get("evidence", [])
+        evidence = (
+            str(evidence_list[0])
+            if isinstance(evidence_list, list) and evidence_list
+            else str(cluster.get("claim") or "")
+        )
+        return ReviewThemeItem(
+            theme=str(cluster.get("claim") or "Community observation"),
+            evidence=evidence,
+            source_ids=source_ids,
+            confidence=self._coerce_confidence(cluster.get("confidence"), default=0.55),
+            evidence_gap=not source_ids,
         )
 
     def _review_theme_item(

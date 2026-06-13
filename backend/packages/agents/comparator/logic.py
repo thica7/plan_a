@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections import Counter
 from collections.abc import Sequence
 from datetime import datetime
@@ -35,6 +36,16 @@ FEATURE_TAXONOMY_ORDER = (
     "repository context",
     "enterprise administration",
 )
+
+COMMUNITY_MATRIX_SOURCE_TYPES = {
+    "community_forum",
+    "reddit_thread",
+    "github_discussion",
+    "github_issue",
+    "review_site",
+    "developer_blog",
+    "snippet_only",
+}
 
 
 class ComparatorAgentMixin:
@@ -159,6 +170,7 @@ class ComparatorAgentMixin:
             winner_by_dimension=voted_winners,
             summary=[
                 *self._matrix_standardization_summary(detail),
+                *self._community_matrix_summary(detail),
                 *self._string_list(payload.get("matrix_summary")),
                 *vote_summary,
             ],
@@ -661,27 +673,35 @@ class ComparatorAgentMixin:
         winners: dict[str, str] = {}
         summary: list[str] = []
         cell_by_key = {(cell.dimension, cell.competitor): cell for cell in cells}
+        source_by_id = {source.id: source for source in detail.raw_sources}
         for dimension in detail.plan.dimensions:
             signals: dict[str, str] = {}
             evidence_winner = self._winner_from_numeric_signal(
                 {
-                    competitor: len(
-                        self._matrix_cell(cell_by_key, dimension, competitor).source_ids
+                    competitor: self._official_matrix_source_count(
+                        self._matrix_cell(cell_by_key, dimension, competitor),
+                        source_by_id,
                     )
                     for competitor in detail.plan.competitors
                 }
             )
             confidence_winner = self._winner_from_numeric_signal(
                 {
-                    competitor: self._matrix_cell(
-                        cell_by_key, dimension, competitor
-                    ).confidence
+                    competitor: self._official_matrix_confidence(
+                        self._matrix_cell(cell_by_key, dimension, competitor),
+                        source_by_id,
+                    )
                     for competitor in detail.plan.competitors
                 }
             )
             finding_winner = self._winner_from_numeric_signal(
                 {
-                    competitor: self._matrix_finding_count(detail, dimension, competitor)
+                    competitor: self._official_matrix_finding_count(
+                        detail,
+                        dimension,
+                        competitor,
+                        source_by_id,
+                    )
                     for competitor in detail.plan.competitors
                 }
             )
@@ -692,11 +712,20 @@ class ComparatorAgentMixin:
             if finding_winner:
                 signals["findings"] = finding_winner
             llm_winner = payload_winners.get(dimension)
-            if llm_winner in detail.plan.competitors or llm_winner == "tie":
+            if llm_winner == "tie" or (
+                llm_winner in detail.plan.competitors
+                and self._matrix_competitor_has_scoped_official_signal(
+                    detail,
+                    cell_by_key,
+                    dimension,
+                    llm_winner,
+                    source_by_id,
+                )
+            ):
                 signals["llm"] = llm_winner
             winner = self._winner_from_matrix_signals(dimension, signals)
             if winner is None:
-                winner = llm_winner if isinstance(llm_winner, str) and llm_winner else "tie"
+                winner = "tie"
             winners[dimension] = winner
             summary.append(
                 "[majority-vote:{dimension}] winner={winner}; {signals}".format(
@@ -720,6 +749,154 @@ class ComparatorAgentMixin:
             (dimension, competitor),
             ComparisonCell(competitor=competitor, dimension=dimension, value=""),
         )
+
+    def _official_matrix_source_count(
+        self,
+        cell: ComparisonCell,
+        source_by_id: dict[str, RawSource],
+    ) -> int:
+        return sum(
+            1
+            for source_id in cell.source_ids
+            if self._matrix_source_is_official_signal(source_by_id.get(source_id))
+        )
+
+    def _official_matrix_confidence(
+        self,
+        cell: ComparisonCell,
+        source_by_id: dict[str, RawSource],
+    ) -> float:
+        confidences = [
+            source.confidence
+            for source_id in cell.source_ids
+            for source in [source_by_id.get(source_id)]
+            if self._matrix_source_is_official_signal(source)
+        ]
+        return max(confidences, default=0.0)
+
+    def _matrix_source_is_official_signal(self, source: RawSource | None) -> bool:
+        if source is None:
+            return False
+        if source.metadata.get("community_evidence"):
+            return False
+        return source.source_type not in COMMUNITY_MATRIX_SOURCE_TYPES
+
+    def _matrix_competitor_has_scoped_official_signal(
+        self,
+        detail: RunDetail,
+        cell_by_key: dict[tuple[str, str], ComparisonCell],
+        dimension: str,
+        competitor: str,
+        source_by_id: dict[str, RawSource],
+    ) -> bool:
+        cell = self._matrix_cell(cell_by_key, dimension, competitor)
+        if any(
+            self._matrix_source_is_scoped_official_signal(
+                source_by_id.get(source_id),
+                dimension,
+                competitor,
+            )
+            for source_id in cell.source_ids
+        ):
+            return True
+        return (
+            self._official_matrix_finding_count(
+                detail,
+                dimension,
+                competitor,
+                source_by_id,
+            )
+            > 0
+        )
+
+    def _community_matrix_summary(self, detail: RunDetail) -> list[str]:
+        summaries: list[str] = []
+        seen: set[tuple[str, str, str, str, str]] = set()
+        for source in detail.raw_sources:
+            if not source.metadata.get("community_evidence"):
+                continue
+            clusters = source.metadata.get("community_claim_clusters")
+            if not isinstance(clusters, list):
+                continue
+            for cluster in clusters:
+                if not isinstance(cluster, dict):
+                    continue
+                label = str(cluster.get("label") or "")
+                if label not in {
+                    "official_confirmed",
+                    "community_triangulated",
+                    "community_observed",
+                    "community_contested",
+                }:
+                    continue
+                kind = str(cluster.get("kind") or "")
+                normalized_value = str(cluster.get("normalized_value") or "")
+                claim = str(cluster.get("claim") or "Community observation")
+                key = (source.dimension, source.competitor, kind, normalized_value, label)
+                if key in seen:
+                    continue
+                seen.add(key)
+                source_ids = [
+                    str(source_id)
+                    for source_id in cluster.get("source_ids", [])
+                    if str(source_id).strip()
+                ]
+                summaries.append(
+                    "[community-adjusted:{dimension}] {competitor}: {label}; "
+                    "{claim} sources={sources}".format(
+                        dimension=source.dimension,
+                        competitor=source.competitor,
+                        label=label,
+                        claim=claim,
+                        sources=", ".join(source_ids[:4]),
+                    )
+                )
+        return summaries[:8]
+
+    def _official_matrix_finding_count(
+        self,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+        source_by_id: dict[str, RawSource],
+    ) -> int:
+        kb = detail.competitor_kbs.get(competitor)
+        if kb is None:
+            return 0
+        count = 0
+        for finding in kb.slices.get(dimension, []):
+            source_ids = self._matrix_finding_source_ids(finding)
+            if source_ids and any(
+                self._matrix_source_is_scoped_official_signal(
+                    source_by_id.get(source_id),
+                    dimension,
+                    competitor,
+                )
+                for source_id in source_ids
+            ):
+                count += 1
+        return count
+
+    def _matrix_source_is_scoped_official_signal(
+        self,
+        source: RawSource | None,
+        dimension: str,
+        competitor: str,
+    ) -> bool:
+        return (
+            self._matrix_source_is_official_signal(source)
+            and source is not None
+            and source.dimension == dimension
+            and self._source_matches_competitor(source, competitor)
+        )
+
+    def _matrix_finding_source_ids(self, finding: str) -> list[str]:
+        matches = re.findall(
+            r"\[source:([^\]\s]+)\]|\bsource\s+id\s*:\s*([A-Za-z0-9_.:/#-]+)",
+            finding,
+            flags=re.IGNORECASE,
+        )
+        return merge_ordered_refs(value for match in matches for value in match)
 
     def _matrix_finding_count(
         self, detail: RunDetail, dimension: str, competitor: str
