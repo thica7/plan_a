@@ -273,8 +273,10 @@ def _user_research_source_regression_problem(
         )
         if (
             user_research_ids
+            and not _previous_review_section_is_explicit_user_research_gap(previous)
             and (
                 previous_review_ids & user_research_ids
+                or _previous_review_section_has_user_research_source_tokens(previous)
                 or _previous_review_section_has_user_research_semantics(previous)
             )
             and not candidate_review_ids & user_research_ids
@@ -463,6 +465,29 @@ USER_RESEARCH_REVIEW_SEMANTIC_TOKENS = (
     "阻力",
 )
 
+USER_RESEARCH_SOURCE_TOKEN_HINTS = (
+    "survey",
+    "interview",
+    "manual",
+    "transcript",
+    "user-note",
+    "user_note",
+    "review",
+    "feedback",
+    "persona",
+)
+
+USER_RESEARCH_EVIDENCE_GAP_PATTERNS = (
+    r"\bno\s+(?:cited\s+|verified\s+|current\s+)?"
+    r"(?:user[-\s]+research|user[-\s]+review(?:s| themes?)?|reviews?|"
+    r"customer[-\s]+feedback|buyer[-\s]+feedback)"
+    r"(?:\s+or\s+reviews?)?\s+(?:is\s+|are\s+)?"
+    r"(?:available|found|collected|provided|present|included|yet)\b",
+    r"\b(?:user[-\s]+research|user[-\s]+reviews?|reviews?|"
+    r"customer[-\s]+feedback|buyer[-\s]+feedback)\s+"
+    r"(?:is|are|was|were)\s+(?:not\s+available|unavailable|missing|absent)\b",
+)
+
 
 def _section_cited_source_ids(
     markdown: str,
@@ -481,6 +506,36 @@ def _user_research_source_ids(detail: RunDetail) -> set[str]:
         for source in detail.raw_sources
         if source.source_type in USER_RESEARCH_SOURCE_TYPES
     }
+
+
+def _previous_review_section_has_user_research_source_tokens(detail: RunDetail) -> bool:
+    section = _find_section(
+        detail.report_md,
+        "review_theme_summary",
+        detail.output_language,
+    )
+    if section is None:
+        return False
+    return any(
+        any(
+            hint in normalize_source_token(token).casefold()
+            for hint in USER_RESEARCH_SOURCE_TOKEN_HINTS
+        )
+        for token in source_tokens(section.body)
+    )
+
+
+def _previous_review_section_is_explicit_user_research_gap(detail: RunDetail) -> bool:
+    section = _find_section(
+        detail.report_md,
+        "review_theme_summary",
+        detail.output_language,
+    )
+    if section is None:
+        return False
+    body = re.sub(r"\[source:[^\]]+\]", "", section.body).casefold()
+    body = re.sub(r"\s+", " ", body).strip()
+    return any(re.search(pattern, body) for pattern in USER_RESEARCH_EVIDENCE_GAP_PATTERNS)
 
 
 def _previous_review_section_has_user_research_semantics(detail: RunDetail) -> bool:

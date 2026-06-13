@@ -43,6 +43,8 @@ from packages.schema.models import (
     RawSource,
     RedoScope,
     ReflectionRecord,
+    ReviewThemeItem,
+    ReviewThemeSummary,
     RevisionRecord,
     ToolCallMessage,
     TraceSpan,
@@ -4366,6 +4368,102 @@ def test_collector_redo_removing_cross_source_clears_all_dependent_feature_outpu
     assert "feature" not in detail.competitor_kbs["Windsurf"].slices
     assert detail.competitor_knowledge["Claude Code"].feature_tree.nodes == []
     assert detail.competitor_knowledge["Windsurf"].feature_tree.nodes == []
+
+
+@pytest.mark.parametrize("dimension", ["persona", "review"])
+def test_collector_redo_clears_removed_review_summary_source_ids(dimension: str) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id=f"run-{dimension}-review-summary-cleanup",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=[dimension, "pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id=f"old-{dimension}-survey",
+                competitor="Cursor",
+                dimension=dimension,
+                source_type="survey_simulated",
+                title=f"Old Cursor {dimension} survey",
+                snippet="Old survey says onboarding creates friction.",
+                content_hash=f"old-{dimension}-survey-hash",
+                confidence=0.82,
+            ),
+            RawSource(
+                id="cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Current pricing evidence.",
+                content_hash="cursor-pricing-hash",
+                confidence=0.93,
+            ),
+        ],
+        competitor_knowledge={
+            "Cursor": CompetitorKnowledge(
+                competitor="Cursor",
+                review_summary=ReviewThemeSummary(
+                    competitor="Cursor",
+                    dimension=dimension,
+                    source_ids=[f"old-{dimension}-survey"],
+                    complaint_themes=[
+                        ReviewThemeItem(
+                            theme="Onboarding friction",
+                            evidence="Old survey says onboarding creates friction.",
+                            source_ids=[f"old-{dimension}-survey"],
+                            confidence=0.82,
+                        )
+                    ],
+                ),
+                source_ids=[f"old-{dimension}-survey", "cursor-pricing"],
+            )
+        },
+    )
+    scope = RedoScope(
+        kind="collector",
+        target_subagent=dimension,
+        target_competitor="Cursor",
+        rationale=f"redo Cursor {dimension} evidence",
+    )
+
+    dimensions, target_competitors = service._prepare_redo_scope_inputs(detail, scope)
+
+    review_summary = detail.competitor_knowledge["Cursor"].review_summary
+    removed_source_id = f"old-{dimension}-survey"
+    theme_source_ids = [
+        source_id
+        for items in (
+            review_summary.praise_themes,
+            review_summary.complaint_themes,
+            review_summary.adoption_blockers,
+            review_summary.switching_triggers,
+        )
+        for item in items
+        for source_id in item.source_ids
+    ]
+    assert dimensions == [dimension]
+    assert target_competitors == ["Cursor"]
+    assert [source.id for source in detail.raw_sources] == ["cursor-pricing"]
+    assert removed_source_id not in review_summary.source_ids
+    assert removed_source_id not in theme_source_ids
 
 
 @pytest.mark.asyncio

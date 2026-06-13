@@ -520,6 +520,112 @@ def test_section_regression_detects_review_section_losing_replaced_user_research
     assert "user research source" in problem
 
 
+def test_section_regression_detects_review_section_losing_old_survey_token_source() -> None:
+    previous = RunDetail(
+        id="run-prev",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="new-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="New Cursor survey",
+                snippet="Refreshed survey with adoption blockers.",
+                content_hash="new-survey-hash",
+                confidence=0.78,
+            ),
+            RawSource(
+                id="pricing-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Pricing page.",
+                content_hash="pricing-1-hash",
+                confidence=0.93,
+            ),
+        ],
+        report_md=(
+            "# Report\n\n"
+            "## User Review Themes\n"
+            "Pain points and onboarding friction dominate trial follow-through. "
+            "[source:old-survey]\n"
+        ),
+    )
+    candidate = previous.model_copy(
+        update={
+            "report_md": (
+                "# Report\n\n"
+                "## User Review Themes\n"
+                "Pricing packaging is the only cited buyer signal. [source:pricing-1]\n"
+            ),
+        }
+    )
+
+    problem = section_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert problem is not None
+    assert "user research source" in problem
+
+
+def test_section_regression_allows_explicit_user_research_evidence_gap() -> None:
+    previous = RunDetail(
+        id="run-prev",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="new-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="New Cursor survey",
+                snippet="Refreshed survey with adoption blockers.",
+                content_hash="new-survey-hash",
+                confidence=0.78,
+            ),
+            RawSource(
+                id="pricing-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Pricing page.",
+                content_hash="pricing-1-hash",
+                confidence=0.93,
+            ),
+        ],
+        report_md=(
+            "# Report\n\n"
+            "## User Review Themes\n"
+            "No user research or reviews are available yet; keep this as an evidence gap.\n"
+        ),
+    )
+    candidate = previous.model_copy(
+        update={
+            "report_md": (
+                "# Report\n\n"
+                "## User Review Themes\n"
+                "Pricing packaging is the only cited buyer signal. [source:pricing-1]\n"
+            ),
+        }
+    )
+
+    problem = section_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert problem is None
+
+
 def test_section_regression_ignores_unrelated_global_quality_gate_failures() -> None:
     previous = RunDetail(
         id="run-prev",

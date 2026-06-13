@@ -16,6 +16,7 @@ from packages.schema.models import (
     RawSource,
     RedoScope,
     ReviewThemeItem,
+    ReviewThemeSummary,
 )
 from packages.sources import (
     malformed_source_tokens,
@@ -1597,6 +1598,11 @@ class QualityAgentMixin:
         knowledge = detail.competitor_knowledge.get(competitor)
         if knowledge is None:
             return
+        valid_source_ids = {
+            source.id
+            for source in detail.raw_sources
+            if self._source_matches_competitor(source, competitor)
+        }
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
             knowledge.pricing_model.tiers = []
@@ -1607,12 +1613,48 @@ class QualityAgentMixin:
         else:
             knowledge.feature_tree.nodes = []
             knowledge.feature_tree.summary_claims = []
-        valid_source_ids = {
-            source.id
-            for source in detail.raw_sources
-            if self._source_matches_competitor(source, competitor)
-        }
+        if self._dimension_uses_review_summary(dimension):
+            self._clear_review_summary_removed_sources(
+                knowledge,
+                competitor=competitor,
+                dimension=dimension,
+                valid_source_ids=valid_source_ids,
+            )
         knowledge.source_ids = [
             source_id for source_id in knowledge.source_ids if source_id in valid_source_ids
         ]
         detail.competitor_knowledge[competitor] = knowledge
+
+    def _clear_review_summary_removed_sources(
+        self,
+        knowledge: CompetitorKnowledge,
+        *,
+        competitor: str,
+        dimension: str,
+        valid_source_ids: set[str],
+    ) -> None:
+        review_summary = knowledge.review_summary
+        review_summary.source_ids = self._ordered_source_ids(
+            [source_id for source_id in review_summary.source_ids if source_id in valid_source_ids]
+        )
+        has_cited_theme = False
+        for items in (
+            review_summary.praise_themes,
+            review_summary.complaint_themes,
+            review_summary.adoption_blockers,
+            review_summary.switching_triggers,
+        ):
+            for item in items:
+                had_source_ids = bool(item.source_ids)
+                item.source_ids = self._ordered_source_ids(
+                    [source_id for source_id in item.source_ids if source_id in valid_source_ids]
+                )
+                if item.source_ids:
+                    has_cited_theme = True
+                elif had_source_ids:
+                    item.evidence_gap = True
+        if not review_summary.source_ids and not has_cited_theme:
+            knowledge.review_summary = ReviewThemeSummary(
+                competitor=competitor,
+                dimension=dimension,
+            )
