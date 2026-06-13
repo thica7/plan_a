@@ -59,6 +59,24 @@ The official collector remains the source of official facts. The community lane
 supplies observed market behavior, user-reported limits, complaints, praise,
 adoption blockers, switching triggers, and contested claims.
 
+Current-project fit for the first implementation:
+
+- Store community semantics in existing `RawSource.source_type` and
+  `RawSource.metadata`; do not add a database or DTO migration.
+- `ComparisonMatrix` currently has only `winner_by_dimension`, `summary`, and
+  `cells`. First implementation should therefore expose
+  `community_adjusted_winner` and `risk_adjusted_recommendation` as explicit
+  matrix summary/caveat entries and writer context, not as new schema fields.
+- Comparator winner voting must treat community sources as community/risk
+  signals, not as official evidence-count or official-confidence signals.
+- `RawSource` has no first-class author identity. First implementation should
+  use domain-level independence plus staff/mod/maintainer text signals; same
+  forum different-author independence is deferred until author metadata exists.
+- `SearchResult` and `SourceCandidate` may carry `date` or `last_updated`, but
+  `RawSource` only has metadata for publication timing. First implementation
+  should preserve recency hints when available and avoid hard stale-source
+  gates when no parseable date exists.
+
 ## Source Types
 
 Community sources should not be collapsed into generic webpage evidence.
@@ -378,4 +396,3 @@ New runs should satisfy:
 - Treating Reddit or forum posts as official commitments without official
   support.
 - Full UI redesign for evidence browsing.
-

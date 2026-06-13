@@ -28,7 +28,7 @@
   - Extracts concrete community claims from `RawSource` snippets and clusters equivalent claims by competitor, dimension, kind, and normalized value.
 
 - Create `backend/packages/community/scoring.py`
-  - Scores source confidence and cluster confidence with independence, staff/mod/maintainer, recency, snippet-only, and conflict rules.
+  - Scores source confidence and cluster confidence with independence, staff/mod/maintainer signals, snippet-only caps, conflict rules, and recency hints when metadata is available.
 
 - Create `backend/packages/community/raw_sources.py`
   - Reclassifies fetched community `RawSource` objects and creates capped `snippet_only` sources when fetching fails but the search snippet is useful.
@@ -61,6 +61,9 @@
 
 - Modify `backend/packages/agents/analysts/logic.py`
   - Enrich `review_summary` and persona/adoption claims from community clusters when source IDs are present.
+
+- Modify `backend/packages/agents/comparator/logic.py`
+  - Keep community sources out of official winner voting while adding explicit community-adjusted matrix caveats.
 
 - Modify `backend/packages/agents/writer/logic.py`
   - Expose community source metadata and claim clusters in the writer context.
@@ -2090,6 +2093,7 @@ git commit -m "feat: collect community evidence"
 **Files:**
 - Modify: `backend/packages/agents/collectors/logic.py`
 - Modify: `backend/packages/agents/analysts/logic.py`
+- Modify: `backend/packages/agents/comparator/logic.py`
 - Modify: `backend/tests/unit/test_run_service.py`
 - Modify: `backend/tests/unit/test_review_theme_summary.py`
 
@@ -2286,17 +2290,104 @@ def test_review_summary_uses_community_clusters_for_review_dimension() -> None:
     assert summary.complaint_themes[0].confidence == 0.68
 ```
 
-- [ ] **Step 3: Run focused tests and verify they fail**
+- [ ] **Step 3: Add failing comparator official-winner guard test**
+
+Append to `backend/tests/unit/test_run_service.py`:
+
+```python
+def test_comparison_matrix_keeps_community_sources_out_of_official_winner_signal() -> None:
+    service = RunService(
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-comparator-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Users report Cursor Pro pricing and usage-limit caveats.",
+                content_hash="cursor-reddit-hash",
+                confidence=0.90,
+                metadata={
+                    "community_evidence": True,
+                    "community_source_type": "reddit_thread",
+                    "community_claim_clusters": [
+                        {
+                            "kind": "pricing",
+                            "label": "community_triangulated",
+                            "claim": "Community sources report pricing caveats.",
+                            "source_ids": ["cursor-reddit-pricing", "cursor-forum-pricing"],
+                            "confidence": 0.90,
+                            "evidence": ["Users report Cursor pricing caveats."],
+                        }
+                    ],
+                },
+            ),
+            RawSource(
+                id="cursor-forum-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="community_forum",
+                title="Cursor pricing forum",
+                url="https://forum.cursor.com/t/pricing",
+                snippet="Forum users discuss pricing caveats and quotas.",
+                content_hash="cursor-forum-hash",
+                confidence=0.88,
+                metadata={"community_evidence": True, "community_source_type": "community_forum"},
+            ),
+            RawSource(
+                id="copilot-official-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                url="https://github.com/features/copilot#pricing",
+                snippet="GitHub Copilot official pricing is published.",
+                content_hash="copilot-official-hash",
+                confidence=0.84,
+            ),
+        ],
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+
+    assert matrix.winner_by_dimension["pricing"] == "GitHub Copilot"
+    assert any("[community-adjusted:pricing]" in item for item in matrix.summary)
+    assert any("community_triangulated" in item for item in matrix.summary)
+```
+
+- [ ] **Step 4: Run focused tests and verify they fail**
 
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test_run_service.py::test_collect_join_annotates_community_claim_clusters backend\tests\unit\test_run_service.py::test_collect_join_marks_community_cluster_official_confirmed_when_values_match backend\tests\unit\test_review_theme_summary.py::test_review_summary_uses_community_clusters_for_review_dimension -q
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test_run_service.py::test_collect_join_annotates_community_claim_clusters backend\tests\unit\test_run_service.py::test_collect_join_marks_community_cluster_official_confirmed_when_values_match backend\tests\unit\test_run_service.py::test_comparison_matrix_keeps_community_sources_out_of_official_winner_signal backend\tests\unit\test_review_theme_summary.py::test_review_summary_uses_community_clusters_for_review_dimension -q
 ```
 
-Expected: FAIL because annotation and analyst consumption are not implemented.
+Expected: FAIL because annotation, analyst consumption, and comparator community-vs-official winner separation are not implemented.
 
-- [ ] **Step 4: Add collect-join annotation helper**
+- [ ] **Step 5: Add collect-join annotation helper**
 
 In `backend/packages/agents/collectors/logic.py`, import:
 
@@ -2371,7 +2462,7 @@ Add this helper near `_normalize_collected_sources()`:
         ]
 ```
 
-- [ ] **Step 5: Call annotation from collect join**
+- [ ] **Step 6: Call annotation from collect join**
 
 In `_real_collect_join_step()`, after:
 
@@ -2385,7 +2476,7 @@ add:
         self._annotate_community_claim_clusters(detail, dimensions)
 ```
 
-- [ ] **Step 6: Add analyst helper for community clusters**
+- [ ] **Step 7: Add analyst helper for community clusters**
 
 In `backend/packages/agents/analysts/logic.py`, add this helper near `_build_review_summary_from_source_dicts()`:
 
@@ -2468,7 +2559,7 @@ In `backend/packages/agents/analysts/logic.py`, add this helper near `_build_rev
         )
 ```
 
-- [ ] **Step 7: Prefer community cluster review summaries when available**
+- [ ] **Step 8: Prefer community cluster review summaries when available**
 
 In both places where `_build_review_summary_from_source_dicts()` is called for review/persona dimensions, replace the direct assignment with:
 
@@ -2490,32 +2581,167 @@ In both places where `_build_review_summary_from_source_dicts()` is called for r
 
 Apply this replacement in `_merge_structured_knowledge_slice()` and `_merge_structured_knowledge_payload()` where `review_sources` is already computed.
 
-- [ ] **Step 8: Run focused tests**
+- [ ] **Step 9: Add comparator community caveats without official winner leakage**
+
+In `backend/packages/agents/comparator/logic.py`, add this constant near `FEATURE_TAXONOMY_ORDER`:
+
+```python
+COMMUNITY_MATRIX_SOURCE_TYPES = {
+    "community_forum",
+    "reddit_thread",
+    "github_discussion",
+    "github_issue",
+    "review_site",
+    "developer_blog",
+    "snippet_only",
+}
+```
+
+In `_build_comparison_matrix()`, add community summaries before payload summaries:
+
+```python
+            summary=[
+                *self._matrix_standardization_summary(detail),
+                *self._community_matrix_summary(detail),
+                *self._string_list(payload.get("matrix_summary")),
+                *vote_summary,
+            ],
+```
+
+In `_matrix_majority_vote()`, create a source lookup before the dimension loop:
+
+```python
+        source_by_id = {source.id: source for source in detail.raw_sources}
+```
+
+Replace the existing `evidence_winner` and `confidence_winner` score inputs with official-only scores:
+
+```python
+            evidence_winner = self._winner_from_numeric_signal(
+                {
+                    competitor: self._official_matrix_source_count(
+                        self._matrix_cell(cell_by_key, dimension, competitor),
+                        source_by_id,
+                    )
+                    for competitor in detail.plan.competitors
+                }
+            )
+            confidence_winner = self._winner_from_numeric_signal(
+                {
+                    competitor: self._official_matrix_confidence(
+                        self._matrix_cell(cell_by_key, dimension, competitor),
+                        source_by_id,
+                    )
+                    for competitor in detail.plan.competitors
+                }
+            )
+```
+
+Add these helpers near `_matrix_cell()`:
+
+```python
+    def _official_matrix_source_count(
+        self,
+        cell: ComparisonCell,
+        source_by_id: dict[str, RawSource],
+    ) -> int:
+        return sum(
+            1
+            for source_id in cell.source_ids
+            if self._matrix_source_is_official_signal(source_by_id.get(source_id))
+        )
+
+    def _official_matrix_confidence(
+        self,
+        cell: ComparisonCell,
+        source_by_id: dict[str, RawSource],
+    ) -> float:
+        confidences = [
+            source.confidence
+            for source_id in cell.source_ids
+            for source in [source_by_id.get(source_id)]
+            if self._matrix_source_is_official_signal(source)
+        ]
+        return max(confidences, default=0.0)
+
+    def _matrix_source_is_official_signal(self, source: RawSource | None) -> bool:
+        if source is None:
+            return False
+        if source.metadata.get("community_evidence"):
+            return False
+        return source.source_type not in COMMUNITY_MATRIX_SOURCE_TYPES
+
+    def _community_matrix_summary(self, detail: RunDetail) -> list[str]:
+        summaries: list[str] = []
+        seen: set[tuple[str, str, str, str, str]] = set()
+        for source in detail.raw_sources:
+            if not source.metadata.get("community_evidence"):
+                continue
+            clusters = source.metadata.get("community_claim_clusters")
+            if not isinstance(clusters, list):
+                continue
+            for cluster in clusters:
+                if not isinstance(cluster, dict):
+                    continue
+                label = str(cluster.get("label") or "")
+                if label not in {
+                    "official_confirmed",
+                    "community_triangulated",
+                    "community_observed",
+                    "community_contested",
+                }:
+                    continue
+                kind = str(cluster.get("kind") or "")
+                normalized_value = str(cluster.get("normalized_value") or "")
+                claim = str(cluster.get("claim") or "Community observation")
+                key = (source.dimension, source.competitor, kind, normalized_value, label)
+                if key in seen:
+                    continue
+                seen.add(key)
+                source_ids = [
+                    str(source_id)
+                    for source_id in cluster.get("source_ids", [])
+                    if str(source_id).strip()
+                ]
+                summaries.append(
+                    "[community-adjusted:{dimension}] {competitor}: {label}; "
+                    "{claim} sources={sources}".format(
+                        dimension=source.dimension,
+                        competitor=source.competitor,
+                        label=label,
+                        claim=claim,
+                        sources=", ".join(source_ids[:4]),
+                    )
+                )
+        return summaries[:8]
+```
+
+- [ ] **Step 10: Run focused tests**
 
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test_run_service.py::test_collect_join_annotates_community_claim_clusters backend\tests\unit\test_run_service.py::test_collect_join_marks_community_cluster_official_confirmed_when_values_match backend\tests\unit\test_review_theme_summary.py::test_review_summary_uses_community_clusters_for_review_dimension -q
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test_run_service.py::test_collect_join_annotates_community_claim_clusters backend\tests\unit\test_run_service.py::test_collect_join_marks_community_cluster_official_confirmed_when_values_match backend\tests\unit\test_run_service.py::test_comparison_matrix_keeps_community_sources_out_of_official_winner_signal backend\tests\unit\test_review_theme_summary.py::test_review_summary_uses_community_clusters_for_review_dimension -q
 ```
 
 Expected: PASS.
 
-- [ ] **Step 9: Run ruff**
+- [ ] **Step 11: Run ruff**
 
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\agents\collectors\logic.py backend\packages\agents\analysts\logic.py backend\tests\unit\test_run_service.py backend\tests\unit\test_review_theme_summary.py
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\agents\collectors\logic.py backend\packages\agents\analysts\logic.py backend\packages\agents\comparator\logic.py backend\tests\unit\test_run_service.py backend\tests\unit\test_review_theme_summary.py
 ```
 
 Expected: `All checks passed!`
 
-- [ ] **Step 10: Commit Task 6**
+- [ ] **Step 12: Commit Task 6**
 
 Run:
 
 ```powershell
-git add backend/packages/agents/collectors/logic.py backend/packages/agents/analysts/logic.py backend/tests/unit/test_run_service.py backend/tests/unit/test_review_theme_summary.py
+git add backend/packages/agents/collectors/logic.py backend/packages/agents/analysts/logic.py backend/packages/agents/comparator/logic.py backend/tests/unit/test_run_service.py backend/tests/unit/test_review_theme_summary.py
 git commit -m "feat: annotate community claim clusters"
 ```
 
@@ -3429,7 +3655,7 @@ Expected: PASS.
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\community backend\packages\research\models.py backend\packages\research\discovery\constants.py backend\packages\research\discovery\providers.py backend\packages\research\capture\policy.py backend\packages\config\settings.py backend\packages\schema\messages.py backend\packages\i18n\language.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\packages\agents\analysts\logic.py backend\packages\agents\writer\logic.py backend\packages\agents\qa\logic.py backend\packages\business_intel\report_quality.py backend\tests\unit\test_community_query_planner.py backend\tests\unit\test_community_source_classifier.py backend\tests\unit\test_community_claims.py backend\tests\unit\test_run_service.py backend\tests\unit\test_report_quality.py
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\community backend\packages\research\models.py backend\packages\research\discovery\constants.py backend\packages\research\discovery\providers.py backend\packages\research\capture\policy.py backend\packages\config\settings.py backend\packages\schema\messages.py backend\packages\i18n\language.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\packages\agents\analysts\logic.py backend\packages\agents\comparator\logic.py backend\packages\agents\writer\logic.py backend\packages\agents\qa\logic.py backend\packages\business_intel\report_quality.py backend\tests\unit\test_community_query_planner.py backend\tests\unit\test_community_source_classifier.py backend\tests\unit\test_community_claims.py backend\tests\unit\test_run_service.py backend\tests\unit\test_report_quality.py
 ```
 
 Expected: `All checks passed!`
@@ -3464,7 +3690,7 @@ Expected: PASS.
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\community backend\packages\research\models.py backend\packages\research\discovery\constants.py backend\packages\research\discovery\providers.py backend\packages\research\capture\policy.py backend\packages\config\settings.py backend\packages\schema\messages.py backend\packages\i18n\language.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\packages\agents\analysts\logic.py backend\packages\agents\writer\logic.py backend\packages\agents\qa\logic.py backend\packages\business_intel\report_quality.py backend\tests\unit\test_community_query_planner.py backend\tests\unit\test_community_source_classifier.py backend\tests\unit\test_community_claims.py backend\tests\unit\test_run_service.py backend\tests\unit\test_report_quality.py
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\community backend\packages\research\models.py backend\packages\research\discovery\constants.py backend\packages\research\discovery\providers.py backend\packages\research\capture\policy.py backend\packages\config\settings.py backend\packages\schema\messages.py backend\packages\i18n\language.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\packages\agents\analysts\logic.py backend\packages\agents\comparator\logic.py backend\packages\agents\writer\logic.py backend\packages\agents\qa\logic.py backend\packages\business_intel\report_quality.py backend\tests\unit\test_community_query_planner.py backend\tests\unit\test_community_source_classifier.py backend\tests\unit\test_community_claims.py backend\tests\unit\test_run_service.py backend\tests\unit\test_report_quality.py
 ```
 
 Expected: `All checks passed!`
