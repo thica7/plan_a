@@ -2453,6 +2453,21 @@ class WriterAgentMixin:
                 source_id for source_id in ids if not (source_id in seen or seen.add(source_id))
             ]
 
+        source_dimensions = {source.id: source.dimension for source in detail.raw_sources}
+
+        def rank_source_ids_by_dimension(ids: list[str], primary_dimension: str) -> list[str]:
+            primary_ids = [
+                source_id
+                for source_id in ids
+                if source_dimensions.get(source_id) == primary_dimension
+            ]
+            other_ids = [
+                source_id
+                for source_id in ids
+                if source_dimensions.get(source_id) != primary_dimension
+            ]
+            return [*primary_ids, *other_ids]
+
         source_ids = [
             source.id
             for source in detail.raw_sources
@@ -2480,14 +2495,31 @@ class WriterAgentMixin:
             ]
         if not source_ids:
             source_ids = [source.id for source in detail.raw_sources]
+        if "pricing" in matched_dimensions:
+            source_ids = rank_source_ids_by_dimension(source_ids, "pricing")
+        elif "feature" in matched_dimensions:
+            source_ids = rank_source_ids_by_dimension(source_ids, "feature")
         if "persona" in matched_dimensions and not {
             "pricing",
             "feature",
         }.intersection(matched_dimensions):
-            preferred_user_research_ids = [
-                source.id
+            source_type_rank = {
+                source_type: index
+                for index, source_type in enumerate(USER_RESEARCH_SOURCE_TYPE_ORDER)
+            }
+            preferred_user_research_sources = [
+                source
                 for source in detail.raw_sources
                 if source.id in source_ids and source.source_type in USER_RESEARCH_SOURCE_TYPES
+            ]
+            preferred_user_research_ids = [
+                source.id
+                for source in sorted(
+                    preferred_user_research_sources,
+                    key=lambda source: source_type_rank.get(
+                        source.source_type, len(source_type_rank)
+                    ),
+                )
             ]
             if preferred_user_research_ids:
                 source_ids = [*preferred_user_research_ids, *source_ids]
