@@ -139,7 +139,7 @@ def _upstream_data_changed_repair_plan(
             previous_report_protectable=False,
             anti_regression_required=False,
         )
-    sections = _target_sections(issues)
+    sections = _clean_upstream_target_sections(issues)
     if sections and len(sections) <= UPSTREAM_SECTION_REPAIR_MAX_SECTIONS:
         return WriterRepairPlan(
             mode="section",
@@ -307,23 +307,44 @@ def _report_line_numbers(issues: list[QCIssue]) -> list[int]:
 def _target_sections(issues: list[QCIssue]) -> list[str]:
     sections: list[str] = []
     for issue in issues:
-        haystack = " ".join(
-            value
-            for value in [
-                issue.field_path,
-                issue.problem,
-                issue.target_subagent or "",
-                issue.redo_scope.target_subagent or "",
-                issue.redo_scope.rationale,
-            ]
-            if value
-        ).casefold()
-        for section_key, hints in SECTION_REPAIR_HINTS.items():
-            if section_key not in sections and any(
-                _section_hint_matches(haystack, hint) for hint in hints
-            ):
+        for section_key in _issue_target_sections(issue):
+            if section_key not in sections:
                 sections.append(section_key)
     return sections
+
+
+def _clean_upstream_target_sections(issues: list[QCIssue]) -> list[str]:
+    if not issues:
+        return []
+
+    sections: list[str] = []
+    for issue in issues:
+        issue_sections = _issue_target_sections(issue)
+        if not issue_sections:
+            return []
+        for section_key in issue_sections:
+            if section_key not in sections:
+                sections.append(section_key)
+    return sections
+
+
+def _issue_target_sections(issue: QCIssue) -> list[str]:
+    haystack = " ".join(
+        value
+        for value in [
+            issue.field_path,
+            issue.problem,
+            issue.target_subagent or "",
+            issue.redo_scope.target_subagent or "",
+            issue.redo_scope.rationale,
+        ]
+        if value
+    ).casefold()
+    return [
+        section_key
+        for section_key, hints in SECTION_REPAIR_HINTS.items()
+        if any(_section_hint_matches(haystack, hint) for hint in hints)
+    ]
 
 
 def _section_hint_matches(haystack: str, hint: str) -> bool:

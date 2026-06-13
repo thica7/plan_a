@@ -105,6 +105,58 @@ def test_upstream_data_changed_uses_full_rewrite_for_broad_or_unmapped_issues() 
     assert plan.anti_regression_required is True
 
 
+def test_upstream_data_changed_uses_full_rewrite_for_mixed_mapped_unmapped_issues() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issues = [
+        QCIssue(
+            id="issue-review",
+            severity="warn",
+            detected_by="reflector",
+            target_agent="collector",
+            target_subagent="persona",
+            field_path="reflections[-1].coverage_gaps[0]",
+            problem="persona survey and interview review themes need refresh.",
+            redo_scope=RedoScope(
+                kind="collector",
+                target_subagent="persona",
+                rationale="refresh persona",
+            ),
+        ),
+        QCIssue(
+            id="issue-broad",
+            severity="blocker",
+            detected_by="schema",
+            target_agent="analyst",
+            field_path="competitor_knowledge",
+            problem="Multiple structured slices changed.",
+            redo_scope=RedoScope(kind="analyst", rationale="broad refresh"),
+        ),
+    ]
+
+    plan = build_writer_repair_plan(detail, issues, upstream_data_changed=True)
+
+    assert plan.mode == "full"
+    assert plan.anti_regression_required is True
+
+
+def test_writer_repair_maps_standalone_rag_phrase_to_rag_gap_fill() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-rag-gap-fill",
+        severity="warn",
+        detected_by="reflector",
+        target_agent="writer",
+        field_path="report_md.section[rag_gap_fill]",
+        problem="RAG gap fill needs refresh.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Refresh RAG gap fill."),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["rag_gap_fill"]
+
+
 def test_writer_repair_maps_thin_competitive_findings_to_section_repair() -> None:
     detail = _detail(report_md=_protectable_report())
     issue = QCIssue(

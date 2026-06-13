@@ -133,18 +133,17 @@ class WriterAgentMixin:
                 redo_issue_by_id.setdefault(issue.id, issue)
         pending_redo = record.pending_graph_redo
         pending_issue_ids: set[str] = set()
-        if (
-            pending_redo is not None
-            and pending_redo.redo_scope.kind == "writer_only"
-            and pending_redo.issue_ids
-        ):
+        writer_only_pending_issue_ids: set[str] = set()
+        if pending_redo is not None and pending_redo.issue_ids:
             pending_issue_ids = set(pending_redo.issue_ids)
             for issue in detail.qa_findings:
                 if issue.id in pending_issue_ids:
                     redo_issue_by_id.setdefault(issue.id, issue)
+            if pending_redo.redo_scope.kind == "writer_only":
+                writer_only_pending_issue_ids = pending_issue_ids
         redo_issues = list(redo_issue_by_id.values())
         redo_source_message_ids = [message.id for message in redo_messages]
-        if pending_issue_ids:
+        if writer_only_pending_issue_ids:
             writer_only_messages_without_issue_ids: list[str] = []
             for message in record.detail.agent_messages:
                 if message.message_type != "redo_request":
@@ -152,7 +151,7 @@ class WriterAgentMixin:
                 raw_issue_ids = message.payload.get("issue_ids", [])
                 if raw_issue_ids:
                     message_issue_ids = set(raw_issue_ids)
-                    if message_issue_ids & pending_issue_ids:
+                    if message_issue_ids & writer_only_pending_issue_ids:
                         redo_source_message_ids.append(message.id)
                     continue
                 redo_scope = message.payload.get("redo_scope", {})

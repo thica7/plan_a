@@ -5300,6 +5300,83 @@ async def test_writer_upstream_changed_allows_full_rewrite_with_guard_metadata()
 
 
 @pytest.mark.asyncio
+async def test_writer_upstream_collector_redo_uses_qa_issue_for_section_repair() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return (
+            "## User Review Themes\n"
+            "Refreshed persona evidence shows Cursor is easier to explain during "
+            "procurement, while Copilot still benefits from Microsoft workflow "
+            "familiarity for platform buyers. [source:pricing-1]\n"
+            "- Refreshed theme: evaluators value pricing clarity when comparing "
+            "focused developer workflow tools. [source:pricing-1]\n"
+            "- Refreshed blocker: security review and procurement packaging still "
+            "need direct validation before a replacement claim is safe. [source:feature-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer upstream collector section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="collector-persona-review",
+        severity="warn",
+        detected_by="reflector",
+        target_agent="collector",
+        target_subagent="persona",
+        field_path="reflections[-1].coverage_gaps[0]",
+        problem="persona survey and interview review themes need refresh.",
+        redo_scope=RedoScope(
+            kind="collector",
+            target_subagent="persona",
+            rationale="refresh persona",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="collector",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_repair_mode"] == "section"
+    assert payload["writer_repair_sections"] == ["review_theme_summary"]
+    assert "Refreshed persona evidence" in record.detail.report_md
+    assert "Customer theme: pricing clarity supports fast evaluation" not in (
+        record.detail.report_md
+    )
+
+
+@pytest.mark.asyncio
 async def test_writer_upstream_changed_rejects_thinner_full_rewrite() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
