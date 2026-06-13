@@ -47,6 +47,37 @@ def test_writer_user_research_policy_names_all_research_source_types() -> None:
         assert source_type in policy
 
 
+def test_quality_expects_community_section_when_community_evidence_exists() -> None:
+    detail = _run_detail(
+        run_id="run-quality-community-section",
+        execution_mode="real",
+        source_count=1,
+        report_md=_structured_report_md(),
+        metrics=RunMetrics(),
+    )
+    detail.raw_sources = [
+        RawSource(
+            id="reddit-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="reddit_thread",
+            title="Cursor pricing reddit",
+            url="https://reddit.com/r/cursor/comments/pricing",
+            snippet="Cursor Pro is $20 per month.",
+            content_hash="hash",
+            confidence=0.62,
+            metadata={"community_evidence": True},
+        )
+    ]
+
+    comparison = compare_run_quality(detail, baseline=detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert "community_evidence_section_score" in metrics
+    assert metrics["community_evidence_section_score"].target_value == 0.0
+    assert round(sum(metric.weight for metric in comparison.metrics), 6) == 1.0
+
+
 def test_compare_run_quality_scores_real_run_against_baseline() -> None:
     baseline = _run_detail(
         run_id="baseline-run",

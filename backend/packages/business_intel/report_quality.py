@@ -14,6 +14,15 @@ from packages.schema.api_dto import (
 from packages.schema.models import RawSource
 from packages.sources import resolve_source_token, source_token_alias_map, source_tokens
 
+COMMUNITY_SOURCE_TYPES = {
+    "community_forum",
+    "reddit_thread",
+    "github_discussion",
+    "github_issue",
+    "review_site",
+    "developer_blog",
+    "snippet_only",
+}
 REAL_SOURCE_TYPES = {
     "official",
     "official_docs",
@@ -26,6 +35,7 @@ REAL_SOURCE_TYPES = {
     "news",
     "web_search_result",
     "webpage_verified",
+    *COMMUNITY_SOURCE_TYPES,
 }
 USER_RESEARCH_SOURCE_TYPES = {
     "survey_simulated",
@@ -50,6 +60,7 @@ USER_RESEARCH_DIMENSION_HINTS = {
 REVIEW_THEME_SOURCE_TYPES = {
     "review_site",
     *USER_RESEARCH_SOURCE_TYPES,
+    *COMMUNITY_SOURCE_TYPES,
 }
 REVIEW_THEME_DIMENSION_HINTS = {
     "review",
@@ -186,6 +197,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "memory_context_section_score": _memory_context_section_score(detail),
         "user_research_section_score": _user_research_section_score(detail),
         "review_theme_section_score": _review_theme_section_score(detail),
+        "community_evidence_section_score": _community_evidence_section_score(detail),
         "swot_section_score": _swot_section_score(detail),
         "rag_gap_fill_section_score": _rag_gap_fill_section_score(detail),
         "qa_blocker_count": float(
@@ -221,6 +233,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "memory_context_section_score": values["memory_context_section_score"],
         "user_research_section_score": values["user_research_section_score"],
         "review_theme_section_score": values["review_theme_section_score"],
+        "community_evidence_section_score": values["community_evidence_section_score"],
         "swot_section_score": values["swot_section_score"],
         "rag_gap_fill_section_score": values["rag_gap_fill_section_score"],
         "qa_blocker_count": max(0.0, 1.0 - min(values["qa_blocker_count"] / 3.0, 1.0)),
@@ -258,6 +271,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         and values["memory_context_section_score"] >= 1.0
         and values["user_research_section_score"] >= 1.0
         and values["review_theme_section_score"] >= 1.0
+        and values["community_evidence_section_score"] >= 1.0
         and values["swot_section_score"] >= 1.0
         and values["rag_gap_fill_section_score"] >= 1.0
         and values["qa_blocker_count"] <= 0
@@ -275,8 +289,9 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
 def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower_is_better"]]]:
     return [
         ("evidence_count", 0.05, "higher_is_better"),
-        ("source_coverage_rate", 0.07, "higher_is_better"),
-        ("verified_source_rate", 0.07, "higher_is_better"),
+        ("source_coverage_rate", 0.06, "higher_is_better"),
+        ("verified_source_rate", 0.06, "higher_is_better"),
+        ("community_evidence_section_score", 0.02, "higher_is_better"),
         ("claim_citation_rate", 0.08, "higher_is_better"),
         ("citation_validity_rate", 0.08, "higher_is_better"),
         ("real_source_rate", 0.07, "higher_is_better"),
@@ -1246,6 +1261,21 @@ def _review_theme_section_score(detail: RunDetail) -> float:
         return 1.0
     section = _find_section_before_support(detail.report_md, _review_theme_section_aliases())
     return 1.0 if section is not None and _section_has_substantive_body(section) else 0.0
+
+
+def _community_evidence_section_score(detail: RunDetail) -> float:
+    if not any(source.metadata.get("community_evidence") for source in detail.raw_sources):
+        return 1.0
+    section = _find_section_before_support(
+        detail.report_md,
+        _report_label_aliases("community_evidence_triangulation"),
+    )
+    if section is not None and _section_has_substantive_body(section):
+        return 1.0
+    body = repair_mojibake_text(detail.report_md).casefold()
+    if "community observation" in body and "official" in body:
+        return 0.75
+    return 0.0
 
 
 def _swot_section_score(detail: RunDetail) -> float:

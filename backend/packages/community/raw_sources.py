@@ -10,6 +10,15 @@ from packages.research.models import SourceCandidate
 from packages.schema.models import RawSource
 
 SNIPPET_ONLY_CONFIDENCE_CAP = 0.55
+COMMUNITY_ORIGIN_SOURCE_TYPES = {
+    "community_forum",
+    "reddit_thread",
+    "github_discussion",
+    "github_issue",
+    "review_site",
+    "developer_blog",
+    "snippet_only",
+}
 _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 
 
@@ -20,7 +29,45 @@ def reclassify_community_source(source: RawSource, *, run_id: str) -> RawSource:
         snippet=source.snippet,
     )
     if not classification.is_community:
-        return source
+        if not _is_community_origin_source(source):
+            return source
+        source_type = _community_origin_source_type(source)
+        metadata = {
+            **source.metadata,
+            "community_evidence": True,
+            "community_source_type": source.metadata.get("community_source_type")
+            if isinstance(source.metadata.get("community_source_type"), str)
+            else "community_search",
+            "community_classification_reason": source.metadata.get(
+                "community_classification_reason",
+                "community_origin_preserved_after_final_url_reclassification",
+            ),
+            "official_commitment": False,
+        }
+        confidence = min(
+            SNIPPET_ONLY_CONFIDENCE_CAP,
+            source.confidence,
+            source.candidate_confidence
+            if isinstance(source.candidate_confidence, int | float)
+            else source.confidence,
+        )
+        return source.model_copy(
+            update={
+                "id": compute_raw_source_id(
+                    source_type=source_type,
+                    competitor=source.competitor,
+                    dimension=source.dimension,
+                    url=str(source.url) if source.url else None,
+                    content_hash=source.content_hash,
+                    title=source.title,
+                    snippet=source.snippet,
+                    run_id=run_id,
+                ),
+                "source_type": source_type,
+                "confidence": confidence,
+                "metadata": metadata,
+            }
+        )
     confidence = max(source.confidence, classification.base_confidence)
     source_type = classification.source_type
     metadata = {
@@ -48,6 +95,26 @@ def reclassify_community_source(source: RawSource, *, run_id: str) -> RawSource:
             "metadata": metadata,
         }
     )
+
+
+def _is_community_origin_source(source: RawSource) -> bool:
+    return (
+        source.candidate_origin == "community_search"
+        or source.metadata.get("community_evidence") is True
+        or isinstance(source.metadata.get("community_source_type"), str)
+    )
+
+
+def _community_origin_source_type(source: RawSource) -> str:
+    metadata_source_type = source.metadata.get("community_source_type")
+    if (
+        isinstance(metadata_source_type, str)
+        and metadata_source_type in COMMUNITY_ORIGIN_SOURCE_TYPES
+    ):
+        return metadata_source_type
+    if source.source_type in COMMUNITY_ORIGIN_SOURCE_TYPES:
+        return source.source_type
+    return "snippet_only"
 
 
 def snippet_only_source_from_candidate(

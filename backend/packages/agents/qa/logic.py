@@ -22,6 +22,7 @@ from packages.sources import (
     malformed_source_tokens,
     resolve_source_token,
     source_token_alias_map,
+    source_tokens,
 )
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
@@ -53,7 +54,15 @@ PERSONA_QUALITATIVE_SOURCE_TYPES = {
     "manual_note",
     "manual",
 }
-PERSONA_PUBLIC_SOURCE_TYPES = {"webpage_verified"}
+COMMUNITY_PUBLIC_SOURCE_TYPES = {
+    "community_forum",
+    "reddit_thread",
+    "github_discussion",
+    "github_issue",
+    "review_site",
+    "developer_blog",
+}
+PERSONA_PUBLIC_SOURCE_TYPES = {"webpage_verified", *COMMUNITY_PUBLIC_SOURCE_TYPES}
 PERSONA_SIGNAL_TERMS = (
     "persona",
     "target user",
@@ -414,6 +423,7 @@ class QualityAgentMixin:
         issues.extend(self._build_analyst_qa_issues(detail, missing_dimensions))
         issues.extend(self._build_phantom_citation_issues(detail))
         issues.extend(self._build_text_quality_issues(detail))
+        issues.extend(self._build_community_official_commitment_issues(detail))
         issues.extend(self._build_matrix_consistency_issues(detail))
         issues.extend(self._build_reflector_qa_issues(detail))
         return self._dedupe_qa_issues(issues)
@@ -526,6 +536,8 @@ class QualityAgentMixin:
             for source in detail.raw_sources
             if source.dimension in detail.plan.dimensions
             and source.source_type != "webpage_verified"
+            and source.source_type not in COMMUNITY_PUBLIC_SOURCE_TYPES
+            and not source.metadata.get("community_evidence")
             and source.url is not None
         ]
 
@@ -599,6 +611,72 @@ class QualityAgentMixin:
         issues.extend(self._build_source_quality_issues(detail))
         issues.extend(self._build_source_coverage_issues(detail, missing_dimensions))
         issues.extend(self._build_persona_evidence_strength_issues(detail, missing_dimensions))
+        issues.extend(self._build_community_attempt_issues(detail))
+        return issues
+
+    def _build_community_attempt_issues(self, detail: RunDetail) -> list[QCIssue]:
+        if detail.execution_mode != "real":
+            return []
+        if not self._settings.collector_community_enabled:
+            return []
+        if self._settings.collector_community_target_sources_per_branch <= 0:
+            return []
+        search_enabled = getattr(getattr(self, "_search", None), "is_enabled", True)
+        if callable(search_enabled):
+            search_enabled = search_enabled()
+        if not search_enabled:
+            return []
+        attempted = {
+            (
+                str(message.payload.get("competitor") or ""),
+                str(message.payload.get("dimension") or ""),
+            )
+            for message in detail.agent_messages
+            if message.message_type == "community_search_completed"
+            and isinstance(message.payload, dict)
+        }
+        issues: list[QCIssue] = []
+        for competitor in detail.plan.competitors:
+            for dimension in detail.plan.dimensions:
+                has_community_source = any(
+                    source.dimension == dimension
+                    and self._source_matches_competitor(source, competitor)
+                    and source.metadata.get("community_evidence")
+                    for source in detail.raw_sources
+                )
+                if has_community_source or (competitor, dimension) in attempted:
+                    continue
+                problem = (
+                    f"Community triangulation was not attempted for {competitor} / {dimension}."
+                )
+                issues.append(
+                    QCIssue(
+                        id=stable_prefixed_id(
+                            "qc-issue",
+                            "community-not-attempted",
+                            competitor,
+                            dimension,
+                            length=16,
+                        ),
+                        severity="warn",
+                        detected_by="coverage",
+                        target_agent="collector",
+                        target_subagent=dimension,
+                        target_competitor=competitor,
+                        field_path=(
+                            "agent_messages.community_search_completed"
+                            f"[{competitor}][{dimension}]"
+                        ),
+                        problem=problem,
+                        redo_scope=RedoScope(
+                            kind="collector",
+                            target_subagent=dimension,
+                            target_competitor=competitor,
+                            rationale=problem,
+                        ),
+                        self_found=False,
+                    )
+                )
         return issues
 
     def _build_source_quality_issues(self, detail: RunDetail) -> list[QCIssue]:
@@ -1265,6 +1343,170 @@ class QualityAgentMixin:
         issues.extend(self._build_report_text_quality_issues(detail))
         issues.extend(self._build_claim_text_quality_issues(detail))
         return issues
+
+    def _build_community_official_commitment_issues(
+        self,
+        detail: RunDetail,
+    ) -> list[QCIssue]:
+        source_by_id = {source.id: source for source in detail.raw_sources}
+        source_aliases = self._source_alias_map(detail)
+        issues: list[QCIssue] = []
+        for line_number, line in enumerate(detail.report_md.splitlines(), start=1):
+            normalized = line.casefold()
+            if not self._is_community_official_commitment_line(normalized):
+                continue
+            line_source_ids = [
+                source_id
+                for cited_id in source_tokens(line)
+                for source_id in [resolve_source_token(cited_id, source_aliases)]
+                if source_id is not None
+            ]
+            for source_id in line_source_ids:
+                source = source_by_id.get(source_id)
+                if source is None:
+                    continue
+                if not source.metadata.get("community_evidence"):
+                    continue
+                if source.metadata.get("official_commitment"):
+                    continue
+                if self._line_cites_scoped_official_source(
+                    line_source_ids,
+                    community_source=source,
+                    source_by_id=source_by_id,
+                ):
+                    continue
+                if self._community_source_has_official_confirmed_cluster(
+                    source,
+                    source_by_id=source_by_id,
+                ):
+                    continue
+                problem = (
+                    "Report presents a community observation as official commitment; "
+                    f"line {line_number} cites {source_id}."
+                )
+                issues.append(
+                    QCIssue(
+                        id=stable_prefixed_id(
+                            "qc-issue",
+                            "community-official-commitment",
+                            source_id,
+                            line_number,
+                            length=16,
+                        ),
+                        severity="blocker",
+                        detected_by="citation",
+                        target_agent="writer",
+                        field_path=f"report_md.line[{line_number}]",
+                        problem=problem,
+                        redo_scope=RedoScope(
+                            kind="writer_only",
+                            rationale=problem,
+                        ),
+                        self_found=False,
+                    )
+                )
+        return issues
+
+    def _line_cites_scoped_official_source(
+        self,
+        line_source_ids: list[str],
+        *,
+        community_source: RawSource,
+        source_by_id: dict[str, RawSource],
+    ) -> bool:
+        return any(
+            self._is_scoped_official_source(
+                source_by_id.get(source_id),
+                community_source=community_source,
+            )
+            for source_id in line_source_ids
+        )
+
+    def _community_source_has_official_confirmed_cluster(
+        self,
+        source: RawSource,
+        *,
+        source_by_id: dict[str, RawSource],
+    ) -> bool:
+        clusters = source.metadata.get("community_claim_clusters")
+        if not isinstance(clusters, list):
+            return False
+        for cluster in clusters:
+            if not isinstance(cluster, dict):
+                continue
+            if cluster.get("label") != "official_confirmed":
+                continue
+            official_source_ids = cluster.get("official_source_ids")
+            if not isinstance(official_source_ids, list):
+                continue
+            if any(
+                isinstance(official_source_id, str)
+                and self._is_scoped_official_source(
+                    source_by_id.get(official_source_id),
+                    community_source=source,
+                )
+                for official_source_id in official_source_ids
+            ):
+                return True
+        return False
+
+    def _is_scoped_official_source(
+        self,
+        source: RawSource | None,
+        *,
+        community_source: RawSource,
+    ) -> bool:
+        if source is None:
+            return False
+        if source.metadata.get("community_evidence"):
+            return False
+        return (
+            source.source_type == "webpage_verified"
+            and source.competitor == community_source.competitor
+            and source.dimension == community_source.dimension
+        )
+
+    def _is_community_official_commitment_line(self, normalized_line: str) -> bool:
+        if self._is_community_official_caveat(normalized_line):
+            return False
+        return any(
+            (
+                re.search(
+                    pattern,
+                    normalized_line,
+                )
+                is not None
+            )
+            for pattern in (
+                r"\bofficial\b.{0,80}\b(?:is|are|confirms?|confirmed)\b",
+                r"\bofficial\b.{0,80}:",
+                r"\bofficial\s+pricing\s*:",
+                r"\baccording to official\b.{0,80}",
+                r"\bofficial docs say\b",
+                r"\bofficial sources confirm\b",
+                r"\bofficially confirmed\b",
+                r"\bofficial commitment\b",
+            )
+        )
+
+    def _is_community_official_caveat(self, normalized_line: str) -> bool:
+        return any(
+            phrase in normalized_line
+            for phrase in (
+                "not official",
+                "no official confirmation",
+                "not an official",
+                "not an official commitment",
+                "unofficial",
+                "not officially confirmed",
+                "official sources were unavailable",
+                "official sources unavailable",
+                "official sources are unavailable",
+                "official source not found",
+                "no official evidence",
+                "without official evidence",
+            )
+        )
 
     def _build_report_text_quality_issues(self, detail: RunDetail) -> list[QCIssue]:
         issues: list[QCIssue] = []

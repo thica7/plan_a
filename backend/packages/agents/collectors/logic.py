@@ -2084,13 +2084,17 @@ class CollectorAgentMixin:
             source for source in sources if source.metadata.get("community_evidence")
         ]
         if not community_sources:
-            community_sources = await self._collect_community_sources_for_branch(
-                record,
-                detail,
-                dimension,
-                competitor,
-                context,
-            )
+            try:
+                community_sources = await self._collect_community_sources_for_branch(
+                    record,
+                    detail,
+                    dimension,
+                    competitor,
+                    context,
+                )
+            except Exception as exc:  # noqa: BLE001 - optional community search degrades.
+                collect_payload["community_error"] = str(exc)
+                community_sources = []
             for source in community_sources:
                 if not self._source_already_in_batch(source, sources):
                     sources.append(source)

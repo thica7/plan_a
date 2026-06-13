@@ -5,6 +5,10 @@ from packages.community.claims import (
     extract_community_claims_from_source,
 )
 from packages.community.models import CommunityClaim
+from packages.community.raw_sources import (
+    SNIPPET_ONLY_CONFIDENCE_CAP,
+    reclassify_community_source,
+)
 from packages.community.scoring import independent_domain_count
 from packages.schema.models import RawSource
 
@@ -67,6 +71,36 @@ def test_metadata_community_evidence_with_non_community_source_type_does_not_cra
     assert claims[0].normalized_value == "$20 per month"
     assert claims[0].source_type == "snippet_only"
     assert claims[0].is_snippet_only is True
+
+
+def test_reclassify_preserves_community_origin_when_final_url_is_not_community() -> None:
+    source = RawSource(
+        id="community-fetch-final-official",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.com/pricing",
+        snippet="Cursor pricing plans are listed on the official pricing page.",
+        content_hash="community-fetch-final-official-hash",
+        confidence=0.91,
+        candidate_origin="community_search",
+        candidate_confidence=0.62,
+        metadata={
+            "community_evidence": True,
+            "community_source_type": "reddit_thread",
+            "community_authority_signal": "user",
+        },
+    )
+
+    reclassified = reclassify_community_source(source, run_id="run-community-preserve")
+
+    assert reclassified.metadata["community_evidence"] is True
+    assert reclassified.metadata["official_commitment"] is False
+    assert reclassified.source_type != "webpage_verified"
+    assert reclassified.source_type == "reddit_thread"
+    assert reclassified.metadata["community_source_type"] == "reddit_thread"
+    assert reclassified.confidence <= SNIPPET_ONLY_CONFIDENCE_CAP
 
 
 def test_cluster_confidence_rises_with_independent_agreement() -> None:

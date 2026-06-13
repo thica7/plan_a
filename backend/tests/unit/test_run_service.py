@@ -1253,6 +1253,751 @@ def test_collect_qa_accepts_public_and_interview_persona_evidence() -> None:
     assert not [issue for issue in issues if "persona evidence is weak" in issue.problem]
 
 
+def test_persona_strength_accepts_community_public_signal() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-persona-strength",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-persona",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="reddit_thread",
+                title="Cursor adoption thread",
+                url="https://reddit.com/r/cursor/comments/adoption",
+                snippet="Developers and enterprise teams discuss onboarding and workflow fit.",
+                content_hash="hash",
+                confidence=0.68,
+                metadata={"community_evidence": True},
+            )
+        ],
+    )
+
+    issues = service._build_persona_evidence_strength_issues(detail, [])
+
+    assert issues == []
+
+
+def test_collect_qa_does_not_block_typed_community_sources_as_unverified() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-source-qa",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        agent_messages=[
+            AgentMessage(
+                id="msg-community-search",
+                run_id="run-community-source-qa",
+                from_agent="collector",
+                to_agent="collect_join",
+                message_type="community_search_completed",
+                payload_schema="CommunitySearchSummary",
+                payload={
+                    "competitor": "Cursor",
+                    "dimension": "pricing",
+                    "queries": ["Cursor pricing usage limit reddit AI coding assistants"],
+                    "query_count": 1,
+                    "candidate_count": 1,
+                    "candidate_ids": ["candidate-1"],
+                    "no_result": False,
+                },
+            )
+        ],
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+
+    assert not any("not fetched webpage evidence" in issue.problem for issue in issues)
+
+
+def test_qa_blocks_community_observation_written_as_official_commitment() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-official-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={
+                    "community_evidence": True,
+                    "community_claim_clusters": [
+                        {
+                            "label": "community_observed",
+                            "claim": "Community sources report pricing at $20 per month.",
+                            "source_ids": ["reddit-pricing"],
+                        }
+                    ],
+                },
+            )
+        ],
+        report_md="## Pricing\nOfficial Cursor pricing is $20 per month. [source:reddit-pricing]",
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert any(
+        issue.severity == "blocker"
+        and "community observation as official" in issue.problem
+        for issue in issues
+    )
+
+
+def test_qa_allows_community_official_commitment_when_same_line_cites_official_source() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-same-line",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="community-hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            ),
+            RawSource(
+                id="cursor-official-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="official-hash",
+                confidence=0.9,
+            ),
+        ],
+        report_md=(
+            "## Pricing\n"
+            "Official Cursor pricing is $20 per month. "
+            "[source:reddit-pricing] [source:cursor-official-pricing]"
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
+def test_qa_allows_official_confirmed_community_cluster() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-cluster",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="community-hash",
+                confidence=0.62,
+                metadata={
+                    "community_evidence": True,
+                    "community_claim_clusters": [
+                        {
+                            "label": "official_confirmed",
+                            "claim": "Community and official sources report $20 per month.",
+                            "source_ids": ["reddit-pricing"],
+                            "official_source_ids": ["cursor-official-pricing"],
+                        }
+                    ],
+                },
+            ),
+            RawSource(
+                id="cursor-official-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="official-hash",
+                confidence=0.9,
+            ),
+        ],
+        report_md="## Pricing\nOfficial Cursor pricing is $20 per month. [source:reddit-pricing]",
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
+def test_qa_warns_when_community_triangulation_was_not_attempted() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx-key",
+        )
+    )
+    detail = RunDetail(
+        id="run-community-missing-attempt",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-official-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor pricing plans are available.",
+                content_hash="hash",
+                confidence=0.82,
+            )
+        ],
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert any(
+        issue.severity == "warn"
+        and "Community triangulation was not attempted" in issue.problem
+        for issue in issues
+    )
+
+
+def test_qa_allows_community_observation_caveated_as_not_official() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-caveat",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md=(
+            "## Pricing\n"
+            "Community observation only, not official confirmation. [source:reddit-pricing]"
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
+def test_qa_allows_community_observation_when_official_sources_unavailable() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-unavailable",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md=(
+            "## Pricing\n"
+            "Official sources were unavailable; community users report Cursor Pro "
+            "at $20 per month. [source:reddit-pricing]"
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
+def test_qa_blocks_community_official_commitment_with_colon_phrasing() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-colon-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md="## Pricing\nOfficial Cursor pricing: $20 per month. [source:reddit-pricing]",
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert any(
+        issue.severity == "blocker"
+        and "community observation as official" in issue.problem
+        for issue in issues
+    )
+
+
+def test_qa_blocks_community_official_commitment_with_according_to_phrasing() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-according-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md=(
+            "## Pricing\n"
+            "According to official pricing: $20 per month for Cursor Pro. "
+            "[source:reddit-pricing]"
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert any(
+        issue.severity == "blocker"
+        and "community observation as official" in issue.problem
+        for issue in issues
+    )
+
+
+def test_qa_blocks_community_official_commitment_via_resolved_source_alias() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-alias-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md=(
+            "## Pricing\n"
+            "Official Cursor pricing is $20 per month. [source:reddit-pricing#chunk]"
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert any(
+        issue.severity == "blocker"
+        and "community observation as official" in issue.problem
+        for issue in issues
+    )
+
+
+def test_qa_does_not_warn_community_attempt_when_community_collection_disabled() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            collector_community_enabled=False,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-disabled-attempt",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-official-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor pricing plans are available.",
+                content_hash="hash",
+                confidence=0.82,
+            )
+        ],
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any(
+        issue.severity == "warn"
+        and "Community triangulation was not attempted" in issue.problem
+        for issue in issues
+    )
+
+
+def test_qa_does_not_warn_community_attempt_when_community_target_zero() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            collector_community_target_sources_per_branch=0,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-target-zero-attempt",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-official-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor pricing plans are available.",
+                content_hash="hash",
+                confidence=0.82,
+            )
+        ],
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any(
+        issue.severity == "warn"
+        and "Community triangulation was not attempted" in issue.problem
+        for issue in issues
+    )
+
+
+def test_collect_qa_does_not_emit_writer_community_official_commitment() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-collect-no-writer-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md="## Pricing\nOfficial Cursor pricing is $20 per month. [source:reddit-pricing]",
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
 def test_feature_collection_uses_known_official_source_registry() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -2902,7 +3647,10 @@ def test_comparison_matrix_pricing_confidence_signal_cannot_break_structural_tie
     service._merge_kb_slice(
         detail,
         "pricing",
-        {"A": ["A has pricing evidence."], "B": ["B has pricing evidence."]},
+        {
+            "A": ["A has pricing evidence. [source:pricing-a]"],
+            "B": ["B has pricing evidence. [source:pricing-b]"],
+        },
     )
 
     matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
@@ -6530,6 +7278,88 @@ async def test_collector_adds_community_sources_even_when_official_sources_exist
     assert "webpage_verified" in source_types
     assert {"reddit_thread", "community_forum"} & source_types
     assert any(source.metadata.get("community_evidence") for source in record.detail.raw_sources)
+
+
+@pytest.mark.asyncio
+async def test_collector_preserves_official_sources_when_community_search_fails() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_target_verified_sources_per_branch=1,
+            collector_search_max_results=4,
+            collector_community_enabled=True,
+            collector_community_queries_per_branch=1,
+            collector_community_target_sources_per_branch=1,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    official_source = RawSource(
+        id="cursor-official-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor official pricing",
+        url="https://cursor.com/pricing",
+        snippet="Cursor Pro is $20 per month.",
+        content_hash="cursor-official-pricing-hash",
+        confidence=0.95,
+    )
+
+    async def fake_collect_with_web_search(  # noqa: ANN001
+        record,
+        dimension,
+        competitor,
+        context,
+        *,
+        seed_sources=None,
+        include_official=True,
+    ) -> list[RawSource]:
+        assert dimension == "pricing"
+        assert competitor == "Cursor"
+        assert include_official is True
+        return [official_source]
+
+    async def fail_community_collection(  # noqa: ANN001
+        record,
+        detail,
+        dimension,
+        competitor,
+        context,
+    ) -> list[RawSource]:
+        raise RuntimeError("community search down")
+
+    service._collect_competitor_with_web_search = fake_collect_with_web_search  # type: ignore[method-assign]
+    service._collect_community_sources_for_branch = fail_community_collection  # type: ignore[method-assign]
+
+    await service._real_collector_branch_step(record, "pricing", "Cursor")
+
+    assert len(record.detail.raw_sources) == 1
+    assert record.detail.raw_sources[0].source_type == "webpage_verified"
+    assert str(record.detail.raw_sources[0].url) == "https://cursor.com/pricing"
+    collector_done = next(
+        event
+        for event in reversed(service.get_trace(detail.id) or [])
+        if event.type == "node_completed" and event.agent == "collector"
+    )
+    assert collector_done.payload["collect"]["community_error"] == "community search down"
 
 
 @pytest.mark.asyncio
