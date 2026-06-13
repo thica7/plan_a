@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -354,6 +355,7 @@ class WriterAgentMixin:
                             f"Confirmed Memory Preferences:\n{memory_context}\n"
                             f"Layer Report Context: {layer_context}\n"
                             f"{grounding_prompt}\n"
+                            f"{self._writer_community_policy_text()}\n"
                             f"Writer Context JSON: {writer_context_json}\n\n"
                             f"Required sections:\n{required_sections}\n"
                             "Target 8,500-10,000 characters for the first draft. Use about "
@@ -523,9 +525,19 @@ class WriterAgentMixin:
                 "sections or include commentary outside the section.\n"
                 "Use the exact requested level-2 heading for each returned section.\n"
                 "You must preserve existing [source:ID] syntax.\n"
+                f"{self._writer_community_policy_text()}\n"
                 f"Writer Context JSON: {writer_context_json}\n\n"
                 f"Previous report:\n{previous_report}"
             ),
+        )
+
+    def _writer_community_policy_text(self) -> str:
+        return (
+            "Official facts vs community observations: official docs may support official "
+            "commitments; community_triangulated, community_observed, and "
+            "community_contested clusters may support actual-use risks, user evaluation, "
+            "and pricing caveats. Do not present community observations as official "
+            "commitments unless an official source also supports the same claim."
         )
 
     def _writer_section_heading_instruction(self, detail: RunDetail, section: str) -> str:
@@ -1549,6 +1561,12 @@ class WriterAgentMixin:
                 "competitor and dimension with cited cells."
             ),
         ]
+        if any(source.metadata.get("community_evidence") for source in detail.raw_sources):
+            analysis_sections.append(
+                f"{report_label(output_language, 'community_evidence_triangulation')}: "
+                "separate official facts from community observations, contested claims, "
+                "and actual-use risks."
+            )
         layer = detail.plan.competitor_layer
         if layer == "L1":
             layer_sections = [
@@ -1713,8 +1731,110 @@ class WriterAgentMixin:
             normalized_fields = normalized_fields_from_source(source)
             if normalized_fields:
                 digest["normalized_fields"] = normalized_fields
+            if source.metadata.get("community_evidence"):
+                digest["community_evidence"] = True
+                community_source_type = self._writer_metadata_string(
+                    source.metadata.get("community_source_type")
+                )
+                if community_source_type is not None:
+                    digest["community_source_type"] = community_source_type
+                community_authority_signal = self._writer_metadata_string(
+                    source.metadata.get("community_authority_signal")
+                )
+                if community_authority_signal is not None:
+                    digest["community_authority_signal"] = community_authority_signal
+                digest["official_commitment"] = bool(
+                    source.metadata.get("official_commitment", False)
+                )
+                clusters = self._writer_community_cluster_list_digest(
+                    source.metadata.get("community_claim_clusters")
+                )
+                if clusters:
+                    digest["community_claim_clusters"] = clusters
             digests.append(digest)
         return digests
+
+    def _writer_metadata_string(self, value: object, limit: int = 80) -> str | None:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        return self._trim_sentence(value, limit)
+
+    def _writer_community_cluster_list_digest(
+        self,
+        clusters: object,
+    ) -> list[dict[str, object]]:
+        if not isinstance(clusters, list):
+            return []
+        digests: list[dict[str, object]] = []
+        for cluster in clusters:
+            if not isinstance(cluster, Mapping):
+                continue
+            digest = self._writer_community_cluster_digest(cluster)
+            if digest:
+                digests.append(digest)
+            if len(digests) >= 5:
+                break
+        return digests
+
+    def _writer_community_cluster_digest(
+        self,
+        cluster: Mapping[str, object],
+    ) -> dict[str, object]:
+        digest: dict[str, object] = {}
+        for key, limit in (
+            ("kind", 80),
+            ("label", 80),
+            ("claim", 180),
+            ("normalized_value", 120),
+        ):
+            value = cluster.get(key)
+            if isinstance(value, str) and value.strip():
+                digest[key] = self._trim_sentence(value, limit)
+        confidence = self._writer_cluster_confidence(cluster.get("confidence"))
+        if confidence is not None:
+            digest["confidence"] = confidence
+        for key, count, limit in (
+            ("source_ids", 6, 80),
+            ("official_source_ids", 6, 80),
+            ("evidence", 3, 180),
+            ("conflict_values", 5, 120),
+        ):
+            values = self._writer_string_list_digest(
+                cluster.get(key),
+                count=count,
+                limit=limit,
+            )
+            if values:
+                digest[key] = values
+        return digest
+
+    def _writer_cluster_confidence(self, value: object) -> float | None:
+        if isinstance(value, bool):
+            return None
+        try:
+            confidence = float(value)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(confidence):
+            return None
+        return round(confidence, 3)
+
+    def _writer_string_list_digest(
+        self,
+        values: object,
+        *,
+        count: int,
+        limit: int,
+    ) -> list[str]:
+        if not isinstance(values, list):
+            return []
+        digest: list[str] = []
+        for value in values:
+            if isinstance(value, str) and value.strip():
+                digest.append(self._trim_sentence(value, limit))
+            if len(digest) >= count:
+                break
+        return digest
 
     def _writer_competitor_digest(self, detail: RunDetail, competitor: str) -> dict[str, object]:
         kb = detail.competitor_kbs.get(competitor)

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 from datetime import datetime
 
@@ -5242,6 +5243,66 @@ async def test_writer_section_repair_prompt_includes_localized_heading() -> None
 
 
 @pytest.mark.asyncio
+async def test_writer_section_repair_prompt_includes_community_policy() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    captured_user = ""
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal captured_user
+        captured_user = user
+        return (
+            "## User Review Themes\n"
+            "- Community caveats are directional. [source:community-pricing-a]"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer section repair community policy",
+            competitors=["A", "B"],
+            dimensions=["pricing"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="community-pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="reddit_thread",
+            title="A pricing community thread",
+            url="https://reddit.com/r/a/comments/pricing",
+            snippet="Community users report practical pricing caveats and usage limits.",
+            content_hash="community-pricing-a-hash",
+            confidence=0.68,
+            metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+        )
+    ]
+
+    await service._writer_section_repair_markdown(
+        record,
+        sections=["review_theme_summary"],
+        previous_report="# Existing report",
+    )
+
+    assert "Official facts vs community observations" in captured_user
+    assert "Do not present community observations as official commitments" in captured_user
+
+
+@pytest.mark.asyncio
 async def test_writer_full_rewrite_rejects_collapsed_review_section_when_previous_is_protectable() -> None:  # noqa: E501
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -5822,6 +5883,7 @@ async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
             competitors=["A", "B"],
             dimensions=["pricing"],
             execution_mode="real",
+            output_language="en-US",
         )
     )
     record = service._runs[detail.id]
@@ -5837,7 +5899,19 @@ async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
             snippet=long_snippet,
             content_hash="pricing-a-hash",
             confidence=0.95,
-        )
+        ),
+        RawSource(
+            id="community-pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="reddit_thread",
+            title="A pricing community thread",
+            url="https://reddit.com/r/a/comments/pricing",
+            snippet="Community users report practical pricing caveats and usage limits.",
+            content_hash="community-pricing-a-hash",
+            confidence=0.68,
+            metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+        ),
     ]
     record.detail.comparison_matrix = ComparisonMatrix(
         competitors=["A", "B"],
@@ -5868,6 +5942,9 @@ async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
     assert "Competitor Knowledge Schema JSON:" not in captured_user
     assert len(captured_user) < 16500
     assert captured_user.count("long-context-token") < 80
+    assert "Official facts vs community observations" in captured_user
+    assert "Do not present community observations as official commitments" in captured_user
+    assert "Community Evidence Triangulation" in captured_user
     assert record.detail.agent_messages[-1].payload["writer_mode"] == "real LLM call"
 
 
@@ -9297,6 +9374,133 @@ def test_writer_source_digest_exposes_normalized_fields() -> None:
     assert "$20/month" in str(digest[0]["snippet"])
     assert "normalized_fields" in digest[0]
     assert "snippet_quality" not in digest[0]
+
+
+def test_writer_source_digest_exposes_community_metadata() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    source = RawSource(
+        id="reddit-cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="reddit_thread",
+        title="Cursor pricing reddit",
+        url="https://reddit.com/r/cursor/comments/abc",
+        snippet="Cursor Pro is $20 per month.",
+        content_hash="hash",
+        confidence=0.62,
+        metadata={
+            "community_evidence": True,
+            "community_source_type": "reddit_thread",
+            "community_authority_signal": "user",
+            "official_commitment": False,
+            "community_claim_clusters": [
+                {
+                    "kind": "pricing",
+                    "label": "community_observed",
+                    "claim": "Community sources report pricing at $20 per month.",
+                    "source_ids": ["reddit-cursor-pricing"],
+                    "confidence": 0.62,
+                    "evidence": ["Cursor Pro is $20 per month."],
+                }
+            ],
+        },
+    )
+
+    digest = service._writer_source_digest([source])
+
+    assert digest[0]["source_type"] == "reddit_thread"
+    assert digest[0]["community_evidence"] is True
+    assert digest[0]["official_commitment"] is False
+    assert digest[0]["community_claim_clusters"][0]["label"] == "community_observed"
+
+
+def test_writer_source_digest_projects_community_clusters_compactly() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    long_claim = "Community users report pricing caveats. " + ("claim-detail " * 80)
+    long_evidence = "A long user quote about practical pricing caveats. " + (
+        "evidence-detail " * 80
+    )
+    long_authority_signal = "community moderator with repeated product usage " + (
+        "authority-detail " * 20
+    )
+    clusters = [
+        {
+            "kind": "pricing",
+            "label": "community_observed",
+            "claim": long_claim,
+            "source_ids": [f"community-source-{index}" for index in range(8)],
+            "official_source_ids": [f"official-source-{index}" for index in range(8)],
+            "confidence": "0.6789",
+            "evidence": [long_evidence for _ in range(5)],
+            "normalized_value": "$20/month",
+            "conflict_values": [f"conflict-{index}" for index in range(8)],
+            "debug_object": object(),
+        },
+        *(
+            {
+                "kind": "pricing",
+                "label": "community_contested",
+                "claim": f"Cluster {index} claim",
+                "source_ids": [f"community-source-{index}"],
+                "confidence": 0.5,
+                "evidence": [f"Evidence {index}"],
+            }
+            for index in range(1, 7)
+        ),
+    ]
+    source = RawSource(
+        id="community-pricing-a",
+        competitor="A",
+        dimension="pricing",
+        source_type="reddit_thread",
+        title="A pricing community thread",
+        url="https://reddit.com/r/a/comments/pricing",
+        snippet="Community users report practical pricing caveats and usage limits.",
+        content_hash="community-pricing-a-hash",
+        confidence=0.68,
+        metadata={
+            "community_evidence": True,
+            "community_source_type": object(),
+            "community_authority_signal": long_authority_signal,
+            "community_claim_clusters": clusters,
+        },
+    )
+
+    digest = service._writer_source_digest([source])
+    projected_clusters = digest[0]["community_claim_clusters"]
+
+    json.dumps(digest, ensure_ascii=False)
+    assert "community_source_type" not in digest[0]
+    assert len(digest[0]["community_authority_signal"]) <= 83
+    assert len(projected_clusters) == 5
+    assert "debug_object" not in projected_clusters[0]
+    assert len(projected_clusters[0]["claim"]) <= 183
+    assert len(projected_clusters[0]["source_ids"]) == 6
+    assert len(projected_clusters[0]["official_source_ids"]) == 6
+    assert projected_clusters[0]["confidence"] == 0.679
+    assert len(projected_clusters[0]["evidence"]) == 3
+    assert all(len(item) <= 183 for item in projected_clusters[0]["evidence"])
+    assert len(projected_clusters[0]["conflict_values"]) == 5
 
 
 def test_deterministic_feature_payload_uses_shared_taxonomy() -> None:
