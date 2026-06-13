@@ -4424,7 +4424,8 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
         winner_by_dimension={"pricing": "A"},
         summary=["A has transparent pricing."],
     )
-    record.detail.report_md = "Previous report. [source:pricing-1]"
+    previous_report = "Previous report. [source:pricing-1]"
+    record.detail.report_md = previous_report
     record.detail.revisions = [
         RevisionRecord(
             id="rev-1", iteration=1, stage="collector", issue_count_before=2, issue_count_after=1
@@ -4433,7 +4434,9 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
 
     await service._real_writer_step(record)
 
-    assert record.detail.report_md == "Previous report. [source:pricing-1]"
+    assert record.detail.report_md.startswith(previous_report)
+    assert record.detail.report_md != previous_report
+    assert "## Executive Takeaway" in record.detail.report_md
     assert record.detail.metrics.revision_count == 1
     assert (
         record.detail.agent_messages[-1].payload["writer_mode"]
@@ -4969,10 +4972,15 @@ async def test_writer_section_repair_failure_reports_attempted_metadata() -> Non
         },
     )
 
+    expected_report = service._preserve_hardened_previous_report(
+        record.detail,
+        previous_report,
+    )
+
     await service._real_writer_step(record)
 
     payload = record.detail.agent_messages[-1].payload
-    assert record.detail.report_md == previous_report
+    assert record.detail.report_md == expected_report
     assert payload["writer_mode"] == "preserved previous report after writer error"
     assert payload["writer_repair_mode"] == "section"
     assert payload["writer_repair_sections"] == ["review_theme_summary"]
@@ -5292,7 +5300,7 @@ async def test_writer_upstream_changed_allows_full_rewrite_with_guard_metadata()
 
 
 @pytest.mark.asyncio
-async def test_writer_upstream_changed_accepts_thinner_full_rewrite() -> None:
+async def test_writer_upstream_changed_rejects_thinner_full_rewrite() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -5330,7 +5338,8 @@ async def test_writer_upstream_changed_accepts_thinner_full_rewrite() -> None:
     )
     record = service._runs[detail.id]
     record.detail.raw_sources = _writer_repair_sources()
-    record.detail.report_md = _writer_repair_protectable_report()
+    previous_report = _writer_repair_protectable_report()
+    record.detail.report_md = previous_report
     scope = RedoScope(
         kind="collector",
         target_subagent="pricing",
@@ -5348,14 +5357,24 @@ async def test_writer_upstream_changed_accepts_thinner_full_rewrite() -> None:
         issue_count_before=1,
     )
 
+    expected_report = service._preserve_hardened_previous_report(
+        record.detail,
+        previous_report,
+    )
+
     await service._real_writer_step(record)
 
     payload = record.detail.agent_messages[-1].payload
-    assert "Cursor has updated pricing transparency" in record.detail.report_md
-    assert "Customer theme: pricing clarity supports fast evaluation" not in record.detail.report_md
+    assert record.detail.report_md == expected_report
+    assert "Cursor has updated pricing transparency" not in record.detail.report_md
+    assert "Customer theme: pricing clarity supports fast evaluation" in record.detail.report_md
+    assert (
+        payload["writer_mode"]
+        == "preserved previous report after writer anti-regression"
+    )
     assert payload["writer_repair_mode"] == "full"
     assert payload["previous_report_protected"] is True
-    assert payload["anti_regression_reason"] is None
+    assert payload["anti_regression_reason"] is not None
 
 
 @pytest.mark.asyncio

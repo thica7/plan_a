@@ -14,6 +14,7 @@ from packages.schema.models import QCIssue
 WriterRepairMode = Literal["line", "section", "full"]
 
 LINE_REPAIR_MAX_ISSUES = 5
+UPSTREAM_SECTION_REPAIR_MAX_SECTIONS = 2
 PROTECTABLE_MINIMUMS = {
     "report_structure_score": 0.7,
     "decision_summary_section_score": 1.0,
@@ -87,12 +88,7 @@ def build_writer_repair_plan(
 ) -> WriterRepairPlan:
     protectable = _previous_report_is_protectable(detail)
     if upstream_data_changed:
-        return WriterRepairPlan(
-            mode="full",
-            reason="upstream data changed; full rewrite allowed",
-            previous_report_protectable=protectable,
-            anti_regression_required=False,
-        )
+        return _upstream_data_changed_repair_plan(detail, issues, protectable)
     if not protectable:
         return WriterRepairPlan(
             mode="full",
@@ -126,6 +122,35 @@ def build_writer_repair_plan(
     return WriterRepairPlan(
         mode="full",
         reason="writer findings are broad or unmapped; full rewrite required",
+        previous_report_protectable=True,
+        anti_regression_required=True,
+    )
+
+
+def _upstream_data_changed_repair_plan(
+    detail: RunDetail,
+    issues: list[QCIssue],
+    protectable: bool,
+) -> WriterRepairPlan:
+    if not protectable:
+        return WriterRepairPlan(
+            mode="full",
+            reason="upstream data changed; previous report is not protectable",
+            previous_report_protectable=False,
+            anti_regression_required=False,
+        )
+    sections = _target_sections(issues)
+    if sections and len(sections) <= UPSTREAM_SECTION_REPAIR_MAX_SECTIONS:
+        return WriterRepairPlan(
+            mode="section",
+            reason="upstream data changed; scoped section repair selected",
+            previous_report_protectable=True,
+            sections=sections,
+            anti_regression_required=True,
+        )
+    return WriterRepairPlan(
+        mode="full",
+        reason="upstream data changed; broad rewrite required with anti-regression",
         previous_report_protectable=True,
         anti_regression_required=True,
     )
@@ -294,9 +319,24 @@ def _target_sections(issues: list[QCIssue]) -> list[str]:
             if value
         ).casefold()
         for section_key, hints in SECTION_REPAIR_HINTS.items():
-            if section_key not in sections and any(hint.casefold() in haystack for hint in hints):
+            if section_key not in sections and any(
+                _section_hint_matches(haystack, hint) for hint in hints
+            ):
                 sections.append(section_key)
     return sections
+
+
+def _section_hint_matches(haystack: str, hint: str) -> bool:
+    normalized_hint = hint.casefold()
+    if re.fullmatch(r"[a-z0-9]{1,3}", normalized_hint):
+        return (
+            re.search(
+                rf"(?<![a-z0-9]){re.escape(normalized_hint)}(?![a-z0-9])",
+                haystack,
+            )
+            is not None
+        )
+    return normalized_hint in haystack
 
 
 def _find_section(

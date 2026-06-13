@@ -41,15 +41,68 @@ def test_writer_repair_requires_full_rewrite_for_poor_report() -> None:
     assert "report is not protectable" in plan.reason
 
 
-def test_writer_repair_upstream_changed_allows_full_without_anti_regression() -> None:
-    detail = _detail(report_md=_protectable_report())
-    issues = [_report_line_issue(line_number=8, problem="stale pricing evidence")]
+def test_upstream_data_changed_uses_section_repair_only_for_clean_section_mapping() -> None:
+    detail = _detail(report_md=_protectable_report()).model_copy(
+        update={
+            "id": "run-routing",
+            "topic": "AI coding",
+            "plan": AnalysisPlan(
+                topic="AI coding",
+                competitors=["Cursor"],
+                dimensions=["pricing", "persona"],
+            ),
+        }
+    )
+    issue = QCIssue(
+        id="issue-review",
+        severity="warn",
+        detected_by="reflector",
+        target_agent="collector",
+        target_subagent="persona",
+        field_path="reflections[-1].coverage_gaps[0]",
+        problem="persona survey and interview review themes need refresh.",
+        redo_scope=RedoScope(
+            kind="collector",
+            target_subagent="persona",
+            rationale="refresh persona",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=True)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["review_theme_summary"]
+    assert plan.anti_regression_required is True
+
+
+def test_upstream_data_changed_uses_full_rewrite_for_broad_or_unmapped_issues() -> None:
+    detail = _detail(report_md=_protectable_report()).model_copy(
+        update={
+            "id": "run-routing-broad",
+            "topic": "AI coding",
+            "plan": AnalysisPlan(
+                topic="AI coding",
+                competitors=["Cursor"],
+                dimensions=["pricing", "feature"],
+            ),
+        }
+    )
+    issues = [
+        QCIssue(
+            id="issue-one",
+            severity="blocker",
+            detected_by="schema",
+            target_agent="analyst",
+            field_path="competitor_knowledge",
+            problem="Multiple structured slices changed.",
+            redo_scope=RedoScope(kind="analyst", rationale="broad refresh"),
+        )
+    ]
 
     plan = build_writer_repair_plan(detail, issues, upstream_data_changed=True)
 
     assert plan.mode == "full"
-    assert plan.previous_report_protectable is True
-    assert plan.anti_regression_required is False
+    assert plan.anti_regression_required is True
 
 
 def test_writer_repair_maps_thin_competitive_findings_to_section_repair() -> None:
