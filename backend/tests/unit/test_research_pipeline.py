@@ -8,6 +8,7 @@ from packages.research.capture import CaptureCache, capture_candidate, select_ca
 from packages.research.capture.policy import (
     capture_failure_reason,
     capture_rejection_reason,
+    fallback_candidate_reason,
     invalid_candidate_reason,
 )
 from packages.research.discovery import (
@@ -133,6 +134,33 @@ def test_search_candidate_confidence_requires_competitor_relevance() -> None:
     )
 
     assert candidates[0].confidence < 0.5
+
+
+def test_community_search_reddit_candidate_keeps_community_confidence() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agent",
+        competitor="Cursor",
+        dimension="pricing",
+    )
+
+    candidates = search_result_candidates(
+        brief,
+        [
+            SearchResult(
+                title="Cursor pricing reddit",
+                url="https://www.reddit.com/r/cursor/comments/abc",
+                snippet="Cursor Pro users discuss the $20 per month plan and usage limits.",
+            )
+        ],
+        origin="community_search",
+        query="Cursor pricing reddit user reports",
+    )
+
+    candidate = candidates[0]
+    assert candidate.origin == "community_search"
+    assert candidate.confidence == 0.62
+    assert fallback_candidate_reason(candidate) == ""
 
 
 def test_capture_selection_defers_low_confidence_homepage_candidates() -> None:

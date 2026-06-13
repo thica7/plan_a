@@ -11,6 +11,7 @@ CandidateOrigin = Literal[
     "trusted_registry",
     "perplexity",
     "web_search",
+    "community_search",
     "homepage_derived",
     "llm_fallback",
     "manual",
