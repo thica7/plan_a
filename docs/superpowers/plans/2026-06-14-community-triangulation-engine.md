@@ -66,6 +66,9 @@
   - Expose community source metadata and claim clusters in the writer context.
   - Add required report wording for official facts versus community observations.
 
+- Modify `backend/packages/i18n/language.py`
+  - Add the localized `community_evidence_triangulation` report label used by writer and report-quality checks.
+
 - Modify `backend/packages/agents/qa/logic.py`
   - Treat community source types as public persona/review signals.
   - Warn when community triangulation is skipped for official gaps.
@@ -816,7 +819,7 @@ def test_cluster_confidence_rises_with_independent_agreement() -> None:
     ]
 
 
-def test_cluster_labels_conflicting_prices_as_contested() -> None:
+def test_cluster_keeps_distinct_pricing_values_separate() -> None:
     sources = [
         _source("reddit-cursor-20", "reddit_thread", "Cursor Pro is $20 per month."),
         _source("forum-cursor-25", "community_forum", "Cursor Pro is $25 per month."),
@@ -829,10 +832,12 @@ def test_cluster_labels_conflicting_prices_as_contested() -> None:
 
     clusters = cluster_community_claims(claims)
 
-    assert len(clusters) == 1
-    assert clusters[0].label == "community_contested"
-    assert clusters[0].confidence < 0.75
-    assert clusters[0].conflict_values == ["$20 per month", "$25 per month"]
+    assert [cluster.normalized_value for cluster in clusters] == [
+        "$20 per month",
+        "$25 per month",
+    ]
+    assert all(cluster.label == "community_observed" for cluster in clusters)
+    assert all(cluster.conflict_values == [] for cluster in clusters)
 
 
 def test_single_snippet_only_source_is_capped() -> None:
@@ -966,14 +971,14 @@ def extract_community_claims_from_source(source: RawSource) -> list[CommunityCla
 
 
 def cluster_community_claims(claims: list[CommunityClaim]) -> list[CommunityClaimCluster]:
-    grouped: dict[tuple[str, str, str], list[CommunityClaim]] = defaultdict(list)
+    grouped: dict[tuple[str, str, str, str], list[CommunityClaim]] = defaultdict(list)
     for claim in claims:
-        grouped[(claim.competitor, claim.dimension, claim.kind)].append(claim)
+        grouped[_cluster_key(claim)].append(claim)
 
     clusters: list[CommunityClaimCluster] = []
-    for (competitor, dimension, kind), items in grouped.items():
+    for (competitor, dimension, kind, key_value), items in grouped.items():
         values = sorted({item.normalized_value for item in items if item.normalized_value})
-        contested = len(values) > 1 and kind in {"pricing", "usage_limit"}
+        contested = len(values) > 1 and not key_value
         if contested:
             cluster_items = items
             normalized_value = ""
@@ -1012,6 +1017,13 @@ def cluster_community_claims(claims: list[CommunityClaim]) -> list[CommunityClai
         clusters,
         key=lambda item: (item.competitor, item.dimension, item.kind, item.normalized_value),
     )
+
+
+def _cluster_key(claim: CommunityClaim) -> tuple[str, str, str, str]:
+    key_value = ""
+    if claim.kind in {"pricing", "usage_limit"} and claim.normalized_value:
+        key_value = claim.normalized_value
+    return (claim.competitor, claim.dimension, claim.kind, key_value)
 
 
 def _pricing_claims(source: RawSource, text: str) -> list[CommunityClaim]:
@@ -2512,6 +2524,7 @@ git commit -m "feat: annotate community claim clusters"
 ### Task 7: Writer Context And Report Contract
 
 **Files:**
+- Modify: `backend/packages/i18n/language.py`
 - Modify: `backend/packages/agents/writer/logic.py`
 - Modify: `backend/tests/unit/test_run_service.py`
 
@@ -2569,7 +2582,24 @@ def test_writer_source_digest_exposes_community_metadata() -> None:
 
 - [ ] **Step 2: Add failing writer prompt contract test**
 
-In the existing writer prompt test that captures `captured_user`, add these assertions:
+In `test_writer_uses_compact_context_package_for_llm_prompt`, add a second raw source to `record.detail.raw_sources` so the conditional community report section is required:
+
+```python
+        RawSource(
+            id="community-pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="reddit_thread",
+            title="A pricing community thread",
+            url="https://reddit.com/r/a/comments/pricing",
+            snippet="Community users report practical pricing caveats and usage limits.",
+            content_hash="community-pricing-a-hash",
+            confidence=0.68,
+            metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+        ),
+```
+
+Then add these assertions after the existing `captured_user` assertions:
 
 ```python
     assert "Official facts vs community observations" in captured_user
@@ -2606,18 +2636,32 @@ In `_writer_source_digest()` in `backend/packages/agents/writer/logic.py`, after
                     digest["community_claim_clusters"] = clusters[:5]
 ```
 
-- [ ] **Step 5: Add writer report section requirement**
+- [ ] **Step 5: Add localized report label**
+
+In `backend/packages/i18n/language.py`, add this key to both `REPORT_LABELS` dictionaries:
+
+```python
+        "community_evidence_triangulation": "\u793e\u533a\u8bc1\u636e\u4e09\u89d2\u9a8c\u8bc1",
+```
+
+```python
+        "community_evidence_triangulation": "Community Evidence Triangulation",
+```
+
+- [ ] **Step 6: Add writer report section requirement**
 
 In `_writer_required_sections()` in `backend/packages/agents/writer/logic.py`, add this section to the core analysis layer when any raw source has `metadata["community_evidence"]`:
 
 ```python
         if any(source.metadata.get("community_evidence") for source in detail.raw_sources):
             analysis_sections.append(
-                "Community Evidence Triangulation: separate official facts from community observations, contested claims, and actual-use risks."
+                f"{report_label(output_language, 'community_evidence_triangulation')}: "
+                "separate official facts from community observations, contested claims, "
+                "and actual-use risks."
             )
 ```
 
-- [ ] **Step 6: Add prompt policy language**
+- [ ] **Step 7: Add prompt policy language**
 
 In the writer user prompt where required sections and writer context are sent, add this sentence near the existing evidence policy text:
 
@@ -2625,7 +2669,7 @@ In the writer user prompt where required sections and writer context are sent, a
                             "Official facts vs community observations: official docs may support official commitments; community_triangulated, community_observed, and community_contested clusters may support actual-use risks, user evaluation, and pricing caveats. Do not present community observations as official commitments unless an official source also supports the same claim.\n"
 ```
 
-- [ ] **Step 7: Run writer tests**
+- [ ] **Step 8: Run writer tests**
 
 Run:
 
@@ -2635,22 +2679,22 @@ D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test
 
 Expected: PASS.
 
-- [ ] **Step 8: Run ruff**
+- [ ] **Step 9: Run ruff**
 
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\agents\writer\logic.py backend\tests\unit\test_run_service.py
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\i18n\language.py backend\packages\agents\writer\logic.py backend\tests\unit\test_run_service.py
 ```
 
 Expected: `All checks passed!`
 
-- [ ] **Step 9: Commit Task 7**
+- [ ] **Step 10: Commit Task 7**
 
 Run:
 
 ```powershell
-git add backend/packages/agents/writer/logic.py backend/tests/unit/test_run_service.py
+git add backend/packages/i18n/language.py backend/packages/agents/writer/logic.py backend/tests/unit/test_run_service.py
 git commit -m "feat: expose community evidence to writer"
 ```
 
@@ -3139,9 +3183,13 @@ Add a score helper near other section score helpers:
 def _community_evidence_section_score(detail: RunDetail) -> float:
     if not any(source.metadata.get("community_evidence") for source in detail.raw_sources):
         return 1.0
-    body = repair_mojibake_text(detail.report_md).casefold()
-    if "community evidence triangulation" in body:
+    section = _find_section_before_support(
+        detail.report_md,
+        _report_label_aliases("community_evidence_triangulation"),
+    )
+    if section is not None and _section_has_substantive_body(section):
         return 1.0
+    body = repair_mojibake_text(detail.report_md).casefold()
     if "community observation" in body and "official" in body:
         return 0.75
     return 0.0
@@ -3381,7 +3429,7 @@ Expected: PASS.
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\community backend\packages\research\models.py backend\packages\research\discovery\constants.py backend\packages\research\discovery\providers.py backend\packages\research\capture\policy.py backend\packages\config\settings.py backend\packages\schema\messages.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\packages\agents\analysts\logic.py backend\packages\agents\writer\logic.py backend\packages\agents\qa\logic.py backend\packages\business_intel\report_quality.py backend\tests\unit\test_community_query_planner.py backend\tests\unit\test_community_source_classifier.py backend\tests\unit\test_community_claims.py backend\tests\unit\test_run_service.py backend\tests\unit\test_report_quality.py
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\community backend\packages\research\models.py backend\packages\research\discovery\constants.py backend\packages\research\discovery\providers.py backend\packages\research\capture\policy.py backend\packages\config\settings.py backend\packages\schema\messages.py backend\packages\i18n\language.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\packages\agents\analysts\logic.py backend\packages\agents\writer\logic.py backend\packages\agents\qa\logic.py backend\packages\business_intel\report_quality.py backend\tests\unit\test_community_query_planner.py backend\tests\unit\test_community_source_classifier.py backend\tests\unit\test_community_claims.py backend\tests\unit\test_run_service.py backend\tests\unit\test_report_quality.py
 ```
 
 Expected: `All checks passed!`
@@ -3416,7 +3464,7 @@ Expected: PASS.
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\community backend\packages\research\models.py backend\packages\research\discovery\constants.py backend\packages\research\discovery\providers.py backend\packages\research\capture\policy.py backend\packages\config\settings.py backend\packages\schema\messages.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\packages\agents\analysts\logic.py backend\packages\agents\writer\logic.py backend\packages\agents\qa\logic.py backend\packages\business_intel\report_quality.py backend\tests\unit\test_community_query_planner.py backend\tests\unit\test_community_source_classifier.py backend\tests\unit\test_community_claims.py backend\tests\unit\test_run_service.py backend\tests\unit\test_report_quality.py
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\community backend\packages\research\models.py backend\packages\research\discovery\constants.py backend\packages\research\discovery\providers.py backend\packages\research\capture\policy.py backend\packages\config\settings.py backend\packages\schema\messages.py backend\packages\i18n\language.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\packages\agents\analysts\logic.py backend\packages\agents\writer\logic.py backend\packages\agents\qa\logic.py backend\packages\business_intel\report_quality.py backend\tests\unit\test_community_query_planner.py backend\tests\unit\test_community_source_classifier.py backend\tests\unit\test_community_claims.py backend\tests\unit\test_run_service.py backend\tests\unit\test_report_quality.py
 ```
 
 Expected: `All checks passed!`
