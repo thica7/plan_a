@@ -111,6 +111,10 @@ class Settings:
     collector_react_max_turns: int = 3
     collector_target_verified_sources_per_branch: int = 3
     collector_search_max_results: int = 6
+    collector_community_enabled: bool = True
+    collector_community_queries_per_branch: int = 3
+    collector_community_max_results_per_query: int = 5
+    collector_community_target_sources_per_branch: int = 2
     analyst_react_enabled: bool = True
     analyst_react_max_turns: int = 3
     analyst_react_fanout_threshold: int = 8
@@ -228,6 +232,25 @@ def get_settings() -> Settings:
             6,
             minimum=3,
             maximum=10,
+        ),
+        collector_community_enabled=_env_bool("COLLECTOR_COMMUNITY_ENABLED", True),
+        collector_community_queries_per_branch=_env_int(
+            "COLLECTOR_COMMUNITY_QUERIES_PER_BRANCH",
+            3,
+            minimum=0,
+            maximum=10,
+        ),
+        collector_community_max_results_per_query=_env_int(
+            "COLLECTOR_COMMUNITY_MAX_RESULTS_PER_QUERY",
+            5,
+            minimum=1,
+            maximum=20,
+        ),
+        collector_community_target_sources_per_branch=_env_int(
+            "COLLECTOR_COMMUNITY_TARGET_SOURCES_PER_BRANCH",
+            2,
+            minimum=0,
+            maximum=6,
         ),
         analyst_react_enabled=_env_bool("ANALYST_REACT_ENABLED", True),
         analyst_react_max_turns=max(1, min(6, int(os.getenv("ANALYST_REACT_MAX_TURNS", "3")))),

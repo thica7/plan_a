@@ -70,7 +70,7 @@ async def collect_competitor_with_skill_tools(
                 sources.append(source)
                 break
 
-    if not sources and "search_review_site" in allowlist and service._search.is_enabled:
+    if "search_review_site" in allowlist and service._search.is_enabled:
         plan = search_review_site_queries(competitor=competitor, topic=detail.topic)
         service._trace_local_tool(
             record,
@@ -84,6 +84,16 @@ async def collect_competitor_with_skill_tools(
             context=context,
             metadata={"query_count": len(plan.queries)},
         )
+        community_sources = await service._collect_community_sources_for_branch(
+            record,
+            detail,
+            dimension,
+            competitor,
+            context,
+        )
+        if community_sources:
+            sources.extend(community_sources)
+            return sources
         for query in plan.queries[:2]:
             results = await service._trace_search(
                 record,

@@ -16,6 +16,12 @@ from packages.business_intel.entity_resolver import (
     normalize_competitor_key,
     search_qualifier_for_competitor,
 )
+from packages.community import (
+    build_community_queries,
+    reclassify_community_source,
+    snippet_only_source_from_candidate,
+)
+from packages.community.source_classifier import classify_community_source
 from packages.identity import compute_raw_source_id
 from packages.research.discovery import (
     homepage_candidates,
@@ -558,7 +564,10 @@ class CollectorAgentMixin:
             )
 
         async def fetch(url: str):
-            return await self._trace_fetch(record, "collector", dimension, url, context)
+            try:
+                return await self._trace_fetch(record, "collector", dimension, url, context)
+            except Exception:  # noqa: BLE001 - one failed candidate should not abort collection.
+                return None
 
         result = await run_research_pipeline(
             brief,
@@ -648,7 +657,7 @@ class CollectorAgentMixin:
                 brief.dimension,
                 page.snippet,
             ),
-            source_is_usable=self._source_is_usable,
+            source_is_usable=self._research_source_is_usable,
         )
 
     async def _collect_official_sources(
@@ -881,6 +890,140 @@ class CollectorAgentMixin:
             query = f"{query} {qualifier}"
         return f"{query} {detail.topic} official source"
 
+    async def _community_source_candidates(
+        self,
+        record: RunRecord,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+        context: SubagentContext,
+    ) -> list[SourceCandidate]:
+        if not self._settings.collector_community_enabled or not self._search.is_enabled:
+            return []
+        queries = build_community_queries(
+            competitor=competitor,
+            dimension=dimension,
+            topic=detail.topic,
+            limit=max(0, int(self._settings.collector_community_queries_per_branch)),
+        )
+        candidates: list[SourceCandidate] = []
+        for query in queries:
+            results = await self._trace_search(
+                record,
+                agent="collector",
+                subagent=context.subagent,
+                query=query,
+                max_results=max(1, int(self._settings.collector_community_max_results_per_query)),
+                context=context,
+            )
+            for rank, result in enumerate(results):
+                classification = classify_community_source(
+                    url=result.url,
+                    title=result.title,
+                    snippet=result.snippet,
+                )
+                if not classification.is_community:
+                    continue
+                candidates.append(
+                    SourceCandidate(
+                        title=result.title,
+                        url=result.url,
+                        snippet=result.snippet,
+                        origin="community_search",
+                        competitor=competitor,
+                        dimension=dimension,
+                        rank=rank,
+                        confidence=classification.base_confidence,
+                        query=query,
+                        date=result.date,
+                        last_updated=result.last_updated,
+                        reason="community_evidence_search",
+                        metadata={
+                            "community_evidence": True,
+                            "community_source_type": classification.source_type,
+                            "community_authority_signal": classification.authority_signal,
+                            "community_classification_reason": classification.reason,
+                        },
+                    )
+                )
+        self._append_agent_message(
+            record,
+            from_agent="collector",
+            to_agent="collect_join",
+            message_type="community_search_completed",
+            payload_schema="CommunitySearchSummary",
+            payload={
+                "competitor": competitor,
+                "dimension": dimension,
+                "queries": queries,
+                "query_count": len(queries),
+                "candidate_count": len(candidates),
+                "candidate_ids": [candidate.id for candidate in candidates],
+                "no_result": not candidates,
+            },
+        )
+        return candidates
+
+    async def _collect_community_sources_for_branch(
+        self,
+        record: RunRecord,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+        context: SubagentContext,
+    ) -> list[RawSource]:
+        target_count = max(0, int(self._settings.collector_community_target_sources_per_branch))
+        if target_count <= 0:
+            return []
+        candidates = await self._community_source_candidates(
+            record, detail, dimension, competitor, context
+        )
+        if not candidates:
+            return []
+        fetched_sources = await self._collect_competitor_with_research_pipeline(
+            record,
+            detail,
+            dimension,
+            competitor,
+            context,
+            batch_sources=[],
+            target_source_count=target_count,
+            include_official=False,
+            seed_candidates=candidates,
+            enable_search=False,
+            enable_repair=False,
+        )
+        community_sources = [
+            reclassify_community_source(source, run_id=detail.id) for source in fetched_sources
+        ]
+        if len(community_sources) < target_count:
+            existing_urls = {
+                str(source.url).rstrip("/")
+                for source in community_sources
+                if source.url is not None
+            }
+            for candidate in candidates:
+                if len(community_sources) >= target_count:
+                    break
+                if candidate.url.rstrip("/") in existing_urls:
+                    continue
+                snippet_source = snippet_only_source_from_candidate(candidate, run_id=detail.id)
+                if snippet_source is None:
+                    continue
+                community_sources.append(snippet_source)
+                existing_urls.add(candidate.url.rstrip("/"))
+        return [
+            source
+            for source in community_sources
+            if not self._candidate_already_collected(
+                detail,
+                [],
+                competitor=competitor,
+                dimension=dimension,
+                url=str(source.url) if source.url else None,
+            )
+        ]
+
     def _dimension_source_terms(self, dimension: str) -> list[str]:
         normalized = dimension.casefold()
         if "pricing" in normalized:
@@ -1046,6 +1189,31 @@ class CollectorAgentMixin:
 
     def _source_is_usable(self, source: RawSource) -> bool:
         return self._source_quality_problem(source) is None
+
+    def _research_source_is_usable(self, source: RawSource) -> bool:
+        problem = self._source_quality_problem(source)
+        if problem is None:
+            return True
+        if (
+            source.candidate_origin == "community_search"
+            and "does not expose a recognizable" in problem
+            and self._community_source_mentions_competitor(source)
+        ):
+            classification = classify_community_source(
+                url=str(source.url or ""),
+                title=source.title,
+                snippet=source.snippet,
+            )
+            return classification.is_community
+        return False
+
+    def _community_source_mentions_competitor(self, source: RawSource) -> bool:
+        haystack = f"{source.title}\n{source.url or ''}\n{source.snippet}".casefold()
+        competitor_terms = {
+            source.competitor.casefold(),
+            normalize_competitor_key(source.competitor),
+        }
+        return any(term and term in haystack for term in competitor_terms)
 
     def _source_quality_problem(self, source: RawSource) -> str | None:
         return source_quality_problem(source)
@@ -1908,6 +2076,22 @@ class CollectorAgentMixin:
                 collect_payload["skill_tool_added"] = len(sources)
             except Exception as exc:  # noqa: BLE001 - skill tools degrade to LLM fallback.
                 collect_payload["skill_tool_error"] = str(exc)
+        community_sources = [
+            source for source in sources if source.metadata.get("community_evidence")
+        ]
+        if not community_sources:
+            community_sources = await self._collect_community_sources_for_branch(
+                record,
+                detail,
+                dimension,
+                competitor,
+                context,
+            )
+            for source in community_sources:
+                if not self._source_already_in_batch(source, sources):
+                    sources.append(source)
+        collect_payload["community_source_count"] = len(community_sources)
+        collect_payload["community_source_ids"] = [source.id for source in community_sources]
         if not sources:
             payload = await self._trace_llm_json(
                 record,
@@ -2003,6 +2187,7 @@ class CollectorAgentMixin:
             consumer_agent="collect_join",
             message_types={
                 "raw_sources_collected",
+                "community_search_completed",
                 "cross_competitor_sources_collected",
                 "cross_competitor_search_failed",
             },
@@ -2019,7 +2204,11 @@ class CollectorAgentMixin:
             record,
             to_agent="collect_join",
             consumer_agent="collect_join",
-            message_types={"cross_competitor_sources_collected", "cross_competitor_search_failed"},
+            message_types={
+                "community_search_completed",
+                "cross_competitor_sources_collected",
+                "cross_competitor_search_failed",
+            },
         )
         detail.raw_sources = self._normalize_collected_sources(detail, dimensions)
         normalized_count = len(detail.raw_sources)

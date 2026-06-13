@@ -75,6 +75,16 @@ class RawSourceDigestMessagePayload(_MessagePayload):
     after_count: int | None = Field(default=None, ge=0)
 
 
+class CommunitySearchSummaryMessagePayload(_MessagePayload):
+    competitor: str
+    dimension: str
+    queries: list[str] = Field(default_factory=list)
+    query_count: int = Field(ge=0)
+    candidate_count: int = Field(ge=0)
+    candidate_ids: list[str] = Field(default_factory=list)
+    no_result: bool = False
+
+
 class QCIssueCollectionMessagePayload(_MessagePayload):
     qa_findings: list[QCIssue] = Field(default_factory=list)
     phase: str | None = None
@@ -178,6 +188,7 @@ AGENT_MESSAGE_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "AnalysisTaskPayload": AnalysisTaskMessagePayload,
     "CollectTaskPayload": CollectTaskMessagePayload,
     "CollectorDispatchPlan": DispatchPlanMessagePayload,
+    "CommunitySearchSummary": CommunitySearchSummaryMessagePayload,
     "CompetitorKBDigest": CompetitorKBDigestMessagePayload,
     "CompetitorKnowledge": CompetitorKnowledgeMessagePayload,
     "ComparisonMatrix": ComparisonMatrixMessagePayload,

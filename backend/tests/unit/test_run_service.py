@@ -6347,6 +6347,492 @@ async def test_collector_uses_search_candidates_before_homepage_derived_fallback
     assert "https://www.anthropic.com/features" not in fetch_calls
 
 
+@pytest.mark.asyncio
+async def test_collector_adds_community_sources_even_when_official_sources_exist() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_target_verified_sources_per_branch=1,
+            collector_search_max_results=4,
+            collector_community_enabled=True,
+            collector_community_queries_per_branch=2,
+            collector_community_target_sources_per_branch=2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    async def fake_trace_search(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        query,
+        max_results,
+        context=None,
+    ) -> list[SearchResult]:
+        results_by_query = {
+            "Cursor pricing plans billing usage limits AI coding assistants official source": [
+                SearchResult(
+                    title="Cursor pricing",
+                    url="https://cursor.com/pricing",
+                    snippet="Cursor pricing plans include Pro and Teams.",
+                )
+            ],
+            "Cursor pricing usage limit reddit AI coding assistants": [
+                SearchResult(
+                    title="Cursor Pro usage limit thread",
+                    url="https://www.reddit.com/r/cursor/comments/pro_limits",
+                    snippet=(
+                        "Users report Cursor Pro is $20 per month and mention usage limits."
+                    ),
+                )
+            ],
+            "Cursor pricing usage limit forum AI coding assistants": [
+                SearchResult(
+                    title="Cursor forum pricing limits",
+                    url="https://forum.cursor.com/t/pricing-limits/1",
+                    snippet="A staff member explains usage limits for paid plans.",
+                )
+            ],
+        }
+        return results_by_query.get(query, [])[:max_results]
+
+    async def fake_trace_fetch(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        url,
+        context=None,
+    ) -> EvidenceFetchResult:
+        text_by_url = {
+            "https://cursor.com/pricing": (
+                "Cursor pricing plans include Pro, Teams, billing, and usage."
+            ),
+            "https://www.reddit.com/r/cursor/comments/pro_limits": (
+                "Users report Cursor Pro is $20 per month and mention usage limits."
+            ),
+            "https://forum.cursor.com/t/pricing-limits/1": (
+                "A staff member explains usage limits for paid plans."
+            ),
+        }
+        text = text_by_url[url]
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title=f"Fetched {url}",
+            text=text,
+            content_hash=f"hash-{len(text)}",
+            status_code=200,
+            fetch_method="test_fetch",
+            quality_score=0.95,
+            text_length=len(text),
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._trace_fetch = fake_trace_fetch  # type: ignore[method-assign]
+
+    await service._real_collector_branch_step(record, "pricing", "Cursor")
+
+    source_types = {source.source_type for source in record.detail.raw_sources}
+    assert "webpage_verified" in source_types
+    assert {"reddit_thread", "community_forum"} & source_types
+    assert any(source.metadata.get("community_evidence") for source in record.detail.raw_sources)
+
+
+@pytest.mark.asyncio
+async def test_collector_keeps_useful_community_snippet_when_fetch_fails() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_target_verified_sources_per_branch=1,
+            collector_search_max_results=4,
+            collector_community_enabled=True,
+            collector_community_queries_per_branch=1,
+            collector_community_target_sources_per_branch=1,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    async def fake_trace_search(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        query,
+        max_results,
+        context=None,
+    ) -> list[SearchResult]:
+        results_by_query = {
+            "Cursor pricing plans billing usage limits AI coding assistants official source": [
+                SearchResult(
+                    title="Cursor pricing",
+                    url="https://cursor.com/pricing",
+                    snippet="Cursor pricing plans include Pro.",
+                )
+            ],
+            "Cursor pricing usage limit reddit AI coding assistants": [
+                SearchResult(
+                    title="Cursor Pro reported pricing",
+                    url="https://www.reddit.com/r/cursor/comments/pro_limits",
+                    snippet=(
+                        "Users report Cursor Pro is $20 per month with usage limit confusion."
+                    ),
+                )
+            ],
+        }
+        return results_by_query.get(query, [])[:max_results]
+
+    async def fake_trace_fetch(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        url,
+        context=None,
+    ) -> EvidenceFetchResult:
+        if url == "https://www.reddit.com/r/cursor/comments/pro_limits":
+            return EvidenceFetchResult(
+                url=url,
+                ok=False,
+                title="blocked",
+                text="",
+                content_hash="blocked-hash",
+                status_code=403,
+                error="robots blocked",
+                fetch_method="test_failed_fetch",
+                quality_score=0.0,
+                text_length=0,
+                failure_reason="robots_blocked",
+            )
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="Cursor pricing",
+            text="Cursor pricing plans include Pro.",
+            content_hash="official-hash",
+            status_code=200,
+            fetch_method="test_fetch",
+            quality_score=0.95,
+            text_length=32,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._trace_fetch = fake_trace_fetch  # type: ignore[method-assign]
+
+    await service._real_collector_branch_step(record, "pricing", "Cursor")
+
+    snippet_sources = [
+        source for source in record.detail.raw_sources if source.source_type == "snippet_only"
+    ]
+    assert len(snippet_sources) == 1
+    assert snippet_sources[0].confidence == 0.55
+    assert snippet_sources[0].metadata["community_source_type"] == "reddit_thread"
+
+
+@pytest.mark.asyncio
+async def test_collector_records_no_result_metadata_for_empty_community_search() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_target_verified_sources_per_branch=1,
+            collector_search_max_results=4,
+            collector_community_enabled=True,
+            collector_community_queries_per_branch=1,
+            collector_community_target_sources_per_branch=1,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    async def fake_trace_search(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        query,
+        max_results,
+        context=None,
+    ) -> list[SearchResult]:
+        if (
+            query
+            == "Cursor pricing plans billing usage limits AI coding assistants official source"
+        ):
+            return [
+                SearchResult(
+                    title="Cursor pricing",
+                    url="https://cursor.com/pricing",
+                    snippet="Cursor pricing plans include Pro.",
+                )
+            ]
+        return []
+
+    async def fake_trace_fetch(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        url,
+        context=None,
+    ) -> EvidenceFetchResult:
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="Cursor pricing",
+            text="Cursor pricing plans include Pro.",
+            content_hash="official-hash",
+            status_code=200,
+            fetch_method="test_fetch",
+            quality_score=0.95,
+            text_length=32,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._trace_fetch = fake_trace_fetch  # type: ignore[method-assign]
+
+    await service._real_collector_branch_step(record, "pricing", "Cursor")
+
+    community_messages = [
+        message
+        for message in record.detail.agent_messages
+        if message.message_type == "community_search_completed"
+    ]
+    assert len(community_messages) == 1
+    assert community_messages[0].payload["candidate_count"] == 0
+    assert community_messages[0].payload["no_result"] is True
+
+
+@pytest.mark.asyncio
+async def test_collector_does_not_repeat_community_search_after_skill_tool_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_target_verified_sources_per_branch=1,
+            collector_search_max_results=4,
+            collector_community_enabled=True,
+            collector_community_queries_per_branch=1,
+            collector_community_target_sources_per_branch=1,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["review"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    community_query = "Cursor G2 reviews pros cons AI coding assistants"
+    community_query_count = 0
+
+    async def fake_trace_search(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        query,
+        max_results,
+        context=None,
+    ) -> list[SearchResult]:
+        nonlocal community_query_count
+        if query == community_query:
+            community_query_count += 1
+            return [
+                SearchResult(
+                    title="Cursor user review thread",
+                    url="https://www.reddit.com/r/cursor/comments/review_feedback",
+                    snippet=(
+                        "Cursor users share reviews, pros, cons, complaints, and adoption "
+                        "feedback for coding teams."
+                    ),
+                )
+            ][:max_results]
+        return []
+
+    async def fake_trace_fetch(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        url,
+        context=None,
+    ) -> EvidenceFetchResult:
+        if url != "https://www.reddit.com/r/cursor/comments/review_feedback":
+            return EvidenceFetchResult(
+                url=url,
+                ok=False,
+                title="not found",
+                text="",
+                content_hash="failed-fetch",
+                status_code=404,
+                error="not found",
+                fetch_method="test_failed_fetch",
+                quality_score=0.0,
+                text_length=0,
+                failure_reason="http_404",
+            )
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="Cursor user review thread",
+            text=(
+                "Cursor users share reviews, pros, cons, complaints, praise, adoption "
+                "feedback, code completion workflow, and developer team experience."
+            ),
+            content_hash="cursor-review-hash",
+            status_code=200,
+            fetch_method="test_fetch",
+            quality_score=0.95,
+            text_length=136,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._trace_fetch = fake_trace_fetch  # type: ignore[method-assign]
+
+    await service._real_collector_branch_step(record, "review", "Cursor")
+
+    community_messages = [
+        message
+        for message in record.detail.agent_messages
+        if message.message_type == "community_search_completed"
+    ]
+    community_sources = [
+        source
+        for source in record.detail.raw_sources
+        if source.metadata.get("community_evidence")
+    ]
+    assert len(community_messages) == 1
+    assert community_query_count == 1
+    assert len(community_sources) == 1
+    events = service.get_trace(detail.id) or []
+    collector_done = next(
+        event
+        for event in events
+        if event.type == "node_completed"
+        and event.agent == "collector"
+        and event.payload["retrieval_stage"] == "collector_branch_finish"
+    )
+    assert collector_done.payload["collect"]["community_source_count"] == 1
+    assert collector_done.payload["collect"]["community_source_ids"] == [
+        community_sources[0].id
+    ]
+
+
+@pytest.mark.asyncio
+async def test_collector_target_zero_skips_community_search() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_community_enabled=True,
+            collector_community_queries_per_branch=1,
+            collector_community_target_sources_per_branch=0,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    context = SubagentContext(run_id=detail.id, agent="collector", subagent="pricing::Cursor")
+    search_count = 0
+
+    async def fake_trace_search(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        query,
+        max_results,
+        context=None,
+    ) -> list[SearchResult]:
+        nonlocal search_count
+        search_count += 1
+        return [
+            SearchResult(
+                title="Cursor Pro usage limit thread",
+                url="https://www.reddit.com/r/cursor/comments/pro_limits",
+                snippet="Users report Cursor Pro is $20 per month and mention usage limits.",
+            )
+        ]
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+
+    sources = await service._collect_community_sources_for_branch(
+        record,
+        detail,
+        "pricing",
+        "Cursor",
+        context,
+    )
+
+    assert sources == []
+    assert search_count == 0
+
+
 def test_collector_search_query_adds_product_qualifier_for_ambiguous_names() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
