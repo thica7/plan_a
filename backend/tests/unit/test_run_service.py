@@ -7978,6 +7978,138 @@ def test_writer_hardens_chinese_user_research_with_persona_sources() -> None:
     assert "[source:github-pricing]" not in hardened
 
 
+def test_writer_source_ids_for_chinese_pricing_user_overlap_keeps_pricing_first() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-zh-citation-pricing-user-overlap",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["GitHub Copilot"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="github-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                snippet="GitHub Copilot pricing plans.",
+                content_hash="github-pricing-hash",
+                confidence=0.98,
+            ),
+            RawSource(
+                id="github-persona-survey",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="GitHub Copilot persona survey synthesis",
+                snippet="Simulated survey research with adoption blockers and switching triggers.",
+                content_hash="github-persona-survey-hash",
+                confidence=0.76,
+            ),
+            RawSource(
+                id="github-persona-interview",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="interview_record",
+                title="GitHub Copilot persona interview synthesis",
+                snippet="Synthetic interview record with buyer concerns and user feedback.",
+                content_hash="github-persona-interview-hash",
+                confidence=0.82,
+            ),
+        ],
+    )
+    line = "GitHub Copilot 企业用户按席位定价，每月费用随套餐变化。"
+
+    source_ids = service._source_ids_for_report_line(detail, line)
+    hardened = service._ensure_report_claim_citations(detail, line)
+
+    assert source_ids[0] == "github-pricing"
+    assert "[source:github-pricing]" in hardened
+
+
+def test_writer_source_ids_for_english_pricing_user_overlap_keeps_pricing_first() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-en-citation-pricing-user-overlap",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["GitHub Copilot"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="github-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                snippet="GitHub Copilot pricing plans.",
+                content_hash="github-pricing-hash",
+                confidence=0.98,
+            ),
+            RawSource(
+                id="github-persona-survey",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="GitHub Copilot persona survey synthesis",
+                snippet="Simulated survey research with adoption blockers and switching triggers.",
+                content_hash="github-persona-survey-hash",
+                confidence=0.76,
+            ),
+            RawSource(
+                id="github-persona-interview",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="interview_record",
+                title="GitHub Copilot persona interview synthesis",
+                snippet="Synthetic interview record with buyer concerns and user feedback.",
+                content_hash="github-persona-interview-hash",
+                confidence=0.82,
+            ),
+        ],
+    )
+
+    source_ids = service._source_ids_for_report_line(
+        detail,
+        "Enterprise users compare GitHub Copilot pricing by seat and monthly cost.",
+    )
+
+    assert source_ids[0] == "github-pricing"
+
+
 def test_deterministic_payload_uses_normalized_fields_before_noisy_snippet() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

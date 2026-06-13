@@ -2480,7 +2480,10 @@ class WriterAgentMixin:
             ]
         if not source_ids:
             source_ids = [source.id for source in detail.raw_sources]
-        if "persona" in matched_dimensions:
+        if "persona" in matched_dimensions and not {
+            "pricing",
+            "feature",
+        }.intersection(matched_dimensions):
             preferred_user_research_ids = [
                 source.id
                 for source in detail.raw_sources
