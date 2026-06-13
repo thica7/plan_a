@@ -260,7 +260,7 @@ def _user_research_source_regression_problem(
     protected_sections: list[str],
 ) -> str | None:
     if "review_theme_summary" in protected_sections:
-        user_research_ids = _user_research_source_ids(previous)
+        user_research_ids = _user_research_source_ids(candidate)
         previous_review_ids = _section_cited_source_ids(
             previous.report_md,
             "review_theme_summary",
@@ -272,7 +272,11 @@ def _user_research_source_regression_problem(
             candidate.output_language,
         )
         if (
-            previous_review_ids & user_research_ids
+            user_research_ids
+            and (
+                previous_review_ids & user_research_ids
+                or _previous_review_section_has_user_research_semantics(previous)
+            )
             and not candidate_review_ids & user_research_ids
         ):
             return "review_theme_summary lost user research source citations"
@@ -435,6 +439,30 @@ USER_RESEARCH_SOURCE_TYPES = {
     "manual",
 }
 
+USER_RESEARCH_REVIEW_SEMANTIC_TOKENS = (
+    "survey",
+    "interview",
+    "user research",
+    "user review",
+    "review theme",
+    "adoption blocker",
+    "switching trigger",
+    "buyer feedback",
+    "customer feedback",
+    "persona",
+    "调查",
+    "访谈",
+    "用户研究",
+    "用户评价",
+    "评价",
+    "评论",
+    "采用",
+    "采纳",
+    "切换",
+    "痛点",
+    "阻力",
+)
+
 
 def _section_cited_source_ids(
     markdown: str,
@@ -453,6 +481,18 @@ def _user_research_source_ids(detail: RunDetail) -> set[str]:
         for source in detail.raw_sources
         if source.source_type in USER_RESEARCH_SOURCE_TYPES
     }
+
+
+def _previous_review_section_has_user_research_semantics(detail: RunDetail) -> bool:
+    section = _find_section(
+        detail.report_md,
+        "review_theme_summary",
+        detail.output_language,
+    )
+    if section is None:
+        return False
+    body = re.sub(r"\[source:[^\]]+\]", "", section.body).casefold()
+    return any(token in body for token in USER_RESEARCH_REVIEW_SEMANTIC_TOKENS)
 
 
 def _section_content_chars(

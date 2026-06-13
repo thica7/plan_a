@@ -139,6 +139,16 @@ class WriterAgentMixin:
             for issue in detail.qa_findings:
                 if issue.id in pending_issue_ids:
                     redo_issue_by_id.setdefault(issue.id, issue)
+            for message in record.detail.agent_messages:
+                if message.message_type != "redo_request":
+                    continue
+                raw_issue_ids = message.payload.get("issue_ids", [])
+                if not raw_issue_ids or not (set(raw_issue_ids) & pending_issue_ids):
+                    continue
+                for item in message.payload.get("issues", []):
+                    issue = QCIssue.model_validate(item)
+                    if issue.id in pending_issue_ids:
+                        redo_issue_by_id.setdefault(issue.id, issue)
             if pending_redo.redo_scope.kind == "writer_only":
                 writer_only_pending_issue_ids = pending_issue_ids
         redo_issues = list(redo_issue_by_id.values())
