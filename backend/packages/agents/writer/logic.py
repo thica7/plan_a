@@ -35,10 +35,58 @@ USER_RESEARCH_SOURCE_TYPE_ORDER = (
     "survey_response",
     "interview_record",
     "manual_transcript",
+    "manual_user_note",
     "manual_note",
     "manual",
 )
 USER_RESEARCH_SOURCE_TYPES = set(USER_RESEARCH_SOURCE_TYPE_ORDER)
+CJK_TEXT_RE = re.compile(r"[\u3400-\u9fff]")
+PRICING_LINE_TOKENS = (
+    "price",
+    "pricing",
+    "cost",
+    "$",
+    "定价",
+    "价格",
+    "费用",
+    "套餐",
+    "月费",
+    "席位",
+    "报价",
+)
+FEATURE_LINE_TOKENS = (
+    "feature",
+    "capability",
+    "function",
+    "功能",
+    "特征",
+    "能力",
+    "代码补全",
+    "代理",
+    "上下文",
+)
+PERSONA_LINE_TOKENS = (
+    "persona",
+    "customer",
+    "user",
+    "buyer",
+    "use case",
+    "用户",
+    "用户画像",
+    "买家",
+    "采购",
+    "客户",
+    "访谈",
+    "调查",
+    "评价",
+    "评论",
+    "采纳",
+    "采用",
+    "切换",
+    "痛点",
+    "阻力",
+)
+CLAIM_LINE_TOKENS = PRICING_LINE_TOKENS + FEATURE_LINE_TOKENS + PERSONA_LINE_TOKENS
 
 
 def writer_user_research_policy_text() -> str:
@@ -2352,6 +2400,12 @@ class WriterAgentMixin:
             return False
         if self._report_line_is_explicit_gap_statement(stripped):
             return False
+        if CJK_TEXT_RE.search(stripped):
+            normalized = stripped.casefold()
+            if len(stripped) >= 12 and any(
+                token in normalized for token in CLAIM_LINE_TOKENS
+            ):
+                return True
         return bool(re.search(r"[A-Za-z0-9]", stripped)) and len(stripped) >= 24
 
     def _report_line_is_explicit_gap_statement(self, line: str) -> bool:
@@ -2381,18 +2435,15 @@ class WriterAgentMixin:
             if dimension.casefold() in normalized
             or (
                 dimension == "pricing"
-                and any(token in normalized for token in ("price", "pricing", "cost", "$"))
+                and any(token in normalized for token in PRICING_LINE_TOKENS)
             )
             or (
                 dimension == "feature"
-                and any(token in normalized for token in ("feature", "capability", "function"))
+                and any(token in normalized for token in FEATURE_LINE_TOKENS)
             )
             or (
                 dimension == "persona"
-                and any(
-                    token in normalized
-                    for token in ("persona", "customer", "user", "buyer", "use case")
-                )
+                and any(token in normalized for token in PERSONA_LINE_TOKENS)
             )
         ]
 
@@ -2429,4 +2480,12 @@ class WriterAgentMixin:
             ]
         if not source_ids:
             source_ids = [source.id for source in detail.raw_sources]
+        if "persona" in matched_dimensions:
+            preferred_user_research_ids = [
+                source.id
+                for source in detail.raw_sources
+                if source.id in source_ids and source.source_type in USER_RESEARCH_SOURCE_TYPES
+            ]
+            if preferred_user_research_ids:
+                source_ids = [*preferred_user_research_ids, *source_ids]
         return unique(source_ids)

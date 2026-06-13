@@ -7856,6 +7856,128 @@ def test_writer_source_digest_includes_all_raw_sources() -> None:
     assert digest[-1]["id"] == "raw-source-30"
 
 
+def test_writer_source_ids_for_chinese_user_research_prefers_survey_and_interview_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-zh-citation-user-research",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["GitHub Copilot"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="github-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                snippet="GitHub Copilot pricing plans.",
+                content_hash="github-pricing-hash",
+                confidence=0.98,
+            ),
+            RawSource(
+                id="github-persona-survey",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="GitHub Copilot persona survey synthesis",
+                snippet="Simulated survey research with adoption blockers and switching triggers.",
+                content_hash="github-persona-survey-hash",
+                confidence=0.76,
+            ),
+            RawSource(
+                id="github-persona-interview",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="interview_record",
+                title="GitHub Copilot persona interview synthesis",
+                snippet="Synthetic interview record with buyer concerns and user feedback.",
+                content_hash="github-persona-interview-hash",
+                confidence=0.82,
+            ),
+        ],
+    )
+
+    source_ids = service._source_ids_for_report_line(
+        detail,
+        "用户画像调查和访谈记录显示，企业买家关注治理、预算审批和切换风险。",
+    )
+
+    assert source_ids[:2] == ["github-persona-survey", "github-persona-interview"]
+    assert "github-pricing" not in source_ids[:2]
+
+
+def test_writer_hardens_chinese_user_research_with_persona_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-zh-hardening-user-research",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["GitHub Copilot"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="github-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                snippet="GitHub Copilot pricing plans.",
+                content_hash="github-pricing-hash",
+                confidence=0.98,
+            ),
+            RawSource(
+                id="github-persona-survey",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="GitHub Copilot persona survey synthesis",
+                snippet="Simulated survey research with adoption blockers and switching triggers.",
+                content_hash="github-persona-survey-hash",
+                confidence=0.76,
+            ),
+        ],
+    )
+    markdown = "## 用户研究证据\n用户画像调查显示买家关注治理和预算审批。"
+
+    hardened = service._ensure_report_claim_citations(detail, markdown)
+
+    assert "[source:github-persona-survey]" in hardened
+    assert "[source:github-pricing]" not in hardened
+
+
 def test_deterministic_payload_uses_normalized_fields_before_noisy_snippet() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
