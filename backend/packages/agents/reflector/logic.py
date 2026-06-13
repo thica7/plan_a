@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -11,6 +12,9 @@ from packages.schema.models import QCIssue, RedoScope, ReflectionRecord
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
+
+
+QA_CONFIDENCE_OUTLIER_THRESHOLD = 0.7
 
 
 class ReflectorAgentMixin:
@@ -34,7 +38,8 @@ class ReflectorAgentMixin:
                 "Treat comparison-matrix cells with source_ids across every competitor and "
                 "dimension as side-by-side comparison coverage; only report "
                 "cross_competitor_gaps when the matrix lacks cells, source_ids, or aligned "
-                "dimension coverage."
+                "dimension coverage. Only report confidence_outliers for cells below the "
+                f"QA confidence threshold {QA_CONFIDENCE_OUTLIER_THRESHOLD:.2f}."
             ),
             user=(
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
@@ -109,6 +114,10 @@ class ReflectorAgentMixin:
             for index, finding in enumerate(findings[:5], start=1):
                 if not finding.strip():
                     continue
+                if group_name == "confidence" and self._confidence_outlier_is_below_threshold(
+                    detail, finding
+                ) is False:
+                    continue
                 dimension = self._infer_dimension_from_text(detail, finding)
                 competitor = self._infer_competitor_from_text(detail, finding)
                 issue = QCIssue(
@@ -147,6 +156,52 @@ class ReflectorAgentMixin:
                     issue.redo_scope = assign_redo_scope(issue)
                 issues.append(issue)
         return issues
+
+    def _confidence_outlier_is_below_threshold(self, detail: RunDetail, text: str) -> bool:
+        normalized = text.casefold()
+        if not any(
+            token in normalized
+            for token in ("low confidence", "below", "under", "threshold")
+        ):
+            return True
+        values = [
+            float(value)
+            for value in re.findall(r"(?<!\d)(?:0(?:\.\d+)?|1(?:\.0+)?)(?!\d)", text)
+        ]
+        confidence_values = [value for value in values if 0.0 <= value <= 1.0]
+        if confidence_values and min(confidence_values) < QA_CONFIDENCE_OUTLIER_THRESHOLD:
+            return True
+
+        mentioned_dimensions = [
+            dimension
+            for dimension in detail.plan.dimensions
+            if dimension.casefold() in normalized
+        ]
+        mentioned_competitors = [
+            competitor
+            for competitor in detail.plan.competitors
+            if competitor.casefold() in normalized
+        ]
+        matrix = detail.comparison_matrix
+        if matrix is None:
+            return not confidence_values
+        cells = [
+            cell
+            for cell in matrix.cells
+            if (
+                not mentioned_dimensions
+                or cell.dimension.casefold()
+                in {dimension.casefold() for dimension in mentioned_dimensions}
+            )
+            and (
+                not mentioned_competitors
+                or cell.competitor.casefold()
+                in {competitor.casefold() for competitor in mentioned_competitors}
+            )
+        ]
+        if not cells:
+            return not confidence_values
+        return min(cell.confidence for cell in cells) < QA_CONFIDENCE_OUTLIER_THRESHOLD
 
     def _infer_dimension_from_text(self, detail: RunDetail, text: str) -> str | None:
         normalized = text.casefold()

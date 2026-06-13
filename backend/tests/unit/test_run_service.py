@@ -2304,6 +2304,60 @@ def test_qa_surfaces_latest_reflector_findings() -> None:
     assert all(issue.severity == "warn" for issue in reflector_issues)
 
 
+def test_reflector_confidence_outlier_uses_lower_qa_threshold() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-reflector-confidence-threshold",
+        topic="AI Coding Agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI Coding Agent",
+            competitors=["Cursor", "Claude Code", "GitHub Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+        ),
+        comparison_matrix=ComparisonMatrix(
+            competitors=["Cursor", "Claude Code", "GitHub Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            cells=[
+                ComparisonCell(
+                    competitor=competitor,
+                    dimension="persona",
+                    value="persona synthesis",
+                    source_ids=[f"{competitor.lower().replace(' ', '-')}-persona"],
+                    confidence=0.76,
+                )
+                for competitor in ["Cursor", "Claude Code", "GitHub Copilot"]
+            ],
+        ),
+        reflections=[
+            ReflectionRecord(
+                iteration=1,
+                confidence_outliers=[
+                    "Persona cells for Cursor, Claude Code, and GitHub Copilot "
+                    "have low confidence (0.76), below 0.85 threshold."
+                ],
+            )
+        ],
+    )
+
+    issues = service._build_reflector_qa_issues(detail)
+
+    assert issues == []
+
+
 @pytest.mark.asyncio
 async def test_reflector_prompt_includes_comparison_matrix_digest() -> None:
     service = RunService(
