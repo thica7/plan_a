@@ -48,6 +48,9 @@
 - Modify `backend/packages/config/settings.py`
   - Add bounded community collector settings with environment overrides.
 
+- Modify `backend/packages/schema/messages.py`
+  - Register the `CommunitySearchSummary` agent-message payload used to audit attempted community searches and no-result outcomes.
+
 - Modify `backend/packages/agents/collectors/logic.py`
   - Run the community lane for every competitor/dimension after the normal branch collection.
   - Trace query counts, candidate counts, fetched community sources, snippet-only fallbacks, and claim cluster metadata.
@@ -285,26 +288,18 @@ class CommunityClaimCluster(BaseModel):
 Create `backend/packages/community/__init__.py` with:
 
 ```python
-from packages.community.claims import (
-    cluster_community_claims,
-    extract_community_claims_from_source,
-)
 from packages.community.models import (
     CommunityClaim,
     CommunityClaimCluster,
     CommunitySourceClassification,
 )
 from packages.community.query_planner import build_community_queries
-from packages.community.source_classifier import classify_community_source
 
 __all__ = [
     "CommunityClaim",
     "CommunityClaimCluster",
     "CommunitySourceClassification",
     "build_community_queries",
-    "classify_community_source",
-    "cluster_community_claims",
-    "extract_community_claims_from_source",
 ]
 ```
 
@@ -636,7 +631,21 @@ def _is_developer_blog(host: str) -> bool:
     )
 ```
 
-- [ ] **Step 4: Add `community_search` candidate origin**
+- [ ] **Step 4: Export the source classifier from the package**
+
+Update `backend/packages/community/__init__.py` to add:
+
+```python
+from packages.community.source_classifier import classify_community_source
+```
+
+Add this string to `__all__`:
+
+```python
+    "classify_community_source",
+```
+
+- [ ] **Step 5: Add `community_search` candidate origin**
 
 In `backend/packages/research/models.py`, update `CandidateOrigin` to include `community_search`:
 
@@ -652,7 +661,7 @@ CandidateOrigin = Literal[
 ]
 ```
 
-- [ ] **Step 5: Rank community search below general web search but above homepage fallback**
+- [ ] **Step 6: Rank community search below general web search but above homepage fallback**
 
 In `backend/packages/research/discovery/constants.py`, update `SOURCE_ORIGIN_PRIORITY` to:
 
@@ -667,7 +676,7 @@ SOURCE_ORIGIN_PRIORITY: dict[str, int] = {
 }
 ```
 
-- [ ] **Step 6: Accept the new origin in provider normalization**
+- [ ] **Step 7: Accept the new origin in provider normalization**
 
 In `backend/packages/research/discovery/providers.py`, add `"community_search"` to the `_candidate_origin()` allowed set:
 
@@ -683,7 +692,7 @@ In `backend/packages/research/discovery/providers.py`, add `"community_search"` 
     }:
 ```
 
-- [ ] **Step 7: Keep very weak community candidates as fallback**
+- [ ] **Step 8: Keep very weak community candidates as fallback**
 
 In `backend/packages/research/capture/policy.py`, add this branch to `fallback_candidate_reason()` after the homepage branch:
 
@@ -692,7 +701,7 @@ In `backend/packages/research/capture/policy.py`, add this branch to `fallback_c
         return "deferred_low_confidence_community_search"
 ```
 
-- [ ] **Step 8: Run source classifier tests**
+- [ ] **Step 9: Run source classifier tests**
 
 Run:
 
@@ -702,7 +711,7 @@ D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test
 
 Expected: PASS.
 
-- [ ] **Step 9: Run ruff for touched files**
+- [ ] **Step 10: Run ruff for touched files**
 
 Run:
 
@@ -712,12 +721,12 @@ D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\co
 
 Expected: `All checks passed!`
 
-- [ ] **Step 10: Commit Task 2**
+- [ ] **Step 11: Commit Task 2**
 
 Run:
 
 ```powershell
-git add backend/packages/community/source_classifier.py backend/packages/research/models.py backend/packages/research/discovery/constants.py backend/packages/research/discovery/providers.py backend/packages/research/capture/policy.py backend/tests/unit/test_community_source_classifier.py
+git add backend/packages/community/__init__.py backend/packages/community/source_classifier.py backend/packages/research/models.py backend/packages/research/discovery/constants.py backend/packages/research/discovery/providers.py backend/packages/research/capture/policy.py backend/tests/unit/test_community_source_classifier.py
 git commit -m "feat: classify community sources"
 ```
 
@@ -1127,7 +1136,25 @@ def _ordered_unique(values: object) -> list:
     return result
 ```
 
-- [ ] **Step 5: Run the focused claim tests**
+- [ ] **Step 5: Export claim helpers from the package**
+
+Update `backend/packages/community/__init__.py` to add:
+
+```python
+from packages.community.claims import (
+    cluster_community_claims,
+    extract_community_claims_from_source,
+)
+```
+
+Add these strings to `__all__`:
+
+```python
+    "cluster_community_claims",
+    "extract_community_claims_from_source",
+```
+
+- [ ] **Step 6: Run the focused claim tests**
 
 Run:
 
@@ -1137,7 +1164,7 @@ D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test
 
 Expected: PASS.
 
-- [ ] **Step 6: Run ruff for touched files**
+- [ ] **Step 7: Run ruff for touched files**
 
 Run:
 
@@ -1147,7 +1174,7 @@ D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\co
 
 Expected: `All checks passed!`
 
-- [ ] **Step 7: Commit Task 3**
+- [ ] **Step 8: Commit Task 3**
 
 Run:
 
@@ -1431,6 +1458,7 @@ git commit -m "feat: create community raw sources"
 
 **Files:**
 - Modify: `backend/packages/config/settings.py`
+- Modify: `backend/packages/schema/messages.py`
 - Modify: `backend/packages/agents/collectors/logic.py`
 - Modify: `backend/packages/agents/collectors/skill_tools.py`
 - Modify: `backend/tests/unit/test_run_service.py`
@@ -1445,11 +1473,12 @@ async def test_collector_adds_community_sources_even_when_official_sources_exist
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
-            execution_mode="real",
             demo_mode=False,
             ark_api_key="key",
             ark_model="model",
             ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
             pplx_api_key="pplx",
             web_search_provider="perplexity",
             collector_react_enabled=False,
@@ -1544,11 +1573,12 @@ async def test_collector_keeps_useful_community_snippet_when_fetch_fails() -> No
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
-            execution_mode="real",
             demo_mode=False,
             ark_api_key="key",
             ark_model="model",
             ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
             pplx_api_key="pplx",
             web_search_provider="perplexity",
             collector_react_enabled=False,
@@ -1646,11 +1676,12 @@ async def test_collector_records_no_result_metadata_for_empty_community_search()
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
-            execution_mode="real",
             demo_mode=False,
             ark_api_key="key",
             ark_model="model",
             ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
             pplx_api_key="pplx",
             web_search_provider="perplexity",
             collector_react_enabled=False,
@@ -1754,18 +1785,45 @@ In `load_settings()`, add:
         collector_community_queries_per_branch=_env_int(
             "COLLECTOR_COMMUNITY_QUERIES_PER_BRANCH",
             3,
+            minimum=0,
+            maximum=10,
         ),
         collector_community_max_results_per_query=_env_int(
             "COLLECTOR_COMMUNITY_MAX_RESULTS_PER_QUERY",
             5,
+            minimum=1,
+            maximum=20,
         ),
         collector_community_target_sources_per_branch=_env_int(
             "COLLECTOR_COMMUNITY_TARGET_SOURCES_PER_BRANCH",
             2,
+            minimum=0,
+            maximum=6,
         ),
 ```
 
-- [ ] **Step 4: Add collector imports**
+- [ ] **Step 4: Add community search message schema**
+
+In `backend/packages/schema/messages.py`, add this payload model after `RawSourceDigestMessagePayload`:
+
+```python
+class CommunitySearchSummaryMessagePayload(_MessagePayload):
+    competitor: str
+    dimension: str
+    queries: list[str] = Field(default_factory=list)
+    query_count: int = Field(ge=0)
+    candidate_count: int = Field(ge=0)
+    candidate_ids: list[str] = Field(default_factory=list)
+    no_result: bool = False
+```
+
+Register it in `AGENT_MESSAGE_PAYLOAD_SCHEMAS`:
+
+```python
+    "CommunitySearchSummary": CommunitySearchSummaryMessagePayload,
+```
+
+- [ ] **Step 5: Add collector imports**
 
 In `backend/packages/agents/collectors/logic.py`, add imports:
 
@@ -1778,7 +1836,7 @@ from packages.community import (
 from packages.community.source_classifier import classify_community_source
 ```
 
-- [ ] **Step 5: Add community candidate builder helper**
+- [ ] **Step 6: Add community candidate builder helper**
 
 In `CollectorAgentMixin`, near `_web_search_query()`, add:
 
@@ -1858,7 +1916,7 @@ In `CollectorAgentMixin`, near `_web_search_query()`, add:
         return candidates
 ```
 
-- [ ] **Step 6: Add community source collection helper**
+- [ ] **Step 7: Add community source collection helper**
 
 In `CollectorAgentMixin`, below `_community_source_candidates()`, add:
 
@@ -1929,7 +1987,7 @@ In `CollectorAgentMixin`, below `_community_source_candidates()`, add:
         ]
 ```
 
-- [ ] **Step 7: Wire the helper into branch collection**
+- [ ] **Step 8: Wire the helper into branch collection**
 
 In `_real_collector_branch_step()`, after the existing deterministic source collection has filled local `sources` and before `detail.raw_sources.extend(sources)`, add:
 
@@ -1948,7 +2006,7 @@ In `_real_collector_branch_step()`, after the existing deterministic source coll
         collect_payload["community_source_ids"] = [source.id for source in community_sources]
 ```
 
-- [ ] **Step 8: Make `search_review_site` execute community search in skill tools**
+- [ ] **Step 9: Make `search_review_site` execute community search in skill tools**
 
 In `backend/packages/agents/collectors/skill_tools.py`, replace the `if not sources and "search_review_site"` guard with:
 
@@ -1973,7 +2031,7 @@ Inside that branch, after tracing the review plan and before the existing per-qu
 
 Keep the existing legacy loop after this block so older review-site behavior remains as a fallback.
 
-- [ ] **Step 9: Consume community search summaries in collect join**
+- [ ] **Step 10: Consume community search summaries in collect join**
 
 In `_real_collect_join_step()` in `backend/packages/agents/collectors/logic.py`, add `"community_search_completed"` to both collect-join `message_types` sets:
 
@@ -1984,7 +2042,7 @@ In `_real_collect_join_step()` in `backend/packages/agents/collectors/logic.py`,
                 "community_search_completed",
 ```
 
-- [ ] **Step 10: Run collector tests**
+- [ ] **Step 11: Run collector tests**
 
 Run:
 
@@ -1994,22 +2052,22 @@ D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test
 
 Expected: PASS.
 
-- [ ] **Step 11: Run ruff for collector files**
+- [ ] **Step 12: Run ruff for collector files**
 
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\config\settings.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\tests\unit\test_run_service.py
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\config\settings.py backend\packages\schema\messages.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\tests\unit\test_run_service.py
 ```
 
 Expected: `All checks passed!`
 
-- [ ] **Step 12: Commit Task 5**
+- [ ] **Step 13: Commit Task 5**
 
 Run:
 
 ```powershell
-git add backend/packages/config/settings.py backend/packages/agents/collectors/logic.py backend/packages/agents/collectors/skill_tools.py backend/tests/unit/test_run_service.py
+git add backend/packages/config/settings.py backend/packages/schema/messages.py backend/packages/agents/collectors/logic.py backend/packages/agents/collectors/skill_tools.py backend/tests/unit/test_run_service.py
 git commit -m "feat: collect community evidence"
 ```
 
@@ -2029,7 +2087,16 @@ Append to `backend/tests/unit/test_run_service.py`:
 
 ```python
 def test_collect_join_annotates_community_claim_clusters() -> None:
-    service = RunService(settings=Settings(execution_mode="real"))
+    service = RunService(
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
     detail = RunDetail(
         id="run-community-clusters",
         topic="AI coding assistants",
@@ -2080,7 +2147,16 @@ def test_collect_join_annotates_community_claim_clusters() -> None:
 
 
 def test_collect_join_marks_community_cluster_official_confirmed_when_values_match() -> None:
-    service = RunService(settings=Settings(execution_mode="real"))
+    service = RunService(
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
     detail = RunDetail(
         id="run-community-official-confirmed",
         topic="AI coding assistants",
@@ -2135,11 +2211,23 @@ Append to `backend/tests/unit/test_review_theme_summary.py`:
 
 ```python
 def test_review_summary_uses_community_clusters_for_review_dimension() -> None:
-    service = RunService(settings=Settings(execution_mode="real"))
+    service = RunService(
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
     detail = RunDetail(
         id="run-community-review-summary",
         topic="AI coding assistants",
+        status="running",
         execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
         plan=AnalysisPlan(
             topic="AI coding assistants",
             competitors=["Cursor"],
@@ -2433,7 +2521,16 @@ Append to `backend/tests/unit/test_run_service.py` near source digest tests:
 
 ```python
 def test_writer_source_digest_exposes_community_metadata() -> None:
-    service = RunService(settings=Settings(execution_mode="real"))
+    service = RunService(
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
     source = RawSource(
         id="reddit-cursor-pricing",
         competitor="Cursor",
@@ -2573,7 +2670,16 @@ Append to `backend/tests/unit/test_run_service.py`:
 
 ```python
 def test_persona_strength_accepts_community_public_signal() -> None:
-    service = RunService(settings=Settings(execution_mode="real"))
+    service = RunService(
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
     detail = RunDetail(
         id="run-community-persona-strength",
         topic="AI coding assistants",
@@ -2607,8 +2713,80 @@ def test_persona_strength_accepts_community_public_signal() -> None:
     assert issues == []
 
 
+def test_collect_qa_does_not_block_typed_community_sources_as_unverified() -> None:
+    service = RunService(
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-source-qa",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        agent_messages=[
+            AgentMessage(
+                id="msg-community-search",
+                run_id="run-community-source-qa",
+                from_agent="collector",
+                to_agent="collect_join",
+                message_type="community_search_completed",
+                payload_schema="CommunitySearchSummary",
+                payload={
+                    "competitor": "Cursor",
+                    "dimension": "pricing",
+                    "queries": ["Cursor pricing usage limit reddit AI coding assistants"],
+                    "query_count": 1,
+                    "candidate_count": 1,
+                    "candidate_ids": ["candidate-1"],
+                    "no_result": False,
+                },
+            )
+        ],
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+
+    assert not any("not fetched webpage evidence" in issue.problem for issue in issues)
+
+
 def test_qa_blocks_community_observation_written_as_official_commitment() -> None:
-    service = RunService(settings=Settings(execution_mode="real"))
+    service = RunService(
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
     detail = RunDetail(
         id="run-community-official-guard",
         topic="AI coding assistants",
@@ -2647,7 +2825,7 @@ def test_qa_blocks_community_observation_written_as_official_commitment() -> Non
         report_md="## Pricing\nOfficial Cursor pricing is $20 per month. [source:reddit-pricing]",
     )
 
-    issues = service._build_qa_issues(detail)
+    issues = service._build_collect_qa_issues(detail)
 
     assert any(
         issue.severity == "blocker"
@@ -2657,7 +2835,16 @@ def test_qa_blocks_community_observation_written_as_official_commitment() -> Non
 
 
 def test_qa_warns_when_community_triangulation_was_not_attempted() -> None:
-    service = RunService(settings=Settings(execution_mode="real"))
+    service = RunService(
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
     detail = RunDetail(
         id="run-community-missing-attempt",
         topic="AI coding assistants",
@@ -2724,11 +2911,12 @@ def test_quality_expects_community_section_when_community_evidence_exists() -> N
         )
     ]
 
-    comparison = compare_run_quality(detail, detail)
+    comparison = compare_run_quality(detail, baseline=detail)
     metrics = {metric.name: metric for metric in comparison.metrics}
 
     assert "community_evidence_section_score" in metrics
     assert metrics["community_evidence_section_score"].target_value == 0.0
+    assert round(sum(metric.weight for metric in comparison.metrics), 6) == 1.0
 ```
 
 - [ ] **Step 3: Run QA and quality tests and verify they fail**
@@ -2736,7 +2924,7 @@ def test_quality_expects_community_section_when_community_evidence_exists() -> N
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test_run_service.py -k "community_public_signal or community_observation_written_as_official or community_triangulation_was_not_attempted" -q
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test_run_service.py -k "community_public_signal or typed_community_sources_as_unverified or community_observation_written_as_official or community_triangulation_was_not_attempted" -q
 D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test_report_quality.py -k "community_section_when_community_evidence_exists" -q
 ```
 
@@ -2763,7 +2951,23 @@ Update `PERSONA_PUBLIC_SOURCE_TYPES` to:
 PERSONA_PUBLIC_SOURCE_TYPES = {"webpage_verified", *COMMUNITY_PUBLIC_SOURCE_TYPES}
 ```
 
-- [ ] **Step 5: Add writer QA official/community guard**
+- [ ] **Step 5: Exempt typed community sources from generic unverified-source blocking**
+
+In `_build_collect_qa_issues()` in `backend/packages/agents/qa/logic.py`, update `unverified_sources` to exclude community evidence sources:
+
+```python
+        unverified_sources = [
+            source
+            for source in detail.raw_sources
+            if source.dimension in detail.plan.dimensions
+            and source.source_type != "webpage_verified"
+            and source.source_type not in COMMUNITY_PUBLIC_SOURCE_TYPES
+            and not source.metadata.get("community_evidence")
+            and source.url is not None
+        ]
+```
+
+- [ ] **Step 6: Add writer QA official/community guard**
 
 In `backend/packages/agents/qa/logic.py`, add this helper near writer QA issue helpers:
 
@@ -2813,7 +3017,7 @@ In `backend/packages/agents/qa/logic.py`, add this helper near writer QA issue h
         return issues
 ```
 
-- [ ] **Step 6: Add QA warn for skipped community triangulation**
+- [ ] **Step 7: Add QA warn for skipped community triangulation**
 
 In `backend/packages/agents/qa/logic.py`, add:
 
@@ -2872,7 +3076,7 @@ In `backend/packages/agents/qa/logic.py`, add:
         return issues
 ```
 
-In `_build_qa_issues()`, after `_build_collect_qa_issues(detail)` is added, add:
+In `_build_collect_qa_issues()`, after `_build_persona_evidence_strength_issues(detail, missing_dimensions)` is added and before `return issues`, add:
 
 ```python
         issues.extend(self._build_community_attempt_issues(detail))
@@ -2884,7 +3088,7 @@ In `_build_qa_issues()`, after `_build_text_quality_issues(detail)` is added, ad
         issues.extend(self._build_community_official_commitment_issues(detail))
 ```
 
-- [ ] **Step 7: Add community source types and metric to report quality**
+- [ ] **Step 8: Add community source types and metric to report quality**
 
 In `backend/packages/business_intel/report_quality.py`, add community source types to `REAL_SOURCE_TYPES` and `REVIEW_THEME_SOURCE_TYPES`:
 
@@ -2958,8 +3162,12 @@ Register it in `normalized`:
 Register it in `_metric_specs()`:
 
 ```python
+        ("source_coverage_rate", 0.06, "higher_is_better"),
+        ("verified_source_rate", 0.06, "higher_is_better"),
         ("community_evidence_section_score", 0.02, "higher_is_better"),
 ```
+
+This replaces the existing `source_coverage_rate` and `verified_source_rate` weights of `0.07`, keeping total metric weight at `1.00`.
 
 Add it to the `report_quality_signal` section gate:
 
@@ -2967,18 +3175,18 @@ Add it to the `report_quality_signal` section gate:
         and values["community_evidence_section_score"] >= 1.0
 ```
 
-- [ ] **Step 8: Run QA and quality tests**
+- [ ] **Step 9: Run QA and quality tests**
 
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test_run_service.py -k "community_public_signal or community_observation_written_as_official or community_triangulation_was_not_attempted" -q
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test_run_service.py -k "community_public_signal or typed_community_sources_as_unverified or community_observation_written_as_official or community_triangulation_was_not_attempted" -q
 D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend\tests\unit\test_report_quality.py -k "community_section_when_community_evidence_exists" -q
 ```
 
 Expected: PASS.
 
-- [ ] **Step 9: Run ruff**
+- [ ] **Step 10: Run ruff**
 
 Run:
 
@@ -2988,7 +3196,7 @@ D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\ag
 
 Expected: `All checks passed!`
 
-- [ ] **Step 10: Commit Task 8**
+- [ ] **Step 11: Commit Task 8**
 
 Run:
 
@@ -3015,11 +3223,12 @@ async def test_cursor_pricing_uses_community_caveat_when_official_pricing_is_thi
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
-            execution_mode="real",
             demo_mode=False,
             ark_api_key="key",
             ark_model="model",
             ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
             web_search_provider="perplexity",
             collector_target_verified_sources_per_branch=1,
             collector_community_enabled=True,
@@ -3139,7 +3348,7 @@ def test_quality_accepts_labeled_community_observation_section() -> None:
         )
     ]
 
-    comparison = compare_run_quality(detail, detail)
+    comparison = compare_run_quality(detail, baseline=detail)
     metrics = {metric.name: metric for metric in comparison.metrics}
 
     assert metrics["community_evidence_section_score"].target_value == 1.0
@@ -3172,7 +3381,7 @@ Expected: PASS.
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\community backend\packages\research\models.py backend\packages\research\discovery\constants.py backend\packages\research\discovery\providers.py backend\packages\research\capture\policy.py backend\packages\config\settings.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\packages\agents\analysts\logic.py backend\packages\agents\writer\logic.py backend\packages\agents\qa\logic.py backend\packages\business_intel\report_quality.py backend\tests\unit\test_community_query_planner.py backend\tests\unit\test_community_source_classifier.py backend\tests\unit\test_community_claims.py backend\tests\unit\test_run_service.py backend\tests\unit\test_report_quality.py
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\community backend\packages\research\models.py backend\packages\research\discovery\constants.py backend\packages\research\discovery\providers.py backend\packages\research\capture\policy.py backend\packages\config\settings.py backend\packages\schema\messages.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\packages\agents\analysts\logic.py backend\packages\agents\writer\logic.py backend\packages\agents\qa\logic.py backend\packages\business_intel\report_quality.py backend\tests\unit\test_community_query_planner.py backend\tests\unit\test_community_source_classifier.py backend\tests\unit\test_community_claims.py backend\tests\unit\test_run_service.py backend\tests\unit\test_report_quality.py
 ```
 
 Expected: `All checks passed!`
@@ -3207,7 +3416,7 @@ Expected: PASS.
 Run:
 
 ```powershell
-D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\community backend\packages\research\models.py backend\packages\research\discovery\constants.py backend\packages\research\discovery\providers.py backend\packages\research\capture\policy.py backend\packages\config\settings.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\packages\agents\analysts\logic.py backend\packages\agents\writer\logic.py backend\packages\agents\qa\logic.py backend\packages\business_intel\report_quality.py backend\tests\unit\test_community_query_planner.py backend\tests\unit\test_community_source_classifier.py backend\tests\unit\test_community_claims.py backend\tests\unit\test_run_service.py backend\tests\unit\test_report_quality.py
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m ruff check backend\packages\community backend\packages\research\models.py backend\packages\research\discovery\constants.py backend\packages\research\discovery\providers.py backend\packages\research\capture\policy.py backend\packages\config\settings.py backend\packages\schema\messages.py backend\packages\agents\collectors\logic.py backend\packages\agents\collectors\skill_tools.py backend\packages\agents\analysts\logic.py backend\packages\agents\writer\logic.py backend\packages\agents\qa\logic.py backend\packages\business_intel\report_quality.py backend\tests\unit\test_community_query_planner.py backend\tests\unit\test_community_source_classifier.py backend\tests\unit\test_community_claims.py backend\tests\unit\test_run_service.py backend\tests\unit\test_report_quality.py
 ```
 
 Expected: `All checks passed!`
