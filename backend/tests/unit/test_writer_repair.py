@@ -7,6 +7,7 @@ from packages.agents.writer.repair import (
     build_writer_repair_plan,
     replace_markdown_section,
     report_regression_problem,
+    section_regression_problem,
 )
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
@@ -312,6 +313,96 @@ def test_report_regression_detects_review_section_losing_user_research_sources()
 
     assert problem is not None
     assert "user research source" in problem
+
+
+def test_report_regression_detects_review_section_losing_fragmented_user_research_source() -> None:
+    previous = RunDetail(
+        id="run-prev",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="cursor-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="Cursor survey",
+                snippet="Survey with adoption blockers.",
+                content_hash="cursor-survey-hash",
+                confidence=0.76,
+            )
+        ],
+        report_md=(
+            "# Report\n\n"
+            "## User Review Themes\n"
+            "Survey and interview signals describe adoption blockers. "
+            "[source:cursor-survey#chunk-1]\n"
+        ),
+    )
+    candidate = previous.model_copy(
+        update={
+            "report_md": (
+                "# Report\n\n"
+                "## User Review Themes\n"
+                "User evidence is summarized from pricing pages. [source:pricing-1]\n"
+            )
+        }
+    )
+
+    problem = report_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert problem is not None
+    assert "user research source" in problem
+
+
+def test_section_regression_ignores_unrelated_global_quality_gate_failures() -> None:
+    previous = RunDetail(
+        id="run-prev",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="cursor-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="Cursor survey",
+                snippet="Survey with adoption blockers.",
+                content_hash="cursor-survey-hash",
+                confidence=0.76,
+            )
+        ],
+        report_md=(
+            "# Report\n\n"
+            "## User Review Themes\n"
+            "Survey signals describe adoption blockers and switching triggers. "
+            "[source:cursor-survey]\n"
+        ),
+    )
+    candidate = previous.model_copy(
+        update={
+            "report_md": (
+                "# Report\n\n"
+                "## User Review Themes\n"
+                "Survey signals describe onboarding blockers and switching triggers. "
+                "[source:cursor-survey]\n"
+            )
+        }
+    )
+
+    global_problem = report_regression_problem(previous, candidate, ["review_theme_summary"])
+    section_problem = section_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert global_problem is not None
+    assert section_problem is None
 
 
 def test_writer_repair_helpers_accept_approved_positional_api() -> None:

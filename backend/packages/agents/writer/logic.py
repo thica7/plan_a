@@ -12,6 +12,7 @@ from packages.agents.writer.repair import (
     build_writer_repair_plan,
     replace_markdown_section,
     report_regression_problem,
+    section_regression_problem,
 )
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.i18n.language import (
@@ -239,7 +240,7 @@ class WriterAgentMixin:
                             "metrics": repair_comparison_metrics,
                         }
                     )
-                    anti_regression_reason = report_regression_problem(
+                    anti_regression_reason = section_regression_problem(
                         previous_detail,
                         candidate_detail,
                         protected_sections=repair_plan.sections,

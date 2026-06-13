@@ -6,6 +6,7 @@ from typing import Literal
 
 from packages.business_intel.report_quality import compare_run_quality
 from packages.i18n.language import report_label
+from packages.identity.source_resolver import normalize_source_token, source_tokens
 from packages.research.evidence import publishable_text_noise_problem
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import QCIssue
@@ -163,23 +164,76 @@ def report_regression_problem(
     candidate: RunDetail,
     protected_sections: list[str],
 ) -> str | None:
+    section_problem = _protected_section_regression_problem(
+        previous, candidate, protected_sections
+    )
+    if section_problem:
+        return section_problem
+    user_research_problem = _user_research_source_regression_problem(
+        previous, candidate, protected_sections
+    )
+    if user_research_problem:
+        return user_research_problem
+
+    comparison = compare_run_quality(candidate, baseline=previous)
+    if comparison.regression_gate_status == "fail":
+        return "; ".join(comparison.regression_gate_reasons)
+    return None
+
+
+def section_regression_problem(
+    previous: RunDetail,
+    candidate: RunDetail,
+    protected_sections: list[str],
+) -> str | None:
+    section_problem = _protected_section_regression_problem(
+        previous, candidate, protected_sections
+    )
+    if section_problem:
+        return section_problem
+    return _user_research_source_regression_problem(
+        previous, candidate, protected_sections
+    )
+
+
+def _protected_section_regression_problem(
+    previous: RunDetail,
+    candidate: RunDetail,
+    protected_sections: list[str],
+) -> str | None:
     for section_key in protected_sections:
-        previous_chars = _section_content_chars(
+        previous_section = _find_section(
             previous.report_md,
             section_key,
             previous.output_language,
         )
-        candidate_chars = _section_content_chars(
+        candidate_section = _find_section(
             candidate.report_md,
             section_key,
             candidate.output_language,
         )
+        previous_chars = _section_content_chars(previous_section)
+        candidate_chars = _section_content_chars(candidate_section)
+        if (
+            previous_section is not None
+            and candidate_section is not None
+            and _sections_use_different_scripts(previous_section, candidate_section)
+        ):
+            continue
         if previous_chars >= 180 and candidate_chars < max(120, previous_chars * 0.55):
             return (
                 f"{section_key} section regressed from {previous_chars} to "
                 f"{candidate_chars} substantive characters"
             )
 
+    return None
+
+
+def _user_research_source_regression_problem(
+    previous: RunDetail,
+    candidate: RunDetail,
+    protected_sections: list[str],
+) -> str | None:
     if "review_theme_summary" in protected_sections:
         user_research_ids = _user_research_source_ids(previous)
         previous_review_ids = _section_cited_source_ids(
@@ -198,9 +252,6 @@ def report_regression_problem(
         ):
             return "review_theme_summary lost user research source citations"
 
-    comparison = compare_run_quality(candidate, baseline=previous)
-    if comparison.regression_gate_status == "fail":
-        return "; ".join(comparison.regression_gate_reasons)
     return None
 
 
@@ -332,7 +383,7 @@ def _section_cited_source_ids(
     section = _find_section(markdown, section_key, output_language)
     if section is None:
         return set()
-    return set(re.findall(r"\[source:([A-Za-z0-9_.:#-]+)\]", section.body))
+    return {normalize_source_token(token) for token in source_tokens(section.body)}
 
 
 def _user_research_source_ids(detail: RunDetail) -> set[str]:
@@ -344,13 +395,23 @@ def _user_research_source_ids(detail: RunDetail) -> set[str]:
 
 
 def _section_content_chars(
-    markdown: str,
-    section_key: str,
-    output_language: str,
+    section: MarkdownSection | None,
 ) -> int:
-    section = _find_section(markdown, section_key, output_language)
     if section is None:
         return 0
     body = re.sub(r"\[source:[^\]]+\]", "", section.body)
     body = re.sub(r"\s+", " ", body).strip()
     return len(body)
+
+
+def _sections_use_different_scripts(
+    previous: MarkdownSection,
+    candidate: MarkdownSection,
+) -> bool:
+    return _contains_cjk(previous.heading + "\n" + previous.body) != _contains_cjk(
+        candidate.heading + "\n" + candidate.body
+    )
+
+
+def _contains_cjk(value: str) -> bool:
+    return bool(re.search(r"[\u3400-\u9fff]", value))
