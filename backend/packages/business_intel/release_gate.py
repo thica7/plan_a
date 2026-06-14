@@ -30,6 +30,16 @@ from packages.schema.enterprise import (
 MIN_VERIFIED_EVIDENCE_RATE = 0.8
 MIN_READY_SCORE = 85
 MIN_RELEASE_SOURCE_CONFIDENCE = 0.75
+MIN_COMMUNITY_RELEASE_CLUSTER_CONFIDENCE = 0.70
+COMMUNITY_RELEASE_GRADE_LABELS = {"official_confirmed", "community_triangulated"}
+COMMUNITY_RELEASE_GRADE_SOURCE_TYPES = {
+    "github_discussion",
+    "github_issue",
+    "community_forum",
+    "reddit_thread",
+    "review_site",
+    "developer_blog",
+}
 MIN_REPORT_STRUCTURE_SCORE = 0.7
 MIN_REPORT_BODY_CHARS = 900
 STRONG_CONCLUSION_RE = re.compile(
@@ -320,28 +330,34 @@ def _source_quality_issues(
                 ),
             )
         )
-    verified = [
+    release_grade_candidates = [
         item
         for item in evidence
-        if item.source_type == "webpage_verified"
-        and item.quality_label not in BAD_QUALITY_LABELS
-        and item.reliability_score >= 0.5
+        if _is_release_grade_rate_candidate(item)
     ]
-    verified_rate = len(verified) / len(evidence)
-    if verified_rate >= MIN_VERIFIED_EVIDENCE_RATE:
+    release_grade_denominator = release_grade_candidates or evidence
+    release_grade = [
+        item
+        for item in release_grade_denominator
+        if _is_release_grade_evidence(item, min_reliability_score=0.5)
+    ]
+    release_grade_rate = len(release_grade) / len(release_grade_denominator)
+    if release_grade_rate >= MIN_VERIFIED_EVIDENCE_RATE:
         return issues
     issues.append(
         _gate_issue(
             "verified_evidence_rate",
-            "Verified evidence rate",
+            "Release-grade evidence rate",
             (
-                f"Only {verified_rate:.0%} of report evidence is verified and usable; "
+                f"Only {release_grade_rate:.0%} of release-relevant report evidence is "
+                "release-grade; "
                 f"minimum is {MIN_VERIFIED_EVIDENCE_RATE:.0%}."
             ),
-            evidence_ids=[item.id for item in evidence],
-            **_issue_scope_from_evidence(evidence, competitor_names_by_id),
+            evidence_ids=[item.id for item in release_grade_denominator],
+            **_issue_scope_from_evidence(release_grade_denominator, competitor_names_by_id),
             recommendation=(
-                "Replace weak sources with verified webpages or mark bad evidence stale/rejected."
+                "Replace weak sources with verified webpages, high-confidence triangulated "
+                "community evidence, or mark bad evidence stale/rejected."
             ),
         )
     )
@@ -367,6 +383,71 @@ def _source_robots_status(evidence: EvidenceRecord) -> str:
     if "robots" in source_type and "blocked" in source_type:
         return "blocked"
     return "unknown"
+
+
+def _is_release_grade_evidence(
+    evidence: EvidenceRecord,
+    *,
+    min_reliability_score: float,
+) -> bool:
+    if (
+        evidence.quality_label in BAD_QUALITY_LABELS
+        or evidence.reliability_score < min_reliability_score
+    ):
+        return False
+    if evidence.source_type == "webpage_verified":
+        return True
+    if evidence.source_type not in COMMUNITY_RELEASE_GRADE_SOURCE_TYPES:
+        return False
+    if evidence.reliability_score < MIN_RELEASE_SOURCE_CONFIDENCE:
+        return False
+    return _has_release_grade_community_cluster(evidence)
+
+
+def _is_release_grade_rate_candidate(evidence: EvidenceRecord) -> bool:
+    if evidence.source_type == "webpage_verified":
+        return True
+    return (
+        evidence.source_type in COMMUNITY_RELEASE_GRADE_SOURCE_TYPES
+        and _has_release_grade_community_cluster(evidence)
+    )
+
+
+def _has_release_grade_community_cluster(evidence: EvidenceRecord) -> bool:
+    clusters = evidence.metadata.get("community_claim_clusters")
+    if not isinstance(clusters, list):
+        return False
+    for cluster in clusters:
+        if not isinstance(cluster, dict):
+            continue
+        label = str(cluster.get("label") or "")
+        if label not in COMMUNITY_RELEASE_GRADE_LABELS:
+            continue
+        confidence = _optional_float(cluster.get("confidence"))
+        if confidence is None or confidence < MIN_COMMUNITY_RELEASE_CLUSTER_CONFIDENCE:
+            continue
+        if label == "official_confirmed":
+            return True
+        source_ids = cluster.get("source_ids")
+        source_count = len(source_ids) if isinstance(source_ids, list) else 0
+        independent_count = _optional_int(cluster.get("independent_domain_count"))
+        if source_count >= 2 or (independent_count is not None and independent_count >= 2):
+            return True
+    return False
+
+
+def _optional_float(value: object) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_int(value: object) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _issue_scope_from_evidence(
@@ -395,10 +476,9 @@ def _claim_evidence_quality_issues(
             item
             for evidence_id in claim.evidence_ids
             if (item := evidence_by_id.get(evidence_id)) is not None
-            and (
-                item.source_type != "webpage_verified"
-                or item.reliability_score < MIN_RELEASE_SOURCE_CONFIDENCE
-                or item.quality_label in BAD_QUALITY_LABELS
+            and not _is_release_grade_evidence(
+                item,
+                min_reliability_score=MIN_RELEASE_SOURCE_CONFIDENCE,
             )
         ]
         if not weak:
@@ -409,7 +489,7 @@ def _claim_evidence_quality_issues(
                 "Claim evidence confidence",
                 (
                     f"Claim {claim.id} depends on {len(weak)} weak evidence item(s); "
-                    "release claims require verified webpage evidence with confidence >= "
+                    "release claims require release-grade evidence with confidence >= "
                     f"{MIN_RELEASE_SOURCE_CONFIDENCE:.2f}."
                 ),
                 claim_ids=[claim.id],
@@ -418,8 +498,8 @@ def _claim_evidence_quality_issues(
                 competitor_name=competitor_names_by_id.get(claim.competitor_id),
                 dimension=claim.claim_type,
                 recommendation=(
-                    "Redo collection for this claim using official or fetched webpages before "
-                    "publishing."
+                    "Redo collection for this claim using official, fetched webpages, or "
+                    "high-confidence triangulated community evidence before publishing."
                 ),
             )
         )
@@ -632,10 +712,9 @@ def _report_citation_quality_issues(
             evidence_by_token[normalized]
             for token in _cited_source_tokens(line)
             if (normalized := normalize_source_token(token)) in evidence_by_token
-            and (
-                evidence_by_token[normalized].source_type != "webpage_verified"
-                or evidence_by_token[normalized].reliability_score < MIN_RELEASE_SOURCE_CONFIDENCE
-                or evidence_by_token[normalized].quality_label in BAD_QUALITY_LABELS
+            and not _is_release_grade_evidence(
+                evidence_by_token[normalized],
+                min_reliability_score=MIN_RELEASE_SOURCE_CONFIDENCE,
             )
         ]
         if not weak:

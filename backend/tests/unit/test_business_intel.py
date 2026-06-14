@@ -542,6 +542,376 @@ def test_report_release_gate_blocks_pending_source_policy_review() -> None:
     assert "source_policy_review_required" in {issue.rule_id for issue in gate.issues}
 
 
+def test_report_release_gate_counts_high_quality_triangulated_community_evidence() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="community-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="github_discussion",
+            title="Cursor pricing community discussion",
+            url="https://github.com/orgs/community/discussions/1",
+            snippet="Multiple independent users report Cursor Pro pricing at $20 per month.",
+            content_hash="hash-1",
+            reliability_score=0.85,
+            quality_label="accepted",
+            metadata={
+                "community_evidence": True,
+                "community_claim_clusters": [
+                    {
+                        "label": "community_triangulated",
+                        "confidence": 0.84,
+                        "claim_type": "pricing",
+                        "independent_domain_count": 3,
+                        "source_ids": ["community-1", "community-2", "community-3"],
+                    }
+                ],
+            },
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Community sources triangulate Cursor pricing at $20 per month.",
+            evidence_ids=["evidence-1"],
+            confidence=0.84,
+        )
+    ]
+    report = _report_version(
+        report_md=_structured_release_report(source_token="evidence-1"),
+        evidence_ids=["evidence-1"],
+        claim_ids=["claim-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert "verified_evidence_rate" not in {issue.rule_id for issue in gate.issues}
+    assert gate.allowed is True
+
+
+def test_report_release_gate_counts_collector_threshold_triangulated_community_evidence() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="community-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="github_discussion",
+            title="Cursor pricing community discussion",
+            url="https://github.com/orgs/community/discussions/1",
+            snippet="Multiple independent users report Cursor Pro pricing at $20 per month.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+            metadata={
+                "community_evidence": True,
+                "community_claim_clusters": [
+                    {
+                        "label": "community_triangulated",
+                        "confidence": 0.70,
+                        "kind": "pricing",
+                        "independent_domain_count": 2,
+                        "source_ids": ["community-1", "community-2"],
+                    }
+                ],
+            },
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Community sources triangulate Cursor pricing at $20 per month.",
+            evidence_ids=["evidence-1"],
+            confidence=0.8,
+        )
+    ]
+    report = _report_version(
+        report_md=_structured_release_report(source_token="evidence-1"),
+        evidence_ids=["evidence-1"],
+        claim_ids=["claim-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert "verified_evidence_rate" not in {issue.rule_id for issue in gate.issues}
+    assert gate.allowed is True
+
+
+def test_report_release_gate_still_blocks_untriangulated_community_evidence() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="community-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="snippet_only",
+            title="Cursor pricing reddit snippet",
+            url="https://www.reddit.com/r/cursor/comments/example",
+            snippet="One community snippet reports Cursor pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+            metadata={"community_evidence": True},
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="A community snippet reports Cursor pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.8,
+        )
+    ]
+    report = _report_version(
+        report_md=_structured_release_report(source_token="evidence-1"),
+        evidence_ids=["evidence-1"],
+        claim_ids=["claim-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert "verified_evidence_rate" in {issue.rule_id for issue in gate.issues}
+    assert gate.allowed is False
+
+
+def test_report_release_gate_does_not_dilute_rate_with_auxiliary_evidence() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        ),
+        EvidenceRecord(
+            id="evidence-2",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="snippet-1",
+            competitor_id=competitor.id,
+            dimension="persona",
+            source_type="snippet_only",
+            title="Cursor community snippet",
+            url="https://www.reddit.com/r/cursor/comments/example",
+            snippet="A community snippet provides auxiliary user sentiment.",
+            content_hash="hash-2",
+            reliability_score=0.55,
+            quality_label="unreviewed",
+            metadata={"community_evidence": True},
+        ),
+        EvidenceRecord(
+            id="evidence-3",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="survey-1",
+            competitor_id=competitor.id,
+            dimension="persona",
+            source_type="survey_simulated",
+            title="Cursor persona survey synthesis",
+            url=None,
+            snippet="A simulated survey summarizes buyer persona concerns.",
+            content_hash="hash-3",
+            reliability_score=0.76,
+            quality_label="unreviewed",
+        ),
+        EvidenceRecord(
+            id="evidence-4",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="interview-1",
+            competitor_id=competitor.id,
+            dimension="persona",
+            source_type="interview_record",
+            title="Cursor persona interview synthesis",
+            url=None,
+            snippet="A synthetic interview summarizes adoption blockers.",
+            content_hash="hash-4",
+            reliability_score=0.82,
+            quality_label="unreviewed",
+        ),
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        report_md=_structured_release_report(source_token="evidence-1"),
+        evidence_ids=["evidence-1", "evidence-2", "evidence-3", "evidence-4"],
+        claim_ids=["claim-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert "verified_evidence_rate" not in {issue.rule_id for issue in gate.issues}
+    assert gate.allowed is True
+
+
+def test_report_release_gate_does_not_dilute_rate_with_community_observations() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        ),
+        EvidenceRecord(
+            id="evidence-2",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="forum-1",
+            competitor_id=competitor.id,
+            dimension="feature",
+            source_type="community_forum",
+            title="Cursor community forum observation",
+            url="https://forum.cursor.com/t/example/1",
+            snippet="A forum thread describes a feature limitation in actual use.",
+            content_hash="hash-2",
+            reliability_score=0.92,
+            quality_label="unreviewed",
+            metadata={
+                "community_evidence": True,
+                "community_claim_clusters": [
+                    {
+                        "label": "community_observed",
+                        "confidence": 0.65,
+                        "kind": "feature_limitation",
+                        "independent_domain_count": 1,
+                        "source_ids": ["forum-1"],
+                    }
+                ],
+            },
+        ),
+        EvidenceRecord(
+            id="evidence-3",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="discussion-1",
+            competitor_id=competitor.id,
+            dimension="persona",
+            source_type="github_discussion",
+            title="Cursor community discussion observation",
+            url="https://github.com/orgs/community/discussions/1",
+            snippet="A community discussion describes user sentiment.",
+            content_hash="hash-3",
+            reliability_score=0.92,
+            quality_label="unreviewed",
+            metadata={
+                "community_evidence": True,
+                "community_claim_clusters": [
+                    {
+                        "label": "community_observed",
+                        "confidence": 0.65,
+                        "kind": "persona_signal",
+                        "independent_domain_count": 1,
+                        "source_ids": ["discussion-1"],
+                    }
+                ],
+            },
+        ),
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        report_md=_structured_release_report(source_token="evidence-1"),
+        evidence_ids=["evidence-1", "evidence-2", "evidence-3"],
+        claim_ids=["claim-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert "verified_evidence_rate" not in {issue.rule_id for issue in gate.issues}
+    assert gate.allowed is True
+
+
 def test_report_release_gate_uses_report_homepage_snapshot_for_competitors() -> None:
     competitor = _competitor().model_copy(update={"homepage_url": None, "metadata": {}})
     evidence = [
