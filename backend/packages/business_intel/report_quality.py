@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
+from packages.business_intel.report_sections import build_report_section_index
 from packages.i18n.language import repair_mojibake_text, report_label
 from packages.schema.api_dto import (
     RunDetail,
@@ -1291,6 +1292,47 @@ def _rag_gap_fill_section_score(detail: RunDetail) -> float:
     if not _needs_rag_gap_fill_section(detail):
         return 1.0
     report_md = repair_mojibake_text(detail.report_md)
+    rag_section_aliases = (
+        "rag gap fill",
+        "evidence gap fill",
+        "retrieval",
+        "RAG 缺口补全",
+        "RAG缺口补全",
+        "证据缺口补全",
+        "RAG 缂哄彛琛ュ叏",
+        "RAG缂哄彛琛ュ叏",
+        "璇佹嵁缂哄彛琛ュ叏",
+    )
+    section_index = build_report_section_index(report_md)
+    rag_section = next(
+        (
+            section
+            for section in section_index.sections
+            if _heading_matches(section.heading, rag_section_aliases)
+        ),
+        None,
+    )
+    if rag_section is not None:
+        normalized_section = rag_section.body.casefold()
+        if any(
+            phrase in normalized_section
+            for phrase in (
+                "suggested retrieval query",
+                "retrieval context",
+                "grounded context",
+                "retrieval candidate",
+                "\u5efa\u8bae\u68c0\u7d22",
+                "\u5efa\u8bae\u68c0\u7d22/\u53d6\u8bc1",
+                "\u68c0\u7d22\u67e5\u8be2",
+                "\u68c0\u7d22/\u53d6\u8bc1",
+                "\u9700\u8981\u7684\u8bc1\u636e",
+                "\u5f53\u524d\u72b6\u6001",
+                "\u8bc1\u636e\u7f3a\u53e3",
+                "\u5f85\u8865\u5168",
+            )
+        ):
+            return 1.0
+        return 0.5
     if not _has_heading(
         report_md,
         (
@@ -1363,6 +1405,14 @@ def _has_structured_swot_quadrants(body: str) -> bool:
         heading_quadrant = _swot_quadrant_from_heading(line)
         if heading_quadrant is not None and _heading_has_following_body(lines, index):
             found.add(heading_quadrant)
+            continue
+        label_quadrant, inline_content = _swot_quadrant_from_markdown_label(line)
+        if label_quadrant is None:
+            continue
+        if _is_substantive_quadrant_content(
+            inline_content
+        ) or _swot_label_has_following_body(lines, index):
+            found.add(label_quadrant)
     return found == {key for key, _ in _swot_quadrant_aliases()}
 
 
@@ -1401,17 +1451,49 @@ def _swot_quadrant_from_heading(line: str) -> str | None:
     return _swot_quadrant_from_label(match.group(1))
 
 
+def _swot_quadrant_from_markdown_label(line: str) -> tuple[str | None, str]:
+    stripped = line.strip()
+    match = re.match(
+        r"^\s*(?:[-*]\s*)?(?:\*\*|__)\s*(.+?)\s*(?:\*\*|__)\s*(.*)$",
+        stripped,
+    )
+    if match is None:
+        return None, ""
+    quadrant = _swot_quadrant_from_label(match.group(1))
+    return quadrant, match.group(2).strip()
+
+
 def _swot_quadrant_from_label(label: str) -> str | None:
-    normalized_label = _normalize_heading(label)
-    compact_label = _compact_heading_text(label)
-    for key, aliases in _swot_quadrant_aliases():
-        if any(
-            normalized_label == _normalize_heading(alias)
-            or compact_label == _compact_heading_text(alias)
-            for alias in aliases
-        ):
-            return key
+    for cleaned_label in _swot_label_candidates(label):
+        normalized_label = _normalize_heading(cleaned_label)
+        compact_label = _compact_heading_text(cleaned_label)
+        for key, aliases in _swot_quadrant_aliases():
+            if any(
+                normalized_label == _normalize_heading(alias)
+                or compact_label == _compact_heading_text(alias)
+                for alias in aliases
+            ):
+                return key
     return None
+
+
+def _swot_label_candidates(label: str) -> list[str]:
+    cleaned = _clean_swot_quadrant_label(label)
+    candidates = [cleaned]
+    parenthetical_parts = re.findall(r"[\(\[（【]\s*([^\)\]）】]+?)\s*[\)\]）】]", cleaned)
+    without_parenthetical = re.sub(r"\s*[\(\[（【][^\)\]）】]+?[\)\]）】]\s*", " ", cleaned)
+    candidates.append(_clean_swot_quadrant_label(without_parenthetical))
+    candidates.extend(_clean_swot_quadrant_label(part) for part in parenthetical_parts)
+    for part in re.split(r"[/／|｜·・]", cleaned):
+        candidates.append(_clean_swot_quadrant_label(part))
+    return [candidate for candidate in candidates if candidate]
+
+
+def _clean_swot_quadrant_label(label: str) -> str:
+    cleaned = label.strip()
+    cleaned = re.sub(r"^(?:\*\*|__|[*_`])+", "", cleaned)
+    cleaned = re.sub(r"(?:\*\*|__|[*_`])+$", "", cleaned)
+    return cleaned.strip().strip(":：锛歖").strip()
 
 
 def _table_cells(line: str) -> list[str]:
@@ -1426,6 +1508,17 @@ def _table_cells(line: str) -> list[str]:
 def _heading_has_following_body(lines: list[str], heading_index: int) -> bool:
     for line in lines[heading_index + 1 :]:
         if re.match(r"^\s*#{1,6}\s+", line):
+            return False
+        if _is_substantive_quadrant_content(line):
+            return True
+    return False
+
+
+def _swot_label_has_following_body(lines: list[str], label_index: int) -> bool:
+    for line in lines[label_index + 1 :]:
+        if re.match(r"^\s*#{1,6}\s+", line):
+            return False
+        if _swot_quadrant_from_markdown_label(line)[0] is not None:
             return False
         if _is_substantive_quadrant_content(line):
             return True

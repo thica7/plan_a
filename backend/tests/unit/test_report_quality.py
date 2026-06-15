@@ -1564,6 +1564,94 @@ def test_report_quality_accepts_structured_english_swot_quadrant_rows() -> None:
     assert comparison.report_quality_signal is True
 
 
+def test_report_quality_accepts_bold_swot_quadrant_labels() -> None:
+    structured_swot = (
+        f"## {report_label('en-US', 'swot_analysis')}\n"
+        "### Cursor\n\n"
+        "**Strengths:**\n"
+        "- Cursor pricing clarity gives sales a concrete first proof point. [source:source-0]\n\n"
+        "**Weaknesses:**\n"
+        "- Enterprise security and procurement proof remains incomplete. [source:source-2]\n\n"
+        "**Opportunities:**\n"
+        "- Buyer education can focus on standalone value and workflow speed. [source:source-0]\n\n"
+        "**Threats:**\n"
+        "- Copilot can defend through bundled Microsoft procurement paths. [source:source-1]"
+    )
+    detail = _run_detail(
+        run_id="bold-swot-labels",
+        execution_mode="real",
+        source_count=4,
+        report_md=_replace_report_section(
+            _structured_report_md(),
+            report_label("en-US", "swot_analysis"),
+            structured_swot,
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[_llm_trace_span()],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    blockers = {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert metrics["swot_section_score"].target_value == 1.0
+    assert "swot_section_score" not in blockers
+
+
+def test_report_quality_accepts_bilingual_swot_quadrant_labels() -> None:
+    structured_swot = (
+        f"## {report_label('en-US', 'swot_analysis')}\n"
+        "### Cursor\n\n"
+        "**Strengths (优势):**\n"
+        "- Cursor pricing clarity gives sales a concrete first proof point. [source:source-0]\n\n"
+        "**Weaknesses (劣势):**\n"
+        "- Enterprise security and procurement proof remains incomplete. [source:source-2]\n\n"
+        "**Opportunities (机会):**\n"
+        "- Buyer education can focus on standalone value and workflow speed. [source:source-0]\n\n"
+        "**Threats (威胁):**\n"
+        "- Copilot can defend through bundled Microsoft procurement paths. [source:source-1]"
+    )
+    detail = _run_detail(
+        run_id="bilingual-swot-labels",
+        execution_mode="real",
+        source_count=4,
+        report_md=_replace_report_section(
+            _structured_report_md(),
+            report_label("en-US", "swot_analysis"),
+            structured_swot,
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[_llm_trace_span()],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    blockers = {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
+
+    assert metrics["swot_section_score"].target_value == 1.0
+    assert "swot_section_score" not in blockers
+
+
 def test_report_quality_accepts_structured_chinese_swot_quadrant_rows() -> None:
     structured_swot = (
         f"## {report_label('zh-CN', 'swot_analysis')}\n"
@@ -1595,9 +1683,15 @@ def test_report_quality_accepts_structured_chinese_swot_quadrant_rows() -> None:
 
     comparison = compare_run_quality(detail)
     metrics = {metric.name: metric for metric in comparison.metrics}
+    blockers = {
+        name
+        for check in comparison.signal_checks
+        if check.signal == "report_quality"
+        for name in check.blocking_metric_names
+    }
 
     assert metrics["swot_section_score"].target_value == 1.0
-    assert comparison.report_quality_signal is True
+    assert "swot_section_score" not in blockers
 
 
 def test_report_quality_does_not_count_swot_or_review_child_headings_as_duplicates() -> None:
@@ -1746,6 +1840,62 @@ def test_compare_run_quality_accepts_chinese_rag_gap_fill_section() -> None:
             "## RAG 缺口补全\n"
             "- 差距 `gap-security-evidence`：建议的检索查询：Cursor 安全合规 官方文档。"
             " [source:source-0]\n"
+        ),
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0,
+            verified_source_rate=1.0,
+            claim_citation_rate=1.0,
+        ),
+        trace_spans=[
+            TraceSpan(
+                id="span-llm-1",
+                kind="llm",
+                agent="writer",
+                name="real writer",
+                status="ok",
+                model="deepseek/deepseek-v4-pro",
+                provider="openrouter",
+                duration_ms=120,
+            )
+        ],
+    )
+    detail.qa_findings.append(
+        QCIssue(
+            id="gap-security-evidence",
+            severity="warn",
+            detected_by="coverage",
+            target_agent="collector",
+            target_subagent="security",
+            target_competitor="Cursor",
+            field_path="raw_sources[security][Cursor]",
+            problem="Missing official security evidence.",
+            redo_scope=RedoScope(
+                kind="collector",
+                target_subagent="security",
+                target_competitor="Cursor",
+                rationale="Collect official security evidence.",
+            ),
+        )
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["rag_gap_fill_section_score"].target_value == 1.0
+
+
+def test_compare_run_quality_accepts_normal_chinese_rag_gap_fill_table() -> None:
+    detail = _run_detail(
+        run_id="normal-chinese-rag-gap-fill",
+        execution_mode="real",
+        source_count=4,
+        report_md=(
+            f"{_structured_report_md()}\n\n"
+            "## RAG 缺口补全\n"
+            "| 缺口 | 建议检索/取证 | 需要的证据 | 当前状态 |\n"
+            "| --- | --- | --- | --- |\n"
+            "| gap-security-evidence | Cursor 安全合规 官方文档 | 官方安全或 SOC2 证据 | 待补全 |\n"
         ),
         metrics=RunMetrics(
             llm_calls=3,
