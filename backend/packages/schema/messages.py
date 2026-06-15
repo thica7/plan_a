@@ -127,10 +127,14 @@ class CompetitorKBDigestMessagePayload(_MessagePayload):
 
 class ComparisonMatrixMessagePayload(_MessagePayload):
     comparison_matrix: ComparisonMatrix
+    module_status: Literal["llm", "fallback"] = "llm"
+    fallback: dict[str, Any] = Field(default_factory=dict)
 
 
 class ReflectionRecordMessagePayload(_MessagePayload):
     reflection: ReflectionRecord
+    module_status: Literal["llm", "fallback"] = "llm"
+    fallback: dict[str, Any] = Field(default_factory=dict)
 
 
 class MarkdownReportMessagePayload(_MessagePayload):

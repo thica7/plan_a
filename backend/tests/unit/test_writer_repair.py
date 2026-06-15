@@ -678,7 +678,7 @@ def test_section_regression_allows_review_theme_fallback_evidence_gap() -> None:
     assert problem is None
 
 
-def test_section_regression_ignores_unrelated_global_quality_gate_failures() -> None:
+def test_report_regression_ignores_absolute_quality_gate_failure_without_relative_regression() -> None:
     previous = RunDetail(
         id="run-prev",
         topic="AI coding",
@@ -720,7 +720,7 @@ def test_section_regression_ignores_unrelated_global_quality_gate_failures() -> 
     global_problem = report_regression_problem(previous, candidate, ["review_theme_summary"])
     section_problem = section_regression_problem(previous, candidate, ["review_theme_summary"])
 
-    assert global_problem is not None
+    assert global_problem is None
     assert section_problem is None
 
 

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import packages.agents.pydantic_ai_adapter as pydantic_ai_adapter
 from packages.agents.executor import AgentExecutionRequest
 from packages.business_intel import (
@@ -8,6 +10,7 @@ from packages.business_intel import (
     build_red_team_agent,
     business_findings_to_redo_scopes,
     claim_validation_issues_to_redo_scopes,
+    compare_run_quality,
     evaluate_business_qa,
     evaluate_report_release_gate,
     evidence_gaps_to_redo_scopes,
@@ -35,6 +38,8 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
     SourceRegistryRecord,
 )
+from packages.schema.api_dto import RunDetail
+from packages.schema.models import AnalysisPlan, RawSource, RunMetrics
 from packages.skills.registry import SkillRegistry
 
 
@@ -1189,6 +1194,111 @@ Collect feature evidence next. [source:evidence-1]
     assert gate.allowed is False
     assert "report_depth_required" in rule_ids
     assert "report_structure_required" not in rule_ids
+
+
+def test_run_quality_does_not_give_full_core_depth_to_short_core_sections() -> None:
+    detail = _quality_run_detail(
+        report_md=_medium_but_still_thin_core_report(),
+        competitors=["Cursor", "Claude Code", "GitHub Copilot", "Windsurf"],
+        dimensions=["pricing", "feature", "persona"],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric.target_value for metric in comparison.metrics}
+
+    assert metrics["core_analysis_depth_score"] < 1.0
+    assert metrics["core_section_depth_score"] < 1.0
+
+
+def test_report_release_gate_blocks_report_with_thin_core_quality_metrics() -> None:
+    competitor_names = ["Cursor", "Claude Code", "GitHub Copilot", "Windsurf"]
+    competitors = [
+        CompetitorRecord(
+            id=f"competitor-{index}",
+            workspace_id="workspace-1",
+            name=name,
+            normalized_name=name.casefold().replace(" ", "-"),
+            layer="L1",
+            metadata={"homepage_verified": True},
+        )
+        for index, name in enumerate(competitor_names, start=1)
+    ]
+    evidence = [
+        EvidenceRecord(
+            id=f"evidence-{index}",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id=f"evidence-{index}",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title=f"{competitor.name} pricing",
+            url=f"https://example.com/{index}/pricing",
+            snippet=f"{competitor.name} publishes pricing and product positioning.",
+            content_hash=f"hash-{index}",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+        for index, competitor in enumerate(competitors, start=1)
+    ]
+    claims = [
+        ClaimRecord(
+            id=f"claim-{index}",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text=f"{competitor.name} publishes pricing and product positioning.",
+            evidence_ids=[f"evidence-{index}"],
+            confidence=0.9,
+        )
+        for index, competitor in enumerate(competitors, start=1)
+    ]
+    report_md = f"""
+## Executive Summary
+The report has the required release headings but the core analysis remains too compressed for a
+decision-grade release. [source:evidence-1]
+
+{_medium_but_still_thin_core_report()}
+
+## Claim Validation & Evidence Risk
+The scoped claims are cited but still require fuller treatment in the core report. [source:evidence-1]
+
+## RAG Gap-Fill
+Retrieval gaps remain summarized too briefly for publication. [source:evidence-1]
+
+## Scenario Checklist
+The L1 pricing scenario is referenced but not deeply expanded. [source:evidence-1]
+
+## Next Collection / Verification Plan
+Collect stronger customer voice and procurement evidence before final release. [source:evidence-1]
+
+## Evidence Appendix
+- evidence-1 through evidence-4: accepted pricing evidence. [source:evidence-1]
+""".strip()
+    report = _report_version(
+        report_md=report_md,
+        evidence_ids=[item.id for item in evidence],
+        claim_ids=[item.id for item in claims],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+    )
+    report_depth_issues = [
+        issue for issue in gate.issues if issue.rule_id == "report_depth_required"
+    ]
+
+    assert len(report_md) > 900
+    assert report_depth_issues
+    assert any(
+        "core_section_depth_score" in issue.message or "swot_section_score" in issue.message
+        for issue in report_depth_issues
+    )
 
 
 def test_report_release_gate_accepts_chinese_report_structure() -> None:
@@ -2659,6 +2769,112 @@ def _report_version(
         evidence_ids=evidence_ids or ["evidence-1"],
         quality_metadata=quality_metadata or {},
     )
+
+
+def _quality_run_detail(
+    *,
+    report_md: str,
+    competitors: list[str] | None = None,
+    dimensions: list[str] | None = None,
+) -> RunDetail:
+    competitors = competitors or ["Cursor"]
+    dimensions = dimensions or ["pricing"]
+    return RunDetail(
+        id="run-quality",
+        topic="Cursor pricing",
+        status="completed",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="Cursor pricing",
+            competitors=competitors,
+            dimensions=dimensions,
+            competitor_layer="L1",
+        ),
+        raw_sources=[
+            RawSource(
+                id="evidence-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.sh/pricing",
+                snippet="Cursor publishes pricing.",
+                content_hash="hash-1",
+                confidence=0.9,
+            )
+        ],
+        metrics=RunMetrics(llm_calls=3, source_coverage_rate=1.0, claim_citation_rate=1.0),
+        report_md=report_md,
+    )
+
+
+def _medium_but_still_thin_core_report() -> str:
+    citation = "[source:evidence-1]"
+    return f"""
+# AI Coding Agent Battlecard
+
+## Decision Summary
+- Recommended action: use Cursor as the primary evaluation anchor because standalone pricing
+  and focused workflow claims are easier to explain during a first-pass procurement discussion.
+  {citation}
+- Immediate move: validate security, enterprise packaging, and switching costs before making
+  a replacement recommendation against Copilot, Claude Code, or Windsurf. {citation}
+
+## Competitive Findings
+- Pricing: Cursor appears easiest to frame as a standalone purchase, while Copilot benefits
+  from Microsoft adjacency and Claude Code needs clearer usage-cost framing. {citation}
+- Feature: agentic coding workflows are converging, so differentiation depends on context
+  management, IDE fit, policy controls, and team onboarding. {citation}
+- Persona: individual developers, platform buyers, and AI-forward teams all evaluate these
+  tools differently, which means one winner claim would be premature. {citation}
+
+## User Review Themes
+- Praise: evaluators can understand Cursor pricing and workflow positioning quickly. {citation}
+- Complaint: buyers still need stronger enterprise controls, migration proof, and onboarding
+  evidence before replacing an incumbent workflow. {citation}
+- Switching trigger: teams move only when workflow gains outweigh governance and training cost.
+  {citation}
+
+## Competitor Deep Dives
+- Cursor wins on focused positioning and pricing clarity, but still needs procurement and
+  governance validation before an enterprise recommendation is safe. {citation}
+- Claude Code is strongest when sophisticated teams value deeper agentic workflows, but its
+  buying motion needs clearer cost and rollout guardrails. {citation}
+- GitHub Copilot wins on distribution and Microsoft familiarity, but can look less differentiated
+  in a pure agent-workflow comparison. {citation}
+- Windsurf can remain attractive for AI-native workflow experiments, but the current evidence
+  needs stronger enterprise adoption proof. {citation}
+
+## SWOT Analysis
+- Strengths: Cursor has focused workflow framing; Copilot has distribution; Claude Code has
+  advanced agentic depth; Windsurf has AI-native workflow appeal. {citation}
+- Weaknesses: each competitor still has unanswered questions around procurement, packaging,
+  or governance evidence. {citation}
+- Opportunities: the response should tie pricing clarity to onboarding speed and qualify
+  claims that require security or enterprise proof. {citation}
+- Threats: bundled distribution, unclear usage costs, and migration friction can overturn a
+  simple feature-led recommendation. {citation}
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Claude Code | GitHub Copilot | Windsurf |
+| --- | --- | --- | --- | --- |
+| Pricing | Clearer standalone framing. {citation} | Needs usage-cost validation. {citation} | Benefits from bundle context. {citation} | Needs package proof. {citation} |
+| Feature | Focused coding workflow. {citation} | Advanced agentic depth. {citation} | IDE distribution breadth. {citation} | AI-native workflow. {citation} |
+| Persona | Developer-led evaluators. {citation} | Advanced technical teams. {citation} | Enterprise platform buyers. {citation} | AI-forward teams. {citation} |
+
+## Battlecard
+- Win theme: lead with pricing clarity plus focused developer workflow, then qualify all
+  unsupported enterprise claims. {citation}
+- Objection handling: when buyers prefer Copilot, ask whether bundled familiarity or actual
+  workflow productivity is the priority. {citation}
+- Validation ask: collect direct customer voice, trust-center proof, and current package terms
+  before finalizing a replacement recommendation. {citation}
+
+## Source Quality & Coverage
+Accepted source coverage is present, but this sample remains intentionally compact. {citation}
+""".strip()
 
 
 def _structured_release_report(source_token: str = "evidence-1") -> str:

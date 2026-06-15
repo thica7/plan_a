@@ -120,7 +120,7 @@ class Settings:
     analyst_react_fanout_threshold: int = 8
     analyst_branch_timeout_seconds: float = 25.0
     analyst_fanout_branch_timeout_seconds: float = 8.0
-    comparator_timeout_seconds: float = 8.0
+    comparator_timeout_seconds: float = 45.0
     writer_timeout_seconds: float = 600.0
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
@@ -274,7 +274,7 @@ def get_settings() -> Settings:
         ),
         comparator_timeout_seconds=_env_float(
             "COMPARATOR_TIMEOUT_SECONDS",
-            8.0,
+            45.0,
             minimum=0.05,
             maximum=120.0,
         ),

@@ -59,7 +59,7 @@ class ComparatorAgentMixin:
             message_types={"analyst_qa_result"},
         )
         await self.emit(detail.id, "node_started", "comparator", None, "Calling comparator.")
-        fallback: dict[str, object] = {}
+        fallback: dict[str, object] = {"used": False, "deterministic_fallback": False}
         timeout_seconds = max(0.05, float(self._settings.comparator_timeout_seconds))
         try:
             payload = await asyncio.wait_for(
@@ -88,10 +88,21 @@ class ComparatorAgentMixin:
         except TimeoutError:
             payload = self._deterministic_comparator_payload(timeout_seconds)
             fallback = {
+                "used": True,
                 "reason": "timeout",
                 "timeout_seconds": timeout_seconds,
                 "deterministic_fallback": True,
             }
+        except Exception as exc:  # noqa: BLE001 - comparator can degrade to evidence matrix.
+            payload = self._deterministic_comparator_payload(timeout_seconds)
+            fallback = {
+                "used": True,
+                "reason": "llm_error",
+                "error": str(exc),
+                "timeout_seconds": timeout_seconds,
+                "deterministic_fallback": True,
+            }
+        module_status = "fallback" if fallback.get("used") else "llm"
         detail.comparison_matrix = self._build_comparison_matrix(detail, payload)
         self._refresh_swot_analyses(detail)
         self._append_agent_message(
@@ -100,7 +111,11 @@ class ComparatorAgentMixin:
             to_agent="reflector",
             message_type="comparison_matrix_ready",
             payload_schema="ComparisonMatrix",
-            payload={"comparison_matrix": detail.comparison_matrix.model_dump(mode="json")},
+            payload={
+                "comparison_matrix": detail.comparison_matrix.model_dump(mode="json"),
+                "module_status": module_status,
+                "fallback": fallback,
+            },
         )
         detail.updated_at = datetime.utcnow()
         await self.emit(
@@ -108,8 +123,12 @@ class ComparatorAgentMixin:
             "node_completed",
             "comparator",
             None,
-            "Comparator completed.",
-            {"matrix": payload, "fallback": fallback},
+            (
+                "Comparator completed with deterministic fallback."
+                if module_status == "fallback"
+                else "Comparator completed."
+            ),
+            {"matrix": payload, "fallback": fallback, "module_status": module_status},
         )
 
     def _deterministic_comparator_payload(self, timeout_seconds: float) -> dict[str, object]:

@@ -873,35 +873,35 @@ def _core_analysis_depth_score(markdown: str) -> float:
         section_char_count, section_row_count = _body_content_summary(section.body)
         char_count += section_char_count
         bullet_or_table_rows += section_row_count
-    return min(1.0, max(char_count / 1000.0, bullet_or_table_rows / 10.0))
+    return min(1.0, max(char_count / 4600.0, bullet_or_table_rows / 30.0))
 
 
 def _core_section_depth_score(detail: RunDetail) -> float:
     specs = [
-        (_report_label_aliases("decision_summary"), 180, 2),
-        (_report_label_aliases("competitive_findings"), 320, 3),
+        (_report_label_aliases("decision_summary"), 450, 3),
+        (_report_label_aliases("competitive_findings"), 600, 4),
         (
             (
                 *_report_label_aliases("competitor_deep_dives"),
                 "Competitor Deep Dive",
             ),
-            320,
+            500,
             max(3, len(detail.plan.competitors)),
         ),
-        (_swot_section_aliases(), 240, 4),
-        (_layer_section_aliases(detail), 240, 3),
+        (_swot_section_aliases(), 280, 4),
+        (_layer_section_aliases(detail), 600, 4),
         (
             (
                 *_report_label_aliases("side_by_side_matrix", "comparison_matrix"),
                 "Side-by-Side Decision Matrix",
                 "Decision Matrix",
             ),
-            260,
-            max(3, len(detail.plan.competitors) * max(1, min(len(detail.plan.dimensions), 3))),
+            520,
+            max(4, len(detail.plan.competitors) * max(1, min(len(detail.plan.dimensions), 3))),
         ),
     ]
     if _needs_review_theme_section(detail):
-        specs.insert(2, (_review_theme_section_aliases(), 220, 3))
+        specs.insert(2, (_review_theme_section_aliases(), 500, 4))
     scores: list[float] = []
     swot_aliases = _swot_section_aliases()
     for aliases, min_chars, min_rows in specs:

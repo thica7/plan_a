@@ -202,8 +202,19 @@ def report_regression_problem(
 
     comparison = compare_run_quality(candidate, baseline=previous)
     if comparison.regression_gate_status == "fail":
-        return "; ".join(comparison.regression_gate_reasons)
+        relative_reasons = _relative_regression_reasons(comparison.regression_gate_reasons)
+        if relative_reasons:
+            return "; ".join(relative_reasons)
     return None
+
+
+def _relative_regression_reasons(reasons: list[str]) -> list[str]:
+    return [
+        reason
+        for reason in reasons
+        if reason.startswith("delta_score ")
+        or reason.startswith("core metric regression:")
+    ]
 
 
 def section_regression_problem(

@@ -1,6 +1,6 @@
 import type { RunEvent } from "../../api/sse_types";
 import type { DecisionReplayReport, RunMetrics, TraceSpan } from "../../api/types";
-import { formatDecisionPayload, formatSpanMeta, type ContextRow } from "./traceModel";
+import { formatDecisionPayload, formatModuleExecutionStatus, formatSpanMeta, type ContextRow } from "./traceModel";
 import { useTranslation } from "../../stores/i18n";
 
 export function TraceMetricsBar({
@@ -153,17 +153,21 @@ export function EventList({ events }: { events: RunEvent[] }) {
   if (events.length === 0) return <p>{t("trace.noTraceEvents")}</p>;
   return (
     <ol className="trace-list">
-      {events.map((event) => (
-        <li key={event.id}>
-          <span>{event.id}</span>
-          <strong>{event.type}</strong>
-          <em>
-            {event.agent || "system"}
-            {event.subagent ? `/${event.subagent}` : ""}
-          </em>
-          <p>{event.message}</p>
-        </li>
-      ))}
+      {events.map((event) => {
+        const moduleStatus = formatModuleExecutionStatus(event.payload);
+        return (
+          <li key={event.id}>
+            <span>{event.id}</span>
+            <strong>{event.type}</strong>
+            <em>
+              {event.agent || "system"}
+              {event.subagent ? `/${event.subagent}` : ""}
+            </em>
+            <p>{event.message}</p>
+            {moduleStatus ? <small>{moduleStatus}</small> : null}
+          </li>
+        );
+      })}
     </ol>
   );
 }

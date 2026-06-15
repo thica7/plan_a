@@ -86,6 +86,38 @@ def test_source_normalizer_rewrites_source_tokens_to_raw_source_tokens() -> None
     assert reconciliation["unresolved_report_source_tokens"] == []
 
 
+def test_source_normalizer_rewrites_fullwidth_source_tokens_to_canonical_syntax() -> None:
+    evidence = EvidenceRecord(
+        id="evidence-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="pricing-raw",
+        competitor_id="cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor publishes pricing.",
+        content_hash="hash-1",
+        reliability_score=0.9,
+        metadata=raw_source_alias_metadata("pricing-old"),
+    )
+
+    normalized = normalize_report_source_tokens(
+        "Known \u3010source:pricing-old#chunk:0\u3011 and \u3010source:evidence-1\u3011.",
+        [evidence],
+        scoped_evidence_ids=["evidence-1"],
+    )
+
+    assert normalized.report_md == "Known [source:pricing-raw] and [source:pricing-raw]."
+    assert source_tokens("Known \u3010source:pricing-old\u3011.") == ["pricing-old"]
+    assert normalized.evidence_ids == ["evidence-1"]
+    assert [item.status for item in normalized.resolutions] == ["alias", "alias"]
+    reconciliation = normalized.reconciliation([evidence])
+    assert reconciliation["canonical_report_md_changed"] is True
+    assert reconciliation["canonical_report_source_tokens"] == ["pricing-raw"]
+    assert reconciliation["unresolved_report_source_tokens"] == []
+
+
 def test_source_reconciliation_without_scope_uses_all_evidence() -> None:
     evidence = EvidenceRecord(
         id="evidence-1",

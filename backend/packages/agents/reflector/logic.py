@@ -28,30 +28,41 @@ class ReflectorAgentMixin:
             message_types={"comparison_matrix_ready"},
         )
         await self.emit(detail.id, "node_started", "reflector", None, "Calling reflector.")
-        payload = await self._trace_llm_json(
-            record,
-            agent="reflector",
-            subagent=None,
-            name="coverage_reflection",
-            system=(
-                "You are a reflector. Find coverage gaps before QA. Be strict but concise. "
-                "Treat comparison-matrix cells with source_ids across every competitor and "
-                "dimension as side-by-side comparison coverage; only report "
-                "cross_competitor_gaps when the matrix lacks cells, source_ids, or aligned "
-                "dimension coverage. Only report confidence_outliers for cells below the "
-                f"QA confidence threshold {QA_CONFIDENCE_OUTLIER_THRESHOLD:.2f}."
-            ),
-            user=(
-                f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                f"Comparison Matrix JSON: "
-                f"{json.dumps(self._reflector_matrix_digest(detail), ensure_ascii=False)}\n"
-                f"Source digest JSON: "
-                f"{json.dumps(self._source_digest(detail.raw_sources), ensure_ascii=False)}"
-            ),
-            schema_hint='{"coverage_gaps":["gap"],"confidence_outliers":["outlier"],"cross_competitor_gaps":["gap"],'
-            '"suggested_redo_dimension":"dimension or null"}',
-        )
+        fallback: dict[str, object] = {"used": False, "deterministic_fallback": False}
+        try:
+            payload = await self._trace_llm_json(
+                record,
+                agent="reflector",
+                subagent=None,
+                name="coverage_reflection",
+                system=(
+                    "You are a reflector. Find coverage gaps before QA. Be strict but concise. "
+                    "Treat comparison-matrix cells with source_ids across every competitor and "
+                    "dimension as side-by-side comparison coverage; only report "
+                    "cross_competitor_gaps when the matrix lacks cells, source_ids, or aligned "
+                    "dimension coverage. Only report confidence_outliers for cells below the "
+                    f"QA confidence threshold {QA_CONFIDENCE_OUTLIER_THRESHOLD:.2f}."
+                ),
+                user=(
+                    f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                    f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                    f"Comparison Matrix JSON: "
+                    f"{json.dumps(self._reflector_matrix_digest(detail), ensure_ascii=False)}\n"
+                    f"Source digest JSON: "
+                    f"{json.dumps(self._source_digest(detail.raw_sources), ensure_ascii=False)}"
+                ),
+                schema_hint='{"coverage_gaps":["gap"],"confidence_outliers":["outlier"],"cross_competitor_gaps":["gap"],'
+                '"suggested_redo_dimension":"dimension or null"}',
+            )
+        except Exception as exc:  # noqa: BLE001 - deterministic reflection keeps the run alive.
+            payload = self._deterministic_reflector_payload(detail)
+            fallback = {
+                "used": True,
+                "reason": "llm_error",
+                "deterministic_fallback": True,
+                "error": str(exc),
+            }
+        module_status = "fallback" if fallback.get("used") else "llm"
         suggested_dimension = payload.get("suggested_redo_dimension")
         suggested_redos = []
         if isinstance(suggested_dimension, str) and suggested_dimension in detail.plan.dimensions:
@@ -77,7 +88,11 @@ class ReflectorAgentMixin:
             to_agent="writer",
             message_type="reflection_ready",
             payload_schema="ReflectionRecord",
-            payload={"reflection": detail.reflections[-1].model_dump(mode="json")},
+            payload={
+                "reflection": detail.reflections[-1].model_dump(mode="json"),
+                "module_status": module_status,
+                "fallback": fallback,
+            },
         )
         detail.updated_at = datetime.utcnow()
         await self.emit(
@@ -85,9 +100,49 @@ class ReflectorAgentMixin:
             "node_completed",
             "reflector",
             None,
-            "Reflector completed.",
-            {"reflection": payload},
+            (
+                "Reflector completed with deterministic fallback."
+                if module_status == "fallback"
+                else "Reflector completed."
+            ),
+            {"reflection": payload, "fallback": fallback, "module_status": module_status},
         )
+
+    def _deterministic_reflector_payload(self, detail: RunDetail) -> dict[str, object]:
+        coverage_gaps: list[str] = []
+        confidence_outliers: list[str] = []
+        cross_competitor_gaps: list[str] = []
+        matrix = detail.comparison_matrix
+        if matrix is None:
+            cross_competitor_gaps.append("Comparison matrix is missing before reflection.")
+        else:
+            cells_by_key = {
+                (cell.competitor.casefold(), cell.dimension.casefold()): cell
+                for cell in matrix.cells
+            }
+            for dimension in detail.plan.dimensions:
+                for competitor in detail.plan.competitors:
+                    cell = cells_by_key.get((competitor.casefold(), dimension.casefold()))
+                    if cell is None:
+                        cross_competitor_gaps.append(
+                            f"Missing comparison cell for {competitor} / {dimension}."
+                        )
+                        continue
+                    if not cell.source_ids:
+                        coverage_gaps.append(
+                            f"Comparison cell for {competitor} / {dimension} has no source_ids."
+                        )
+                    if cell.confidence < QA_CONFIDENCE_OUTLIER_THRESHOLD:
+                        confidence_outliers.append(
+                            f"{competitor} / {dimension} confidence {cell.confidence:.2f} "
+                            f"is below {QA_CONFIDENCE_OUTLIER_THRESHOLD:.2f}."
+                        )
+        return {
+            "coverage_gaps": coverage_gaps[:5],
+            "confidence_outliers": confidence_outliers[:5],
+            "cross_competitor_gaps": cross_competitor_gaps[:5],
+            "suggested_redo_dimension": None,
+        }
 
     def _build_reflector_qa_issues(self, detail: RunDetail) -> list[QCIssue]:
         if not detail.reflections:
@@ -215,23 +270,21 @@ class ReflectorAgentMixin:
             return {"winner_by_dimension": {}, "summary": [], "cells": []}
         return {
             "winner_by_dimension": detail.comparison_matrix.winner_by_dimension,
-            "summary": detail.comparison_matrix.summary[:6],
+            "summary": detail.comparison_matrix.summary,
             "cells": [
                 {
                     "competitor": cell.competitor,
                     "dimension": cell.dimension,
-                    "source_ids": cell.source_ids[:4],
+                    "source_ids": cell.source_ids,
                     "confidence": round(cell.confidence, 3),
                     "value": self._reflector_matrix_cell_value(cell.dimension, cell.value),
                 }
-                for cell in detail.comparison_matrix.cells[:40]
+                for cell in detail.comparison_matrix.cells
             ],
         }
 
     def _reflector_matrix_cell_value(self, dimension: str, value: str) -> str:
-        dimension_key = dimension.casefold()
-        limit = 1200 if "feature" in dimension_key or "pricing" in dimension_key else 220
-        return value[:limit]
+        return value
 
     def _infer_competitor_from_text(self, detail: RunDetail, text: str) -> str | None:
         normalized = text.casefold()

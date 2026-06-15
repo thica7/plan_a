@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -164,7 +165,13 @@ class DoubaoClient:
         await asyncio.sleep(backoff_seconds * (2**attempt_index))
 
     def _parse_text_response(self, response: httpx.Response, provider: LLMProviderConfig) -> str:
-        data = response.json()
+        try:
+            data = response.json()
+        except json.JSONDecodeError as exc:
+            preview = response.text[:500]
+            raise _RetryableLLMError(
+                f"LLM response was not valid JSON: {preview}"
+            ) from exc
         self._last_usage = self._parse_usage(data.get("usage"))
         self._last_provider = provider.name
         self._last_model = provider.model
@@ -173,7 +180,7 @@ class DoubaoClient:
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMError("LLM response did not contain choices[0].message.content.") from exc
         if not isinstance(content, str) or not content.strip():
-            raise LLMError("LLM returned empty content.")
+            raise _RetryableLLMError("LLM returned empty content.")
         return content
 
     def consume_last_usage(self) -> LLMUsage | None:

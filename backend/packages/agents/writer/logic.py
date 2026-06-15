@@ -22,6 +22,11 @@ from packages.i18n.language import (
     repair_mojibake_text,
     report_label,
 )
+from packages.identity.source_resolver import (
+    SOURCE_TOKEN_RE,
+    source_token_match_value,
+    source_tokens,
+)
 from packages.rag.grounded_prompt import build_run_grounding_prompt
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
@@ -89,6 +94,36 @@ PERSONA_LINE_TOKENS = (
     "阻力",
 )
 CLAIM_LINE_TOKENS = PRICING_LINE_TOKENS + FEATURE_LINE_TOKENS + PERSONA_LINE_TOKENS
+WRITER_NORMALIZED_FIELD_DROP_KEYS = {
+    "content",
+    "extracted_text",
+    "full_text",
+    "html",
+    "markdown",
+    "page_content",
+    "raw",
+    "raw_html",
+    "raw_markdown",
+    "raw_text",
+    "text",
+}
+WRITER_NORMALIZED_FIELD_QUOTE_KEY_PARTS = (
+    "evidence",
+    "excerpt",
+    "quote",
+)
+WRITER_NORMALIZED_FIELD_LONG_KEY_PARTS = (
+    "blocker",
+    "claim",
+    "description",
+    "note",
+    "pain",
+    "rationale",
+    "reason",
+    "summary",
+    "trigger",
+)
+WRITER_NORMALIZED_SNIPPET_LIMIT = 1600
 
 
 def writer_user_research_policy_text() -> str:
@@ -217,6 +252,7 @@ class WriterAgentMixin:
                         ),
                         timeout=timeout_seconds,
                     )
+                    self._require_writer_report_output(section_md)
                     report_md = replace_markdown_section(
                         report_md,
                         section,
@@ -274,12 +310,16 @@ class WriterAgentMixin:
                     )
                     writer_mode = "preserved previous report after writer error"
                 else:
-                    detail.report_md = self._harden_report_markdown(
-                        detail,
-                        self._fallback_report_markdown(detail, writer_error),
+                    await self._fail_writer_without_report(
+                        record,
+                        writer_error,
+                        writer_repair_mode=writer_repair_mode,
+                        writer_repair_sections=writer_repair_sections,
+                        writer_repair_decision=writer_repair_decision,
+                        anti_regression_reason=anti_regression_reason,
+                        previous_report_protected=previous_report_protected,
                     )
-                    writer_mode = "deterministic fallback after writer error"
-            except Exception as exc:  # noqa: BLE001 - writer fallback keeps long runs demo-safe.
+            except Exception as exc:  # noqa: BLE001 - preserve existing reports, fail otherwise.
                 writer_error = str(exc)
                 if previous_report.strip():
                     detail.report_md = self._preserve_hardened_previous_report(
@@ -288,11 +328,15 @@ class WriterAgentMixin:
                     )
                     writer_mode = "preserved previous report after writer error"
                 else:
-                    detail.report_md = self._harden_report_markdown(
-                        detail,
-                        self._fallback_report_markdown(detail, writer_error),
+                    await self._fail_writer_without_report(
+                        record,
+                        writer_error,
+                        writer_repair_mode=writer_repair_mode,
+                        writer_repair_sections=writer_repair_sections,
+                        writer_repair_decision=writer_repair_decision,
+                        anti_regression_reason=anti_regression_reason,
+                        previous_report_protected=previous_report_protected,
                     )
-                    writer_mode = "deterministic fallback after writer error"
         else:
             if repair_plan is not None and repair_plan.mode == "full":
                 writer_repair_mode = repair_plan.mode
@@ -358,10 +402,17 @@ class WriterAgentMixin:
                             f"{self._writer_community_policy_text()}\n"
                             f"Writer Context JSON: {writer_context_json}\n\n"
                             f"Required sections:\n{required_sections}\n"
-                            "Target 8,500-10,000 characters for the first draft. Use about "
-                            "65-75% of the report on the Core analysis layer: decision summary, "
+                            "Target 16,000-20,000 characters for the first draft. Use about "
+                            "70-80% of the report on the Core analysis layer: decision summary, "
                             "competitive findings, user review themes, competitor deep dives, "
-                            "SWOT, matrix interpretation, and layer-specific implications. Keep "
+                            "SWOT, matrix interpretation, and layer-specific implications. "
+                            "Core section minimums: Decision Summary 800+ characters; "
+                            "Competitive Findings 1,200+; User Review Themes 1,000+ when "
+                            "review, community, survey, interview, or persona evidence exists; "
+                            "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
+                            "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
+                            "Threats for every competitor; Matrix Interpretation 900+; "
+                            "Layer-specific Battlecard/Workflow/Market section 1,200+. Keep "
                             "the Support/audit layer concise and complete; it is the audit trail, "
                             "not the main readout. Prefer deeper cited analysis and decision "
                             "implications over repeated source IDs or QA boilerplate."
@@ -369,6 +420,7 @@ class WriterAgentMixin:
                     ),
                     timeout=timeout_seconds,
                 )
+                self._require_writer_report_output(report_md)
                 hardened_report = self._harden_report_markdown(detail, report_md)
                 if (
                     previous_report.strip()
@@ -429,12 +481,16 @@ class WriterAgentMixin:
                     )
                     writer_mode = "preserved previous report after writer error"
                 else:
-                    detail.report_md = self._harden_report_markdown(
-                        detail,
-                        self._fallback_report_markdown(detail, writer_error),
+                    await self._fail_writer_without_report(
+                        record,
+                        writer_error,
+                        writer_repair_mode=writer_repair_mode,
+                        writer_repair_sections=writer_repair_sections,
+                        writer_repair_decision=writer_repair_decision,
+                        anti_regression_reason=anti_regression_reason,
+                        previous_report_protected=previous_report_protected,
                     )
-                    writer_mode = "deterministic fallback after writer error"
-            except Exception as exc:  # noqa: BLE001 - writer fallback keeps long runs demo-safe.
+            except Exception as exc:  # noqa: BLE001 - preserve existing reports, fail otherwise.
                 writer_error = str(exc)
                 if previous_report.strip():
                     detail.report_md = self._preserve_hardened_previous_report(
@@ -443,11 +499,15 @@ class WriterAgentMixin:
                     )
                     writer_mode = "preserved previous report after writer error"
                 else:
-                    detail.report_md = self._harden_report_markdown(
-                        detail,
-                        self._fallback_report_markdown(detail, writer_error),
+                    await self._fail_writer_without_report(
+                        record,
+                        writer_error,
+                        writer_repair_mode=writer_repair_mode,
+                        writer_repair_sections=writer_repair_sections,
+                        writer_repair_decision=writer_repair_decision,
+                        anti_regression_reason=anti_regression_reason,
+                        previous_report_protected=previous_report_protected,
                     )
-                    writer_mode = "deterministic fallback after writer error"
         repair_metadata = {
             "writer_repair_mode": writer_repair_mode,
             "writer_repair_sections": writer_repair_sections,
@@ -486,6 +546,42 @@ class WriterAgentMixin:
             },
         )
         await self.emit(detail.id, "node_completed", "writer", None, "Writer completed.")
+
+    async def _fail_writer_without_report(
+        self,
+        record: RunRecord,
+        reason: str,
+        *,
+        writer_repair_mode: str,
+        writer_repair_sections: Sequence[str],
+        writer_repair_decision: str,
+        anti_regression_reason: str | None,
+        previous_report_protected: bool,
+    ) -> None:
+        detail = record.detail
+        detail.status = "failed"
+        detail.current_node = None
+        detail.updated_at = datetime.utcnow()
+        await self.emit(
+            detail.id,
+            "run_failed",
+            "writer",
+            None,
+            f"Writer failed before report generation: {reason}",
+            {
+                "error": reason,
+                "writer_repair_mode": writer_repair_mode,
+                "writer_repair_sections": list(writer_repair_sections),
+                "writer_repair_decision": writer_repair_decision,
+                "anti_regression_reason": anti_regression_reason,
+                "previous_report_protected": previous_report_protected,
+            },
+        )
+        raise RuntimeError(f"Writer failed before report generation: {reason}")
+
+    def _require_writer_report_output(self, report_md: str) -> None:
+        if not report_md.strip():
+            raise RuntimeError("writer LLM returned empty output")
 
     async def _writer_section_repair_markdown(
         self,
@@ -643,6 +739,11 @@ class WriterAgentMixin:
         *,
         fallback: bool = True,
     ) -> list[str]:
+        return self._fallback_layer_sections_lines(
+            detail,
+            source_ids,
+            fallback=fallback,
+        )
         refs = self._format_source_refs(source_ids)
         layer = detail.plan.competitor_layer
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
@@ -760,6 +861,79 @@ class WriterAgentMixin:
             f"- {implication}{refs}",
         ]
 
+    def _fallback_layer_sections_lines(
+        self,
+        detail: RunDetail,
+        source_ids: list[str],
+        *,
+        fallback: bool,
+    ) -> list[str]:
+        refs = self._format_source_refs(source_ids)
+        heading = self._layer_section_heading(detail, fallback=fallback)
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        layer = detail.plan.competitor_layer
+        if layer == "L1":
+            if is_zh:
+                bullets = [
+                    f"- 直接战报定位：把当前赢家作为短期替代或对抗话术的候选主线，但只在引用证据覆盖的范围内使用。{refs}",
+                    f"- 反对意见处理：优先围绕定价、包装、功能对齐、采购阻力和切换触发组织回答，不把弱单元格包装成确定结论。{refs}",
+                    f"- 行动偏向：使用置信度最高的维度赢家作为初始战报骨架，并在发布前验证单来源、低置信度或社区观察支持的声明。{refs}",
+                    f"- 落地检查：每条战报话术都要同时包含可引用证据、目标买家、可能反驳点和下一步验证任务，避免只给一句赢家判断。{refs}",
+                ]
+            else:
+                bullets = [
+                    f"- Direct-use position: treat the current winners as candidate near-term replacement or objection-handling lines only within the cited evidence boundary.{refs}",
+                    f"- Objection handling: organize responses around pricing, packaging, feature parity, procurement friction, and switching triggers without turning weak cells into settled conclusions.{refs}",
+                    f"- Action bias: use the highest-confidence dimension winners as the initial battlecard spine, then verify single-source, low-confidence, or community-observed claims before publication.{refs}",
+                    f"- Deployment check: every battlecard line should pair cited evidence, target buyer, likely rebuttal, and next validation task instead of stopping at a one-sentence winner claim.{refs}",
+                ]
+        elif layer == "L2":
+            if is_zh:
+                bullets = [
+                    f"- 相邻工作流威胁：从工作流重叠、集成杠杆和切换成本阅读矩阵，而不是只比较孤立功能。{refs}",
+                    f"- 采购风险：在提出企业建议前，把已证实的组织控制措施与搜索线索、社区观察或低置信度声明分开。{refs}",
+                    f"- 监控列表：重点关注相邻竞品能通过一次集成、权限或打包变化吞并目标工作流的维度。{refs}",
+                    f"- 行动节奏：把强证据维度写成可执行建议，把弱证据维度转为验证任务，避免把工作流风险过早定性。{refs}",
+                ]
+            else:
+                bullets = [
+                    f"- Adjacent-workflow threat: read the matrix through workflow overlap, integration leverage, and switching-cost exposure rather than isolated feature parity.{refs}",
+                    f"- Buying risk: separate proven enterprise controls from search leads, community observations, or low-confidence claims before making procurement recommendations.{refs}",
+                    f"- Watchlist: monitor dimensions where adjacent competitors could absorb the target workflow through one integration, permission, or packaging change.{refs}",
+                    f"- Action cadence: turn strong-evidence dimensions into recommendations and weak-evidence dimensions into validation tasks instead of overstating workflow risk.{refs}",
+                ]
+        elif layer == "L3":
+            if is_zh:
+                bullets = [
+                    f"- 类别视角：避免只宣布单一直接赢家，应按细分市场、趋势信号和基准强度给竞品分组。{refs}",
+                    f"- 战略视角：当证据广度仍不足以支撑景观级覆盖时，把建议写成投资组合选项而不是终局判断。{refs}",
+                    f"- 不确定性视角：在做类别范围声明前，优先增加竞品、市场级来源和跨来源验证。{refs}",
+                    f"- 决策节奏：用高置信信号确定短期动作，用低覆盖区域定义观察指标和后续研究任务。{refs}",
+                ]
+            else:
+                bullets = [
+                    f"- Category view: avoid a single direct winner and group competitors by segment, trend signal, and benchmark strength.{refs}",
+                    f"- Strategy view: treat recommendations as portfolio options while evidence breadth remains below landscape-grade coverage.{refs}",
+                    f"- Uncertainty view: prioritize adding competitors, market-level sources, and cross-source validation before making category-wide claims.{refs}",
+                    f"- Decision cadence: use high-confidence signals for near-term action and low-coverage areas for watch metrics and follow-up research tasks.{refs}",
+                ]
+        else:
+            if is_zh:
+                bullets = [
+                    f"- 业务含义：当前报告应作为带不确定性边界的证据读数，而不是最终市场结论。{refs}",
+                    f"- 决策使用：把高置信矩阵单元转成可行动建议，把弱单元格保留为验证任务。{refs}",
+                    f"- 风险控制：当来源为单条、搜索线索或低置信度时，不要夸大采购、合规、功能或价格结论。{refs}",
+                    f"- 后续动作：优先补齐影响赢家判断的来源，再扩大到支持层审计材料。{refs}",
+                ]
+            else:
+                bullets = [
+                    f"- Business implication: use this as an evidence-indexed readout with explicit uncertainty rather than a final market conclusion.{refs}",
+                    f"- Decision use: turn high-confidence matrix cells into action and keep weak cells as validation tasks.{refs}",
+                    f"- Risk control: do not overstate procurement, compliance, feature, or pricing claims when support is single-source, search-only, or low-confidence.{refs}",
+                    f"- Next action: fill the sources that could change winner judgments before expanding support-layer audit material.{refs}",
+                ]
+        return ["", f"## {heading}", *bullets]
+
     def _fallback_decision_summary_section(
         self, detail: RunDetail, source_ids: list[str]
     ) -> list[str]:
@@ -821,6 +995,7 @@ class WriterAgentMixin:
             "",
             f"## {report_label(detail.output_language, 'competitive_findings')}",
         ]
+        return self._fallback_competitive_findings_lines(detail, lines, is_zh)
         if detail.comparison_matrix is None:
             source_ids = self._matrix_source_ids(detail)
             if is_zh:
@@ -880,6 +1055,141 @@ class WriterAgentMixin:
                     "making a competitive recommendation."
                     f"{self._format_source_refs(self._matrix_source_ids(detail))}"
                 )
+        return lines
+
+    def _fallback_competitive_findings_lines(
+        self,
+        detail: RunDetail,
+        lines: list[str],
+        is_zh: bool,
+    ) -> list[str]:
+        if detail.comparison_matrix is None:
+            source_ids = self._matrix_source_ids(detail)
+            refs = self._format_source_refs(source_ids)
+            if is_zh:
+                lines.extend(
+                    [
+                        f"- 竞争发现暂以证据覆盖为核心约束：结构化对比矩阵尚未形成，因此不能直接宣布赢家。{refs}",
+                        f"- 可用信号应先按竞品、维度和来源类型分层阅读，避免把单条搜索线索或低置信度材料提升为采购结论。{refs}",
+                        f"- 决策含义是先补齐关键单元格，再把价格、功能、用户人群和切换触发转成正式竞争建议。{refs}",
+                        f"- 下一轮优先收集能够互相印证的官方页面、社区讨论、案例或访谈材料，让矩阵具备可解释的强弱差异。{refs}",
+                    ]
+                )
+            else:
+                lines.extend(
+                    [
+                        (
+                            "- Competitive findings are currently constrained by source coverage: "
+                            f"the structured comparison matrix is not available, so no winner should be declared yet.{refs}"
+                        ),
+                        (
+                            "- Read the available signals by competitor, dimension, and source type before promoting "
+                            f"any search-only or low-confidence item into a buying conclusion.{refs}"
+                        ),
+                        (
+                            "- The practical decision is to fill the key cells first, then turn pricing, feature, "
+                            f"persona, and switching signals into a formal competitive recommendation.{refs}"
+                        ),
+                        (
+                            "- Next collection should prioritize mutually confirming official pages, community "
+                            f"discussions, case studies, or interviews so the matrix can explain real strengths and weaknesses.{refs}"
+                        ),
+                    ]
+                )
+            return lines
+
+        matrix_refs = self._matrix_source_ids(detail)
+        matrix_ref_text = self._format_source_refs(matrix_refs)
+        dimensions = ", ".join(detail.plan.dimensions) or (
+            "请求维度" if is_zh else "requested dimensions"
+        )
+        winners = ", ".join(
+            f"{dimension}: {winner}"
+            for dimension, winner in detail.comparison_matrix.winner_by_dimension.items()
+            if winner
+        ) or ("尚无确认赢家" if is_zh else "no confirmed winners")
+        if is_zh:
+            lines.append(
+                f"- 总体读数：本轮矩阵覆盖 {dimensions}，当前赢家线索为 {winners}；这些结论应被视为带证据边界的竞争判断，而不是脱离来源的绝对排名。{matrix_ref_text}"
+            )
+        else:
+            lines.append(
+                f"- Overall read: the current matrix covers {dimensions}, with winner signals at {winners}; "
+                f"treat these as evidence-bounded competitive judgments, not absolute rankings detached from the cited cells.{matrix_ref_text}"
+            )
+
+        for dimension in detail.plan.dimensions:
+            cells = [
+                cell for cell in detail.comparison_matrix.cells if cell.dimension == dimension
+            ]
+            if not cells:
+                continue
+            source_ids = [source_id for cell in cells for source_id in cell.source_ids]
+            refs = self._format_source_refs(source_ids)
+            winner = detail.comparison_matrix.winner_by_dimension.get(dimension)
+            cell_summary = "; ".join(
+                f"{cell.competitor}: {self._trim_sentence(cell.value, 140)}"
+                for cell in cells[:4]
+            )
+            confidence_values = [cell.confidence for cell in cells]
+            confidence_summary = (
+                f"{min(confidence_values):.2f}-{max(confidence_values):.2f}"
+                if confidence_values
+                else "unknown"
+            )
+            if winner:
+                if is_zh:
+                    lines.append(
+                        f"- {dimension}：{winner} 在该维度领先；可写成竞争优势的前提是同时保留对比单元格的差异：{cell_summary or '暂无单元格摘要'}。{refs}"
+                    )
+                    lines.append(
+                        f"- {dimension} 的证据姿态：单元格置信度区间为 {confidence_summary}，销售或产品话术应强调已引用材料能证明的部分，并把弱单元格列入验证任务。{refs}"
+                    )
+                else:
+                    lines.append(
+                        f"- {dimension}: {winner} leads this dimension, but the implication should stay tied to "
+                        f"the cited cell differences: {cell_summary or 'no cell summary available'}.{refs}"
+                    )
+                    lines.append(
+                        f"- {dimension} evidence posture: cell confidence ranges {confidence_summary}; sales or "
+                        f"product messaging should emphasize only what the cited material can support and route weaker cells into verification tasks.{refs}"
+                    )
+            else:
+                if is_zh:
+                    lines.append(
+                        f"- {dimension}：存在可用于对比的证据，但暂不宣布明确赢家；当前单元格显示 {cell_summary or '暂无单元格摘要'}。{refs}"
+                    )
+                    lines.append(
+                        f"- {dimension} 的处理方式：置信度区间为 {confidence_summary}，应把差异转成待验证假设，而不是直接转成采购或市场声明。{refs}"
+                    )
+                else:
+                    lines.append(
+                        f"- {dimension}: evidence exists for comparison, but no clear winner should be asserted "
+                        f"without another validation pass; current cells show {cell_summary or 'no cell summary available'}.{refs}"
+                    )
+                    lines.append(
+                        f"- {dimension} handling: confidence ranges {confidence_summary}, so the difference should "
+                        f"become a validation hypothesis rather than an immediate procurement or market claim.{refs}"
+                    )
+
+        if len(lines) == 2:
+            refs = self._format_source_refs(matrix_refs)
+            if is_zh:
+                lines.append(f"- 尚无维度级别的发现；在做出竞争建议之前，请使用收集任务。{refs}")
+            else:
+                lines.append(
+                    "- No dimension-level findings are available yet; use collection tasks before "
+                    f"making a competitive recommendation.{refs}"
+                )
+        elif is_zh:
+            lines.append(
+                f"- 竞争建议落地时，应把赢家、证据强度、弱单元格和下一步验证放在同一段中呈现；这样能让报告既可行动，又不会把证据缺口包装成确定事实。{matrix_ref_text}"
+            )
+        else:
+            lines.append(
+                "- When turning these findings into action, present the winner, evidence strength, weak cells, "
+                f"and next validation step together; that keeps the report usable without packaging evidence gaps as settled facts.{matrix_ref_text}"
+            )
         return lines
 
     def _fallback_competitor_deep_dives_section(self, detail: RunDetail) -> list[str]:
@@ -1554,7 +1864,9 @@ class WriterAgentMixin:
             (
                 f"{report_label(output_language, 'swot_analysis')}: include Strengths, "
                 "Weaknesses, Opportunities, and Threats for each competitor using cited SWOT "
-                "analysis or explicit evidence-gap notes."
+                "analysis or explicit evidence-gap notes. Use explicit quadrant labels "
+                "`Strengths`, `Weaknesses`, `Opportunities`, and `Threats` (or the localized "
+                "equivalents) under every competitor instead of only writing general prose."
             ),
             (
                 f"{report_label(output_language, 'side_by_side_matrix')}: cover every "
@@ -1622,7 +1934,9 @@ class WriterAgentMixin:
             ),
             (
                 f"{report_label(output_language, 'rag_gap_fill')}: list retrieval gaps that "
-                "must be closed before publication."
+                "must be closed before publication, including the gap id or topic, suggested "
+                "retrieval query, evidence needed, current status, and how the gap affects the "
+                "recommendation. Do not use a one-line placeholder."
             ),
             (
                 f"{report_label(output_language, 'scenario_checklist')}: tie the selected "
@@ -1691,44 +2005,36 @@ class WriterAgentMixin:
                 for competitor in detail.plan.competitors
             },
             "comparison_matrix": self._writer_matrix_digest(detail),
-            "qa_findings": [self._writer_issue_digest(issue) for issue in detail.qa_findings[:10]],
+            "qa_findings": [self._writer_issue_digest(issue) for issue in detail.qa_findings],
             "reflections": [
                 {
                     "iteration": reflection.iteration,
-                    "coverage_gaps": [
-                        self._trim_sentence(item, 180) for item in reflection.coverage_gaps[:4]
-                    ],
-                    "confidence_outliers": [
-                        self._trim_sentence(item, 180)
-                        for item in reflection.confidence_outliers[:4]
-                    ],
-                    "cross_competitor_gaps": [
-                        self._trim_sentence(item, 180)
-                        for item in reflection.cross_competitor_gaps[:4]
-                    ],
+                    "coverage_gaps": list(reflection.coverage_gaps),
+                    "confidence_outliers": list(reflection.confidence_outliers),
+                    "cross_competitor_gaps": list(reflection.cross_competitor_gaps),
                 }
-                for reflection in detail.reflections[-2:]
+                for reflection in detail.reflections
             ],
         }
 
     def _writer_source_digest(self, sources: list[RawSource]) -> list[dict[str, object]]:
         digests: list[dict[str, object]] = []
         for source in sources:
-            snippet = source_business_snippet(source, dimension=source.dimension, limit=240)
+            snippet = self._writer_source_snippet(source)
             digest = {
                 "id": source.id,
                 "competitor": source.competitor,
                 "covered_competitors": source.covered_competitors,
                 "dimension": source.dimension,
                 "source_type": source.source_type,
-                "title": self._trim_sentence(source.title, 120),
+                "title": source.title,
                 "url": str(source.url) if source.url else None,
-                "snippet": self._trim_sentence(snippet, 240),
+                "snippet": snippet,
                 "confidence": round(source.confidence, 3),
             }
             if not snippet:
                 digest["snippet_quality"] = "omitted_no_clean_business_snippet"
-            normalized_fields = normalized_fields_from_source(source)
+            normalized_fields = self._writer_normalized_fields_digest(source)
             if normalized_fields:
                 digest["normalized_fields"] = normalized_fields
             if source.metadata.get("community_evidence"):
@@ -1753,6 +2059,111 @@ class WriterAgentMixin:
                     digest["community_claim_clusters"] = clusters
             digests.append(digest)
         return digests
+
+    def _writer_source_snippet(self, source: RawSource) -> str:
+        raw_len = len(source.snippet or "")
+        normalized_limit = (
+            WRITER_NORMALIZED_SNIPPET_LIMIT
+            if normalized_fields_from_source(source)
+            else max(raw_len, 50000)
+        )
+        return source_business_snippet(
+            source,
+            dimension=source.dimension,
+            limit=normalized_limit,
+        )
+
+    def _writer_normalized_fields_digest(
+        self,
+        source: RawSource,
+    ) -> list[dict[str, object]]:
+        fields = normalized_fields_from_source(source)
+        digests: list[dict[str, object]] = []
+        for field in fields:
+            if not isinstance(field, Mapping):
+                continue
+            digest: dict[str, object] = {}
+            for raw_key, raw_value in field.items():
+                key = str(raw_key)
+                normalized_key = key.strip().lower()
+                if normalized_key in WRITER_NORMALIZED_FIELD_DROP_KEYS:
+                    continue
+                value = self._writer_normalized_field_value(normalized_key, raw_value)
+                if value is not None:
+                    digest[key] = value
+            if digest:
+                digests.append(digest)
+        return digests
+
+    def _writer_normalized_field_value(
+        self,
+        key: str,
+        value: object,
+    ) -> object | None:
+        if isinstance(value, str):
+            if not value.strip():
+                return None
+            return self._trim_sentence(
+                value,
+                self._writer_normalized_field_limit(key),
+            )
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, int | float):
+            return value if math.isfinite(float(value)) else None
+        if isinstance(value, list):
+            items: list[object] = []
+            for item in value:
+                item_value = self._writer_normalized_field_value(key, item)
+                if item_value is not None:
+                    items.append(item_value)
+                if len(items) >= 5:
+                    break
+            return items or None
+        if isinstance(value, Mapping):
+            nested: dict[str, object] = {}
+            for raw_key, raw_value in value.items():
+                nested_key = str(raw_key)
+                normalized_nested_key = nested_key.strip().lower()
+                if normalized_nested_key in WRITER_NORMALIZED_FIELD_DROP_KEYS:
+                    continue
+                nested_value = self._writer_normalized_field_value(
+                    normalized_nested_key,
+                    raw_value,
+                )
+                if nested_value is not None:
+                    nested[nested_key] = nested_value
+            return nested or None
+        return None
+
+    def _writer_normalized_field_limit(self, key: str) -> int:
+        if any(part in key for part in WRITER_NORMALIZED_FIELD_QUOTE_KEY_PARTS):
+            return 1200
+        if any(part in key for part in WRITER_NORMALIZED_FIELD_LONG_KEY_PARTS):
+            return 800
+        return 400
+
+    def _writer_source_text_keys(
+        self,
+        detail: RunDetail,
+        *,
+        competitor: str,
+        dimension: str | None = None,
+    ) -> set[str]:
+        keys: set[str] = set()
+        for source in detail.raw_sources:
+            if dimension is not None and source.dimension != dimension:
+                continue
+            if not self._source_matches_competitor(source, competitor):
+                continue
+            snippet = self._writer_source_snippet(source)
+            key = self._writer_dedupe_text_key(snippet)
+            if key:
+                keys.add(key)
+        return keys
+
+    def _writer_dedupe_text_key(self, value: str) -> str:
+        return " ".join(value.split()).casefold()
 
     def _writer_metadata_string(self, value: object, limit: int = 80) -> str | None:
         if not isinstance(value, str) or not value.strip():
@@ -1842,7 +2253,12 @@ class WriterAgentMixin:
         slices = {}
         if kb is not None:
             slices = {
-                dimension: [self._trim_sentence(item, 180) for item in findings[:3]]
+                dimension: self._writer_unique_kb_findings(
+                    detail,
+                    competitor=competitor,
+                    dimension=dimension,
+                    findings=findings,
+                )
                 for dimension, findings in kb.slices.items()
                 if dimension in detail.plan.dimensions
             }
@@ -1857,6 +2273,29 @@ class WriterAgentMixin:
             "feature_claims": self._writer_feature_claim_digest(knowledge),
             "persona_claims": self._writer_persona_claim_digest(knowledge),
         }
+
+    def _writer_unique_kb_findings(
+        self,
+        detail: RunDetail,
+        *,
+        competitor: str,
+        dimension: str,
+        findings: Sequence[str],
+    ) -> list[str]:
+        source_text_keys = self._writer_source_text_keys(
+            detail,
+            competitor=competitor,
+            dimension=dimension,
+        )
+        unique: list[str] = []
+        seen: set[str] = set()
+        for finding in findings:
+            key = self._writer_dedupe_text_key(finding)
+            if not key or key in seen or key in source_text_keys:
+                continue
+            unique.append(finding)
+            seen.add(key)
+        return unique
 
     def _writer_pricing_digest(self, knowledge: object | None) -> dict[str, object]:
         if knowledge is None or not hasattr(knowledge, "pricing_model"):
@@ -1927,31 +2366,25 @@ class WriterAgentMixin:
             "winner_by_dimension": detail.comparison_matrix.winner_by_dimension,
             "summary": [
                 self._writer_matrix_summary_item(item)
-                for item in detail.comparison_matrix.summary[:6]
+                for item in detail.comparison_matrix.summary
             ],
             "cells": [
                 {
                     "competitor": cell.competitor,
                     "dimension": cell.dimension,
                     "value": self._writer_matrix_cell_value(cell),
-                    "source_ids": cell.source_ids[:4],
+                    "source_ids": cell.source_ids,
                     "confidence": round(cell.confidence, 3),
                 }
-                for cell in detail.comparison_matrix.cells[:32]
+                for cell in detail.comparison_matrix.cells
             ],
         }
 
     def _writer_matrix_summary_item(self, item: str) -> str:
-        long_summary = item.startswith(
-            ("[feature-standardization:", "[pricing-standardization:")
-        )
-        limit = 1200 if long_summary else 180
-        return self._trim_sentence(item, limit)
+        return item
 
     def _writer_matrix_cell_value(self, cell: object) -> str:
-        dimension = str(getattr(cell, "dimension", "")).casefold()
-        limit = 1200 if "feature" in dimension or "pricing" in dimension else 180
-        return self._trim_sentence(str(getattr(cell, "value", "")), limit)
+        return str(getattr(cell, "value", ""))
 
     def _feature_node_source_ids(self, node: FeatureNode) -> list[str]:
         source_ids: list[str] = []
@@ -1971,7 +2404,7 @@ class WriterAgentMixin:
             "target_agent": issue.target_agent,
             "target_subagent": issue.target_subagent,
             "target_competitor": issue.target_competitor,
-            "problem": self._trim_sentence(issue.problem, 180),
+            "problem": issue.problem,
         }
 
     def _matrix_source_ids(self, detail: RunDetail) -> list[str]:
@@ -2507,12 +2940,11 @@ class WriterAgentMixin:
         return f"{text[: limit - 1].rstrip()}..."
 
     def _extract_cited_source_ids(self, report_md: str) -> set[str]:
-        patterns = [
+        cited = set(source_tokens(report_md))
+        for pattern in (
             r"\bsource(?:\s+id)?\s*:\s*([A-Za-z0-9_.:-]+)",
             r"\[source(?:\s+id)?\s+([A-Za-z0-9_.:-]+)\]",
-        ]
-        cited: set[str] = set()
-        for pattern in patterns:
+        ):
             cited.update(re.findall(pattern, report_md, flags=re.IGNORECASE))
         return cited
 
@@ -2524,12 +2956,11 @@ class WriterAgentMixin:
         repaired_lines: list[str] = []
         for line in markdown.splitlines():
             repaired_lines.append(
-                re.sub(
-                    r"\[source:([A-Za-z0-9_.:#-]+)\]",
+                SOURCE_TOKEN_RE.sub(
                     lambda match, current_line=line: self._repair_report_source_token(
                         detail,
                         current_line,
-                        match.group(1),
+                        source_token_match_value(match),
                         valid_source_ids,
                     ),
                     line,

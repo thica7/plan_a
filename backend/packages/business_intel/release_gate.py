@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
 import re
 from urllib.parse import urlparse
 
 from packages.business_intel.claim_validator import validate_project_claims
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS, evaluate_business_qa
 from packages.business_intel.planning import build_business_intel_plan
+from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.scorer import score_project_readiness
 from packages.business_intel.source_reconciliation import (
     evidence_by_source_token,
@@ -15,6 +17,7 @@ from packages.business_intel.source_reconciliation import (
 )
 from packages.i18n.language import repair_mojibake_text
 from packages.identity import compute_release_gate_issue_id
+from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     BusinessQAFinding,
     ClaimRecord,
@@ -26,6 +29,7 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
     SourceRegistryRecord,
 )
+from packages.schema.models import AnalysisPlan, RawSource, RunMetrics
 
 MIN_VERIFIED_EVIDENCE_RATE = 0.8
 MIN_READY_SCORE = 85
@@ -42,6 +46,12 @@ COMMUNITY_RELEASE_GRADE_SOURCE_TYPES = {
 }
 MIN_REPORT_STRUCTURE_SCORE = 0.7
 MIN_REPORT_BODY_CHARS = 900
+REPORT_RICHNESS_MINIMUMS = {
+    "core_analysis_depth_score": 0.8,
+    "core_section_depth_score": 1.0,
+    "swot_section_score": 1.0,
+    "rag_gap_fill_section_score": 1.0,
+}
 STRONG_CONCLUSION_RE = re.compile(
     r"\b("
     r"winner|leading option|best option|safer|safest|recommended|recommendation|"
@@ -102,6 +112,12 @@ def evaluate_report_release_gate(
         *_report_integrity_issues(report_version, scoped_evidence, scoped_claims),
         *_report_structure_issues(report_version),
         *_report_depth_issues(report_version),
+        *_report_richness_issues(
+            report_version,
+            competitors=scoped_competitors,
+            evidence=report_scoped_evidence,
+            dimensions=dimensions,
+        ),
         *_source_quality_issues(scoped_evidence, competitor_names_by_id),
         *_claim_evidence_quality_issues(scoped_claims, scoped_evidence, competitor_names_by_id),
         *_claim_validation_issues(scoped_claims, scoped_evidence, competitor_names_by_id),
@@ -604,6 +620,104 @@ def _report_depth_issues(report_version: ReportVersionRecord) -> list[BusinessQA
             ),
         )
     ]
+
+
+def _report_richness_issues(
+    report_version: ReportVersionRecord,
+    *,
+    competitors: list[CompetitorRecord],
+    evidence: list[EvidenceRecord],
+    dimensions: list[str],
+) -> list[BusinessQAFinding]:
+    if len(competitors) < 2 or not report_version.report_md.strip():
+        return []
+    detail = _release_report_quality_detail(
+        report_version,
+        competitors=competitors,
+        evidence=evidence,
+        dimensions=dimensions,
+    )
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric.target_value for metric in comparison.metrics}
+    failed = [
+        f"{name}={metrics.get(name, 0.0):.2f} (<{minimum:.2f})"
+        for name, minimum in REPORT_RICHNESS_MINIMUMS.items()
+        if metrics.get(name, 0.0) < minimum
+    ]
+    if not failed:
+        return []
+    return [
+        _gate_issue(
+            "report_depth_required",
+            "Report core richness required",
+            (
+                "Report core richness metrics are below release minimums: "
+                f"{'; '.join(failed)}."
+            ),
+            recommendation=(
+                "Redo the writer report with expanded evidence-backed core analysis, explicit "
+                "SWOT quadrants, fuller section-level tradeoffs, and a concrete RAG gap-fill "
+                "summary before marking the run complete."
+            ),
+        )
+    ]
+
+
+def _release_report_quality_detail(
+    report_version: ReportVersionRecord,
+    *,
+    competitors: list[CompetitorRecord],
+    evidence: list[EvidenceRecord],
+    dimensions: list[str],
+) -> RunDetail:
+    competitor_names_by_id = {item.id: item.name for item in competitors}
+    raw_sources = [
+        RawSource(
+            id=item.id,
+            competitor=competitor_names_by_id.get(item.competitor_id, item.competitor_id),
+            dimension=item.dimension or "general",
+            source_type=item.source_type,
+            title=item.title,
+            url=item.url,
+            snippet=item.snippet,
+            content_hash=item.content_hash or item.id,
+            confidence=item.reliability_score,
+            quality_score=item.reliability_score,
+            metadata={
+                **item.metadata,
+                "raw_source_id": item.raw_source_id,
+                "release_evidence_id": item.id,
+            },
+        )
+        for item in evidence
+    ]
+    now = datetime.utcnow()
+    has_sources = bool(raw_sources)
+    return RunDetail(
+        id=report_version.run_id or report_version.id,
+        workspace_id=report_version.workspace_id,
+        project_id=report_version.project_id,
+        topic=report_version.topic_normalized,
+        status="completed",
+        execution_mode="real",
+        created_at=report_version.created_at or now,
+        updated_at=report_version.created_at or now,
+        plan=AnalysisPlan(
+            topic=report_version.topic_normalized,
+            competitors=[item.name for item in competitors],
+            dimensions=dimensions or ["pricing", "feature", "persona"],
+            competitor_layer=report_version.competitor_layer,
+        ),
+        raw_sources=raw_sources,
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0 if has_sources else 0.0,
+            verified_source_rate=1.0 if has_sources else 0.0,
+            claim_citation_rate=1.0 if has_sources else 0.0,
+            schema_pass_rate=1.0,
+        ),
+        report_md=report_version.report_md,
+    )
 
 
 def _has_layer_heading(

@@ -184,6 +184,26 @@ export function formatDecisionPayload(event: DecisionReplayEvent) {
   return parts.join(" / ");
 }
 
+export function formatModuleExecutionStatus(payload: Record<string, unknown>) {
+  const moduleStatus = stringValue(payload.module_status);
+  const fallback = objectValue(payload.fallback);
+  const fallbackUsed = fallback ? booleanValue(fallback.used) : null;
+  if (moduleStatus === "fallback" || fallbackUsed === true) {
+    const reason = fallback ? stringValue(fallback.reason) : "";
+    const timeoutSeconds = fallback ? numberValue(fallback.timeout_seconds) : null;
+    const error = fallback ? stringValue(fallback.error) : "";
+    const parts = ["Fallback"];
+    if (reason) parts.push(reason);
+    if (timeoutSeconds !== null) parts.push(`${timeoutSeconds}s`);
+    if (error) parts.push(clipPayloadText(error));
+    return parts.join(": ");
+  }
+  if (moduleStatus === "llm" || fallbackUsed === false) {
+    return "LLM";
+  }
+  return "";
+}
+
 function numberPayload(event: DecisionReplayEvent, key: string) {
   return numberValue(event.payload[key]);
 }
@@ -193,8 +213,7 @@ function stringPayload(event: DecisionReplayEvent, key: string) {
 }
 
 function objectPayload(event: DecisionReplayEvent, key: string) {
-  const value = event.payload[key];
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  return objectValue(event.payload[key]);
 }
 
 function arrayPayload(event: DecisionReplayEvent, key: string) {
@@ -216,6 +235,10 @@ function booleanValue(value: unknown) {
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function objectValue(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
 function clipPayloadText(value: string) {

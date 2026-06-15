@@ -2750,6 +2750,49 @@ def test_qa_marks_phantom_citation_as_writer_only_blocker() -> None:
     assert phantom[0].redo_scope.kind == "writer_only"
 
 
+def test_writer_repairs_fullwidth_unknown_source_tokens_to_canonical_source() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://example.com/pricing",
+                snippet="A costs $10.",
+                content_hash="abc",
+                confidence=0.8,
+            )
+        ],
+    )
+
+    repaired = service._repair_report_source_tokens(
+        detail,
+        "A pricing is documented. \u3010source:pricing-404\u3011",
+    )
+
+    assert repaired == "A pricing is documented. [source:pricing-1]"
+
+
 def test_analyst_slice_merge_discards_unknown_source_citations() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -3249,6 +3292,98 @@ async def test_reflector_prompt_includes_comparison_matrix_digest() -> None:
     assert "Comparison Matrix JSON:" in captured_user
     assert '"source_ids": ["pricing-a"]' in captured_user
     assert record.detail.reflections[-1].cross_competitor_gaps == []
+    assert record.detail.agent_messages[-1].payload["module_status"] == "llm"
+    completed = [event for event in record.events if event.agent == "reflector"][-1]
+    assert completed.payload["module_status"] == "llm"
+    assert completed.payload["fallback"]["used"] is False
+
+
+@pytest.mark.asyncio
+async def test_reflector_uses_deterministic_fallback_when_llm_json_fails() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    async def fake_complete_json(*, system: str, user: str, schema_hint: str) -> dict:  # noqa: ARG001
+        raise RuntimeError("LLM JSON request failed for all providers")
+
+    service._llm.complete_json = fake_complete_json  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Reflector fallback",
+            competitors=["A", "B"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://a.example/pricing",
+            snippet="A publishes pricing.",
+            content_hash="pricing-a-hash",
+            confidence=0.9,
+        ),
+        RawSource(
+            id="pricing-b",
+            competitor="B",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="B pricing",
+            url="https://b.example/pricing",
+            snippet="B publishes pricing.",
+            content_hash="pricing-b-hash",
+            confidence=0.9,
+        ),
+    ]
+    record.detail.comparison_matrix = ComparisonMatrix(
+        competitors=["A", "B"],
+        dimensions=["pricing"],
+        cells=[
+            ComparisonCell(
+                competitor="A",
+                dimension="pricing",
+                value="A publishes pricing.",
+                source_ids=["pricing-a"],
+                confidence=0.9,
+            ),
+            ComparisonCell(
+                competitor="B",
+                dimension="pricing",
+                value="B publishes pricing.",
+                source_ids=["pricing-b"],
+                confidence=0.9,
+            ),
+        ],
+        winner_by_dimension={"pricing": "tie"},
+        summary=["[majority-vote:pricing] winner=tie; evidence=tie"],
+    )
+
+    await service._real_reflector_step(record)
+
+    assert record.detail.reflections[-1].coverage_gaps == []
+    assert record.detail.reflections[-1].confidence_outliers == []
+    assert record.detail.reflections[-1].cross_competitor_gaps == []
+    assert record.detail.agent_messages[-1].message_type == "reflection_ready"
+    completed = [event for event in record.events if event.agent == "reflector"][-1]
+    assert completed.type == "node_completed"
+    assert completed.payload["module_status"] == "fallback"
+    assert completed.payload["fallback"]["used"] is True
+    assert completed.payload["fallback"]["deterministic_fallback"] is True
+    assert "LLM JSON request failed" in completed.payload["fallback"]["error"]
 
 
 def test_qa_issue_redo_scopes_are_not_placeholders() -> None:
@@ -4340,6 +4475,82 @@ def test_writer_and_reflector_digests_preserve_pricing_matrix_cells() -> None:
     assert "Usage add-on" in writer_digest["summary"][0]
 
 
+def test_writer_and_reflector_digests_preserve_persona_matrix_cells() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    long_persona_value = " | ".join(
+        [
+            (
+                f"segment={segment}; role={role}; company_size={size}; "
+                f"use_cases={use_cases}; pain_points={pain_points}"
+            )
+            for segment, role, size, use_cases, pain_points in [
+                (
+                    "Enterprise engineering teams",
+                    "technical buyer",
+                    "enterprise",
+                    "agentic coding, refactoring, IDE workflow, pull request governance",
+                    "security risk, cost control, developer onboarding, audit readiness",
+                ),
+                (
+                    "Individual developers",
+                    "developer",
+                    "individual",
+                    "code completion, agentic coding, debugging and fixes",
+                    "large codebase maintenance, reliability drift, context loss",
+                ),
+                (
+                    "SMB and startup engineering teams",
+                    "engineering lead",
+                    "startup",
+                    "team rollout, repository modernization, workflow automation",
+                    "budget predictability, switching friction, rollout governance",
+                ),
+            ]
+        ]
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["persona"]),
+        comparison_matrix=ComparisonMatrix(
+            competitors=["A"],
+            dimensions=["persona"],
+            cells=[
+                ComparisonCell(
+                    competitor="A",
+                    dimension="persona",
+                    value=long_persona_value,
+                    source_ids=["persona-a"],
+                    confidence=0.9,
+                )
+            ],
+            winner_by_dimension={"persona": "A"},
+            summary=[f"[persona-standardization:persona] {long_persona_value}"],
+        ),
+    )
+
+    writer_digest = service._writer_matrix_digest(detail)
+    reflector_digest = service._reflector_matrix_digest(detail)
+
+    assert writer_digest["cells"][0]["value"] == long_persona_value
+    assert reflector_digest["cells"][0]["value"] == long_persona_value
+    assert writer_digest["summary"][0] == f"[persona-standardization:persona] {long_persona_value}"
+
+
 @pytest.mark.asyncio
 async def test_comparator_timeout_falls_back_to_deterministic_matrix() -> None:
     service = RunService(
@@ -4396,6 +4607,65 @@ async def test_comparator_timeout_falls_back_to_deterministic_matrix() -> None:
     )
     assert completed.payload["fallback"]["reason"] == "timeout"
     assert completed.payload["fallback"]["deterministic_fallback"] is True
+
+
+@pytest.mark.asyncio
+async def test_comparator_llm_error_falls_back_to_visible_deterministic_matrix() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            comparator_timeout_seconds=30,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Comparator LLM error",
+            competitors=["A", "B"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://a.example/pricing",
+            snippet="A publishes a $10 plan.",
+            content_hash="pricing-a-hash",
+            confidence=0.9,
+        )
+    ]
+    service._merge_kb_slice(record.detail, "pricing", {"A": ["A publishes a $10 plan."]})
+
+    async def failing_complete_json(*, system: str, user: str, schema_hint: str) -> dict:  # noqa: ARG001
+        raise RuntimeError("LLM returned empty content.")
+
+    service._llm.complete_json = failing_complete_json  # type: ignore[method-assign]
+
+    await service._real_comparator_step(record)
+
+    assert record.detail.comparison_matrix is not None
+    assert record.detail.comparison_matrix.cells[0].source_ids == ["pricing-a"]
+    completed = [
+        event for event in record.events if event.type == "node_completed" and event.agent == "comparator"
+    ][-1]
+    assert completed.payload["fallback"]["used"] is True
+    assert completed.payload["fallback"]["reason"] == "llm_error"
+    assert completed.payload["fallback"]["deterministic_fallback"] is True
+    assert "LLM returned empty content" in completed.payload["fallback"]["error"]
+    last_message = record.detail.agent_messages[-1]
+    assert last_message.message_type == "comparison_matrix_ready"
+    assert last_message.payload["module_status"] == "fallback"
 
 
 @pytest.mark.asyncio
@@ -6592,7 +6862,7 @@ async def test_writer_upstream_changed_rejects_thinner_full_rewrite() -> None:
 
 
 @pytest.mark.asyncio
-async def test_writer_budget_timeout_generates_deterministic_report() -> None:
+async def test_writer_budget_timeout_fails_without_previous_report() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -6650,19 +6920,85 @@ async def test_writer_budget_timeout_generates_deterministic_report() -> None:
         summary=["A has transparent pricing."],
     )
 
-    await service._real_writer_step(record)
+    with pytest.raises(
+        RuntimeError,
+        match="Writer failed before report generation: writer LLM exceeded 0.05s",
+    ):
+        await service._real_writer_step(record)
 
-    assert "## Generation Notes" in record.detail.report_md
-    assert "writer LLM exceeded 0.05s" in record.detail.report_md
-    assert (
-        record.detail.agent_messages[-1].payload["writer_mode"]
-        == "deterministic fallback after writer error"
+    assert record.detail.status == "failed"
+    assert record.detail.report_md == ""
+    assert all(
+        message.message_type != "report_ready"
+        for message in record.detail.agent_messages
     )
-    assert record.detail.agent_messages[-1].payload["error"] == "writer LLM exceeded 0.05s"
+    assert any(
+        event.type == "run_failed"
+        and event.agent == "writer"
+        and "writer LLM exceeded 0.05s" in event.message
+        for event in record.events
+    )
 
 
 @pytest.mark.asyncio
-async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
+async def test_writer_empty_output_fails_without_previous_report() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def empty_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return "   "
+
+    service._llm.complete_text = empty_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer empty output",
+            competitors=["A"],
+            dimensions=["pricing"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-1",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://example.com/pricing",
+            snippet="A costs $10 per month.",
+            content_hash="abc",
+            confidence=0.9,
+        )
+    ]
+
+    with pytest.raises(
+        RuntimeError,
+        match="Writer failed before report generation: writer LLM returned empty output",
+    ):
+        await service._real_writer_step(record)
+
+    assert record.detail.status == "failed"
+    assert record.detail.report_md == ""
+    assert all(
+        message.message_type != "report_ready"
+        for message in record.detail.agent_messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_uses_full_context_package_for_llm_prompt() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -6693,7 +7029,10 @@ async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
         )
     )
     record = service._runs[detail.id]
-    long_snippet = "A pricing is published. " + ("long-context-token " * 400)
+    long_snippet = (
+        "A pricing evidence describes enterprise budget governance, procurement approval, "
+        "usage limits, renewal planning, and developer rollout. "
+    ) * 40
     record.detail.raw_sources = [
         RawSource(
             id="pricing-a",
@@ -6740,14 +7079,18 @@ async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
 
     assert "Writer Context JSON:" in captured_user
     assert "around 5,500 characters" not in captured_user
-    assert "8,500-10,000 characters" in captured_user
-    assert "65-75%" in captured_user
+    assert "8,500-10,000 characters" not in captured_user
+    assert "16,000-20,000 characters" in captured_user
+    assert "Core section minimums" in captured_user
+    assert "70-80%" in captured_user
     assert "Core analysis layer" in captured_user
     assert "Support/audit layer" in captured_user
     assert "Competitor KB JSON:" not in captured_user
     assert "Competitor Knowledge Schema JSON:" not in captured_user
-    assert len(captured_user) < 16500
-    assert captured_user.count("long-context-token") < 80
+    assert " ".join(long_snippet.split()) in captured_user
+    marker_count = captured_user.count("enterprise budget governance")
+    assert marker_count >= 40
+    assert marker_count < 80
     assert "Official facts vs community observations" in captured_user
     assert "Do not present community observations as official commitments" in captured_user
     assert "Community Evidence Triangulation" in captured_user
@@ -8755,6 +9098,49 @@ async def test_release_gate_sync_creates_scoped_qa_repair_issue() -> None:
 
 
 @pytest.mark.asyncio
+async def test_release_gate_sync_updates_latest_revision_after_issue_count() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Release gate revision sync",
+            competitors=["Claude"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.report_md = "After redo. [source:pricing-1]"
+    record.detail.revisions = [
+        RevisionRecord(
+            id="revision-1",
+            iteration=1,
+            stage="writer",
+            before_md="Before redo.",
+            after_md=record.detail.report_md,
+            issue_count_before=1,
+            issue_count_after=0,
+            convergence_ratio=0.0,
+        )
+    ]
+
+    service._sync_release_gate_repair_issues(record, _blocked_release_gate())
+
+    assert len(record.detail.qa_findings) == 1
+    assert record.detail.revisions[-1].issue_count_after == 1
+    assert record.detail.revisions[-1].convergence_ratio == 1.0
+
+
+@pytest.mark.asyncio
 async def test_release_gate_auto_redo_uses_existing_scoped_redo_for_real_runs() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -9788,6 +10174,81 @@ def test_writer_source_digest_includes_all_raw_sources() -> None:
     assert digest[-1]["id"] == "raw-source-30"
 
 
+def test_writer_source_digest_preserves_clean_business_snippet() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    snippet = (
+        "Enterprise engineering teams use the product for agentic coding, "
+        "repository modernization, pull request automation, secure rollout governance, "
+        "budget predictability, onboarding consistency, workflow migration, "
+        "developer productivity analysis, debugging and fixes, refactoring, "
+        "IDE workflow consolidation, and audit-ready adoption planning."
+    )
+    source = RawSource(
+        id="persona-long",
+        competitor="A",
+        dimension="persona",
+        source_type="interview_record",
+        title="A persona interview",
+        url=None,
+        snippet=snippet,
+        content_hash="persona-long-hash",
+        confidence=0.9,
+    )
+
+    digest = service._writer_source_digest([source])
+
+    assert digest[0]["snippet"] == snippet
+
+
+def test_writer_competitor_digest_preserves_all_kb_slices() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    findings = [
+        (
+            f"Persona evidence {index}: segment=Enterprise engineering teams; "
+            "role=technical buyer; company_size=enterprise; "
+            "use_cases=agentic coding, refactoring, IDE workflow, pull request governance; "
+            "pain_points=security risk, cost control, developer onboarding, audit readiness."
+        )
+        for index in range(1, 6)
+    ]
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["persona"]),
+        competitor_kbs={
+            "A": CompetitorKB(competitor="A", slices={"persona": findings})
+        },
+    )
+
+    digest = service._writer_competitor_digest(detail, "A")
+
+    assert digest["kb_slices"]["persona"] == findings
+
+
 def test_writer_source_ids_for_chinese_user_research_prefers_survey_and_interview_sources() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -10262,6 +10723,61 @@ def test_writer_source_digest_exposes_normalized_fields() -> None:
     assert "$20/month" in str(digest[0]["snippet"])
     assert "normalized_fields" in digest[0]
     assert "snippet_quality" not in digest[0]
+
+
+def test_writer_source_digest_compacts_duplicate_normalized_field_text() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    huge_quote = "OpenAI pricing includes model rates and request limits. " * 500
+    source = RawSource(
+        id="pricing-a",
+        competitor="A",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="A pricing",
+        url="https://a.example/pricing",
+        snippet="A Pro costs $20/month with 500 requests.",
+        content_hash="pricing-a-hash",
+        confidence=0.9,
+        metadata={
+            "normalized_fields": [
+                {
+                    "kind": "pricing",
+                    "model_type": "subscription_saas",
+                    "tier_name": "Pro",
+                    "price": "$20/month",
+                    "billing_cycle": "monthly",
+                    "usage_limit": "500 requests",
+                    "source_quote": huge_quote,
+                    "raw_text": huge_quote,
+                    "html": huge_quote,
+                }
+            ]
+        },
+    )
+
+    digest = service._writer_source_digest([source])
+
+    digest_json = json.dumps(digest[0], ensure_ascii=False)
+    normalized_fields = digest[0]["normalized_fields"]
+    assert isinstance(normalized_fields, list)
+    assert normalized_fields[0]["kind"] == "pricing"
+    assert normalized_fields[0]["tier_name"] == "Pro"
+    assert normalized_fields[0]["price"] == "$20/month"
+    assert normalized_fields[0]["usage_limit"] == "500 requests"
+    assert "source_quote" in normalized_fields[0]
+    assert "raw_text" not in normalized_fields[0]
+    assert "html" not in normalized_fields[0]
+    assert len(digest_json) < 5000
 
 
 def test_writer_source_digest_exposes_community_metadata() -> None:

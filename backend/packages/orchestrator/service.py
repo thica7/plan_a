@@ -2800,6 +2800,7 @@ class RunService(
                 detail.qa_findings = retained
                 detail.updated_at = datetime.utcnow()
                 self._refresh_quality_metrics(detail)
+                self._sync_latest_revision_issue_count(detail)
             return []
 
         gaps = quality_gaps_from_release_gate(gate)
@@ -2834,7 +2835,27 @@ class RunService(
         detail.qa_findings = [*retained, *release_issues]
         detail.updated_at = datetime.utcnow()
         self._refresh_quality_metrics(detail)
+        self._sync_latest_revision_issue_count(detail)
         return release_issues
+
+    def _sync_latest_revision_issue_count(self, detail: RunDetail) -> None:
+        if not detail.revisions:
+            return
+        latest = detail.revisions[-1]
+        if latest.after_md and latest.after_md != detail.report_md:
+            return
+        issue_count_after = len(detail.qa_findings)
+        if latest.issue_count_after == issue_count_after:
+            return
+        detail.revisions[-1] = latest.model_copy(
+            update={
+                "issue_count_after": issue_count_after,
+                "convergence_ratio": self._convergence_ratio(
+                    latest.issue_count_before,
+                    issue_count_after,
+                ),
+            }
+        )
 
     def _release_gate_detected_by(self, scope: RedoScope) -> str:
         if scope.kind == "writer_only":

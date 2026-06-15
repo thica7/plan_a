@@ -705,6 +705,9 @@ verification before publication. [source:source-0] [source:source-1]
   [source:source-2] [source:source-3]
 - Risk language should stay caveated because security, SSO, and buyer validation evidence are
   not yet sufficient for a final external claim. [source:source-1]
+- Buyer implication: the recommendation should separate the near-term sales talk track from the
+  final procurement decision, so the report can guide action while still naming the validation
+  evidence required before publication. [source:source-0] [source:source-3]
 
 ## Competitor Deep Dives
 | Competitor | Strength | Watchout |
@@ -712,18 +715,39 @@ verification before publication. [source:source-0] [source:source-1]
 | Cursor | Clear AI coding workflow and pricing story for teams evaluating a dedicated editor. [source:source-0] | Needs current security and procurement validation before final recommendation. [source:source-2] |
 | Copilot | Broad enterprise distribution and familiar IDE adoption path. [source:source-1] | Bundled packaging can obscure direct buyer value comparisons. [source:source-3] |
 
+## SWOT Analysis
+- Strengths: Cursor has a clearer dedicated AI coding workflow and pricing story for accounts
+  that want a standalone challenger narrative, while Copilot has distribution leverage through
+  familiar enterprise IDE and Microsoft procurement paths. [source:source-0] [source:source-1]
+- Weaknesses: Cursor still needs stronger official security, SSO, and procurement evidence before
+  the report can turn draft-ready positioning into a publishable enterprise recommendation.
+  Copilot still needs clearer standalone value framing when the buyer asks for direct workflow
+  productivity proof outside bundled Microsoft adoption. [source:source-2] [source:source-3]
+- Opportunities: Sales can use the contrast to ask whether the buyer values a focused workflow
+  shift or a lower-risk incumbent path, then collect the missing procurement and security evidence
+  tied to the selected buying motion. [source:source-0] [source:source-2]
+- Threats: If Copilot reframes the discussion around bundled procurement convenience, or if Cursor
+  cannot supply current security and SSO proof, the recommendation should stay caveated and avoid
+  a public winner claim until validation closes. [source:source-1] [source:source-3]
+
 ## Battlecard
 Sales should lead with pricing clarity, workflow focus, and switching objections, then keep the
 recommendation framed as draft-ready rather than fully publishable. The strongest wedge is Cursor's
 single-purpose AI workflow, while the strongest Copilot defense is enterprise familiarity and
 procurement coverage. Use this battlecard to guide buyer questions, not to make unsupported claims
 about productivity, security posture, or total cost. [source:source-0] [source:source-2]
+The practical objection path is to ask whether the buyer prioritizes a focused workflow shift,
+lower procurement risk, or proof of enterprise controls; each answer maps to a different follow-up
+source request and keeps the sales response grounded in the current evidence. [source:source-1]
+[source:source-3]
 
 ## Side-by-Side Decision Matrix
 | Dimension | Cursor | Copilot |
 | --- | --- | --- |
 | Pricing | clear price [source:source-0] | bundled path [source:source-1] |
 | Feature | focused AI workflow [source:source-2] | broad IDE ecosystem [source:source-3] |
+| Persona | challenger evaluation teams [source:source-0] | Microsoft-standardized teams [source:source-1] |
+| Risk | needs security proof [source:source-2] | needs standalone value proof [source:source-3] |
 
 ## Source Quality & Coverage
 The report uses verified webpages for both competitors and separates direct evidence from
