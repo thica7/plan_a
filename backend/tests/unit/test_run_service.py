@@ -1854,6 +1854,64 @@ def test_qa_blocks_community_official_commitment_via_resolved_source_alias() -> 
     )
 
 
+def test_qa_ignores_community_official_commitment_repeats_in_support_audit_sections() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-audit-repeat",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md=(
+            "## Pricing\n"
+            "Community sources report Cursor Pro around $20 per month; this is not "
+            "official confirmation. [source:reddit-pricing]\n\n"
+            "## RAG 缺口补全\n"
+            "| 缺口 | 建议检索/取证 | 当前状态 |\n"
+            "| --- | --- | --- |\n"
+            "| pricing | official pricing page | community source may be stale "
+            "[source:reddit-pricing] |\n\n"
+            "## Final QA Gate Status\n"
+            "- blocker repeated text: Report presents a community observation as official "
+            "commitment; line 7 cites reddit-pricing."
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
 def test_qa_does_not_warn_community_attempt_when_community_collection_disabled() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

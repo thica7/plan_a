@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
+from packages.business_intel.report_sections import build_report_section_index
 from packages.identity import stable_prefixed_id
 from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
 from packages.research.evidence import publishable_text_noise_problem
@@ -1350,8 +1351,11 @@ class QualityAgentMixin:
     ) -> list[QCIssue]:
         source_by_id = {source.id: source for source in detail.raw_sources}
         source_aliases = self._source_alias_map(detail)
+        section_index = build_report_section_index(detail.report_md)
         issues: list[QCIssue] = []
         for line_number, line in enumerate(detail.report_md.splitlines(), start=1):
+            if section_index.is_support_or_audit_line(line_number):
+                continue
             normalized = line.casefold()
             if not self._is_community_official_commitment_line(normalized):
                 continue
