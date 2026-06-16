@@ -5,7 +5,6 @@ tools_allowlist:
   - web_search
   - search_review_site
   - fetch_page
-  - extract_facts
 query_templates:
   - "{competitor} reviews pros cons"
   - "{competitor} G2 reviews"

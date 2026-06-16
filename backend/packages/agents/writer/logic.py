@@ -581,7 +581,7 @@ class WriterAgentMixin:
 
     def _require_writer_report_output(self, report_md: str) -> None:
         if not report_md.strip():
-            raise RuntimeError("writer LLM returned empty output")
+            raise RuntimeError("Writer returned empty report content")
 
     async def _writer_section_repair_markdown(
         self,
@@ -650,226 +650,20 @@ class WriterAgentMixin:
     ) -> str:
         return self._harden_report_markdown(detail, previous_report)
 
-    def _fallback_report_markdown(self, detail: RunDetail, reason: str) -> str:
-        layer_label = self._writer_layer_label(detail)
-        output_language = detail.output_language
-        is_zh = normalize_output_language(output_language) == "zh-CN"
-        lines = [
-            f"# {detail.topic} {layer_label}",
-            "",
-            f"## {report_label(output_language, 'executive_takeaway')}",
-        ]
-        matrix_sources = self._matrix_source_ids(detail)
-        if is_zh:
-            lines.append(
-                "这份基于证据索引的报告汇总最新结构化知识和对比矩阵，并保留明确的不确定性说明。"
-                + self._format_source_refs(matrix_sources)
-            )
-        else:
-            lines.append(
-                "This evidence-indexed report summarizes the latest structured knowledge "
-                "and comparison matrix while preserving explicit uncertainty."
-                + self._format_source_refs(matrix_sources)
-            )
-        lines.extend(self._fallback_decision_summary_section(detail, matrix_sources))
-        lines.extend(self._fallback_competitive_findings_section(detail))
-        lines.extend(self._fallback_review_theme_section(detail))
-        if detail.comparison_matrix is not None:
-            lines.extend(["", f"## {report_label(output_language, 'dimension_winners')}"])
-            for dimension, winner in detail.comparison_matrix.winner_by_dimension.items():
-                source_ids = [
-                    source_id
-                    for cell in detail.comparison_matrix.cells
-                    if cell.dimension == dimension
-                    for source_id in cell.source_ids
-                ]
-                lines.append(f"- {dimension}: {winner}{self._format_source_refs(source_ids)}")
-            lines.extend(["", f"## {report_label(output_language, 'comparison_matrix')}"])
-            for cell in detail.comparison_matrix.cells:
-                lines.append(
-                    f"- {cell.competitor} / {cell.dimension}: {cell.value}"
-                    f"{self._format_source_refs(cell.source_ids)}"
-                )
-        lines.extend(self._fallback_competitor_deep_dives_section(detail))
-        lines.extend(self._fallback_swot_section(detail))
-        lines.extend(self._fallback_layer_sections(detail, matrix_sources, fallback=False))
-        lines.extend(self._fallback_evidence_support_section(detail))
-        lines.extend(self._fallback_source_quality_section(detail))
-        lines.extend(self._fallback_scenario_checklist_section(detail))
-        lines.extend(["", f"## {report_label(output_language, 'knowledge_coverage')}"])
-        for competitor in detail.plan.competitors:
-            knowledge = detail.competitor_knowledge.get(competitor)
-            source_ids = knowledge.source_ids if knowledge is not None else []
-            confidence = f"{knowledge.confidence:.2f}" if knowledge is not None else "unknown"
-            lines.append(
-                f"- {competitor}: confidence {confidence}{self._format_source_refs(source_ids)}"
-            )
-        if detail.reflections:
-            latest = detail.reflections[-1]
-            lines.extend(["", f"## {report_label(output_language, 'confidence_notes')}"])
-            notes = [
-                *latest.coverage_gaps[:3],
-                *latest.confidence_outliers[:2],
-                *latest.cross_competitor_gaps[:2],
-            ]
-            for note in notes:
-                lines.append(f"- {note}{self._format_source_refs(matrix_sources)}")
-        lines.extend(self._fallback_claim_validation_section(detail))
-        lines.extend(self._fallback_next_collection_plan(detail))
-        lines.extend(self._fallback_evidence_appendix(detail))
-        lines.extend(
-            [
-                "",
-                f"## {report_label(output_language, 'generation_notes')}",
-                "- 确定性写作器因叙事写作器未完成，已基于结构化证据生成本报告。"
-                if is_zh
-                else (
-                    "- The deterministic writer generated this report from structured "
-                    "evidence because the narrative writer could not complete."
-                ),
-                f"- 内部原因：{reason}" if is_zh else f"- Internal reason: {reason}",
-            ]
-        )
-        return "\n".join(lines)
-
-    def _fallback_layer_sections(
+    def _backfill_layer_sections(
         self,
         detail: RunDetail,
         source_ids: list[str],
-        *,
-        fallback: bool = True,
     ) -> list[str]:
-        return self._fallback_layer_sections_lines(
-            detail,
-            source_ids,
-            fallback=fallback,
-        )
-        refs = self._format_source_refs(source_ids)
-        layer = detail.plan.competitor_layer
-        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
-        if layer == "L1":
-            if is_zh:
-                return [
-                    "",
-                    f"## {self._layer_section_heading(detail, fallback=fallback)}",
-                    f"- 直接使用定位：在更强证据改变矩阵之前，将此视为近期替代决策。{refs}",
-                    (
-                        "- 反对意见处理：在销售或产品响应中，优先考虑定价、包装、"
-                        f"功能对齐以及切换触发因素。{refs}"
-                    ),
-                    (
-                        "- 行动偏向：使用置信度最高的维度赢家作为初始战报核心，"
-                        f"在发布前验证薄弱单元格。{refs}"
-                    ),
-                ]
-            return [
-                "",
-                f"## {self._layer_section_heading(detail, fallback=fallback)}",
-                (
-                    "- Direct-use position: treat this as a near-term replacement decision "
-                    f"until stronger evidence changes the matrix.{refs}"
-                ),
-                (
-                    "- Objection handling: prioritize pricing, packaging, feature parity, "
-                    f"and switching triggers in sales or product response.{refs}"
-                ),
-                (
-                    "- Action bias: use the highest-confidence dimension winners as the "
-                    f"initial battlecard spine, then verify weak cells before publication.{refs}"
-                ),
-            ]
-        if layer == "L2":
-            if is_zh:
-                return [
-                    "",
-                    f"## {self._layer_section_heading(detail, fallback=fallback)}",
-                    f"- 相邻工作流威胁：通过工作流重叠、集成杠杆和切换成本暴露来解读矩阵。{refs}",
-                    (
-                        "- 购买风险：在提出采购建议之前，将已证实的组织控制措施"
-                        f"与仅限搜索或低置信度的声明区分开来。{refs}"
-                    ),
-                    (
-                        "- 监视列表：监控相邻竞品只需一次集成或打包更改即可"
-                        f"吞并目标工作流的维度。{refs}"
-                    ),
-                ]
-            return [
-                "",
-                f"## {self._layer_section_heading(detail, fallback=fallback)}",
-                (
-                    "- Adjacent-workflow threat: read the matrix through workflow overlap, "
-                    f"integration leverage, and switching-cost exposure.{refs}"
-                ),
-                (
-                    "- Buying risk: separate proven enterprise controls from search-only or "
-                    f"low-confidence claims before procurement recommendations.{refs}"
-                ),
-                (
-                    "- Watchlist: monitor the dimensions where adjacent competitors could "
-                    f"absorb the target workflow with one integration or packaging change.{refs}"
-                ),
-            ]
-        if layer == "L3":
-            if is_zh:
-                return [
-                    "",
-                    f"## {self._layer_section_heading(detail, fallback=fallback)}",
-                    (
-                        "- 类别视角：避免单一直接赢家，按细分市场、趋势信号"
-                        f"和基准强度对竞品进行分组。{refs}"
-                    ),
-                    f"- 战略视角：在证据广度仍低于景观级覆盖率时，将建议视为投资组合选项。{refs}",
-                    f"- 不确定性视角：在做出类别范围的声明之前，优先增加竞品和市场级来源。{refs}",
-                ]
-            return [
-                "",
-                f"## {self._layer_section_heading(detail, fallback=fallback)}",
-                (
-                    "- Category view: avoid a single direct winner and group competitors by "
-                    f"segment, trend signal, and benchmark strength.{refs}"
-                ),
-                (
-                    "- Strategy view: treat recommendations as portfolio options while "
-                    f"evidence breadth remains below landscape-grade coverage.{refs}"
-                ),
-                (
-                    "- Uncertainty view: prioritize adding competitors and market-level "
-                    f"sources before making category-wide claims.{refs}"
-                ),
-            ]
-        if is_zh:
-            implication = (
-                "在叙事写作器能够重新生成更完整版本之前，请使用此基于证据的临时读取版本。"
-                if fallback
-                else (
-                    "将此部分用作具有明确不确定性的基于证据的业务读取版本。"
-                )
-            )
-        else:
-            implication = (
-                "Use this evidence-indexed interim readout until the narrative writer "
-                "can regenerate a fuller version."
-                if fallback
-                else (
-                    "Use this section as an evidence-indexed business readout with explicit "
-                    "uncertainty."
-                )
-            )
-        return [
-            "",
-            f"## {self._layer_section_heading(detail, fallback=fallback)}",
-            f"- {implication}{refs}",
-        ]
+        return self._backfill_layer_sections_lines(detail, source_ids)
 
-    def _fallback_layer_sections_lines(
+    def _backfill_layer_sections_lines(
         self,
         detail: RunDetail,
         source_ids: list[str],
-        *,
-        fallback: bool,
     ) -> list[str]:
         refs = self._format_source_refs(source_ids)
-        heading = self._layer_section_heading(detail, fallback=fallback)
+        heading = self._layer_section_heading(detail)
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         layer = detail.plan.competitor_layer
         if layer == "L1":
@@ -934,7 +728,7 @@ class WriterAgentMixin:
                 ]
         return ["", f"## {heading}", *bullets]
 
-    def _fallback_decision_summary_section(
+    def _backfill_decision_summary_section(
         self, detail: RunDetail, source_ids: list[str]
     ) -> list[str]:
         refs = self._format_source_refs(source_ids)
@@ -989,75 +783,15 @@ class WriterAgentMixin:
             ),
         ]
 
-    def _fallback_competitive_findings_section(self, detail: RunDetail) -> list[str]:
+    def _backfill_competitive_findings_section(self, detail: RunDetail) -> list[str]:
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = [
             "",
             f"## {report_label(detail.output_language, 'competitive_findings')}",
         ]
-        return self._fallback_competitive_findings_lines(detail, lines, is_zh)
-        if detail.comparison_matrix is None:
-            source_ids = self._matrix_source_ids(detail)
-            if is_zh:
-                lines.append(
-                    "- 结构化对比数据仍然稀疏；将来源覆盖率、QA 发现和层上下文作为主要的决策约束。"
-                    f"{self._format_source_refs(source_ids)}"
-                )
-            else:
-                lines.append(
-                    "- Structured comparison data is still thin; treat source coverage, QA "
-                    "findings, and layer context as the main decision constraints."
-                    f"{self._format_source_refs(source_ids)}"
-                )
-            return lines
+        return self._backfill_competitive_findings_lines(detail, lines, is_zh)
 
-        for dimension in detail.plan.dimensions:
-            cells = [
-                cell for cell in detail.comparison_matrix.cells if cell.dimension == dimension
-            ]
-            source_ids = [source_id for cell in cells for source_id in cell.source_ids]
-            winner = detail.comparison_matrix.winner_by_dimension.get(dimension)
-            if winner:
-                if is_zh:
-                    lines.append(
-                        f"- {dimension}：{winner} 在该维度领先，"
-                        "但其含义应与引用的单元格和置信水平保持一致。"
-                        f"{self._format_source_refs(source_ids)}"
-                    )
-                else:
-                    lines.append(
-                        f"- {dimension}: {winner} leads this dimension, but the implication "
-                        "should stay tied to the cited cells and confidence levels."
-                        f"{self._format_source_refs(source_ids)}"
-                    )
-            elif cells:
-                if is_zh:
-                    lines.append(
-                        f"- {dimension}：存在用于对比的证据，"
-                        "但在进行另一次验证之前，不应断言明确的赢家。"
-                        f"{self._format_source_refs(source_ids)}"
-                    )
-                else:
-                    lines.append(
-                        f"- {dimension}: evidence exists for comparison, but no clear winner "
-                        "should be asserted without another validation pass."
-                        f"{self._format_source_refs(source_ids)}"
-                    )
-        if len(lines) == 2:
-            if is_zh:
-                lines.append(
-                    "- 尚无维度级别的发现；在做出竞争建议之前，请使用收集任务。"
-                    f"{self._format_source_refs(self._matrix_source_ids(detail))}"
-                )
-            else:
-                lines.append(
-                    "- No dimension-level findings are available yet; use collection tasks before "
-                    "making a competitive recommendation."
-                    f"{self._format_source_refs(self._matrix_source_ids(detail))}"
-                )
-        return lines
-
-    def _fallback_competitive_findings_lines(
+    def _backfill_competitive_findings_lines(
         self,
         detail: RunDetail,
         lines: list[str],
@@ -1192,7 +926,7 @@ class WriterAgentMixin:
             )
         return lines
 
-    def _fallback_competitor_deep_dives_section(self, detail: RunDetail) -> list[str]:
+    def _backfill_competitor_deep_dives_section(self, detail: RunDetail) -> list[str]:
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = [
             "",
@@ -1281,7 +1015,7 @@ class WriterAgentMixin:
                 )
         return lines
 
-    def _fallback_evidence_support_section(self, detail: RunDetail) -> list[str]:
+    def _backfill_evidence_support_section(self, detail: RunDetail) -> list[str]:
         refs = self._format_source_refs(self._matrix_source_ids(detail))
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         if is_zh:
@@ -1307,7 +1041,7 @@ class WriterAgentMixin:
             ),
         ]
 
-    def _fallback_source_quality_section(self, detail: RunDetail) -> list[str]:
+    def _backfill_source_quality_section(self, detail: RunDetail) -> list[str]:
         heading = report_label(detail.output_language, "source_quality")
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         if not detail.raw_sources:
@@ -1342,7 +1076,7 @@ class WriterAgentMixin:
                 )
         return lines
 
-    def _fallback_scenario_checklist_section(self, detail: RunDetail) -> list[str]:
+    def _backfill_scenario_checklist_section(self, detail: RunDetail) -> list[str]:
         scenario_id = detail.plan.scenario_id or "auto"
         pack = get_scenario_pack(scenario_id) if detail.plan.scenario_id else None
         recommended = detail.plan.scenario_recommended_dimensions or detail.plan.dimensions
@@ -1383,7 +1117,7 @@ class WriterAgentMixin:
                 lines.append(f"- QA rules: {', '.join(detail.plan.qa_rule_ids)}")
         return lines
 
-    def _fallback_next_collection_plan(self, detail: RunDetail) -> list[str]:
+    def _backfill_next_collection_plan(self, detail: RunDetail) -> list[str]:
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = ["", f"## {report_label(detail.output_language, 'next_collection')}"]
         source_ids_by_dimension: dict[str, list[str]] = {}
@@ -1422,7 +1156,7 @@ class WriterAgentMixin:
                 )
         return lines
 
-    def _fallback_evidence_appendix(self, detail: RunDetail) -> list[str]:
+    def _backfill_evidence_appendix(self, detail: RunDetail) -> list[str]:
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = ["", f"## {report_label(detail.output_language, 'evidence_appendix')}"]
         if not detail.raw_sources:
@@ -1463,7 +1197,7 @@ class WriterAgentMixin:
     def _ensure_report_required_sections(self, detail: RunDetail, markdown: str) -> str:
         hardened = markdown.strip()
         if not hardened:
-            hardened = self._fallback_report_markdown(detail, "empty writer output")
+            raise RuntimeError("Writer returned empty report content")
         source_ids = self._matrix_source_ids(detail)
         executive_headings = self._report_label_aliases(
             "executive_takeaway",
@@ -1488,27 +1222,27 @@ class WriterAgentMixin:
             ),
             (
                 self._report_label_aliases("decision_summary"),
-                self._fallback_decision_summary_section(detail, source_ids),
+                self._backfill_decision_summary_section(detail, source_ids),
             ),
             (
                 self._report_label_aliases("competitive_findings"),
-                self._fallback_competitive_findings_section(detail),
+                self._backfill_competitive_findings_section(detail),
             ),
             (
                 self._report_label_aliases("review_theme_summary"),
-                self._fallback_review_theme_section(detail),
+                self._backfill_review_theme_section(detail),
             ),
             (
                 self._report_label_aliases("competitor_deep_dives"),
-                self._fallback_competitor_deep_dives_section(detail),
+                self._backfill_competitor_deep_dives_section(detail),
             ),
             (
                 self._report_label_aliases("swot_analysis"),
-                self._fallback_swot_section(detail),
+                self._backfill_swot_section(detail),
             ),
             (
                 layer_heading_aliases,
-                self._fallback_layer_sections(detail, source_ids, fallback=False),
+                self._backfill_layer_sections(detail, source_ids),
             ),
         ]
         core_blocks = [
@@ -1536,47 +1270,47 @@ class WriterAgentMixin:
             (
                 report_label(detail.output_language, "evidence_support"),
                 self._report_label_aliases("evidence_support"),
-                self._fallback_evidence_support_section(detail),
+                self._backfill_evidence_support_section(detail),
             ),
             (
                 report_label(detail.output_language, "source_quality"),
                 self._report_label_aliases("source_quality"),
-                self._fallback_source_quality_section(detail),
+                self._backfill_source_quality_section(detail),
             ),
             (
                 report_label(detail.output_language, "memory_context"),
                 self._report_label_aliases("memory_context"),
-                self._fallback_memory_context_section(detail),
+                self._backfill_memory_context_section(detail),
             ),
             (
                 report_label(detail.output_language, "user_research_evidence"),
                 self._report_label_aliases("user_research_evidence"),
-                self._fallback_user_research_section(detail),
+                self._backfill_user_research_section(detail),
             ),
             (
                 report_label(detail.output_language, "rag_gap_fill"),
                 self._report_label_aliases("rag_gap_fill"),
-                self._fallback_rag_gap_fill_section(detail),
+                self._backfill_rag_gap_fill_section(detail),
             ),
             (
                 report_label(detail.output_language, "scenario_checklist"),
                 self._report_label_aliases("scenario_checklist"),
-                self._fallback_scenario_checklist_section(detail),
+                self._backfill_scenario_checklist_section(detail),
             ),
             (
                 report_label(detail.output_language, "claim_risk"),
                 self._report_label_aliases("claim_risk"),
-                self._fallback_claim_validation_section(detail),
+                self._backfill_claim_validation_section(detail),
             ),
             (
                 report_label(detail.output_language, "next_collection"),
                 self._report_label_aliases("next_collection"),
-                self._fallback_next_collection_plan(detail),
+                self._backfill_next_collection_plan(detail),
             ),
             (
                 report_label(detail.output_language, "evidence_appendix"),
                 self._report_label_aliases("evidence_appendix"),
-                self._fallback_evidence_appendix(detail),
+                self._backfill_evidence_appendix(detail),
             ),
         ]
         support_order_heading_groups = self._support_report_heading_alias_groups()
@@ -1603,7 +1337,7 @@ class WriterAgentMixin:
                     )
         return self._normalize_report_section_order(detail, hardened)
 
-    def _layer_section_heading(self, detail: RunDetail, *, fallback: bool = True) -> str:
+    def _layer_section_heading(self, detail: RunDetail) -> str:
         return report_label(detail.output_language, self._layer_section_label_key(detail))
 
     def _layer_section_label_key(self, detail: RunDetail) -> str:
@@ -2434,7 +2168,7 @@ class WriterAgentMixin:
             return ""
         return " " + " ".join(f"[source:{source_id}]" for source_id in unique)
 
-    def _fallback_memory_context_section(self, detail: RunDetail) -> list[str]:
+    def _backfill_memory_context_section(self, detail: RunDetail) -> list[str]:
         if not detail.plan.memory_prompt_context:
             return []
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
@@ -2477,7 +2211,7 @@ class WriterAgentMixin:
             return "失败模式" if is_zh else "Failure pattern"
         return "指导" if is_zh else "Guidance"
 
-    def _fallback_review_theme_section(self, detail: RunDetail) -> list[str]:
+    def _backfill_review_theme_section(self, detail: RunDetail) -> list[str]:
         summaries = [
             knowledge.review_summary
             for knowledge in detail.competitor_knowledge.values()
@@ -2561,7 +2295,7 @@ class WriterAgentMixin:
             )
         )
 
-    def _fallback_swot_section(self, detail: RunDetail) -> list[str]:
+    def _backfill_swot_section(self, detail: RunDetail) -> list[str]:
         analyses = [
             knowledge.swot_analysis
             for knowledge in detail.competitor_knowledge.values()
@@ -2656,7 +2390,7 @@ class WriterAgentMixin:
             lines.append(f"- {label}: {text}{gap}{refs}")
         return lines
 
-    def _fallback_user_research_section(self, detail: RunDetail) -> list[str]:
+    def _backfill_user_research_section(self, detail: RunDetail) -> list[str]:
         research_sources = [
             source
             for source in detail.raw_sources
@@ -2712,7 +2446,7 @@ class WriterAgentMixin:
                 )
         return lines
 
-    def _fallback_rag_gap_fill_section(self, detail: RunDetail) -> list[str]:
+    def _backfill_rag_gap_fill_section(self, detail: RunDetail) -> list[str]:
         collector_gaps = [
             issue
             for issue in detail.qa_findings
@@ -2781,7 +2515,7 @@ class WriterAgentMixin:
         query = f"{competitor} {dimension} {issue.problem}".strip()
         return " ".join(query.split())[:180]
 
-    def _fallback_claim_validation_section(self, detail: RunDetail) -> list[str]:
+    def _backfill_claim_validation_section(self, detail: RunDetail) -> list[str]:
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = ["", f"## {report_label(detail.output_language, 'claim_risk')}"]
         source_by_id = {source.id: source for source in detail.raw_sources}

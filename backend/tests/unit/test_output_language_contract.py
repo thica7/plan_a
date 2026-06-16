@@ -1,5 +1,7 @@
 from datetime import datetime
 
+import pytest
+
 from packages.agents.writer.logic import WriterAgentMixin
 from packages.config import Settings
 from packages.enterprise.projection import _build_report_version
@@ -79,7 +81,7 @@ def test_language_instruction_preserves_citation_syntax() -> None:
 
 
 def test_report_labels_are_localized() -> None:
-    assert REPORT_LABELS["zh-CN"]["executive_summary"] == "执行摘要"
+    assert REPORT_LABELS["zh-CN"]["executive_summary"] == "\u6267\u884c\u6458\u8981"
     assert REPORT_LABELS["en-US"]["executive_summary"] == "Executive Summary"
 
 
@@ -171,13 +173,11 @@ def test_demo_report_uses_chinese_headings_by_default() -> None:
 
     report = service._demo_report(_language_run_detail("zh-CN"))
 
-    assert "## 执行摘要" in report
-    assert "## 来源质量与覆盖" in report
+    assert f"## {REPORT_LABELS['zh-CN']['executive_summary']}" in report
+    assert f"## {REPORT_LABELS['zh-CN']['source_quality']}" in report
+    assert f"## {REPORT_LABELS['zh-CN']['battlecard']}" in report
     assert "[source:src-1]" in report
     assert "## Executive Summary" not in report
-    assert "本次 Demo 运行覆盖了" in report
-    assert "Demo 证据被投射到企业" in report
-    assert "将此 Demo 报告用作直接的战报脚手架" in report
     assert "This demo run covers" not in report
 
 
@@ -194,39 +194,16 @@ def test_demo_report_can_use_english_headings() -> None:
     assert "This demo run covers" in report
     assert "Demo evidence is projected into" in report
     assert "Use this demo report as a direct battlecard scaffold" in report
-    assert "本次 Demo 运行覆盖了" not in report
+    assert f"## {REPORT_LABELS['zh-CN']['executive_summary']}" not in report
 
 
-def test_fallback_report_uses_chinese_headings() -> None:
-    report = _WriterHarness()._fallback_report_markdown(
-        _language_run_detail("zh-CN"),
-        "writer timeout",
-    )
-
-    assert "# AI 编程助手竞品分析 直接战报" in report
-    assert f"## {REPORT_LABELS['zh-CN']['executive_takeaway']}" in report
-    assert "## 维度结论" in report
-    assert "[source:src-1]" in report
-    assert "这份基于证据索引的报告" in report
-    assert "直接使用定位" in report
-    assert "推荐行动" in report
-    assert "This evidence-indexed report" not in report
+def test_writer_does_not_expose_complete_fallback_report_builder() -> None:
+    assert not hasattr(_WriterHarness, "_fallback_report_markdown")
 
 
-def test_fallback_report_uses_english_body() -> None:
-    report = _WriterHarness()._fallback_report_markdown(
-        _language_run_detail("en-US"),
-        "writer timeout",
-    )
-
-    assert "# AI 编程助手竞品分析 Direct Battlecard" in report
-    assert f"## {REPORT_LABELS['en-US']['executive_takeaway']}" in report
-    assert "## Dimension Winners" in report
-    assert "[source:src-1]" in report
-    assert "This evidence-indexed report summarizes" in report
-    assert "Direct-use position:" in report
-    assert "Recommended action:" in report
-    assert "这份基于证据索引的报告" not in report
+def test_writer_hardening_rejects_empty_report_instead_of_synthesizing_fallback() -> None:
+    with pytest.raises(RuntimeError, match="Writer returned empty report content"):
+        _WriterHarness()._harden_report_markdown(_language_run_detail("en-US"), "")
 
 
 def test_report_projection_carries_output_language_metadata() -> None:

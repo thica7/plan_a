@@ -360,7 +360,7 @@ def _draft_skill_spec(dimension_key: str) -> SkillSpec:
         description=(
             f"Pending collector schema for {dimension_key} evidence discovered by gap analysis."
         ),
-        tools_allowlist=["web_search", "robots_check", "fetch_page", "extract_facts"],
+        tools_allowlist=["web_search", "robots_check", "fetch_page"],
         query_templates=[
             f"{{competitor}} {dimension_key} official documentation",
             f"{{competitor}} {dimension_key} policy",

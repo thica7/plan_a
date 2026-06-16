@@ -7,6 +7,7 @@ from collections.abc import Callable
 from packages.business_intel.entity_resolver import (
     confusion_terms_for_competitor,
     identity_terms_for_competitor,
+    is_trusted_url_for_competitor,
     normalize_competitor_key,
 )
 from packages.identity import compute_raw_source_id
@@ -181,6 +182,12 @@ def raw_source_from_capture(
 ) -> RawSource:
     evidence_snippet = snippet or capture.snippet or candidate.snippet
     content_hash = capture.content_hash or _content_hash(evidence_snippet or candidate.title)
+    source_metadata = {
+        "requested_url": capture.requested_url,
+        "final_url": capture.final_url,
+        "redirected": capture.requested_url.rstrip("/") != capture.final_url.rstrip("/"),
+    }
+    source_metadata.update(metadata or {})
     return RawSource(
         id=compute_raw_source_id(
             source_type=source_type,
@@ -206,7 +213,7 @@ def raw_source_from_capture(
         fetch_method=capture.fetch_method,
         quality_score=capture.quality_score,
         failure_reason=capture.failure_reason,
-        metadata=metadata or {},
+        metadata=source_metadata,
     )
 
 
@@ -221,6 +228,7 @@ def raw_sources_from_research_result(
     confidence_for_source: SourceConfidenceCallable,
     fallback_snippet: FallbackSnippetCallable,
     source_is_usable: SourceUsableCallable = lambda source: source_quality_problem(source) is None,
+    rejection_diagnostics: list[dict[str, object]] | None = None,
 ) -> list[RawSource]:
     candidate_by_id = {candidate.id: candidate for candidate in result.candidates}
     accepted_by_page = accepted_evidence_by_page(result.evidence_items)
@@ -234,12 +242,42 @@ def raw_sources_from_research_result(
         if len(batch_sources) + len(sources) >= target_source_count:
             break
         candidate = candidate_by_id.get(page.candidate_id)
-        if candidate is None or page.status != "ok":
+        if candidate is None:
+            record_raw_source_rejection(
+                rejection_diagnostics,
+                page=page,
+                candidate=None,
+                reason="candidate_missing",
+                detail=f"Captured page {page.id} has no matching source candidate.",
+            )
+            continue
+        if page.status != "ok":
+            record_raw_source_rejection(
+                rejection_diagnostics,
+                page=page,
+                candidate=candidate,
+                reason="capture_not_ok",
+                detail=page.failure_reason or page.error or page.status,
+            )
             continue
         page_items = accepted_by_page.get(page.id, [])
         if requires_accepted_evidence and not page_items:
+            record_raw_source_rejection(
+                rejection_diagnostics,
+                page=page,
+                candidate=candidate,
+                reason="missing_accepted_evidence",
+                detail="No accepted evidence items were attached to this captured page.",
+            )
             continue
         if source_exists(page.final_url, [*batch_sources, *sources]):
+            record_raw_source_rejection(
+                rejection_diagnostics,
+                page=page,
+                candidate=candidate,
+                reason="duplicate_source",
+                detail="A source with the same URL, dimension, and competitor was already collected.",
+            )
             continue
         fallback = fallback_snippet(page)
         snippet = snippet_from_evidence_items(page_items, fallback=fallback)
@@ -257,9 +295,44 @@ def raw_sources_from_research_result(
             },
         )
         if not source_is_usable(source):
+            record_raw_source_rejection(
+                rejection_diagnostics,
+                page=page,
+                candidate=candidate,
+                reason="source_quality_problem",
+                detail=source_quality_problem(source)
+                or "Source usability callback rejected this RawSource.",
+                source=source,
+            )
             continue
         sources.append(source)
     return sources
+
+
+def record_raw_source_rejection(
+    diagnostics: list[dict[str, object]] | None,
+    *,
+    page: CapturedPage,
+    candidate: SourceCandidate | None,
+    reason: str,
+    detail: str,
+    source: RawSource | None = None,
+) -> None:
+    if diagnostics is None:
+        return
+    diagnostics.append(
+        {
+            "reason": reason,
+            "detail": detail,
+            "candidate_id": page.candidate_id,
+            "candidate_origin": candidate.origin if candidate is not None else None,
+            "candidate_url": candidate.url if candidate is not None else None,
+            "requested_url": page.requested_url,
+            "final_url": page.final_url,
+            "page_status": page.status,
+            "raw_source_id": source.id if source is not None else None,
+        }
+    )
 
 
 def _research_page_score(
@@ -482,7 +555,10 @@ def competitor_identity_problem(source: RawSource) -> str | None:
     if not key or key.startswith("crossmodel"):
         return None
     haystack = f"{source.title}\n{source.url or ''}\n{source.snippet}".casefold()
+    trusted_lineage = source_has_trusted_identity_lineage(source)
     for term in confusion_terms_for_competitor(source.competitor):
+        if trusted_lineage and term in haystack:
+            continue
         if (
             key == "windsurf"
             and term in {"devin.ai", "devin desktop"}
@@ -501,6 +577,17 @@ def competitor_identity_problem(source: RawSource) -> str | None:
             "product identity signal."
         )
     return None
+
+
+def source_has_trusted_identity_lineage(source: RawSource) -> bool:
+    urls: list[str] = []
+    if source.url:
+        urls.append(str(source.url))
+    for key in ("requested_url", "source_requested_url", "candidate_url", "final_url"):
+        value = source.metadata.get(key)
+        if isinstance(value, str) and value:
+            urls.append(value)
+    return any(is_trusted_url_for_competitor(source.competitor, url) for url in urls)
 
 
 def is_windsurf_devin_redirect_source(source: RawSource, haystack: str) -> bool:

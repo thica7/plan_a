@@ -400,6 +400,7 @@ def test_evidence_gaps_generate_pending_schema_suggestions_for_new_dimensions() 
     assert suggestion.proposed_skill.name == "compliance"
     assert suggestion.proposed_skill.output.required_dimension == "compliance"
     assert "fetch_page" in suggestion.proposed_skill.tools_allowlist
+    assert "extract_facts" not in suggestion.proposed_skill.tools_allowlist
 
 
 def test_report_release_gate_requires_clean_qa_and_verified_evidence() -> None:

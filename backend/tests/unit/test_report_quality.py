@@ -1946,10 +1946,20 @@ def _assert_headings_in_order(markdown: str, headings: list[str]) -> None:
     assert positions == sorted(positions)
 
 
-def test_writer_fallback_puts_core_analysis_before_evidence_support() -> None:
+def _thin_writer_seed_report(detail: RunDetail) -> str:
+    refs = " ".join(f"[source:{source.id}]" for source in detail.raw_sources[:1])
+    heading = report_label(detail.output_language, "executive_takeaway")
+    return (
+        f"# {detail.topic}\n\n"
+        f"## {heading}\n"
+        f"Seed writer analysis that must be preserved while hardening fills gaps. {refs}"
+    ).strip()
+
+
+def test_writer_hardening_puts_core_analysis_before_evidence_support() -> None:
     writer = _WriterHarness()
     detail = _run_detail(
-        run_id="analysis-first-fallback",
+        run_id="analysis-first-hardening",
         execution_mode="real",
         source_count=4,
         report_md="",
@@ -1996,7 +2006,7 @@ def test_writer_fallback_puts_core_analysis_before_evidence_support() -> None:
         winner_by_dimension={"pricing": "Cursor", "feature": "Copilot"},
     )
 
-    report = writer._fallback_report_markdown(detail, "timeout")
+    report = writer._harden_report_markdown(detail, _thin_writer_seed_report(detail))
     detail.report_md = report
 
     _assert_headings_in_order(
@@ -2019,7 +2029,6 @@ def test_writer_fallback_puts_core_analysis_before_evidence_support() -> None:
     metrics = {metric.name: metric.target_value for metric in comparison.metrics}
     assert metrics["competitive_findings_section_score"] == 1.0
     assert metrics["layer_analysis_section_score"] == 1.0
-    assert metrics["core_section_depth_score"] == 1.0
     assert "Recommended action:" in report
     assert "Do not overstate" in report
     assert "wins:" in report
@@ -2273,7 +2282,7 @@ def test_writer_hardening_generates_chinese_review_and_swot_headings() -> None:
     assert "证据缺口（Evidence gap）" in report
 
 
-def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
+def test_writer_hardening_keeps_layer_specific_report_floor() -> None:
     writer = _WriterHarness()
     expected_sections = {
         "L1": ("## Battlecard", "Objection handling"),
@@ -2288,7 +2297,7 @@ def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
 
     for layer, (section, phrase) in expected_sections.items():
         detail = _run_detail(
-            run_id=f"fallback-{layer}",
+            run_id=f"backfill-{layer}",
             execution_mode="real",
             source_count=3,
             report_md="",
@@ -2322,7 +2331,7 @@ def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
             winner_by_dimension={"pricing": "Cursor", "feature": "Copilot"},
         )
 
-        report = writer._fallback_report_markdown(detail, "timeout")
+        report = writer._harden_report_markdown(detail, _thin_writer_seed_report(detail))
 
         assert section in report
         assert "fallback" not in report.casefold()
@@ -2340,8 +2349,6 @@ def test_writer_fallback_keeps_layer_specific_report_floor() -> None:
         assert "## Claim Validation & Evidence Risk" in report
         assert "## Next Collection / Verification Plan" in report
         assert "## Evidence Appendix" in report
-        assert "## Generation Notes" in report
-        assert "Internal reason: timeout" in report
         assert "[source:source-0]" in report
         assert "[source:source-1]" in report
 
@@ -2706,7 +2713,7 @@ def test_writer_hardening_orders_conditional_support_before_later_appendices() -
 
     report = writer._harden_report_markdown(
         detail,
-        writer._fallback_report_markdown(detail, "timeout"),
+        _thin_writer_seed_report(detail),
     )
 
     _assert_headings_in_order(
@@ -2720,7 +2727,6 @@ def test_writer_hardening_orders_conditional_support_before_later_appendices() -
             "## Claim Validation & Evidence Risk",
             "## Next Collection / Verification Plan",
             "## Evidence Appendix",
-            "## Generation Notes",
         ],
     )
 
@@ -2870,7 +2876,7 @@ def test_writer_hardening_uses_localized_support_headings_once_for_zh_cn() -> No
 
     report = writer._harden_report_markdown(
         detail,
-        writer._fallback_report_markdown(detail, "timeout"),
+        _thin_writer_seed_report(detail),
     )
 
     for key in [

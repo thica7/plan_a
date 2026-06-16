@@ -26,6 +26,7 @@ from packages.research.evidence import (
     normalized_fields_as_dicts,
     normalized_fields_from_evidence_items,
     raw_source_from_capture,
+    raw_sources_from_research_result,
     snippet_from_evidence_items,
     source_quality_problem,
 )
@@ -43,6 +44,7 @@ from packages.research.models import (
     ExtractionResult,
     QualityGap,
     ResearchBrief,
+    ResearchResult,
     SourceCandidate,
 )
 from packages.research.pipeline import run_research_pipeline
@@ -409,6 +411,118 @@ def test_raw_source_from_capture_preserves_candidate_and_fetch_lineage() -> None
     assert source.candidate_origin == "trusted_registry"
     assert source.fetch_method == "basic_httpx"
     assert source_quality_problem(source) is None
+
+
+def test_source_quality_accepts_trusted_windsurf_docs_redirect_with_devin_rebrand() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI Coding Agent",
+        competitor="Windsurf",
+        dimension="feature",
+        homepage_hint="https://windsurf.com/",
+    )
+    candidate = SourceCandidate(
+        title="Windsurf official plugin docs",
+        url="https://docs.windsurf.com/plugins",
+        origin="trusted_registry",
+        competitor="Windsurf",
+        dimension="feature",
+        rank=0,
+        confidence=0.98,
+    )
+    captured = CapturedPage(
+        candidate_id=candidate.id,
+        requested_url=candidate.url,
+        final_url="https://docs.devin.ai/windsurf/plugins/changelog",
+        status="ok",
+        title="Changelog - Devin Docs",
+        text="",
+        content_hash="hash-windsurf-devin-docs",
+        status_code=200,
+        fetch_method="basic_httpx",
+        quality_score=1.0,
+        text_length=220,
+    )
+
+    source = raw_source_from_capture(
+        brief,
+        candidate,
+        captured,
+        confidence=0.96,
+        snippet=(
+            "Windsurf is now Devin Desktop. Devin Docs describes Windsurf Cascade "
+            "plugins, agentic coding workflows, autocomplete, MCP, and developer "
+            "IDE features for engineering teams."
+        ),
+    )
+
+    assert source_quality_problem(source) is None
+
+
+def test_raw_source_admission_reports_rejection_reason_for_accepted_evidence() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI Coding Agent",
+        competitor="Cursor",
+        dimension="feature",
+    )
+    candidate = SourceCandidate(
+        id="candidate-cursor-confused",
+        title="Cursor pagination docs",
+        url="https://example.com/cursor-pagination",
+        origin="web_search",
+        competitor="Cursor",
+        dimension="feature",
+        rank=0,
+        confidence=0.7,
+    )
+    page = CapturedPage(
+        id="page-cursor-confused",
+        candidate_id=candidate.id,
+        requested_url=candidate.url,
+        final_url=candidate.url,
+        status="ok",
+        title="Cursor pagination docs",
+        text="Cursor pagination APIs expose database cursor features for developers.",
+        content_hash="hash-cursor-confused",
+        fetch_method="basic_httpx",
+        quality_score=0.9,
+    )
+    item = EvidenceItem(
+        competitor="Cursor",
+        dimension="feature",
+        field="workflow_capability",
+        value="database cursor pagination",
+        source_candidate_id=candidate.id,
+        captured_page_id=page.id,
+        source_url=page.final_url,
+        quote="Cursor pagination APIs expose database cursor features for developers.",
+        confidence=0.9,
+        status="accepted",
+    )
+    diagnostics: list[dict[str, object]] = []
+
+    sources = raw_sources_from_research_result(
+        brief,
+        ResearchResult(
+            brief=brief,
+            candidates=[candidate],
+            captured_pages=[page],
+            evidence_items=[item],
+        ),
+        batch_sources=[],
+        target_source_count=1,
+        requires_accepted_evidence=True,
+        source_exists=lambda _url, _sources: False,
+        confidence_for_source=lambda _candidate, _page, _snippet, _items: 0.96,
+        fallback_snippet=lambda page: page.snippet,
+        rejection_diagnostics=diagnostics,
+    )
+
+    assert sources == []
+    assert diagnostics
+    assert diagnostics[0]["reason"] == "source_quality_problem"
+    assert "rather than Cursor" in str(diagnostics[0]["detail"])
 
 
 def test_normalized_fields_are_built_from_accepted_evidence_items() -> None:

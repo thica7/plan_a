@@ -5638,7 +5638,7 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
     service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
     detail = await service.create_run(
         RunCreateRequest(
-            topic="Writer fallback",
+            topic="Writer previous report preservation",
             competitors=["A"],
             dimensions=["pricing"],
             execution_mode="real",
@@ -6883,7 +6883,7 @@ async def test_writer_budget_timeout_fails_without_previous_report() -> None:
     service._llm.complete_text = slow_complete_text  # type: ignore[method-assign]
     detail = await service.create_run(
         RunCreateRequest(
-            topic="Writer budget fallback",
+            topic="Writer budget timeout",
             competitors=["A"],
             dimensions=["pricing"],
             execution_mode="real",
@@ -6985,7 +6985,7 @@ async def test_writer_empty_output_fails_without_previous_report() -> None:
 
     with pytest.raises(
         RuntimeError,
-        match="Writer failed before report generation: writer LLM returned empty output",
+        match="Writer failed before report generation: Writer returned empty report content",
     ):
         await service._real_writer_step(record)
 
@@ -8332,6 +8332,100 @@ def test_collector_accepts_windsurf_pricing_rebrand_redirect_source() -> None:
     )
 
     assert service._source_quality_problem(source) is None
+
+
+def test_collector_react_actions_follow_skill_allowlist() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    pricing_actions = service._collector_react_allowed_actions("pricing")
+    review_actions = service._collector_react_allowed_actions("review")
+    feature_actions = service._collector_react_allowed_actions("feature")
+
+    assert pricing_actions == [
+        "web_search",
+        "robots_check",
+        "fetch_page",
+        "finish",
+    ]
+    assert review_actions == [
+        "web_search",
+        "search_review_site",
+        "fetch_page",
+        "finish",
+    ]
+    assert feature_actions == [
+        "web_search",
+        "fetch_page",
+        "find_official_docs",
+        "finish",
+    ]
+
+
+def test_skill_allowlists_only_include_supported_collector_actions() -> None:
+    registry = SkillRegistry.from_default_path()
+    supported_actions = set(RunService.COLLECTOR_REACT_ACTIONS) | {"finish"}
+
+    for skill in registry.list():
+        assert set(skill.tools_allowlist) <= supported_actions
+
+
+def test_collector_does_not_keep_duplicate_identity_guard_helpers() -> None:
+    assert not hasattr(RunService, "_competitor_identity_problem")
+    assert not hasattr(RunService, "_is_windsurf_devin_redirect_source")
+
+
+@pytest.mark.asyncio
+async def test_collector_skill_tools_do_not_emit_legacy_simulated_persona_source() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-no-legacy-simulated-persona",
+        topic="AI Coding Agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI Coding Agent",
+            competitors=["Windsurf"],
+            dimensions=["persona"],
+        ),
+    )
+    record = RunRecord(detail=detail)
+    context = SubagentContext(
+        run_id=detail.id,
+        agent="collector",
+        subagent="persona::Windsurf",
+    )
+
+    sources = await service._collect_competitor_with_skill_tools(
+        record,
+        "persona",
+        "Windsurf",
+        context,
+        qa_feedback=[],
+    )
+
+    assert sources == []
 
 
 def test_persona_web_search_query_uses_customer_adoption_terms() -> None:

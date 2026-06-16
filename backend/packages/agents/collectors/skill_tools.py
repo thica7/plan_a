@@ -3,13 +3,12 @@ from __future__ import annotations
 import json
 
 from packages.agents import SubagentContext
-from packages.identity import compute_raw_source_id
 from packages.research.discovery import homepage_candidates, trusted_registry_candidates
 from packages.research.models import ResearchBrief
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import RawSource
 from packages.search import SearchResult
-from packages.tools import search_review_site_queries, survey_simulator
+from packages.tools import search_review_site_queries
 
 
 async def collect_competitor_with_skill_tools(
@@ -116,47 +115,4 @@ async def collect_competitor_with_skill_tools(
                     sources.append(source)
                     return sources
 
-    if not sources and "survey_simulator" in allowlist:
-        records = survey_simulator(
-            topic=detail.topic,
-            competitor=competitor,
-            dimension=dimension,
-            qa_feedback=qa_feedback,
-        )
-        service._trace_local_tool(
-            record,
-            agent="collector",
-            subagent=context.subagent,
-            name="survey_simulator",
-            input_text=json.dumps(
-                {"topic": detail.topic, "competitor": competitor, "dimension": dimension},
-                ensure_ascii=False,
-            ),
-            output_text=json.dumps([item.__dict__ for item in records], ensure_ascii=False),
-            context=context,
-            metadata={"record_count": len(records), "source_type": "interview_record"},
-        )
-        for item in records[:1]:
-            title = f"{item.respondent} interview note"
-            source = RawSource(
-                id=compute_raw_source_id(
-                    source_type="interview_record",
-                    competitor=competitor,
-                    dimension=dimension,
-                    content_hash=item.content_hash,
-                    title=title,
-                    snippet=item.summary,
-                    run_id=detail.id,
-                    source_role="skill-tool-survey",
-                ),
-                competitor=competitor,
-                dimension=dimension,
-                source_type="interview_record",
-                title=title,
-                snippet=item.summary,
-                content_hash=item.content_hash,
-                confidence=0.56,
-            )
-            if service._source_is_usable(source):
-                sources.append(source)
     return sources
