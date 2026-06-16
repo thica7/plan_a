@@ -1510,6 +1510,53 @@ def test_segment_inputs_enforce_budget_for_broad_registry_segments() -> None:
     assert union_segment_ids == registry_ids
 
 
+def test_segment_inputs_mark_single_source_broad_segment_over_budget() -> None:
+    source = RawSource(
+        id="cursor-heavy-matrix-source",
+        competitor="Cursor",
+        dimension="security",
+        source_type="webpage_verified",
+        title="Cursor heavy matrix source",
+        snippet="Cursor security evidence covers SSO, audit logs, and procurement review.",
+        content_hash="cursor-heavy-matrix-source-hash",
+        confidence=0.9,
+    )
+    detail = _detail_with_sources([source])
+    detail.plan.competitors = ["Cursor"]
+    detail.plan.dimensions = ["security"]
+    detail.comparison_matrix = ComparisonMatrix(
+        competitors=["Cursor"],
+        dimensions=["security"],
+        cells=[
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="security",
+                value=(
+                    "Cursor security cell includes SSO, audit logging, deployment "
+                    f"controls, procurement review, and governance item {cell_index}. "
+                    * 12
+                ),
+                source_ids=["cursor-heavy-matrix-source"],
+                confidence=0.9,
+            )
+            for cell_index in range(900)
+        ],
+    )
+
+    result = build_writer_evidence_pack(detail)
+    over_budget = [
+        segment
+        for segment in result.segment_inputs()
+        if segment["segment_input_chars"] > SEGMENT_INPUT_TARGET_CHARS
+    ]
+
+    assert over_budget
+    assert {
+        segment.get("segment_over_budget_reason") for segment in over_budget
+    } == {"single_source_exceeds_budget"}
+    assert all(len(segment["allowed_source_ids"]) == 1 for segment in over_budget)
+
+
 def test_segment_matrix_filters_source_ids_outside_allowed_segment_sources() -> None:
     sources = [
         RawSource(

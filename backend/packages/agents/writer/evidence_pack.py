@@ -305,6 +305,7 @@ class WriterEvidencePackResult(BaseModel):
             segment["segment_input_chars"] <= SEGMENT_INPUT_TARGET_CHARS
             or len(allowed_source_ids) <= 1
         ):
+            self._mark_single_source_over_budget(segment, allowed_source_ids)
             return [segment]
         return self._split_source_segments(
             name,
@@ -355,6 +356,7 @@ class WriterEvidencePackResult(BaseModel):
             segment["segment_input_chars"] <= SEGMENT_INPUT_TARGET_CHARS
             or len(allowed_source_ids) <= 1
         ):
+            self._mark_single_source_over_budget(segment, allowed_source_ids)
             return [segment]
         midpoint = max(1, len(allowed_source_ids) // 2)
         left_segments = self._split_source_segments(
@@ -386,6 +388,19 @@ class WriterEvidencePackResult(BaseModel):
             existing_count=existing_count + len(left_segments),
         )
         return [*left_segments, *right_segments]
+
+    def _mark_single_source_over_budget(
+        self,
+        segment: dict[str, object],
+        allowed_source_ids: list[str],
+    ) -> None:
+        if (
+            len(allowed_source_ids) <= 1
+            and segment["segment_input_chars"] > SEGMENT_INPUT_TARGET_CHARS
+        ):
+            segment["segment_over_budget_reason"] = "single_source_exceeds_budget"
+            segment["segment_input_target_chars"] = SEGMENT_INPUT_TARGET_CHARS
+            segment["segment_input_chars"] = len(json.dumps(segment, ensure_ascii=False))
 
     def _source_scoped_segment(
         self,
@@ -818,6 +833,7 @@ class WriterEvidencePackResult(BaseModel):
         if include_coverage:
             payload["coverage"] = dict(self.pack.coverage)
         payload["segment_input_chars"] = len(json.dumps(payload, ensure_ascii=False))
+        self._mark_single_source_over_budget(payload, allowed_source_ids)
         return payload
 
     def _source_ids_for_groups(self, groups: list[WriterEvidenceGroup]) -> list[str]:
