@@ -7244,6 +7244,14 @@ async def test_writer_uses_evidence_pack_context_and_emits_preflight(monkeypatch
     captured: dict[str, str] = {}
 
     async def fake_trace_llm_text(*args, **kwargs):
+        preflight_event = next(
+            (event for event in record.events if event.type == "writer_preflight"),
+            None,
+        )
+        assert preflight_event is not None
+        assert preflight_event.payload["raw_source_count"] == 1
+        assert preflight_event.payload["source_registry_count"] >= 1
+        assert preflight_event.payload["writer_evidence_pack_chars"] > 0
         captured["user"] = kwargs["user"]
         return (
             "# Report\n\n"
@@ -7258,11 +7266,6 @@ async def test_writer_uses_evidence_pack_context_and_emits_preflight(monkeypatch
     assert "Writer Evidence Pack JSON:" in captured["user"]
     assert "Writer Context JSON:" not in captured["user"]
     assert "source_registry" in captured["user"]
-    assert any(
-        event.type == "writer_preflight"
-        and event.payload["raw_source_count"] == 1
-        for event in record.events
-    )
 
 
 def test_candidate_evidence_prefers_matching_search_results() -> None:

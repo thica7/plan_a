@@ -23,7 +23,8 @@ export type RunEventType =
   | "redo.routed"
   | "benchmark.scored"
   | "report.ready"
-  | "runtime.command";
+  | "runtime.command"
+  | "writer_preflight";
 
 export interface RunEvent {
   id: number;

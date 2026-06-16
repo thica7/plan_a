@@ -611,6 +611,7 @@ export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) 
     "benchmark.scored",
     "report.ready",
     "runtime.command",
+    "writer_preflight",
   ];
   for (const type of eventTypes) {
     source.addEventListener(type, (message) => {
