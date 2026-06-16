@@ -7268,6 +7268,60 @@ async def test_writer_uses_evidence_pack_context_and_emits_preflight(monkeypatch
     assert "source_registry" in captured["user"]
 
 
+@pytest.mark.asyncio
+async def test_writer_section_repair_uses_evidence_pack_context(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-repair-pack",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="cursor-persona",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="interview_record",
+                title="Cursor persona interview",
+                snippet="Enterprise buyers evaluate Cursor for security and onboarding.",
+                content_hash="cursor-persona-hash",
+                confidence=0.82,
+            )
+        ],
+    )
+    record = RunRecord(detail=detail)
+    captured: dict[str, str] = {}
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return "## User Review Themes\nEnterprise buyers cite onboarding. [source:cursor-persona]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_section_repair_markdown(
+        record,
+        sections=["review_theme_summary"],
+        previous_report="## User Review Themes\nThin.",
+    )
+
+    assert "Writer Evidence Pack JSON:" in captured["user"]
+    assert "Writer Context JSON:" not in captured["user"]
+    assert "cursor-persona" in captured["user"]
+
+
 def test_candidate_evidence_prefers_matching_search_results() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

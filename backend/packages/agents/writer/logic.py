@@ -598,10 +598,8 @@ class WriterAgentMixin:
         previous_report: str,
     ) -> str:
         detail = record.detail
-        writer_context_json = json.dumps(
-            self._writer_context_package(detail),
-            ensure_ascii=False,
-        )
+        evidence_pack_result = build_writer_evidence_pack(detail)
+        writer_context_json = evidence_pack_result.to_prompt_json()
         language_guidance = language_instruction(detail.output_language)
         section_headings = "\n".join(
             self._writer_section_heading_instruction(detail, section) for section in sections
@@ -629,7 +627,7 @@ class WriterAgentMixin:
                 "Use the exact requested level-2 heading for each returned section.\n"
                 "You must preserve existing [source:ID] syntax.\n"
                 f"{self._writer_community_policy_text()}\n"
-                f"Writer Context JSON: {writer_context_json}\n\n"
+                f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
                 f"Previous report:\n{previous_report}"
             ),
         )
