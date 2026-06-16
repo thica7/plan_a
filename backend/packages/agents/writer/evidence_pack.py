@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -12,11 +13,19 @@ from packages.research.evidence.text import source_business_snippet
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import RawSource
 
-
 SCHEMA_VERSION = "writer_evidence_pack.v1"
 UNSTRUCTURED_SIGNAL_LIMIT = 420
 SOURCE_NOTE_LIMIT = 180
+QUOTE_EXCERPT_LIMIT = 400
+QUOTE_USED_BY_FACT_LIMIT = 12
 SINGLE_CALL_CONTEXT_TARGET_CHARS = 160_000
+NORMALIZED_FIELD_DROP_KEYS = {
+    "raw_text",
+    "html",
+    "source_quote",
+    "evidence_quote",
+    "source_url",
+}
 
 
 class WriterSourceRegistryItem(BaseModel):
@@ -202,6 +211,7 @@ class _WriterEvidencePackBuilder:
         for source in self.detail.raw_sources:
             self._register_source(source)
             self._project_source(source)
+        self._detect_pricing_conflicts()
         pack = WriterEvidencePack(
             source_registry=list(self.registry_by_id.values()),
             groups=list(self.groups.values()),
@@ -244,28 +254,278 @@ class _WriterEvidencePackBuilder:
             )
 
     def _project_source(self, source: RawSource) -> None:
+        facts = self._project_normalized_fields(source)
+        cluster_facts = self._project_community_clusters(source)
+        signal = self._project_residual_signal(source, [*facts, *cluster_facts])
+        if not facts and not cluster_facts and signal is None:
+            self.registry_by_id[source.id].no_signal_reason = "no_clean_business_signal"
+
+    def _project_normalized_fields(self, source: RawSource) -> list[WriterFact]:
+        facts: list[WriterFact] = []
+        for index, field in enumerate(normalized_fields_from_source(source), start=1):
+            fact = self._fact_from_field(source, field, index=index)
+            if fact is None:
+                continue
+            fact = self._add_fact(source, fact)
+            facts.append(fact)
+        return facts
+
+    def _fact_from_field(
+        self,
+        source: RawSource,
+        field: Mapping[str, object],
+        *,
+        index: int,
+    ) -> WriterFact | None:
+        kind = (
+            _string(field.get("kind"))
+            or _string(field.get("dimension"))
+            or source.dimension
+        )
+        competitor = _string(field.get("competitor")) or source.competitor
+        dimension = _string(field.get("dimension")) or source.dimension
+        values: dict[str, object] = {}
+        for raw_key, raw_value in field.items():
+            key = str(raw_key).strip()
+            normalized_key = key.casefold()
+            if not key or normalized_key in NORMALIZED_FIELD_DROP_KEYS:
+                continue
+            value = _compact_value(raw_value)
+            if value is not None:
+                values[key] = value
+        if not values:
+            return None
+        quote_text = _raw_string(field.get("source_quote")) or _raw_string(
+            field.get("evidence_quote")
+        )
+        quote_ids = [self._quote_id_for_text(source, quote_text)] if quote_text else []
+        confidence = _float(field.get("confidence"))
+        if confidence is None:
+            confidence = source.confidence
+        return WriterFact(
+            id=f"fact:{source.id}:{index}",
+            kind=kind,
+            competitor=competitor,
+            dimension=dimension,
+            values=values,
+            source_ids=[source.id],
+            quote_ids=quote_ids,
+            confidence=round(confidence, 3),
+        )
+
+    def _quote_id_for_text(self, source: RawSource, text: str) -> str:
+        key = _clean(text).casefold()
+        quote = self.quotes_by_key.get(key)
+        if quote is None:
+            quote = WriterQuote(
+                id=f"quote:{len(self.quotes_by_key) + 1}",
+                excerpt=_trim(text, QUOTE_EXCERPT_LIMIT - 2),
+                full_text_source_ids=[source.id],
+                source_ids=[source.id],
+                confidence=round(source.confidence, 3),
+                raw_quote_chars=len(text),
+            )
+            self.quotes_by_key[key] = quote
+            return quote.id
+        self.deduped_quote_count += 1
+        quote.full_text_source_ids = _unique([*quote.full_text_source_ids, source.id])
+        quote.source_ids = _unique([*quote.source_ids, source.id])
+        quote.confidence = round(max(quote.confidence, source.confidence), 3)
+        quote.raw_quote_chars = max(quote.raw_quote_chars, len(text))
+        return quote.id
+
+    def _project_residual_signal(
+        self,
+        source: RawSource,
+        facts: list[WriterFact],
+    ) -> WriterUnstructuredSignal | None:
+        snippet_source = source
+        if facts:
+            residual_metadata = dict(source.metadata)
+            residual_metadata.pop("normalized_fields", None)
+            residual_metadata.pop("community_claim_clusters", None)
+            snippet_source = source.model_copy(update={"metadata": residual_metadata})
         clean_snippet = source_business_snippet(
-            source,
+            snippet_source,
             dimension=source.dimension,
             limit=UNSTRUCTURED_SIGNAL_LIMIT,
         )
-        if clean_snippet:
-            signal = WriterUnstructuredSignal(
-                id=f"signal:{source.id}",
-                source_id=source.id,
+        if clean_snippet and facts:
+            clean_snippet = self._remove_covered_quotes(clean_snippet, facts)
+        if not clean_snippet or self._snippet_is_covered_by_facts(clean_snippet, facts):
+            return None
+        signal = WriterUnstructuredSignal(
+            id=f"signal:{source.id}",
+            source_id=source.id,
+            competitor=source.competitor,
+            dimension=source.dimension,
+            source_type=source.source_type,
+            signal_summary=clean_snippet,
+            salient_terms=_salient_terms(clean_snippet),
+            confidence=round(source.confidence, 3),
+        )
+        self._group(source.competitor, source.dimension).unstructured_signals.append(signal)
+        self._mark_source_represented(source.id, signal.id)
+        return signal
+
+    def _remove_covered_quotes(self, clean_snippet: str, facts: list[WriterFact]) -> str:
+        residual = clean_snippet
+        for fact in facts:
+            for quote_id in fact.quote_ids:
+                quote = self._quote_by_id(quote_id)
+                if quote is None:
+                    continue
+                residual = residual.replace(quote.excerpt, " ")
+        return _clean(residual)
+
+    def _snippet_is_covered_by_facts(
+        self,
+        clean_snippet: str,
+        facts: list[WriterFact],
+    ) -> bool:
+        if not facts:
+            return False
+        snippet_key = _clean(clean_snippet).casefold()
+        if not snippet_key:
+            return False
+        for fact in facts:
+            for quote_id in fact.quote_ids:
+                quote = self._quote_by_id(quote_id)
+                if quote and snippet_key in _clean(quote.excerpt).casefold():
+                    return True
+            value_terms = [
+                _clean(item).casefold()
+                for value in fact.values.values()
+                for item in _string_list(value)
+                if len(_clean(item)) >= 4
+            ]
+            if value_terms and all(term in snippet_key for term in value_terms[:4]):
+                return True
+        return False
+
+    def _project_community_clusters(self, source: RawSource) -> list[WriterFact]:
+        clusters = source.metadata.get("community_claim_clusters")
+        if not isinstance(clusters, list):
+            return []
+        facts: list[WriterFact] = []
+        for index, cluster in enumerate(clusters[:5], start=1):
+            if not isinstance(cluster, Mapping):
+                continue
+            values: dict[str, object] = {}
+            for key, limit in (
+                ("label", 80),
+                ("claim", 180),
+                ("normalized_value", 120),
+            ):
+                value = _string(cluster.get(key))
+                if value:
+                    values[key] = _trim(value, limit)
+            confidence = _float(cluster.get("confidence"))
+            if confidence is not None:
+                values["cluster_confidence"] = round(confidence, 3)
+            for key, count, limit in (
+                ("source_ids", 6, 80),
+                ("official_source_ids", 6, 80),
+                ("evidence", 3, 180),
+                ("conflict_values", 5, 120),
+            ):
+                values_list = [
+                    _trim(value, limit)
+                    for value in _string_list(cluster.get(key))[:count]
+                ]
+                if values_list:
+                    values[key] = values_list
+            if not values:
+                continue
+            fact = WriterFact(
+                id=f"fact:{source.id}:community:{index}",
+                kind=f"community_{_string(cluster.get('kind')) or 'claim'}",
                 competitor=source.competitor,
                 dimension=source.dimension,
-                source_type=source.source_type,
-                signal_summary=clean_snippet,
-                salient_terms=_salient_terms(clean_snippet),
-                confidence=round(source.confidence, 3),
+                values=values,
+                source_ids=_unique(
+                    [source.id, *_string_list(cluster.get("source_ids"))]
+                ),
+                confidence=round(
+                    confidence if confidence is not None else source.confidence,
+                    3,
+                ),
             )
-            self._group(source.competitor, source.dimension).unstructured_signals.append(
-                signal
-            )
-            self._mark_source_represented(source.id, signal.id)
-        else:
-            self.registry_by_id[source.id].no_signal_reason = "no_clean_business_signal"
+            facts.append(self._add_fact(source, fact))
+        return facts
+
+    def _add_fact(self, source: RawSource, fact: WriterFact) -> WriterFact:
+        group = self._group(fact.competitor, fact.dimension)
+        key = _fact_key(fact)
+        for existing in group.facts:
+            if _fact_key(existing) != key:
+                continue
+            self.deduped_fact_count += 1
+            existing.source_ids = _unique([*existing.source_ids, *fact.source_ids])
+            existing.quote_ids = _unique([*existing.quote_ids, *fact.quote_ids])
+            existing.confidence = round(max(existing.confidence, fact.confidence), 3)
+            for quote_id in fact.quote_ids:
+                quote = self._quote_by_id(quote_id)
+                if quote:
+                    self._record_quote_used_by_fact(quote, existing.id)
+            self._mark_source_represented(source.id, existing.id)
+            return existing
+        group.facts.append(fact)
+        for quote_id in fact.quote_ids:
+            quote = self._quote_by_id(quote_id)
+            if quote:
+                self._record_quote_used_by_fact(quote, fact.id)
+        self._mark_source_represented(source.id, fact.id)
+        return fact
+
+    def _record_quote_used_by_fact(self, quote: WriterQuote, fact_id: str) -> None:
+        quote.used_by_fact_ids = _unique(
+            [*quote.used_by_fact_ids, fact_id]
+        )[:QUOTE_USED_BY_FACT_LIMIT]
+
+    def _detect_pricing_conflicts(self) -> None:
+        for group in self.groups.values():
+            positions_by_area: dict[str, dict[str, list[WriterFact]]] = {}
+            for fact in group.facts:
+                if fact.kind.casefold() != "pricing":
+                    continue
+                tier_name = _string(fact.values.get("tier_name"))
+                billing_cycle = _string(fact.values.get("billing_cycle"))
+                price = _string(fact.values.get("price"))
+                if not tier_name or not billing_cycle or not price:
+                    continue
+                claim_area = f"pricing:{_slug(tier_name)}:{_slug(billing_cycle)}"
+                positions_by_area.setdefault(claim_area, {}).setdefault(
+                    price,
+                    [],
+                ).append(fact)
+            group.conflicts = [
+                WriterConflict(
+                    id=f"conflict:{_slug(group.competitor)}:{claim_area}",
+                    claim_area=claim_area,
+                    positions={price: price for price in positions},
+                    source_ids_by_position={
+                        price: _unique(
+                            source_id
+                            for fact in facts
+                            for source_id in fact.source_ids
+                        )
+                        for price, facts in positions.items()
+                    },
+                    confidence_by_position={
+                        price: round(max(fact.confidence for fact in facts), 3)
+                        for price, facts in positions.items()
+                    },
+                )
+                for claim_area, positions in positions_by_area.items()
+                if len(positions) > 1
+            ]
+
+    def _quote_by_id(self, quote_id: str) -> WriterQuote | None:
+        for quote in self.quotes_by_key.values():
+            if quote.id == quote_id:
+                return quote
+        return None
 
     def _group(self, competitor: str, dimension: str) -> WriterEvidenceGroup:
         key = (competitor, dimension)
@@ -404,3 +664,89 @@ def _salient_terms(text: str) -> list[str]:
         if len(terms) >= 8:
             break
     return terms
+
+
+def _string(value: object) -> str:
+    return value.strip() if isinstance(value, str) and value.strip() else ""
+
+
+def _raw_string(value: object) -> str:
+    return value if isinstance(value, str) and value.strip() else ""
+
+
+def _string_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else []
+    if isinstance(value, Mapping):
+        values: list[str] = []
+        for item in value.values():
+            values.extend(_string_list(item))
+        return values
+    if isinstance(value, Iterable):
+        values = []
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                values.append(item.strip())
+            elif item is not None and not isinstance(item, str):
+                text = str(item).strip()
+                if text:
+                    values.append(text)
+        return values
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _float(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _compact_value(value: object) -> object | None:
+    if isinstance(value, str):
+        return _trim(value, QUOTE_EXCERPT_LIMIT) if value.strip() else None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        number = _float(value)
+        return value if number is not None else None
+    if isinstance(value, list):
+        items = [
+            item
+            for raw_item in value[:5]
+            for item in [_compact_value(raw_item)]
+            if item is not None
+        ]
+        return items or None
+    if isinstance(value, Mapping):
+        nested: dict[str, object] = {}
+        for raw_key, raw_value in value.items():
+            key = str(raw_key).strip()
+            if not key or key.casefold() in NORMALIZED_FIELD_DROP_KEYS:
+                continue
+            nested_value = _compact_value(raw_value)
+            if nested_value is not None:
+                nested[key] = nested_value
+        return nested or None
+    return None
+
+
+def _fact_key(fact: WriterFact) -> str:
+    payload = {
+        "kind": fact.kind.casefold(),
+        "competitor": fact.competitor.casefold(),
+        "dimension": fact.dimension.casefold(),
+        "values": fact.values,
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True).casefold()
+
+
+def _slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
+    return slug or "unknown"
