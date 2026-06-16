@@ -7319,6 +7319,7 @@ async def test_writer_section_repair_uses_evidence_pack_context(monkeypatch) -> 
 
     assert "Writer Evidence Pack JSON:" in captured["user"]
     assert "Writer Context JSON:" not in captured["user"]
+    assert "source_registry" in captured["user"]
     assert "cursor-persona" in captured["user"]
 
 
