@@ -8,6 +8,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from packages.agents.writer.evidence_pack import build_writer_evidence_pack
 from packages.agents.writer.repair import (
     apply_line_repair,
     build_writer_repair_plan,
@@ -343,9 +344,15 @@ class WriterAgentMixin:
                 writer_repair_sections = repair_plan.sections
                 writer_repair_decision = repair_plan.reason
                 previous_report_protected = repair_plan.previous_report_protectable
-            writer_context_json = json.dumps(
-                self._writer_context_package(detail),
-                ensure_ascii=False,
+            evidence_pack_result = build_writer_evidence_pack(detail)
+            writer_context_json = evidence_pack_result.to_prompt_json()
+            await self.emit(
+                detail.id,
+                "writer_preflight",
+                "writer",
+                None,
+                "Writer evidence pack prepared.",
+                evidence_pack_result.telemetry_payload(),
             )
             layer_context = self._writer_layer_context(detail)
             memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
@@ -400,7 +407,7 @@ class WriterAgentMixin:
                             f"Layer Report Context: {layer_context}\n"
                             f"{grounding_prompt}\n"
                             f"{self._writer_community_policy_text()}\n"
-                            f"Writer Context JSON: {writer_context_json}\n\n"
+                            f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
                             f"Required sections:\n{required_sections}\n"
                             "Target 16,000-20,000 characters for the first draft. Use about "
                             "70-80% of the report on the Core analysis layer: decision summary, "

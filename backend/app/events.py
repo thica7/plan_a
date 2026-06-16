@@ -27,6 +27,7 @@ RunEventType = Literal[
     "benchmark.scored",
     "report.ready",
     "runtime.command",
+    "writer_preflight",
 ]
 
 

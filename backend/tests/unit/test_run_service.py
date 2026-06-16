@@ -7105,7 +7105,7 @@ async def test_writer_empty_output_fails_without_previous_report() -> None:
 
 
 @pytest.mark.asyncio
-async def test_writer_uses_full_context_package_for_llm_prompt() -> None:
+async def test_writer_uses_evidence_pack_for_llm_prompt() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -7184,7 +7184,9 @@ async def test_writer_uses_full_context_package_for_llm_prompt() -> None:
 
     await service._real_writer_step(record)
 
-    assert "Writer Context JSON:" in captured_user
+    assert "Writer Evidence Pack JSON:" in captured_user
+    assert "Writer Context JSON:" not in captured_user
+    assert "source_registry" in captured_user
     assert "around 5,500 characters" not in captured_user
     assert "8,500-10,000 characters" not in captured_user
     assert "16,000-20,000 characters" in captured_user
@@ -7194,14 +7196,73 @@ async def test_writer_uses_full_context_package_for_llm_prompt() -> None:
     assert "Support/audit layer" in captured_user
     assert "Competitor KB JSON:" not in captured_user
     assert "Competitor Knowledge Schema JSON:" not in captured_user
-    assert " ".join(long_snippet.split()) in captured_user
     marker_count = captured_user.count("enterprise budget governance")
-    assert marker_count >= 40
-    assert marker_count < 80
+    assert 1 <= marker_count < 40
     assert "Official facts vs community observations" in captured_user
     assert "Do not present community observations as official commitments" in captured_user
     assert "Community Evidence Triangulation" in captured_user
     assert record.detail.agent_messages[-1].payload["writer_mode"] == "real LLM call"
+
+
+@pytest.mark.asyncio
+async def test_writer_uses_evidence_pack_context_and_emits_preflight(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    detail = RunDetail(
+        id="run-writer-pack",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Cursor Pro costs $20 per month.",
+                content_hash="cursor-pricing-hash",
+                confidence=0.96,
+            )
+        ],
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    captured: dict[str, str] = {}
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return (
+            "# Report\n\n"
+            "## Executive Summary\nCursor has visible pricing. [source:cursor-pricing]\n\n"
+            "## Evidence Appendix\n- [source:cursor-pricing] Cursor pricing\n"
+        )
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._real_writer_step(record)
+
+    assert "Writer Evidence Pack JSON:" in captured["user"]
+    assert "Writer Context JSON:" not in captured["user"]
+    assert "source_registry" in captured["user"]
+    assert any(
+        event.type == "writer_preflight"
+        and event.payload["raw_source_count"] == 1
+        for event in record.events
+    )
 
 
 def test_candidate_evidence_prefers_matching_search_results() -> None:
