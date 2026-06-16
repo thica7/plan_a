@@ -40,7 +40,7 @@ def test_enterprise_store_settings_default_to_postgres(monkeypatch) -> None:
     assert settings.run_orchestration_backend == "temporal"
     assert settings.temporal_traffic_percent == 100
     assert settings.llm_timeout_seconds == 90.0
-    assert settings.comparator_timeout_seconds == 45.0
+    assert settings.comparator_timeout_seconds == 120.0
     assert settings.writer_timeout_seconds == 600.0
 
 

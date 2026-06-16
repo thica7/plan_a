@@ -4552,7 +4552,7 @@ def test_writer_and_reflector_digests_preserve_persona_matrix_cells() -> None:
 
 
 @pytest.mark.asyncio
-async def test_comparator_timeout_falls_back_to_deterministic_matrix() -> None:
+async def test_comparator_timeout_retries_before_deterministic_fallback() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -4588,8 +4588,11 @@ async def test_comparator_timeout_falls_back_to_deterministic_matrix() -> None:
         )
     ]
     service._merge_kb_slice(record.detail, "pricing", {"A": ["A publishes a $10 plan."]})
+    attempts = 0
 
     async def slow_complete_json(*, system: str, user: str, schema_hint: str) -> dict:
+        nonlocal attempts
+        attempts += 1
         await asyncio.sleep(1)
         return {}
 
@@ -4605,12 +4608,79 @@ async def test_comparator_timeout_falls_back_to_deterministic_matrix() -> None:
         for event in reversed(events)
         if event.type == "node_completed" and event.agent == "comparator"
     )
+    assert attempts == 3
     assert completed.payload["fallback"]["reason"] == "timeout"
+    assert completed.payload["fallback"]["attempts"] == 3
+    assert completed.payload["fallback"]["max_attempts"] == 3
     assert completed.payload["fallback"]["deterministic_fallback"] is True
 
 
 @pytest.mark.asyncio
-async def test_comparator_llm_error_falls_back_to_visible_deterministic_matrix() -> None:
+async def test_comparator_empty_payload_retries_and_uses_successful_payload() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            comparator_timeout_seconds=30,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Comparator empty retry",
+            competitors=["A", "B"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://a.example/pricing",
+            snippet="A publishes a $10 plan.",
+            content_hash="pricing-a-hash",
+            confidence=0.9,
+        )
+    ]
+    service._merge_kb_slice(record.detail, "pricing", {"A": ["A publishes a $10 plan."]})
+    attempts = 0
+
+    async def eventually_complete_json(*, system: str, user: str, schema_hint: str) -> dict:  # noqa: ARG001
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            return {}
+        return {
+            "matrix_summary": ["Recovered after empty comparator responses."],
+            "winner_by_dimension": {"pricing": "A"},
+        }
+
+    service._llm.complete_json = eventually_complete_json  # type: ignore[method-assign]
+
+    await service._real_comparator_step(record)
+
+    assert record.detail.comparison_matrix is not None
+    completed = [
+        event for event in record.events if event.type == "node_completed" and event.agent == "comparator"
+    ][-1]
+    assert attempts == 3
+    assert completed.payload["fallback"]["used"] is False
+    assert completed.payload["fallback"]["attempts"] == 3
+    assert completed.payload["module_status"] == "llm"
+    assert "Recovered after empty comparator responses." in record.detail.comparison_matrix.summary
+
+
+@pytest.mark.asyncio
+async def test_comparator_llm_error_retries_before_visible_deterministic_matrix() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -4646,8 +4716,11 @@ async def test_comparator_llm_error_falls_back_to_visible_deterministic_matrix()
         )
     ]
     service._merge_kb_slice(record.detail, "pricing", {"A": ["A publishes a $10 plan."]})
+    attempts = 0
 
     async def failing_complete_json(*, system: str, user: str, schema_hint: str) -> dict:  # noqa: ARG001
+        nonlocal attempts
+        attempts += 1
         raise RuntimeError("LLM returned empty content.")
 
     service._llm.complete_json = failing_complete_json  # type: ignore[method-assign]
@@ -4659,8 +4732,11 @@ async def test_comparator_llm_error_falls_back_to_visible_deterministic_matrix()
     completed = [
         event for event in record.events if event.type == "node_completed" and event.agent == "comparator"
     ][-1]
+    assert attempts == 3
     assert completed.payload["fallback"]["used"] is True
     assert completed.payload["fallback"]["reason"] == "llm_error"
+    assert completed.payload["fallback"]["attempts"] == 3
+    assert completed.payload["fallback"]["max_attempts"] == 3
     assert completed.payload["fallback"]["deterministic_fallback"] is True
     assert "LLM returned empty content" in completed.payload["fallback"]["error"]
     last_message = record.detail.agent_messages[-1]

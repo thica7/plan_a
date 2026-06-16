@@ -47,6 +47,8 @@ COMMUNITY_MATRIX_SOURCE_TYPES = {
     "snippet_only",
 }
 
+COMPARATOR_LLM_MAX_ATTEMPTS = 3
+
 
 class ComparatorAgentMixin:
     async def _real_comparator_step(self, record: RunRecord) -> None:
@@ -59,51 +61,19 @@ class ComparatorAgentMixin:
             message_types={"analyst_qa_result"},
         )
         await self.emit(detail.id, "node_started", "comparator", None, "Calling comparator.")
-        fallback: dict[str, object] = {"used": False, "deterministic_fallback": False}
         timeout_seconds = max(0.05, float(self._settings.comparator_timeout_seconds))
-        try:
-            payload = await asyncio.wait_for(
-                self._trace_llm_json(
-                    record,
-                    agent="comparator",
-                    subagent=None,
-                    name="comparison_matrix",
-                    system="You are a comparator. Build a compact cross-competitor matrix summary.",
-                    user=(
-                        f"Topic: {detail.topic}\n"
-                        f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                        f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                        f"Competitor KB JSON: {self._competitor_kb_json(detail)}\n"
-                        "Competitor Knowledge Schema JSON: "
-                        f"{self._competitor_knowledge_json(detail)}\n"
-                        f"Source digest JSON: {self._source_digest_json(detail)}"
-                    ),
-                    schema_hint=(
-                        '{"matrix_summary":["row"],'
-                        '"winner_by_dimension":{"dimension":"competitor or tie"}}'
-                    ),
-                ),
-                timeout=timeout_seconds,
-            )
-        except TimeoutError:
+        payload, fallback = await self._comparator_payload_with_retries(
+            record,
+            timeout_seconds=timeout_seconds,
+        )
+        if fallback.get("used"):
             payload = self._deterministic_comparator_payload(timeout_seconds)
-            fallback = {
-                "used": True,
-                "reason": "timeout",
-                "timeout_seconds": timeout_seconds,
-                "deterministic_fallback": True,
-            }
-        except Exception as exc:  # noqa: BLE001 - comparator can degrade to evidence matrix.
-            payload = self._deterministic_comparator_payload(timeout_seconds)
-            fallback = {
-                "used": True,
-                "reason": "llm_error",
-                "error": str(exc),
-                "timeout_seconds": timeout_seconds,
-                "deterministic_fallback": True,
-            }
         module_status = "fallback" if fallback.get("used") else "llm"
-        detail.comparison_matrix = self._build_comparison_matrix(detail, payload)
+        detail.comparison_matrix = self._build_comparison_matrix(
+            detail,
+            payload,
+            fallback_used=bool(fallback.get("used")),
+        )
         self._refresh_swot_analyses(detail)
         self._append_agent_message(
             record,
@@ -131,6 +101,85 @@ class ComparatorAgentMixin:
             {"matrix": payload, "fallback": fallback, "module_status": module_status},
         )
 
+    async def _comparator_payload_with_retries(
+        self,
+        record: RunRecord,
+        *,
+        timeout_seconds: float,
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        detail = record.detail
+        last_error: BaseException | None = None
+        last_reason = "empty_content"
+        for attempt in range(1, COMPARATOR_LLM_MAX_ATTEMPTS + 1):
+            try:
+                payload = await asyncio.wait_for(
+                    self._trace_llm_json(
+                        record,
+                        agent="comparator",
+                        subagent=None,
+                        name="comparison_matrix",
+                        system=(
+                            "You are a comparator. Build a compact "
+                            "cross-competitor matrix summary."
+                        ),
+                        user=(
+                            f"Topic: {detail.topic}\n"
+                            f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                            f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                            f"Competitor KB JSON: {self._competitor_kb_json(detail)}\n"
+                            "Competitor Knowledge Schema JSON: "
+                            f"{self._competitor_knowledge_json(detail)}\n"
+                            f"Source digest JSON: {self._source_digest_json(detail)}"
+                        ),
+                        schema_hint=(
+                            '{"matrix_summary":["row"],'
+                            '"winner_by_dimension":{"dimension":"competitor or tie"}}'
+                        ),
+                    ),
+                    timeout=timeout_seconds,
+                )
+                if self._comparator_payload_has_content(payload):
+                    return (
+                        payload,
+                        {
+                            "used": False,
+                            "deterministic_fallback": False,
+                            "attempts": attempt,
+                            "max_attempts": COMPARATOR_LLM_MAX_ATTEMPTS,
+                        },
+                    )
+                last_reason = "empty_content"
+                last_error = RuntimeError("Comparator LLM returned empty content.")
+            except TimeoutError as exc:
+                last_reason = "timeout"
+                last_error = exc
+            except Exception as exc:  # noqa: BLE001 - comparator can degrade after retries.
+                last_reason = "llm_error"
+                last_error = exc
+
+        fallback: dict[str, object] = {
+            "used": True,
+            "reason": last_reason,
+            "timeout_seconds": timeout_seconds,
+            "attempts": COMPARATOR_LLM_MAX_ATTEMPTS,
+            "max_attempts": COMPARATOR_LLM_MAX_ATTEMPTS,
+            "deterministic_fallback": True,
+        }
+        if last_error is not None and last_reason != "timeout":
+            fallback["error"] = str(last_error)
+        return {}, fallback
+
+    def _comparator_payload_has_content(self, payload: object) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        summary = payload.get("matrix_summary")
+        if isinstance(summary, list) and any(str(item).strip() for item in summary):
+            return True
+        winners = payload.get("winner_by_dimension")
+        return isinstance(winners, dict) and any(
+            str(value).strip() for value in winners.values()
+        )
+
     def _deterministic_comparator_payload(self, timeout_seconds: float) -> dict[str, object]:
         return {
             "matrix_summary": [
@@ -142,7 +191,13 @@ class ComparatorAgentMixin:
             "winner_by_dimension": {},
         }
 
-    def _build_comparison_matrix(self, detail: RunDetail, payload: dict) -> ComparisonMatrix:
+    def _build_comparison_matrix(
+        self,
+        detail: RunDetail,
+        payload: dict,
+        *,
+        fallback_used: bool = False,
+    ) -> ComparisonMatrix:
         cells: list[ComparisonCell] = []
         for dimension in detail.plan.dimensions:
             for competitor in detail.plan.competitors:
@@ -182,6 +237,13 @@ class ComparatorAgentMixin:
             cells,
             {str(key): str(value) for key, value in payload_winners.items()},
         )
+        if fallback_used:
+            voted_winners, fallback_summary = self._conservative_fallback_winners(
+                detail,
+                cells,
+                voted_winners,
+            )
+            vote_summary = [*vote_summary, *fallback_summary]
         return ComparisonMatrix(
             competitors=detail.plan.competitors,
             dimensions=detail.plan.dimensions,
@@ -194,6 +256,42 @@ class ComparatorAgentMixin:
                 *vote_summary,
             ],
         )
+
+    def _conservative_fallback_winners(
+        self,
+        detail: RunDetail,
+        cells: list[ComparisonCell],
+        voted_winners: dict[str, str],
+    ) -> tuple[dict[str, str], list[str]]:
+        source_by_id = {source.id: source for source in detail.raw_sources}
+        cell_by_key = {(cell.dimension, cell.competitor): cell for cell in cells}
+        winners = dict(voted_winners)
+        summary: list[str] = []
+        for dimension, winner in list(winners.items()):
+            if winner == "tie":
+                continue
+            official_counts = {
+                competitor: self._official_matrix_source_count(
+                    self._matrix_cell(cell_by_key, dimension, competitor),
+                    source_by_id,
+                )
+                for competitor in detail.plan.competitors
+            }
+            if all(count > 0 for count in official_counts.values()):
+                continue
+            winners[dimension] = "tie"
+            summary.append(
+                "[fallback-conservative:{dimension}] winner=tie; "
+                "deterministic fallback had incomplete scoped official coverage "
+                "({counts})".format(
+                    dimension=dimension,
+                    counts=", ".join(
+                        f"{competitor}={count}"
+                        for competitor, count in official_counts.items()
+                    ),
+                )
+            )
+        return winners, summary
 
     def _refresh_swot_analyses(self, detail: RunDetail) -> None:
         matrix = detail.comparison_matrix
