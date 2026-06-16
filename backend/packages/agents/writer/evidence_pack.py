@@ -140,6 +140,7 @@ class WriterEvidencePack(BaseModel):
     groups: list[WriterEvidenceGroup] = Field(default_factory=list)
     quotes: list[WriterQuote] = Field(default_factory=list)
     matrix: dict[str, object] = Field(default_factory=dict)
+    structured_knowledge: dict[str, object] = Field(default_factory=dict)
     coverage: dict[str, object] = Field(default_factory=dict)
 
 
@@ -216,12 +217,14 @@ class _WriterEvidencePackBuilder:
         for source in self.detail.raw_sources:
             self._register_source(source)
             self._project_source(source)
+        self._project_kb_slices()
         self._detect_pricing_conflicts()
         pack = WriterEvidencePack(
             source_registry=list(self.registry_by_id.values()),
             groups=list(self.groups.values()),
             quotes=list(self.quotes_by_key.values()),
             matrix=self._matrix_digest(),
+            structured_knowledge=self._structured_knowledge_digest(),
         )
         pack.coverage = self._coverage_summary(pack)
         metrics = self._metrics(pack)
@@ -264,6 +267,25 @@ class _WriterEvidencePackBuilder:
         signal = self._project_residual_signal(source, [*facts, *cluster_facts])
         if not facts and not cluster_facts and signal is None:
             self.registry_by_id[source.id].no_signal_reason = "no_clean_business_signal"
+
+    def _project_kb_slices(self) -> None:
+        for competitor, kb in self.detail.competitor_kbs.items():
+            for dimension, findings in kb.slices.items():
+                if dimension not in self.detail.plan.dimensions:
+                    continue
+                group = self._group(competitor, dimension)
+                for index, finding in enumerate(findings):
+                    text = _trim(_string(finding), 700)
+                    if not text:
+                        continue
+                    signal = WriterKBSignal(
+                        id=f"kb:{competitor}:{dimension}:{index}",
+                        competitor=competitor,
+                        dimension=dimension,
+                        text=text,
+                        source_ids=[],
+                    )
+                    group.kb_signals.append(signal)
 
     def _project_normalized_fields(self, source: RawSource) -> list[WriterFact]:
         facts: list[WriterFact] = []
@@ -565,6 +587,21 @@ class _WriterEvidencePackBuilder:
             ],
         }
 
+    def _structured_knowledge_digest(self) -> dict[str, object]:
+        digest: dict[str, object] = {}
+        for competitor, knowledge in self.detail.competitor_knowledge.items():
+            item: dict[str, object] = {"confidence": round(knowledge.confidence, 3)}
+            if getattr(knowledge, "review_summary", None) is not None:
+                item["review_summary"] = knowledge.review_summary.model_dump(mode="json")
+            if getattr(knowledge, "pricing_model", None) is not None:
+                item["pricing_model"] = knowledge.pricing_model.model_dump(mode="json")
+            if getattr(knowledge, "feature_tree", None) is not None:
+                item["feature_tree"] = knowledge.feature_tree.model_dump(mode="json")
+            if getattr(knowledge, "user_personas", None) is not None:
+                item["user_personas"] = knowledge.user_personas.model_dump(mode="json")
+            digest[competitor] = item
+        return digest
+
     def _metrics(self, pack: WriterEvidencePack) -> WriterEvidencePackMetrics:
         prompt_json = json.dumps(pack.model_dump(mode="json"), ensure_ascii=False)
         group_sizes = [
@@ -577,6 +614,9 @@ class _WriterEvidencePackBuilder:
         ]
         represented_count = sum(1 for item in pack.source_registry if item.represented_by)
         no_signal_count = sum(1 for item in pack.source_registry if item.no_signal_reason)
+        kb_slice_count, represented_kb_slice_count, dropped_kb_slice_count = (
+            self._kb_slice_counts(pack)
+        )
         return WriterEvidencePackMetrics(
             writer_evidence_pack_chars=len(prompt_json),
             source_registry_count=len(pack.source_registry),
@@ -584,6 +624,9 @@ class _WriterEvidencePackBuilder:
             raw_source_count=len(self.detail.raw_sources),
             dropped_source_count=0,
             no_signal_source_count=no_signal_count,
+            kb_slice_count=kb_slice_count,
+            represented_kb_slice_count=represented_kb_slice_count,
+            dropped_kb_slice_count=dropped_kb_slice_count,
             largest_source_projection_chars=self._largest_source_projection_chars(pack),
             largest_group_chars=max(group_sizes, default=0),
             largest_quote_projection_chars=max(quote_sizes, default=0),
@@ -595,16 +638,33 @@ class _WriterEvidencePackBuilder:
     def _coverage_summary(self, pack: WriterEvidencePack) -> dict[str, object]:
         represented_count = sum(1 for item in pack.source_registry if item.represented_by)
         no_signal_count = sum(1 for item in pack.source_registry if item.no_signal_reason)
+        kb_slice_count, represented_kb_slice_count, dropped_kb_slice_count = (
+            self._kb_slice_counts(pack)
+        )
         return {
             "source_registry_count": len(pack.source_registry),
             "represented_source_count": represented_count,
             "raw_source_count": len(self.detail.raw_sources),
             "dropped_source_count": 0,
             "no_signal_source_count": no_signal_count,
-            "kb_slice_count": 0,
-            "represented_kb_slice_count": 0,
-            "dropped_kb_slice_count": 0,
+            "kb_slice_count": kb_slice_count,
+            "represented_kb_slice_count": represented_kb_slice_count,
+            "dropped_kb_slice_count": dropped_kb_slice_count,
         }
+
+    def _kb_slice_counts(self, pack: WriterEvidencePack) -> tuple[int, int, int]:
+        kb_slice_count = sum(
+            len(findings)
+            for kb in self.detail.competitor_kbs.values()
+            for dimension, findings in kb.slices.items()
+            if dimension in self.detail.plan.dimensions
+        )
+        represented_kb_slice_count = sum(len(group.kb_signals) for group in pack.groups)
+        return (
+            kb_slice_count,
+            represented_kb_slice_count,
+            max(0, kb_slice_count - represented_kb_slice_count),
+        )
 
     def _largest_source_projection_chars(self, pack: WriterEvidencePack) -> int:
         source_projection_sizes: list[int] = []

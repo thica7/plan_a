@@ -7,7 +7,14 @@ from packages.agents.writer.evidence_pack import (
     build_writer_evidence_pack,
 )
 from packages.schema.api_dto import RunDetail
-from packages.schema.models import AnalysisPlan, RawSource
+from packages.schema.models import (
+    AnalysisPlan,
+    ComparisonCell,
+    ComparisonMatrix,
+    CompetitorKB,
+    CompetitorKnowledge,
+    RawSource,
+)
 
 
 def _detail_with_sources(sources: list[RawSource]) -> RunDetail:
@@ -555,3 +562,76 @@ def test_community_clusters_project_compact_fact_sources_and_confidence() -> Non
     assert fact.kind == "community_pricing"
     assert fact.source_ids == ["cursor-community", "thread-a", "thread-b"]
     assert fact.confidence == 0.679
+
+
+def test_evidence_pack_preserves_every_kb_slice_with_provenance() -> None:
+    detail = _detail_with_sources([])
+    detail.plan.competitors = ["Cursor"]
+    detail.plan.dimensions = ["persona"]
+    detail.competitor_kbs = {
+        "Cursor": CompetitorKB(
+            competitor="Cursor",
+            slices={
+                "persona": [
+                    "Enterprise buyers evaluate Cursor for security review.",
+                    "Developer teams use Cursor for repository-aware coding.",
+                ]
+            },
+        )
+    }
+
+    result = build_writer_evidence_pack(detail)
+    group = result.pack.groups[0]
+
+    assert result.metrics.kb_slice_count == 2
+    assert result.metrics.represented_kb_slice_count == 2
+    assert result.metrics.dropped_kb_slice_count == 0
+    assert result.pack.coverage["kb_slice_count"] == 2
+    assert result.pack.coverage["represented_kb_slice_count"] == 2
+    assert result.pack.coverage["dropped_kb_slice_count"] == 0
+    assert [signal.id for signal in group.kb_signals] == [
+        "kb:Cursor:persona:0",
+        "kb:Cursor:persona:1",
+    ]
+    assert "security review" in group.kb_signals[0].text
+
+
+def test_evidence_pack_preserves_comparison_matrix_digest() -> None:
+    detail = _detail_with_sources([])
+    detail.plan.competitors = ["Cursor"]
+    detail.plan.dimensions = ["pricing"]
+    detail.comparison_matrix = ComparisonMatrix(
+        competitors=["Cursor"],
+        dimensions=["pricing"],
+        cells=[
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="pricing",
+                value="Cursor Pro is priced at $20/month for individual developers.",
+                source_ids=["cursor-pricing"],
+                confidence=0.94,
+            )
+        ],
+        winner_by_dimension={"pricing": "Cursor"},
+        summary=["Cursor has clear individual pricing."],
+    )
+
+    result = build_writer_evidence_pack(detail)
+
+    assert result.pack.matrix["winner_by_dimension"]["pricing"] == "Cursor"
+    assert result.pack.matrix["cells"][0]["source_ids"] == ["cursor-pricing"]
+
+
+def test_evidence_pack_structured_knowledge_stays_visible() -> None:
+    detail = _detail_with_sources([])
+    detail.plan.competitors = ["Cursor"]
+    detail.plan.dimensions = ["pricing"]
+    detail.competitor_knowledge = {
+        "Cursor": CompetitorKnowledge(competitor="Cursor", confidence=0.8764)
+    }
+
+    result = build_writer_evidence_pack(detail)
+    payload = result.pack.model_dump(mode="json")
+
+    assert "structured_knowledge" in payload
+    assert payload["structured_knowledge"]["Cursor"]["confidence"] == 0.876
