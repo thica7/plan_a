@@ -963,6 +963,63 @@ def test_segment_inputs_keep_non_core_dimensions_in_broad_segments() -> None:
     assert "cursor-security" in by_name["support_appendix"]["allowed_source_ids"]
 
 
+def test_segment_inputs_treat_customer_dimensions_as_user_research() -> None:
+    source = RawSource(
+        id="cursor-customer-feedback",
+        competitor="Cursor",
+        dimension="customer_feedback",
+        source_type="interview_record",
+        title="Cursor customer feedback",
+        snippet="Customers report onboarding friction and procurement review needs.",
+        content_hash="cursor-customer-feedback-hash",
+        confidence=0.87,
+    )
+    detail = _detail_with_sources([source])
+    detail.plan.dimensions = ["customer_feedback"]
+
+    result = build_writer_evidence_pack(detail)
+    user_research = {
+        segment["segment_name"]: segment for segment in result.segment_inputs()
+    }["user_research"]
+
+    assert "cursor-customer-feedback" in user_research["allowed_source_ids"]
+    assert user_research["groups"][0]["dimension"] == "customer_feedback"
+
+
+def test_support_appendix_segment_includes_coverage_counts() -> None:
+    source = RawSource(
+        id="cursor-persona",
+        competitor="Cursor",
+        dimension="persona",
+        source_type="interview_record",
+        title="Cursor persona",
+        snippet="Enterprise buyers evaluate Cursor for security review.",
+        content_hash="cursor-persona-hash",
+        confidence=0.82,
+    )
+    detail = _detail_with_sources([source])
+    detail.plan.competitors = ["Cursor"]
+    detail.plan.dimensions = ["persona"]
+    detail.competitor_kbs = {
+        "Cursor": CompetitorKB(
+            competitor="Cursor",
+            sources=["cursor-persona"],
+            slices={"persona": ["Enterprise buyers evaluate rollout."]},
+        )
+    }
+
+    result = build_writer_evidence_pack(detail)
+    support_appendix = {
+        segment["segment_name"]: segment for segment in result.segment_inputs()
+    }["support_appendix"]
+
+    assert support_appendix["coverage"] == result.pack.coverage
+    assert support_appendix["coverage"]["raw_source_count"] == 1
+    assert support_appendix["coverage"]["represented_source_count"] == 1
+    assert support_appendix["coverage"]["kb_slice_count"] == 1
+    assert support_appendix["coverage"]["represented_kb_slice_count"] == 1
+
+
 def test_segment_inputs_include_relevant_pack_quotes() -> None:
     source = RawSource(
         id="cursor-pricing",

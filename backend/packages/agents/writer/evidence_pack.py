@@ -276,6 +276,7 @@ class WriterEvidencePackResult(BaseModel):
                     matrix_projection="coverage",
                     structured_competitors=[],
                     structured_projection="compact",
+                    include_coverage=True,
                 ),
             ]
         )
@@ -293,6 +294,7 @@ class WriterEvidencePackResult(BaseModel):
         structured_projection: Literal["full", "compact"],
         allowed_source_ids: list[str] | None = None,
         segment_competitor: str | None = None,
+        include_coverage: bool = False,
     ) -> dict[str, object]:
         registry_ids = {item.id for item in self.pack.source_registry}
         if allowed_source_ids is None:
@@ -367,6 +369,8 @@ class WriterEvidencePackResult(BaseModel):
             },
             "allowed_source_ids": allowed_source_ids,
         }
+        if include_coverage:
+            payload["coverage"] = dict(self.pack.coverage)
         payload["segment_input_chars"] = len(json.dumps(payload, ensure_ascii=False))
         return payload
 
@@ -1169,6 +1173,7 @@ def _is_user_research_dimension(dimension: str) -> bool:
             "community",
             "interview",
             "survey",
+            "customer",
         )
     )
 
