@@ -7410,6 +7410,104 @@ async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_segmented_writer_does_not_serialize_full_evidence_pack(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    detail = RunDetail(
+        id="run-segmented-no-full-serialization",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Cursor pricing is visible.",
+                content_hash="cursor-pricing-hash",
+                confidence=0.92,
+            )
+        ],
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    full_serialized = False
+
+    class FakeMetrics:
+        segmented_writer_required = True
+
+    class FakeEvidencePackResult:
+        metrics = FakeMetrics()
+
+        def telemetry_payload(self):
+            return {
+                "raw_source_count": 1,
+                "represented_source_count": 1,
+                "dropped_source_count": 0,
+                "segmented_writer_required": True,
+            }
+
+        def preflight_errors(self):
+            return []
+
+        def to_prompt_json(self):
+            nonlocal full_serialized
+            full_serialized = True
+            raise AssertionError("segmented writer should not serialize the full pack")
+
+        def segment_inputs(self):
+            return [
+                {
+                    "schema_version": "writer_evidence_pack.v1",
+                    "segment_name": "decision_summary",
+                    "source_registry": [],
+                    "groups": [],
+                    "quotes": [],
+                    "matrix": {},
+                    "structured_knowledge": {},
+                    "allowed_source_ids": ["cursor-pricing"],
+                    "segment_input_chars": 240,
+                }
+            ]
+
+        def validate_segment_citations(self, markdown, *, allowed_source_ids):
+            return []
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        return "# Report\n\nCursor has visible pricing. [source:cursor-pricing]"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeEvidencePackResult(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._real_writer_step(record)
+
+    assert not full_serialized
+    assert "Cursor has visible pricing" in record.detail.report_md
+
+
+@pytest.mark.asyncio
 async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

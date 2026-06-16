@@ -365,7 +365,6 @@ class WriterAgentMixin:
                     anti_regression_reason=anti_regression_reason,
                     previous_report_protected=previous_report_protected,
                 )
-            writer_context_json = evidence_pack_result.to_prompt_json()
             layer_context = self._writer_layer_context(detail)
             memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
             required_sections = self._writer_required_sections(detail)
@@ -385,6 +384,7 @@ class WriterAgentMixin:
                     )
                     writer_mode = "real segmented LLM call"
                 else:
+                    writer_context_json = evidence_pack_result.to_prompt_json()
                     report_md = await asyncio.wait_for(
                         self._trace_llm_text(
                             record,
@@ -630,6 +630,7 @@ class WriterAgentMixin:
         for segment in evidence_pack_result.segment_inputs():
             payload = {
                 "segment_name": segment["segment_name"],
+                "segment_competitor": segment.get("segment_competitor"),
                 "segment_input_chars": segment["segment_input_chars"],
                 "segment_source_count": len(segment["allowed_source_ids"]),
                 "segment_group_count": len(segment["groups"]),
@@ -721,6 +722,7 @@ class WriterAgentMixin:
                     f"Competitors: {', '.join(detail.plan.competitors)}\n"
                     f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
                     f"segment_name={segment['segment_name']}\n"
+                    f"segment_competitor={segment.get('segment_competitor') or 'all'}\n"
                     f"retry_count={retry_count}\n"
                     f"{citation_warning}"
                     f"Confirmed Memory Preferences:\n{memory_context}\n"

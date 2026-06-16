@@ -210,60 +210,343 @@ class WriterEvidencePackResult(BaseModel):
         ]
 
     def segment_inputs(self) -> list[dict[str, object]]:
-        all_dimensions = {group.dimension for group in self.pack.groups}
-        user_research_dimensions = {
-            group.dimension
-            for group in self.pack.groups
-            if _is_user_research_dimension(group.dimension)
-            or group.user_research_source_ids
-            or group.community_source_ids
-        }
-        return [
-            self._segment("decision_summary", dimensions=all_dimensions),
-            self._segment("user_research", dimensions=user_research_dimensions),
-            self._segment("competitor_deep_dives", dimensions=all_dimensions),
-            self._segment("swot_matrix", dimensions=all_dimensions),
-            self._segment("support_appendix", dimensions=all_dimensions),
+        groups = list(self.pack.groups)
+        all_source_ids = [item.id for item in self.pack.source_registry]
+        all_competitors = _unique(group.competitor for group in groups)
+        user_research_groups = [
+            group for group in groups if _is_user_research_dimension(group.dimension)
         ]
-
-    def _segment(self, name: str, *, dimensions: set[str]) -> dict[str, object]:
-        groups = [group for group in self.pack.groups if group.dimension in dimensions]
-        allowed_source_ids = _unique(
-            source_id for group in groups for source_id in group.source_ids
+        segments = [
+            self._segment(
+                "decision_summary",
+                groups=groups,
+                allowed_source_ids=all_source_ids,
+                group_projection="compact",
+                quote_projection="compact",
+                matrix_projection="compact",
+                structured_competitors=all_competitors,
+                structured_projection="compact",
+            ),
+            self._segment(
+                "user_research",
+                groups=user_research_groups,
+                group_projection="full",
+                quote_projection="full",
+                matrix_projection="compact",
+                structured_competitors=_unique(
+                    group.competitor for group in user_research_groups
+                ),
+                structured_projection="compact",
+            ),
+        ]
+        for competitor in all_competitors:
+            competitor_groups = [
+                group for group in groups if group.competitor == competitor
+            ]
+            segments.append(
+                self._segment(
+                    "competitor_deep_dives",
+                    groups=competitor_groups,
+                    group_projection="full",
+                    quote_projection="full",
+                    matrix_projection="compact",
+                    structured_competitors=[competitor],
+                    structured_projection="full",
+                    segment_competitor=competitor,
+                )
+            )
+        segments.extend(
+            [
+                self._segment(
+                    "swot_matrix",
+                    groups=groups,
+                    allowed_source_ids=all_source_ids,
+                    group_projection="summary",
+                    quote_projection="none",
+                    matrix_projection="compact",
+                    structured_competitors=[],
+                    structured_projection="compact",
+                ),
+                self._segment(
+                    "support_appendix",
+                    groups=[],
+                    allowed_source_ids=all_source_ids,
+                    group_projection="none",
+                    quote_projection="none",
+                    matrix_projection="coverage",
+                    structured_competitors=[],
+                    structured_projection="compact",
+                ),
+            ]
         )
+        return segments
+
+    def _segment(
+        self,
+        name: str,
+        *,
+        groups: list[WriterEvidenceGroup],
+        group_projection: Literal["full", "compact", "summary", "none"],
+        quote_projection: Literal["full", "compact", "none"],
+        matrix_projection: Literal["compact", "coverage"],
+        structured_competitors: list[str],
+        structured_projection: Literal["full", "compact"],
+        allowed_source_ids: list[str] | None = None,
+        segment_competitor: str | None = None,
+    ) -> dict[str, object]:
+        registry_ids = {item.id for item in self.pack.source_registry}
+        if allowed_source_ids is None:
+            allowed_source_ids = self._source_ids_for_groups(groups)
+        allowed_source_ids = _unique(
+            source_id for source_id in allowed_source_ids if source_id in registry_ids
+        )
+        group_payloads = [
+            self._group_payload(group, projection=group_projection) for group in groups
+        ]
         referenced_quote_ids: set[str] = set()
-        for group in groups:
-            for fact in group.facts:
-                referenced_quote_ids.update(fact.quote_ids)
-            for signal in group.unstructured_signals:
-                referenced_quote_ids.update(signal.quote_ids)
-            for quote in group.quotes:
-                referenced_quote_ids.add(quote.id)
+        if quote_projection != "none":
+            for group_payload in group_payloads:
+                facts = group_payload.get("facts", [])
+                if isinstance(facts, list):
+                    for fact in facts:
+                        if isinstance(fact, Mapping):
+                            referenced_quote_ids.update(_string_list(fact.get("quote_ids")))
+                signals = group_payload.get("unstructured_signals", [])
+                if isinstance(signals, list):
+                    for signal in signals:
+                        if isinstance(signal, Mapping):
+                            referenced_quote_ids.update(
+                                _string_list(signal.get("quote_ids"))
+                            )
+                quotes = group_payload.get("quotes", [])
+                if isinstance(quotes, list):
+                    for quote in quotes:
+                        if isinstance(quote, Mapping):
+                            referenced_quote_ids.update(_string_list(quote.get("id")))
+        allowed = set(allowed_source_ids)
         payload: dict[str, object] = {
             "schema_version": self.pack.schema_version,
             "segment_name": name,
+            "segment_competitor": segment_competitor,
             "source_registry": [
-                item.model_dump(mode="json")
+                self._segment_registry_item(item)
                 for item in self.pack.source_registry
                 if item.id in allowed_source_ids
             ],
-            "groups": [group.model_dump(mode="json") for group in groups],
+            "groups": group_payloads,
             "quotes": [
-                quote.model_dump(mode="json")
+                self._segment_quote(quote, compact=quote_projection == "compact")
                 for quote in self.pack.quotes
-                if quote.id in referenced_quote_ids
-                or any(source_id in allowed_source_ids for source_id in quote.source_ids)
-                or any(
-                    source_id in allowed_source_ids
-                    for source_id in quote.full_text_source_ids
+                if quote_projection != "none"
+                and (
+                    quote.id in referenced_quote_ids
+                    or (
+                        quote_projection == "full"
+                        and (
+                            any(source_id in allowed for source_id in quote.source_ids)
+                            or any(
+                                source_id in allowed
+                                for source_id in quote.full_text_source_ids
+                            )
+                        )
+                    )
                 )
             ],
-            "matrix": self._segment_matrix(allowed_source_ids),
-            "structured_knowledge": self.pack.structured_knowledge,
+            "matrix": (
+                self._coverage_matrix()
+                if matrix_projection == "coverage"
+                else self._segment_matrix(allowed_source_ids)
+            ),
+            "structured_knowledge": {
+                competitor: self._segment_structured_knowledge_item(
+                    payload,
+                    compact=structured_projection == "compact",
+                )
+                for competitor, payload in self.pack.structured_knowledge.items()
+                if competitor in structured_competitors
+            },
             "allowed_source_ids": allowed_source_ids,
         }
         payload["segment_input_chars"] = len(json.dumps(payload, ensure_ascii=False))
         return payload
+
+    def _source_ids_for_groups(self, groups: list[WriterEvidenceGroup]) -> list[str]:
+        return _unique(
+            source_id
+            for group in groups
+            for source_id in [
+                *group.source_ids,
+                *group.official_source_ids,
+                *group.community_source_ids,
+                *group.user_research_source_ids,
+                *[
+                    source_id
+                    for fact in group.facts
+                    for source_id in fact.source_ids
+                ],
+                *[
+                    signal.source_id
+                    for signal in group.unstructured_signals
+                ],
+                *[
+                    source_id
+                    for signal in group.kb_signals
+                    for source_id in signal.source_ids
+                ],
+                *[
+                    source_id
+                    for conflict in group.conflicts
+                    for source_ids in conflict.source_ids_by_position.values()
+                    for source_id in source_ids
+                ],
+            ]
+        )
+
+    def _segment_registry_item(self, item: WriterSourceRegistryItem) -> dict[str, object]:
+        represented_by = list(item.represented_by)
+        return {
+            "id": item.id,
+            "competitor": item.competitor,
+            "covered_competitors": list(item.covered_competitors),
+            "dimension": item.dimension,
+            "source_type": item.source_type,
+            "title": item.title,
+            "confidence": item.confidence,
+            "represented_by": represented_by[:4],
+            "represented_by_count": len(represented_by),
+            "no_signal_reason": item.no_signal_reason,
+        }
+
+    def _group_payload(
+        self,
+        group: WriterEvidenceGroup,
+        *,
+        projection: Literal["full", "compact", "summary", "none"],
+    ) -> dict[str, object]:
+        if projection == "full":
+            return group.model_dump(mode="json")
+        if projection == "none":
+            return {}
+        base: dict[str, object] = {
+            "competitor": group.competitor,
+            "dimension": group.dimension,
+            "source_ids": list(group.source_ids),
+            "official_source_ids": list(group.official_source_ids),
+            "community_source_ids": list(group.community_source_ids),
+            "user_research_source_ids": list(group.user_research_source_ids),
+            "confidence_summary": dict(group.confidence_summary),
+            "coverage_notes": list(group.coverage_notes),
+            "fact_count": len(group.facts),
+            "unstructured_signal_count": len(group.unstructured_signals),
+            "kb_signal_count": len(group.kb_signals),
+            "conflict_count": len(group.conflicts),
+        }
+        if projection == "summary":
+            if group.conflicts:
+                base["conflicts"] = [
+                    {
+                        "id": conflict.id,
+                        "claim_area": conflict.claim_area,
+                        "positions": conflict.positions,
+                        "source_ids_by_position": conflict.source_ids_by_position,
+                        "resolution_status": conflict.resolution_status,
+                    }
+                    for conflict in group.conflicts
+                ]
+            return base
+        compact_facts = group.facts[:4]
+        compact_unstructured_signals = group.unstructured_signals[:2]
+        compact_kb_signals = group.kb_signals[:3]
+        base["facts_truncated_count"] = max(0, len(group.facts) - len(compact_facts))
+        base["unstructured_signals_truncated_count"] = max(
+            0,
+            len(group.unstructured_signals) - len(compact_unstructured_signals),
+        )
+        base["kb_signals_truncated_count"] = max(
+            0,
+            len(group.kb_signals) - len(compact_kb_signals),
+        )
+        base["facts"] = [
+            {
+                "id": fact.id,
+                "kind": fact.kind,
+                "competitor": fact.competitor,
+                "dimension": fact.dimension,
+                "values": _compact_segment_value(fact.values),
+                "source_ids": list(fact.source_ids),
+                "quote_ids": list(fact.quote_ids),
+                "confidence": fact.confidence,
+            }
+            for fact in compact_facts
+        ]
+        base["unstructured_signals"] = [
+            {
+                "id": signal.id,
+                "source_id": signal.source_id,
+                "competitor": signal.competitor,
+                "dimension": signal.dimension,
+                "source_type": signal.source_type,
+                "signal_summary": _trim(signal.signal_summary, 220),
+                "salient_terms": list(signal.salient_terms),
+                "confidence": signal.confidence,
+                "quote_ids": list(signal.quote_ids),
+            }
+            for signal in compact_unstructured_signals
+        ]
+        base["kb_signals"] = [
+            {
+                "id": signal.id,
+                "competitor": signal.competitor,
+                "dimension": signal.dimension,
+                "text": _trim(signal.text, 220),
+                "source_ids": list(signal.source_ids),
+                "merged_into": signal.merged_into,
+            }
+            for signal in compact_kb_signals
+        ]
+        base["conflicts"] = [
+            conflict.model_dump(mode="json") for conflict in group.conflicts
+        ]
+        return base
+
+    def _segment_structured_knowledge_item(
+        self,
+        payload: object,
+        *,
+        compact: bool,
+    ) -> object:
+        if not compact or not isinstance(payload, Mapping):
+            return payload
+        summary: dict[str, object] = {}
+        confidence = payload.get("confidence")
+        if confidence is not None:
+            summary["confidence"] = confidence
+        for key in ("review_summary", "pricing_model", "feature_tree", "user_personas"):
+            if key in payload:
+                summary[f"{key}_present"] = True
+        return summary or {}
+
+    def _segment_quote(self, quote: WriterQuote, *, compact: bool) -> dict[str, object]:
+        if not compact:
+            payload = quote.model_dump(mode="json")
+            payload["excerpt"] = _trim(quote.excerpt, 300)
+            return payload
+        return {
+            "id": quote.id,
+            "excerpt": _trim(quote.excerpt, 100),
+            "source_ids": list(quote.source_ids),
+            "confidence": quote.confidence,
+            "raw_quote_chars": quote.raw_quote_chars,
+        }
+
+    def _coverage_matrix(self) -> dict[str, object]:
+        return {
+            "winner_by_dimension": self.pack.matrix.get("winner_by_dimension", {}),
+            "summary": self.pack.matrix.get("summary", []),
+            "cell_count": len(self.pack.matrix.get("cells", []))
+            if isinstance(self.pack.matrix.get("cells"), list)
+            else 0,
+        }
 
     def _segment_matrix(self, allowed_source_ids: list[str]) -> dict[str, object]:
         allowed = set(allowed_source_ids)
@@ -285,7 +568,13 @@ class WriterEvidencePackResult(BaseModel):
             ]
             if not source_ids:
                 continue
-            filtered_cells.append({**cell, "source_ids": source_ids})
+            filtered_cells.append(
+                {
+                    **cell,
+                    "value": _trim(str(cell.get("value", "")), 240),
+                    "source_ids": source_ids,
+                }
+            )
         matrix["cells"] = filtered_cells
         return matrix
 
@@ -397,6 +686,7 @@ class _WriterEvidencePackBuilder:
                 if dimension not in self.detail.plan.dimensions:
                     continue
                 group = self._group(competitor, dimension)
+                signal_source_ids = self._kb_signal_source_ids(kb.sources, dimension)
                 for index, finding in enumerate(findings):
                     text = _trim(_string(finding), 700)
                     if not text:
@@ -406,12 +696,22 @@ class _WriterEvidencePackBuilder:
                         competitor=competitor,
                         dimension=dimension,
                         text=text,
-                        source_ids=list(kb.sources),
+                        source_ids=signal_source_ids,
                     )
                     group.kb_signals.append(signal)
                     for source_id in signal.source_ids:
                         if source_id in self.registry_by_id:
                             self._mark_source_represented(source_id, signal.id)
+
+    def _kb_signal_source_ids(self, source_ids: Iterable[str], dimension: str) -> list[str]:
+        source_id_list = _unique(source_ids)
+        matching_source_ids = [
+            source_id
+            for source_id in source_id_list
+            if source_id in self.registry_by_id
+            and self.registry_by_id[source_id].dimension == dimension
+        ]
+        return matching_source_ids or source_id_list
 
     def _project_normalized_fields(self, source: RawSource) -> list[WriterFact]:
         facts: list[WriterFact] = []
@@ -951,6 +1251,35 @@ def _compact_value(value: object) -> object | None:
             if not key or key.casefold() in NORMALIZED_FIELD_DROP_KEYS:
                 continue
             nested_value = _compact_value(raw_value)
+            if nested_value is not None:
+                nested[key] = nested_value
+        return nested or None
+    return None
+
+
+def _compact_segment_value(value: object) -> object | None:
+    if isinstance(value, str):
+        return _trim(value, 80) if value.strip() else None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        number = _float(value)
+        return value if number is not None else None
+    if isinstance(value, list):
+        items = [
+            item
+            for raw_item in value[:4]
+            for item in [_compact_segment_value(raw_item)]
+            if item is not None
+        ]
+        return items or None
+    if isinstance(value, Mapping):
+        nested: dict[str, object] = {}
+        for raw_key, raw_value in value.items():
+            key = str(raw_key).strip()
+            if not key:
+                continue
+            nested_value = _compact_segment_value(raw_value)
             if nested_value is not None:
                 nested[key] = nested_value
         return nested or None

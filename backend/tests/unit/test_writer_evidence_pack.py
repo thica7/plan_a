@@ -766,6 +766,53 @@ def test_evidence_pack_kb_provenance_marks_source_represented() -> None:
     assert result.metrics.represented_source_count == 1
 
 
+def test_evidence_pack_kb_provenance_prefers_dimension_sources() -> None:
+    sources = [
+        RawSource(
+            id="cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor pricing evidence supports the pricing slice.",
+            content_hash="cursor-pricing-hash",
+            confidence=0.92,
+        ),
+        RawSource(
+            id="cursor-persona",
+            competitor="Cursor",
+            dimension="persona",
+            source_type="interview_record",
+            title="Cursor persona",
+            snippet="Cursor persona evidence supports the persona slice.",
+            content_hash="cursor-persona-hash",
+            confidence=0.88,
+        ),
+    ]
+    detail = _detail_with_sources(sources)
+    detail.plan.competitors = ["Cursor"]
+    detail.plan.dimensions = ["pricing", "persona"]
+    detail.competitor_kbs = {
+        "Cursor": CompetitorKB(
+            competitor="Cursor",
+            sources=["cursor-pricing", "cursor-persona"],
+            slices={
+                "pricing": ["Pricing slice"],
+                "persona": ["Persona slice"],
+            },
+        )
+    }
+
+    result = build_writer_evidence_pack(detail)
+    groups = {(group.competitor, group.dimension): group for group in result.pack.groups}
+    registry = {item.id: item for item in result.pack.source_registry}
+
+    assert groups[("Cursor", "pricing")].kb_signals[0].source_ids == ["cursor-pricing"]
+    assert groups[("Cursor", "persona")].kb_signals[0].source_ids == ["cursor-persona"]
+    assert "kb:Cursor:persona:0" not in registry["cursor-pricing"].represented_by
+    assert "kb:Cursor:pricing:0" not in registry["cursor-persona"].represented_by
+
+
 def test_evidence_pack_preserves_comparison_matrix_digest() -> None:
     detail = _detail_with_sources([])
     detail.plan.competitors = ["Cursor"]
@@ -983,6 +1030,95 @@ def test_segment_inputs_include_structured_knowledge() -> None:
     }["decision_summary"]
 
     assert decision_summary["structured_knowledge"]["Cursor"]["confidence"] == 0.91
+
+
+def test_segment_inputs_partition_large_pack_without_dropping_sources() -> None:
+    competitors = ["Cursor", "Copilot", "Codeium"]
+    dimensions = ["pricing", "feature", "persona", "security"]
+    sources: list[RawSource] = []
+    kb_slices: dict[str, CompetitorKB] = {}
+    for competitor in competitors:
+        competitor_slug = competitor.lower()
+        kb_sources: list[str] = []
+        slices: dict[str, list[str]] = {}
+        for dimension in dimensions:
+            source_id = f"{competitor_slug}-{dimension}"
+            kb_sources.append(source_id)
+            quote = (
+                f"{competitor} {dimension} evidence describes procurement, rollout, "
+                "buyer risk, adoption tradeoffs, implementation depth, and operating "
+                "constraints for competitive analysis. "
+            ) * 10
+            metadata = {
+                "community_evidence": dimension != "persona",
+                "normalized_fields": [
+                    {
+                        "kind": dimension,
+                        "dimension": dimension,
+                        "competitor": competitor,
+                        "claim": f"{competitor} {dimension} claim {index}",
+                        "source_quote": f"{quote} claim {index}",
+                    }
+                    for index in range(3)
+                ],
+            }
+            sources.append(
+                RawSource(
+                    id=source_id,
+                    competitor=competitor,
+                    dimension=dimension,
+                    source_type=(
+                        "interview_record"
+                        if dimension == "persona"
+                        else "reddit_thread"
+                    ),
+                    title=f"{competitor} {dimension}",
+                    snippet=quote,
+                    content_hash=f"{source_id}-hash",
+                    confidence=0.84,
+                    metadata=metadata,
+                )
+            )
+            slices[dimension] = [
+                (
+                    f"{competitor} {dimension} KB slice {index} explains buyer "
+                    "decision criteria, gaps, and validation needs."
+                )
+                for index in range(3)
+            ]
+        kb_slices[competitor] = CompetitorKB(
+            competitor=competitor,
+            sources=kb_sources,
+            slices=slices,
+        )
+    detail = _detail_with_sources(sources)
+    detail.plan.competitors = competitors
+    detail.plan.dimensions = dimensions
+    detail.competitor_kbs = kb_slices
+
+    result = build_writer_evidence_pack(detail)
+    segments = result.segment_inputs()
+    source_sets = {frozenset(segment["allowed_source_ids"]) for segment in segments}
+    registry_ids = {item.id for item in result.pack.source_registry}
+    union_segment_ids = {
+        source_id
+        for segment in segments
+        for source_id in segment["allowed_source_ids"]
+    }
+    user_research = next(
+        segment for segment in segments if segment["segment_name"] == "user_research"
+    )
+
+    assert len(source_sets) > 1
+    assert (
+        max(segment["segment_input_chars"] for segment in segments)
+        < result.metrics.writer_evidence_pack_chars * 0.75
+    )
+    assert union_segment_ids == registry_ids
+    assert "cursor-persona" in user_research["allowed_source_ids"]
+    assert "cursor-pricing" not in user_research["allowed_source_ids"]
+    assert "cursor-feature" not in user_research["allowed_source_ids"]
+    assert "cursor-security" not in user_research["allowed_source_ids"]
 
 
 def test_segment_matrix_filters_source_ids_outside_allowed_segment_sources() -> None:
