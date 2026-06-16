@@ -115,6 +115,42 @@ def test_evidence_pack_source_registry_represents_every_accepted_source() -> Non
     assert result.metrics.largest_source_projection_chars >= expected_projection_chars
 
 
+def test_writer_evidence_pack_includes_all_raw_sources() -> None:
+    sources = [
+        RawSource(
+            id=f"raw-source-{index:02d}",
+            competitor="Cursor",
+            dimension="persona" if index > 24 else "pricing",
+            source_type="interview_record" if index > 24 else "webpage_verified",
+            title=f"Cursor source {index}",
+            url=None,
+            snippet=(
+                (
+                    f"Source {index} contains decision-relevant enterprise developer "
+                    "team, workflow, and adoption evidence for the report writer."
+                )
+                if index > 24
+                else (
+                    f"Source {index} contains decision-relevant buyer, pricing, and adoption "
+                    "evidence for the report writer."
+                )
+            ),
+            content_hash=f"source-{index}-hash",
+            confidence=0.9,
+        )
+        for index in range(1, 31)
+    ]
+
+    result = build_writer_evidence_pack(_detail_with_sources(sources))
+
+    assert len(result.pack.source_registry) == 30
+    assert result.pack.source_registry[-1].id == "raw-source-30"
+    assert result.metrics.source_registry_count == 30
+    assert result.metrics.raw_source_count == 30
+    assert result.metrics.represented_source_count == 30
+    assert result.metrics.dropped_source_count == 0
+
+
 def test_evidence_pack_marks_noisy_source_without_inventing_signal() -> None:
     source = RawSource(
         id="cursor-noisy",
@@ -616,6 +652,15 @@ def test_community_clusters_project_compact_fact_sources_and_confidence() -> Non
 
 
 def test_evidence_pack_preserves_every_kb_slice_with_provenance() -> None:
+    findings = [
+        (
+            f"Persona evidence {index}: segment=Enterprise engineering teams; "
+            "role=technical buyer; company_size=enterprise; "
+            "use_cases=agentic coding, refactoring, IDE workflow, pull request governance; "
+            "pain_points=security risk, cost control, developer onboarding, audit readiness."
+        )
+        for index in range(1, 6)
+    ]
     detail = _detail_with_sources([])
     detail.plan.competitors = ["Cursor"]
     detail.plan.dimensions = ["persona"]
@@ -623,33 +668,26 @@ def test_evidence_pack_preserves_every_kb_slice_with_provenance() -> None:
         "Cursor": CompetitorKB(
             competitor="Cursor",
             sources=["cursor-kb-source"],
-            slices={
-                "persona": [
-                    "Enterprise buyers evaluate Cursor for security review.",
-                    "Developer teams use Cursor for repository-aware coding.",
-                ]
-            },
+            slices={"persona": findings},
         )
     }
 
     result = build_writer_evidence_pack(detail)
     group = result.pack.groups[0]
 
-    assert result.metrics.kb_slice_count == 2
-    assert result.metrics.represented_kb_slice_count == 2
+    assert result.metrics.kb_slice_count == 5
+    assert result.metrics.represented_kb_slice_count == 5
     assert result.metrics.dropped_kb_slice_count == 0
-    assert result.pack.coverage["kb_slice_count"] == 2
-    assert result.pack.coverage["represented_kb_slice_count"] == 2
+    assert result.pack.coverage["kb_slice_count"] == 5
+    assert result.pack.coverage["represented_kb_slice_count"] == 5
     assert result.pack.coverage["dropped_kb_slice_count"] == 0
     assert [signal.id for signal in group.kb_signals] == [
-        "kb:Cursor:persona:0",
-        "kb:Cursor:persona:1",
+        f"kb:Cursor:persona:{index}" for index in range(5)
     ]
     assert [signal.source_ids for signal in group.kb_signals] == [
-        ["cursor-kb-source"],
-        ["cursor-kb-source"],
+        ["cursor-kb-source"] for _ in findings
     ]
-    assert "security review" in group.kb_signals[0].text
+    assert [signal.text for signal in group.kb_signals] == findings
 
 
 def test_evidence_pack_kb_provenance_marks_source_represented() -> None:

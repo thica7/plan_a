@@ -10849,42 +10849,6 @@ def test_writer_source_digest_omits_noisy_snippet() -> None:
     assert digest[0]["snippet_quality"] == "omitted_no_clean_business_snippet"
 
 
-def test_writer_source_digest_includes_all_raw_sources() -> None:
-    service = RunService(
-        skill_registry=SkillRegistry.from_default_path(),
-        settings=Settings(
-            demo_mode=False,
-            ark_api_key="key",
-            ark_model="model",
-            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
-            llm_timeout_seconds=10,
-            llm_temperature=0.2,
-        ),
-    )
-    sources = [
-        RawSource(
-            id=f"raw-source-{index:02d}",
-            competitor="A",
-            dimension="persona" if index > 24 else "pricing",
-            source_type="interview_record" if index > 24 else "webpage_verified",
-            title=f"A source {index}",
-            url=None,
-            snippet=(
-                f"Source {index} contains decision-relevant buyer, pricing, and adoption "
-                "evidence for the report writer."
-            ),
-            content_hash=f"source-{index}-hash",
-            confidence=0.9,
-        )
-        for index in range(1, 31)
-    ]
-
-    digest = service._writer_source_digest(sources)
-
-    assert len(digest) == 30
-    assert digest[-1]["id"] == "raw-source-30"
-
-
 def test_writer_source_digest_preserves_clean_business_snippet() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -10919,45 +10883,6 @@ def test_writer_source_digest_preserves_clean_business_snippet() -> None:
     digest = service._writer_source_digest([source])
 
     assert digest[0]["snippet"] == snippet
-
-
-def test_writer_competitor_digest_preserves_all_kb_slices() -> None:
-    service = RunService(
-        skill_registry=SkillRegistry.from_default_path(),
-        settings=Settings(
-            demo_mode=False,
-            ark_api_key="key",
-            ark_model="model",
-            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
-            llm_timeout_seconds=10,
-            llm_temperature=0.2,
-        ),
-    )
-    findings = [
-        (
-            f"Persona evidence {index}: segment=Enterprise engineering teams; "
-            "role=technical buyer; company_size=enterprise; "
-            "use_cases=agentic coding, refactoring, IDE workflow, pull request governance; "
-            "pain_points=security risk, cost control, developer onboarding, audit readiness."
-        )
-        for index in range(1, 6)
-    ]
-    detail = RunDetail(
-        id="run-1",
-        topic="Test",
-        status="running",
-        execution_mode="real",
-        created_at="2026-05-23T00:00:00",
-        updated_at="2026-05-23T00:00:00",
-        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["persona"]),
-        competitor_kbs={
-            "A": CompetitorKB(competitor="A", slices={"persona": findings})
-        },
-    )
-
-    digest = service._writer_competitor_digest(detail, "A")
-
-    assert digest["kb_slices"]["persona"] == findings
 
 
 def test_writer_source_ids_for_chinese_user_research_prefers_survey_and_interview_sources() -> None:
