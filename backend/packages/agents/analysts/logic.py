@@ -2007,8 +2007,9 @@ class AnalystAgentMixin:
         return re.compile(
             (
                 r"(?:\$|USD\s*)\s?\d+(?:[.,]\d+)?"
-                r"(?:\s*(?:/|per)\s*(?:month|mo|year|yr|seat|user|developer|credit|"
-                r"request|token|million tokens|usage))?"
+                r"(?:\s*(?:-|–|—|to)\s*\$?\s?\d+(?:[.,]\d+)?)?"
+                r"(?:\s*(?:/|per)\s*(?:active\s+day|day|month|mo|year|yr|seat|"
+                r"user|developer|credit|request|token|million tokens|usage))*"
             ),
             flags=re.IGNORECASE,
         )
@@ -2046,7 +2047,7 @@ class AnalystAgentMixin:
                 PricingTier(
                     name=name,
                     price=price,
-                    billing_cycle=self._extract_billing_cycle_hint(window),
+                    billing_cycle=self._billing_cycle_for_price_window(price, window),
                     limits=self._extract_limit_hints(window),
                     claims=claims,
                 )
@@ -2064,6 +2065,12 @@ class AnalystAgentMixin:
                 claims=claims,
             )
         ]
+
+    def _billing_cycle_for_price_window(self, price: str, window: str) -> str:
+        price_cycle = self._extract_billing_cycle_hint(price)
+        if price_cycle != "unknown":
+            return price_cycle
+        return self._extract_billing_cycle_hint(window)
 
     def _pricing_window_around_match(self, text: str, match: re.Match[str]) -> str:
         start = self._previous_pricing_tier_keyword_index(text, match.start())
@@ -2135,12 +2142,16 @@ class AnalystAgentMixin:
 
     def _extract_billing_cycle_hint(self, text: str) -> str:
         normalized = text.casefold()
+        if re.search(
+            r"\b(active\s+day|per\s+day|/day|daily|usage|credit|request|token|"
+            r"metered|consumption)\b",
+            normalized,
+        ):
+            return "usage"
         if re.search(r"\b(per month|/month|monthly|/mo|per mo)\b", normalized):
             return "monthly"
         if re.search(r"\b(per year|/year|annual|annually|yearly|/yr|per yr)\b", normalized):
             return "annual"
-        if re.search(r"\b(usage|credit|request|token|metered|consumption)\b", normalized):
-            return "usage"
         return "unknown"
 
     def _extract_limit_hints(self, text: str) -> list[str]:
@@ -2172,25 +2183,38 @@ class AnalystAgentMixin:
         dimension: str,
         pricing_model: PricingModel,
     ) -> None:
-        evidence_text = " ".join(
-            " ".join((source.title, source.snippet))
+        evidence_texts = [
+            " ".join((source.title, source.snippet)).strip()
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
-        )
-        if not evidence_text.strip():
+        ]
+        evidence_texts = [text for text in evidence_texts if text]
+        if not evidence_texts:
             return
-        price = self._extract_price_hint(evidence_text)
-        billing_cycle = self._extract_billing_cycle_hint(evidence_text)
-        limits = self._extract_limit_hints(evidence_text)
         existing_claims = [
             *pricing_model.notes,
             *[claim for tier in pricing_model.tiers for claim in tier.claims],
         ]
-        extracted_tiers = self._pricing_tiers_from_text(evidence_text, existing_claims)
+        extracted_tiers: list[PricingTier] = []
+        limits: list[str] = []
+        seen_limits: set[str] = set()
+        for evidence_text in evidence_texts:
+            extracted_tiers.extend(
+                self._pricing_tiers_from_text(evidence_text, existing_claims)
+            )
+            for limit in self._extract_limit_hints(evidence_text):
+                key = limit.casefold()
+                if key not in seen_limits:
+                    seen_limits.add(key)
+                    limits.append(limit)
+        first_extracted = next(
+            (tier for tier in extracted_tiers if tier.price != "unknown"),
+            None,
+        )
         for tier in pricing_model.tiers:
-            if tier.price == "unknown" and price != "unknown":
-                tier.price = price
-            if tier.billing_cycle == "unknown" and billing_cycle != "unknown":
-                tier.billing_cycle = billing_cycle
+            if tier.price == "unknown" and first_extracted is not None:
+                tier.price = first_extracted.price
+            if tier.billing_cycle == "unknown" and first_extracted is not None:
+                tier.billing_cycle = first_extracted.billing_cycle
             if not tier.limits and limits:
                 tier.limits = limits
         seen_keys = {

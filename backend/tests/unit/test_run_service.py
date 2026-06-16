@@ -3550,6 +3550,37 @@ def test_comparison_matrix_uses_kb_and_sources() -> None:
     assert matrix.winner_by_dimension["pricing"] == "A"
 
 
+def test_pricing_tiers_keep_active_day_usage_separate_from_monthly_estimates() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    claim = KnowledgeClaim(
+        claim=(
+            "Claude Code cost reporting mentions $13 per developer per active day, "
+            "while budget estimates can reach $150-250 per developer per month."
+        ),
+        source_ids=["claude-pricing-source"],
+        confidence=0.86,
+    )
+
+    tiers = service._pricing_tiers_from_text(claim.claim, [claim])
+
+    active_day_tier = next(tier for tier in tiers if tier.price.startswith("$13"))
+    monthly_tier = next(tier for tier in tiers if "$150-250" in tier.price)
+    assert active_day_tier.price == "$13 per developer per active day"
+    assert active_day_tier.billing_cycle == "usage"
+    assert monthly_tier.price == "$150-250 per developer per month"
+    assert monthly_tier.billing_cycle == "monthly"
+
+
 def test_review_dimension_produces_review_summary_swot_and_report_sections() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
