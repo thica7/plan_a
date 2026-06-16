@@ -20,6 +20,11 @@ QUOTE_EXCERPT_LIMIT = 400
 QUOTE_USED_BY_FACT_LIMIT = 12
 SINGLE_CALL_CONTEXT_TARGET_CHARS = 160_000
 NORMALIZED_FIELD_DROP_KEYS = {
+    "kind",
+    "competitor",
+    "dimension",
+    "confidence",
+    "evidence_item_ids",
     "raw_text",
     "html",
     "source_quote",
@@ -385,7 +390,7 @@ class _WriterEvidencePackBuilder:
     ) -> bool:
         if not facts:
             return False
-        snippet_key = _clean(clean_snippet).casefold()
+        snippet_key = _canonical_business_text(clean_snippet)
         if not snippet_key:
             return False
         for fact in facts:
@@ -393,13 +398,8 @@ class _WriterEvidencePackBuilder:
                 quote = self._quote_by_id(quote_id)
                 if quote and snippet_key in _clean(quote.excerpt).casefold():
                     return True
-            value_terms = [
-                _clean(item).casefold()
-                for value in fact.values.values()
-                for item in _string_list(value)
-                if len(_clean(item)) >= 4
-            ]
-            if value_terms and all(term in snippet_key for term in value_terms[:4]):
+            value_terms = _business_value_terms(fact)
+            if value_terms and all(term in snippet_key for term in value_terms):
                 return True
         return False
 
@@ -485,36 +485,42 @@ class _WriterEvidencePackBuilder:
 
     def _detect_pricing_conflicts(self) -> None:
         for group in self.groups.values():
-            positions_by_area: dict[str, dict[str, list[WriterFact]]] = {}
+            positions_by_area: dict[str, dict[str, tuple[str, list[WriterFact]]]] = {}
             for fact in group.facts:
                 if fact.kind.casefold() != "pricing":
                     continue
-                tier_name = _string(fact.values.get("tier_name"))
-                billing_cycle = _string(fact.values.get("billing_cycle"))
-                price = _string(fact.values.get("price"))
-                if not tier_name or not billing_cycle or not price:
+                pricing_position = _pricing_conflict_position(fact)
+                if pricing_position is None:
                     continue
-                claim_area = f"pricing:{_slug(tier_name)}:{_slug(billing_cycle)}"
-                positions_by_area.setdefault(claim_area, {}).setdefault(
-                    price,
-                    [],
-                ).append(fact)
+                claim_area, canonical_position, display_position = pricing_position
+                area = positions_by_area.setdefault(claim_area, {})
+                position = area.setdefault(
+                    canonical_position,
+                    (display_position, []),
+                )
+                position[1].append(fact)
             group.conflicts = [
                 WriterConflict(
                     id=f"conflict:{_slug(group.competitor)}:{claim_area}",
                     claim_area=claim_area,
-                    positions={price: price for price in positions},
+                    positions={
+                        display_position: display_position
+                        for display_position, _facts in positions.values()
+                    },
                     source_ids_by_position={
-                        price: _unique(
+                        display_position: _unique(
                             source_id
                             for fact in facts
                             for source_id in fact.source_ids
                         )
-                        for price, facts in positions.items()
+                        for display_position, facts in positions.values()
                     },
                     confidence_by_position={
-                        price: round(max(fact.confidence for fact in facts), 3)
-                        for price, facts in positions.items()
+                        display_position: round(
+                            max(fact.confidence for fact in facts),
+                            3,
+                        )
+                        for display_position, facts in positions.values()
                     },
                 )
                 for claim_area, positions in positions_by_area.items()
@@ -745,6 +751,87 @@ def _fact_key(fact: WriterFact) -> str:
         "values": fact.values,
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True).casefold()
+
+
+def _business_value_terms(fact: WriterFact) -> list[str]:
+    if fact.kind.casefold() == "pricing":
+        terms = [
+            _canonical_business_text(_string(fact.values.get("tier_name"))),
+            _canonical_price_text(_string(fact.values.get("price"))),
+            _canonical_business_text(_string(fact.values.get("billing_cycle"))),
+            _canonical_business_text(_string(fact.values.get("usage_limit"))),
+            _canonical_business_text(_string(fact.values.get("enterprise_condition"))),
+        ]
+        return [term for term in terms if term]
+    terms: list[str] = []
+    for value in fact.values.values():
+        for item in _string_list(value):
+            term = _canonical_business_text(item)
+            if term:
+                terms.append(term)
+    return _unique(terms)
+
+
+def _pricing_conflict_position(fact: WriterFact) -> tuple[str, str, str] | None:
+    tier_name = _string(fact.values.get("tier_name"))
+    price = _string(fact.values.get("price"))
+    if not tier_name or not price:
+        return None
+    billing_cycle = _string(fact.values.get("billing_cycle"))
+    canonical_cycle = _canonical_billing_cycle(billing_cycle) or _canonical_billing_cycle(price)
+    if not canonical_cycle:
+        return None
+    canonical_price = _canonical_price_text(price)
+    if not canonical_price:
+        return None
+    display_price = _display_price_for_cycle(price, canonical_cycle)
+    claim_area = f"pricing:{_slug(tier_name)}:{_slug(canonical_cycle)}"
+    canonical_position = f"{canonical_price}:{canonical_cycle}"
+    return claim_area, canonical_position, display_price
+
+
+def _display_price_for_cycle(price: str, canonical_cycle: str) -> str:
+    text = _clean(price)
+    amount = _price_amount(text)
+    if amount and canonical_cycle == "monthly":
+        return f"{amount}/month"
+    return text
+
+
+def _canonical_price_text(value: str) -> str:
+    amount = _price_amount(value)
+    if not amount:
+        return _canonical_business_text(value)
+    cycle = _canonical_billing_cycle(value)
+    if cycle == "monthly":
+        return f"{amount} per month"
+    return amount
+
+
+def _price_amount(value: str) -> str:
+    match = re.search(r"([$€£]\s*)?\d+(?:\.\d+)?", value)
+    if not match:
+        return ""
+    return match.group(0).replace(" ", "")
+
+
+def _canonical_billing_cycle(value: str) -> str:
+    text = _canonical_business_text(value)
+    if not text:
+        return ""
+    if "per month" in text or text in {"monthly", "month"}:
+        return "monthly"
+    if "per year" in text or text in {"annually", "annual", "yearly", "year"}:
+        return "annual"
+    return text
+
+
+def _canonical_business_text(value: str) -> str:
+    text = _clean(value).casefold().replace("/", " per ")
+    text = re.sub(r"\bmonthly\b", "month", text)
+    text = re.sub(r"\bper\s+month\b", "per month", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 
 def _slug(value: str) -> str:

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 
-from packages.agents.writer.evidence_pack import build_writer_evidence_pack
+from packages.agents.writer.evidence_pack import (
+    QUOTE_EXCERPT_LIMIT,
+    build_writer_evidence_pack,
+)
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import AnalysisPlan, RawSource
 
@@ -159,7 +162,7 @@ def test_pricing_normalized_fields_become_deduped_facts_and_bounded_quote() -> N
     assert len(group.facts) == 65
     assert len(result.pack.quotes) == 1
     assert result.pack.quotes[0].raw_quote_chars == len(repeated_quote)
-    assert len(result.pack.quotes[0].excerpt) <= 500
+    assert len(result.pack.quotes[0].excerpt) <= QUOTE_EXCERPT_LIMIT
     assert group.facts[0].quote_ids == [result.pack.quotes[0].id]
     assert result.metrics.deduped_quote_count == 64
     assert result.metrics.largest_quote_projection_chars < 900
@@ -263,3 +266,203 @@ def test_conflicting_normalized_pricing_facts_create_conflict() -> None:
         "cursor-community"
         in group.conflicts[0].source_ids_by_position["$25/month"]
     )
+
+
+def test_identical_pricing_facts_dedupe_across_source_specific_metadata() -> None:
+    sources = [
+        RawSource(
+            id="cursor-pricing-a",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing A",
+            snippet="Cursor Pro costs $20/month.",
+            content_hash="cursor-pricing-a-hash",
+            confidence=0.91,
+            metadata={
+                "normalized_fields": [
+                    {
+                        "kind": "pricing",
+                        "tier_name": "Pro",
+                        "price": "$20/month",
+                        "billing_cycle": "monthly",
+                        "confidence": 0.91,
+                        "evidence_item_ids": ["evidence-a"],
+                        "source_quote": "Cursor Pro costs $20/month.",
+                    }
+                ]
+            },
+        ),
+        RawSource(
+            id="cursor-pricing-b",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing B",
+            snippet="Cursor Pro costs $20/month.",
+            content_hash="cursor-pricing-b-hash",
+            confidence=0.96,
+            metadata={
+                "normalized_fields": [
+                    {
+                        "kind": "pricing",
+                        "tier_name": "Pro",
+                        "price": "$20/month",
+                        "billing_cycle": "monthly",
+                        "confidence": 0.72,
+                        "evidence_item_ids": ["evidence-b"],
+                        "source_quote": "Cursor Pro costs $20/month.",
+                    }
+                ]
+            },
+        ),
+    ]
+
+    result = build_writer_evidence_pack(_detail_with_sources(sources))
+    fact = result.pack.groups[0].facts[0]
+
+    assert len(result.pack.groups[0].facts) == 1
+    assert fact.source_ids == ["cursor-pricing-a", "cursor-pricing-b"]
+    assert fact.confidence == 0.91
+    assert "confidence" not in fact.values
+    assert "evidence_item_ids" not in fact.values
+    assert result.metrics.deduped_fact_count == 1
+
+
+def test_pricing_conflicts_use_canonical_price_and_cycle_values() -> None:
+    sources = [
+        RawSource(
+            id="cursor-slash",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing slash",
+            snippet="Cursor Pro costs $20/month.",
+            content_hash="cursor-slash-hash",
+            confidence=0.95,
+            metadata={
+                "normalized_fields": [
+                    {
+                        "kind": "pricing",
+                        "tier_name": "Pro",
+                        "price": "$20/month",
+                        "billing_cycle": "monthly",
+                    }
+                ]
+            },
+        ),
+        RawSource(
+            id="cursor-words",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing words",
+            snippet="Cursor Pro costs $20 per month.",
+            content_hash="cursor-words-hash",
+            confidence=0.93,
+            metadata={
+                "normalized_fields": [
+                    {
+                        "kind": "pricing",
+                        "tier_name": "Pro",
+                        "price": "$20 per month",
+                        "billing_cycle": "month",
+                    }
+                ]
+            },
+        ),
+        RawSource(
+            id="cursor-higher",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="community_forum",
+            title="Cursor pricing higher",
+            snippet="A community post says Cursor Pro costs $25/month.",
+            content_hash="cursor-higher-hash",
+            confidence=0.73,
+            metadata={
+                "normalized_fields": [
+                    {
+                        "kind": "pricing",
+                        "tier_name": "Pro",
+                        "price": "$25/month",
+                        "billing_cycle": "monthly",
+                    }
+                ],
+                "community_evidence": True,
+            },
+        ),
+    ]
+
+    result = build_writer_evidence_pack(_detail_with_sources(sources))
+    conflict = result.pack.groups[0].conflicts[0]
+
+    assert len(result.pack.groups[0].conflicts) == 1
+    assert conflict.claim_area == "pricing:pro:monthly"
+    assert "cursor-slash" in conflict.source_ids_by_position["$20/month"]
+    assert "cursor-words" in conflict.source_ids_by_position["$20/month"]
+    assert "$20 per month" not in conflict.source_ids_by_position
+    assert "cursor-higher" in conflict.source_ids_by_position["$25/month"]
+
+
+def test_structured_pricing_without_quote_suppresses_duplicate_residual_signal() -> None:
+    source = RawSource(
+        id="cursor-pricing-structured-only",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="A Pro plan costs $20/month for developers.",
+        content_hash="cursor-pricing-structured-only-hash",
+        confidence=0.94,
+        metadata={
+            "normalized_fields": [
+                {
+                    "kind": "pricing",
+                    "tier_name": "Pro",
+                    "price": "$20/month",
+                    "billing_cycle": "monthly",
+                    "usage_limit": "for developers",
+                }
+            ]
+        },
+    )
+
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+    group = result.pack.groups[0]
+
+    assert len(group.facts) == 1
+    assert group.unstructured_signals == []
+
+
+def test_community_clusters_project_compact_fact_sources_and_confidence() -> None:
+    source = RawSource(
+        id="cursor-community",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="reddit_thread",
+        title="Cursor community pricing",
+        snippet="Community users report Cursor Pro pricing caveats.",
+        content_hash="cursor-community-hash",
+        confidence=0.62,
+        metadata={
+            "community_evidence": True,
+            "community_claim_clusters": [
+                {
+                    "kind": "pricing",
+                    "label": "community_observed",
+                    "claim": "Community users report Cursor Pro costs $20/month.",
+                    "source_ids": ["thread-a", "thread-b"],
+                    "confidence": 0.6789,
+                    "evidence": ["Cursor Pro costs $20/month."],
+                }
+            ],
+        },
+    )
+
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+    fact = result.pack.groups[0].facts[0]
+
+    assert fact.kind == "community_pricing"
+    assert fact.source_ids == ["cursor-community", "thread-a", "thread-b"]
+    assert fact.confidence == 0.679
