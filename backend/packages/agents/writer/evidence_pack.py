@@ -182,6 +182,17 @@ class WriterEvidencePackResult(BaseModel):
         payload["preflight_warnings"] = list(self.warnings)
         return payload
 
+    def preflight_errors(self) -> list[str]:
+        errors: list[str] = []
+        for item in self.pack.source_registry:
+            if not item.represented_by and not item.no_signal_reason:
+                errors.append(f"source_not_represented:{item.id}")
+        if self.metrics.dropped_source_count:
+            errors.append(f"dropped_source_count:{self.metrics.dropped_source_count}")
+        if self.metrics.dropped_kb_slice_count:
+            errors.append(f"dropped_kb_slice_count:{self.metrics.dropped_kb_slice_count}")
+        return errors
+
     def source_appendix_rows(self) -> list[dict[str, object]]:
         return [
             {

@@ -354,6 +354,18 @@ class WriterAgentMixin:
                 "Writer evidence pack prepared.",
                 evidence_pack_result.telemetry_payload(),
             )
+            preflight_errors = evidence_pack_result.preflight_errors()
+            if preflight_errors:
+                await self._fail_writer_without_report(
+                    record,
+                    "writer evidence pack preflight failed: "
+                    + ", ".join(preflight_errors),
+                    writer_repair_mode=writer_repair_mode,
+                    writer_repair_sections=writer_repair_sections,
+                    writer_repair_decision=writer_repair_decision,
+                    anti_regression_reason=anti_regression_reason,
+                    previous_report_protected=previous_report_protected,
+                )
             layer_context = self._writer_layer_context(detail)
             memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
             required_sections = self._writer_required_sections(detail)

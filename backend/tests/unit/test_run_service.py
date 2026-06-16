@@ -7269,6 +7269,64 @@ async def test_writer_uses_evidence_pack_context_and_emits_preflight(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_writer_fails_before_llm_when_evidence_pack_preflight_has_errors(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    detail = RunDetail(
+        id="run-pack-preflight-fail",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["pricing"]),
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    llm_called = False
+
+    class FakeResult:
+        def telemetry_payload(self):
+            return {
+                "raw_source_count": 1,
+                "preflight_warnings": ["source_not_represented:bad"],
+            }
+
+        def preflight_errors(self):
+            return ["source_not_represented:bad"]
+
+        def to_prompt_json(self):
+            return "{}"
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        nonlocal llm_called
+        llm_called = True
+        return "# should not be called"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeResult(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    with pytest.raises(RuntimeError, match="writer evidence pack preflight failed"):
+        await service._real_writer_step(record)
+
+    assert not llm_called
+    assert any(event.type == "run_failed" for event in record.events)
+
+
+@pytest.mark.asyncio
 async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch) -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

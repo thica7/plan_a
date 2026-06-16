@@ -135,6 +135,24 @@ def test_evidence_pack_marks_noisy_source_without_inventing_signal() -> None:
     assert json.loads(result.to_prompt_json())["coverage"]["raw_source_count"] == 1
 
 
+def test_evidence_pack_preflight_flags_unrepresented_source() -> None:
+    source = RawSource(
+        id="cursor-empty",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor empty",
+        snippet="",
+        content_hash="cursor-empty-hash",
+        confidence=0.9,
+    )
+
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+
+    assert result.pack.source_registry[0].no_signal_reason == "no_clean_business_signal"
+    assert result.preflight_errors() == []
+
+
 def test_pricing_normalized_fields_become_deduped_facts_and_bounded_quote() -> None:
     repeated_quote = "OpenAI pricing table lists model input cached input and output rates. " * 80
     fields = [
