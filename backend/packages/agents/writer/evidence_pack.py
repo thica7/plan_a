@@ -283,7 +283,7 @@ class _WriterEvidencePackBuilder:
                         competitor=competitor,
                         dimension=dimension,
                         text=text,
-                        source_ids=[],
+                        source_ids=list(kb.sources),
                     )
                     group.kb_signals.append(signal)
 

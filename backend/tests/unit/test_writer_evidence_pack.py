@@ -571,6 +571,7 @@ def test_evidence_pack_preserves_every_kb_slice_with_provenance() -> None:
     detail.competitor_kbs = {
         "Cursor": CompetitorKB(
             competitor="Cursor",
+            sources=["cursor-kb-source"],
             slices={
                 "persona": [
                     "Enterprise buyers evaluate Cursor for security review.",
@@ -592,6 +593,10 @@ def test_evidence_pack_preserves_every_kb_slice_with_provenance() -> None:
     assert [signal.id for signal in group.kb_signals] == [
         "kb:Cursor:persona:0",
         "kb:Cursor:persona:1",
+    ]
+    assert [signal.source_ids for signal in group.kb_signals] == [
+        ["cursor-kb-source"],
+        ["cursor-kb-source"],
     ]
     assert "security review" in group.kb_signals[0].text
 
