@@ -345,7 +345,6 @@ class WriterAgentMixin:
                 writer_repair_decision = repair_plan.reason
                 previous_report_protected = repair_plan.previous_report_protectable
             evidence_pack_result = build_writer_evidence_pack(detail)
-            writer_context_json = evidence_pack_result.to_prompt_json()
             await self.emit(
                 detail.id,
                 "writer_preflight",
@@ -366,6 +365,7 @@ class WriterAgentMixin:
                     anti_regression_reason=anti_regression_reason,
                     previous_report_protected=previous_report_protected,
                 )
+            writer_context_json = evidence_pack_result.to_prompt_json()
             layer_context = self._writer_layer_context(detail)
             memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
             required_sections = self._writer_required_sections(detail)
@@ -744,6 +744,12 @@ class WriterAgentMixin:
     ) -> str:
         detail = record.detail
         evidence_pack_result = build_writer_evidence_pack(detail)
+        preflight_errors = evidence_pack_result.preflight_errors()
+        if preflight_errors:
+            raise RuntimeError(
+                "writer evidence pack preflight failed: "
+                + ", ".join(preflight_errors)
+            )
         writer_context_json = evidence_pack_result.to_prompt_json()
         language_guidance = language_instruction(detail.output_language)
         section_headings = "\n".join(

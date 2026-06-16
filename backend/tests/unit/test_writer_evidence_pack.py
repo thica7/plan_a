@@ -4,6 +4,10 @@ import json
 
 from packages.agents.writer.evidence_pack import (
     QUOTE_EXCERPT_LIMIT,
+    WriterEvidencePack,
+    WriterEvidencePackMetrics,
+    WriterEvidencePackResult,
+    WriterSourceRegistryItem,
     build_writer_evidence_pack,
 )
 from packages.schema.api_dto import RunDetail
@@ -151,6 +155,33 @@ def test_evidence_pack_preflight_flags_unrepresented_source() -> None:
 
     assert result.pack.source_registry[0].no_signal_reason == "no_clean_business_signal"
     assert result.preflight_errors() == []
+
+
+def test_evidence_pack_preflight_errors_report_unrepresented_and_dropped_counts() -> None:
+    result = WriterEvidencePackResult(
+        pack=WriterEvidencePack(
+            source_registry=[
+                WriterSourceRegistryItem(
+                    id="cursor-unrepresented",
+                    competitor="Cursor",
+                    dimension="pricing",
+                    source_type="webpage_verified",
+                    title="Cursor unrepresented",
+                    confidence=0.9,
+                )
+            ]
+        ),
+        metrics=WriterEvidencePackMetrics(
+            dropped_source_count=2,
+            dropped_kb_slice_count=3,
+        ),
+    )
+
+    assert result.preflight_errors() == [
+        "source_not_represented:cursor-unrepresented",
+        "dropped_source_count:2",
+        "dropped_kb_slice_count:3",
+    ]
 
 
 def test_pricing_normalized_fields_become_deduped_facts_and_bounded_quote() -> None:

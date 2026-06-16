@@ -7603,6 +7603,64 @@ async def test_writer_section_repair_uses_evidence_pack_context(monkeypatch) -> 
     assert "cursor-persona" in captured["user"]
 
 
+@pytest.mark.asyncio
+async def test_writer_section_repair_fails_before_llm_when_evidence_pack_preflight_has_errors(
+    monkeypatch,
+) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-section-repair-pack-preflight-fail",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["pricing"]),
+    )
+    record = RunRecord(detail=detail)
+    llm_called = False
+
+    class FakeResult:
+        def preflight_errors(self):
+            return ["source_not_represented:bad"]
+
+        def to_prompt_json(self):
+            raise AssertionError("to_prompt_json should not be called")
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        nonlocal llm_called
+        llm_called = True
+        return "# should not be called"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeResult(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    with pytest.raises(
+        RuntimeError,
+        match="writer evidence pack preflight failed: source_not_represented:bad",
+    ):
+        await service._writer_section_repair_markdown(
+            record,
+            sections=["pricing_analysis"],
+            previous_report="## Pricing Analysis\nThin.",
+        )
+
+    assert not llm_called
+
+
 def test_candidate_evidence_prefers_matching_search_results() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
