@@ -55,7 +55,7 @@ The pack is not a subset of sources. It is a structured full-coverage projection
 - `conflicts` preserve unresolved official/community or source/source disagreement.
 - `coverage` records source counts, represented source counts, dropped source count, compaction counts, and warnings.
 
-The initial writer consumes the evidence pack instead of the current full source digest. Complete raw sources remain in `RunDetail`, database storage, traceable source IDs, and support/audit appendix generation.
+The initial writer and writer section-repair paths consume the evidence pack instead of the current full source digest. Complete raw sources remain in `RunDetail`, database storage, traceable source IDs, and support/audit appendix generation.
 
 ## Architecture
 
@@ -77,6 +77,7 @@ Responsibilities:
 
 - Build one registry entry per raw source.
 - Extract normalized facts from source metadata.
+- Extract compact unstructured signals from clean snippets when normalized fields are absent.
 - Deduplicate repeated fact values and repeated quotes.
 - Merge source IDs for equivalent facts.
 - Preserve conflicts instead of overwriting them.
@@ -104,7 +105,26 @@ Each registry item should include:
 
 The registry is intentionally compact. It proves coverage without duplicating full snippets.
 
-### 4. Evidence Groups
+### 4. Unstructured Source Signals
+
+Sources without normalized fields or community clusters must still contribute writing context. A source is not sufficiently represented if it only appears in `source_registry`.
+
+For each such source, the builder should derive deterministic `unstructured_signals` from the clean business snippet:
+
+- `source_id`
+- `competitor`
+- `dimension`
+- `source_type`
+- `signal_summary`
+- `salient_terms`
+- `confidence`
+- `quote_ids`
+
+`signal_summary` should use existing snippet-cleaning behavior and stay compact. It must not call the LLM. The goal is to preserve useful source meaning without dumping the full raw snippet.
+
+These signals should be attached to the relevant competitor-dimension group so persona, review, feature, and pricing sections do not lose snippet-only or non-normalized evidence.
+
+### 5. Evidence Groups
 
 Evidence groups should be keyed by competitor and dimension:
 
@@ -115,6 +135,7 @@ Evidence groups should be keyed by competitor and dimension:
 - `community_source_ids`
 - `user_research_source_ids`
 - `facts`
+- `unstructured_signals`
 - `quotes`
 - `conflicts`
 - `confidence_summary`
@@ -122,7 +143,7 @@ Evidence groups should be keyed by competitor and dimension:
 
 This gives writer the correct grain for report sections: pricing, feature, persona, community themes, SWOT, matrix interpretation, and deep dives.
 
-### 5. Normalized Field Aggregation
+### 6. Normalized Field Aggregation
 
 Normalized fields should be converted into facts, not dumped one field object at a time.
 
@@ -166,7 +187,7 @@ Persona and user research facts should preserve:
 
 Equivalent facts should be merged by normalized semantic key. Merged facts must retain all source IDs.
 
-### 6. Quote Deduplication
+### 7. Quote Deduplication
 
 Long quotes should not repeat across dozens of normalized fields.
 
@@ -182,7 +203,7 @@ Repeated quote text should appear once, with merged `source_ids` and `used_by_fa
 
 For the OpenAI pricing pattern, 65 pricing fields with the same long quote should become many structured price facts plus one representative quote entry, not 65 duplicated quote blobs.
 
-### 7. Community Triangulation Projection
+### 8. Community Triangulation Projection
 
 Community claim clusters should remain writer-visible, but projected compactly:
 
@@ -197,7 +218,7 @@ Community claim clusters should remain writer-visible, but projected compactly:
 
 Community evidence can have high confidence when multiple independent sources converge. The pack should preserve that convergence instead of treating community sources as noise.
 
-### 8. Conflict Preservation
+### 9. Conflict Preservation
 
 If official, community, survey, interview, or snippet-only evidence disagree, the pack should not collapse the disagreement into one fact.
 
@@ -213,7 +234,7 @@ Conflicts should include:
 
 The writer should use conflicts to write caveats, not silently choose one side.
 
-### 9. Input Budget and Telemetry
+### 10. Input Budget and Telemetry
 
 Budgets are observability and routing thresholds, not source-dropping rules.
 
@@ -240,7 +261,7 @@ Emit a writer-preflight event before the LLM call:
 
 `dropped_source_count` should be zero for accepted sources. If it is not zero, that is a blocker-level implementation bug.
 
-### 10. Segmented Writer
+### 11. Segmented Writer
 
 When the pack is large, use segmented generation instead of one monolithic call.
 
@@ -263,7 +284,15 @@ Each segment should receive:
 
 The assembler should join sections and run existing hardening and QA logic. The assembled report must still satisfy required section and core depth gates.
 
-### 11. Failure Handling
+### 12. Writer Repair Integration
+
+The existing section repair path also builds `Writer Context JSON`. It must use the same evidence pack builder and should pass only the relevant groups for the section being repaired, plus the full source registry.
+
+Section repair must not reintroduce the current full source digest. Otherwise a report that succeeds initially can still time out or regress during repair.
+
+Line repair remains deterministic and does not need evidence-pack LLM context unless it escalates to section repair.
+
+### 13. Failure Handling
 
 Initial writer generation should not use fallback report content.
 
@@ -283,7 +312,7 @@ Current:
 
 New:
 
-`RunDetail.raw_sources -> WriterEvidencePackBuilder -> writer_preflight telemetry -> single writer or segmented writer`
+`RunDetail.raw_sources -> WriterEvidencePackBuilder -> writer_preflight telemetry -> single writer, segmented writer, or section repair writer`
 
 The full raw source list remains available for audit and persistence:
 
@@ -298,11 +327,13 @@ Add focused unit tests before implementation:
 3. Equivalent facts merge source IDs instead of dropping sources.
 4. Repeated quotes become one quote registry entry.
 5. Conflicting official/community facts produce a conflict entry.
-6. Writer preflight emits input size telemetry.
-7. Large evidence pack routes to segmented writer.
-8. Segmented writer receives only relevant groups for each section plus the full source registry.
-9. No accepted source is dropped from the pack.
-10. Existing writer repair anti-regression behavior still preserves previous reports when appropriate.
+6. A non-normalized snippet-only source produces an `unstructured_signal`, not only a source registry row.
+7. Writer preflight emits input size telemetry.
+8. Large evidence pack routes to segmented writer.
+9. Segmented writer receives only relevant groups for each section plus the full source registry.
+10. Section repair uses evidence-pack context and does not call the old full source digest path.
+11. No accepted source is dropped from the pack.
+12. Existing writer repair anti-regression behavior still preserves previous reports when appropriate.
 
 ## Rollout Plan
 
@@ -312,15 +343,19 @@ Phase 2: Replace initial writer context source digest with evidence pack while k
 
 Phase 3: Add writer preflight telemetry.
 
-Phase 4: Add segmented writer routing for large packs.
+Phase 4: Replace writer section-repair context with section-scoped evidence pack context.
 
-Phase 5: Audit recent failed runs against telemetry and compare report richness against known good reports.
+Phase 5: Add segmented writer routing for large packs.
+
+Phase 6: Audit recent failed runs against telemetry and compare report richness against known good reports.
 
 ## Acceptance Criteria
 
 - `run-58dd1b8df825ffcba52fbdd1433b5956` style input reconstructs to a writer evidence pack far smaller than the current 512k context while representing all 82 raw sources.
 - Repeated OpenAI pricing quote text appears once in quote registry, not 65 times.
+- Snippet-only and non-normalized sources appear as compact unstructured signals, not just registry rows.
 - Writer input telemetry is visible in run events.
 - Large runs do not fail solely because the initial writer prompt exceeds 600 seconds.
+- Writer section repair does not use the old full source digest path.
 - Report depth does not regress against recent expanded-report expectations.
 - Source auditability remains intact: every claim still cites existing source IDs and every accepted source remains traceable.
