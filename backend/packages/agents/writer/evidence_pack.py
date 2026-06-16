@@ -8,6 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from packages.identity.source_resolver import source_tokens
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
 from packages.schema.api_dto import RunDetail
@@ -21,7 +22,6 @@ QUOTE_USED_BY_FACT_LIMIT = 12
 STRUCTURED_KNOWLEDGE_LIST_LIMIT = 8
 STRUCTURED_KNOWLEDGE_TEXT_LIMIT = 700
 SINGLE_CALL_CONTEXT_TARGET_CHARS = 160_000
-SOURCE_TOKEN_RE = re.compile(r"\[source:([^\]\s]+)\]")
 NORMALIZED_FIELD_DROP_KEYS = {
     "kind",
     "competitor",
@@ -286,8 +286,7 @@ class WriterEvidencePackResult(BaseModel):
     ) -> list[str]:
         invalid: list[str] = []
         registry_ids = {item.id for item in self.pack.source_registry}
-        for match in SOURCE_TOKEN_RE.finditer(markdown or ""):
-            source_id = match.group(1)
+        for source_id in source_tokens(markdown or ""):
             if source_id not in registry_ids or source_id not in allowed_source_ids:
                 invalid.append(source_id)
         return _unique(invalid)

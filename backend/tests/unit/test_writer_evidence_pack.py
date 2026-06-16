@@ -933,3 +933,24 @@ def test_segment_citation_validation_rejects_unsupplied_source_id() -> None:
     )
 
     assert errors == ["missing-source"]
+
+
+def test_segment_citation_validation_rejects_full_width_source_outside_allowlist() -> None:
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor Pro costs $20 per month.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+    )
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+
+    errors = result.validate_segment_citations(
+        "Cursor is priced clearly. 【source:cursor-pricing】",
+        allowed_source_ids=set(),
+    )
+
+    assert errors == ["cursor-pricing"]
