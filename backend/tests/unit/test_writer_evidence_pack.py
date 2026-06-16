@@ -730,3 +730,58 @@ def test_source_appendix_rows_are_generated_from_registry() -> None:
             "no_signal_reason": None,
         }
     ]
+
+
+def test_evidence_pack_builds_segment_inputs_with_allowed_source_ids() -> None:
+    sources = [
+        RawSource(
+            id="cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor Pro costs $20 per month.",
+            content_hash="cursor-pricing-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="cursor-persona",
+            competitor="Cursor",
+            dimension="persona",
+            source_type="interview_record",
+            title="Cursor persona",
+            snippet="Enterprise buyers evaluate Cursor for security review.",
+            content_hash="cursor-persona-hash",
+            confidence=0.82,
+        ),
+    ]
+
+    result = build_writer_evidence_pack(_detail_with_sources(sources))
+    segments = result.segment_inputs()
+
+    by_name = {segment["segment_name"]: segment for segment in segments}
+    assert "decision_summary" in by_name
+    assert "user_research" in by_name
+    assert "cursor-pricing" in by_name["decision_summary"]["allowed_source_ids"]
+    assert "cursor-persona" in by_name["user_research"]["allowed_source_ids"]
+
+
+def test_segment_citation_validation_rejects_unsupplied_source_id() -> None:
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor Pro costs $20 per month.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+    )
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+
+    errors = result.validate_segment_citations(
+        "Cursor is priced clearly. [source:missing-source]",
+        allowed_source_ids={"cursor-pricing"},
+    )
+
+    assert errors == ["missing-source"]

@@ -29,6 +29,7 @@ EXPECTED_EVENT_TYPES = {
     "report.ready",
     "runtime.command",
     "writer_preflight",
+    "writer_segment_preflight",
 }
 
 

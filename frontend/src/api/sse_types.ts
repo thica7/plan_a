@@ -24,7 +24,8 @@ export type RunEventType =
   | "benchmark.scored"
   | "report.ready"
   | "runtime.command"
-  | "writer_preflight";
+  | "writer_preflight"
+  | "writer_segment_preflight";
 
 export interface RunEvent {
   id: number;

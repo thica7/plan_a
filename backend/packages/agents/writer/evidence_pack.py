@@ -21,6 +21,7 @@ QUOTE_USED_BY_FACT_LIMIT = 12
 STRUCTURED_KNOWLEDGE_LIST_LIMIT = 8
 STRUCTURED_KNOWLEDGE_TEXT_LIMIT = 700
 SINGLE_CALL_CONTEXT_TARGET_CHARS = 160_000
+SOURCE_TOKEN_RE = re.compile(r"\[source:([^\]\s]+)\]")
 NORMALIZED_FIELD_DROP_KEYS = {
     "kind",
     "competitor",
@@ -196,6 +197,58 @@ class WriterEvidencePackResult(BaseModel):
             }
             for item in self.pack.source_registry
         ]
+
+    def segment_inputs(self) -> list[dict[str, object]]:
+        return [
+            self._segment(
+                "decision_summary",
+                dimensions={"pricing", "feature", "persona"},
+            ),
+            self._segment("user_research", dimensions={"persona"}),
+            self._segment(
+                "competitor_deep_dives",
+                dimensions={"pricing", "feature", "persona"},
+            ),
+            self._segment("swot_matrix", dimensions={"pricing", "feature", "persona"}),
+            self._segment(
+                "support_appendix",
+                dimensions={"pricing", "feature", "persona"},
+            ),
+        ]
+
+    def _segment(self, name: str, *, dimensions: set[str]) -> dict[str, object]:
+        groups = [group for group in self.pack.groups if group.dimension in dimensions]
+        allowed_source_ids = _unique(
+            source_id for group in groups for source_id in group.source_ids
+        )
+        payload: dict[str, object] = {
+            "schema_version": self.pack.schema_version,
+            "segment_name": name,
+            "source_registry": [
+                item.model_dump(mode="json")
+                for item in self.pack.source_registry
+                if item.id in allowed_source_ids
+            ],
+            "groups": [group.model_dump(mode="json") for group in groups],
+            "matrix": self.pack.matrix,
+            "allowed_source_ids": allowed_source_ids,
+        }
+        payload["segment_input_chars"] = len(json.dumps(payload, ensure_ascii=False))
+        return payload
+
+    def validate_segment_citations(
+        self,
+        markdown: str,
+        *,
+        allowed_source_ids: set[str],
+    ) -> list[str]:
+        invalid: list[str] = []
+        registry_ids = {item.id for item in self.pack.source_registry}
+        for match in SOURCE_TOKEN_RE.finditer(markdown or ""):
+            source_id = match.group(1)
+            if source_id not in registry_ids or source_id not in allowed_source_ids:
+                invalid.append(source_id)
+        return _unique(invalid)
 
 
 USER_RESEARCH_SOURCE_TYPES = {

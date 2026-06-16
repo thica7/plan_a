@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import re
 from collections.abc import Iterable, Mapping, Sequence
@@ -360,72 +361,84 @@ class WriterAgentMixin:
             user_research_policy = writer_user_research_policy_text()
             language_guidance = language_instruction(detail.output_language)
             try:
-                report_md = await asyncio.wait_for(
-                    self._trace_llm_text(
+                if evidence_pack_result.metrics.segmented_writer_required:
+                    report_md = await self._writer_segmented_report_markdown(
                         record,
-                        agent="writer",
-                        subagent=None,
-                        name="report_writer",
-                        system=(
-                            "You are a senior enterprise competitive-intelligence analyst. "
-                            "Produce a concise decision-grade markdown first draft, not a short "
-                            "summary. Use an analysis-first structure: lead with an executive "
-                            "takeaway, decision summary, competitive findings, competitor deep "
-                            "dives, and the selected layer-specific analysis. Put source quality, "
-                            "scenario QA, claim risk, RAG gap-fill, verification tasks, and the "
-                            "evidence appendix after the core analysis as support material. Write "
-                            "with consulting depth: side-by-side matrices, dimension analysis, "
-                            "risks, buying implications, and explicit next validation tasks. Cite "
-                            "factual claims with existing source IDs using [source:ID]. Do not "
-                            "invent source IDs. "
-                            "Do not use web_search_result or confidence < 0.75 as the sole support "
-                            "for a winner, legal/security certification, pricing, or procurement "
-                            "recommendation. If evidence is incomplete, say the conclusion is "
-                            "tentative and list the exact evidence gap. Do not claim all sources "
-                            "are verified when any source_type is web_search_result or "
-                            "llm_public_knowledge. "
-                            "Follow the Grounded Evidence Contract exactly. "
-                            f"{language_guidance} "
-                            f"{user_research_policy} "
-                            "Honor confirmed memory guidance when it does not conflict with "
-                            "evidence, schema requirements, or compliance policy. "
-                            "Use the requested competitive layer to choose the report shape: L1 "
-                            "is a direct battlecard, L2 is adjacent workflow and enterprise-risk "
-                            "analysis, and L3 is market landscape and category strategy."
+                        evidence_pack_result=evidence_pack_result,
+                        timeout_seconds=timeout_seconds,
+                        language_guidance=language_guidance,
+                        memory_context=memory_context,
+                        layer_context=layer_context,
+                        required_sections=required_sections,
+                    )
+                    writer_mode = "real segmented LLM call"
+                else:
+                    report_md = await asyncio.wait_for(
+                        self._trace_llm_text(
+                            record,
+                            agent="writer",
+                            subagent=None,
+                            name="report_writer",
+                            system=(
+                                "You are a senior enterprise competitive-intelligence analyst. "
+                                "Produce a concise decision-grade markdown first draft, not a short "
+                                "summary. Use an analysis-first structure: lead with an executive "
+                                "takeaway, decision summary, competitive findings, competitor deep "
+                                "dives, and the selected layer-specific analysis. Put source quality, "
+                                "scenario QA, claim risk, RAG gap-fill, verification tasks, and the "
+                                "evidence appendix after the core analysis as support material. Write "
+                                "with consulting depth: side-by-side matrices, dimension analysis, "
+                                "risks, buying implications, and explicit next validation tasks. Cite "
+                                "factual claims with existing source IDs using [source:ID]. Do not "
+                                "invent source IDs. "
+                                "Do not use web_search_result or confidence < 0.75 as the sole support "
+                                "for a winner, legal/security certification, pricing, or procurement "
+                                "recommendation. If evidence is incomplete, say the conclusion is "
+                                "tentative and list the exact evidence gap. Do not claim all sources "
+                                "are verified when any source_type is web_search_result or "
+                                "llm_public_knowledge. "
+                                "Follow the Grounded Evidence Contract exactly. "
+                                f"{language_guidance} "
+                                f"{user_research_policy} "
+                                "Honor confirmed memory guidance when it does not conflict with "
+                                "evidence, schema requirements, or compliance policy. "
+                                "Use the requested competitive layer to choose the report shape: L1 "
+                                "is a direct battlecard, L2 is adjacent workflow and enterprise-risk "
+                                "analysis, and L3 is market landscape and category strategy."
+                            ),
+                            user=(
+                                f"Topic: {detail.topic}\n"
+                                f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                                f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                                f"Competitive Layer: {detail.plan.competitor_layer}\n"
+                                f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
+                                "Scenario Recommended Dimensions: "
+                                f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
+                                f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
+                                f"Confirmed Memory Preferences:\n{memory_context}\n"
+                                f"Layer Report Context: {layer_context}\n"
+                                f"{grounding_prompt}\n"
+                                f"{self._writer_community_policy_text()}\n"
+                                f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
+                                f"Required sections:\n{required_sections}\n"
+                                "Target 16,000-20,000 characters for the first draft. Use about "
+                                "70-80% of the report on the Core analysis layer: decision summary, "
+                                "competitive findings, user review themes, competitor deep dives, "
+                                "SWOT, matrix interpretation, and layer-specific implications. "
+                                "Core section minimums: Decision Summary 800+ characters; "
+                                "Competitive Findings 1,200+; User Review Themes 1,000+ when "
+                                "review, community, survey, interview, or persona evidence exists; "
+                                "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
+                                "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
+                                "Threats for every competitor; Matrix Interpretation 900+; "
+                                "Layer-specific Battlecard/Workflow/Market section 1,200+. Keep "
+                                "the Support/audit layer concise and complete; it is the audit trail, "
+                                "not the main readout. Prefer deeper cited analysis and decision "
+                                "implications over repeated source IDs or QA boilerplate."
+                            ),
                         ),
-                        user=(
-                            f"Topic: {detail.topic}\n"
-                            f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                            f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                            f"Competitive Layer: {detail.plan.competitor_layer}\n"
-                            f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
-                            "Scenario Recommended Dimensions: "
-                            f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
-                            f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
-                            f"Confirmed Memory Preferences:\n{memory_context}\n"
-                            f"Layer Report Context: {layer_context}\n"
-                            f"{grounding_prompt}\n"
-                            f"{self._writer_community_policy_text()}\n"
-                            f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
-                            f"Required sections:\n{required_sections}\n"
-                            "Target 16,000-20,000 characters for the first draft. Use about "
-                            "70-80% of the report on the Core analysis layer: decision summary, "
-                            "competitive findings, user review themes, competitor deep dives, "
-                            "SWOT, matrix interpretation, and layer-specific implications. "
-                            "Core section minimums: Decision Summary 800+ characters; "
-                            "Competitive Findings 1,200+; User Review Themes 1,000+ when "
-                            "review, community, survey, interview, or persona evidence exists; "
-                            "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
-                            "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
-                            "Threats for every competitor; Matrix Interpretation 900+; "
-                            "Layer-specific Battlecard/Workflow/Market section 1,200+. Keep "
-                            "the Support/audit layer concise and complete; it is the audit trail, "
-                            "not the main readout. Prefer deeper cited analysis and decision "
-                            "implications over repeated source IDs or QA boilerplate."
-                        ),
-                    ),
-                    timeout=timeout_seconds,
-                )
+                        timeout=timeout_seconds,
+                    )
                 self._require_writer_report_output(report_md)
                 hardened_report = self._harden_report_markdown(detail, report_md)
                 if (
@@ -588,6 +601,118 @@ class WriterAgentMixin:
     def _require_writer_report_output(self, report_md: str) -> None:
         if not report_md.strip():
             raise RuntimeError("Writer returned empty report content")
+
+    async def _writer_segmented_report_markdown(
+        self,
+        record: RunRecord,
+        *,
+        evidence_pack_result,
+        timeout_seconds: float,
+        language_guidance: str,
+        memory_context: str,
+        layer_context: str,
+        required_sections: str,
+    ) -> str:
+        detail = record.detail
+        sections: list[str] = []
+        for segment in evidence_pack_result.segment_inputs():
+            payload = {
+                "segment_name": segment["segment_name"],
+                "segment_input_chars": segment["segment_input_chars"],
+                "segment_source_count": len(segment["allowed_source_ids"]),
+                "segment_group_count": len(segment["groups"]),
+                "segment_allowed_source_ids": list(segment["allowed_source_ids"]),
+                "segment_retry_count": 0,
+            }
+            await self.emit(
+                detail.id,
+                "writer_segment_preflight",
+                "writer",
+                None,
+                f"Writer segment prepared: {segment['segment_name']}",
+                payload,
+            )
+            segment_md = await self._writer_segment_markdown(
+                record,
+                segment=segment,
+                timeout_seconds=timeout_seconds,
+                language_guidance=language_guidance,
+                memory_context=memory_context,
+                layer_context=layer_context,
+                required_sections=required_sections,
+                retry_count=0,
+            )
+            invalid_sources = evidence_pack_result.validate_segment_citations(
+                segment_md,
+                allowed_source_ids=set(segment["allowed_source_ids"]),
+            )
+            if invalid_sources:
+                segment_md = await self._writer_segment_markdown(
+                    record,
+                    segment=segment,
+                    timeout_seconds=timeout_seconds,
+                    language_guidance=language_guidance,
+                    memory_context=memory_context,
+                    layer_context=layer_context,
+                    required_sections=required_sections,
+                    retry_count=1,
+                    citation_error_ids=invalid_sources,
+                )
+            sections.append(segment_md.strip())
+        return "\n\n".join(section for section in sections if section)
+
+    async def _writer_segment_markdown(
+        self,
+        record: RunRecord,
+        *,
+        segment: dict[str, object],
+        timeout_seconds: float,
+        language_guidance: str,
+        memory_context: str,
+        layer_context: str,
+        required_sections: str,
+        retry_count: int,
+        citation_error_ids: list[str] | None = None,
+    ) -> str:
+        detail = record.detail
+        segment_json = json.dumps(segment, ensure_ascii=False)
+        citation_warning = ""
+        if citation_error_ids:
+            citation_warning = (
+                "Previous segment cited source IDs outside this segment: "
+                f"{', '.join(citation_error_ids)}. Rewrite using only allowed_source_ids.\n"
+            )
+        return await asyncio.wait_for(
+            self._trace_llm_text(
+                record,
+                agent="writer",
+                subagent=None,
+                name="report_writer_segment",
+                system=(
+                    "You are a senior enterprise competitive-intelligence analyst writing "
+                    "one section group of a larger markdown report. Return only markdown "
+                    "for this segment. Cite factual claims only with source IDs in "
+                    "allowed_source_ids. Do not invent source IDs. "
+                    f"{language_guidance}"
+                ),
+                user=(
+                    f"Topic: {detail.topic}\n"
+                    f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                    f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                    f"segment_name={segment['segment_name']}\n"
+                    f"retry_count={retry_count}\n"
+                    f"{citation_warning}"
+                    f"Confirmed Memory Preferences:\n{memory_context}\n"
+                    f"Layer Report Context: {layer_context}\n"
+                    f"{self._writer_community_policy_text()}\n"
+                    f"Segment Evidence Pack JSON: {segment_json}\n\n"
+                    f"Required sections for full report:\n{required_sections}\n"
+                    "Write with consulting depth for this segment. Keep support material "
+                    "concise and preserve [source:ID] citation syntax."
+                ),
+            ),
+            timeout=timeout_seconds,
+        )
 
     async def _writer_section_repair_markdown(
         self,

@@ -7269,6 +7269,89 @@ async def test_writer_uses_evidence_pack_context_and_emits_preflight(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    sources = [
+        RawSource(
+            id=f"cursor-source-{index}",
+            competitor="Cursor",
+            dimension="persona" if index % 2 else "pricing",
+            source_type="interview_record",
+            title=f"Cursor source {index}",
+            snippet=(
+                "Enterprise buyers evaluate Cursor for security review, onboarding, "
+                "budget control, repository-aware coding, rollout governance, and "
+                f"developer adoption signal {index}. "
+            )
+            * 6,
+            content_hash=f"cursor-source-{index}-hash",
+            confidence=0.82,
+        )
+        for index in range(40)
+    ]
+    detail = RunDetail(
+        id="run-segmented-pack",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=sources,
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    calls: list[str] = []
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        calls.append(kwargs["name"])
+        if "segment_name=decision_summary" in user:
+            return "## Executive Summary\nCursor has clear evidence. [source:cursor-source-0]"
+        if "segment_name=user_research" in user:
+            return (
+                "## User Review Themes\nEnterprise buyers cite rollout concerns. "
+                "[source:cursor-source-1]"
+            )
+        if "segment_name=competitor_deep_dives" in user:
+            return (
+                "## Competitor Deep Dives\nCursor has repository-aware workflows. "
+                "[source:cursor-source-2]"
+            )
+        if "segment_name=swot_matrix" in user:
+            return "## SWOT Analysis\nStrengths include adoption signal. [source:cursor-source-3]"
+        return "## Evidence Appendix\n- [source:cursor-source-0] Cursor source 0"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+    monkeypatch.setattr(
+        "packages.agents.writer.evidence_pack.SINGLE_CALL_CONTEXT_TARGET_CHARS",
+        100,
+    )
+
+    await service._real_writer_step(record)
+
+    assert "report_writer_segment" in calls
+    assert "report_writer" not in calls
+    assert "## Executive Summary" in record.detail.report_md
+    assert any(event.type == "writer_segment_preflight" for event in record.events)
+
+
+@pytest.mark.asyncio
 async def test_writer_section_repair_uses_evidence_pack_context(monkeypatch) -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
