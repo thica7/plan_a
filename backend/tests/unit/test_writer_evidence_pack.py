@@ -695,6 +695,47 @@ def test_community_clusters_project_compact_fact_sources_and_confidence() -> Non
     assert fact.confidence == 0.679
 
 
+def test_prompt_projection_hides_internal_fact_ids_that_resemble_source_ids() -> None:
+    source = RawSource(
+        id="raw-source-cursor-community",
+        competitor="Cursor",
+        dimension="feature",
+        source_type="reddit_thread",
+        title="Cursor community feature thread",
+        snippet="Community users report context and workflow limitations.",
+        content_hash="cursor-community-feature-hash",
+        confidence=0.82,
+        metadata={
+            "community_evidence": True,
+            "community_claim_clusters": [
+                {
+                    "kind": "feature_limitation",
+                    "label": "community_observed",
+                    "claim": "Community users report feature limitations in actual use.",
+                    "source_ids": ["raw-source-cursor-community"],
+                    "confidence": 0.71,
+                    "evidence": ["Context limits create workflow friction."],
+                }
+            ],
+        },
+    )
+
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+
+    assert result.pack.groups[0].facts[0].id == (
+        "fact:raw-source-cursor-community:community:1"
+    )
+    prompt_json = result.to_prompt_json()
+    segment_json = json.dumps(result.segment_inputs()[0], ensure_ascii=False)
+
+    assert "fact:raw-source-cursor-community:community:1" not in prompt_json
+    assert "fact:raw-source-cursor-community:community:1" not in segment_json
+    assert "signal:raw-source-cursor-community" not in prompt_json
+    assert "signal:raw-source-cursor-community" not in segment_json
+    assert '"source_ids": ["raw-source-cursor-community"]' in prompt_json
+    assert '"source_ids": ["raw-source-cursor-community"]' in segment_json
+
+
 def test_evidence_pack_preserves_every_kb_slice_with_provenance() -> None:
     findings = [
         (
@@ -1117,7 +1158,7 @@ def test_segment_inputs_partition_large_pack_without_dropping_sources() -> None:
                         "claim": f"{competitor} {dimension} claim {index}",
                         "source_quote": f"{quote} claim {index}",
                     }
-                    for index in range(3)
+                    for index in range(8)
                 ],
             }
             sources.append(
@@ -1808,6 +1849,28 @@ def test_segment_citation_validation_rejects_unsupplied_source_id() -> None:
     )
 
     assert errors == ["missing-source"]
+
+
+def test_segment_citation_validation_rejects_fact_derived_source_token() -> None:
+    source = RawSource(
+        id="raw-source-cursor-community",
+        competitor="Cursor",
+        dimension="feature",
+        source_type="reddit_thread",
+        title="Cursor community feature thread",
+        snippet="Community users report workflow friction.",
+        content_hash="cursor-community-feature-hash",
+        confidence=0.82,
+    )
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+
+    errors = result.validate_segment_citations(
+        "Community evidence is directional. "
+        "[source:raw-source-cursor-community:community:1]",
+        allowed_source_ids={"raw-source-cursor-community"},
+    )
+
+    assert errors == ["raw-source-cursor-community:community:1"]
 
 
 def test_segment_citation_validation_rejects_malformed_source_token() -> None:

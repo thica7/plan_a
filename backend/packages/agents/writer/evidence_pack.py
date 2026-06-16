@@ -179,7 +179,7 @@ class WriterEvidencePackResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
     def to_prompt_json(self) -> str:
-        return json.dumps(self.pack.model_dump(mode="json"), ensure_ascii=False)
+        return json.dumps(_prompt_safe_pack_payload(self.pack), ensure_ascii=False)
 
     def telemetry_payload(self) -> dict[str, object]:
         payload = self.metrics.model_dump(mode="json")
@@ -966,19 +966,7 @@ class WriterEvidencePackResult(BaseModel):
         return scoped_groups
 
     def _segment_registry_item(self, item: WriterSourceRegistryItem) -> dict[str, object]:
-        represented_by = list(item.represented_by)
-        return {
-            "id": item.id,
-            "competitor": item.competitor,
-            "covered_competitors": list(item.covered_competitors),
-            "dimension": item.dimension,
-            "source_type": item.source_type,
-            "title": item.title,
-            "confidence": item.confidence,
-            "represented_by": represented_by[:4],
-            "represented_by_count": len(represented_by),
-            "no_signal_reason": item.no_signal_reason,
-        }
+        return _prompt_safe_registry_item(item)
 
     def _group_payload(
         self,
@@ -987,91 +975,10 @@ class WriterEvidencePackResult(BaseModel):
         projection: Literal["full", "compact", "summary", "none"],
     ) -> dict[str, object]:
         if projection == "full":
-            return group.model_dump(mode="json")
+            return _prompt_safe_group_payload(group, projection="full")
         if projection == "none":
             return {}
-        base: dict[str, object] = {
-            "competitor": group.competitor,
-            "dimension": group.dimension,
-            "source_ids": list(group.source_ids),
-            "official_source_ids": list(group.official_source_ids),
-            "community_source_ids": list(group.community_source_ids),
-            "user_research_source_ids": list(group.user_research_source_ids),
-            "confidence_summary": dict(group.confidence_summary),
-            "coverage_notes": list(group.coverage_notes),
-            "fact_count": len(group.facts),
-            "unstructured_signal_count": len(group.unstructured_signals),
-            "kb_signal_count": len(group.kb_signals),
-            "conflict_count": len(group.conflicts),
-        }
-        if projection == "summary":
-            if group.conflicts:
-                base["conflicts"] = [
-                    {
-                        "id": conflict.id,
-                        "claim_area": conflict.claim_area,
-                        "positions": conflict.positions,
-                        "source_ids_by_position": conflict.source_ids_by_position,
-                        "resolution_status": conflict.resolution_status,
-                    }
-                    for conflict in group.conflicts
-                ]
-            return base
-        compact_facts = group.facts[:4]
-        compact_unstructured_signals = group.unstructured_signals[:2]
-        compact_kb_signals = group.kb_signals[:3]
-        base["facts_truncated_count"] = max(0, len(group.facts) - len(compact_facts))
-        base["unstructured_signals_truncated_count"] = max(
-            0,
-            len(group.unstructured_signals) - len(compact_unstructured_signals),
-        )
-
-        base["kb_signals_truncated_count"] = max(
-            0,
-            len(group.kb_signals) - len(compact_kb_signals),
-        )
-        base["facts"] = [
-            {
-                "id": fact.id,
-                "kind": fact.kind,
-                "competitor": fact.competitor,
-                "dimension": fact.dimension,
-                "values": _compact_segment_value(fact.values),
-                "source_ids": list(fact.source_ids),
-                "quote_ids": list(fact.quote_ids),
-                "confidence": fact.confidence,
-            }
-            for fact in compact_facts
-        ]
-        base["unstructured_signals"] = [
-            {
-                "id": signal.id,
-                "source_id": signal.source_id,
-                "competitor": signal.competitor,
-                "dimension": signal.dimension,
-                "source_type": signal.source_type,
-                "signal_summary": _trim(signal.signal_summary, 220),
-                "salient_terms": list(signal.salient_terms),
-                "confidence": signal.confidence,
-                "quote_ids": list(signal.quote_ids),
-            }
-            for signal in compact_unstructured_signals
-        ]
-        base["kb_signals"] = [
-            {
-                "id": signal.id,
-                "competitor": signal.competitor,
-                "dimension": signal.dimension,
-                "text": _trim(signal.text, 220),
-                "source_ids": list(signal.source_ids),
-                "merged_into": signal.merged_into,
-            }
-            for signal in compact_kb_signals
-        ]
-        base["conflicts"] = [
-            conflict.model_dump(mode="json") for conflict in group.conflicts
-        ]
-        return base
+        return _prompt_safe_group_payload(group, projection=projection)
 
     def _group_for_source_ids(
         self,
@@ -1179,17 +1086,7 @@ class WriterEvidencePackResult(BaseModel):
         return summary or {}
 
     def _segment_quote(self, quote: WriterQuote, *, compact: bool) -> dict[str, object]:
-        if not compact:
-            payload = quote.model_dump(mode="json")
-            payload["excerpt"] = _trim(quote.excerpt, 300)
-            return payload
-        return {
-            "id": quote.id,
-            "excerpt": _trim(quote.excerpt, 100),
-            "source_ids": list(quote.source_ids),
-            "confidence": quote.confidence,
-            "raw_quote_chars": quote.raw_quote_chars,
-        }
+        return _prompt_safe_quote_payload(quote, compact=compact)
 
     def _coverage_matrix(self) -> dict[str, object]:
         return {
@@ -1242,6 +1139,201 @@ class WriterEvidencePackResult(BaseModel):
             if source_id not in registry_ids or source_id not in allowed_source_ids:
                 invalid.append(source_id)
         return _unique(invalid)
+
+
+def _prompt_safe_pack_payload(pack: WriterEvidencePack) -> dict[str, object]:
+    return {
+        "schema_version": pack.schema_version,
+        "source_registry": [
+            _prompt_safe_registry_item(item) for item in pack.source_registry
+        ],
+        "groups": [
+            _prompt_safe_group_payload(group, projection="full")
+            for group in pack.groups
+        ],
+        "quotes": [
+            _prompt_safe_quote_payload(quote, compact=False) for quote in pack.quotes
+        ],
+        "matrix": pack.matrix,
+        "structured_knowledge": pack.structured_knowledge,
+        "coverage": pack.coverage,
+    }
+
+
+def _prompt_safe_registry_item(item: WriterSourceRegistryItem) -> dict[str, object]:
+    return {
+        "id": item.id,
+        "competitor": item.competitor,
+        "covered_competitors": list(item.covered_competitors),
+        "dimension": item.dimension,
+        "source_type": item.source_type,
+        "title": item.title,
+        "url": item.url,
+        "confidence": item.confidence,
+        "candidate_origin": item.candidate_origin,
+        "quality_score": item.quality_score,
+        "short_source_note": item.short_source_note,
+        "has_normalized_fields": item.has_normalized_fields,
+        "has_community_clusters": item.has_community_clusters,
+        "represented_by_count": len(item.represented_by),
+        "representation_types": _unique(
+            represented_by.split(":", 1)[0]
+            for represented_by in item.represented_by
+            if represented_by
+        ),
+        "no_signal_reason": item.no_signal_reason,
+    }
+
+
+def _prompt_safe_group_payload(
+    group: WriterEvidenceGroup,
+    *,
+    projection: Literal["full", "compact", "summary"],
+) -> dict[str, object]:
+    base: dict[str, object] = {
+        "competitor": group.competitor,
+        "dimension": group.dimension,
+        "source_ids": list(group.source_ids),
+        "official_source_ids": list(group.official_source_ids),
+        "community_source_ids": list(group.community_source_ids),
+        "user_research_source_ids": list(group.user_research_source_ids),
+        "confidence_summary": dict(group.confidence_summary),
+        "coverage_notes": list(group.coverage_notes),
+        "fact_count": len(group.facts),
+        "unstructured_signal_count": len(group.unstructured_signals),
+        "kb_signal_count": len(group.kb_signals),
+        "conflict_count": len(group.conflicts),
+    }
+    if projection == "summary":
+        if group.conflicts:
+            base["conflicts"] = [
+                _prompt_safe_conflict_payload(conflict)
+                for conflict in group.conflicts
+            ]
+        return base
+    if projection == "full":
+        base["facts"] = [
+            _prompt_safe_fact_payload(fact, compact=False) for fact in group.facts
+        ]
+        base["unstructured_signals"] = [
+            _prompt_safe_unstructured_signal_payload(signal, compact=False)
+            for signal in group.unstructured_signals
+        ]
+        base["kb_signals"] = [
+            _prompt_safe_kb_signal_payload(signal, compact=False)
+            for signal in group.kb_signals
+        ]
+        base["quotes"] = [
+            _prompt_safe_quote_payload(quote, compact=False)
+            for quote in group.quotes
+        ]
+        base["conflicts"] = [
+            _prompt_safe_conflict_payload(conflict)
+            for conflict in group.conflicts
+        ]
+        return base
+
+    compact_facts = group.facts[:4]
+    compact_unstructured_signals = group.unstructured_signals[:2]
+    compact_kb_signals = group.kb_signals[:3]
+    base["facts_truncated_count"] = max(0, len(group.facts) - len(compact_facts))
+    base["unstructured_signals_truncated_count"] = max(
+        0,
+        len(group.unstructured_signals) - len(compact_unstructured_signals),
+    )
+    base["kb_signals_truncated_count"] = max(
+        0,
+        len(group.kb_signals) - len(compact_kb_signals),
+    )
+    base["facts"] = [
+        _prompt_safe_fact_payload(fact, compact=True) for fact in compact_facts
+    ]
+    base["unstructured_signals"] = [
+        _prompt_safe_unstructured_signal_payload(signal, compact=True)
+        for signal in compact_unstructured_signals
+    ]
+    base["kb_signals"] = [
+        _prompt_safe_kb_signal_payload(signal, compact=True)
+        for signal in compact_kb_signals
+    ]
+    base["conflicts"] = [
+        _prompt_safe_conflict_payload(conflict) for conflict in group.conflicts
+    ]
+    return base
+
+
+def _prompt_safe_fact_payload(
+    fact: WriterFact,
+    *,
+    compact: bool,
+) -> dict[str, object]:
+    values = _compact_segment_value(fact.values) if compact else fact.values
+    return {
+        "kind": fact.kind,
+        "competitor": fact.competitor,
+        "dimension": fact.dimension,
+        "values": values,
+        "source_ids": list(fact.source_ids),
+        "quote_ids": list(fact.quote_ids),
+        "confidence": fact.confidence,
+    }
+
+
+def _prompt_safe_unstructured_signal_payload(
+    signal: WriterUnstructuredSignal,
+    *,
+    compact: bool,
+) -> dict[str, object]:
+    return {
+        "source_id": signal.source_id,
+        "competitor": signal.competitor,
+        "dimension": signal.dimension,
+        "source_type": signal.source_type,
+        "signal_summary": _trim(signal.signal_summary, 220 if compact else 420),
+        "salient_terms": list(signal.salient_terms),
+        "confidence": signal.confidence,
+        "quote_ids": list(signal.quote_ids),
+    }
+
+
+def _prompt_safe_kb_signal_payload(
+    signal: WriterKBSignal,
+    *,
+    compact: bool,
+) -> dict[str, object]:
+    return {
+        "competitor": signal.competitor,
+        "dimension": signal.dimension,
+        "text": _trim(signal.text, 220 if compact else STRUCTURED_KNOWLEDGE_TEXT_LIMIT),
+        "source_ids": list(signal.source_ids),
+        "merged_into_present": bool(signal.merged_into),
+    }
+
+
+def _prompt_safe_conflict_payload(conflict: WriterConflict) -> dict[str, object]:
+    return {
+        "claim_area": conflict.claim_area,
+        "positions": dict(conflict.positions),
+        "source_ids_by_position": dict(conflict.source_ids_by_position),
+        "confidence_by_position": dict(conflict.confidence_by_position),
+        "resolution_status": conflict.resolution_status,
+    }
+
+
+def _prompt_safe_quote_payload(
+    quote: WriterQuote,
+    *,
+    compact: bool,
+) -> dict[str, object]:
+    return {
+        "id": quote.id,
+        "excerpt": _trim(quote.excerpt, 100 if compact else 300),
+        "full_text_source_ids": list(quote.full_text_source_ids),
+        "source_ids": list(quote.source_ids),
+        "used_by_fact_count": len(quote.used_by_fact_ids),
+        "confidence": quote.confidence,
+        "raw_quote_chars": quote.raw_quote_chars,
+    }
 
 
 USER_RESEARCH_SOURCE_TYPES = {
@@ -1695,13 +1787,23 @@ class _WriterEvidencePackBuilder:
         return compact if compact not in ({}, []) else None
 
     def _metrics(self, pack: WriterEvidencePack) -> WriterEvidencePackMetrics:
-        prompt_json = json.dumps(pack.model_dump(mode="json"), ensure_ascii=False)
+        prompt_json = json.dumps(_prompt_safe_pack_payload(pack), ensure_ascii=False)
         group_sizes = [
-            len(json.dumps(group.model_dump(mode="json"), ensure_ascii=False))
+            len(
+                json.dumps(
+                    _prompt_safe_group_payload(group, projection="full"),
+                    ensure_ascii=False,
+                )
+            )
             for group in pack.groups
         ]
         quote_sizes = [
-            len(json.dumps(quote.model_dump(mode="json"), ensure_ascii=False))
+            len(
+                json.dumps(
+                    _prompt_safe_quote_payload(quote, compact=False),
+                    ensure_ascii=False,
+                )
+            )
             for quote in pack.quotes
         ]
         represented_count = sum(1 for item in pack.source_registry if item.represented_by)
@@ -1762,21 +1864,24 @@ class _WriterEvidencePackBuilder:
         source_projection_sizes: list[int] = []
         for item in pack.source_registry:
             source_projection = {
-                "registry_item": item.model_dump(mode="json"),
+                "registry_item": _prompt_safe_registry_item(item),
                 "unstructured_signals": [
-                    signal.model_dump(mode="json")
+                    _prompt_safe_unstructured_signal_payload(
+                        signal,
+                        compact=False,
+                    )
                     for group in pack.groups
                     for signal in group.unstructured_signals
                     if signal.source_id == item.id
                 ],
                 "facts": [
-                    fact.model_dump(mode="json")
+                    _prompt_safe_fact_payload(fact, compact=False)
                     for group in pack.groups
                     for fact in group.facts
                     if item.id in fact.source_ids
                 ],
                 "quotes": [
-                    quote.model_dump(mode="json")
+                    _prompt_safe_quote_payload(quote, compact=False)
                     for quote in pack.quotes
                     if item.id in quote.source_ids
                     or item.id in quote.full_text_source_ids
