@@ -4,6 +4,7 @@ import json
 
 from packages.agents.writer.evidence_pack import (
     QUOTE_EXCERPT_LIMIT,
+    SEGMENT_INPUT_TARGET_CHARS,
     WriterEvidencePack,
     WriterEvidencePackMetrics,
     WriterEvidencePackResult,
@@ -1107,7 +1108,6 @@ def test_segment_inputs_partition_large_pack_without_dropping_sources() -> None:
                 "constraints for competitive analysis. "
             ) * 10
             metadata = {
-                "community_evidence": dimension != "persona",
                 "normalized_fields": [
                     {
                         "kind": dimension,
@@ -1127,7 +1127,7 @@ def test_segment_inputs_partition_large_pack_without_dropping_sources() -> None:
                     source_type=(
                         "interview_record"
                         if dimension == "persona"
-                        else "reddit_thread"
+                        else "webpage_verified"
                     ),
                     title=f"{competitor} {dimension}",
                     snippet=quote,
@@ -1176,6 +1176,177 @@ def test_segment_inputs_partition_large_pack_without_dropping_sources() -> None:
     assert "cursor-pricing" not in user_research["allowed_source_ids"]
     assert "cursor-feature" not in user_research["allowed_source_ids"]
     assert "cursor-security" not in user_research["allowed_source_ids"]
+
+
+def test_user_research_segment_includes_user_sources_in_non_user_dimensions() -> None:
+    sources = [
+        RawSource(
+            id="cursor-pricing-interview",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="interview_record",
+            title="Cursor pricing interview",
+            snippet="A buyer interview reports pricing approval friction.",
+            content_hash="cursor-pricing-interview-hash",
+            confidence=0.84,
+        ),
+        RawSource(
+            id="cursor-security-official",
+            competitor="Cursor",
+            dimension="security",
+            source_type="webpage_verified",
+            title="Cursor security",
+            snippet="Cursor publishes enterprise security controls.",
+            content_hash="cursor-security-official-hash",
+            confidence=0.92,
+        ),
+    ]
+    detail = _detail_with_sources(sources)
+    detail.plan.dimensions = ["pricing", "security"]
+
+    result = build_writer_evidence_pack(detail)
+    user_research = {
+        segment["segment_name"]: segment for segment in result.segment_inputs()
+    }["user_research"]
+
+    assert "cursor-pricing-interview" in user_research["allowed_source_ids"]
+    assert "cursor-security-official" not in user_research["allowed_source_ids"]
+    assert [group["dimension"] for group in user_research["groups"]] == ["pricing"]
+
+
+def test_user_research_segments_stay_under_absolute_budget() -> None:
+    quote_base = (
+        "Customer feedback describes onboarding friction, pricing review, team "
+        "adoption concerns, administrative controls, and renewal decision criteria. "
+    )
+    sources = [
+        RawSource(
+            id=f"cursor-customer-interview-{source_index}",
+            competitor="Cursor",
+            dimension="customer_feedback",
+            source_type="interview_record",
+            title=f"Cursor customer interview {source_index}",
+            snippet=(
+                f"Customer interview {source_index} reports adoption and "
+                "procurement feedback."
+            ),
+            content_hash=f"cursor-customer-interview-{source_index}-hash",
+            confidence=0.86,
+            metadata={
+                "normalized_fields": [
+                    {
+                        "kind": "customer_feedback",
+                        "dimension": "customer_feedback",
+                        "competitor": "Cursor",
+                        "theme": f"feedback-theme-{source_index}-{field_index}",
+                        "sentiment": "mixed",
+                        "buyer_role": "engineering leader",
+                        "source_quote": (
+                            f"{quote_base} source={source_index} field={field_index}. "
+                            * 12
+                        ),
+                    }
+                    for field_index in range(24)
+                ]
+            },
+        )
+        for source_index in range(10)
+    ]
+    detail = _detail_with_sources(sources)
+    detail.plan.competitors = ["Cursor"]
+    detail.plan.dimensions = ["customer_feedback"]
+
+    result = build_writer_evidence_pack(detail)
+    segments = result.segment_inputs()
+    registry_ids = {item.id for item in result.pack.source_registry}
+    union_segment_ids = {
+        source_id
+        for segment in segments
+        for source_id in segment["allowed_source_ids"]
+    }
+
+    assert max(segment["segment_input_chars"] for segment in segments) < (
+        SEGMENT_INPUT_TARGET_CHARS
+    )
+    assert union_segment_ids == registry_ids
+    assert any(segment["segment_name"] == "user_research" for segment in segments)
+
+
+def test_competitor_deep_dive_segments_stay_under_absolute_budget() -> None:
+    quote_base = (
+        "Pricing evidence covers batch priority models, cached input, output, "
+        "long context, enterprise controls, procurement review, and rollout risk. "
+    )
+    sources = [
+        RawSource(
+            id=f"openai-pricing-{source_index}",
+            competitor="OpenAI Codex",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title=f"OpenAI pricing source {source_index}",
+            snippet=f"OpenAI pricing source {source_index} includes detailed model rows.",
+            content_hash=f"openai-pricing-{source_index}-hash",
+            confidence=0.94,
+            metadata={
+                "normalized_fields": [
+                    {
+                        "kind": "pricing",
+                        "dimension": "pricing",
+                        "competitor": "OpenAI Codex",
+                        "model_type": "api_usage_based",
+                        "tier_name": f"gpt-heavy-{source_index}-{field_index}",
+                        "price": f"${source_index}{field_index}.00",
+                        "billing_cycle": "per 1m",
+                        "usage_limit": "long context",
+                        "enterprise_condition": "enterprise_available",
+                        "source_quote": (
+                            f"{quote_base} source={source_index} field={field_index}. "
+                            * 12
+                        ),
+                    }
+                    for field_index in range(24)
+                ]
+            },
+        )
+        for source_index in range(10)
+    ]
+    detail = _detail_with_sources(sources)
+    detail.plan.competitors = ["OpenAI Codex"]
+    detail.plan.dimensions = ["pricing"]
+    detail.competitor_kbs = {
+        "OpenAI Codex": CompetitorKB(
+            competitor="OpenAI Codex",
+            sources=[source.id for source in sources],
+            slices={
+                "pricing": [
+                    (
+                        f"OpenAI pricing KB slice {index} explains pricing model rows, "
+                        "enterprise constraints, context limits, and buyer validation needs."
+                    )
+                    for index in range(40)
+                ]
+            },
+        )
+    }
+
+    result = build_writer_evidence_pack(detail)
+    segments = result.segment_inputs()
+    registry_ids = {item.id for item in result.pack.source_registry}
+    union_segment_ids = {
+        source_id
+        for segment in segments
+        for source_id in segment["allowed_source_ids"]
+    }
+
+    assert max(segment["segment_input_chars"] for segment in segments) < (
+        SEGMENT_INPUT_TARGET_CHARS
+    )
+    assert union_segment_ids == registry_ids
+    assert any(
+        segment["segment_name"] == "competitor_deep_dives"
+        and segment.get("segment_competitor") == "OpenAI Codex"
+        for segment in segments
+    )
 
 
 def test_segment_matrix_filters_source_ids_outside_allowed_segment_sources() -> None:

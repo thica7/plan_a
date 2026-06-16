@@ -4,7 +4,7 @@ import json
 import math
 import re
 from collections.abc import Iterable, Mapping
-from typing import Literal
+from typing import Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,6 +22,10 @@ QUOTE_USED_BY_FACT_LIMIT = 12
 STRUCTURED_KNOWLEDGE_LIST_LIMIT = 8
 STRUCTURED_KNOWLEDGE_TEXT_LIMIT = 700
 SINGLE_CALL_CONTEXT_TARGET_CHARS = 160_000
+SEGMENT_INPUT_TARGET_CHARS = SINGLE_CALL_CONTEXT_TARGET_CHARS
+SEGMENT_SOURCE_BATCH_SIZE = 4
+SEGMENT_FACT_BATCH_SIZE = 32
+T = TypeVar("T")
 NORMALIZED_FIELD_DROP_KEYS = {
     "kind",
     "competitor",
@@ -214,7 +218,11 @@ class WriterEvidencePackResult(BaseModel):
         all_source_ids = [item.id for item in self.pack.source_registry]
         all_competitors = _unique(group.competitor for group in groups)
         user_research_groups = [
-            group for group in groups if _is_user_research_dimension(group.dimension)
+            group
+            for group in groups
+            if _is_user_research_dimension(group.dimension)
+            or group.user_research_source_ids
+            or group.community_source_ids
         ]
         segments = [
             self._segment(
@@ -227,33 +235,14 @@ class WriterEvidencePackResult(BaseModel):
                 structured_competitors=all_competitors,
                 structured_projection="compact",
             ),
-            self._segment(
-                "user_research",
-                groups=user_research_groups,
-                group_projection="full",
-                quote_projection="full",
-                matrix_projection="compact",
-                structured_competitors=_unique(
-                    group.competitor for group in user_research_groups
-                ),
-                structured_projection="compact",
-            ),
         ]
+        segments.extend(self._user_research_segments(user_research_groups))
         for competitor in all_competitors:
             competitor_groups = [
                 group for group in groups if group.competitor == competitor
             ]
-            segments.append(
-                self._segment(
-                    "competitor_deep_dives",
-                    groups=competitor_groups,
-                    group_projection="full",
-                    quote_projection="full",
-                    matrix_projection="compact",
-                    structured_competitors=[competitor],
-                    structured_projection="full",
-                    segment_competitor=competitor,
-                )
+            segments.extend(
+                self._competitor_deep_dive_segments(competitor, competitor_groups)
             )
         segments.extend(
             [
@@ -282,18 +271,261 @@ class WriterEvidencePackResult(BaseModel):
         )
         return segments
 
+    def _user_research_segments(
+        self,
+        groups: list[WriterEvidenceGroup],
+    ) -> list[dict[str, object]]:
+        segment = self._segment(
+            "user_research",
+            groups=groups,
+            group_projection="full",
+            quote_projection="full",
+            matrix_projection="compact",
+            structured_competitors=_unique(group.competitor for group in groups),
+            structured_projection="compact",
+        )
+        if segment["segment_input_chars"] < SEGMENT_INPUT_TARGET_CHARS:
+            return [segment]
+        segments: list[dict[str, object]] = []
+        for group in groups:
+            group_segment = self._segment(
+                "user_research",
+                groups=[group],
+                group_projection="full",
+                quote_projection="full",
+                matrix_projection="compact",
+                structured_competitors=[group.competitor],
+                structured_projection="compact",
+                segment_competitor=group.competitor,
+                segment_dimension=group.dimension,
+            )
+            if group_segment["segment_input_chars"] < SEGMENT_INPUT_TARGET_CHARS:
+                segments.append(group_segment)
+                continue
+            segments.extend(self._split_user_research_group_segments(group))
+        return segments
+
+    def _split_user_research_group_segments(
+        self,
+        group: WriterEvidenceGroup,
+    ) -> list[dict[str, object]]:
+        segments: list[dict[str, object]] = []
+        source_ids = self._source_ids_for_groups([group])
+        if len(source_ids) > 1:
+            for batch_index, source_batch in enumerate(
+                _chunked(source_ids, SEGMENT_SOURCE_BATCH_SIZE),
+                start=1,
+            ):
+                sliced_group = self._group_for_source_ids(group, source_batch)
+                source_segment = self._segment(
+                    "user_research",
+                    groups=[sliced_group],
+                    group_projection="full",
+                    quote_projection="full",
+                    matrix_projection="compact",
+                    structured_competitors=[group.competitor],
+                    structured_projection="compact",
+                    segment_competitor=group.competitor,
+                    segment_dimension=group.dimension,
+                    segment_batch=f"sources:{batch_index}",
+                )
+                if source_segment["segment_input_chars"] < SEGMENT_INPUT_TARGET_CHARS:
+                    segments.append(source_segment)
+                    continue
+                segments.extend(
+                    self._split_user_research_fact_segments(
+                        sliced_group,
+                        batch_prefix=f"sources:{batch_index}",
+                    )
+                )
+            return segments
+        return self._split_user_research_fact_segments(group, batch_prefix="facts")
+
+    def _split_user_research_fact_segments(
+        self,
+        group: WriterEvidenceGroup,
+        *,
+        batch_prefix: str,
+    ) -> list[dict[str, object]]:
+        if not group.facts:
+            return [
+                self._segment(
+                    "user_research",
+                    groups=[group],
+                    group_projection="compact",
+                    quote_projection="compact",
+                    matrix_projection="compact",
+                    structured_competitors=[group.competitor],
+                    structured_projection="compact",
+                    segment_competitor=group.competitor,
+                    segment_dimension=group.dimension,
+                    segment_batch=batch_prefix,
+                )
+            ]
+        segments: list[dict[str, object]] = []
+        for batch_index, facts in enumerate(
+            _chunked(group.facts, SEGMENT_FACT_BATCH_SIZE),
+            start=1,
+        ):
+            fact_source_ids = _unique(
+                source_id for fact in facts for source_id in fact.source_ids
+            )
+            if not fact_source_ids:
+                fact_source_ids = self._source_ids_for_groups([group])
+            sliced_group = self._group_for_source_ids(group, fact_source_ids)
+            sliced_group = sliced_group.model_copy(update={"facts": facts})
+            segments.append(
+                self._segment(
+                    "user_research",
+                    groups=[sliced_group],
+                    group_projection="full",
+                    quote_projection="full_referenced",
+                    matrix_projection="compact",
+                    structured_competitors=[group.competitor],
+                    structured_projection="compact",
+                    segment_competitor=group.competitor,
+                    segment_dimension=group.dimension,
+                    segment_batch=f"{batch_prefix}:facts:{batch_index}",
+                )
+            )
+        return segments
+
+    def _competitor_deep_dive_segments(
+        self,
+        competitor: str,
+        groups: list[WriterEvidenceGroup],
+    ) -> list[dict[str, object]]:
+        segment = self._segment(
+            "competitor_deep_dives",
+            groups=groups,
+            group_projection="full",
+            quote_projection="full",
+            matrix_projection="compact",
+            structured_competitors=[competitor],
+            structured_projection="full",
+            segment_competitor=competitor,
+        )
+        if segment["segment_input_chars"] < SEGMENT_INPUT_TARGET_CHARS:
+            return [segment]
+        segments: list[dict[str, object]] = []
+        for group in groups:
+            dimension_segment = self._segment(
+                "competitor_deep_dives",
+                groups=[group],
+                group_projection="full",
+                quote_projection="full",
+                matrix_projection="compact",
+                structured_competitors=[competitor],
+                structured_projection="full",
+                segment_competitor=competitor,
+                segment_dimension=group.dimension,
+            )
+            if dimension_segment["segment_input_chars"] < SEGMENT_INPUT_TARGET_CHARS:
+                segments.append(dimension_segment)
+                continue
+            segments.extend(self._split_group_segments(competitor, group))
+        return segments
+
+    def _split_group_segments(
+        self,
+        competitor: str,
+        group: WriterEvidenceGroup,
+    ) -> list[dict[str, object]]:
+        segments: list[dict[str, object]] = []
+        source_ids = self._source_ids_for_groups([group])
+        if len(source_ids) > 1:
+            for batch_index, source_batch in enumerate(
+                _chunked(source_ids, SEGMENT_SOURCE_BATCH_SIZE),
+                start=1,
+            ):
+                sliced_group = self._group_for_source_ids(group, source_batch)
+                source_segment = self._segment(
+                    "competitor_deep_dives",
+                    groups=[sliced_group],
+                    group_projection="full",
+                    quote_projection="full",
+                    matrix_projection="compact",
+                    structured_competitors=[competitor],
+                    structured_projection="full",
+                    segment_competitor=competitor,
+                    segment_dimension=group.dimension,
+                    segment_batch=f"sources:{batch_index}",
+                )
+                if source_segment["segment_input_chars"] < SEGMENT_INPUT_TARGET_CHARS:
+                    segments.append(source_segment)
+                    continue
+                segments.extend(
+                    self._split_group_fact_segments(
+                        competitor,
+                        sliced_group,
+                        batch_prefix=f"sources:{batch_index}",
+                    )
+                )
+            return segments
+        return self._split_group_fact_segments(competitor, group, batch_prefix="facts")
+
+    def _split_group_fact_segments(
+        self,
+        competitor: str,
+        group: WriterEvidenceGroup,
+        *,
+        batch_prefix: str,
+    ) -> list[dict[str, object]]:
+        if not group.facts:
+            return [
+                self._segment(
+                    "competitor_deep_dives",
+                    groups=[group],
+                    group_projection="compact",
+                    quote_projection="compact",
+                    matrix_projection="compact",
+                    structured_competitors=[competitor],
+                    structured_projection="compact",
+                    segment_competitor=competitor,
+                    segment_dimension=group.dimension,
+                    segment_batch=batch_prefix,
+                )
+            ]
+        segments: list[dict[str, object]] = []
+        for batch_index, facts in enumerate(
+            _chunked(group.facts, SEGMENT_FACT_BATCH_SIZE),
+            start=1,
+        ):
+            fact_source_ids = _unique(
+                source_id for fact in facts for source_id in fact.source_ids
+            )
+            sliced_group = self._group_for_source_ids(group, fact_source_ids)
+            sliced_group = sliced_group.model_copy(update={"facts": facts})
+            segments.append(
+                self._segment(
+                    "competitor_deep_dives",
+                    groups=[sliced_group],
+                    group_projection="full",
+                    quote_projection="full_referenced",
+                    matrix_projection="compact",
+                    structured_competitors=[competitor],
+                    structured_projection="full",
+                    segment_competitor=competitor,
+                    segment_dimension=group.dimension,
+                    segment_batch=f"{batch_prefix}:facts:{batch_index}",
+                )
+            )
+        return segments
+
     def _segment(
         self,
         name: str,
         *,
         groups: list[WriterEvidenceGroup],
         group_projection: Literal["full", "compact", "summary", "none"],
-        quote_projection: Literal["full", "compact", "none"],
+        quote_projection: Literal["full", "full_referenced", "compact", "none"],
         matrix_projection: Literal["compact", "coverage"],
         structured_competitors: list[str],
         structured_projection: Literal["full", "compact"],
         allowed_source_ids: list[str] | None = None,
         segment_competitor: str | None = None,
+        segment_dimension: str | None = None,
+        segment_batch: str | None = None,
         include_coverage: bool = False,
     ) -> dict[str, object]:
         registry_ids = {item.id for item in self.pack.source_registry}
@@ -330,6 +562,8 @@ class WriterEvidencePackResult(BaseModel):
             "schema_version": self.pack.schema_version,
             "segment_name": name,
             "segment_competitor": segment_competitor,
+            "segment_dimension": segment_dimension,
+            "segment_batch": segment_batch,
             "source_registry": [
                 self._segment_registry_item(item)
                 for item in self.pack.source_registry
@@ -466,6 +700,7 @@ class WriterEvidencePackResult(BaseModel):
             0,
             len(group.unstructured_signals) - len(compact_unstructured_signals),
         )
+
         base["kb_signals_truncated_count"] = max(
             0,
             len(group.kb_signals) - len(compact_kb_signals),
@@ -512,6 +747,86 @@ class WriterEvidencePackResult(BaseModel):
             conflict.model_dump(mode="json") for conflict in group.conflicts
         ]
         return base
+
+    def _group_for_source_ids(
+        self,
+        group: WriterEvidenceGroup,
+        source_ids: list[str],
+    ) -> WriterEvidenceGroup:
+        source_id_set = set(source_ids)
+        kb_signals = []
+        for signal in group.kb_signals:
+            signal_source_ids = [
+                source_id
+                for source_id in signal.source_ids
+                if source_id in source_id_set
+            ]
+            if signal_source_ids:
+                kb_signals.append(
+                    signal.model_copy(update={"source_ids": signal_source_ids})
+                )
+        conflicts = []
+        for conflict in group.conflicts:
+            source_ids_by_position = {
+                position: [
+                    source_id
+                    for source_id in position_source_ids
+                    if source_id in source_id_set
+                ]
+                for position, position_source_ids in conflict.source_ids_by_position.items()
+            }
+            source_ids_by_position = {
+                position: position_source_ids
+                for position, position_source_ids in source_ids_by_position.items()
+                if position_source_ids
+            }
+            if source_ids_by_position:
+                conflicts.append(
+                    conflict.model_copy(
+                        update={"source_ids_by_position": source_ids_by_position}
+                    )
+                )
+        return group.model_copy(
+            update={
+                "source_ids": [
+                    source_id
+                    for source_id in group.source_ids
+                    if source_id in source_id_set
+                ],
+                "official_source_ids": [
+                    source_id
+                    for source_id in group.official_source_ids
+                    if source_id in source_id_set
+                ],
+                "community_source_ids": [
+                    source_id
+                    for source_id in group.community_source_ids
+                    if source_id in source_id_set
+                ],
+                "user_research_source_ids": [
+                    source_id
+                    for source_id in group.user_research_source_ids
+                    if source_id in source_id_set
+                ],
+                "facts": [
+                    fact
+                    for fact in group.facts
+                    if any(source_id in source_id_set for source_id in fact.source_ids)
+                ],
+                "unstructured_signals": [
+                    signal
+                    for signal in group.unstructured_signals
+                    if signal.source_id in source_id_set
+                ],
+                "kb_signals": kb_signals,
+                "quotes": [
+                    quote
+                    for quote in group.quotes
+                    if any(source_id in source_id_set for source_id in quote.source_ids)
+                ],
+                "conflicts": conflicts,
+            }
+        )
 
     def _segment_structured_knowledge_item(
         self,
@@ -1138,6 +1453,12 @@ class _WriterEvidencePackBuilder:
                 len(json.dumps(source_projection, ensure_ascii=False))
             )
         return max(source_projection_sizes, default=0)
+
+
+def _chunked(values: list[T], size: int) -> Iterable[list[T]]:
+    chunk_size = max(1, size)
+    for index in range(0, len(values), chunk_size):
+        yield values[index : index + chunk_size]
 
 
 def _clean(value: str) -> str:
