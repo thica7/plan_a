@@ -346,6 +346,13 @@ class WriterEvidencePackResult(BaseModel):
             "segment_input_target_chars": SEGMENT_INPUT_TARGET_CHARS,
         }
         payload["repair_input_chars"] = len(json.dumps(payload, ensure_ascii=False))
+        if payload["repair_input_chars"] > SEGMENT_INPUT_TARGET_CHARS:
+            payload["repair_over_budget_reason"] = (
+                "single_repair_segment_exceeds_budget"
+                if len(segments) <= 1
+                else "repair_batch_exceeds_budget"
+            )
+            payload["repair_input_chars"] = len(json.dumps(payload, ensure_ascii=False))
         return payload
 
     def _budgeted_source_segments(

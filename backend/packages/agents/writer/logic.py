@@ -859,7 +859,7 @@ class WriterAgentMixin:
                     ),
                 )
             )
-        return "\n\n".join(section.strip() for section in repaired_sections if section.strip())
+        return self._join_section_repair_parts(repaired_sections, section_headings)
 
     def _writer_community_policy_text(self) -> str:
         return (
@@ -876,6 +876,35 @@ class WriterAgentMixin:
         except KeyError:
             heading = section
         return f"{section} -> ## {heading}"
+
+    def _join_section_repair_parts(
+        self,
+        parts: Sequence[str],
+        section_headings: str,
+    ) -> str:
+        requested_headings = {
+            line.split("->", 1)[1].strip()
+            for line in section_headings.splitlines()
+            if "->" in line
+        }
+        seen_headings: set[str] = set()
+        cleaned_parts: list[str] = []
+        for part in parts:
+            cleaned_lines: list[str] = []
+            for line in part.strip().splitlines():
+                heading = line.strip()
+                is_top_level_heading = heading.startswith("## ") and not heading.startswith(
+                    "### "
+                )
+                if heading in requested_headings or is_top_level_heading:
+                    if heading in seen_headings:
+                        continue
+                    seen_headings.add(heading)
+                cleaned_lines.append(line)
+            cleaned_part = "\n".join(cleaned_lines).strip()
+            if cleaned_part:
+                cleaned_parts.append(cleaned_part)
+        return "\n\n".join(cleaned_parts)
 
     def _preserve_hardened_previous_report(
         self,

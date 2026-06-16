@@ -1478,6 +1478,73 @@ def test_repair_segment_inputs_partition_large_competitor_section_by_child_segme
             assert payload["repair_input_chars"] <= SEGMENT_INPUT_TARGET_CHARS
 
 
+def test_repair_segment_inputs_mark_wrapper_budget_overflow(monkeypatch) -> None:
+    result = WriterEvidencePackResult(
+        pack=WriterEvidencePack(
+            source_registry=[
+                WriterSourceRegistryItem(
+                    id="cursor-near-budget",
+                    competitor="Cursor",
+                    dimension="pricing",
+                    source_type="webpage_verified",
+                    title="Cursor near-budget source",
+                    confidence=0.95,
+                    represented_by=["fact:cursor-near-budget"],
+                )
+            ]
+        ),
+        metrics=WriterEvidencePackMetrics(),
+    )
+
+    def make_segment(filler_chars: int) -> dict[str, object]:
+        segment: dict[str, object] = {
+            "schema_version": "writer_evidence_pack.v1",
+            "segment_name": "competitor_deep_dives",
+            "segment_competitor": "Cursor",
+            "segment_dimension": "pricing",
+            "segment_batch": "facts:1",
+            "source_registry": [{"id": "cursor-near-budget"}],
+            "groups": [],
+            "quotes": [],
+            "matrix": {},
+            "structured_knowledge": {},
+            "allowed_source_ids": ["cursor-near-budget"],
+            "near_budget_padding": "x" * filler_chars,
+        }
+        for _ in range(3):
+            segment["segment_input_chars"] = len(
+                json.dumps(segment, ensure_ascii=False)
+            )
+        return segment
+
+    selected_segment = None
+    selected_payload = None
+    for filler_chars in range(SEGMENT_INPUT_TARGET_CHARS, 0, -25):
+        candidate = make_segment(filler_chars)
+        monkeypatch.setattr(
+            WriterEvidencePackResult,
+            "segment_inputs",
+            lambda self, candidate=candidate: [candidate],
+        )
+        payload = result.repair_segment_inputs(["competitor_deep_dives"])[0]
+        if (
+            candidate["segment_input_chars"] <= SEGMENT_INPUT_TARGET_CHARS
+            and payload["repair_input_chars"] > SEGMENT_INPUT_TARGET_CHARS
+        ):
+            selected_segment = candidate
+            selected_payload = payload
+            break
+
+    assert selected_segment is not None
+    assert selected_payload is not None
+    assert selected_payload["repair_input_chars"] <= SEGMENT_INPUT_TARGET_CHARS or (
+        selected_payload.get("repair_over_budget_reason")
+        == "single_repair_segment_exceeds_budget"
+        or selected_payload["segments"][0].get("segment_over_budget_reason")
+        in {"single_fact_exceeds_budget", "single_source_exceeds_budget"}
+    )
+
+
 def test_source_batched_segments_trim_deduped_fact_source_ids() -> None:
     heavy_fact_value = (
         "Pricing evidence includes model rows, procurement notes, rollout "

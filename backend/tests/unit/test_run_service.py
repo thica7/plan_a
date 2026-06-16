@@ -8069,6 +8069,7 @@ async def test_writer_section_repair_iterates_budgeted_segment_payloads(
     assert '"repair_part": 2' in calls[1]
     assert "Part 1 cites" in result
     assert "Part 2 cites" in result
+    assert result.count("## Competitor Deep Dives") == 1
     assert preflight_event is not None
     assert preflight_event.payload["writer_repair_mode"] == "section"
     assert preflight_event.payload["writer_repair_sections"] == [
