@@ -5,6 +5,7 @@ import json
 from packages.agents.writer.evidence_pack import (
     QUOTE_EXCERPT_LIMIT,
     SEGMENT_INPUT_TARGET_CHARS,
+    SEGMENT_SOURCE_BATCH_SIZE,
     WriterEvidencePack,
     WriterEvidencePackMetrics,
     WriterEvidencePackResult,
@@ -1368,6 +1369,145 @@ def test_competitor_deep_dive_segments_stay_under_absolute_budget() -> None:
         and segment.get("segment_competitor") == "OpenAI Codex"
         for segment in segments
     )
+
+
+def test_source_batched_segments_trim_deduped_fact_source_ids() -> None:
+    heavy_fact_value = (
+        "Pricing evidence includes model rows, procurement notes, rollout "
+        "constraints, billing assumptions, context windows, and enterprise "
+        "conditions. "
+        * 50
+    )
+    sources = []
+    for source_index in range(12):
+        normalized_fields = [
+            {
+                "kind": "pricing",
+                "dimension": "pricing",
+                "competitor": "OpenAI Codex",
+                "model_type": "api_usage_based",
+                "tier_name": "Shared enterprise",
+                "price": "$99.00",
+                "billing_cycle": "per month",
+                "usage_limit": "shared context",
+                "enterprise_condition": "enterprise_available",
+                "source_quote": (
+                    "Shared enterprise pricing is available for rollout planning."
+                ),
+            }
+        ]
+        normalized_fields.extend(
+            {
+                "kind": "pricing",
+                "dimension": "pricing",
+                "competitor": "OpenAI Codex",
+                "model_type": "api_usage_based",
+                "tier_name": f"Unique {source_index}-{field_index}",
+                "price": f"${source_index}{field_index}.00",
+                "billing_cycle": "per 1m",
+                "usage_limit": "long context",
+                "enterprise_condition": "enterprise_available",
+                "detailed_pricing_note": (
+                    f"{heavy_fact_value} source={source_index} field={field_index}"
+                ),
+                **{
+                    f"detailed_pricing_note_{detail_index}": (
+                        f"{heavy_fact_value} detail={detail_index} "
+                        f"source={source_index} field={field_index}"
+                    )
+                    for detail_index in range(20)
+                },
+                "source_quote": (
+                    f"Unique pricing source={source_index} field={field_index}. " * 12
+                ),
+            }
+            for field_index in range(2)
+        )
+        sources.append(
+            RawSource(
+                id=f"openai-pricing-dedupe-{source_index}",
+                competitor="OpenAI Codex",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title=f"OpenAI pricing dedupe {source_index}",
+                snippet="OpenAI pricing includes shared and unique model rows.",
+                content_hash=f"openai-pricing-dedupe-{source_index}-hash",
+                confidence=0.93,
+                metadata={"normalized_fields": normalized_fields},
+            )
+        )
+    detail = _detail_with_sources(sources)
+    detail.plan.competitors = ["OpenAI Codex"]
+    detail.plan.dimensions = ["pricing"]
+
+    result = build_writer_evidence_pack(detail)
+    segments = result.segment_inputs()
+    source_batched_segments = [
+        segment
+        for segment in segments
+        if segment["segment_name"] == "competitor_deep_dives"
+        and str(segment.get("segment_batch") or "").startswith("sources:")
+    ]
+    registry_ids = {item.id for item in result.pack.source_registry}
+    union_segment_ids = {
+        source_id
+        for segment in segments
+        for source_id in segment["allowed_source_ids"]
+    }
+
+    assert source_batched_segments
+    assert union_segment_ids == registry_ids
+    for segment in source_batched_segments:
+        allowed = set(segment["allowed_source_ids"])
+        assert len(allowed) <= SEGMENT_SOURCE_BATCH_SIZE
+        assert segment["segment_input_chars"] <= SEGMENT_INPUT_TARGET_CHARS
+        for group in segment["groups"]:
+            for fact in group["facts"]:
+                assert set(fact["source_ids"]) <= allowed
+
+
+def test_segment_inputs_enforce_budget_for_broad_registry_segments() -> None:
+    sources = [
+        RawSource(
+            id=f"cursor-security-registry-{source_index}",
+            competitor="Cursor",
+            dimension="security",
+            source_type="webpage_verified",
+            title=f"Cursor security registry source {source_index}",
+            snippet=(
+                "Cursor security evidence covers SSO, audit logs, deployment "
+                f"controls, and procurement review item {source_index}."
+            ),
+            content_hash=f"cursor-security-registry-{source_index}-hash",
+            confidence=0.9,
+        )
+        for source_index in range(900)
+    ]
+    detail = _detail_with_sources(sources)
+    detail.plan.competitors = ["Cursor"]
+    detail.plan.dimensions = ["security"]
+
+    result = build_writer_evidence_pack(detail)
+    segments = result.segment_inputs()
+    registry_ids = {item.id for item in result.pack.source_registry}
+    union_segment_ids = {
+        source_id
+        for segment in segments
+        for source_id in segment["allowed_source_ids"]
+    }
+    over_budget = [
+        {
+            "segment_name": segment["segment_name"],
+            "segment_batch": segment.get("segment_batch"),
+            "segment_input_chars": segment["segment_input_chars"],
+        }
+        for segment in segments
+        if segment["segment_input_chars"] > SEGMENT_INPUT_TARGET_CHARS
+        and segment.get("segment_over_budget_reason") != "single_fact_exceeds_budget"
+    ]
+
+    assert over_budget == []
+    assert union_segment_ids == registry_ids
 
 
 def test_segment_matrix_filters_source_ids_outside_allowed_segment_sources() -> None:

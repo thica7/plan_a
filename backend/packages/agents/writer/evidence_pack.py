@@ -224,8 +224,9 @@ class WriterEvidencePackResult(BaseModel):
             or group.user_research_source_ids
             or group.community_source_ids
         ]
-        segments = [
-            self._segment(
+        segments = []
+        segments.extend(
+            self._budgeted_source_segments(
                 "decision_summary",
                 groups=groups,
                 allowed_source_ids=all_source_ids,
@@ -234,8 +235,8 @@ class WriterEvidencePackResult(BaseModel):
                 matrix_projection="compact",
                 structured_competitors=all_competitors,
                 structured_projection="compact",
-            ),
-        ]
+            )
+        )
         segments.extend(self._user_research_segments(user_research_groups))
         for competitor in all_competitors:
             competitor_groups = [
@@ -245,31 +246,178 @@ class WriterEvidencePackResult(BaseModel):
                 self._competitor_deep_dive_segments(competitor, competitor_groups)
             )
         segments.extend(
-            [
-                self._segment(
-                    "swot_matrix",
-                    groups=groups,
-                    allowed_source_ids=all_source_ids,
-                    group_projection="summary",
-                    quote_projection="none",
-                    matrix_projection="compact",
-                    structured_competitors=[],
-                    structured_projection="compact",
-                ),
-                self._segment(
-                    "support_appendix",
-                    groups=[],
-                    allowed_source_ids=all_source_ids,
-                    group_projection="none",
-                    quote_projection="none",
-                    matrix_projection="coverage",
-                    structured_competitors=[],
-                    structured_projection="compact",
-                    include_coverage=True,
-                ),
-            ]
+            self._budgeted_source_segments(
+                "swot_matrix",
+                groups=groups,
+                allowed_source_ids=all_source_ids,
+                group_projection="summary",
+                quote_projection="none",
+                matrix_projection="compact",
+                structured_competitors=[],
+                structured_projection="compact",
+            )
+        )
+        segments.extend(
+            self._budgeted_source_segments(
+                "support_appendix",
+                groups=[],
+                allowed_source_ids=all_source_ids,
+                group_projection="none",
+                quote_projection="none",
+                matrix_projection="coverage",
+                structured_competitors=[],
+                structured_projection="compact",
+                include_coverage=True,
+            )
         )
         return segments
+
+    def _budgeted_source_segments(
+        self,
+        name: str,
+        *,
+        groups: list[WriterEvidenceGroup],
+        allowed_source_ids: list[str],
+        group_projection: Literal["full", "compact", "summary", "none"],
+        quote_projection: Literal["full", "full_referenced", "compact", "none"],
+        matrix_projection: Literal["compact", "coverage"],
+        structured_competitors: list[str],
+        structured_projection: Literal["full", "compact"],
+        segment_competitor: str | None = None,
+        segment_dimension: str | None = None,
+        include_coverage: bool = False,
+    ) -> list[dict[str, object]]:
+        segment = self._source_scoped_segment(
+            name,
+            groups=groups,
+            allowed_source_ids=allowed_source_ids,
+            group_projection=group_projection,
+            quote_projection=quote_projection,
+            matrix_projection=matrix_projection,
+            structured_competitors=structured_competitors,
+            structured_projection=structured_projection,
+            segment_competitor=segment_competitor,
+            segment_dimension=segment_dimension,
+            segment_batch=None,
+            include_coverage=include_coverage,
+        )
+        if (
+            segment["segment_input_chars"] <= SEGMENT_INPUT_TARGET_CHARS
+            or len(allowed_source_ids) <= 1
+        ):
+            return [segment]
+        return self._split_source_segments(
+            name,
+            groups=groups,
+            allowed_source_ids=allowed_source_ids,
+            group_projection=group_projection,
+            quote_projection=quote_projection,
+            matrix_projection=matrix_projection,
+            structured_competitors=structured_competitors,
+            structured_projection=structured_projection,
+            segment_competitor=segment_competitor,
+            segment_dimension=segment_dimension,
+            include_coverage=include_coverage,
+            existing_count=0,
+        )
+
+    def _split_source_segments(
+        self,
+        name: str,
+        *,
+        groups: list[WriterEvidenceGroup],
+        allowed_source_ids: list[str],
+        group_projection: Literal["full", "compact", "summary", "none"],
+        quote_projection: Literal["full", "full_referenced", "compact", "none"],
+        matrix_projection: Literal["compact", "coverage"],
+        structured_competitors: list[str],
+        structured_projection: Literal["full", "compact"],
+        segment_competitor: str | None,
+        segment_dimension: str | None,
+        include_coverage: bool,
+        existing_count: int,
+    ) -> list[dict[str, object]]:
+        segment = self._source_scoped_segment(
+            name,
+            groups=groups,
+            allowed_source_ids=allowed_source_ids,
+            group_projection=group_projection,
+            quote_projection=quote_projection,
+            matrix_projection=matrix_projection,
+            structured_competitors=structured_competitors,
+            structured_projection=structured_projection,
+            segment_competitor=segment_competitor,
+            segment_dimension=segment_dimension,
+            segment_batch=f"sources:{existing_count + 1}",
+            include_coverage=include_coverage,
+        )
+        if (
+            segment["segment_input_chars"] <= SEGMENT_INPUT_TARGET_CHARS
+            or len(allowed_source_ids) <= 1
+        ):
+            return [segment]
+        midpoint = max(1, len(allowed_source_ids) // 2)
+        left_segments = self._split_source_segments(
+            name,
+            groups=groups,
+            allowed_source_ids=allowed_source_ids[:midpoint],
+            group_projection=group_projection,
+            quote_projection=quote_projection,
+            matrix_projection=matrix_projection,
+            structured_competitors=structured_competitors,
+            structured_projection=structured_projection,
+            segment_competitor=segment_competitor,
+            segment_dimension=segment_dimension,
+            include_coverage=include_coverage,
+            existing_count=existing_count,
+        )
+        right_segments = self._split_source_segments(
+            name,
+            groups=groups,
+            allowed_source_ids=allowed_source_ids[midpoint:],
+            group_projection=group_projection,
+            quote_projection=quote_projection,
+            matrix_projection=matrix_projection,
+            structured_competitors=structured_competitors,
+            structured_projection=structured_projection,
+            segment_competitor=segment_competitor,
+            segment_dimension=segment_dimension,
+            include_coverage=include_coverage,
+            existing_count=existing_count + len(left_segments),
+        )
+        return [*left_segments, *right_segments]
+
+    def _source_scoped_segment(
+        self,
+        name: str,
+        *,
+        groups: list[WriterEvidenceGroup],
+        allowed_source_ids: list[str],
+        group_projection: Literal["full", "compact", "summary", "none"],
+        quote_projection: Literal["full", "full_referenced", "compact", "none"],
+        matrix_projection: Literal["compact", "coverage"],
+        structured_competitors: list[str],
+        structured_projection: Literal["full", "compact"],
+        segment_competitor: str | None,
+        segment_dimension: str | None,
+        segment_batch: str | None,
+        include_coverage: bool,
+    ) -> dict[str, object]:
+        scoped_groups = self._groups_for_source_ids(groups, allowed_source_ids)
+        return self._segment(
+            name,
+            groups=scoped_groups,
+            allowed_source_ids=allowed_source_ids,
+            group_projection=group_projection,
+            quote_projection=quote_projection,
+            matrix_projection=matrix_projection,
+            structured_competitors=structured_competitors,
+            structured_projection=structured_projection,
+            segment_competitor=segment_competitor,
+            segment_dimension=segment_dimension,
+            segment_batch=segment_batch,
+            include_coverage=include_coverage,
+        )
 
     def _user_research_segments(
         self,
@@ -704,6 +852,18 @@ class WriterEvidencePackResult(BaseModel):
             ]
         )
 
+    def _groups_for_source_ids(
+        self,
+        groups: list[WriterEvidenceGroup],
+        source_ids: list[str],
+    ) -> list[WriterEvidenceGroup]:
+        scoped_groups: list[WriterEvidenceGroup] = []
+        for group in groups:
+            scoped_group = self._group_for_source_ids(group, source_ids)
+            if self._source_ids_for_groups([scoped_group]):
+                scoped_groups.append(scoped_group)
+        return scoped_groups
+
     def _segment_registry_item(self, item: WriterSourceRegistryItem) -> dict[str, object]:
         represented_by = list(item.represented_by)
         return {
@@ -873,7 +1033,15 @@ class WriterEvidencePackResult(BaseModel):
                     if source_id in source_id_set
                 ],
                 "facts": [
-                    fact
+                    fact.model_copy(
+                        update={
+                            "source_ids": [
+                                source_id
+                                for source_id in fact.source_ids
+                                if source_id in source_id_set
+                            ]
+                        }
+                    )
                     for fact in group.facts
                     if any(source_id in source_id_set for source_id in fact.source_ids)
                 ],
