@@ -13,6 +13,8 @@ from packages.schema.models import (
     ComparisonMatrix,
     CompetitorKB,
     CompetitorKnowledge,
+    PricingModel,
+    PricingTier,
     RawSource,
 )
 
@@ -601,6 +603,40 @@ def test_evidence_pack_preserves_every_kb_slice_with_provenance() -> None:
     assert "security review" in group.kb_signals[0].text
 
 
+def test_evidence_pack_kb_provenance_marks_source_represented() -> None:
+    source = RawSource(
+        id="cursor-kb-source",
+        competitor="Cursor",
+        dimension="persona",
+        source_type="webpage_verified",
+        title="Cursor KB source",
+        snippet="Skip to content Navigation Menu Sign in Cookie Privacy policy",
+        content_hash="cursor-kb-source-hash",
+        confidence=0.9,
+    )
+    detail = _detail_with_sources([source])
+    detail.plan.competitors = ["Cursor"]
+    detail.plan.dimensions = ["persona"]
+    detail.competitor_kbs = {
+        "Cursor": CompetitorKB(
+            competitor="Cursor",
+            sources=["cursor-kb-source"],
+            slices={
+                "persona": [
+                    "Enterprise buyers evaluate Cursor for security review."
+                ]
+            },
+        )
+    }
+
+    result = build_writer_evidence_pack(detail)
+    registry_item = result.pack.source_registry[0]
+
+    assert registry_item.represented_by == ["kb:Cursor:persona:0"]
+    assert registry_item.no_signal_reason is None
+    assert result.metrics.represented_source_count == 1
+
+
 def test_evidence_pack_preserves_comparison_matrix_digest() -> None:
     detail = _detail_with_sources([])
     detail.plan.competitors = ["Cursor"]
@@ -632,11 +668,23 @@ def test_evidence_pack_structured_knowledge_stays_visible() -> None:
     detail.plan.competitors = ["Cursor"]
     detail.plan.dimensions = ["pricing"]
     detail.competitor_knowledge = {
-        "Cursor": CompetitorKnowledge(competitor="Cursor", confidence=0.8764)
+        "Cursor": CompetitorKnowledge(competitor="Cursor", confidence=0.8764),
+        "Codeium": CompetitorKnowledge(
+            competitor="Codeium",
+            confidence=0.7123,
+            pricing_model=PricingModel(
+                tiers=[PricingTier(name="Pro", price="$20/month")]
+            ),
+        ),
     }
 
     result = build_writer_evidence_pack(detail)
     payload = result.pack.model_dump(mode="json")
 
     assert "structured_knowledge" in payload
-    assert payload["structured_knowledge"]["Cursor"]["confidence"] == 0.876
+    assert payload["structured_knowledge"]["Cursor"] == {"confidence": 0.876}
+    assert payload["structured_knowledge"]["Codeium"]["confidence"] == 0.712
+    assert payload["structured_knowledge"]["Codeium"]["pricing_model"]["tiers"] == [
+        {"name": "Pro", "price": "$20/month"}
+    ]
+    assert "review_summary" not in payload["structured_knowledge"]["Codeium"]

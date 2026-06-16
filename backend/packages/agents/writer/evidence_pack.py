@@ -18,6 +18,8 @@ UNSTRUCTURED_SIGNAL_LIMIT = 420
 SOURCE_NOTE_LIMIT = 180
 QUOTE_EXCERPT_LIMIT = 400
 QUOTE_USED_BY_FACT_LIMIT = 12
+STRUCTURED_KNOWLEDGE_LIST_LIMIT = 8
+STRUCTURED_KNOWLEDGE_TEXT_LIMIT = 700
 SINGLE_CALL_CONTEXT_TARGET_CHARS = 160_000
 NORMALIZED_FIELD_DROP_KEYS = {
     "kind",
@@ -286,6 +288,9 @@ class _WriterEvidencePackBuilder:
                         source_ids=list(kb.sources),
                     )
                     group.kb_signals.append(signal)
+                    for source_id in signal.source_ids:
+                        if source_id in self.registry_by_id:
+                            self._mark_source_represented(source_id, signal.id)
 
     def _project_normalized_fields(self, source: RawSource) -> list[WriterFact]:
         facts: list[WriterFact] = []
@@ -591,16 +596,30 @@ class _WriterEvidencePackBuilder:
         digest: dict[str, object] = {}
         for competitor, knowledge in self.detail.competitor_knowledge.items():
             item: dict[str, object] = {"confidence": round(knowledge.confidence, 3)}
-            if getattr(knowledge, "review_summary", None) is not None:
-                item["review_summary"] = knowledge.review_summary.model_dump(mode="json")
-            if getattr(knowledge, "pricing_model", None) is not None:
-                item["pricing_model"] = knowledge.pricing_model.model_dump(mode="json")
-            if getattr(knowledge, "feature_tree", None) is not None:
-                item["feature_tree"] = knowledge.feature_tree.model_dump(mode="json")
-            if getattr(knowledge, "user_personas", None) is not None:
-                item["user_personas"] = knowledge.user_personas.model_dump(mode="json")
+            for field_name in (
+                "review_summary",
+                "pricing_model",
+                "feature_tree",
+                "user_personas",
+            ):
+                section = self._structured_section_digest(
+                    getattr(knowledge, field_name, None)
+                )
+                if section is not None:
+                    item[field_name] = section
             digest[competitor] = item
         return digest
+
+    def _structured_section_digest(self, section: object) -> object | None:
+        if not isinstance(section, BaseModel):
+            return None
+        payload = section.model_dump(
+            mode="json",
+            exclude_defaults=True,
+            exclude_none=True,
+        )
+        compact = _compact_structured_knowledge_value(payload)
+        return compact if compact not in ({}, []) else None
 
     def _metrics(self, pack: WriterEvidencePack) -> WriterEvidencePackMetrics:
         prompt_json = json.dumps(pack.model_dump(mode="json"), ensure_ascii=False)
@@ -800,6 +819,39 @@ def _compact_value(value: object) -> object | None:
                 nested[key] = nested_value
         return nested or None
     return None
+
+
+def _compact_structured_knowledge_value(value: object) -> object | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return _trim(value, STRUCTURED_KNOWLEDGE_TEXT_LIMIT) if value.strip() else None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        return value
+    if isinstance(value, list):
+        items: list[object] = []
+        for raw_item in value:
+            item = _compact_structured_knowledge_value(raw_item)
+            if item is None or item == {} or item == []:
+                continue
+            items.append(item)
+            if len(items) >= STRUCTURED_KNOWLEDGE_LIST_LIMIT:
+                break
+        return items
+    if isinstance(value, Mapping):
+        compact: dict[str, object] = {}
+        for raw_key, raw_value in value.items():
+            key = str(raw_key).strip()
+            if not key:
+                continue
+            item = _compact_structured_knowledge_value(raw_value)
+            if item is None or item == {} or item == []:
+                continue
+            compact[key] = item
+        return compact
+    return value
 
 
 def _fact_key(fact: WriterFact) -> str:
