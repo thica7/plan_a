@@ -211,6 +211,31 @@ def test_writer_repair_maps_rationale_only_decision_summary_to_section_repair() 
     assert plan.sections == ["decision_summary"]
 
 
+def test_writer_repair_routes_release_gate_report_depth_to_full_rewrite() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-report-depth-required",
+        severity="blocker",
+        detected_by="coverage",
+        target_agent="writer",
+        field_path="release_gate.report_depth_required",
+        problem=(
+            "Report richness below threshold: core_section_depth_score=0.86; "
+            "SWOT quadrants and RAG gap-fill also need expansion."
+        ),
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="Redo writer report with expanded evidence-backed core analysis.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "full"
+    assert plan.anti_regression_required is True
+    assert "report_depth_required" in plan.reason
+
+
 def test_writer_repair_claim_risk_review_wording_does_not_target_user_reviews() -> None:
     detail = _detail(report_md=_protectable_report())
     issue = QCIssue(
@@ -317,6 +342,38 @@ def test_replace_markdown_section_replaces_zh_cn_heading_without_duplicate() -> 
     assert "- 新评价: 买家关注定价透明度。 [source:pricing-1]" in updated
     assert "保留摘要内容。 [source:pricing-1]" in updated
     assert "- 保留 SWOT 内容。 [source:feature-1]" in updated
+
+
+def test_replace_markdown_section_restores_canonical_order_for_numbered_zh_sections() -> None:
+    original = (
+        "# AI Coding Agent 竞争报告\n\n"
+        "## 1. 执行摘要\n"
+        "摘要内容。 [source:pricing-1]\n\n"
+        "## 2. 决策摘要\n"
+        "决策内容。 [source:pricing-1]\n\n"
+        "## 7. 对比矩阵\n"
+        "矩阵内容。 [source:pricing-1]\n\n"
+        "## 5. 竞品深挖\n"
+        "旧深挖内容。 [source:feature-1]\n\n"
+        "## SWOT 分析\n"
+        "SWOT 内容。 [source:feature-1]\n"
+    )
+    replacement = (
+        "## 5. 竞品深挖\n"
+        "新的深挖内容。 [source:feature-1]\n"
+    )
+
+    updated = replace_markdown_section(
+        original,
+        "competitor_deep_dives",
+        "zh-CN",
+        replacement,
+    )
+
+    assert updated.count("## 5. 竞品深挖") == 1
+    assert "旧深挖内容" not in updated
+    assert updated.index("## 5. 竞品深挖") < updated.index("## 7. 对比矩阵")
+    assert updated.index("## SWOT 分析") > updated.index("## 5. 竞品深挖")
 
 
 def test_report_regression_detects_collapsed_review_section() -> None:

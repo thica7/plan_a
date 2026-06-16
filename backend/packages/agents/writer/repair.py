@@ -61,6 +61,31 @@ SECTION_REPAIR_HINTS: dict[str, tuple[str, ...]] = {
     "claim_risk": ("claim risk", "claim_validation", "evidence risk"),
     "rag_gap_fill": ("rag", "gap fill", "retrieval"),
 }
+CANONICAL_SECTION_ORDER = (
+    "executive_summary",
+    "executive_takeaway",
+    "decision_summary",
+    "competitive_findings",
+    "review_theme_summary",
+    "competitor_deep_dives",
+    "comparison_matrix",
+    "side_by_side_matrix",
+    "swot_analysis",
+    "battlecard",
+    "community_evidence_triangulation",
+    "workflow_enterprise_risk",
+    "market_landscape",
+    "rag_gap_fill",
+    "claim_risk",
+    "evidence_support",
+    "source_quality",
+    "knowledge_coverage",
+    "confidence_notes",
+    "next_collection",
+    "evidence_appendix",
+    "generation_notes",
+    "memory_context",
+)
 
 
 @dataclass(frozen=True)
@@ -94,6 +119,14 @@ def build_writer_repair_plan(
             mode="full",
             reason="report is not protectable; full rewrite required",
             previous_report_protectable=False,
+        )
+
+    if _has_release_gate_report_depth_issue(issues):
+        return WriterRepairPlan(
+            mode="full",
+            reason="release_gate.report_depth_required requires full core rewrite",
+            previous_report_protectable=True,
+            anti_regression_required=True,
         )
 
     line_numbers = _report_line_numbers(issues)
@@ -178,10 +211,12 @@ def replace_markdown_section(
     replacement = _normalize_section_replacement(replacement_markdown)
     target = _find_section(markdown, target_section, output_language)
     if target is None:
-        return f"{markdown.rstrip()}\n\n{replacement}".strip()
+        updated = f"{markdown.rstrip()}\n\n{replacement}".strip()
+        return _restore_canonical_section_order(updated, output_language)
     before = markdown[: target.start].rstrip()
     after = markdown[target.end :].lstrip()
-    return f"{before}\n\n{replacement}\n\n{after}".strip()
+    updated = f"{before}\n\n{replacement}\n\n{after}".strip()
+    return _restore_canonical_section_order(updated, output_language)
 
 
 def report_regression_problem(
@@ -321,6 +356,10 @@ def _report_line_numbers(issues: list[QCIssue]) -> list[int]:
     return sorted(set(numbers))
 
 
+def _has_release_gate_report_depth_issue(issues: list[QCIssue]) -> bool:
+    return any(issue.field_path == "release_gate.report_depth_required" for issue in issues)
+
+
 def _target_sections(issues: list[QCIssue]) -> list[str]:
     sections: list[str] = []
     for issue in issues:
@@ -387,6 +426,42 @@ def _find_section(
         (section for section in _sections(markdown) if _heading_matches(section.heading, aliases)),
         None,
     )
+
+
+def _restore_canonical_section_order(markdown: str, output_language: str) -> str:
+    sections = _sections(markdown)
+    if len(sections) < 2:
+        return markdown.strip()
+
+    order = {section_key: index for index, section_key in enumerate(CANONICAL_SECTION_ORDER)}
+    ranked: list[tuple[int, int, MarkdownSection]] = []
+    changed = False
+    for index, section in enumerate(sections):
+        section_key = _section_key_for_heading(section.heading, output_language)
+        rank = order.get(section_key, len(order) + index)
+        ranked.append((rank, index, section))
+        if section_key is not None:
+            for previous_rank, _, _ in ranked[:-1]:
+                if previous_rank > rank:
+                    changed = True
+                    break
+    if not changed:
+        return markdown.strip()
+
+    preamble = markdown[: sections[0].start].rstrip()
+    section_blocks = [
+        markdown[section.start : section.end].strip()
+        for _, _, section in sorted(ranked, key=lambda item: (item[0], item[1]))
+    ]
+    parts = [part for part in [preamble, *section_blocks] if part]
+    return "\n\n".join(parts).strip()
+
+
+def _section_key_for_heading(heading: str, output_language: str) -> str | None:
+    for section_key in CANONICAL_SECTION_ORDER:
+        if _heading_matches(heading, _section_aliases(section_key, output_language)):
+            return section_key
+    return None
 
 
 def _sections(markdown: str) -> list[MarkdownSection]:
