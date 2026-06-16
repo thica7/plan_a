@@ -208,8 +208,7 @@ class _WriterEvidencePackBuilder:
             quotes=list(self.quotes_by_key.values()),
             matrix=self._matrix_digest(),
         )
-        metrics = self._metrics(pack)
-        pack.coverage = metrics.model_dump(mode="json")
+        pack.coverage = self._coverage_summary(pack)
         metrics = self._metrics(pack)
         return WriterEvidencePackResult(pack=pack, metrics=metrics, warnings=self.warnings)
 
@@ -320,19 +319,56 @@ class _WriterEvidencePackBuilder:
             raw_source_count=len(self.detail.raw_sources),
             dropped_source_count=0,
             no_signal_source_count=no_signal_count,
-            largest_source_projection_chars=max(
-                (
-                    len(json.dumps(item.model_dump(mode="json"), ensure_ascii=False))
-                    for item in pack.source_registry
-                ),
-                default=0,
-            ),
+            largest_source_projection_chars=self._largest_source_projection_chars(pack),
             largest_group_chars=max(group_sizes, default=0),
             largest_quote_projection_chars=max(quote_sizes, default=0),
             deduped_quote_count=self.deduped_quote_count,
             deduped_fact_count=self.deduped_fact_count,
             segmented_writer_required=len(prompt_json) > SINGLE_CALL_CONTEXT_TARGET_CHARS,
         )
+
+    def _coverage_summary(self, pack: WriterEvidencePack) -> dict[str, object]:
+        represented_count = sum(1 for item in pack.source_registry if item.represented_by)
+        no_signal_count = sum(1 for item in pack.source_registry if item.no_signal_reason)
+        return {
+            "source_registry_count": len(pack.source_registry),
+            "represented_source_count": represented_count,
+            "raw_source_count": len(self.detail.raw_sources),
+            "dropped_source_count": 0,
+            "no_signal_source_count": no_signal_count,
+            "kb_slice_count": 0,
+            "represented_kb_slice_count": 0,
+            "dropped_kb_slice_count": 0,
+        }
+
+    def _largest_source_projection_chars(self, pack: WriterEvidencePack) -> int:
+        source_projection_sizes: list[int] = []
+        for item in pack.source_registry:
+            source_projection = {
+                "registry_item": item.model_dump(mode="json"),
+                "unstructured_signals": [
+                    signal.model_dump(mode="json")
+                    for group in pack.groups
+                    for signal in group.unstructured_signals
+                    if signal.source_id == item.id
+                ],
+                "facts": [
+                    fact.model_dump(mode="json")
+                    for group in pack.groups
+                    for fact in group.facts
+                    if item.id in fact.source_ids
+                ],
+                "quotes": [
+                    quote.model_dump(mode="json")
+                    for quote in pack.quotes
+                    if item.id in quote.source_ids
+                    or item.id in quote.full_text_source_ids
+                ],
+            }
+            source_projection_sizes.append(
+                len(json.dumps(source_projection, ensure_ascii=False))
+            )
+        return max(source_projection_sizes, default=0)
 
 
 def _clean(value: str) -> str:
