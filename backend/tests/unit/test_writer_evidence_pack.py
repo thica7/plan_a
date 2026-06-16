@@ -1371,6 +1371,113 @@ def test_competitor_deep_dive_segments_stay_under_absolute_budget() -> None:
     )
 
 
+def test_repair_segment_inputs_partition_large_competitor_section_by_child_segment() -> None:
+    quote_base = (
+        "Pricing evidence covers batch priority models, cached input, output, "
+        "long context, enterprise controls, procurement review, and rollout risk. "
+    )
+    heavy_fact_value = (
+        "Pricing table detail covers model rows, context windows, batch priority, "
+        "cached input, output, enterprise availability, procurement controls, and "
+        "rollout assumptions. "
+        * 50
+    )
+    sources = [
+        RawSource(
+            id="openai-pricing-repair-heavy",
+            competitor="OpenAI Codex",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="OpenAI pricing repair heavy",
+            snippet="OpenAI pricing source includes detailed model rows.",
+            content_hash="openai-pricing-repair-heavy-hash",
+            confidence=0.94,
+            metadata={
+                "normalized_fields": [
+                    {
+                        "kind": "pricing",
+                        "dimension": "pricing",
+                        "competitor": "OpenAI Codex",
+                        "model_type": "api_usage_based",
+                        "tier_name": f"gpt-repair-heavy-{field_index}",
+                        "price": f"${field_index}.00",
+                        "billing_cycle": "per 1m",
+                        "usage_limit": "long context",
+                        "enterprise_condition": "enterprise_available",
+                        "detailed_pricing_note": (
+                            f"{heavy_fact_value} item={field_index}"
+                        ),
+                        **{
+                            f"detailed_pricing_note_{detail_index}": (
+                                f"{heavy_fact_value} detail={detail_index} "
+                                f"item={field_index}"
+                            )
+                            for detail_index in range(20)
+                        },
+                        "source_quote": f"{quote_base} field={field_index}. " * 12,
+                    }
+                    for field_index in range(64)
+                ]
+            },
+        )
+    ]
+    detail = _detail_with_sources(sources)
+    detail.plan.competitors = ["OpenAI Codex"]
+    detail.plan.dimensions = ["pricing"]
+    detail.competitor_kbs = {
+        "OpenAI Codex": CompetitorKB(
+            competitor="OpenAI Codex",
+            sources=[source.id for source in sources],
+            slices={
+                "pricing": [
+                    (
+                        f"OpenAI repair KB slice {index} explains pricing rows, "
+                        "enterprise constraints, context limits, and validation needs."
+                    )
+                    for index in range(40)
+                ]
+            },
+        )
+    }
+
+    result = build_writer_evidence_pack(detail)
+    selected_segments = [
+        segment
+        for segment in result.segment_inputs()
+        if segment["segment_name"] == "competitor_deep_dives"
+    ]
+    selected_source_ids = {
+        source_id
+        for segment in selected_segments
+        for source_id in segment["allowed_source_ids"]
+    }
+
+    repair_payloads = result.repair_segment_inputs(["competitor_deep_dives"])
+    repair_source_ids = {
+        source_id
+        for payload in repair_payloads
+        for source_id in payload["allowed_source_ids"]
+    }
+
+    assert len(selected_segments) > 1
+    assert len(repair_payloads) == len(selected_segments)
+    assert repair_source_ids == selected_source_ids
+    assert [payload["repair_part"] for payload in repair_payloads] == list(
+        range(1, len(repair_payloads) + 1)
+    )
+    for payload in repair_payloads:
+        assert payload["repair_part_count"] == len(repair_payloads)
+        assert payload["segment_input_target_chars"] == SEGMENT_INPUT_TARGET_CHARS
+        assert payload["segment_count"] == 1
+        if payload["repair_input_chars"] > SEGMENT_INPUT_TARGET_CHARS:
+            assert payload["segments"][0].get("segment_over_budget_reason") in {
+                "single_fact_exceeds_budget",
+                "single_source_exceeds_budget",
+            }
+        else:
+            assert payload["repair_input_chars"] <= SEGMENT_INPUT_TARGET_CHARS
+
+
 def test_source_batched_segments_trim_deduped_fact_source_ids() -> None:
     heavy_fact_value = (
         "Pricing evidence includes model rows, procurement notes, rollout "

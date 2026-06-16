@@ -272,20 +272,57 @@ class WriterEvidencePackResult(BaseModel):
         )
         return segments
 
-    def repair_segment_input(self, sections: Sequence[str] | None = None) -> dict[str, object]:
+    def repair_segment_inputs(
+        self,
+        sections: Sequence[str] | None = None,
+    ) -> list[dict[str, object]]:
         section_names = [section for section in sections or [] if section]
         desired_segment_names = _repair_segment_names(section_names)
+        all_segments = self.segment_inputs()
         segments = [
             segment
-            for segment in self.segment_inputs()
+            for segment in all_segments
             if segment.get("segment_name") in desired_segment_names
         ]
         if not segments:
             segments = [
                 segment
-                for segment in self.segment_inputs()
+                for segment in all_segments
                 if segment.get("segment_name") == "decision_summary"
             ]
+        repair_part_count = len(segments)
+        return [
+            self._repair_payload(
+                section_names=section_names,
+                segments=[segment],
+                repair_part=index,
+                repair_part_count=repair_part_count,
+            )
+            for index, segment in enumerate(segments, start=1)
+        ]
+
+    def repair_segment_input(
+        self,
+        sections: Sequence[str] | None = None,
+    ) -> dict[str, object]:
+        payloads = self.repair_segment_inputs(sections)
+        if payloads:
+            return payloads[0]
+        return self._repair_payload(
+            section_names=[section for section in sections or [] if section],
+            segments=[],
+            repair_part=1,
+            repair_part_count=1,
+        )
+
+    def _repair_payload(
+        self,
+        *,
+        section_names: list[str],
+        segments: list[dict[str, object]],
+        repair_part: int,
+        repair_part_count: int,
+    ) -> dict[str, object]:
         allowed_source_ids = _unique(
             source_id
             for segment in segments
@@ -294,10 +331,19 @@ class WriterEvidencePackResult(BaseModel):
         payload: dict[str, object] = {
             "schema_version": self.pack.schema_version,
             "repair_sections": section_names,
-            "segment_names": sorted(desired_segment_names),
+            "segment_names": sorted(
+                {
+                    str(segment.get("segment_name"))
+                    for segment in segments
+                    if segment.get("segment_name")
+                }
+            ),
             "segment_count": len(segments),
+            "repair_part": repair_part,
+            "repair_part_count": repair_part_count,
             "allowed_source_ids": allowed_source_ids,
             "segments": segments,
+            "segment_input_target_chars": SEGMENT_INPUT_TARGET_CHARS,
         }
         payload["repair_input_chars"] = len(json.dumps(payload, ensure_ascii=False))
         return payload

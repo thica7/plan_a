@@ -7624,6 +7624,7 @@ async def test_writer_segment_prompt_includes_source_quality_and_user_research_p
         raw_sources=[],
     )
     record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
     captured: dict[str, str] = {}
     segment = {
         "schema_version": "writer_evidence_pack.v1",
@@ -7837,6 +7838,7 @@ async def test_writer_section_repair_uses_evidence_pack_context(monkeypatch) -> 
         ],
     )
     record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
     captured: dict[str, str] = {}
 
     async def fake_trace_llm_text(*args, **kwargs):
@@ -7883,6 +7885,7 @@ async def test_writer_section_repair_uses_segment_payload_for_segmented_pack(
         raw_sources=[],
     )
     record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
     captured: dict[str, str] = {}
     full_serialized = False
 
@@ -7940,6 +7943,139 @@ async def test_writer_section_repair_uses_segment_payload_for_segmented_pack(
     assert "Writer Evidence Pack JSON:" in captured["user"]
     assert "repair_sections" in captured["user"]
     assert "cursor-persona" in captured["user"]
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_iterates_budgeted_segment_payloads(
+    monkeypatch,
+) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-repair-segment-pack-parts",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["pricing"]),
+        raw_sources=[],
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    full_serialized = False
+    calls: list[str] = []
+
+    def repair_payload(part: int, source_id: str) -> dict[str, object]:
+        return {
+            "schema_version": "writer_evidence_pack.v1",
+            "repair_sections": ["competitor_deep_dives"],
+            "segment_names": ["competitor_deep_dives"],
+            "segment_count": 1,
+            "repair_part": part,
+            "repair_part_count": 2,
+            "allowed_source_ids": [source_id],
+            "segments": [
+                {
+                    "segment_name": "competitor_deep_dives",
+                    "source_registry": [{"id": source_id}],
+                    "groups": [],
+                    "quotes": [],
+                    "matrix": {},
+                    "structured_knowledge": {},
+                    "allowed_source_ids": [source_id],
+                    "segment_input_chars": 240,
+                }
+            ],
+            "repair_input_chars": 640,
+            "segment_input_target_chars": 160_000,
+        }
+
+    class FakeMetrics:
+        segmented_writer_required = True
+
+    class FakeEvidencePackResult:
+        metrics = FakeMetrics()
+
+        def telemetry_payload(self):
+            return {
+                "raw_source_count": 2,
+                "represented_source_count": 2,
+                "dropped_source_count": 0,
+                "segmented_writer_required": True,
+            }
+
+        def preflight_errors(self):
+            return []
+
+        def to_prompt_json(self):
+            nonlocal full_serialized
+            full_serialized = True
+            raise AssertionError("section repair should not serialize the full pack")
+
+        def repair_segment_input(self, sections):
+            return {
+                "repair_sections": list(sections or []),
+                "segments": [
+                    repair_payload(1, "cursor-pricing-a")["segments"][0],
+                    repair_payload(2, "cursor-pricing-b")["segments"][0],
+                ],
+                "repair_input_chars": 320_000,
+            }
+
+        def repair_segment_inputs(self, sections):
+            assert list(sections) == ["competitor_deep_dives"]
+            return [
+                repair_payload(1, "cursor-pricing-a"),
+                repair_payload(2, "cursor-pricing-b"),
+            ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        calls.append(kwargs["user"])
+        return (
+            f"## Competitor Deep Dives\nPart {len(calls)} cites "
+            f"[source:cursor-pricing-{'a' if len(calls) == 1 else 'b'}]"
+        )
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeEvidencePackResult(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    result = await service._writer_section_repair_markdown(
+        record,
+        sections=["competitor_deep_dives"],
+        previous_report="## Competitor Deep Dives\nThin.",
+    )
+
+    preflight_event = next(
+        (event for event in record.events if event.type == "writer_preflight"),
+        None,
+    )
+    assert not full_serialized
+    assert len(calls) == 2
+    assert all("Writer Evidence Pack JSON:" in user for user in calls)
+    assert '"repair_part": 1' in calls[0]
+    assert '"repair_part": 2' in calls[1]
+    assert "Part 1 cites" in result
+    assert "Part 2 cites" in result
+    assert preflight_event is not None
+    assert preflight_event.payload["writer_repair_mode"] == "section"
+    assert preflight_event.payload["writer_repair_sections"] == [
+        "competitor_deep_dives"
+    ]
+    assert preflight_event.payload["segmented_writer_required"] is True
+    assert preflight_event.payload["repair_segment_count"] == 2
 
 
 @pytest.mark.asyncio

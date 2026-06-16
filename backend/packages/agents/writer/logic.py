@@ -779,48 +779,87 @@ class WriterAgentMixin:
                 "writer evidence pack preflight failed: "
                 + ", ".join(preflight_errors)
             )
-        if getattr(
+        segmented_writer_required = getattr(
             getattr(evidence_pack_result, "metrics", None),
             "segmented_writer_required",
             False,
-        ):
-            writer_context_json = json.dumps(
-                evidence_pack_result.repair_segment_input(sections),
-                ensure_ascii=False,
-            )
+        )
+        if segmented_writer_required:
+            if hasattr(evidence_pack_result, "repair_segment_inputs"):
+                repair_payloads = evidence_pack_result.repair_segment_inputs(sections)
+            else:
+                repair_payloads = [evidence_pack_result.repair_segment_input(sections)]
+            writer_context_jsons = [
+                json.dumps(payload, ensure_ascii=False) for payload in repair_payloads
+            ]
         else:
-            writer_context_json = evidence_pack_result.to_prompt_json()
+            repair_payloads = []
+            writer_context_jsons = [evidence_pack_result.to_prompt_json()]
+        telemetry_payload = (
+            evidence_pack_result.telemetry_payload()
+            if hasattr(evidence_pack_result, "telemetry_payload")
+            else {}
+        )
+        telemetry_payload = dict(telemetry_payload)
+        telemetry_payload.update(
+            {
+                "writer_repair_mode": "section",
+                "writer_repair_sections": list(sections),
+                "segmented_writer_required": bool(segmented_writer_required),
+                "repair_segment_count": (
+                    len(repair_payloads) if segmented_writer_required else 1
+                ),
+            }
+        )
+        if repair_payloads:
+            telemetry_payload["repair_input_chars"] = [
+                payload.get("repair_input_chars") for payload in repair_payloads
+            ]
+            telemetry_payload["repair_part_count"] = len(repair_payloads)
+        await self.emit(
+            detail.id,
+            "writer_preflight",
+            "writer",
+            None,
+            "Writer evidence pack prepared for section repair.",
+            telemetry_payload,
+        )
         language_guidance = language_instruction(detail.output_language)
         section_headings = "\n".join(
             self._writer_section_heading_instruction(detail, section) for section in sections
         )
-        return await self._trace_llm_text(
-            record,
-            agent="writer",
-            subagent=None,
-            name="report_section_repair",
-            system=(
-                "You are a senior enterprise competitive-intelligence analyst repairing "
-                "one section of an existing markdown report. Return only the requested "
-                "section markdown. Preserve existing [source:ID] syntax, never invent "
-                "source IDs, and cite factual claims with available source IDs. "
-                f"{language_guidance}"
-            ),
-            user=(
-                f"Topic: {detail.topic}\n"
-                f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                f"Repair only these sections: {', '.join(sections)}\n"
-                f"Expected section headings:\n{section_headings}\n"
-                "return only the requested section markdown; do not rewrite unrelated "
-                "sections or include commentary outside the section.\n"
-                "Use the exact requested level-2 heading for each returned section.\n"
-                "You must preserve existing [source:ID] syntax.\n"
-                f"{self._writer_community_policy_text()}\n"
-                f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
-                f"Previous report:\n{previous_report}"
-            ),
-        )
+        repaired_sections = []
+        for writer_context_json in writer_context_jsons:
+            repaired_sections.append(
+                await self._trace_llm_text(
+                    record,
+                    agent="writer",
+                    subagent=None,
+                    name="report_section_repair",
+                    system=(
+                        "You are a senior enterprise competitive-intelligence analyst repairing "
+                        "one section of an existing markdown report. Return only the requested "
+                        "section markdown. Preserve existing [source:ID] syntax, never invent "
+                        "source IDs, and cite factual claims with available source IDs. "
+                        f"{language_guidance}"
+                    ),
+                    user=(
+                        f"Topic: {detail.topic}\n"
+                        f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                        f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                        f"Repair only these sections: {', '.join(sections)}\n"
+                        f"Expected section headings:\n{section_headings}\n"
+                        "return only the requested section markdown; do not rewrite unrelated "
+                        "sections or include commentary outside the section.\n"
+                        "Use the exact requested level-2 heading for each returned section.\n"
+                        "You must preserve existing [source:ID] syntax.\n"
+                        f"{self._writer_community_policy_text()}\n"
+                        f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
+                        f"Previous report:\n{previous_report}"
+                    ),
+                )
+            )
+        return "\n\n".join(section.strip() for section in repaired_sections if section.strip())
 
     def _writer_community_policy_text(self) -> str:
         return (
