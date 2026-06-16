@@ -688,3 +688,45 @@ def test_evidence_pack_structured_knowledge_stays_visible() -> None:
         {"name": "Pro", "price": "$20/month"}
     ]
     assert "review_summary" not in payload["structured_knowledge"]["Codeium"]
+
+
+def test_source_appendix_rows_are_generated_from_registry() -> None:
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.com/pricing",
+        snippet="Cursor Pro costs $20 per month.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+        metadata={
+            "normalized_fields": [
+                {
+                    "kind": "pricing",
+                    "tier_name": "Pro",
+                    "price": "$20/month",
+                    "billing_cycle": "monthly",
+                    "source_quote": "Cursor Pro costs $20 per month.",
+                }
+            ]
+        },
+    )
+
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+    rows = result.source_appendix_rows()
+
+    assert rows == [
+        {
+            "source_id": "cursor-pricing",
+            "title": "Cursor pricing",
+            "url": "https://cursor.com/pricing",
+            "source_type": "webpage_verified",
+            "competitor": "Cursor",
+            "dimension": "pricing",
+            "confidence": 0.96,
+            "represented_by": list(result.pack.source_registry[0].represented_by),
+            "no_signal_reason": None,
+        }
+    ]

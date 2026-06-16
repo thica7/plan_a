@@ -13752,3 +13752,48 @@ def test_comparison_matrix_ignores_community_only_llm_winner_signal() -> None:
 
     assert matrix.winner_by_dimension["review"] == "tie"
     assert any("[community-adjusted:review]" in item for item in matrix.summary)
+
+
+def test_writer_source_appendix_backfill_uses_registry_rows() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-appendix-pack",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor Pro costs $20 per month.",
+                content_hash="cursor-pricing-hash",
+                confidence=0.96,
+            )
+        ],
+    )
+
+    appendix = service._writer_source_appendix_lines(detail)
+
+    assert any("[source:cursor-pricing]" in line for line in appendix)
+    assert not any("Cursor Pro costs $20 per month." in line for line in appendix)

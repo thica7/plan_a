@@ -1160,6 +1160,23 @@ class WriterAgentMixin:
                 )
         return lines
 
+    def _writer_source_appendix_lines(self, detail: RunDetail) -> list[str]:
+        evidence_pack_result = build_writer_evidence_pack(detail)
+        lines = ["", f"## {report_label(detail.output_language, 'evidence_appendix')}"]
+        for row in evidence_pack_result.source_appendix_rows():
+            source_id = row["source_id"]
+            title = row["title"] or source_id
+            source_type = row["source_type"]
+            competitor = row["competitor"]
+            dimension = row["dimension"]
+            confidence = row["confidence"]
+            url = row["url"] or "no url"
+            lines.append(
+                f"- [source:{source_id}] {title} | {source_type} | "
+                f"{competitor}/{dimension} | confidence={confidence} | {url}"
+            )
+        return lines
+
     def _backfill_evidence_appendix(self, detail: RunDetail) -> list[str]:
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = ["", f"## {report_label(detail.output_language, 'evidence_appendix')}"]

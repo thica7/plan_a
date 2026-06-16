@@ -181,6 +181,22 @@ class WriterEvidencePackResult(BaseModel):
         payload["preflight_warnings"] = list(self.warnings)
         return payload
 
+    def source_appendix_rows(self) -> list[dict[str, object]]:
+        return [
+            {
+                "source_id": item.id,
+                "title": item.title,
+                "url": item.url,
+                "source_type": item.source_type,
+                "competitor": item.competitor,
+                "dimension": item.dimension,
+                "confidence": item.confidence,
+                "represented_by": list(item.represented_by),
+                "no_signal_reason": item.no_signal_reason,
+            }
+            for item in self.pack.source_registry
+        ]
+
 
 USER_RESEARCH_SOURCE_TYPES = {
     "survey_simulated",
