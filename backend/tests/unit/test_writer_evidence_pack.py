@@ -263,6 +263,48 @@ def test_pricing_normalized_fields_become_deduped_facts_and_bounded_quote() -> N
     assert result.metrics.writer_evidence_pack_chars < 80_000
 
 
+def test_run_58_style_pricing_source_stays_below_prompt_budget() -> None:
+    quote = "Standard Batch Flex Priority Standard Short context Long context Model Input Cached input Output. " * 80
+    source = RawSource(
+        id="raw-source-openai-pricing",
+        competitor="OpenAI Codex",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Pricing | OpenAI API",
+        snippet="OpenAI API pricing table.",
+        content_hash="openai-pricing-run58-hash",
+        confidence=0.96,
+        metadata={
+            "normalized_fields": [
+                {
+                    "kind": "pricing",
+                    "dimension": "pricing",
+                    "competitor": "OpenAI Codex",
+                    "model_type": "api_usage_based",
+                    "tier_name": f"gpt-5.{index}",
+                    "price": f"${index}.00",
+                    "billing_cycle": "per 1m",
+                    "usage_limit": "short context",
+                    "enterprise_condition": "enterprise_available",
+                    "source_quote": quote,
+                }
+                for index in range(65)
+            ]
+        },
+    )
+    detail = _detail_with_sources([source])
+    detail.plan.competitors = ["OpenAI Codex"]
+    detail.plan.dimensions = ["pricing"]
+
+    result = build_writer_evidence_pack(detail)
+
+    assert result.metrics.raw_source_count == 1
+    assert result.metrics.represented_source_count == 1
+    assert result.metrics.writer_evidence_pack_chars < 90_000
+    assert result.metrics.largest_quote_projection_chars < 1_100
+    assert result.metrics.deduped_quote_count == 64
+
+
 def test_mixed_structured_source_keeps_residual_snippet_signal() -> None:
     source = RawSource(
         id="cursor-pricing-mixed",
