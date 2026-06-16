@@ -6349,6 +6349,92 @@ async def test_writer_section_repair_failure_reports_attempted_metadata() -> Non
 
 
 @pytest.mark.asyncio
+async def test_writer_section_repair_preflight_failure_fails_run_with_previous_report(
+    monkeypatch,
+) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer section repair preflight failure",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-review-preflight-failure",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section needs section repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+    llm_called = False
+
+    class FakeResult:
+        def preflight_errors(self):
+            return ["source_not_represented:bad"]
+
+        def to_prompt_json(self):
+            raise AssertionError("to_prompt_json should not be called")
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        nonlocal llm_called
+        llm_called = True
+        return "# should not be called"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeResult(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    with pytest.raises(
+        RuntimeError,
+        match="writer evidence pack preflight failed: source_not_represented:bad",
+    ):
+        await service._real_writer_step(record)
+
+    assert not llm_called
+    assert record.detail.status == "failed"
+    assert any(event.type == "run_failed" for event in record.events)
+
+
+@pytest.mark.asyncio
 async def test_writer_section_repair_prompt_includes_localized_heading() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -7508,6 +7594,76 @@ async def test_segmented_writer_does_not_serialize_full_evidence_pack(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_writer_segment_prompt_includes_source_quality_and_user_research_policy(
+    monkeypatch,
+) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    detail = RunDetail(
+        id="run-segment-prompt-policy",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["persona"],
+        ),
+        raw_sources=[],
+    )
+    record = RunRecord(detail=detail)
+    captured: dict[str, str] = {}
+    segment = {
+        "schema_version": "writer_evidence_pack.v1",
+        "segment_name": "user_research",
+        "source_registry": [],
+        "groups": [],
+        "quotes": [],
+        "matrix": {},
+        "structured_knowledge": {},
+        "allowed_source_ids": ["cursor-persona"],
+        "segment_input_chars": 240,
+    }
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["system"] = kwargs["system"]
+        captured["user"] = kwargs["user"]
+        return "## User Review Themes\nEnterprise buyers cite onboarding. [source:cursor-persona]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="## User Review Themes",
+        retry_count=0,
+    )
+
+    prompt = f"{captured['system']}\n{captured['user']}"
+    assert (
+        "Do not use web_search_result or confidence < 0.75 as the sole support"
+        in prompt
+    )
+    assert "as user-research signals, not as official factual proof" in prompt
+
+
+@pytest.mark.asyncio
 async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -7698,6 +7854,91 @@ async def test_writer_section_repair_uses_evidence_pack_context(monkeypatch) -> 
     assert "Writer Evidence Pack JSON:" in captured["user"]
     assert "Writer Context JSON:" not in captured["user"]
     assert "source_registry" in captured["user"]
+    assert "cursor-persona" in captured["user"]
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_uses_segment_payload_for_segmented_pack(
+    monkeypatch,
+) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-repair-segment-pack",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[],
+    )
+    record = RunRecord(detail=detail)
+    captured: dict[str, str] = {}
+    full_serialized = False
+
+    class FakeMetrics:
+        segmented_writer_required = True
+
+    class FakeEvidencePackResult:
+        metrics = FakeMetrics()
+
+        def preflight_errors(self):
+            return []
+
+        def to_prompt_json(self):
+            nonlocal full_serialized
+            full_serialized = True
+            raise AssertionError("section repair should not serialize the full pack")
+
+        def repair_segment_input(self, sections):
+            return {
+                "schema_version": "writer_evidence_pack.v1",
+                "repair_sections": list(sections or []),
+                "segment_count": 1,
+                "allowed_source_ids": ["cursor-persona"],
+                "segments": [
+                    {
+                        "segment_name": "user_research",
+                        "source_registry": [{"id": "cursor-persona"}],
+                        "groups": [],
+                        "quotes": [],
+                        "matrix": {},
+                        "structured_knowledge": {},
+                        "allowed_source_ids": ["cursor-persona"],
+                        "segment_input_chars": 240,
+                    }
+                ],
+            }
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return "## User Review Themes\nEnterprise buyers cite onboarding. [source:cursor-persona]"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeEvidencePackResult(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_section_repair_markdown(
+        record,
+        sections=["review_theme_summary"],
+        previous_report="## User Review Themes\nThin.",
+    )
+
+    assert not full_serialized
+    assert "Writer Evidence Pack JSON:" in captured["user"]
+    assert "repair_sections" in captured["user"]
     assert "cursor-persona" in captured["user"]
 
 

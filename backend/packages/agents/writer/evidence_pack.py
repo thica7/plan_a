@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -272,6 +272,36 @@ class WriterEvidencePackResult(BaseModel):
         )
         return segments
 
+    def repair_segment_input(self, sections: Sequence[str] | None = None) -> dict[str, object]:
+        section_names = [section for section in sections or [] if section]
+        desired_segment_names = _repair_segment_names(section_names)
+        segments = [
+            segment
+            for segment in self.segment_inputs()
+            if segment.get("segment_name") in desired_segment_names
+        ]
+        if not segments:
+            segments = [
+                segment
+                for segment in self.segment_inputs()
+                if segment.get("segment_name") == "decision_summary"
+            ]
+        allowed_source_ids = _unique(
+            source_id
+            for segment in segments
+            for source_id in _string_list(segment.get("allowed_source_ids"))
+        )
+        payload: dict[str, object] = {
+            "schema_version": self.pack.schema_version,
+            "repair_sections": section_names,
+            "segment_names": sorted(desired_segment_names),
+            "segment_count": len(segments),
+            "allowed_source_ids": allowed_source_ids,
+            "segments": segments,
+        }
+        payload["repair_input_chars"] = len(json.dumps(payload, ensure_ascii=False))
+        return payload
+
     def _budgeted_source_segments(
         self,
         name: str,
@@ -438,6 +468,8 @@ class WriterEvidencePackResult(BaseModel):
         self,
         groups: list[WriterEvidenceGroup],
     ) -> list[dict[str, object]]:
+        if not groups:
+            return []
         segment = self._segment(
             "user_research",
             groups=groups,
@@ -1153,7 +1185,7 @@ class WriterEvidencePackResult(BaseModel):
     ) -> list[str]:
         invalid: list[str] = []
         registry_ids = {item.id for item in self.pack.source_registry}
-        for source_id in source_tokens(markdown or ""):
+        for source_id in source_tokens(markdown or "", include_malformed=True):
             if source_id not in registry_ids or source_id not in allowed_source_ids:
                 invalid.append(source_id)
         return _unique(invalid)
@@ -1745,6 +1777,51 @@ def _is_user_research_dimension(dimension: str) -> bool:
             "customer",
         )
     )
+
+
+def _repair_segment_names(sections: Sequence[str]) -> set[str]:
+    normalized = " ".join(section.casefold() for section in sections)
+    names: set[str] = set()
+    if any(
+        token in normalized
+        for token in (
+            "persona",
+            "user",
+            "review",
+            "community",
+            "interview",
+            "survey",
+            "customer",
+        )
+    ):
+        names.add("user_research")
+    if any(token in normalized for token in ("competitor", "deep", "vendor")):
+        names.add("competitor_deep_dives")
+    if "swot" in normalized:
+        names.add("swot_matrix")
+    if any(
+        token in normalized
+        for token in ("appendix", "evidence", "source", "support", "audit", "coverage")
+    ):
+        names.add("support_appendix")
+    if any(
+        token in normalized
+        for token in (
+            "executive",
+            "decision",
+            "finding",
+            "pricing",
+            "feature",
+            "security",
+            "workflow",
+            "market",
+            "battlecard",
+            "analysis",
+            "recommendation",
+        )
+    ) or ("summary" in normalized and not names):
+        names.add("decision_summary")
+    return names or {"decision_summary"}
 
 
 def _salient_terms(text: str) -> list[str]:

@@ -134,6 +134,10 @@ def writer_user_research_policy_text() -> str:
     )
 
 
+class WriterEvidencePreflightError(RuntimeError):
+    """Raised when writer evidence cannot safely be sent to the LLM."""
+
+
 class WriterAgentMixin:
     async def _real_writer_step(self, record: RunRecord) -> None:
         detail = record.detail
@@ -301,6 +305,17 @@ class WriterAgentMixin:
                 else:
                     detail.report_md = hardened_report
                     writer_mode = "writer repair: section"
+            except WriterEvidencePreflightError as exc:
+                writer_error = str(exc)
+                await self._fail_writer_without_report(
+                    record,
+                    writer_error,
+                    writer_repair_mode=writer_repair_mode,
+                    writer_repair_sections=writer_repair_sections,
+                    writer_repair_decision=writer_repair_decision,
+                    anti_regression_reason=anti_regression_reason,
+                    previous_report_protected=previous_report_protected,
+                )
             except TimeoutError as exc:
                 timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
                 writer_error = timeout_reason
@@ -631,7 +646,11 @@ class WriterAgentMixin:
             payload = {
                 "segment_name": segment["segment_name"],
                 "segment_competitor": segment.get("segment_competitor"),
+                "segment_dimension": segment.get("segment_dimension"),
+                "segment_batch": segment.get("segment_batch"),
+                "segment_over_budget_reason": segment.get("segment_over_budget_reason"),
                 "segment_input_chars": segment["segment_input_chars"],
+                "segment_input_target_chars": segment.get("segment_input_target_chars"),
                 "segment_source_count": len(segment["allowed_source_ids"]),
                 "segment_group_count": len(segment["groups"]),
                 "segment_allowed_source_ids": list(segment["allowed_source_ids"]),
@@ -704,6 +723,7 @@ class WriterAgentMixin:
                 "Previous segment cited source IDs outside this segment: "
                 f"{', '.join(citation_error_ids)}. Rewrite using only allowed_source_ids.\n"
             )
+        user_research_policy = writer_user_research_policy_text()
         return await asyncio.wait_for(
             self._trace_llm_text(
                 record,
@@ -715,6 +735,13 @@ class WriterAgentMixin:
                     "one section group of a larger markdown report. Return only markdown "
                     "for this segment. Cite factual claims only with source IDs in "
                     "allowed_source_ids. Do not invent source IDs. "
+                    "Do not use web_search_result or confidence < 0.75 as the sole support "
+                    "for a winner, legal/security certification, pricing, or procurement "
+                    "recommendation. If evidence is incomplete, say the conclusion is "
+                    "tentative and list the exact evidence gap. Do not claim all sources "
+                    "are verified when any source_type is web_search_result or "
+                    "llm_public_knowledge. "
+                    f"{user_research_policy} "
                     f"{language_guidance}"
                 ),
                 user=(
@@ -748,11 +775,21 @@ class WriterAgentMixin:
         evidence_pack_result = build_writer_evidence_pack(detail)
         preflight_errors = evidence_pack_result.preflight_errors()
         if preflight_errors:
-            raise RuntimeError(
+            raise WriterEvidencePreflightError(
                 "writer evidence pack preflight failed: "
                 + ", ".join(preflight_errors)
             )
-        writer_context_json = evidence_pack_result.to_prompt_json()
+        if getattr(
+            getattr(evidence_pack_result, "metrics", None),
+            "segmented_writer_required",
+            False,
+        ):
+            writer_context_json = json.dumps(
+                evidence_pack_result.repair_segment_input(sections),
+                ensure_ascii=False,
+            )
+        else:
+            writer_context_json = evidence_pack_result.to_prompt_json()
         language_guidance = language_instruction(detail.output_language)
         section_headings = "\n".join(
             self._writer_section_heading_instruction(detail, section) for section in sections
