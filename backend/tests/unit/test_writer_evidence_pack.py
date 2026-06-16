@@ -405,6 +405,58 @@ def test_pricing_conflicts_use_canonical_price_and_cycle_values() -> None:
     assert "cursor-higher" in conflict.source_ids_by_position["$25/month"]
 
 
+def test_equivalent_pricing_facts_dedupe_across_price_spellings() -> None:
+    sources = [
+        RawSource(
+            id="cursor-slash-price",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing slash",
+            snippet="Cursor Pro costs $20/month.",
+            content_hash="cursor-slash-price-hash",
+            confidence=0.95,
+            metadata={
+                "normalized_fields": [
+                    {
+                        "kind": "pricing",
+                        "tier_name": "Pro",
+                        "price": "$20/month",
+                        "billing_cycle": "monthly",
+                    }
+                ]
+            },
+        ),
+        RawSource(
+            id="cursor-word-price",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing words",
+            snippet="Cursor Pro costs $20 per month.",
+            content_hash="cursor-word-price-hash",
+            confidence=0.92,
+            metadata={
+                "normalized_fields": [
+                    {
+                        "kind": "pricing",
+                        "tier_name": "Pro",
+                        "price": "$20 per month",
+                        "billing_cycle": "month",
+                    }
+                ]
+            },
+        ),
+    ]
+
+    result = build_writer_evidence_pack(_detail_with_sources(sources))
+    fact = result.pack.groups[0].facts[0]
+
+    assert len(result.pack.groups[0].facts) == 1
+    assert fact.source_ids == ["cursor-slash-price", "cursor-word-price"]
+    assert result.metrics.deduped_fact_count == 1
+
+
 def test_structured_pricing_without_quote_suppresses_duplicate_residual_signal() -> None:
     source = RawSource(
         id="cursor-pricing-structured-only",
@@ -433,6 +485,43 @@ def test_structured_pricing_without_quote_suppresses_duplicate_residual_signal()
 
     assert len(group.facts) == 1
     assert group.unstructured_signals == []
+
+
+def test_mixed_structured_without_quote_keeps_unique_residual_signal() -> None:
+    source = RawSource(
+        id="cursor-pricing-noquote-mixed",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet=(
+            "A Pro plan costs $20/month. Enterprise procurement requires sales "
+            "contact and security review before rollout."
+        ),
+        content_hash="cursor-pricing-noquote-mixed-hash",
+        confidence=0.94,
+        metadata={
+            "normalized_fields": [
+                {
+                    "kind": "pricing",
+                    "tier_name": "Pro",
+                    "price": "$20/month",
+                    "billing_cycle": "monthly",
+                }
+            ]
+        },
+    )
+
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+    group = result.pack.groups[0]
+
+    assert len(group.facts) == 1
+    assert len(group.unstructured_signals) == 1
+    assert (
+        "procurement requires sales contact"
+        in group.unstructured_signals[0].signal_summary
+    )
+    assert "security review" in group.unstructured_signals[0].signal_summary
 
 
 def test_community_clusters_project_compact_fact_sources_and_confidence() -> None:

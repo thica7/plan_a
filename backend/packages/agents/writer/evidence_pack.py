@@ -357,7 +357,8 @@ class _WriterEvidencePackBuilder:
         )
         if clean_snippet and facts:
             clean_snippet = self._remove_covered_quotes(clean_snippet, facts)
-        if not clean_snippet or self._snippet_is_covered_by_facts(clean_snippet, facts):
+            clean_snippet = self._extract_residual_signal(clean_snippet, facts)
+        if not clean_snippet:
             return None
         signal = WriterUnstructuredSignal(
             id=f"signal:{source.id}",
@@ -383,25 +384,23 @@ class _WriterEvidencePackBuilder:
                 residual = residual.replace(quote.excerpt, " ")
         return _clean(residual)
 
-    def _snippet_is_covered_by_facts(
+    def _extract_residual_signal(
         self,
         clean_snippet: str,
         facts: list[WriterFact],
-    ) -> bool:
+    ) -> str:
         if not facts:
-            return False
-        snippet_key = _canonical_business_text(clean_snippet)
-        if not snippet_key:
-            return False
+            return clean_snippet
+        residual = clean_snippet
         for fact in facts:
             for quote_id in fact.quote_ids:
                 quote = self._quote_by_id(quote_id)
-                if quote and snippet_key in _clean(quote.excerpt).casefold():
-                    return True
-            value_terms = _business_value_terms(fact)
-            if value_terms and all(term in snippet_key for term in value_terms):
-                return True
-        return False
+                if quote and _canonical_business_text(
+                    residual
+                ) in _canonical_business_text(quote.excerpt):
+                    return ""
+            residual = _mask_fact_terms(residual, fact)
+        return residual if _has_meaningful_residual_signal(residual) else ""
 
     def _project_community_clusters(self, source: RawSource) -> list[WriterFact]:
         clusters = source.metadata.get("community_claim_clusters")
@@ -744,6 +743,27 @@ def _compact_value(value: object) -> object | None:
 
 
 def _fact_key(fact: WriterFact) -> str:
+    if fact.kind.casefold() == "pricing":
+        pricing_position = _pricing_conflict_position(fact)
+        if pricing_position is not None:
+            claim_area, canonical_position, _display_position = pricing_position
+            payload = {
+                "kind": "pricing",
+                "competitor": fact.competitor.casefold(),
+                "dimension": fact.dimension.casefold(),
+                "claim_area": claim_area,
+                "position": canonical_position,
+                "model_type": _canonical_business_text(
+                    _string(fact.values.get("model_type"))
+                ),
+                "usage_limit": _canonical_business_text(
+                    _string(fact.values.get("usage_limit"))
+                ),
+                "enterprise_condition": _canonical_business_text(
+                    _string(fact.values.get("enterprise_condition"))
+                ),
+            }
+            return json.dumps(payload, ensure_ascii=False, sort_keys=True).casefold()
     payload = {
         "kind": fact.kind.casefold(),
         "competitor": fact.competitor.casefold(),
@@ -772,13 +792,93 @@ def _business_value_terms(fact: WriterFact) -> list[str]:
     return _unique(terms)
 
 
+def _mask_fact_terms(text: str, fact: WriterFact) -> str:
+    residual = text
+    if fact.kind.casefold() == "pricing":
+        residual = _mask_pricing_fact_terms(residual, fact)
+    else:
+        for term in _business_value_terms(fact):
+            residual = _replace_case_insensitive(residual, term, " ")
+    return _clean(_strip_empty_sentence_fragments(residual))
+
+
+def _mask_pricing_fact_terms(text: str, fact: WriterFact) -> str:
+    residual = text
+    tier_name = _string(fact.values.get("tier_name"))
+    price = _string(fact.values.get("price"))
+    billing_cycle = _string(fact.values.get("billing_cycle"))
+    usage_limit = _string(fact.values.get("usage_limit"))
+    enterprise_condition = _string(fact.values.get("enterprise_condition"))
+    if tier_name:
+        residual = _replace_case_insensitive(residual, tier_name, " ")
+    amount = _price_amount(price)
+    if amount:
+        amount_pattern = re.escape(amount).replace(r"\$", r"\$ ?")
+        residual = re.sub(
+            rf"{amount_pattern}(?:\s*(?:/|per)\s*(?:month|monthly))?",
+            " ",
+            residual,
+            flags=re.IGNORECASE,
+        )
+    if billing_cycle:
+        for term in {
+            billing_cycle,
+            _canonical_billing_cycle(billing_cycle),
+            "per month",
+        }:
+            if term:
+                residual = _replace_case_insensitive(residual, term, " ")
+    for term in (usage_limit, enterprise_condition):
+        if term:
+            residual = _replace_case_insensitive(residual, term, " ")
+    residual = re.sub(
+        r"\b(?:a|an|the)?\s*(?:plan|tier)?\s*(?:costs?|priced at|is)?\s*(?:for)?\b",
+        " ",
+        residual,
+        flags=re.IGNORECASE,
+    )
+    return residual
+
+
+def _replace_case_insensitive(text: str, term: str, replacement: str) -> str:
+    clean_term = _clean(term)
+    if not clean_term:
+        return text
+    pattern = re.escape(clean_term)
+    if clean_term[0].isalnum():
+        pattern = rf"\b{pattern}"
+    if clean_term[-1].isalnum():
+        pattern = rf"{pattern}\b"
+    return re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+
+def _strip_empty_sentence_fragments(text: str) -> str:
+    fragments = [
+        fragment.strip(" .;:,")
+        for fragment in re.split(r"(?<=[.!?])\s+", text)
+    ]
+    return " ".join(fragment for fragment in fragments if fragment)
+
+
+def _has_meaningful_residual_signal(text: str) -> bool:
+    terms = _salient_terms(text)
+    meaningful_terms = [
+        term.strip(".")
+        for term in terms
+        if term.strip(".") not in {"plan", "tier", "costs", "cost", "month", "monthly"}
+    ]
+    return len(meaningful_terms) >= 2
+
+
 def _pricing_conflict_position(fact: WriterFact) -> tuple[str, str, str] | None:
     tier_name = _string(fact.values.get("tier_name"))
     price = _string(fact.values.get("price"))
     if not tier_name or not price:
         return None
     billing_cycle = _string(fact.values.get("billing_cycle"))
-    canonical_cycle = _canonical_billing_cycle(billing_cycle) or _canonical_billing_cycle(price)
+    canonical_cycle = _canonical_billing_cycle(billing_cycle) or _canonical_billing_cycle(
+        price
+    )
     if not canonical_cycle:
         return None
     canonical_price = _canonical_price_text(price)
