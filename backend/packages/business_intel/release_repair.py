@@ -40,7 +40,7 @@ class ReleaseReportRepairResult:
 
     def metadata(self) -> dict[str, Any]:
         return {
-            "changed": bool(self.targets),
+            "changed": self.changed or bool(self.targets) or self.before_issue_count > 0,
             "before_warn_count": self.before_warn_count,
             "after_warn_count": self.after_warn_count,
             "before_issue_count": self.before_issue_count,
@@ -58,7 +58,8 @@ def apply_release_gate_warning_report_repair(
     after_gate: ReportReleaseGate | None = None,
 ) -> ReleaseReportRepairResult:
     targets = release_repair_targets(gate, tasks)
-    if not targets:
+    should_record_status = not gate.allowed or bool(targets)
+    if not should_record_status:
         return ReleaseReportRepairResult(
             report_md=report_md,
             changed=False,
@@ -71,8 +72,10 @@ def apply_release_gate_warning_report_repair(
 
     section = release_repair_section(
         targets,
+        gate=gate,
         before_warn_count=gate.warn_count,
         after_warn_count=after_gate.warn_count if after_gate is not None else None,
+        after_issue_count=after_gate.issue_count if after_gate is not None else None,
     )
     repaired = replace_or_insert_section(report_md, RELEASE_REPAIR_HEADING, section)
     return ReleaseReportRepairResult(
@@ -104,29 +107,74 @@ def release_repair_targets(
 def release_repair_section(
     targets: list[ReleaseRepairTarget],
     *,
+    gate: ReportReleaseGate,
     before_warn_count: int,
     after_warn_count: int | None,
+    after_issue_count: int | None,
 ) -> str:
-    after_label = str(after_warn_count) if after_warn_count is not None else "pending"
-    rule_counts = Counter(target.rule_id for target in targets)
+    after_label = str(after_warn_count) if after_warn_count is not None else str(gate.warn_count)
+    after_issue_label = (
+        str(after_issue_count) if after_issue_count is not None else str(gate.issue_count)
+    )
+    rule_counts = _issue_rule_counts(gate.issues)
     section_counts = Counter(target.target_section for target in targets)
     action_counts = Counter(target.required_action for target in targets)
     lines = [
         f"## {RELEASE_REPAIR_HEADING}",
         (
+            f"- Release gate status: {gate.status}; {gate.blocker_count} blocker(s), "
+            f"{gate.warn_count} warning(s), {gate.issue_count} total issue(s)."
+        ),
+        (
             f"- Warning repair status: {before_warn_count} warning(s) before targeted "
             f"repair; {after_label} warning(s) after re-evaluation."
         ),
-        f"- Follow-up targets: {len(targets)} warning(s) grouped for reviewer attention.",
+        f"- Release gate issue re-evaluation: {after_issue_label} total issue(s) after repair.",
+        (
+            f"- Follow-up targets: {len(targets)} warning(s) grouped for reviewer attention."
+            if targets
+            else "- Follow-up targets: no warning follow-up targets; blocker details remain "
+            "in release_gate.warning_repair metadata."
+        ),
         (
             "- Scope: detailed release-gate issue rationale, claim IDs, evidence IDs, "
             "and acceptance rules are retained in release_gate.warning_repair metadata."
         ),
-        "- By rule: " + _format_counts(rule_counts) + ".",
+        "- By rule: " + _format_issue_rule_counts(rule_counts) + ".",
         "- By target section: " + _format_counts(section_counts) + ".",
         "- By required action: " + _format_counts(action_counts) + ".",
     ]
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _issue_rule_counts(issues: list[BusinessQAFinding]) -> dict[str, Counter[str]]:
+    counts: dict[str, Counter[str]] = {}
+    for issue in issues:
+        counts.setdefault(issue.rule_id, Counter())[issue.severity] += 1
+    return counts
+
+
+def _format_issue_rule_counts(counts: dict[str, Counter[str]]) -> str:
+    if not counts:
+        return "none"
+    parts: list[str] = []
+    severity_order = {"blocker": 0, "warn": 1, "info": 2}
+    for rule_id, severity_counts in sorted(counts.items()):
+        severity_parts = [
+            f"{count} {_display_severity(severity)}(s)"
+            for severity, count in sorted(
+                severity_counts.items(),
+                key=lambda item: severity_order.get(item[0], 99),
+            )
+        ]
+        parts.append(f"{rule_id}: {', '.join(severity_parts)}")
+    return ", ".join(parts)
+
+
+def _display_severity(severity: str) -> str:
+    if severity == "warn":
+        return "warning"
+    return severity
 
 
 def _format_counts(counts: Counter[str]) -> str:

@@ -9475,6 +9475,59 @@ def test_release_gate_quality_metadata_records_followup_tasks() -> None:
     assert "Collect a second independent pricing source." not in projection.report_version.report_md
 
 
+def test_release_gate_quality_metadata_records_blocked_status_in_report() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    projection = EnterpriseRunProjection(
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-1",
+        report_version=ReportVersionRecord(
+            id="report-version-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id="run-1",
+            version_number=1,
+            topic_normalized="release-gate-blocked",
+            competitor_layer="L1",
+            competitor_set_hash="hash",
+            report_md=(
+                "# Report\n\n"
+                "## Final QA Gate Status\n"
+                "**Status: passed.** No unresolved deterministic QA findings were recorded."
+            ),
+        ),
+    )
+
+    changed = service._attach_release_gate_quality_metadata(projection, _blocked_release_gate())
+    metadata = projection.report_version.quality_metadata["release_gate"]
+
+    assert changed is True
+    assert metadata["allowed"] is False
+    assert metadata["status"] == "blocked"
+    assert metadata["warning_repair"]["changed"] is True
+    assert "## Release Gate Follow-up Repairs" in projection.report_version.report_md
+    assert (
+        "- Release gate status: blocked; 1 blocker(s), 0 warning(s), "
+        "1 total issue(s)."
+    ) in projection.report_version.report_md
+    assert "claim_uses_low_confidence_evidence: 1 blocker(s)" in (
+        projection.report_version.report_md
+    )
+    assert projection.report_version.report_md.index(
+        "## Release Gate Follow-up Repairs"
+    ) < projection.report_version.report_md.index("## Final QA Gate Status")
+
+
 @pytest.mark.asyncio
 async def test_release_gate_auto_redo_is_disabled_for_demo_runs() -> None:
     service = RunService(
