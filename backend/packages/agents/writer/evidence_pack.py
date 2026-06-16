@@ -363,29 +363,17 @@ class WriterEvidencePackResult(BaseModel):
                 )
             ]
         segments: list[dict[str, object]] = []
-        for batch_index, facts in enumerate(
-            _chunked(group.facts, SEGMENT_FACT_BATCH_SIZE),
-            start=1,
-        ):
-            fact_source_ids = _unique(
-                source_id for fact in facts for source_id in fact.source_ids
-            )
-            if not fact_source_ids:
-                fact_source_ids = self._source_ids_for_groups([group])
-            sliced_group = self._group_for_source_ids(group, fact_source_ids)
-            sliced_group = sliced_group.model_copy(update={"facts": facts})
-            segments.append(
-                self._segment(
+        for facts in _chunked(group.facts, SEGMENT_FACT_BATCH_SIZE):
+            segments.extend(
+                self._budgeted_fact_segments(
                     "user_research",
-                    groups=[sliced_group],
-                    group_projection="full",
-                    quote_projection="full_referenced",
-                    matrix_projection="compact",
+                    group=group,
+                    facts=facts,
                     structured_competitors=[group.competitor],
                     structured_projection="compact",
                     segment_competitor=group.competitor,
-                    segment_dimension=group.dimension,
-                    segment_batch=f"{batch_prefix}:facts:{batch_index}",
+                    batch_prefix=batch_prefix,
+                    existing_count=len(segments),
                 )
             )
         return segments
@@ -487,30 +475,106 @@ class WriterEvidencePackResult(BaseModel):
                 )
             ]
         segments: list[dict[str, object]] = []
-        for batch_index, facts in enumerate(
-            _chunked(group.facts, SEGMENT_FACT_BATCH_SIZE),
-            start=1,
-        ):
-            fact_source_ids = _unique(
-                source_id for fact in facts for source_id in fact.source_ids
-            )
-            sliced_group = self._group_for_source_ids(group, fact_source_ids)
-            sliced_group = sliced_group.model_copy(update={"facts": facts})
-            segments.append(
-                self._segment(
+        for facts in _chunked(group.facts, SEGMENT_FACT_BATCH_SIZE):
+            segments.extend(
+                self._budgeted_fact_segments(
                     "competitor_deep_dives",
-                    groups=[sliced_group],
-                    group_projection="full",
-                    quote_projection="full_referenced",
-                    matrix_projection="compact",
+                    group=group,
+                    facts=facts,
                     structured_competitors=[competitor],
                     structured_projection="full",
                     segment_competitor=competitor,
-                    segment_dimension=group.dimension,
-                    segment_batch=f"{batch_prefix}:facts:{batch_index}",
+                    batch_prefix=batch_prefix,
+                    existing_count=len(segments),
                 )
             )
         return segments
+
+    def _budgeted_fact_segments(
+        self,
+        name: str,
+        *,
+        group: WriterEvidenceGroup,
+        facts: list[WriterFact],
+        structured_competitors: list[str],
+        structured_projection: Literal["full", "compact"],
+        segment_competitor: str,
+        batch_prefix: str,
+        existing_count: int,
+    ) -> list[dict[str, object]]:
+        segment = self._fact_segment(
+            name,
+            group=group,
+            facts=facts,
+            structured_competitors=structured_competitors,
+            structured_projection=structured_projection,
+            segment_competitor=segment_competitor,
+            segment_batch=f"{batch_prefix}:facts:{existing_count + 1}",
+        )
+        if (
+            segment["segment_input_chars"] <= SEGMENT_INPUT_TARGET_CHARS
+            or len(facts) <= 1
+        ):
+            if segment["segment_input_chars"] > SEGMENT_INPUT_TARGET_CHARS:
+                segment["segment_over_budget_reason"] = "single_fact_exceeds_budget"
+                segment["segment_input_target_chars"] = SEGMENT_INPUT_TARGET_CHARS
+                segment["segment_input_chars"] = len(
+                    json.dumps(segment, ensure_ascii=False)
+                )
+            return [segment]
+        midpoint = max(1, len(facts) // 2)
+        left_segments = self._budgeted_fact_segments(
+            name,
+            group=group,
+            facts=facts[:midpoint],
+            structured_competitors=structured_competitors,
+            structured_projection=structured_projection,
+            segment_competitor=segment_competitor,
+            batch_prefix=batch_prefix,
+            existing_count=existing_count,
+        )
+        right_segments = self._budgeted_fact_segments(
+            name,
+            group=group,
+            facts=facts[midpoint:],
+            structured_competitors=structured_competitors,
+            structured_projection=structured_projection,
+            segment_competitor=segment_competitor,
+            batch_prefix=batch_prefix,
+            existing_count=existing_count + len(left_segments),
+        )
+        return [*left_segments, *right_segments]
+
+    def _fact_segment(
+        self,
+        name: str,
+        *,
+        group: WriterEvidenceGroup,
+        facts: list[WriterFact],
+        structured_competitors: list[str],
+        structured_projection: Literal["full", "compact"],
+        segment_competitor: str,
+        segment_batch: str,
+    ) -> dict[str, object]:
+        fact_source_ids = _unique(
+            source_id for fact in facts for source_id in fact.source_ids
+        )
+        if not fact_source_ids:
+            fact_source_ids = self._source_ids_for_groups([group])
+        sliced_group = self._group_for_source_ids(group, fact_source_ids)
+        sliced_group = sliced_group.model_copy(update={"facts": facts})
+        return self._segment(
+            name,
+            groups=[sliced_group],
+            group_projection="full",
+            quote_projection="full_referenced",
+            matrix_projection="compact",
+            structured_competitors=structured_competitors,
+            structured_projection=structured_projection,
+            segment_competitor=segment_competitor,
+            segment_dimension=group.dimension,
+            segment_batch=segment_batch,
+        )
 
     def _segment(
         self,

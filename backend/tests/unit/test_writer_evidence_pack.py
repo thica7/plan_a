@@ -1219,18 +1219,21 @@ def test_user_research_segments_stay_under_absolute_budget() -> None:
         "Customer feedback describes onboarding friction, pricing review, team "
         "adoption concerns, administrative controls, and renewal decision criteria. "
     )
+    heavy_fact_value = (
+        "Interview detail covers rollout blockers, procurement review, renewal "
+        "criteria, enablement gaps, governance concerns, and team-level adoption "
+        "patterns. "
+        * 50
+    )
     sources = [
         RawSource(
-            id=f"cursor-customer-interview-{source_index}",
+            id="cursor-customer-interview-heavy",
             competitor="Cursor",
             dimension="customer_feedback",
             source_type="interview_record",
-            title=f"Cursor customer interview {source_index}",
-            snippet=(
-                f"Customer interview {source_index} reports adoption and "
-                "procurement feedback."
-            ),
-            content_hash=f"cursor-customer-interview-{source_index}-hash",
+            title="Cursor customer interview heavy",
+            snippet="Customer interviews report adoption and procurement feedback.",
+            content_hash="cursor-customer-interview-heavy-hash",
             confidence=0.86,
             metadata={
                 "normalized_fields": [
@@ -1238,19 +1241,25 @@ def test_user_research_segments_stay_under_absolute_budget() -> None:
                         "kind": "customer_feedback",
                         "dimension": "customer_feedback",
                         "competitor": "Cursor",
-                        "theme": f"feedback-theme-{source_index}-{field_index}",
+                        "theme": f"feedback-theme-{field_index}",
                         "sentiment": "mixed",
                         "buyer_role": "engineering leader",
-                        "source_quote": (
-                            f"{quote_base} source={source_index} field={field_index}. "
-                            * 12
+                        "detailed_takeaway": (
+                            f"{heavy_fact_value} item={field_index}"
                         ),
+                        **{
+                            f"detailed_takeaway_{detail_index}": (
+                                f"{heavy_fact_value} detail={detail_index} "
+                                f"item={field_index}"
+                            )
+                            for detail_index in range(20)
+                        },
+                        "source_quote": f"{quote_base} field={field_index}. " * 12,
                     }
-                    for field_index in range(24)
+                    for field_index in range(64)
                 ]
             },
         )
-        for source_index in range(10)
     ]
     detail = _detail_with_sources(sources)
     detail.plan.competitors = ["Cursor"]
@@ -1265,7 +1274,7 @@ def test_user_research_segments_stay_under_absolute_budget() -> None:
         for source_id in segment["allowed_source_ids"]
     }
 
-    assert max(segment["segment_input_chars"] for segment in segments) < (
+    assert max(segment["segment_input_chars"] for segment in segments) <= (
         SEGMENT_INPUT_TARGET_CHARS
     )
     assert union_segment_ids == registry_ids
@@ -1277,15 +1286,21 @@ def test_competitor_deep_dive_segments_stay_under_absolute_budget() -> None:
         "Pricing evidence covers batch priority models, cached input, output, "
         "long context, enterprise controls, procurement review, and rollout risk. "
     )
+    heavy_fact_value = (
+        "Pricing table detail covers model rows, context windows, batch priority, "
+        "cached input, output, enterprise availability, procurement controls, and "
+        "rollout assumptions. "
+        * 50
+    )
     sources = [
         RawSource(
-            id=f"openai-pricing-{source_index}",
+            id="openai-pricing-heavy",
             competitor="OpenAI Codex",
             dimension="pricing",
             source_type="webpage_verified",
-            title=f"OpenAI pricing source {source_index}",
-            snippet=f"OpenAI pricing source {source_index} includes detailed model rows.",
-            content_hash=f"openai-pricing-{source_index}-hash",
+            title="OpenAI pricing heavy",
+            snippet="OpenAI pricing source includes detailed model rows.",
+            content_hash="openai-pricing-heavy-hash",
             confidence=0.94,
             metadata={
                 "normalized_fields": [
@@ -1294,21 +1309,27 @@ def test_competitor_deep_dive_segments_stay_under_absolute_budget() -> None:
                         "dimension": "pricing",
                         "competitor": "OpenAI Codex",
                         "model_type": "api_usage_based",
-                        "tier_name": f"gpt-heavy-{source_index}-{field_index}",
-                        "price": f"${source_index}{field_index}.00",
+                        "tier_name": f"gpt-heavy-{field_index}",
+                        "price": f"${field_index}.00",
                         "billing_cycle": "per 1m",
                         "usage_limit": "long context",
                         "enterprise_condition": "enterprise_available",
-                        "source_quote": (
-                            f"{quote_base} source={source_index} field={field_index}. "
-                            * 12
+                        "detailed_pricing_note": (
+                            f"{heavy_fact_value} item={field_index}"
                         ),
+                        **{
+                            f"detailed_pricing_note_{detail_index}": (
+                                f"{heavy_fact_value} detail={detail_index} "
+                                f"item={field_index}"
+                            )
+                            for detail_index in range(20)
+                        },
+                        "source_quote": f"{quote_base} field={field_index}. " * 12,
                     }
-                    for field_index in range(24)
+                    for field_index in range(64)
                 ]
             },
         )
-        for source_index in range(10)
     ]
     detail = _detail_with_sources(sources)
     detail.plan.competitors = ["OpenAI Codex"]
@@ -1338,7 +1359,7 @@ def test_competitor_deep_dive_segments_stay_under_absolute_budget() -> None:
         for source_id in segment["allowed_source_ids"]
     }
 
-    assert max(segment["segment_input_chars"] for segment in segments) < (
+    assert max(segment["segment_input_chars"] for segment in segments) <= (
         SEGMENT_INPUT_TARGET_CHARS
     )
     assert union_segment_ids == registry_ids
