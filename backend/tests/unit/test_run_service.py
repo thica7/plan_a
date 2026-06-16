@@ -7352,6 +7352,145 @@ async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    sources = [
+        RawSource(
+            id="cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor Pro costs $20 per month.",
+            content_hash="cursor-pricing-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="cursor-persona",
+            competitor="Cursor",
+            dimension="persona",
+            source_type="interview_record",
+            title="Cursor persona",
+            snippet="Enterprise buyers evaluate Cursor for security review.",
+            content_hash="cursor-persona-hash",
+            confidence=0.82,
+        ),
+    ]
+    detail = RunDetail(
+        id="run-segment-retry-valid",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=sources,
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    decision_calls = 0
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        nonlocal decision_calls
+        user = kwargs["user"]
+        if "segment_name=decision_summary" in user:
+            decision_calls += 1
+            if "retry_count=1" in user:
+                return "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]"
+            return "## Executive Summary\nCursor pricing is visible. [source:missing-source]"
+        if "segment_name=user_research" in user:
+            return (
+                "## User Review Themes\nEnterprise buyers cite security review. "
+                "[source:cursor-persona]"
+            )
+        return "## Support\nCursor has cited evidence. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+    monkeypatch.setattr(
+        "packages.agents.writer.evidence_pack.SINGLE_CALL_CONTEXT_TARGET_CHARS",
+        100,
+    )
+
+    await service._real_writer_step(record)
+
+    assert decision_calls == 2
+    assert "[source:missing-source]" not in record.detail.report_md
+    assert "[source:cursor-pricing]" in record.detail.report_md
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_retry_fails_when_citations_stay_invalid(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor Pro costs $20 per month.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+    )
+    detail = RunDetail(
+        id="run-segment-retry-invalid",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[source],
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        return "## Executive Summary\nCursor pricing is visible. [source:missing-source]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+    monkeypatch.setattr(
+        "packages.agents.writer.evidence_pack.SINGLE_CALL_CONTEXT_TARGET_CHARS",
+        100,
+    )
+
+    with pytest.raises(RuntimeError, match="invalid source IDs after retry"):
+        await service._real_writer_step(record)
+
+    assert record.detail.status == "failed"
+    assert record.detail.report_md == ""
+
+
+@pytest.mark.asyncio
 async def test_writer_section_repair_uses_evidence_pack_context(monkeypatch) -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

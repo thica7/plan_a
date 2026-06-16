@@ -658,6 +658,15 @@ class WriterAgentMixin:
                     retry_count=1,
                     citation_error_ids=invalid_sources,
                 )
+                invalid_sources = evidence_pack_result.validate_segment_citations(
+                    segment_md,
+                    allowed_source_ids=set(segment["allowed_source_ids"]),
+                )
+                if invalid_sources:
+                    raise RuntimeError(
+                        "Writer segment cited invalid source IDs after retry: "
+                        f"{', '.join(invalid_sources)}"
+                    )
             sections.append(segment_md.strip())
         return "\n\n".join(section for section in sections if section)
 

@@ -199,21 +199,20 @@ class WriterEvidencePackResult(BaseModel):
         ]
 
     def segment_inputs(self) -> list[dict[str, object]]:
+        all_dimensions = {group.dimension for group in self.pack.groups}
+        user_research_dimensions = {
+            group.dimension
+            for group in self.pack.groups
+            if _is_user_research_dimension(group.dimension)
+            or group.user_research_source_ids
+            or group.community_source_ids
+        }
         return [
-            self._segment(
-                "decision_summary",
-                dimensions={"pricing", "feature", "persona"},
-            ),
-            self._segment("user_research", dimensions={"persona"}),
-            self._segment(
-                "competitor_deep_dives",
-                dimensions={"pricing", "feature", "persona"},
-            ),
-            self._segment("swot_matrix", dimensions={"pricing", "feature", "persona"}),
-            self._segment(
-                "support_appendix",
-                dimensions={"pricing", "feature", "persona"},
-            ),
+            self._segment("decision_summary", dimensions=all_dimensions),
+            self._segment("user_research", dimensions=user_research_dimensions),
+            self._segment("competitor_deep_dives", dimensions=all_dimensions),
+            self._segment("swot_matrix", dimensions=all_dimensions),
+            self._segment("support_appendix", dimensions=all_dimensions),
         ]
 
     def _segment(self, name: str, *, dimensions: set[str]) -> dict[str, object]:
@@ -221,6 +220,14 @@ class WriterEvidencePackResult(BaseModel):
         allowed_source_ids = _unique(
             source_id for group in groups for source_id in group.source_ids
         )
+        referenced_quote_ids: set[str] = set()
+        for group in groups:
+            for fact in group.facts:
+                referenced_quote_ids.update(fact.quote_ids)
+            for signal in group.unstructured_signals:
+                referenced_quote_ids.update(signal.quote_ids)
+            for quote in group.quotes:
+                referenced_quote_ids.add(quote.id)
         payload: dict[str, object] = {
             "schema_version": self.pack.schema_version,
             "segment_name": name,
@@ -230,11 +237,46 @@ class WriterEvidencePackResult(BaseModel):
                 if item.id in allowed_source_ids
             ],
             "groups": [group.model_dump(mode="json") for group in groups],
-            "matrix": self.pack.matrix,
+            "quotes": [
+                quote.model_dump(mode="json")
+                for quote in self.pack.quotes
+                if quote.id in referenced_quote_ids
+                or any(source_id in allowed_source_ids for source_id in quote.source_ids)
+                or any(
+                    source_id in allowed_source_ids
+                    for source_id in quote.full_text_source_ids
+                )
+            ],
+            "matrix": self._segment_matrix(allowed_source_ids),
+            "structured_knowledge": self.pack.structured_knowledge,
             "allowed_source_ids": allowed_source_ids,
         }
         payload["segment_input_chars"] = len(json.dumps(payload, ensure_ascii=False))
         return payload
+
+    def _segment_matrix(self, allowed_source_ids: list[str]) -> dict[str, object]:
+        allowed = set(allowed_source_ids)
+        matrix = dict(self.pack.matrix)
+        cells = matrix.get("cells")
+        if not isinstance(cells, list):
+            return matrix
+        filtered_cells: list[dict[str, object]] = []
+        for cell in cells:
+            if not isinstance(cell, Mapping):
+                continue
+            raw_source_ids = cell.get("source_ids", [])
+            if not isinstance(raw_source_ids, list):
+                continue
+            source_ids = [
+                source_id
+                for source_id in raw_source_ids
+                if isinstance(source_id, str) and source_id in allowed
+            ]
+            if not source_ids:
+                continue
+            filtered_cells.append({**cell, "source_ids": source_ids})
+        matrix["cells"] = filtered_cells
+        return matrix
 
     def validate_segment_citations(
         self,
@@ -804,6 +846,21 @@ def _unique(values: Iterable[str]) -> list[str]:
         result.append(value)
         seen.add(value)
     return result
+
+
+def _is_user_research_dimension(dimension: str) -> bool:
+    normalized = dimension.casefold()
+    return any(
+        token in normalized
+        for token in (
+            "persona",
+            "user",
+            "review",
+            "community",
+            "interview",
+            "survey",
+        )
+    )
 
 
 def _salient_terms(text: str) -> list[str]:

@@ -766,6 +766,154 @@ def test_evidence_pack_builds_segment_inputs_with_allowed_source_ids() -> None:
     assert "cursor-persona" in by_name["user_research"]["allowed_source_ids"]
 
 
+def test_segment_inputs_keep_non_core_dimensions_in_broad_segments() -> None:
+    source = RawSource(
+        id="cursor-security",
+        competitor="Cursor",
+        dimension="security",
+        source_type="webpage_verified",
+        title="Cursor security",
+        snippet="Cursor enterprise buyers require SSO and security review.",
+        content_hash="cursor-security-hash",
+        confidence=0.91,
+    )
+    detail = _detail_with_sources([source])
+    detail.plan.dimensions = ["security"]
+
+    result = build_writer_evidence_pack(detail)
+    by_name = {segment["segment_name"]: segment for segment in result.segment_inputs()}
+
+    assert "cursor-security" in by_name["decision_summary"]["allowed_source_ids"]
+    assert "cursor-security" in by_name["support_appendix"]["allowed_source_ids"]
+
+
+def test_segment_inputs_include_relevant_pack_quotes() -> None:
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor Pro costs $20 per month.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+        metadata={
+            "normalized_fields": [
+                {
+                    "kind": "pricing",
+                    "tier_name": "Pro",
+                    "price": "$20/month",
+                    "billing_cycle": "monthly",
+                    "source_quote": "Cursor Pro costs $20 per month.",
+                }
+            ]
+        },
+    )
+
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+    decision_summary = {
+        segment["segment_name"]: segment for segment in result.segment_inputs()
+    }["decision_summary"]
+
+    referenced_quote_ids = {
+        quote_id
+        for group in decision_summary["groups"]
+        for fact in group["facts"]
+        for quote_id in fact["quote_ids"]
+    }
+    segment_quote_ids = {quote["id"] for quote in decision_summary["quotes"]}
+    assert referenced_quote_ids
+    assert referenced_quote_ids <= segment_quote_ids
+
+
+def test_segment_inputs_include_structured_knowledge() -> None:
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor Pro costs $20 per month.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+    )
+    detail = _detail_with_sources([source])
+    detail.competitor_knowledge = {
+        "Cursor": CompetitorKnowledge(
+            competitor="Cursor",
+            confidence=0.91,
+            pricing_model=PricingModel(
+                tiers=[PricingTier(name="Pro", price="$20/month")]
+            ),
+        )
+    }
+
+    result = build_writer_evidence_pack(detail)
+    decision_summary = {
+        segment["segment_name"]: segment for segment in result.segment_inputs()
+    }["decision_summary"]
+
+    assert decision_summary["structured_knowledge"]["Cursor"]["confidence"] == 0.91
+
+
+def test_segment_matrix_filters_source_ids_outside_allowed_segment_sources() -> None:
+    sources = [
+        RawSource(
+            id="cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor Pro costs $20 per month.",
+            content_hash="cursor-pricing-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="cursor-persona",
+            competitor="Cursor",
+            dimension="persona",
+            source_type="interview_record",
+            title="Cursor persona",
+            snippet="Enterprise buyers evaluate Cursor for security review.",
+            content_hash="cursor-persona-hash",
+            confidence=0.82,
+        ),
+    ]
+    detail = _detail_with_sources(sources)
+    detail.comparison_matrix = ComparisonMatrix(
+        competitors=["Cursor"],
+        dimensions=["pricing", "persona"],
+        cells=[
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="pricing",
+                value="Cursor has visible pricing.",
+                source_ids=["cursor-pricing"],
+                confidence=0.96,
+            ),
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="persona",
+                value="Enterprise buyers evaluate rollout.",
+                source_ids=["cursor-pricing", "cursor-persona"],
+                confidence=0.84,
+            ),
+        ],
+        winner_by_dimension={"pricing": "Cursor", "persona": "Cursor"},
+        summary=["Cursor has evidence across dimensions."],
+    )
+
+    result = build_writer_evidence_pack(detail)
+    user_research = {
+        segment["segment_name"]: segment for segment in result.segment_inputs()
+    }["user_research"]
+
+    matrix_cells = user_research["matrix"]["cells"]
+    assert len(matrix_cells) == 1
+    assert matrix_cells[0]["dimension"] == "persona"
+    assert matrix_cells[0]["source_ids"] == ["cursor-persona"]
+
+
 def test_segment_citation_validation_rejects_unsupplied_source_id() -> None:
     source = RawSource(
         id="cursor-pricing",
