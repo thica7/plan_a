@@ -8,7 +8,11 @@ from typing import Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from packages.identity.source_resolver import source_tokens
+from packages.identity.source_resolver import (
+    is_valid_source_token,
+    normalize_source_token,
+    source_tokens,
+)
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
 from packages.schema.api_dto import RunDetail
@@ -25,6 +29,9 @@ SINGLE_CALL_CONTEXT_TARGET_CHARS = 160_000
 SEGMENT_INPUT_TARGET_CHARS = SINGLE_CALL_CONTEXT_TARGET_CHARS
 SEGMENT_SOURCE_BATCH_SIZE = 4
 SEGMENT_FACT_BATCH_SIZE = 32
+SOURCE_CITATION_RE = re.compile(
+    r"(?:\[source:([^\]]+)\]|\u3010source:([^\u3011]+)\u3011)"
+)
 T = TypeVar("T")
 NORMALIZED_FIELD_DROP_KEYS = {
     "kind",
@@ -222,7 +229,6 @@ class WriterEvidencePackResult(BaseModel):
             for group in groups
             if _is_user_research_dimension(group.dimension)
             or group.user_research_source_ids
-            or group.community_source_ids
         ]
         segments = []
         segments.extend(
@@ -1140,6 +1146,14 @@ class WriterEvidencePackResult(BaseModel):
                 invalid.append(source_id)
         return _unique(invalid)
 
+    def sanitize_segment_citations(
+        self,
+        markdown: str,
+        *,
+        allowed_source_ids: set[str],
+    ) -> str:
+        return _sanitize_segment_citations(markdown, allowed_source_ids)
+
 
 def _prompt_safe_pack_payload(pack: WriterEvidencePack) -> dict[str, object]:
     return {
@@ -1919,6 +1933,51 @@ def _unique(values: Iterable[str]) -> list[str]:
         result.append(value)
         seen.add(value)
     return result
+
+
+def _sanitize_segment_citations(markdown: str, allowed_source_ids: set[str]) -> str:
+    allowed = {normalize_source_token(source_id) for source_id in allowed_source_ids}
+
+    def replace(match: re.Match[str]) -> str:
+        raw_token = next(group for group in match.groups() if group is not None)
+        parts = _source_citation_parts(raw_token)
+        if not parts:
+            return match.group(0)
+        if len(parts) == 1:
+            token = _canonical_segment_source_token(parts[0], allowed)
+            return f"[source:{token}]" if is_valid_source_token(token) else match.group(0)
+        canonical_parts = [
+            _canonical_segment_source_token(token, allowed) for token in parts
+        ]
+        if all(is_valid_source_token(token) for token in canonical_parts) and all(
+            token in allowed for token in canonical_parts
+        ):
+            return "".join(f"[source:{token}]" for token in canonical_parts)
+        return match.group(0)
+
+    return SOURCE_CITATION_RE.sub(replace, markdown or "")
+
+
+def _canonical_segment_source_token(token: str, allowed_source_ids: set[str]) -> str:
+    normalized = normalize_source_token(token)
+    if normalized in allowed_source_ids:
+        return normalized
+    prefixed = f"raw-source-{normalized}"
+    if normalized and prefixed in allowed_source_ids:
+        return prefixed
+    return normalized
+
+
+def _source_citation_parts(raw_token: str) -> list[str]:
+    if "|" in raw_token:
+        parts: list[str] = []
+        for part in raw_token.split("|"):
+            token = normalize_source_token(part)
+            if token:
+                parts.append(token)
+        return parts
+    token = normalize_source_token(raw_token)
+    return [token] if token else []
 
 
 def _is_user_research_dimension(dimension: str) -> bool:

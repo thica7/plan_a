@@ -1256,6 +1256,45 @@ def test_user_research_segment_includes_user_sources_in_non_user_dimensions() ->
     assert [group["dimension"] for group in user_research["groups"]] == ["pricing"]
 
 
+def test_user_research_segment_excludes_non_user_dimension_community_sources() -> None:
+    sources = [
+        RawSource(
+            id="cursor-persona-interview",
+            competitor="Cursor",
+            dimension="persona",
+            source_type="interview_record",
+            title="Cursor persona interview",
+            snippet="A developer interview describes Cursor adoption patterns.",
+            content_hash="cursor-persona-interview-hash",
+            confidence=0.84,
+        ),
+        RawSource(
+            id="claude-feature-community",
+            competitor="Claude Code",
+            dimension="feature",
+            source_type="github_discussion",
+            title="Claude Code feature community thread",
+            snippet="A community thread discusses context-window behavior.",
+            content_hash="claude-feature-community-hash",
+            confidence=0.9,
+        ),
+    ]
+    detail = _detail_with_sources(sources)
+    detail.plan.competitors = ["Cursor", "Claude Code"]
+    detail.plan.dimensions = ["persona", "feature"]
+
+    result = build_writer_evidence_pack(detail)
+    user_research = next(
+        segment
+        for segment in result.segment_inputs()
+        if segment["segment_name"] == "user_research"
+    )
+
+    assert "cursor-persona-interview" in user_research["allowed_source_ids"]
+    assert "claude-feature-community" not in user_research["allowed_source_ids"]
+    assert [group["dimension"] for group in user_research["groups"]] == ["persona"]
+
+
 def test_user_research_segments_stay_under_absolute_budget() -> None:
     quote_base = (
         "Customer feedback describes onboarding friction, pricing review, team "
@@ -1849,6 +1888,112 @@ def test_segment_citation_validation_rejects_unsupplied_source_id() -> None:
     )
 
     assert errors == ["missing-source"]
+
+
+def test_segment_citation_sanitizer_normalizes_spacing_and_combined_sources() -> None:
+    sources = [
+        RawSource(
+            id="raw-source-openai-codex-pricing",
+            competitor="OpenAI Codex",
+            dimension="pricing",
+            source_type="official_docs",
+            title="OpenAI Codex pricing",
+            snippet="OpenAI Codex pricing is documented.",
+            content_hash="openai-codex-pricing-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="raw-source-openai-api-pricing",
+            competitor="OpenAI Codex",
+            dimension="pricing",
+            source_type="official_docs",
+            title="OpenAI API pricing",
+            snippet="OpenAI API pricing is documented.",
+            content_hash="openai-api-pricing-hash",
+            confidence=0.95,
+        ),
+    ]
+    result = build_writer_evidence_pack(_detail_with_sources(sources))
+    allowed_source_ids = {
+        "raw-source-openai-codex-pricing",
+        "raw-source-openai-api-pricing",
+    }
+
+    sanitized = result.sanitize_segment_citations(
+        "Codex pricing is supported. [source: raw-source-openai-codex-pricing] "
+        "API pricing is also relevant. "
+        "[source:raw-source-openai-codex-pricing | raw-source-openai-api-pricing]",
+        allowed_source_ids=allowed_source_ids,
+    )
+
+    assert "[source: raw-source-openai-codex-pricing]" not in sanitized
+    assert "[source:raw-source-openai-codex-pricing]" in sanitized
+    assert (
+        "[source:raw-source-openai-codex-pricing][source:raw-source-openai-api-pricing]"
+        in sanitized
+    )
+    assert (
+        result.validate_segment_citations(
+            sanitized,
+            allowed_source_ids=allowed_source_ids,
+        )
+        == []
+    )
+
+    with_unknown = result.sanitize_segment_citations(
+        "Mixed citation remains gated. "
+        "[source:raw-source-openai-codex-pricing | raw-source-missing]",
+        allowed_source_ids=allowed_source_ids,
+    )
+
+    invalid_sources = result.validate_segment_citations(
+        with_unknown,
+        allowed_source_ids=allowed_source_ids,
+    )
+
+    assert invalid_sources
+    assert "raw-source-missing" in invalid_sources[0]
+
+
+def test_segment_citation_sanitizer_prefixes_allowed_bare_raw_source_hash() -> None:
+    source = RawSource(
+        id="raw-source-923de7e2eb0370b8d440",
+        competitor="GitHub Copilot",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="GitHub Copilot pricing",
+        snippet="GitHub Copilot pricing is documented on GitHub.",
+        content_hash="copilot-pricing-hash",
+        confidence=0.98,
+    )
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+    allowed_source_ids = {"raw-source-923de7e2eb0370b8d440"}
+
+    sanitized = result.sanitize_segment_citations(
+        "Copilot pricing is supported. [source:923de7e2eb0370b8d440]",
+        allowed_source_ids=allowed_source_ids,
+    )
+
+    assert "[source:923de7e2eb0370b8d440]" not in sanitized
+    assert "[source:raw-source-923de7e2eb0370b8d440]" in sanitized
+    assert (
+        result.validate_segment_citations(
+            sanitized,
+            allowed_source_ids=allowed_source_ids,
+        )
+        == []
+    )
+
+    with_unknown = result.sanitize_segment_citations(
+        "Unknown bare hash remains gated. [source:deadbeefdeadbeefdead]",
+        allowed_source_ids=allowed_source_ids,
+    )
+
+    assert "[source:deadbeefdeadbeefdead]" in with_unknown
+    assert result.validate_segment_citations(
+        with_unknown,
+        allowed_source_ids=allowed_source_ids,
+    ) == ["deadbeefdeadbeefdead"]
 
 
 def test_segment_citation_validation_rejects_fact_derived_source_token() -> None:

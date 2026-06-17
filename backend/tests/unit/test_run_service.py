@@ -2750,6 +2750,53 @@ def test_qa_marks_phantom_citation_as_writer_only_blocker() -> None:
     assert phantom[0].redo_scope.kind == "writer_only"
 
 
+def test_qa_ignores_raw_source_metadata_text_when_checking_phantom_citations() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["persona"]),
+        report_md=(
+            '| High risk | "A subjective community claim" | '
+            "raw-source:a15f4ee6cbfc6f7f8453 (Reddit snippet, confidence 0.55) | "
+            "Treat as a weak signal, not a factual citation. |\n"
+            "A separate factual sentence cites the source correctly "
+            "[source:raw-source-a15f4ee6cbfc6f7f8453]."
+        ),
+        raw_sources=[
+            RawSource(
+                id="raw-source-a15f4ee6cbfc6f7f8453",
+                competitor="A",
+                dimension="persona",
+                source_type="snippet_only",
+                title="A subjective community claim",
+                url="https://example.com/community",
+                snippet="A subjective community claim.",
+                content_hash="a15f4ee6cbfc6f7f8453",
+                confidence=0.55,
+            )
+        ],
+    )
+
+    issues = service._build_phantom_citation_issues(detail)
+
+    assert issues == []
+
+
 def test_writer_repairs_fullwidth_unknown_source_tokens_to_canonical_source() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -7661,6 +7708,8 @@ async def test_writer_segment_prompt_includes_source_quality_and_user_research_p
         "Do not use web_search_result or confidence < 0.75 as the sole support"
         in prompt
     )
+    assert "Do not combine multiple source IDs inside one [source:...] token" in prompt
+    assert "[source:A][source:B]" in prompt
     assert "as user-research signals, not as official factual proof" in prompt
 
 
@@ -7744,6 +7793,91 @@ async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
     assert decision_calls == 2
     assert "[source:missing-source]" not in record.detail.report_md
     assert "[source:cursor-pricing]" in record.detail.report_md
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_sanitizes_spacing_and_combined_citations(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    sources = [
+        RawSource(
+            id="raw-source-openai-codex-pricing",
+            competitor="OpenAI Codex",
+            dimension="pricing",
+            source_type="official_docs",
+            title="OpenAI Codex pricing",
+            snippet="OpenAI Codex pricing is documented.",
+            content_hash="openai-codex-pricing-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="raw-source-openai-api-pricing",
+            competitor="OpenAI Codex",
+            dimension="pricing",
+            source_type="official_docs",
+            title="OpenAI API pricing",
+            snippet="OpenAI API pricing is documented.",
+            content_hash="openai-api-pricing-hash",
+            confidence=0.95,
+        ),
+    ]
+    detail = RunDetail(
+        id="run-segment-sanitize-citations",
+        topic="OpenAI Codex pricing",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="OpenAI Codex pricing",
+            competitors=["OpenAI Codex"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=sources,
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    decision_calls = 0
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        nonlocal decision_calls
+        user = kwargs["user"]
+        if "segment_name=decision_summary" in user:
+            decision_calls += 1
+            return (
+                "## Executive Summary\nCodex pricing is supported by official evidence. "
+                "[source: raw-source-openai-codex-pricing | raw-source-openai-api-pricing]"
+            )
+        return (
+            "## Support\nCodex pricing has cited evidence. "
+            "[source:raw-source-openai-codex-pricing]"
+        )
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+    monkeypatch.setattr(
+        "packages.agents.writer.evidence_pack.SINGLE_CALL_CONTEXT_TARGET_CHARS",
+        100,
+    )
+
+    await service._real_writer_step(record)
+
+    assert decision_calls == 1
+    assert "[source: raw-source-openai-codex-pricing" not in record.detail.report_md
+    assert " | raw-source-openai-api-pricing]" not in record.detail.report_md
+    assert (
+        "[source:raw-source-openai-codex-pricing][source:raw-source-openai-api-pricing]"
+        in record.detail.report_md
+    )
 
 
 @pytest.mark.asyncio

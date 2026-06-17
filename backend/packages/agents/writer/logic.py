@@ -674,9 +674,15 @@ class WriterAgentMixin:
                 required_sections=required_sections,
                 retry_count=0,
             )
+            allowed_source_ids = set(segment["allowed_source_ids"])
+            segment_md = self._sanitize_writer_segment_citations(
+                evidence_pack_result,
+                segment_md,
+                allowed_source_ids=allowed_source_ids,
+            )
             invalid_sources = evidence_pack_result.validate_segment_citations(
                 segment_md,
-                allowed_source_ids=set(segment["allowed_source_ids"]),
+                allowed_source_ids=allowed_source_ids,
             )
             if invalid_sources:
                 segment_md = await self._writer_segment_markdown(
@@ -690,9 +696,14 @@ class WriterAgentMixin:
                     retry_count=1,
                     citation_error_ids=invalid_sources,
                 )
+                segment_md = self._sanitize_writer_segment_citations(
+                    evidence_pack_result,
+                    segment_md,
+                    allowed_source_ids=allowed_source_ids,
+                )
                 invalid_sources = evidence_pack_result.validate_segment_citations(
                     segment_md,
-                    allowed_source_ids=set(segment["allowed_source_ids"]),
+                    allowed_source_ids=allowed_source_ids,
                 )
                 if invalid_sources:
                     raise RuntimeError(
@@ -701,6 +712,18 @@ class WriterAgentMixin:
                     )
             sections.append(segment_md.strip())
         return "\n\n".join(section for section in sections if section)
+
+    def _sanitize_writer_segment_citations(
+        self,
+        evidence_pack_result,
+        markdown: str,
+        *,
+        allowed_source_ids: set[str],
+    ) -> str:
+        sanitizer = getattr(evidence_pack_result, "sanitize_segment_citations", None)
+        if callable(sanitizer):
+            return sanitizer(markdown, allowed_source_ids=allowed_source_ids)
+        return markdown
 
     async def _writer_segment_markdown(
         self,
@@ -721,7 +744,10 @@ class WriterAgentMixin:
         if citation_error_ids:
             citation_warning = (
                 "Previous segment cited source IDs outside this segment: "
-                f"{', '.join(citation_error_ids)}. Rewrite using only allowed_source_ids.\n"
+                f"{', '.join(citation_error_ids)}. Rewrite using only allowed_source_ids. "
+                "Use exact [source:ID] syntax with no space after source:. Do not put "
+                "multiple source IDs inside one [source:...] token; cite multiple "
+                "sources as consecutive citations such as [source:A][source:B].\n"
             )
         user_research_policy = writer_user_research_policy_text()
         return await asyncio.wait_for(
@@ -734,7 +760,10 @@ class WriterAgentMixin:
                     "You are a senior enterprise competitive-intelligence analyst writing "
                     "one section group of a larger markdown report. Return only markdown "
                     "for this segment. Cite factual claims only with source IDs in "
-                    "allowed_source_ids. Do not invent source IDs. "
+                    "allowed_source_ids. Do not invent source IDs. Use exact [source:ID] "
+                    "syntax with no space after source:. Do not combine multiple source "
+                    "IDs inside one [source:...] token; write consecutive citations "
+                    "like [source:A][source:B]. "
                     "Do not use web_search_result or confidence < 0.75 as the sole support "
                     "for a winner, legal/security certification, pricing, or procurement "
                     "recommendation. If evidence is incomplete, say the conclusion is "
@@ -2956,7 +2985,7 @@ class WriterAgentMixin:
     def _extract_cited_source_ids(self, report_md: str) -> set[str]:
         cited = set(source_tokens(report_md))
         for pattern in (
-            r"\bsource(?:\s+id)?\s*:\s*([A-Za-z0-9_.:-]+)",
+            r"(?<![-\w])source(?:\s+id)?\s*:\s*([A-Za-z0-9_.:-]+)",
             r"\[source(?:\s+id)?\s+([A-Za-z0-9_.:-]+)\]",
         ):
             cited.update(re.findall(pattern, report_md, flags=re.IGNORECASE))
