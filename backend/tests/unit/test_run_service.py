@@ -7499,6 +7499,7 @@ async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch
         execution_mode="real",
         created_at=_now(),
         updated_at=_now(),
+        output_language="en-US",
         plan=AnalysisPlan(
             topic="AI coding agent",
             competitors=["Cursor"],
@@ -7514,7 +7515,11 @@ async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch
         user = kwargs["user"]
         calls.append(kwargs["name"])
         if "segment_name=decision_summary" in user:
-            return "## Executive Summary\nCursor has clear evidence. [source:cursor-source-0]"
+            return (
+                "## Decision Summary\nCursor has clear evidence. [source:cursor-source-0]\n\n"
+                "## Competitive Findings\nCursor has visible evaluation signals. "
+                "[source:cursor-source-0]"
+            )
         if "segment_name=user_research" in user:
             return (
                 "## User Review Themes\nEnterprise buyers cite rollout concerns. "
@@ -7526,7 +7531,12 @@ async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch
                 "[source:cursor-source-2]"
             )
         if "segment_name=swot_matrix" in user:
-            return "## SWOT Analysis\nStrengths include adoption signal. [source:cursor-source-3]"
+            return (
+                "## Side-by-Side Decision Matrix\nCursor compares favorably on "
+                "repository-aware workflows. [source:cursor-source-3]\n\n"
+                "## SWOT Analysis\nStrengths include adoption signal. "
+                "[source:cursor-source-3]"
+            )
         return "## Evidence Appendix\n- [source:cursor-source-0] Cursor source 0"
 
     monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
@@ -7539,7 +7549,7 @@ async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch
 
     assert "report_writer_segment" in calls
     assert "report_writer" not in calls
-    assert "## Executive Summary" in record.detail.report_md
+    assert "## Decision Summary" in record.detail.report_md
     assert any(event.type == "writer_segment_preflight" for event in record.events)
 
 
@@ -7805,6 +7815,9 @@ async def test_segmented_writer_assembles_duplicate_sections_before_return(
             "raw-source-b",
             "raw-source-c",
             "raw-source-d",
+            "raw-source-e",
+            "raw-source-f",
+            "raw-source-g",
         )
     ]
     segments = [
@@ -7821,16 +7834,31 @@ async def test_segmented_writer_assembles_duplicate_sections_before_return(
             segment_batch="sources:2",
         ),
         _segmented_writer_segment(
-            segment_name="support_appendix",
-            section_id="evidence_support",
-            segment_kind="support_fragment",
+            segment_name="competitive_findings",
+            section_id="competitive_findings",
             allowed_source_id="raw-source-c",
+        ),
+        _segmented_writer_segment(
+            segment_name="user_research",
+            section_id="review_theme_summary",
+            allowed_source_id="raw-source-d",
         ),
         _segmented_writer_segment(
             segment_name="competitor_deep_dives Cursor",
             section_id="competitor_deep_dives",
-            allowed_source_id="raw-source-d",
+            allowed_source_id="raw-source-e",
             segment_competitor="Cursor",
+        ),
+        _segmented_writer_segment(
+            segment_name="swot_matrix",
+            section_id="swot_matrix",
+            allowed_source_id="raw-source-f",
+        ),
+        _segmented_writer_segment(
+            segment_name="support_appendix",
+            section_id="evidence_support",
+            segment_kind="support_fragment",
+            allowed_source_id="raw-source-g",
         ),
     ]
     calls: list[str] = []
@@ -7848,10 +7876,19 @@ async def test_segmented_writer_assembles_duplicate_sections_before_return(
                 "## Decision Summary\n"
                 "Decision from sources:2 [source:raw-source-b]."
             )
-        if "segment_name=support_appendix" in user:
-            return "## Evidence and QA Support\nSupport [source:raw-source-c]."
+        if "segment_name=competitive_findings" in user:
+            return "## Competitive Findings\nFindings [source:raw-source-c]."
+        if "segment_name=user_research" in user:
+            return "## User Review Themes\nThemes [source:raw-source-d]."
         if "segment_name=competitor_deep_dives Cursor" in user:
-            return "## Competitor Deep Dives\n### Cursor\nDeep dive [source:raw-source-d]."
+            return "## Competitor Deep Dives\n### Cursor\nDeep dive [source:raw-source-e]."
+        if "segment_name=swot_matrix" in user:
+            return (
+                "## Side-by-Side Decision Matrix\nMatrix [source:raw-source-f].\n\n"
+                "## SWOT Analysis\nSWOT [source:raw-source-f]."
+            )
+        if "segment_name=support_appendix" in user:
+            return "## Evidence and QA Support\nSupport [source:raw-source-g]."
         raise AssertionError(f"unexpected writer segment prompt: {user}")
 
     monkeypatch.setattr(
@@ -7875,6 +7912,11 @@ async def test_segmented_writer_assembles_duplicate_sections_before_return(
     )
     assert "Decision from sources:1 [source:raw-source-a]." in report_md
     assert "Decision from sources:2 [source:raw-source-b]." in report_md
+    quality_events = [
+        event for event in record.events if event.type == "writer_quality_preflight"
+    ]
+    assert len(quality_events) == 1
+    assert quality_events[0].payload["passed"] is True
     assembly_events = [
         event for event in record.events if event.type == "writer_assembly_completed"
     ]
@@ -7978,24 +8020,62 @@ async def test_segmented_writer_does_not_serialize_full_evidence_pack(monkeypatc
 
         def segment_inputs(self):
             return [
-                {
-                    "schema_version": "writer_evidence_pack.v1",
-                    "segment_name": "decision_summary",
-                    "source_registry": [],
-                    "groups": [],
-                    "quotes": [],
-                    "matrix": {},
-                    "structured_knowledge": {},
-                    "allowed_source_ids": ["cursor-pricing"],
-                    "segment_input_chars": 240,
-                }
+                _segmented_writer_segment(
+                    segment_name="decision_summary",
+                    section_id="decision_summary",
+                    allowed_source_id="cursor-pricing",
+                ),
+                _segmented_writer_segment(
+                    segment_name="competitive_findings",
+                    section_id="competitive_findings",
+                    allowed_source_id="cursor-pricing",
+                ),
+                _segmented_writer_segment(
+                    segment_name="user_research",
+                    section_id="review_theme_summary",
+                    allowed_source_id="cursor-pricing",
+                ),
+                _segmented_writer_segment(
+                    segment_name="competitor_deep_dives",
+                    section_id="competitor_deep_dives",
+                    allowed_source_id="cursor-pricing",
+                ),
+                _segmented_writer_segment(
+                    segment_name="swot_matrix",
+                    section_id="swot_matrix",
+                    allowed_source_id="cursor-pricing",
+                ),
+                _segmented_writer_segment(
+                    segment_name="support_appendix",
+                    section_id="evidence_support",
+                    segment_kind="support_fragment",
+                    allowed_source_id="cursor-pricing",
+                ),
             ]
 
         def validate_segment_citations(self, markdown, *, allowed_source_ids):
             return []
 
     async def fake_trace_llm_text(*args, **kwargs):
-        return "# Report\n\nCursor has visible pricing. [source:cursor-pricing]"
+        user = kwargs["user"]
+        if "segment_name=decision_summary" in user:
+            return "## Decision Summary\nCursor has visible pricing. [source:cursor-pricing]"
+        if "segment_name=competitive_findings" in user:
+            return "## Competitive Findings\nCursor has visible pricing. [source:cursor-pricing]"
+        if "segment_name=user_research" in user:
+            return "## User Review Themes\nUsers discuss pricing. [source:cursor-pricing]"
+        if "segment_name=competitor_deep_dives" in user:
+            return "## Competitor Deep Dives\n### Cursor\nVisible pricing. [source:cursor-pricing]"
+        if "segment_name=swot_matrix" in user:
+            return (
+                "## Side-by-Side Decision Matrix\nCursor pricing is visible. "
+                "[source:cursor-pricing]\n\n"
+                "## SWOT Analysis\nStrengths include pricing visibility. "
+                "[source:cursor-pricing]"
+            )
+        if "segment_name=support_appendix" in user:
+            return "## Evidence & QA Support\nPricing source attached. [source:cursor-pricing]"
+        raise AssertionError(f"unexpected writer segment prompt: {user}")
 
     monkeypatch.setattr(
         "packages.agents.writer.logic.build_writer_evidence_pack",

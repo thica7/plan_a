@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from packages.agents.writer.assembler import assemble_report_sections
 from packages.agents.writer.evidence_pack import build_writer_evidence_pack
+from packages.agents.writer.quality_preflight import run_writer_quality_preflight
 from packages.agents.writer.repair import (
     apply_line_repair,
     build_writer_repair_plan,
@@ -844,7 +845,39 @@ class WriterAgentMixin:
             "Writer segmented report assembled",
             assembled.telemetry,
         )
-        return assembled.markdown
+        preflight = run_writer_quality_preflight(detail, assembled.markdown)
+        await self.emit(
+            detail.id,
+            "writer_quality_preflight",
+            "writer",
+            None,
+            "Writer assembled report quality preflight completed",
+            preflight.telemetry_payload(),
+        )
+        if preflight.passed:
+            return assembled.markdown
+
+        repaired = assemble_report_sections(
+            [assembled.markdown],
+            output_language=detail.output_language,
+            competitors=detail.plan.competitors,
+        )
+        repaired_preflight = run_writer_quality_preflight(detail, repaired.markdown)
+        await self.emit(
+            detail.id,
+            "writer_quality_preflight_repair",
+            "writer",
+            None,
+            "Writer assembled report quality preflight repair completed",
+            repaired_preflight.telemetry_payload(),
+        )
+        if repaired_preflight.passed:
+            return repaired.markdown
+
+        raise RuntimeError(
+            "Writer assembled report failed quality preflight: "
+            f"{', '.join(repaired_preflight.failure_reasons)}"
+        )
 
     def _sanitize_writer_segment_citations(
         self,
