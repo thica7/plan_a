@@ -106,6 +106,9 @@ _DASH_TRANSLATION = str.maketrans(
     }
 )
 _SUPPORTED_OUTPUT_LANGUAGES = ("zh-CN", "en-US")
+_HEADING_ALIAS_KEYS: tuple[str, ...] = tuple(
+    dict.fromkeys(CORE_HEADING_KEYS + SUPPORT_HEADING_KEYS + tuple(HEADING_KEY_ALIASES))
+)
 
 
 @dataclass(frozen=True)
@@ -137,7 +140,7 @@ def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
     section_id = _section_id_for(segment)
     essential = bool(segment.get("segment_essential", True))
 
-    if section_id == "evidence_support":
+    if segment_kind != "evidence_shard" and section_id == "evidence_support":
         segment_kind = "support_fragment"
     if segment_kind == "evidence_shard":
         return SegmentContract(
@@ -196,18 +199,32 @@ def validate_segment_contract(
 
     allowed_heading_keys = set(contract.allowed_heading_keys)
     forbidden_heading_key_set = set(contract.forbidden_heading_keys)
+    unknown_headings: list[str] = []
     forbidden_headings: list[str] = []
     forbidden_heading_keys: list[str] = []
     invalid_heading_keys: list[str] = []
     for heading in h2_headings:
         heading_key = heading_key_for(heading, contract.output_language)
-        if heading_key is None or heading_key in allowed_heading_keys:
+        if heading_key is None:
+            unknown_headings.append(heading)
+            continue
+        if heading_key in allowed_heading_keys:
             continue
         if heading_key in forbidden_heading_key_set:
             forbidden_headings.append(heading)
             forbidden_heading_keys.append(heading_key)
         else:
             invalid_heading_keys.append(heading_key)
+
+    if unknown_headings:
+        return SegmentValidationResult(
+            status="retry",
+            errors=["segment contains unknown H2 headings"],
+            h2_headings=h2_headings,
+            forbidden_headings=[],
+            forbidden_heading_keys=[],
+            invalid_heading_keys=[],
+        )
 
     if forbidden_headings:
         return SegmentValidationResult(
@@ -249,11 +266,10 @@ def heading_key_for(heading: str, output_language: str) -> str | None:
 
 def _heading_aliases(output_language: str) -> dict[str, tuple[str, ...]]:
     aliases: dict[str, tuple[str, ...]] = {}
-    keys = set(CORE_HEADING_KEYS) | set(SUPPORT_HEADING_KEYS) | set(HEADING_KEY_ALIASES)
     languages = tuple(
         dict.fromkeys((output_language, *_SUPPORTED_OUTPUT_LANGUAGES))
     )
-    for key in keys:
+    for key in _HEADING_ALIAS_KEYS:
         label_aliases: list[str] = []
         for language in languages:
             try:
@@ -261,12 +277,13 @@ def _heading_aliases(output_language: str) -> dict[str, tuple[str, ...]]:
             except KeyError:
                 continue
         label_aliases.extend(HEADING_KEY_ALIASES.get(key, ()))
-        aliases[key] = tuple(label_aliases)
+        aliases[key] = tuple(dict.fromkeys(label_aliases))
     return aliases
 
 
 def _normalize_heading(heading: str) -> str:
-    return " ".join(heading.strip().translate(_DASH_TRANSLATION).lower().split())
+    normalized = " ".join(heading.strip().translate(_DASH_TRANSLATION).lower().split())
+    return re.sub(r"\s+#+$", "", normalized).strip()
 
 
 def _h2_headings(markdown: str) -> list[str]:

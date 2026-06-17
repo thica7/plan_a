@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from packages.agents.writer.segment_contract import (
+    heading_key_for,
     segment_contract_for,
     validate_segment_contract,
 )
@@ -80,6 +81,25 @@ def test_evidence_shard_contract_rejects_any_h2() -> None:
     assert result.errors == ["evidence_shard must not contain H2 headings"]
 
 
+def test_evidence_shard_kind_takes_precedence_over_support_section() -> None:
+    contract = segment_contract_for(
+        {
+            "segment_kind": "evidence_shard",
+            "section_id": "evidence_support",
+            "output_language": "en-US",
+        }
+    )
+    markdown = f"## {report_label('en-US', 'evidence_support')}\nEvidence details."
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert contract.segment_kind == "evidence_shard"
+    assert contract.allow_h2 is False
+    assert result.status == "retry"
+    assert result.h2_headings == [report_label("en-US", "evidence_support")]
+    assert result.errors == ["evidence_shard must not contain H2 headings"]
+
+
 def test_empty_segment_output_fails() -> None:
     contract = segment_contract_for(
         {"segment_name": "decision_summary", "output_language": "en-US"}
@@ -93,6 +113,18 @@ def test_empty_segment_output_fails() -> None:
     assert result.forbidden_heading_keys == []
     assert result.invalid_heading_keys == []
     assert result.errors == ["segment output is empty"]
+
+
+def test_body_text_without_h2_passes_contract() -> None:
+    contract = segment_contract_for(
+        {"segment_name": "decision_summary", "output_language": "en-US"}
+    )
+
+    result = validate_segment_contract("Plain body text without headings.", contract)
+
+    assert result.status == "pass"
+    assert result.h2_headings == []
+    assert result.errors == []
 
 
 def test_contract_honors_explicit_section_id_and_segment_essential() -> None:
@@ -126,6 +158,31 @@ def test_known_heading_outside_allowed_contract_is_invalid_not_forbidden() -> No
     assert result.forbidden_heading_keys == []
     assert result.invalid_heading_keys == ["competitor_deep_dives"]
     assert result.errors == ["segment contains H2 headings outside its allowed contract"]
+
+
+def test_unknown_h2_heading_retries_with_unknown_heading_error() -> None:
+    contract = segment_contract_for(
+        {"segment_name": "decision_summary", "output_language": "en-US"}
+    )
+
+    result = validate_segment_contract("## Unexpected Custom Heading\nBody.", contract)
+
+    assert result.status == "retry"
+    assert result.h2_headings == ["Unexpected Custom Heading"]
+    assert result.forbidden_headings == []
+    assert result.forbidden_heading_keys == []
+    assert result.invalid_heading_keys == []
+    assert result.errors == ["segment contains unknown H2 headings"]
+
+
+def test_heading_key_for_normalizes_closing_markdown_hashes() -> None:
+    assert heading_key_for("Decision Summary ##", "en-US") == "decision_summary"
+
+
+def test_heading_key_for_is_deterministic_across_repeated_calls() -> None:
+    results = [heading_key_for("Decision Summary", "en-US") for _ in range(10)]
+
+    assert results == ["decision_summary"] * 10
 
 
 def test_valid_user_research_contract_passes_localized_heading() -> None:
