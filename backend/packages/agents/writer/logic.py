@@ -728,8 +728,8 @@ class WriterAgentMixin:
         required_sections: str,
     ) -> str:
         detail = record.detail
-        sections: list[str] = []
-        for segment in evidence_pack_result.segment_inputs():
+
+        async def write_validated_segment(segment: dict[str, object]):
             contract = segment_contract_for(segment)
             segment_with_contract = {
                 **segment,
@@ -915,7 +915,41 @@ class WriterAgentMixin:
                         "segment_retry_count": 1,
                     },
                 )
-            sections.append(segment_md.strip())
+            return segment_md.strip(), contract
+
+        sections: list[str] = []
+        shards_by_section: dict[str, list[str]] = {}
+        section_allowed_source_ids: dict[str, set[str]] = {}
+        for segment in evidence_pack_result.segment_inputs():
+            segment_md, contract = await write_validated_segment(segment)
+            if contract.segment_kind == "evidence_shard":
+                section_id = contract.section_id
+                shards_by_section.setdefault(section_id, []).append(segment_md)
+                allowed_source_ids = section_allowed_source_ids.setdefault(
+                    section_id, set()
+                )
+                allowed_source_ids.update(
+                    source_id
+                    for source_id in (segment.get("allowed_source_ids") or [])
+                    if isinstance(source_id, str)
+                )
+                continue
+            sections.append(segment_md)
+        for section_id, shard_notes in shards_by_section.items():
+            section_segment = {
+                "segment_name": section_id,
+                "segment_kind": "section_fragment",
+                "section_id": section_id,
+                "output_language": detail.output_language,
+                "segment_input_chars": sum(len(note) for note in shard_notes),
+                "allowed_source_ids": sorted(section_allowed_source_ids[section_id]),
+                "groups": [],
+                "sources": [],
+                "shard_notes": shard_notes,
+                "segment_batch": "from_evidence_shards",
+            }
+            section_md, _ = await write_validated_segment(section_segment)
+            sections.append(section_md)
         assembled = assemble_report_sections(
             sections,
             output_language=detail.output_language,
@@ -1031,6 +1065,18 @@ class WriterAgentMixin:
                 "the section as an evidence gap/absence note and do not invent user "
                 "research findings.\n"
             )
+        shard_instruction = ""
+        if segment.get("segment_kind") == "evidence_shard":
+            shard_instruction += (
+                "This is an evidence shard. Return compact structured notes as bullets. "
+                "Do not write any ## H2 heading. Do not write a final report section. "
+                "Preserve exact source IDs for facts that should be cited by the section writer.\n"
+            )
+        if segment.get("shard_notes"):
+            shard_instruction += (
+                "This section writer receives evidence shard notes in segment.shard_notes. "
+                "Write exactly one canonical report section or allowed section group from those notes.\n"
+            )
         user_research_policy = writer_user_research_policy_text()
         return await asyncio.wait_for(
             self._trace_llm_text(
@@ -1071,6 +1117,7 @@ class WriterAgentMixin:
                     f"{citation_warning}"
                     f"{contract_warning}"
                     f"{user_research_gap_instruction}"
+                    f"{shard_instruction}"
                     "Do not write headings outside this segment's contract. "
                     "Do not write support or appendix sections unless "
                     "segment_kind=support_fragment. If segment_kind=evidence_shard, "

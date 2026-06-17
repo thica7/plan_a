@@ -8135,13 +8135,13 @@ class _SegmentedWriterFakePack:
 
     def __init__(
         self,
+        segments: list[dict[str, object]] | None = None,
         *,
         segment_name: str = "decision_summary",
         section_id: str = "decision_summary",
         segment_kind: str = "section_fragment",
         output_language: str = "en-US",
         allowed_source_ids: list[str] | None = None,
-        segments: list[dict[str, object]] | None = None,
     ) -> None:
         self._segment = {
             "schema_version": "writer_evidence_pack.v1",
@@ -8208,7 +8208,12 @@ def _segmented_writer_service() -> RunService:
     )
 
 
-def _segmented_writer_detail(*, run_id: str) -> RunDetail:
+def _segmented_writer_detail(
+    *,
+    run_id: str,
+    competitors: list[str] | None = None,
+) -> RunDetail:
+    competitors = competitors or ["Cursor"]
     return RunDetail(
         id=run_id,
         topic="AI coding agent",
@@ -8219,7 +8224,7 @@ def _segmented_writer_detail(*, run_id: str) -> RunDetail:
         output_language="en-US",
         plan=AnalysisPlan(
             topic="AI coding agent",
-            competitors=["Cursor"],
+            competitors=competitors,
             dimensions=["pricing"],
         ),
         raw_sources=[
@@ -8237,8 +8242,13 @@ def _segmented_writer_detail(*, run_id: str) -> RunDetail:
     )
 
 
-def _segmented_writer_record(service: RunService, *, run_id: str) -> RunRecord:
-    detail = _segmented_writer_detail(run_id=run_id)
+def _segmented_writer_record(
+    service: RunService,
+    *,
+    run_id: str = "run-segmented-writer",
+    competitors: list[str] | None = None,
+) -> RunRecord:
+    detail = _segmented_writer_detail(run_id=run_id, competitors=competitors)
     record = RunRecord(detail=detail)
     service._runs[detail.id] = record
     return record
@@ -8342,6 +8352,81 @@ async def test_writer_segment_preflight_emits_contract_metadata(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_evidence_shard_outputs_notes_then_section_writer_outputs_one_h2(
+    monkeypatch,
+):
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, competitors=["Cursor"])
+    pack = _SegmentedWriterFakePack(
+        [
+            {
+                "segment_name": "decision_summary",
+                "segment_kind": "evidence_shard",
+                "section_id": "decision_summary",
+                "output_language": "en-US",
+                "segment_batch": "sources:1",
+                "segment_input_chars": 2000,
+                "allowed_source_ids": ["raw-source-a"],
+                "groups": [],
+                "sources": [],
+            },
+            {
+                "segment_name": "decision_summary",
+                "segment_kind": "evidence_shard",
+                "section_id": "decision_summary",
+                "output_language": "en-US",
+                "segment_batch": "sources:2",
+                "segment_input_chars": 2000,
+                "allowed_source_ids": ["raw-source-b"],
+                "groups": [],
+                "sources": [],
+            },
+        ]
+    )
+    calls = []
+
+    async def fake_segment_writer(*args, **kwargs):
+        segment = kwargs["segment"]
+        calls.append(segment["segment_kind"])
+        if segment["segment_kind"] == "evidence_shard":
+            return (
+                f"- shard note {segment['segment_batch']} "
+                f"[source:{segment['allowed_source_ids'][0]}]"
+            )
+        return (
+            "## Decision Summary\n"
+            "Merged shard note [source:raw-source-a][source:raw-source-b]."
+        )
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
+
+    report = await service._writer_segmented_report_markdown(
+        record,
+        evidence_pack_result=pack,
+        timeout_seconds=60,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    assert calls == ["evidence_shard", "evidence_shard", "section_fragment"]
+    assert report.count("## Decision Summary") == 1
+    assert "Merged shard note" in report
+
+
+@pytest.mark.asyncio
 async def test_segmented_writer_retries_when_segment_uses_forbidden_heading(
     monkeypatch,
 ) -> None:
@@ -8370,6 +8455,18 @@ async def test_segmented_writer_retries_when_segment_uses_forbidden_heading(
         lambda detail: _SegmentedWriterFakePack(),
     )
     monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
 
     await service._real_writer_step(record)
 
@@ -8419,6 +8516,18 @@ async def test_segmented_writer_repairs_citations_after_contract_retry(
         lambda detail: _SegmentedWriterFakePack(),
     )
     monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
 
     await service._real_writer_step(record)
 

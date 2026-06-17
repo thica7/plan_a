@@ -1811,6 +1811,71 @@ def test_segment_inputs_mark_single_source_broad_segment_over_budget() -> None:
     assert all(len(segment["allowed_source_ids"]) == 1 for segment in over_budget)
 
 
+def test_budget_split_decision_summary_segments_are_evidence_shards(monkeypatch):
+    import packages.agents.writer.evidence_pack as evidence_pack_module
+
+    monkeypatch.setattr(evidence_pack_module, "SEGMENT_INPUT_TARGET_CHARS", 1000)
+    sources = [
+        RawSource(
+            id=f"cursor-pricing-{index}",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title=f"Cursor pricing {index}",
+            url=f"https://example.com/cursor-pricing-{index}",
+            snippet=(
+                "Cursor pricing evidence for budget segmentation. "
+                "This source should be represented and preserved for writer shards. "
+                * 8
+            ),
+            content_hash=f"cursor-pricing-{index}",
+            confidence=0.9,
+        )
+        for index in range(12)
+    ]
+    detail = _detail_with_sources(sources)
+    result = build_writer_evidence_pack(detail)
+
+    decision_segments = [
+        segment
+        for segment in result.segment_inputs()
+        if segment["segment_name"] == "decision_summary"
+    ]
+
+    assert len(decision_segments) > 1
+    assert all(segment["segment_kind"] == "evidence_shard" for segment in decision_segments)
+    assert all(segment["section_id"] == "decision_summary" for segment in decision_segments)
+    assert all(segment["segment_essential"] is True for segment in decision_segments)
+
+
+def test_unsplit_user_research_segment_remains_section_fragment():
+    sources = [
+        RawSource(
+            id=f"cursor-persona-{index}",
+            competitor="Cursor",
+            dimension="persona",
+            source_type="interview_record",
+            title=f"Cursor persona {index}",
+            snippet="Interviewed buyers cite onboarding, security review, and procurement effort.",
+            content_hash=f"cursor-persona-{index}",
+            confidence=0.82,
+        )
+        for index in range(3)
+    ]
+    detail = _detail_with_sources(sources)
+    result = build_writer_evidence_pack(detail)
+
+    user_segments = [
+        segment
+        for segment in result.segment_inputs()
+        if segment["segment_name"] == "user_research"
+    ]
+
+    assert len(user_segments) == 1
+    assert user_segments[0]["segment_kind"] == "section_fragment"
+    assert user_segments[0]["section_id"] == "review_theme_summary"
+
+
 def test_segment_matrix_filters_source_ids_outside_allowed_segment_sources() -> None:
     sources = [
         RawSource(

@@ -442,6 +442,7 @@ class WriterEvidencePackResult(BaseModel):
             segment_batch=f"sources:{existing_count + 1}",
             include_coverage=include_coverage,
         )
+        self._mark_evidence_shard(segment)
         if (
             segment["segment_input_chars"] <= SEGMENT_INPUT_TARGET_CHARS
             or len(allowed_source_ids) <= 1
@@ -491,6 +492,20 @@ class WriterEvidencePackResult(BaseModel):
             segment["segment_over_budget_reason"] = "single_source_exceeds_budget"
             segment["segment_input_target_chars"] = SEGMENT_INPUT_TARGET_CHARS
             segment["segment_input_chars"] = len(json.dumps(segment, ensure_ascii=False))
+
+    def _mark_evidence_shard(self, segment: dict[str, object]) -> None:
+        if segment.get("section_id") == "evidence_support":
+            return
+        base_section_id = segment.get("section_id")
+        segment.update(
+            {
+                "segment_kind": "evidence_shard",
+                "section_id": base_section_id,
+                "segment_essential": True,
+                "shard_output_format": "structured_notes",
+            }
+        )
+        segment["segment_input_chars"] = len(json.dumps(segment, ensure_ascii=False))
 
     def _source_scoped_segment(
         self,
@@ -594,6 +609,7 @@ class WriterEvidencePackResult(BaseModel):
                     segment_dimension=group.dimension,
                     segment_batch=f"sources:{batch_index}",
                 )
+                self._mark_evidence_shard(source_segment)
                 if source_segment["segment_input_chars"] < SEGMENT_INPUT_TARGET_CHARS:
                     segments.append(source_segment)
                     continue
@@ -613,20 +629,20 @@ class WriterEvidencePackResult(BaseModel):
         batch_prefix: str,
     ) -> list[dict[str, object]]:
         if not group.facts:
-            return [
-                self._segment(
-                    "user_research",
-                    groups=[group],
-                    group_projection="compact",
-                    quote_projection="compact",
-                    matrix_projection="compact",
-                    structured_competitors=[group.competitor],
-                    structured_projection="compact",
-                    segment_competitor=group.competitor,
-                    segment_dimension=group.dimension,
-                    segment_batch=batch_prefix,
-                )
-            ]
+            segment = self._segment(
+                "user_research",
+                groups=[group],
+                group_projection="compact",
+                quote_projection="compact",
+                matrix_projection="compact",
+                structured_competitors=[group.competitor],
+                structured_projection="compact",
+                segment_competitor=group.competitor,
+                segment_dimension=group.dimension,
+                segment_batch=batch_prefix,
+            )
+            self._mark_evidence_shard(segment)
+            return [segment]
         segments: list[dict[str, object]] = []
         for facts in _chunked(group.facts, SEGMENT_FACT_BATCH_SIZE):
             segments.extend(
@@ -704,6 +720,7 @@ class WriterEvidencePackResult(BaseModel):
                     segment_dimension=group.dimension,
                     segment_batch=f"sources:{batch_index}",
                 )
+                self._mark_evidence_shard(source_segment)
                 if source_segment["segment_input_chars"] < SEGMENT_INPUT_TARGET_CHARS:
                     segments.append(source_segment)
                     continue
@@ -725,20 +742,20 @@ class WriterEvidencePackResult(BaseModel):
         batch_prefix: str,
     ) -> list[dict[str, object]]:
         if not group.facts:
-            return [
-                self._segment(
-                    "competitor_deep_dives",
-                    groups=[group],
-                    group_projection="compact",
-                    quote_projection="compact",
-                    matrix_projection="compact",
-                    structured_competitors=[competitor],
-                    structured_projection="compact",
-                    segment_competitor=competitor,
-                    segment_dimension=group.dimension,
-                    segment_batch=batch_prefix,
-                )
-            ]
+            segment = self._segment(
+                "competitor_deep_dives",
+                groups=[group],
+                group_projection="compact",
+                quote_projection="compact",
+                matrix_projection="compact",
+                structured_competitors=[competitor],
+                structured_projection="compact",
+                segment_competitor=competitor,
+                segment_dimension=group.dimension,
+                segment_batch=batch_prefix,
+            )
+            self._mark_evidence_shard(segment)
+            return [segment]
         segments: list[dict[str, object]] = []
         for facts in _chunked(group.facts, SEGMENT_FACT_BATCH_SIZE):
             segments.extend(
@@ -776,6 +793,7 @@ class WriterEvidencePackResult(BaseModel):
             segment_competitor=segment_competitor,
             segment_batch=f"{batch_prefix}:facts:{existing_count + 1}",
         )
+        self._mark_evidence_shard(segment)
         if (
             segment["segment_input_chars"] <= SEGMENT_INPUT_TARGET_CHARS
             or len(facts) <= 1
