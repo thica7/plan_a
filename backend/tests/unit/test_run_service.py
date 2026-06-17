@@ -9003,14 +9003,38 @@ async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
     service._runs[detail.id] = record
     decision_calls = 0
 
+    def segment_payload_from_prompt(user: str) -> dict[str, object]:
+        marker = "Segment Evidence Pack JSON: "
+        if marker not in user:
+            return {}
+        payload = user.split(marker, 1)[1].split("\n\nRequired sections", 1)[0]
+        return json.loads(payload)
+
     async def fake_trace_llm_text(*args, **kwargs):
         nonlocal decision_calls
         user = kwargs["user"]
+        segment_payload = segment_payload_from_prompt(user)
+        if segment_payload.get("segment_kind") == "evidence_shard":
+            allowed_source_ids = segment_payload.get("allowed_source_ids") or []
+            source_id = (
+                allowed_source_ids[0]
+                if allowed_source_ids
+                else "cursor-pricing"
+            )
+            return f"- Cursor shard note cites scoped evidence. [source:{source_id}]"
         if "segment_name=decision_summary" in user:
             decision_calls += 1
             if "retry_count=1" in user:
-                return "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]"
-            return "## Executive Summary\nCursor pricing is visible. [source:missing-source]"
+                return (
+                    "## Decision Summary\nCursor pricing is visible. [source:cursor-pricing]\n\n"
+                    "## Competitive Findings\nCursor has cited evaluation signals. "
+                    "[source:cursor-pricing]"
+                )
+            return (
+                "## Decision Summary\nCursor pricing is visible. [source:missing-source]\n\n"
+                "## Competitive Findings\nCursor has unsupported evaluation signals. "
+                "[source:missing-source]"
+            )
         if "segment_name=user_research" in user:
             return (
                 "## User Review Themes\nEnterprise buyers cite security review. "
@@ -9022,7 +9046,11 @@ async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
                 "[source:cursor-pricing]"
             )
         if "segment_name=swot_matrix" in user:
-            return "## SWOT Analysis\nCursor has cited evidence. [source:cursor-pricing]"
+            return (
+                "## Side-by-Side Decision Matrix\nCursor pricing is visible for comparison. "
+                "[source:cursor-pricing]\n\n"
+                "## SWOT Analysis\nCursor has cited evidence. [source:cursor-pricing]"
+            )
         return "## Evidence Support\nCursor has cited evidence. [source:cursor-pricing]"
 
     monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
@@ -9092,14 +9120,37 @@ async def test_writer_segment_sanitizes_spacing_and_combined_citations(monkeypat
     service._runs[detail.id] = record
     decision_calls = 0
 
+    def segment_payload_from_prompt(user: str) -> dict[str, object]:
+        marker = "Segment Evidence Pack JSON: "
+        if marker not in user:
+            return {}
+        payload = user.split(marker, 1)[1].split("\n\nRequired sections", 1)[0]
+        return json.loads(payload)
+
     async def fake_trace_llm_text(*args, **kwargs):
         nonlocal decision_calls
         user = kwargs["user"]
+        segment_payload = segment_payload_from_prompt(user)
+        if segment_payload.get("segment_kind") == "evidence_shard":
+            allowed_source_ids = segment_payload.get("allowed_source_ids") or []
+            source_id = (
+                allowed_source_ids[0]
+                if allowed_source_ids
+                else "raw-source-openai-codex-pricing"
+            )
+            return f"- Pricing shard note cites scoped evidence. [source:{source_id}]"
         if "segment_name=decision_summary" in user:
             decision_calls += 1
             return (
-                "## Executive Summary\nCodex pricing is supported by official evidence. "
-                "[source: raw-source-openai-codex-pricing | raw-source-openai-api-pricing]"
+                "## Decision Summary\nCodex pricing is supported by official evidence. "
+                "[source: raw-source-openai-codex-pricing | raw-source-openai-api-pricing]\n\n"
+                "## Competitive Findings\nThe pricing evidence comes from official docs. "
+                "[source:raw-source-openai-codex-pricing]"
+            )
+        if "segment_name=user_research" in user:
+            return (
+                "## User Review Themes\nNo cited user-review themes are available in this "
+                "fixture; treat buyer sentiment as an evidence gap."
             )
         if "segment_name=competitor_deep_dives" in user:
             return (
@@ -9108,6 +9159,8 @@ async def test_writer_segment_sanitizes_spacing_and_combined_citations(monkeypat
             )
         if "segment_name=swot_matrix" in user:
             return (
+                "## Side-by-Side Decision Matrix\nCodex pricing has cited evidence. "
+                "[source:raw-source-openai-codex-pricing]\n\n"
                 "## SWOT Analysis\nCodex pricing has cited evidence. "
                 "[source:raw-source-openai-codex-pricing]"
             )
