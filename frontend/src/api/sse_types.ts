@@ -25,7 +25,8 @@ export type RunEventType =
   | "report.ready"
   | "runtime.command"
   | "writer_preflight"
-  | "writer_segment_preflight";
+  | "writer_segment_preflight"
+  | "writer_segment_validated";
 
 export interface RunEvent {
   id: number;

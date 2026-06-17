@@ -7668,6 +7668,10 @@ async def test_segmented_writer_retries_when_segment_uses_forbidden_heading(
     async def fake_trace_llm_text(*args, **kwargs):
         user = kwargs["user"]
         calls.append(user)
+        assert "Allowed H2 headings for this segment:" in user
+        assert "Executive Summary" in user
+        assert "Forbidden H2 headings for this segment:" in user
+        assert "Source Quality" in user
         if "retry_count=1" in user:
             assert "Previous segment violated its heading contract" in user
             assert "Forbidden H2 headings found: Evidence Support" in user
@@ -7688,12 +7692,63 @@ async def test_segmented_writer_retries_when_segment_uses_forbidden_heading(
     assert len(calls) == 2
     assert "## Evidence Support" not in record.detail.report_md
     assert "## Executive Summary" in record.detail.report_md
-    validated_event = next(
+    validated_events = [
         event for event in record.events if event.type == "writer_segment_validated"
+    ]
+    assert [event.payload["validation_status"] for event in validated_events] == [
+        "retry",
+        "pass",
+    ]
+    assert validated_events[0].payload["forbidden_headings"] == ["Evidence Support"]
+    assert validated_events[0].payload["segment_retry_count"] == 0
+    assert validated_events[1].payload["segment_retry_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_repairs_citations_after_contract_retry(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-contract-then-citation",
     )
-    assert validated_event.payload["validation_status"] == "retry"
-    assert validated_event.payload["forbidden_headings"] == ["Evidence Support"]
-    assert validated_event.payload["segment_retry_count"] == 0
+    calls: list[str] = []
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        calls.append(user)
+        if len(calls) == 1:
+            return (
+                "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]\n\n"
+                "## Evidence Support\nSupport belongs elsewhere. [source:cursor-pricing]"
+            )
+        if len(calls) == 2:
+            assert "Previous segment violated its heading contract" in user
+            return "## Executive Summary\nCursor pricing is visible. [source:missing-source]"
+        assert "Previous segment cited source IDs outside this segment" in user
+        assert "Previous segment violated its heading contract" in user
+        return "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._real_writer_step(record)
+
+    assert len(calls) == 3
+    assert "[source:missing-source]" not in record.detail.report_md
+    assert "[source:cursor-pricing]" in record.detail.report_md
+    validated_events = [
+        event for event in record.events if event.type == "writer_segment_validated"
+    ]
+    assert [event.payload["validation_status"] for event in validated_events] == [
+        "retry",
+        "pass",
+    ]
+    assert validated_events[1].payload["segment_retry_count"] == 1
 
 
 @pytest.mark.asyncio

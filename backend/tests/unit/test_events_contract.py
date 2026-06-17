@@ -30,6 +30,7 @@ EXPECTED_EVENT_TYPES = {
     "runtime.command",
     "writer_preflight",
     "writer_segment_preflight",
+    "writer_segment_validated",
 }
 
 

@@ -648,6 +648,19 @@ class WriterAgentMixin:
         sections: list[str] = []
         for segment in evidence_pack_result.segment_inputs():
             contract = segment_contract_for(segment)
+            segment_with_contract = {
+                **segment,
+                "allowed_heading_keys": list(contract.allowed_heading_keys),
+                "forbidden_heading_keys": list(contract.forbidden_heading_keys),
+                "allowed_h2_headings": [
+                    report_label(detail.output_language, key)
+                    for key in contract.allowed_heading_keys
+                ],
+                "forbidden_h2_headings": [
+                    report_label(detail.output_language, key)
+                    for key in contract.forbidden_heading_keys
+                ],
+            }
             payload = {
                 "segment_name": segment["segment_name"],
                 "segment_kind": contract.segment_kind,
@@ -673,7 +686,7 @@ class WriterAgentMixin:
             )
             segment_md = await self._writer_segment_markdown(
                 record,
-                segment=segment,
+                segment=segment_with_contract,
                 timeout_seconds=timeout_seconds,
                 language_guidance=language_guidance,
                 memory_context=memory_context,
@@ -694,7 +707,7 @@ class WriterAgentMixin:
             if invalid_sources:
                 segment_md = await self._writer_segment_markdown(
                     record,
-                    segment=segment,
+                    segment=segment_with_contract,
                     timeout_seconds=timeout_seconds,
                     language_guidance=language_guidance,
                     memory_context=memory_context,
@@ -738,17 +751,19 @@ class WriterAgentMixin:
                 },
             )
             if validation.status != "pass":
+                contract_errors = validation.errors
+                contract_forbidden_headings = validation.forbidden_headings
                 segment_md = await self._writer_segment_markdown(
                     record,
-                    segment=segment,
+                    segment=segment_with_contract,
                     timeout_seconds=timeout_seconds,
                     language_guidance=language_guidance,
                     memory_context=memory_context,
                     layer_context=layer_context,
                     required_sections=required_sections,
                     retry_count=1,
-                    contract_errors=validation.errors,
-                    contract_forbidden_headings=validation.forbidden_headings,
+                    contract_errors=contract_errors,
+                    contract_forbidden_headings=contract_forbidden_headings,
                 )
                 segment_md = self._sanitize_writer_segment_citations(
                     evidence_pack_result,
@@ -760,6 +775,29 @@ class WriterAgentMixin:
                     allowed_source_ids=allowed_source_ids,
                 )
                 if invalid_sources:
+                    segment_md = await self._writer_segment_markdown(
+                        record,
+                        segment=segment_with_contract,
+                        timeout_seconds=timeout_seconds,
+                        language_guidance=language_guidance,
+                        memory_context=memory_context,
+                        layer_context=layer_context,
+                        required_sections=required_sections,
+                        retry_count=2,
+                        citation_error_ids=invalid_sources,
+                        contract_errors=contract_errors,
+                        contract_forbidden_headings=contract_forbidden_headings,
+                    )
+                    segment_md = self._sanitize_writer_segment_citations(
+                        evidence_pack_result,
+                        segment_md,
+                        allowed_source_ids=allowed_source_ids,
+                    )
+                    invalid_sources = evidence_pack_result.validate_segment_citations(
+                        segment_md,
+                        allowed_source_ids=allowed_source_ids,
+                    )
+                if invalid_sources:
                     raise RuntimeError(
                         "Writer segment cited invalid source IDs after contract retry: "
                         f"{', '.join(invalid_sources)}"
@@ -770,6 +808,27 @@ class WriterAgentMixin:
                         "Writer segment violated heading contract after retry: "
                         f"{segment['segment_name']}: {'; '.join(validation.errors)}"
                     )
+                await self.emit(
+                    detail.id,
+                    "writer_segment_validated",
+                    "writer",
+                    None,
+                    f"Writer segment validated: {segment['segment_name']}",
+                    {
+                        "segment_name": segment["segment_name"],
+                        "segment_kind": contract.segment_kind,
+                        "section_id": contract.section_id,
+                        "validation_status": validation.status,
+                        "validation_errors": list(validation.errors),
+                        "h2_headings": list(validation.h2_headings),
+                        "forbidden_headings": list(validation.forbidden_headings),
+                        "forbidden_heading_keys": list(
+                            validation.forbidden_heading_keys
+                        ),
+                        "invalid_heading_keys": list(validation.invalid_heading_keys),
+                        "segment_retry_count": 1,
+                    },
+                )
             sections.append(segment_md.strip())
         return "\n\n".join(section for section in sections if section)
 
@@ -802,6 +861,16 @@ class WriterAgentMixin:
     ) -> str:
         detail = record.detail
         segment_json = json.dumps(segment, ensure_ascii=False)
+        allowed_h2_headings = ", ".join(
+            heading
+            for heading in segment.get("allowed_h2_headings", [])
+            if isinstance(heading, str)
+        )
+        forbidden_h2_headings = ", ".join(
+            heading
+            for heading in segment.get("forbidden_h2_headings", [])
+            if isinstance(heading, str)
+        )
         citation_warning = ""
         if citation_error_ids:
             citation_warning = (
@@ -853,6 +922,10 @@ class WriterAgentMixin:
                     f"section_id={segment.get('section_id', segment['segment_name'])}\n"
                     f"segment_competitor={segment.get('segment_competitor') or 'all'}\n"
                     f"retry_count={retry_count}\n"
+                    "Allowed H2 headings for this segment: "
+                    f"{allowed_h2_headings or 'none'}\n"
+                    "Forbidden H2 headings for this segment: "
+                    f"{forbidden_h2_headings or 'none'}\n"
                     f"{citation_warning}"
                     f"{contract_warning}"
                     "Do not write headings outside this segment's contract. "
