@@ -8384,10 +8384,12 @@ async def test_evidence_shard_outputs_notes_then_section_writer_outputs_one_h2(
         ]
     )
     calls = []
+    captured_segments: list[dict[str, object]] = []
 
     async def fake_segment_writer(*args, **kwargs):
         segment = kwargs["segment"]
         calls.append(segment["segment_kind"])
+        captured_segments.append(dict(segment))
         if segment["segment_kind"] == "evidence_shard":
             return (
                 f"- shard note {segment['segment_batch']} "
@@ -8424,6 +8426,29 @@ async def test_evidence_shard_outputs_notes_then_section_writer_outputs_one_h2(
     assert calls == ["evidence_shard", "evidence_shard", "section_fragment"]
     assert report.count("## Decision Summary") == 1
     assert "Merged shard note" in report
+    synthesized_segment = captured_segments[2]
+    assert synthesized_segment["shard_notes"] == [
+        "- shard note sources:1 [source:raw-source-a]",
+        "- shard note sources:2 [source:raw-source-b]",
+    ]
+    assert synthesized_segment["allowed_source_ids"] == ["raw-source-a", "raw-source-b"]
+    assert synthesized_segment["groups"] == []
+    assert synthesized_segment["sources"] == []
+    assert synthesized_segment["segment_batch"] == "from_evidence_shards"
+    contract_keys = {
+        "allowed_heading_keys",
+        "forbidden_heading_keys",
+        "allowed_h2_headings",
+        "forbidden_h2_headings",
+    }
+    synthesized_payload = {
+        key: value
+        for key, value in synthesized_segment.items()
+        if key not in contract_keys
+    }
+    assert synthesized_segment["segment_input_chars"] == len(
+        json.dumps(synthesized_payload, ensure_ascii=False)
+    )
 
 
 @pytest.mark.asyncio
@@ -9428,6 +9453,130 @@ async def test_writer_section_repair_iterates_budgeted_segment_payloads(
     ]
     assert preflight_event.payload["segmented_writer_required"] is True
     assert preflight_event.payload["repair_segment_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_synthesizes_evidence_shards_once(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-repair-evidence-shards",
+        competitors=["Cursor"],
+    )
+    shard_segments = [
+        {
+            "schema_version": "writer_evidence_pack.v1",
+            "segment_name": "decision_summary",
+            "segment_kind": "evidence_shard",
+            "section_id": "decision_summary",
+            "output_language": "en-US",
+            "segment_batch": "sources:1",
+            "segment_input_chars": 2000,
+            "allowed_source_ids": ["raw-source-a"],
+            "groups": [],
+            "sources": [],
+        },
+        {
+            "schema_version": "writer_evidence_pack.v1",
+            "segment_name": "decision_summary",
+            "segment_kind": "evidence_shard",
+            "section_id": "decision_summary",
+            "output_language": "en-US",
+            "segment_batch": "sources:2",
+            "segment_input_chars": 2000,
+            "allowed_source_ids": ["raw-source-b"],
+            "groups": [],
+            "sources": [],
+        },
+    ]
+    calls: list[str] = []
+
+    class FakeMetrics:
+        segmented_writer_required = True
+
+    class FakeEvidencePackResult:
+        metrics = FakeMetrics()
+
+        def telemetry_payload(self):
+            return {
+                "raw_source_count": 2,
+                "represented_source_count": 2,
+                "dropped_source_count": 0,
+                "segmented_writer_required": True,
+            }
+
+        def preflight_errors(self):
+            return []
+
+        def repair_segment_inputs(self, sections):
+            assert list(sections) == ["decision_summary"]
+            return [
+                {
+                    "repair_sections": ["decision_summary"],
+                    "segments": [shard_segments[0]],
+                    "allowed_source_ids": ["raw-source-a"],
+                    "repair_part": 1,
+                    "repair_part_count": 2,
+                    "repair_input_chars": 2000,
+                },
+                {
+                    "repair_sections": ["decision_summary"],
+                    "segments": [shard_segments[1]],
+                    "allowed_source_ids": ["raw-source-b"],
+                    "repair_part": 2,
+                    "repair_part_count": 2,
+                    "repair_input_chars": 2000,
+                },
+            ]
+
+        def validate_segment_citations(self, markdown, *, allowed_source_ids):
+            return [
+                source_id
+                for source_id in source_tokens(markdown)
+                if source_id not in allowed_source_ids
+            ]
+
+        def sanitize_segment_citations(self, markdown, *, allowed_source_ids):
+            return markdown
+
+    async def fake_segment_writer(*args, **kwargs):
+        segment = kwargs["segment"]
+        calls.append(segment["segment_kind"])
+        if segment["segment_kind"] == "evidence_shard":
+            return (
+                f"- repair shard note {segment['segment_batch']} "
+                f"[source:{segment['allowed_source_ids'][0]}]"
+            )
+        assert segment["shard_notes"] == [
+            "- repair shard note sources:1 [source:raw-source-a]",
+            "- repair shard note sources:2 [source:raw-source-b]",
+        ]
+        return (
+            "## Decision Summary\n"
+            "Repaired shard note [source:raw-source-a][source:raw-source-b]."
+        )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        raise AssertionError("evidence shard repair should use segment writer")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeEvidencePackResult(),
+    )
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    result = await service._writer_section_repair_markdown(
+        record,
+        sections=["decision_summary"],
+        previous_report="## Decision Summary\nThin.",
+    )
+
+    assert calls == ["evidence_shard", "evidence_shard", "section_fragment"]
+    assert result.count("## Decision Summary") == 1
+    assert "Repaired shard note" in result
 
 
 @pytest.mark.asyncio

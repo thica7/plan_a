@@ -9,7 +9,10 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from packages.agents.writer.assembler import assemble_report_sections
-from packages.agents.writer.evidence_pack import build_writer_evidence_pack
+from packages.agents.writer.evidence_pack import (
+    SEGMENT_INPUT_TARGET_CHARS,
+    build_writer_evidence_pack,
+)
 from packages.agents.writer.quality_preflight import run_writer_quality_preflight
 from packages.agents.writer.repair import (
     WriterRepairPlan,
@@ -728,228 +731,16 @@ class WriterAgentMixin:
         required_sections: str,
     ) -> str:
         detail = record.detail
-
-        async def write_validated_segment(segment: dict[str, object]):
-            contract = segment_contract_for(segment)
-            segment_with_contract = {
-                **segment,
-                "allowed_heading_keys": list(contract.allowed_heading_keys),
-                "forbidden_heading_keys": list(contract.forbidden_heading_keys),
-                "allowed_h2_headings": [
-                    report_label(detail.output_language, key)
-                    for key in contract.allowed_heading_keys
-                ],
-                "forbidden_h2_headings": [
-                    report_label(detail.output_language, key)
-                    for key in contract.forbidden_heading_keys
-                ],
-            }
-            payload = {
-                "segment_name": segment["segment_name"],
-                "segment_kind": contract.segment_kind,
-                "section_id": contract.section_id,
-                "allowed_heading_keys": list(contract.allowed_heading_keys),
-                "forbidden_heading_keys": list(contract.forbidden_heading_keys),
-                "segment_essential": contract.essential,
-                "segment_competitor": segment.get("segment_competitor"),
-                "segment_dimension": segment.get("segment_dimension"),
-                "segment_batch": segment.get("segment_batch"),
-                "segment_over_budget_reason": segment.get("segment_over_budget_reason"),
-                "segment_input_chars": segment["segment_input_chars"],
-                "segment_input_target_chars": segment.get("segment_input_target_chars"),
-                "segment_source_count": len(segment["allowed_source_ids"]),
-                "segment_group_count": len(segment["groups"]),
-                "segment_allowed_source_ids": list(segment["allowed_source_ids"]),
-                "segment_retry_count": 0,
-            }
-            await self.emit(
-                detail.id,
-                "writer_segment_preflight",
-                "writer",
-                None,
-                f"Writer segment prepared: {segment['segment_name']}",
-                payload,
-            )
-            segment_md = await self._writer_segment_markdown(
-                record,
-                segment=segment_with_contract,
-                timeout_seconds=timeout_seconds,
-                language_guidance=language_guidance,
-                memory_context=memory_context,
-                layer_context=layer_context,
-                required_sections=required_sections,
-                retry_count=0,
-            )
-            allowed_source_ids = set(segment["allowed_source_ids"])
-            segment_md = self._sanitize_writer_segment_citations(
-                evidence_pack_result,
-                segment_md,
-                allowed_source_ids=allowed_source_ids,
-            )
-            invalid_sources = evidence_pack_result.validate_segment_citations(
-                segment_md,
-                allowed_source_ids=allowed_source_ids,
-            )
-            if invalid_sources:
-                segment_md = await self._writer_segment_markdown(
-                    record,
-                    segment=segment_with_contract,
-                    timeout_seconds=timeout_seconds,
-                    language_guidance=language_guidance,
-                    memory_context=memory_context,
-                    layer_context=layer_context,
-                    required_sections=required_sections,
-                    retry_count=1,
-                    citation_error_ids=invalid_sources,
-                )
-                segment_md = self._sanitize_writer_segment_citations(
-                    evidence_pack_result,
-                    segment_md,
-                    allowed_source_ids=allowed_source_ids,
-                )
-                invalid_sources = evidence_pack_result.validate_segment_citations(
-                    segment_md,
-                    allowed_source_ids=allowed_source_ids,
-                )
-            if invalid_sources:
-                raise RuntimeError(
-                    "Writer segment cited invalid source IDs after retry: "
-                    f"{', '.join(invalid_sources)}"
-                )
-            validation = validate_segment_contract(segment_md, contract)
-            await self.emit(
-                detail.id,
-                "writer_segment_validated",
-                "writer",
-                None,
-                f"Writer segment validated: {segment['segment_name']}",
-                {
-                    "segment_name": segment["segment_name"],
-                    "segment_kind": contract.segment_kind,
-                    "section_id": contract.section_id,
-                    "validation_status": validation.status,
-                    "validation_errors": list(validation.errors),
-                    "h2_headings": list(validation.h2_headings),
-                    "forbidden_headings": list(validation.forbidden_headings),
-                    "forbidden_heading_keys": list(validation.forbidden_heading_keys),
-                    "invalid_heading_keys": list(validation.invalid_heading_keys),
-                    "segment_retry_count": 0,
-                },
-            )
-            if validation.status != "pass":
-                contract_errors = validation.errors
-                contract_forbidden_headings = validation.forbidden_headings
-                segment_md = await self._writer_segment_markdown(
-                    record,
-                    segment=segment_with_contract,
-                    timeout_seconds=timeout_seconds,
-                    language_guidance=language_guidance,
-                    memory_context=memory_context,
-                    layer_context=layer_context,
-                    required_sections=required_sections,
-                    retry_count=1,
-                    contract_errors=contract_errors,
-                    contract_forbidden_headings=contract_forbidden_headings,
-                )
-                segment_md = self._sanitize_writer_segment_citations(
-                    evidence_pack_result,
-                    segment_md,
-                    allowed_source_ids=allowed_source_ids,
-                )
-                invalid_sources = evidence_pack_result.validate_segment_citations(
-                    segment_md,
-                    allowed_source_ids=allowed_source_ids,
-                )
-                if invalid_sources:
-                    segment_md = await self._writer_segment_markdown(
-                        record,
-                        segment=segment_with_contract,
-                        timeout_seconds=timeout_seconds,
-                        language_guidance=language_guidance,
-                        memory_context=memory_context,
-                        layer_context=layer_context,
-                        required_sections=required_sections,
-                        retry_count=2,
-                        citation_error_ids=invalid_sources,
-                        contract_errors=contract_errors,
-                        contract_forbidden_headings=contract_forbidden_headings,
-                    )
-                    segment_md = self._sanitize_writer_segment_citations(
-                        evidence_pack_result,
-                        segment_md,
-                        allowed_source_ids=allowed_source_ids,
-                    )
-                    invalid_sources = evidence_pack_result.validate_segment_citations(
-                        segment_md,
-                        allowed_source_ids=allowed_source_ids,
-                    )
-                if invalid_sources:
-                    raise RuntimeError(
-                        "Writer segment cited invalid source IDs after contract retry: "
-                        f"{', '.join(invalid_sources)}"
-                    )
-                validation = validate_segment_contract(segment_md, contract)
-                if validation.status != "pass":
-                    raise RuntimeError(
-                        "Writer segment violated heading contract after retry: "
-                        f"{segment['segment_name']}: {'; '.join(validation.errors)}"
-                    )
-                await self.emit(
-                    detail.id,
-                    "writer_segment_validated",
-                    "writer",
-                    None,
-                    f"Writer segment validated: {segment['segment_name']}",
-                    {
-                        "segment_name": segment["segment_name"],
-                        "segment_kind": contract.segment_kind,
-                        "section_id": contract.section_id,
-                        "validation_status": validation.status,
-                        "validation_errors": list(validation.errors),
-                        "h2_headings": list(validation.h2_headings),
-                        "forbidden_headings": list(validation.forbidden_headings),
-                        "forbidden_heading_keys": list(
-                            validation.forbidden_heading_keys
-                        ),
-                        "invalid_heading_keys": list(validation.invalid_heading_keys),
-                        "segment_retry_count": 1,
-                    },
-                )
-            return segment_md.strip(), contract
-
-        sections: list[str] = []
-        shards_by_section: dict[str, list[str]] = {}
-        section_allowed_source_ids: dict[str, set[str]] = {}
-        for segment in evidence_pack_result.segment_inputs():
-            segment_md, contract = await write_validated_segment(segment)
-            if contract.segment_kind == "evidence_shard":
-                section_id = contract.section_id
-                shards_by_section.setdefault(section_id, []).append(segment_md)
-                allowed_source_ids = section_allowed_source_ids.setdefault(
-                    section_id, set()
-                )
-                allowed_source_ids.update(
-                    source_id
-                    for source_id in (segment.get("allowed_source_ids") or [])
-                    if isinstance(source_id, str)
-                )
-                continue
-            sections.append(segment_md)
-        for section_id, shard_notes in shards_by_section.items():
-            section_segment = {
-                "segment_name": section_id,
-                "segment_kind": "section_fragment",
-                "section_id": section_id,
-                "output_language": detail.output_language,
-                "segment_input_chars": sum(len(note) for note in shard_notes),
-                "allowed_source_ids": sorted(section_allowed_source_ids[section_id]),
-                "groups": [],
-                "sources": [],
-                "shard_notes": shard_notes,
-                "segment_batch": "from_evidence_shards",
-            }
-            section_md, _ = await write_validated_segment(section_segment)
-            sections.append(section_md)
+        sections = await self._writer_segment_markdown_parts(
+            record,
+            evidence_pack_result=evidence_pack_result,
+            segments=evidence_pack_result.segment_inputs(),
+            timeout_seconds=timeout_seconds,
+            language_guidance=language_guidance,
+            memory_context=memory_context,
+            layer_context=layer_context,
+            required_sections=required_sections,
+        )
         assembled = assemble_report_sections(
             sections,
             output_language=detail.output_language,
@@ -996,6 +787,305 @@ class WriterAgentMixin:
             "Writer assembled report failed quality preflight: "
             f"{', '.join(repaired_preflight.failure_reasons)}"
         )
+
+    async def _writer_segment_markdown_parts(
+        self,
+        record: RunRecord,
+        *,
+        evidence_pack_result,
+        segments: Sequence[dict[str, object]],
+        timeout_seconds: float,
+        language_guidance: str,
+        memory_context: str,
+        layer_context: str,
+        required_sections: str,
+    ) -> list[str]:
+        detail = record.detail
+        sections: list[str] = []
+        shards_by_section: dict[str, list[str]] = {}
+        section_allowed_source_ids: dict[str, set[str]] = {}
+        for segment in segments:
+            segment_md, contract = await self._writer_validated_segment_markdown(
+                record,
+                evidence_pack_result=evidence_pack_result,
+                segment=segment,
+                timeout_seconds=timeout_seconds,
+                language_guidance=language_guidance,
+                memory_context=memory_context,
+                layer_context=layer_context,
+                required_sections=required_sections,
+            )
+            if contract.segment_kind == "evidence_shard":
+                section_id = contract.section_id
+                shards_by_section.setdefault(section_id, []).append(segment_md)
+                section_allowed_source_ids.setdefault(section_id, set()).update(
+                    source_id
+                    for source_id in (segment.get("allowed_source_ids") or [])
+                    if isinstance(source_id, str)
+                )
+                continue
+            sections.append(segment_md)
+
+        for section_id, shard_notes in shards_by_section.items():
+            section_segment = self._writer_section_segment_from_shards(
+                detail,
+                section_id=section_id,
+                shard_notes=shard_notes,
+                allowed_source_ids=section_allowed_source_ids[section_id],
+            )
+            section_md, _ = await self._writer_validated_segment_markdown(
+                record,
+                evidence_pack_result=evidence_pack_result,
+                segment=section_segment,
+                timeout_seconds=timeout_seconds,
+                language_guidance=language_guidance,
+                memory_context=memory_context,
+                layer_context=layer_context,
+                required_sections=required_sections,
+            )
+            sections.append(section_md)
+        return sections
+
+    def _writer_section_segment_from_shards(
+        self,
+        detail: RunDetail,
+        *,
+        section_id: str,
+        shard_notes: Sequence[str],
+        allowed_source_ids: set[str],
+    ) -> dict[str, object]:
+        section_segment: dict[str, object] = {
+            "segment_name": section_id,
+            "segment_kind": "section_fragment",
+            "section_id": section_id,
+            "output_language": detail.output_language,
+            "segment_input_chars": 0,
+            "allowed_source_ids": sorted(allowed_source_ids),
+            "groups": [],
+            "sources": [],
+            "shard_notes": list(shard_notes),
+            "segment_batch": "from_evidence_shards",
+        }
+        self._refresh_segment_input_chars(section_segment)
+        if section_segment["segment_input_chars"] > SEGMENT_INPUT_TARGET_CHARS:
+            section_segment["segment_input_target_chars"] = SEGMENT_INPUT_TARGET_CHARS
+            section_segment["segment_over_budget_reason"] = (
+                "shard_notes_exceed_budget"
+            )
+            self._refresh_segment_input_chars(section_segment)
+        return section_segment
+
+    def _refresh_segment_input_chars(self, segment: dict[str, object]) -> None:
+        segment["segment_input_chars"] = 0
+        while True:
+            segment_input_chars = len(json.dumps(segment, ensure_ascii=False))
+            if segment["segment_input_chars"] == segment_input_chars:
+                return
+            segment["segment_input_chars"] = segment_input_chars
+
+    async def _writer_validated_segment_markdown(
+        self,
+        record: RunRecord,
+        *,
+        evidence_pack_result,
+        segment: dict[str, object],
+        timeout_seconds: float,
+        language_guidance: str,
+        memory_context: str,
+        layer_context: str,
+        required_sections: str,
+    ):
+        detail = record.detail
+        contract = segment_contract_for(segment)
+        segment_with_contract = {
+            **segment,
+            "allowed_heading_keys": list(contract.allowed_heading_keys),
+            "forbidden_heading_keys": list(contract.forbidden_heading_keys),
+            "allowed_h2_headings": [
+                report_label(detail.output_language, key)
+                for key in contract.allowed_heading_keys
+            ],
+            "forbidden_h2_headings": [
+                report_label(detail.output_language, key)
+                for key in contract.forbidden_heading_keys
+            ],
+        }
+        allowed_source_id_list = [
+            source_id
+            for source_id in (segment.get("allowed_source_ids") or [])
+            if isinstance(source_id, str)
+        ]
+        groups = segment.get("groups") or []
+        payload = {
+            "segment_name": segment["segment_name"],
+            "segment_kind": contract.segment_kind,
+            "section_id": contract.section_id,
+            "allowed_heading_keys": list(contract.allowed_heading_keys),
+            "forbidden_heading_keys": list(contract.forbidden_heading_keys),
+            "segment_essential": contract.essential,
+            "segment_competitor": segment.get("segment_competitor"),
+            "segment_dimension": segment.get("segment_dimension"),
+            "segment_batch": segment.get("segment_batch"),
+            "segment_over_budget_reason": segment.get("segment_over_budget_reason"),
+            "segment_input_chars": segment.get("segment_input_chars", 0),
+            "segment_input_target_chars": segment.get("segment_input_target_chars"),
+            "segment_source_count": len(allowed_source_id_list),
+            "segment_group_count": len(groups) if isinstance(groups, list) else 0,
+            "segment_allowed_source_ids": allowed_source_id_list,
+            "segment_retry_count": 0,
+        }
+        await self.emit(
+            detail.id,
+            "writer_segment_preflight",
+            "writer",
+            None,
+            f"Writer segment prepared: {segment['segment_name']}",
+            payload,
+        )
+        segment_md = await self._writer_segment_markdown(
+            record,
+            segment=segment_with_contract,
+            timeout_seconds=timeout_seconds,
+            language_guidance=language_guidance,
+            memory_context=memory_context,
+            layer_context=layer_context,
+            required_sections=required_sections,
+            retry_count=0,
+        )
+        allowed_source_ids = set(allowed_source_id_list)
+        segment_md = self._sanitize_writer_segment_citations(
+            evidence_pack_result,
+            segment_md,
+            allowed_source_ids=allowed_source_ids,
+        )
+        invalid_sources = evidence_pack_result.validate_segment_citations(
+            segment_md,
+            allowed_source_ids=allowed_source_ids,
+        )
+        if invalid_sources:
+            segment_md = await self._writer_segment_markdown(
+                record,
+                segment=segment_with_contract,
+                timeout_seconds=timeout_seconds,
+                language_guidance=language_guidance,
+                memory_context=memory_context,
+                layer_context=layer_context,
+                required_sections=required_sections,
+                retry_count=1,
+                citation_error_ids=invalid_sources,
+            )
+            segment_md = self._sanitize_writer_segment_citations(
+                evidence_pack_result,
+                segment_md,
+                allowed_source_ids=allowed_source_ids,
+            )
+            invalid_sources = evidence_pack_result.validate_segment_citations(
+                segment_md,
+                allowed_source_ids=allowed_source_ids,
+            )
+        if invalid_sources:
+            raise RuntimeError(
+                "Writer segment cited invalid source IDs after retry: "
+                f"{', '.join(invalid_sources)}"
+            )
+        validation = validate_segment_contract(segment_md, contract)
+        await self.emit(
+            detail.id,
+            "writer_segment_validated",
+            "writer",
+            None,
+            f"Writer segment validated: {segment['segment_name']}",
+            {
+                "segment_name": segment["segment_name"],
+                "segment_kind": contract.segment_kind,
+                "section_id": contract.section_id,
+                "validation_status": validation.status,
+                "validation_errors": list(validation.errors),
+                "h2_headings": list(validation.h2_headings),
+                "forbidden_headings": list(validation.forbidden_headings),
+                "forbidden_heading_keys": list(validation.forbidden_heading_keys),
+                "invalid_heading_keys": list(validation.invalid_heading_keys),
+                "segment_retry_count": 0,
+            },
+        )
+        if validation.status != "pass":
+            contract_errors = validation.errors
+            contract_forbidden_headings = validation.forbidden_headings
+            segment_md = await self._writer_segment_markdown(
+                record,
+                segment=segment_with_contract,
+                timeout_seconds=timeout_seconds,
+                language_guidance=language_guidance,
+                memory_context=memory_context,
+                layer_context=layer_context,
+                required_sections=required_sections,
+                retry_count=1,
+                contract_errors=contract_errors,
+                contract_forbidden_headings=contract_forbidden_headings,
+            )
+            segment_md = self._sanitize_writer_segment_citations(
+                evidence_pack_result,
+                segment_md,
+                allowed_source_ids=allowed_source_ids,
+            )
+            invalid_sources = evidence_pack_result.validate_segment_citations(
+                segment_md,
+                allowed_source_ids=allowed_source_ids,
+            )
+            if invalid_sources:
+                segment_md = await self._writer_segment_markdown(
+                    record,
+                    segment=segment_with_contract,
+                    timeout_seconds=timeout_seconds,
+                    language_guidance=language_guidance,
+                    memory_context=memory_context,
+                    layer_context=layer_context,
+                    required_sections=required_sections,
+                    retry_count=2,
+                    citation_error_ids=invalid_sources,
+                    contract_errors=contract_errors,
+                    contract_forbidden_headings=contract_forbidden_headings,
+                )
+                segment_md = self._sanitize_writer_segment_citations(
+                    evidence_pack_result,
+                    segment_md,
+                    allowed_source_ids=allowed_source_ids,
+                )
+                invalid_sources = evidence_pack_result.validate_segment_citations(
+                    segment_md,
+                    allowed_source_ids=allowed_source_ids,
+                )
+            if invalid_sources:
+                raise RuntimeError(
+                    "Writer segment cited invalid source IDs after contract retry: "
+                    f"{', '.join(invalid_sources)}"
+                )
+            validation = validate_segment_contract(segment_md, contract)
+            if validation.status != "pass":
+                raise RuntimeError(
+                    "Writer segment violated heading contract after retry: "
+                    f"{segment['segment_name']}: {'; '.join(validation.errors)}"
+                )
+            await self.emit(
+                detail.id,
+                "writer_segment_validated",
+                "writer",
+                None,
+                f"Writer segment validated: {segment['segment_name']}",
+                {
+                    "segment_name": segment["segment_name"],
+                    "segment_kind": contract.segment_kind,
+                    "section_id": contract.section_id,
+                    "validation_status": validation.status,
+                    "validation_errors": list(validation.errors),
+                    "h2_headings": list(validation.h2_headings),
+                    "forbidden_headings": list(validation.forbidden_headings),
+                    "forbidden_heading_keys": list(validation.forbidden_heading_keys),
+                    "invalid_heading_keys": list(validation.invalid_heading_keys),
+                    "segment_retry_count": 1,
+                },
+            )
+        return segment_md.strip(), contract
 
     def _sanitize_writer_segment_citations(
         self,
@@ -1159,11 +1249,23 @@ class WriterAgentMixin:
                 repair_payloads = evidence_pack_result.repair_segment_inputs(sections)
             else:
                 repair_payloads = [evidence_pack_result.repair_segment_input(sections)]
+            repair_segments = [
+                segment
+                for payload in repair_payloads
+                for segment in (payload.get("segments") or [])
+                if isinstance(segment, dict)
+            ]
+            repair_has_evidence_shards = any(
+                segment.get("segment_kind") == "evidence_shard"
+                for segment in repair_segments
+            )
             writer_context_jsons = [
                 json.dumps(payload, ensure_ascii=False) for payload in repair_payloads
             ]
         else:
             repair_payloads = []
+            repair_segments = []
+            repair_has_evidence_shards = False
             writer_context_jsons = [evidence_pack_result.to_prompt_json()]
         telemetry_payload = (
             evidence_pack_result.telemetry_payload()
@@ -1198,6 +1300,20 @@ class WriterAgentMixin:
         section_headings = "\n".join(
             self._writer_section_heading_instruction(detail, section) for section in sections
         )
+        if repair_has_evidence_shards:
+            timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
+            repaired_sections = await self._writer_segment_markdown_parts(
+                record,
+                evidence_pack_result=evidence_pack_result,
+                segments=repair_segments,
+                timeout_seconds=timeout_seconds,
+                language_guidance=language_guidance,
+                memory_context="\n".join(detail.plan.memory_prompt_context) or "none",
+                layer_context=self._writer_layer_context(detail),
+                required_sections=self._writer_required_sections(detail),
+            )
+            return self._join_section_repair_parts(repaired_sections, section_headings)
+
         repaired_sections = []
         for writer_context_json in writer_context_jsons:
             repaired_sections.append(
