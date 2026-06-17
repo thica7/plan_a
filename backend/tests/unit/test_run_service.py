@@ -204,6 +204,94 @@ No unresolved blocker claims were detected, but security and procurement claims 
 """
 
 
+def _writer_repair_release_depth_report() -> str:
+    report = _writer_repair_protectable_report()
+    report = report.replace(
+        "## Competitive Findings\n",
+        (
+            "## Competitive Findings\n"
+            "- Buyer implication: Cursor should be positioned as the clearer standalone "
+            "evaluation path when procurement needs explainable spend, while Copilot should "
+            "be challenged on whether bundled distribution actually reduces rollout risk. "
+            "[source:pricing-1] [source:feature-1]\n"
+            "- Decision guardrail: do not turn pricing clarity into a universal winner claim; "
+            "use it to open discovery, then validate security, onboarding, and admin controls "
+            "before recommending replacement. [source:pricing-1] [source:feature-1]\n"
+        ),
+        1,
+    )
+    report = report.replace(
+        "## Competitor Deep Dives\n",
+        (
+            "## Competitor Deep Dives\n"
+            "- Cursor opportunity: the standalone pricing story gives sales a concrete wedge "
+            "for accounts that dislike opaque bundle math, but it still needs procurement and "
+            "security evidence before becoming a deployment recommendation. [source:pricing-1]\n"
+            "- Copilot opportunity: Microsoft adjacency can reduce perceived adoption friction, "
+            "but evaluators should separate existing license familiarity from proven coding "
+            "workflow advantage. [source:feature-1]\n"
+        ),
+        1,
+    )
+    report = report.replace(
+        "## User Review Themes\n",
+        (
+            "## User Review Themes\n"
+            "- Switching trigger: buyers who need a visible standalone evaluation path can use "
+            "Cursor pricing clarity to start a smaller pilot before procurement review. "
+            "[source:pricing-1]\n"
+            "- Adoption blocker: Copilot's Microsoft distribution can feel safer to platform "
+            "teams, so the report should ask whether procurement continuity matters more than "
+            "focused developer workflow proof. [source:feature-1]\n"
+        ),
+        1,
+    )
+    report = report.replace(
+        (
+            "## SWOT Analysis\n"
+            "- Strengths: Cursor has pricing clarity that sales can explain quickly. "
+            "[source:pricing-1]\n"
+            "- Weaknesses: Enterprise procurement proof remains incomplete. [source:feature-1]\n"
+            "- Opportunities: Buyer education can focus on standalone value. [source:pricing-1]\n"
+            "- Threats: Copilot can defend through Microsoft distribution. [source:feature-1]"
+        ),
+        (
+            "## SWOT Analysis\n"
+            "- Strengths: Cursor has pricing clarity that sales can explain quickly, while "
+            "Copilot has distribution breadth that keeps it credible in Microsoft-centered "
+            "accounts. [source:pricing-1] [source:feature-1]\n"
+            "- Weaknesses: Cursor still needs enterprise procurement proof, and Copilot still "
+            "needs direct standalone value comparison before buyers should accept it as the "
+            "default. [source:pricing-1] [source:feature-1]\n"
+            "- Opportunities: Buyer education can focus on standalone value, pilot clarity, "
+            "and separating workflow gains from bundle familiarity. [source:pricing-1]\n"
+            "- Threats: Copilot can defend through Microsoft distribution, procurement "
+            "continuity, and lower perceived switching risk. [source:feature-1]"
+        ),
+        1,
+    )
+    report = report.replace(
+        "## Battlecard\n",
+        (
+            "## Battlecard\n"
+            "Use the battlecard to qualify buyer priorities before naming a preferred path: "
+            "standalone price clarity favors Cursor discovery, while Microsoft governance "
+            "continuity favors Copilot defense. [source:pricing-1] [source:feature-1]\n"
+        ),
+        1,
+    )
+    report = report.replace(
+        "| Follow-up | collect objections [source:pricing-1] | gather rollout proof [source:feature-1] |",
+        (
+            "| Follow-up | collect objections [source:pricing-1] | gather rollout proof [source:feature-1] |\n"
+            "| Security | verify trust-center evidence [source:feature-1] | verify admin controls [source:feature-1] |\n"
+            "| Procurement | document standalone purchase path [source:pricing-1] | separate bundle discount from value [source:feature-1] |"
+        ),
+        1,
+    )
+    return report
+
+
 def _release_gate_report_depth_issue() -> QCIssue:
     return QCIssue(
         id="issue-release-gate-depth",
@@ -6109,7 +6197,7 @@ async def test_writer_assemble_repair_preserves_report_without_llm() -> None:
     )
     record = service._runs[detail.id]
     record.detail.raw_sources = _writer_repair_sources()
-    record.detail.report_md = _writer_repair_protectable_report().replace(
+    record.detail.report_md = _writer_repair_release_depth_report().replace(
         "## Competitive Findings",
         (
             "## Decision Summary\n"
@@ -6153,6 +6241,8 @@ async def test_writer_assemble_repair_preserves_report_without_llm() -> None:
     assert len(repair_events) == 1
     assert "duplicate_section_count_before" in repair_events[0].payload
     assert "quality_preflight" in repair_events[0].payload
+    assert repair_events[0].payload["quality_gate_passed"] is True
+    assert repair_events[0].payload["quality_gate_reasons"] == []
 
 
 @pytest.mark.asyncio
@@ -6242,6 +6332,12 @@ async def test_writer_assemble_repair_preflight_failure_falls_back_to_full(
     await service._real_writer_step(record)
 
     assert llm_calls == 1
+    repair_event = next(
+        event
+        for event in record.events
+        if event.type == "writer_assemble_repair_completed"
+    )
+    assert repair_event.payload["quality_gate_passed"] is False
     payload = record.detail.agent_messages[-1].payload
     assert payload["writer_repair_mode"] == "full"
     assert (
@@ -6250,6 +6346,97 @@ async def test_writer_assemble_repair_preflight_failure_falls_back_to_full(
     )
     assert payload["previous_report_protected"] is True
     assert payload["anti_regression_reason"]
+
+
+@pytest.mark.asyncio
+async def test_writer_assemble_repair_thin_support_order_falls_back_to_full() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return _writer_repair_protectable_report()
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer thin assemble fallback",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = """# Cursor vs Copilot Direct Battlecard
+
+## Decision Summary
+Too thin to make a release decision. [source:pricing-1]
+
+## Competitive Findings
+- Pricing evidence exists but the analysis is not deep. [source:pricing-1]
+
+## User Review Themes
+- Buyer feedback still needs analysis. [source:feature-1]
+
+## Competitor Deep Dives
+- Cursor and Copilot still need deeper assessment. [source:feature-1]
+
+## Source Quality & Coverage
+Verified source coverage exists, but the core analysis remains thin. [source:pricing-1]
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Copilot |
+| --- | --- | --- |
+| Pricing | clearer [source:pricing-1] | bundled [source:feature-1] |
+
+## SWOT Analysis
+- Strengths: early evidence exists. [source:pricing-1]
+"""
+    issue = _release_gate_report_depth_issue()
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 1
+    repair_event = next(
+        event
+        for event in record.events
+        if event.type == "writer_assemble_repair_completed"
+    )
+    assert repair_event.payload["quality_gate_passed"] is False
+    assert "core_analysis_depth_score" in repair_event.payload["quality_gate_reasons"]
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_repair_mode"] == "full"
+    assert (
+        payload["writer_repair_decision"]
+        == "assembler repair did not pass writer quality preflight"
+    )
 
 
 @pytest.mark.asyncio

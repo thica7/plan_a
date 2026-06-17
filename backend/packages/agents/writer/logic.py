@@ -23,6 +23,7 @@ from packages.agents.writer.segment_contract import (
     segment_contract_for,
     validate_segment_contract,
 )
+from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.i18n.language import (
     language_instruction,
@@ -132,6 +133,8 @@ WRITER_NORMALIZED_FIELD_LONG_KEY_PARTS = (
     "trigger",
 )
 WRITER_NORMALIZED_SNIPPET_LIMIT = 1600
+ASSEMBLE_REPAIR_MIN_CORE_ANALYSIS_DEPTH = 0.6
+ASSEMBLE_REPAIR_MIN_CORE_SECTION_DEPTH = 1.0
 
 
 def writer_user_research_policy_text() -> str:
@@ -139,6 +142,28 @@ def writer_user_research_policy_text() -> str:
     return (
         f"Treat {source_types} as user-research signals, not as official factual proof."
     )
+
+
+def _assemble_repair_quality_gate(
+    detail: RunDetail,
+    markdown: str,
+) -> dict[str, object]:
+    candidate = detail.model_copy(update={"report_md": markdown, "qa_findings": []})
+    comparison = compare_run_quality(candidate)
+    metric_by_name = {metric.name: metric.target_value for metric in comparison.metrics}
+    core_analysis_depth = float(metric_by_name.get("core_analysis_depth_score") or 0.0)
+    core_section_depth = float(metric_by_name.get("core_section_depth_score") or 0.0)
+    reasons: list[str] = []
+    if core_analysis_depth < ASSEMBLE_REPAIR_MIN_CORE_ANALYSIS_DEPTH:
+        reasons.append("core_analysis_depth_score")
+    if core_section_depth < ASSEMBLE_REPAIR_MIN_CORE_SECTION_DEPTH:
+        reasons.append("core_section_depth_score")
+    return {
+        "quality_gate_passed": not reasons,
+        "quality_gate_reasons": reasons,
+        "core_analysis_depth_score": core_analysis_depth,
+        "core_section_depth_score": core_section_depth,
+    }
 
 
 class WriterEvidencePreflightError(RuntimeError):
@@ -250,6 +275,7 @@ class WriterAgentMixin:
                 competitors=detail.plan.competitors,
             )
             preflight = run_writer_quality_preflight(detail, assembled.markdown)
+            quality_gate = _assemble_repair_quality_gate(detail, assembled.markdown)
             await self.emit(
                 detail.id,
                 "writer_assemble_repair_completed",
@@ -259,9 +285,10 @@ class WriterAgentMixin:
                 {
                     **assembled.telemetry,
                     "quality_preflight": preflight.telemetry_payload(),
+                    **quality_gate,
                 },
             )
-            if preflight.passed:
+            if preflight.passed and quality_gate["quality_gate_passed"]:
                 detail.report_md = self._harden_report_markdown(
                     detail,
                     assembled.markdown,
