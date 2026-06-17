@@ -111,3 +111,27 @@ def test_quality_preflight_passes_ordered_core_report() -> None:
             "evidence_support",
         ],
     }
+
+
+def test_quality_preflight_passes_user_research_gap_section() -> None:
+    result = run_writer_quality_preflight(
+        _detail(),
+        "\n\n".join(
+            [
+                "## Decision Summary\nDecision.",
+                "## Competitive Findings\nFindings.",
+                (
+                    "## User Review Themes\nNo user research evidence was available; "
+                    "treat persona conclusions as an evidence gap."
+                ),
+                "## Competitor Deep Dives\nDeep dives.",
+                "## Side-by-Side Decision Matrix\nMatrix.",
+                "## SWOT Analysis\nSWOT.",
+                "## Evidence & QA Support\nSupport.",
+            ]
+        ),
+    )
+
+    assert result.passed is True
+    assert result.missing_core_sections == []
+    assert "review_theme_summary" in result.h2_keys

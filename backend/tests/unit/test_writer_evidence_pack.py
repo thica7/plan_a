@@ -1869,6 +1869,48 @@ def test_segment_matrix_filters_source_ids_outside_allowed_segment_sources() -> 
     assert matrix_cells[0]["source_ids"] == ["cursor-persona"]
 
 
+def test_segment_inputs_include_user_research_gap_without_user_research_sources() -> None:
+    sources = [
+        RawSource(
+            id="cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor Pro costs $20 per month.",
+            content_hash="cursor-pricing-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="cursor-feature",
+            competitor="Cursor",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="Cursor features",
+            snippet="Cursor supports repository-aware coding workflows.",
+            content_hash="cursor-feature-hash",
+            confidence=0.91,
+        ),
+    ]
+    detail = _detail_with_sources(sources)
+    detail.plan.dimensions = ["pricing", "feature"]
+
+    result = build_writer_evidence_pack(detail)
+
+    user_research_segments = [
+        segment
+        for segment in result.segment_inputs()
+        if segment["segment_name"] == "user_research"
+    ]
+    assert len(user_research_segments) == 1
+    segment = user_research_segments[0]
+    assert segment["section_id"] == "review_theme_summary"
+    assert segment["segment_kind"] == "section_fragment"
+    assert segment["allowed_source_ids"] == []
+    assert segment["groups"] == []
+    assert segment["segment_input_chars"] > 0
+
+
 def test_segment_citation_validation_rejects_unsupplied_source_id() -> None:
     source = RawSource(
         id="cursor-pricing",

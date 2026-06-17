@@ -936,6 +936,17 @@ class WriterAgentMixin:
                 f"Forbidden H2 headings found: {forbidden or 'none'}. "
                 "Rewrite only this segment and obey the segment contract exactly.\n"
             )
+        user_research_gap_instruction = ""
+        if (
+            segment.get("segment_name") == "user_research"
+            and not segment.get("groups")
+            and not segment.get("allowed_source_ids")
+        ):
+            user_research_gap_instruction = (
+                "This user_research segment has no groups or allowed sources; write "
+                "the section as an evidence gap/absence note and do not invent user "
+                "research findings.\n"
+            )
         user_research_policy = writer_user_research_policy_text()
         return await asyncio.wait_for(
             self._trace_llm_text(
@@ -975,6 +986,7 @@ class WriterAgentMixin:
                     f"{forbidden_h2_headings or 'none'}\n"
                     f"{citation_warning}"
                     f"{contract_warning}"
+                    f"{user_research_gap_instruction}"
                     "Do not write headings outside this segment's contract. "
                     "Do not write support or appendix sections unless "
                     "segment_kind=support_fragment. If segment_kind=evidence_shard, "

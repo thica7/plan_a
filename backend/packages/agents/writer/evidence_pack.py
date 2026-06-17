@@ -529,7 +529,17 @@ class WriterEvidencePackResult(BaseModel):
         groups: list[WriterEvidenceGroup],
     ) -> list[dict[str, object]]:
         if not groups:
-            return []
+            return [
+                self._segment(
+                    "user_research",
+                    groups=[],
+                    group_projection="none",
+                    quote_projection="none",
+                    matrix_projection="compact",
+                    structured_competitors=[],
+                    structured_projection="compact",
+                )
+            ]
         segment = self._segment(
             "user_research",
             groups=groups,
