@@ -105,6 +105,19 @@ _DASH_TRANSLATION = str.maketrans(
         "\u2212": "-",
     }
 )
+_LEADING_HEADING_DECORATION_RE = re.compile(
+    r"^(?:"
+    r"[-*+\u2022]\s+|"
+    r"(?:section\s+)?(?:\d+(?:\.\d+)*|[ivxlcdm]+)[\.)]\s+|"
+    r"(?:section\s+)?[\(\[\uff08\u3010]\s*"
+    r"(?:\d+(?:\.\d+)*|[ivxlcdm]+|[\u4e00\u4e8c\u4e09\u56db"
+    r"\u4e94\u516d\u4e03\u516b\u4e5d\u5341\u767e\u5343]+)"
+    r"\s*[\)\]\uff09\u3011]\s*|"
+    r"(?:\u7b2c\s*)?[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03"
+    r"\u516b\u4e5d\u5341\u767e\u5343]+[\u3001.\uff0e)]\s*"
+    r")",
+    flags=re.IGNORECASE,
+)
 _SUPPORTED_OUTPUT_LANGUAGES = ("zh-CN", "en-US")
 _HEADING_ALIAS_KEYS: tuple[str, ...] = tuple(
     dict.fromkeys(CORE_HEADING_KEYS + SUPPORT_HEADING_KEYS + tuple(HEADING_KEY_ALIASES))
@@ -282,8 +295,20 @@ def _heading_aliases(output_language: str) -> dict[str, tuple[str, ...]]:
 
 
 def _normalize_heading(heading: str) -> str:
-    normalized = " ".join(heading.strip().translate(_DASH_TRANSLATION).lower().split())
+    cleaned = heading.strip().translate(_DASH_TRANSLATION)
+    cleaned = re.sub(r"\s+#+$", "", cleaned).strip()
+    cleaned = _strip_leading_heading_decoration(cleaned)
+    normalized = " ".join(cleaned.lower().split())
     return re.sub(r"\s+#+$", "", normalized).strip()
+
+
+def _strip_leading_heading_decoration(heading: str) -> str:
+    cleaned = heading.strip()
+    previous = None
+    while previous != cleaned:
+        previous = cleaned
+        cleaned = _LEADING_HEADING_DECORATION_RE.sub("", cleaned).strip()
+    return cleaned
 
 
 def _h2_headings(markdown: str) -> list[str]:

@@ -46,6 +46,29 @@ def test_quality_preflight_fails_duplicate_sections() -> None:
     assert result.h2_keys.count("decision_summary") == 2
 
 
+def test_quality_preflight_fails_duplicate_numbered_support_headings() -> None:
+    result = run_writer_quality_preflight(
+        _detail(),
+        "\n\n".join(
+            [
+                "## Decision Summary\nDecision.",
+                "## Competitive Findings\nFindings.",
+                "## User Review Themes\nThemes.",
+                "## Competitor Deep Dives\nDeep dives.",
+                "## Side-by-Side Decision Matrix\nMatrix.",
+                "## SWOT Analysis\nSWOT.",
+                "## 1. Evidence and QA Support\nSupport.",
+                "## 1. Evidence and QA Support\nDuplicate support.",
+            ]
+        ),
+    )
+
+    assert result.passed is False
+    assert result.duplicate_section_count == 1
+    assert result.failure_reasons == ["duplicate_sections"]
+    assert result.h2_keys.count("evidence_support") == 2
+
+
 def test_quality_preflight_fails_core_after_support() -> None:
     result = run_writer_quality_preflight(
         _detail(),

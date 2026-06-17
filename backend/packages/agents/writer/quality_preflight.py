@@ -20,6 +20,30 @@ REQUIRED_CORE_KEYS: tuple[str, ...] = (
 )
 
 _H2_RE = re.compile(r"(?m)^##\s+(.+?)\s*$")
+_DASH_TRANSLATION = str.maketrans(
+    {
+        "\u2010": "-",
+        "\u2011": "-",
+        "\u2012": "-",
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2015": "-",
+        "\u2212": "-",
+    }
+)
+_LEADING_HEADING_DECORATION_RE = re.compile(
+    r"^(?:"
+    r"[-*+\u2022]\s+|"
+    r"(?:section\s+)?(?:\d+(?:\.\d+)*|[ivxlcdm]+)[\.)]\s+|"
+    r"(?:section\s+)?[\(\[\uff08\u3010]\s*"
+    r"(?:\d+(?:\.\d+)*|[ivxlcdm]+|[\u4e00\u4e8c\u4e09\u56db"
+    r"\u4e94\u516d\u4e03\u516b\u4e5d\u5341\u767e\u5343]+)"
+    r"\s*[\)\]\uff09\u3011]\s*|"
+    r"(?:\u7b2c\s*)?[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03"
+    r"\u516b\u4e5d\u5341\u767e\u5343]+[\u3001.\uff0e)]\s*"
+    r")",
+    flags=re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -48,14 +72,17 @@ def run_writer_quality_preflight(
     detail: RunDetail,
     markdown: str,
 ) -> WriterQualityPreflightResult:
-    h2_keys = [
-        key
-        for key in (
-            heading_key_for(match.group(1).strip(), detail.output_language)
-            for match in _H2_RE.finditer(markdown)
-        )
-        if key is not None
-    ]
+    h2_headings = [match.group(1).strip() for match in _H2_RE.finditer(markdown)]
+    h2_keys: list[str] = []
+    h2_identities: list[str] = []
+    for heading in h2_headings:
+        key = heading_key_for(heading, detail.output_language)
+        if key is None:
+            h2_identities.append(f"unknown:{_normalize_unknown_heading(heading)}")
+            continue
+        h2_keys.append(key)
+        h2_identities.append(f"known:{key}")
+
     first_support_index = next(
         (index for index, key in enumerate(h2_keys) if key in SUPPORT_HEADING_KEYS),
         None,
@@ -70,7 +97,7 @@ def run_writer_quality_preflight(
         before_support_keys = h2_keys[:first_support_index]
         after_support_keys = h2_keys[first_support_index + 1 :]
 
-    duplicate_section_count = _duplicate_known_key_count(h2_keys)
+    duplicate_section_count = _duplicate_identity_count(h2_identities)
     missing_core_sections = [
         key for key in REQUIRED_CORE_KEYS if key not in before_support_keys
     ]
@@ -97,8 +124,24 @@ def run_writer_quality_preflight(
     )
 
 
-def _duplicate_known_key_count(h2_keys: list[str]) -> int:
+def _duplicate_identity_count(h2_identities: list[str]) -> int:
     counts: dict[str, int] = {}
-    for key in h2_keys:
-        counts[key] = counts.get(key, 0) + 1
+    for identity in h2_identities:
+        counts[identity] = counts.get(identity, 0) + 1
     return sum(count - 1 for count in counts.values() if count > 1)
+
+
+def _normalize_unknown_heading(heading: str) -> str:
+    cleaned = heading.strip().translate(_DASH_TRANSLATION)
+    cleaned = re.sub(r"\s+#+$", "", cleaned).strip()
+    cleaned = _strip_leading_heading_decoration(cleaned)
+    return " ".join(cleaned.casefold().split())
+
+
+def _strip_leading_heading_decoration(heading: str) -> str:
+    cleaned = heading.strip()
+    previous = None
+    while previous != cleaned:
+        previous = cleaned
+        cleaned = _LEADING_HEADING_DECORATION_RE.sub("", cleaned).strip()
+    return cleaned

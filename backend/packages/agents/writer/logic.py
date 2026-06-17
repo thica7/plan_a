@@ -137,12 +137,6 @@ WRITER_NORMALIZED_FIELD_LONG_KEY_PARTS = (
     "trigger",
 )
 WRITER_NORMALIZED_SNIPPET_LIMIT = 1600
-ASSEMBLE_REPAIR_MIN_CORE_ANALYSIS_DEPTH = REPORT_RICHNESS_MINIMUMS[
-    "core_analysis_depth_score"
-]
-ASSEMBLE_REPAIR_MIN_CORE_SECTION_DEPTH = REPORT_RICHNESS_MINIMUMS[
-    "core_section_depth_score"
-]
 
 
 def writer_user_research_policy_text() -> str:
@@ -156,21 +150,23 @@ def _assemble_repair_quality_gate(
     detail: RunDetail,
     markdown: str,
 ) -> dict[str, object]:
-    candidate = detail.model_copy(update={"report_md": markdown, "qa_findings": []})
+    candidate = detail.model_copy(update={"report_md": markdown})
     comparison = compare_run_quality(candidate)
     metric_by_name = {metric.name: metric.target_value for metric in comparison.metrics}
-    core_analysis_depth = float(metric_by_name.get("core_analysis_depth_score") or 0.0)
-    core_section_depth = float(metric_by_name.get("core_section_depth_score") or 0.0)
-    reasons: list[str] = []
-    if core_analysis_depth < ASSEMBLE_REPAIR_MIN_CORE_ANALYSIS_DEPTH:
-        reasons.append("core_analysis_depth_score")
-    if core_section_depth < ASSEMBLE_REPAIR_MIN_CORE_SECTION_DEPTH:
-        reasons.append("core_section_depth_score")
+    quality_gate_metrics = {
+        name: float(metric_by_name.get(name) or 0.0)
+        for name in REPORT_RICHNESS_MINIMUMS
+    }
+    reasons = [
+        name
+        for name, minimum in REPORT_RICHNESS_MINIMUMS.items()
+        if quality_gate_metrics[name] < minimum
+    ]
     return {
         "quality_gate_passed": not reasons,
         "quality_gate_reasons": reasons,
-        "core_analysis_depth_score": core_analysis_depth,
-        "core_section_depth_score": core_section_depth,
+        "quality_gate_metrics": quality_gate_metrics,
+        **quality_gate_metrics,
     }
 
 

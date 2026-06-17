@@ -6349,6 +6349,82 @@ async def test_writer_assemble_repair_preflight_failure_falls_back_to_full(
 
 
 @pytest.mark.asyncio
+async def test_writer_assemble_repair_rag_gap_fill_gate_falls_back_to_full() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return _writer_repair_release_depth_report()
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer assemble rag gap fallback",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_release_depth_report().replace(
+        "## Competitive Findings",
+        (
+            "## Decision Summary\n"
+            "Short duplicate summary created by assembly ordering damage. [source:pricing-1]\n\n"
+            "## Competitive Findings"
+        ),
+        1,
+    )
+    issue = _release_gate_report_depth_issue()
+    collector_gap_issue = _collector_issue("issue-rag-gap", "pricing", "Cursor")
+    record.detail.qa_findings = [issue, collector_gap_issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 1
+    repair_event = next(
+        event
+        for event in record.events
+        if event.type == "writer_assemble_repair_completed"
+    )
+    assert repair_event.payload["quality_gate_passed"] is False
+    assert "rag_gap_fill_section_score" in repair_event.payload["quality_gate_reasons"]
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_repair_mode"] == "full"
+    assert (
+        payload["writer_repair_decision"]
+        == "assembler repair did not pass writer quality preflight or depth gate"
+    )
+
+
+@pytest.mark.asyncio
 async def test_writer_assemble_repair_thin_support_order_falls_back_to_full() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
