@@ -30,6 +30,7 @@ RunEventType = Literal[
     "writer_preflight",
     "writer_segment_preflight",
     "writer_segment_validated",
+    "writer_assembly_completed",
 ]
 
 

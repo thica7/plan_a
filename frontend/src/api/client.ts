@@ -614,6 +614,7 @@ export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) 
     "writer_preflight",
     "writer_segment_preflight",
     "writer_segment_validated",
+    "writer_assembly_completed",
   ];
   for (const type of eventTypes) {
     source.addEventListener(type, (message) => {

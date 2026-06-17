@@ -8,6 +8,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from packages.agents.writer.assembler import assemble_report_sections
 from packages.agents.writer.evidence_pack import build_writer_evidence_pack
 from packages.agents.writer.repair import (
     apply_line_repair,
@@ -830,7 +831,20 @@ class WriterAgentMixin:
                     },
                 )
             sections.append(segment_md.strip())
-        return "\n\n".join(section for section in sections if section)
+        assembled = assemble_report_sections(
+            sections,
+            output_language=detail.output_language,
+            competitors=detail.plan.competitors,
+        )
+        await self.emit(
+            detail.id,
+            "writer_assembly_completed",
+            "writer",
+            None,
+            "Writer segmented report assembled",
+            assembled.telemetry,
+        )
+        return assembled.markdown
 
     def _sanitize_writer_segment_citations(
         self,

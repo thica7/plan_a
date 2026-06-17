@@ -7558,6 +7558,7 @@ class _SegmentedWriterFakePack:
         segment_kind: str = "section_fragment",
         output_language: str = "en-US",
         allowed_source_ids: list[str] | None = None,
+        segments: list[dict[str, object]] | None = None,
     ) -> None:
         self._segment = {
             "schema_version": "writer_evidence_pack.v1",
@@ -7577,6 +7578,7 @@ class _SegmentedWriterFakePack:
             "allowed_source_ids": allowed_source_ids or ["cursor-pricing"],
             "segment_input_chars": 240,
         }
+        self._segments = segments
 
     def telemetry_payload(self):
         return {
@@ -7593,6 +7595,8 @@ class _SegmentedWriterFakePack:
         raise AssertionError("segmented writer should not serialize the full pack")
 
     def segment_inputs(self):
+        if self._segments is not None:
+            return self._segments
         return [self._segment]
 
     def validate_segment_citations(self, markdown, *, allowed_source_ids):
@@ -7655,6 +7659,32 @@ def _segmented_writer_record(service: RunService, *, run_id: str) -> RunRecord:
     record = RunRecord(detail=detail)
     service._runs[detail.id] = record
     return record
+
+
+def _segmented_writer_segment(
+    *,
+    segment_name: str,
+    section_id: str,
+    allowed_source_id: str,
+    segment_kind: str = "section_fragment",
+    segment_competitor: str | None = None,
+) -> dict[str, object]:
+    return {
+        "schema_version": "writer_evidence_pack.v1",
+        "segment_name": segment_name,
+        "segment_kind": segment_kind,
+        "section_id": section_id,
+        "segment_competitor": segment_competitor,
+        "output_language": "en-US",
+        "segment_essential": True,
+        "source_registry": [{"id": allowed_source_id}],
+        "groups": [],
+        "quotes": [],
+        "matrix": {},
+        "structured_knowledge": {},
+        "allowed_source_ids": [allowed_source_id],
+        "segment_input_chars": 240,
+    }
 
 
 @pytest.mark.asyncio
@@ -7749,6 +7779,98 @@ async def test_segmented_writer_repairs_citations_after_contract_retry(
         "pass",
     ]
     assert validated_events[1].payload["segment_retry_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_assembles_duplicate_sections_before_return(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-assembler")
+    record.detail.raw_sources = [
+        RawSource(
+            id=source_id,
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title=f"Source {source_id}",
+            snippet=f"Snippet for {source_id}.",
+            content_hash=f"{source_id}-hash",
+            confidence=0.96,
+        )
+        for source_id in (
+            "raw-source-a",
+            "raw-source-b",
+            "raw-source-c",
+            "raw-source-d",
+        )
+    ]
+    segments = [
+        _segmented_writer_segment(
+            segment_name="decision_summary sources:1",
+            section_id="decision_summary",
+            allowed_source_id="raw-source-a",
+        ),
+        _segmented_writer_segment(
+            segment_name="decision_summary sources:2",
+            section_id="decision_summary",
+            allowed_source_id="raw-source-b",
+        ),
+        _segmented_writer_segment(
+            segment_name="support_appendix",
+            section_id="evidence_support",
+            segment_kind="support_fragment",
+            allowed_source_id="raw-source-c",
+        ),
+        _segmented_writer_segment(
+            segment_name="competitor_deep_dives Cursor",
+            section_id="competitor_deep_dives",
+            allowed_source_id="raw-source-d",
+            segment_competitor="Cursor",
+        ),
+    ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        if "segment_name=decision_summary sources:1" in user:
+            return (
+                "## Decision Summary\n"
+                "Decision from sources:1 [source:raw-source-a]."
+            )
+        if "segment_name=decision_summary sources:2" in user:
+            return (
+                "## Decision Summary\n"
+                "Decision from sources:2 [source:raw-source-b]."
+            )
+        if "segment_name=support_appendix" in user:
+            return "## Evidence and QA Support\nSupport [source:raw-source-c]."
+        if "segment_name=competitor_deep_dives Cursor" in user:
+            return "## Competitor Deep Dives\n### Cursor\nDeep dive [source:raw-source-d]."
+        raise AssertionError(f"unexpected writer segment prompt: {user}")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(segments=segments),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._real_writer_step(record)
+
+    report_md = record.detail.report_md
+    assert report_md.count("## Decision Summary") == 1
+    assert report_md.index("## Competitor Deep Dives") < report_md.index(
+        "## Evidence & QA Support"
+    )
+    assert "Decision from sources:1 [source:raw-source-a]." in report_md
+    assert "Decision from sources:2 [source:raw-source-b]." in report_md
+    assembly_events = [
+        event for event in record.events if event.type == "writer_assembly_completed"
+    ]
+    assert len(assembly_events) == 1
+    payload = assembly_events[0].payload
+    assert payload["duplicate_section_count_before"] == 1
+    assert payload["duplicate_section_count_after"] == 0
+    assert "decision_summary" in payload["merged_section_keys"]
 
 
 @pytest.mark.asyncio
