@@ -6342,7 +6342,7 @@ async def test_writer_assemble_repair_preflight_failure_falls_back_to_full(
     assert payload["writer_repair_mode"] == "full"
     assert (
         payload["writer_repair_decision"]
-        == "assembler repair did not pass writer quality preflight"
+        == "assembler repair did not pass writer quality preflight or depth gate"
     )
     assert payload["previous_report_protected"] is True
     assert payload["anti_regression_reason"]
@@ -6435,7 +6435,111 @@ Verified source coverage exists, but the core analysis remains thin. [source:pri
     assert payload["writer_repair_mode"] == "full"
     assert (
         payload["writer_repair_decision"]
-        == "assembler repair did not pass writer quality preflight"
+        == "assembler repair did not pass writer quality preflight or depth gate"
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_assemble_repair_release_depth_boundary_falls_back_to_full() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return _writer_repair_release_depth_report()
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer boundary assemble fallback",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    def boundary_body(seed: str, minimum_chars: int) -> str:
+        sentence = f"{seed} [source:pricing-1] [source:feature-1] "
+        body = sentence
+        while len(body) < minimum_chars:
+            body += sentence
+        return body.strip()
+
+    record.detail.report_md = f"""# Cursor vs Copilot Direct Battlecard
+
+## Decision Summary
+{boundary_body("Recommended action keeps Cursor pricing clarity and Copilot continuity in tension while release proof remains gated.", 560)}
+
+## Competitive Findings
+{boundary_body("The finding frames the choice as standalone clarity versus Microsoft distribution without claiming a final winner.", 760)} Extra release detail now.
+
+## User Review Themes
+{boundary_body("Buyer feedback is directional and should guide discovery on procurement confidence, switching effort, and pilot speed.", 510)} Extra release detail now.
+
+## Competitor Deep Dives
+{boundary_body("Cursor needs procurement proof while Copilot needs standalone value comparison before the account path is publishable.", 510)} Extra release detail now.
+
+## Source Quality & Coverage
+Verified source coverage exists, but this audit section appears before later core sections and
+should be moved after the full analysis layer. [source:pricing-1] [source:feature-1]
+
+## Battlecard
+{boundary_body("The battlecard opens with pricing clarity, handles Microsoft continuity, and asks which buying constraint matters most.", 740)} Extra release detail now.
+
+## Side-by-Side Decision Matrix
+{boundary_body("Matrix interpretation compares pricing, workflow, persona, security, procurement, and follow-up implications.", 620)}
+
+## SWOT Analysis
+- Strengths: Cursor has explainable pricing and Copilot has credible Microsoft distribution for platform teams. [source:pricing-1] [source:feature-1]
+- Weaknesses: Cursor needs procurement proof and Copilot needs standalone value comparison before release. [source:pricing-1] [source:feature-1]
+- Opportunities: Buyer education can separate workflow gains from bundle familiarity during discovery. [source:pricing-1]
+- Threats: Copilot can defend through continuity, governance assumptions, and lower perceived switching risk. [source:feature-1]
+"""
+    issue = _release_gate_report_depth_issue()
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 1
+    repair_event = next(
+        event
+        for event in record.events
+        if event.type == "writer_assemble_repair_completed"
+    )
+    assert repair_event.payload["quality_gate_passed"] is False
+    assert 0.6 <= repair_event.payload["core_analysis_depth_score"] < 0.8
+    assert "core_analysis_depth_score" in repair_event.payload["quality_gate_reasons"]
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_repair_mode"] == "full"
+    assert (
+        payload["writer_repair_decision"]
+        == "assembler repair did not pass writer quality preflight or depth gate"
     )
 
 

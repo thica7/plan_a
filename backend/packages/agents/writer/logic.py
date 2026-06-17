@@ -23,6 +23,7 @@ from packages.agents.writer.segment_contract import (
     segment_contract_for,
     validate_segment_contract,
 )
+from packages.business_intel.release_gate import REPORT_RICHNESS_MINIMUMS
 from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.i18n.language import (
@@ -133,8 +134,12 @@ WRITER_NORMALIZED_FIELD_LONG_KEY_PARTS = (
     "trigger",
 )
 WRITER_NORMALIZED_SNIPPET_LIMIT = 1600
-ASSEMBLE_REPAIR_MIN_CORE_ANALYSIS_DEPTH = 0.6
-ASSEMBLE_REPAIR_MIN_CORE_SECTION_DEPTH = 1.0
+ASSEMBLE_REPAIR_MIN_CORE_ANALYSIS_DEPTH = REPORT_RICHNESS_MINIMUMS[
+    "core_analysis_depth_score"
+]
+ASSEMBLE_REPAIR_MIN_CORE_SECTION_DEPTH = REPORT_RICHNESS_MINIMUMS[
+    "core_section_depth_score"
+]
 
 
 def writer_user_research_policy_text() -> str:
@@ -298,7 +303,10 @@ class WriterAgentMixin:
             else:
                 repair_plan = WriterRepairPlan(
                     mode="full",
-                    reason="assembler repair did not pass writer quality preflight",
+                    reason=(
+                        "assembler repair did not pass writer quality preflight "
+                        "or depth gate"
+                    ),
                     previous_report_protectable=True,
                     anti_regression_required=True,
                 )
