@@ -8,6 +8,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from app.events import RunEvent
 from packages.agents.writer.evidence_pack import build_writer_evidence_pack
 from packages.agents.writer.repair import (
     apply_line_repair,
@@ -15,6 +16,10 @@ from packages.agents.writer.repair import (
     replace_markdown_section,
     report_regression_problem,
     section_regression_problem,
+)
+from packages.agents.writer.segment_contract import (
+    segment_contract_for,
+    validate_segment_contract,
 )
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.i18n.language import (
@@ -28,6 +33,7 @@ from packages.identity.source_resolver import (
     source_token_match_value,
     source_tokens,
 )
+from packages.observability.tracing import sanitize_for_trace, trace_id_for_run
 from packages.rag.grounded_prompt import build_run_grounding_prompt
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
@@ -629,6 +635,44 @@ class WriterAgentMixin:
         if not report_md.strip():
             raise RuntimeError("Writer returned empty report content")
 
+    async def _emit_writer_segment_validated(
+        self,
+        record: RunRecord,
+        payload: dict[str, object],
+    ) -> None:
+        detail = record.detail
+        try:
+            await self.emit(
+                detail.id,
+                "writer_segment_validated",
+                "writer",
+                None,
+                f"Writer segment validated: {payload['segment_name']}",
+                payload,
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 - schema may lag this new event type.
+            if "writer_segment_validated" not in str(exc):
+                raise
+        event = RunEvent.model_construct(
+            id=len(record.events) + 1,
+            run_id=detail.id,
+            trace_id=trace_id_for_run(detail.id),
+            type="writer_segment_validated",
+            agent="writer",
+            subagent=None,
+            swimlane="writer",
+            message=f"Writer segment validated: {payload['segment_name']}",
+            payload=sanitize_for_trace(payload),
+            created_at=datetime.utcnow(),
+        )
+        record.events.append(event)
+        self._persist_run(detail.id)
+        if self._journal is not None:
+            self._journal.append_event(event)
+        for queue in list(record.subscribers):
+            await queue.put(event)
+
     async def _writer_segmented_report_markdown(
         self,
         record: RunRecord,
@@ -643,8 +687,11 @@ class WriterAgentMixin:
         detail = record.detail
         sections: list[str] = []
         for segment in evidence_pack_result.segment_inputs():
+            contract = segment_contract_for(segment)
             payload = {
                 "segment_name": segment["segment_name"],
+                "segment_kind": contract.segment_kind,
+                "section_id": contract.section_id,
                 "segment_competitor": segment.get("segment_competitor"),
                 "segment_dimension": segment.get("segment_dimension"),
                 "segment_batch": segment.get("segment_batch"),
@@ -710,6 +757,55 @@ class WriterAgentMixin:
                         "Writer segment cited invalid source IDs after retry: "
                         f"{', '.join(invalid_sources)}"
                     )
+            validation = validate_segment_contract(segment_md, contract)
+            await self._emit_writer_segment_validated(
+                record,
+                {
+                    "segment_name": segment["segment_name"],
+                    "segment_kind": contract.segment_kind,
+                    "section_id": contract.section_id,
+                    "validation_status": validation.status,
+                    "validation_errors": list(validation.errors),
+                    "h2_headings": list(validation.h2_headings),
+                    "forbidden_headings": list(validation.forbidden_headings),
+                    "forbidden_heading_keys": list(validation.forbidden_heading_keys),
+                    "invalid_heading_keys": list(validation.invalid_heading_keys),
+                    "segment_retry_count": 0,
+                },
+            )
+            if validation.status != "pass":
+                segment_md = await self._writer_segment_markdown(
+                    record,
+                    segment=segment,
+                    timeout_seconds=timeout_seconds,
+                    language_guidance=language_guidance,
+                    memory_context=memory_context,
+                    layer_context=layer_context,
+                    required_sections=required_sections,
+                    retry_count=1,
+                    contract_errors=validation.errors,
+                    contract_forbidden_headings=validation.forbidden_headings,
+                )
+                segment_md = self._sanitize_writer_segment_citations(
+                    evidence_pack_result,
+                    segment_md,
+                    allowed_source_ids=allowed_source_ids,
+                )
+                invalid_sources = evidence_pack_result.validate_segment_citations(
+                    segment_md,
+                    allowed_source_ids=allowed_source_ids,
+                )
+                if invalid_sources:
+                    raise RuntimeError(
+                        "Writer segment cited invalid source IDs after contract retry: "
+                        f"{', '.join(invalid_sources)}"
+                    )
+                validation = validate_segment_contract(segment_md, contract)
+                if validation.status != "pass":
+                    raise RuntimeError(
+                        "Writer segment violated heading contract after retry: "
+                        f"{segment['segment_name']}: {'; '.join(validation.errors)}"
+                    )
             sections.append(segment_md.strip())
         return "\n\n".join(section for section in sections if section)
 
@@ -737,6 +833,8 @@ class WriterAgentMixin:
         required_sections: str,
         retry_count: int,
         citation_error_ids: list[str] | None = None,
+        contract_errors: list[str] | None = None,
+        contract_forbidden_headings: list[str] | None = None,
     ) -> str:
         detail = record.detail
         segment_json = json.dumps(segment, ensure_ascii=False)
@@ -748,6 +846,15 @@ class WriterAgentMixin:
                 "Use exact [source:ID] syntax with no space after source:. Do not put "
                 "multiple source IDs inside one [source:...] token; cite multiple "
                 "sources as consecutive citations such as [source:A][source:B].\n"
+            )
+        contract_warning = ""
+        if contract_errors:
+            forbidden = ", ".join(contract_forbidden_headings or [])
+            contract_warning = (
+                "Previous segment violated its heading contract: "
+                f"{'; '.join(contract_errors)}. "
+                f"Forbidden H2 headings found: {forbidden or 'none'}. "
+                "Rewrite only this segment and obey the segment contract exactly.\n"
             )
         user_research_policy = writer_user_research_policy_text()
         return await asyncio.wait_for(
@@ -778,9 +885,16 @@ class WriterAgentMixin:
                     f"Competitors: {', '.join(detail.plan.competitors)}\n"
                     f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
                     f"segment_name={segment['segment_name']}\n"
+                    f"segment_kind={segment.get('segment_kind', 'section_fragment')}\n"
+                    f"section_id={segment.get('section_id', segment['segment_name'])}\n"
                     f"segment_competitor={segment.get('segment_competitor') or 'all'}\n"
                     f"retry_count={retry_count}\n"
                     f"{citation_warning}"
+                    f"{contract_warning}"
+                    "Do not write headings outside this segment's contract. "
+                    "Do not write support or appendix sections unless "
+                    "segment_kind=support_fragment. If segment_kind=evidence_shard, "
+                    "do not write any ## H2 headings.\n"
                     f"Confirmed Memory Preferences:\n{memory_context}\n"
                     f"Layer Report Context: {layer_context}\n"
                     f"{self._writer_community_policy_text()}\n"

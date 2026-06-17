@@ -150,6 +150,7 @@ class WriterEvidencePack(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: str = SCHEMA_VERSION
+    output_language: str = "zh-CN"
     source_registry: list[WriterSourceRegistryItem] = Field(default_factory=list)
     groups: list[WriterEvidenceGroup] = Field(default_factory=list)
     quotes: list[WriterQuote] = Field(default_factory=list)
@@ -879,6 +880,7 @@ class WriterEvidencePackResult(BaseModel):
         payload: dict[str, object] = {
             "schema_version": self.pack.schema_version,
             "segment_name": name,
+            **_segment_contract_metadata(name, self.pack.output_language),
             "segment_competitor": segment_competitor,
             "segment_dimension": segment_dimension,
             "segment_batch": segment_batch,
@@ -1158,6 +1160,7 @@ class WriterEvidencePackResult(BaseModel):
 def _prompt_safe_pack_payload(pack: WriterEvidencePack) -> dict[str, object]:
     return {
         "schema_version": pack.schema_version,
+        "output_language": pack.output_language,
         "source_registry": [
             _prompt_safe_registry_item(item) for item in pack.source_registry
         ],
@@ -1171,6 +1174,27 @@ def _prompt_safe_pack_payload(pack: WriterEvidencePack) -> dict[str, object]:
         "matrix": pack.matrix,
         "structured_knowledge": pack.structured_knowledge,
         "coverage": pack.coverage,
+    }
+
+
+def _segment_contract_metadata(
+    segment_name: str,
+    output_language: str,
+) -> dict[str, object]:
+    section_id_by_name = {
+        "decision_summary": "decision_summary",
+        "user_research": "review_theme_summary",
+        "competitor_deep_dives": "competitor_deep_dives",
+        "swot_matrix": "swot_matrix",
+        "support_appendix": "evidence_support",
+    }
+    section_id = section_id_by_name.get(segment_name, segment_name)
+    is_support = segment_name == "support_appendix"
+    return {
+        "segment_kind": "support_fragment" if is_support else "section_fragment",
+        "section_id": section_id,
+        "output_language": output_language,
+        "segment_essential": not is_support,
     }
 
 
@@ -1390,6 +1414,7 @@ class _WriterEvidencePackBuilder:
         self._project_kb_slices()
         self._detect_pricing_conflicts()
         pack = WriterEvidencePack(
+            output_language=self.detail.output_language,
             source_registry=list(self.registry_by_id.values()),
             groups=list(self.groups.values()),
             quotes=list(self.quotes_by_key.values()),

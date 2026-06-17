@@ -11,6 +11,7 @@ from packages.business_intel.report_quality import compare_run_quality
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
 from packages.i18n.language import report_label
+from packages.identity.source_resolver import source_tokens
 from packages.memory import PreferenceMemoryStore, RunJournal
 from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
@@ -7542,6 +7543,185 @@ async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch
     assert any(event.type == "writer_segment_preflight" for event in record.events)
 
 
+class _SegmentedWriterFakeMetrics:
+    segmented_writer_required = True
+
+
+class _SegmentedWriterFakePack:
+    metrics = _SegmentedWriterFakeMetrics()
+
+    def __init__(
+        self,
+        *,
+        segment_name: str = "decision_summary",
+        section_id: str = "decision_summary",
+        segment_kind: str = "section_fragment",
+        output_language: str = "en-US",
+        allowed_source_ids: list[str] | None = None,
+    ) -> None:
+        self._segment = {
+            "schema_version": "writer_evidence_pack.v1",
+            "segment_name": segment_name,
+            "segment_kind": segment_kind,
+            "section_id": section_id,
+            "output_language": output_language,
+            "segment_essential": True,
+            "source_registry": [
+                {"id": source_id}
+                for source_id in (allowed_source_ids or ["cursor-pricing"])
+            ],
+            "groups": [],
+            "quotes": [],
+            "matrix": {},
+            "structured_knowledge": {},
+            "allowed_source_ids": allowed_source_ids or ["cursor-pricing"],
+            "segment_input_chars": 240,
+        }
+
+    def telemetry_payload(self):
+        return {
+            "raw_source_count": 1,
+            "represented_source_count": 1,
+            "dropped_source_count": 0,
+            "segmented_writer_required": True,
+        }
+
+    def preflight_errors(self):
+        return []
+
+    def to_prompt_json(self):
+        raise AssertionError("segmented writer should not serialize the full pack")
+
+    def segment_inputs(self):
+        return [self._segment]
+
+    def validate_segment_citations(self, markdown, *, allowed_source_ids):
+        return [
+            source_id
+            for source_id in source_tokens(markdown)
+            if source_id not in allowed_source_ids
+        ]
+
+    def sanitize_segment_citations(self, markdown, *, allowed_source_ids):
+        return markdown
+
+
+def _segmented_writer_service() -> RunService:
+    return RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+
+
+def _segmented_writer_detail(*, run_id: str) -> RunDetail:
+    return RunDetail(
+        id=run_id,
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        output_language="en-US",
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Cursor pricing is visible.",
+                content_hash="cursor-pricing-hash",
+                confidence=0.96,
+            )
+        ],
+    )
+
+
+def _segmented_writer_record(service: RunService, *, run_id: str) -> RunRecord:
+    detail = _segmented_writer_detail(run_id=run_id)
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    return record
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_retries_when_segment_uses_forbidden_heading(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-contract-retry")
+    calls: list[str] = []
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        calls.append(user)
+        if "retry_count=1" in user:
+            assert "Previous segment violated its heading contract" in user
+            assert "Forbidden H2 headings found: Evidence Support" in user
+            return "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]"
+        return (
+            "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]\n\n"
+            "## Evidence Support\nSupport belongs elsewhere. [source:cursor-pricing]"
+        )
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._real_writer_step(record)
+
+    assert len(calls) == 2
+    assert "## Evidence Support" not in record.detail.report_md
+    assert "## Executive Summary" in record.detail.report_md
+    validated_event = next(
+        event for event in record.events if event.type == "writer_segment_validated"
+    )
+    assert validated_event.payload["validation_status"] == "retry"
+    assert validated_event.payload["forbidden_headings"] == ["Evidence Support"]
+    assert validated_event.payload["segment_retry_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_fails_when_contract_retry_still_invalid(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-contract-invalid")
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        return (
+            "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]\n\n"
+            "## Evidence Support\nSupport belongs elsewhere. [source:cursor-pricing]"
+        )
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    with pytest.raises(RuntimeError, match="violated heading contract after retry"):
+        await service._real_writer_step(record)
+
+    assert record.detail.status == "failed"
+    assert record.detail.report_md == ""
+
+
 @pytest.mark.asyncio
 async def test_segmented_writer_does_not_serialize_full_evidence_pack(monkeypatch) -> None:
     service = RunService(
@@ -7780,7 +7960,14 @@ async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
                 "## User Review Themes\nEnterprise buyers cite security review. "
                 "[source:cursor-persona]"
             )
-        return "## Support\nCursor has cited evidence. [source:cursor-pricing]"
+        if "segment_name=competitor_deep_dives" in user:
+            return (
+                "## Competitor Deep Dives\nCursor has cited evidence. "
+                "[source:cursor-pricing]"
+            )
+        if "segment_name=swot_matrix" in user:
+            return "## SWOT Analysis\nCursor has cited evidence. [source:cursor-pricing]"
+        return "## Evidence Support\nCursor has cited evidence. [source:cursor-pricing]"
 
     monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
     monkeypatch.setattr(
@@ -7858,8 +8045,18 @@ async def test_writer_segment_sanitizes_spacing_and_combined_citations(monkeypat
                 "## Executive Summary\nCodex pricing is supported by official evidence. "
                 "[source: raw-source-openai-codex-pricing | raw-source-openai-api-pricing]"
             )
+        if "segment_name=competitor_deep_dives" in user:
+            return (
+                "## Competitor Deep Dives\nCodex pricing has cited evidence. "
+                "[source:raw-source-openai-codex-pricing]"
+            )
+        if "segment_name=swot_matrix" in user:
+            return (
+                "## SWOT Analysis\nCodex pricing has cited evidence. "
+                "[source:raw-source-openai-codex-pricing]"
+            )
         return (
-            "## Support\nCodex pricing has cited evidence. "
+            "## Evidence Support\nCodex pricing has cited evidence. "
             "[source:raw-source-openai-codex-pricing]"
         )
 
