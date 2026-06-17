@@ -8273,6 +8273,75 @@ def _segmented_writer_segment(
 
 
 @pytest.mark.asyncio
+async def test_writer_segment_preflight_emits_contract_metadata(monkeypatch) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service, run_id="run-segment-preflight-contract"
+    )
+    events: list[tuple[object, ...]] = []
+
+    async def capture_emit(*args):
+        events.append(args)
+
+    monkeypatch.setattr(service, "emit", capture_emit)
+    pack = _SegmentedWriterFakePack(
+        segments=[
+            {
+                "schema_version": "writer_evidence_pack.v1",
+                "segment_name": "decision_summary",
+                "segment_kind": "section_fragment",
+                "section_id": "decision_summary",
+                "output_language": "en-US",
+                "segment_input_chars": 2000,
+                "allowed_source_ids": ["raw-source-a"],
+                "source_registry": [{"id": "raw-source-a"}],
+                "groups": [],
+                "quotes": [],
+                "matrix": {},
+                "structured_knowledge": {},
+            }
+        ]
+    )
+
+    async def fake_segment_writer(*args, **kwargs):
+        return "## Decision Summary\nDecision [source:raw-source-a]."
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
+
+    await service._writer_segmented_report_markdown(
+        record,
+        evidence_pack_result=pack,
+        timeout_seconds=60,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    preflight_payloads = [
+        event[5] for event in events if event[1] == "writer_segment_preflight"
+    ]
+    assert preflight_payloads
+    preflight_payload = preflight_payloads[0]
+    assert preflight_payload["segment_kind"] == "section_fragment"
+    assert preflight_payload["section_id"] == "decision_summary"
+    assert "decision_summary" in preflight_payload["allowed_heading_keys"]
+    assert "evidence_support" in preflight_payload["forbidden_heading_keys"]
+    assert preflight_payload["segment_essential"] is True
+
+
+@pytest.mark.asyncio
 async def test_segmented_writer_retries_when_segment_uses_forbidden_heading(
     monkeypatch,
 ) -> None:
