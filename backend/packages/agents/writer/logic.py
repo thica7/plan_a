@@ -8,7 +8,6 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from app.events import RunEvent
 from packages.agents.writer.evidence_pack import build_writer_evidence_pack
 from packages.agents.writer.repair import (
     apply_line_repair,
@@ -33,7 +32,6 @@ from packages.identity.source_resolver import (
     source_token_match_value,
     source_tokens,
 )
-from packages.observability.tracing import sanitize_for_trace, trace_id_for_run
 from packages.rag.grounded_prompt import build_run_grounding_prompt
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
@@ -635,44 +633,6 @@ class WriterAgentMixin:
         if not report_md.strip():
             raise RuntimeError("Writer returned empty report content")
 
-    async def _emit_writer_segment_validated(
-        self,
-        record: RunRecord,
-        payload: dict[str, object],
-    ) -> None:
-        detail = record.detail
-        try:
-            await self.emit(
-                detail.id,
-                "writer_segment_validated",
-                "writer",
-                None,
-                f"Writer segment validated: {payload['segment_name']}",
-                payload,
-            )
-            return
-        except Exception as exc:  # noqa: BLE001 - schema may lag this new event type.
-            if "writer_segment_validated" not in str(exc):
-                raise
-        event = RunEvent.model_construct(
-            id=len(record.events) + 1,
-            run_id=detail.id,
-            trace_id=trace_id_for_run(detail.id),
-            type="writer_segment_validated",
-            agent="writer",
-            subagent=None,
-            swimlane="writer",
-            message=f"Writer segment validated: {payload['segment_name']}",
-            payload=sanitize_for_trace(payload),
-            created_at=datetime.utcnow(),
-        )
-        record.events.append(event)
-        self._persist_run(detail.id)
-        if self._journal is not None:
-            self._journal.append_event(event)
-        for queue in list(record.subscribers):
-            await queue.put(event)
-
     async def _writer_segmented_report_markdown(
         self,
         record: RunRecord,
@@ -752,14 +712,18 @@ class WriterAgentMixin:
                     segment_md,
                     allowed_source_ids=allowed_source_ids,
                 )
-                if invalid_sources:
-                    raise RuntimeError(
-                        "Writer segment cited invalid source IDs after retry: "
-                        f"{', '.join(invalid_sources)}"
-                    )
+            if invalid_sources:
+                raise RuntimeError(
+                    "Writer segment cited invalid source IDs after retry: "
+                    f"{', '.join(invalid_sources)}"
+                )
             validation = validate_segment_contract(segment_md, contract)
-            await self._emit_writer_segment_validated(
-                record,
+            await self.emit(
+                detail.id,
+                "writer_segment_validated",
+                "writer",
+                None,
+                f"Writer segment validated: {segment['segment_name']}",
                 {
                     "segment_name": segment["segment_name"],
                     "segment_kind": contract.segment_kind,

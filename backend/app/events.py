@@ -29,6 +29,7 @@ RunEventType = Literal[
     "runtime.command",
     "writer_preflight",
     "writer_segment_preflight",
+    "writer_segment_validated",
 ]
 
 
