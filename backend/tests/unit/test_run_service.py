@@ -8928,12 +8928,23 @@ async def test_writer_segment_prompt_includes_source_quality_and_user_research_p
         retry_count=0,
     )
 
-    prompt = f"{captured['system']}\n{captured['user']}"
+    captured_system_prompt = captured["system"]
+    captured_user_prompt = captured["user"]
+    prompt = f"{captured_system_prompt}\n{captured_user_prompt}"
+    assert "segment_kind=" in captured_user_prompt
+    assert "section_id=" in captured_user_prompt
+    assert (
+        "Do not write headings outside this segment's contract"
+        in captured_user_prompt
+    )
     assert (
         "Do not use web_search_result or confidence < 0.75 as the sole support"
         in prompt
     )
-    assert "Do not combine multiple source IDs inside one [source:...] token" in prompt
+    assert (
+        "Do not combine multiple source IDs inside one [source:...] token"
+        in captured_system_prompt
+    )
     assert "[source:A][source:B]" in prompt
     assert "as user-research signals, not as official factual proof" in prompt
 
