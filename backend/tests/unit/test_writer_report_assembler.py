@@ -39,6 +39,9 @@ def test_assembler_merges_duplicate_sections_and_moves_support_after_core() -> N
         assert line in result.markdown
     assert result.telemetry["duplicate_section_count_before"] == 2
     assert result.telemetry["duplicate_section_count_after"] == 0
+    assert result.telemetry["competitors"] == ["Acme", "Beta"]
+    assert isinstance(result.telemetry["merged_section_keys"], list)
+    assert isinstance(result.telemetry["competitors"], list)
     assert set(result.telemetry["merged_section_keys"]) >= {
         "decision_summary",
         "evidence_support",
@@ -59,6 +62,23 @@ def test_assembler_preserves_unknown_core_before_support() -> None:
         "## Evidence Appendix"
     )
     assert result.telemetry["unknown_core_section_count"] == 1
+
+
+def test_assembler_reports_duplicate_unknown_h2s_after_assembly() -> None:
+    result = assemble_report_sections(
+        [
+            "## Custom Core Insight\nFirst custom body [source:custom-1].",
+            "## Custom Core Insight\nSecond custom body [source:custom-2].",
+        ],
+        output_language="en-US",
+        competitors=["Acme"],
+    )
+
+    assert result.markdown.count("## Custom Core Insight") == 2
+    assert "First custom body [source:custom-1]." in result.markdown
+    assert "Second custom body [source:custom-2]." in result.markdown
+    assert result.telemetry["duplicate_section_count_after"] == 1
+    assert result.telemetry["competitors"] == ["Acme"]
 
 
 def test_assembler_handles_zh_labels() -> None:

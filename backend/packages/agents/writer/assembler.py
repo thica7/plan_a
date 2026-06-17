@@ -72,9 +72,9 @@ def assemble_report_sections(
             else:
                 unknown_core_sections.append(section)
 
-    merged_section_keys = tuple(
+    merged_section_keys = [
         key for key in CANONICAL_REPORT_ORDER if known_counts.get(key, 0) > 1
-    )
+    ]
     duplicate_section_count_before = sum(
         count - 1 for count in known_counts.values() if count > 1
     )
@@ -105,23 +105,24 @@ def assemble_report_sections(
         (key for key in output_section_keys if key in SUPPORT_HEADING_KEYS),
         None,
     )
+    markdown = "\n\n".join(block for block in output_blocks if block).strip()
     telemetry: dict[str, object] = {
         "input_fragment_count": len(markdown_sections),
         "output_section_count": len(output_section_keys)
         + len(unknown_core_sections)
         + len(unknown_support_sections),
         "duplicate_section_count_before": duplicate_section_count_before,
-        "duplicate_section_count_after": 0,
+        "duplicate_section_count_after": _duplicate_h2_count(
+            markdown,
+            output_language_text,
+        ),
         "merged_section_keys": merged_section_keys,
         "unknown_core_section_count": len(unknown_core_sections),
         "unknown_support_section_count": len(unknown_support_sections),
-        "competitors": tuple(competitors),
+        "competitors": list(competitors),
         "first_support_key": first_support_key,
     }
-    return AssembledReport(
-        markdown="\n\n".join(block for block in output_blocks if block).strip(),
-        telemetry=telemetry,
-    )
+    return AssembledReport(markdown=markdown, telemetry=telemetry)
 
 
 def _parse_fragment(
@@ -167,6 +168,29 @@ def _render_unknown_section(section: _SectionBlock) -> str:
     if not section.body:
         return f"## {section.heading}"
     return f"## {section.heading}\n{section.body}"
+
+
+def _duplicate_h2_count(markdown: str, output_language: str) -> int:
+    counts: dict[str, int] = {}
+    for heading in _h2_headings(markdown):
+        identity = _heading_identity(heading, output_language)
+        counts[identity] = counts.get(identity, 0) + 1
+    return sum(count - 1 for count in counts.values() if count > 1)
+
+
+def _heading_identity(heading: str, output_language: str) -> str:
+    key = heading_key_for(heading, output_language)
+    if key is not None:
+        return f"known:{key}"
+    return f"unknown:{_normalize_unknown_heading(heading)}"
+
+
+def _h2_headings(markdown: str) -> list[str]:
+    return [match.group(1).strip() for match in _H2_RE.finditer(markdown)]
+
+
+def _normalize_unknown_heading(heading: str) -> str:
+    return " ".join(heading.strip().casefold().split())
 
 
 def _looks_like_support_heading(heading: str) -> bool:
