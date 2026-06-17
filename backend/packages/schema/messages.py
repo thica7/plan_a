@@ -140,7 +140,7 @@ class ReflectionRecordMessagePayload(_MessagePayload):
 class MarkdownReportMessagePayload(_MessagePayload):
     report_md: str
     writer_mode: str = ""
-    writer_repair_mode: Literal["none", "line", "section", "full"] = "none"
+    writer_repair_mode: Literal["none", "line", "section", "assemble", "full"] = "none"
     writer_repair_sections: list[str] = Field(default_factory=list)
     writer_repair_decision: str = ""
     anti_regression_reason: str | None = None

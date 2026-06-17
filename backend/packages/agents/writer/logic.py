@@ -257,7 +257,7 @@ class WriterAgentMixin:
                 None,
                 "Writer assembler repair completed",
                 {
-                    "assembly": assembled.telemetry,
+                    **assembled.telemetry,
                     "quality_preflight": preflight.telemetry_payload(),
                 },
             )

@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Literal
 
+from packages.agents.writer.quality_preflight import run_writer_quality_preflight
 from packages.business_intel.report_quality import compare_run_quality
 from packages.i18n.language import report_label
 from packages.identity.source_resolver import normalize_source_token, source_tokens
@@ -114,6 +115,16 @@ def build_writer_repair_plan(
     protectable = _previous_report_is_protectable(detail)
     if upstream_data_changed:
         return _upstream_data_changed_repair_plan(detail, issues, protectable)
+    if (
+        _has_release_gate_report_depth_issue(issues)
+        and _has_deterministic_report_structure_damage(detail)
+    ):
+        return WriterRepairPlan(
+            mode="assemble",
+            reason="release gate failure is deterministic report structure damage",
+            previous_report_protectable=True,
+            anti_regression_required=False,
+        )
     if not protectable:
         return WriterRepairPlan(
             mode="full",
@@ -122,13 +133,6 @@ def build_writer_repair_plan(
         )
 
     if _has_release_gate_report_depth_issue(issues):
-        if _has_deterministic_report_structure_damage(detail):
-            return WriterRepairPlan(
-                mode="assemble",
-                reason="release gate failure is deterministic report structure damage",
-                previous_report_protectable=True,
-                anti_regression_required=False,
-            )
         return WriterRepairPlan(
             mode="full",
             reason="release_gate.report_depth_required requires full core rewrite",
@@ -370,6 +374,10 @@ def _has_release_gate_report_depth_issue(issues: list[QCIssue]) -> bool:
 def _has_deterministic_report_structure_damage(detail: RunDetail) -> bool:
     if not detail.report_md.strip():
         return False
+
+    preflight = run_writer_quality_preflight(detail, detail.report_md)
+    if preflight.core_sections_after_support:
+        return True
 
     comparison = compare_run_quality(detail)
     metric_by_name = {metric.name: metric.target_value for metric in comparison.metrics}

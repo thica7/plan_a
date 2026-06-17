@@ -6053,6 +6053,205 @@ Verified source coverage exists, but the core analysis remains thin. [source:pri
     assert plan.mode == "full"
 
 
+def test_release_gate_support_order_damage_routes_to_assemble() -> None:
+    support_section = (
+        "## Source Quality & Coverage\n"
+        "The run uses verified pages for both target competitors. "
+        "[source:pricing-1] [source:feature-1]\n\n"
+    )
+    report = _writer_repair_protectable_report().replace(support_section, "").replace(
+        "## SWOT Analysis",
+        f"{support_section}## SWOT Analysis",
+        1,
+    )
+    detail = _writer_repair_detail(report)
+
+    plan = build_writer_repair_plan(detail, [_release_gate_report_depth_issue()])
+
+    assert plan.mode == "assemble"
+    assert (
+        plan.reason
+        == "release gate failure is deterministic report structure damage"
+    )
+    assert plan.anti_regression_required is False
+
+
+@pytest.mark.asyncio
+async def test_writer_assemble_repair_preserves_report_without_llm() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return "# Full rewrite should not be used"
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer assemble repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report().replace(
+        "## Competitive Findings",
+        (
+            "## Decision Summary\n"
+            "Short duplicate summary created by assembly ordering damage. [source:pricing-1]\n\n"
+            "## Competitive Findings"
+        ),
+        1,
+    )
+    issue = _release_gate_report_depth_issue()
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 0
+    assert record.detail.report_md.count("## Decision Summary") == 1
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_mode"] == "writer repair: assemble"
+    assert payload["writer_repair_mode"] == "assemble"
+    assert (
+        payload["writer_repair_decision"]
+        == "release gate failure is deterministic report structure damage"
+    )
+    assert payload["previous_report_protected"] is True
+    repair_events = [
+        event
+        for event in record.events
+        if event.type == "writer_assemble_repair_completed"
+    ]
+    assert len(repair_events) == 1
+    assert "duplicate_section_count_before" in repair_events[0].payload
+    assert "quality_preflight" in repair_events[0].payload
+
+
+@pytest.mark.asyncio
+async def test_writer_assemble_repair_preflight_failure_falls_back_to_full(
+    monkeypatch,
+) -> None:
+    from packages.agents.writer import logic as writer_logic
+
+    class FailedPreflight:
+        passed = False
+        failure_reasons = ["missing_core_sections"]
+
+        def telemetry_payload(self) -> dict[str, object]:
+            return {"passed": False, "failure_reasons": list(self.failure_reasons)}
+
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return _writer_repair_protectable_report().replace(
+            (
+                "User review themes show Cursor is easier to explain during procurement, "
+                "while Copilot benefits from\nexisting Microsoft workflow familiarity. "
+                "[source:pricing-1]\n"
+                "- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]\n"
+                "- Adoption blocker: security review and procurement packaging still need deeper "
+                "evidence.\n"
+                "[source:feature-1]"
+            ),
+            "Existing evidence does not provide verified user reviews.",
+        )
+
+    monkeypatch.setattr(
+        writer_logic,
+        "run_writer_quality_preflight",
+        lambda detail, markdown: FailedPreflight(),  # noqa: ARG005
+    )
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer assemble fallback",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report().replace(
+        "## Competitive Findings",
+        (
+            "## Decision Summary\n"
+            "Short duplicate summary created by assembly ordering damage. [source:pricing-1]\n\n"
+            "## Competitive Findings"
+        ),
+        1,
+    )
+    issue = _release_gate_report_depth_issue()
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 1
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_repair_mode"] == "full"
+    assert (
+        payload["writer_repair_decision"]
+        == "assembler repair did not pass writer quality preflight"
+    )
+    assert payload["previous_report_protected"] is True
+    assert payload["anti_regression_reason"]
+
+
 @pytest.mark.asyncio
 async def test_writer_poor_previous_report_allows_full_rewrite() -> None:
     service = RunService(
