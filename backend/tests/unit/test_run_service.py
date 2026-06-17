@@ -7668,6 +7668,7 @@ def _segmented_writer_segment(
     allowed_source_id: str,
     segment_kind: str = "section_fragment",
     segment_competitor: str | None = None,
+    segment_batch: str | None = None,
 ) -> dict[str, object]:
     return {
         "schema_version": "writer_evidence_pack.v1",
@@ -7675,6 +7676,7 @@ def _segmented_writer_segment(
         "segment_kind": segment_kind,
         "section_id": section_id,
         "segment_competitor": segment_competitor,
+        "segment_batch": segment_batch,
         "output_language": "en-US",
         "segment_essential": True,
         "source_registry": [{"id": allowed_source_id}],
@@ -7807,14 +7809,16 @@ async def test_segmented_writer_assembles_duplicate_sections_before_return(
     ]
     segments = [
         _segmented_writer_segment(
-            segment_name="decision_summary sources:1",
+            segment_name="decision_summary",
             section_id="decision_summary",
             allowed_source_id="raw-source-a",
+            segment_batch="sources:1",
         ),
         _segmented_writer_segment(
-            segment_name="decision_summary sources:2",
+            segment_name="decision_summary",
             section_id="decision_summary",
             allowed_source_id="raw-source-b",
+            segment_batch="sources:2",
         ),
         _segmented_writer_segment(
             segment_name="support_appendix",
@@ -7829,15 +7833,17 @@ async def test_segmented_writer_assembles_duplicate_sections_before_return(
             segment_competitor="Cursor",
         ),
     ]
+    calls: list[str] = []
 
     async def fake_trace_llm_text(*args, **kwargs):
         user = kwargs["user"]
-        if "segment_name=decision_summary sources:1" in user:
+        calls.append(user)
+        if "segment_name=decision_summary" in user and "sources:1" in user:
             return (
                 "## Decision Summary\n"
                 "Decision from sources:1 [source:raw-source-a]."
             )
-        if "segment_name=decision_summary sources:2" in user:
+        if "segment_name=decision_summary" in user and "sources:2" in user:
             return (
                 "## Decision Summary\n"
                 "Decision from sources:2 [source:raw-source-b]."
@@ -7856,6 +7862,12 @@ async def test_segmented_writer_assembles_duplicate_sections_before_return(
 
     await service._real_writer_step(record)
 
+    decision_prompts = [
+        call
+        for call in calls
+        if "segment_name=decision_summary" in call and "sources:" in call
+    ]
+    assert len(decision_prompts) == 2
     report_md = record.detail.report_md
     assert report_md.count("## Decision Summary") == 1
     assert report_md.index("## Competitor Deep Dives") < report_md.index(
