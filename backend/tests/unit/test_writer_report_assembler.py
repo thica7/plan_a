@@ -1,0 +1,84 @@
+from __future__ import annotations
+
+from packages.agents.writer.assembler import assemble_report_sections
+from packages.i18n.language import report_label
+
+
+def test_assembler_merges_duplicate_sections_and_moves_support_after_core() -> None:
+    result = assemble_report_sections(
+        [
+            "Intro paragraph with [source:intro].",
+            "## Decision Summary\nFirst decision line [source:decision-1].",
+            "## Evidence and QA Support\nFirst evidence line [source:evidence-1].",
+            "## Competitor Deep Dives\nDeep dive line [source:deep-dive].",
+            "## Decision Summary\nSecond decision line [source:decision-2].",
+            "## SWOT Analysis\nSWOT line [source:swot].",
+            "## Evidence and QA Support\nSecond evidence line [source:evidence-2].",
+        ],
+        output_language="en-US",
+        competitors=["Acme", "Beta"],
+    )
+
+    assert result.markdown.count("## Decision Summary") == 1
+    assert result.markdown.count("## Evidence & QA Support") == 1
+    assert result.markdown.index("## Competitor Deep Dives") < result.markdown.index(
+        "## Evidence & QA Support"
+    )
+    assert result.markdown.index("## SWOT Analysis") < result.markdown.index(
+        "## Evidence & QA Support"
+    )
+    for line in (
+        "Intro paragraph with [source:intro].",
+        "First decision line [source:decision-1].",
+        "Second decision line [source:decision-2].",
+        "First evidence line [source:evidence-1].",
+        "Second evidence line [source:evidence-2].",
+        "Deep dive line [source:deep-dive].",
+        "SWOT line [source:swot].",
+    ):
+        assert line in result.markdown
+    assert result.telemetry["duplicate_section_count_before"] == 2
+    assert result.telemetry["duplicate_section_count_after"] == 0
+    assert set(result.telemetry["merged_section_keys"]) >= {
+        "decision_summary",
+        "evidence_support",
+    }
+
+
+def test_assembler_preserves_unknown_core_before_support() -> None:
+    result = assemble_report_sections(
+        [
+            "## Evidence Appendix\nEvidence appendix body.",
+            "## Custom Core Insight\nCustom insight body.",
+        ],
+        output_language="en-US",
+        competitors=[],
+    )
+
+    assert result.markdown.index("## Custom Core Insight") < result.markdown.index(
+        "## Evidence Appendix"
+    )
+    assert result.telemetry["unknown_core_section_count"] == 1
+
+
+def test_assembler_handles_zh_labels() -> None:
+    decision = report_label("zh-CN", "decision_summary")
+    evidence = report_label("zh-CN", "evidence_support")
+    deep_dives = report_label("zh-CN", "competitor_deep_dives")
+
+    result = assemble_report_sections(
+        [
+            f"## {evidence}\nEvidence body [source:zh-evidence].",
+            f"## {deep_dives}\nDeep dive body [source:zh-dive].",
+            f"## {decision}\nDecision body [source:zh-decision].",
+        ],
+        output_language="zh-CN",
+        competitors=["\u7532", "\u4e59"],
+    )
+
+    assert result.markdown.index(f"## {decision}") < result.markdown.index(
+        f"## {evidence}"
+    )
+    assert result.markdown.index(f"## {deep_dives}") < result.markdown.index(
+        f"## {evidence}"
+    )
