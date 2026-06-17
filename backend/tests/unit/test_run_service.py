@@ -6,6 +6,7 @@ from datetime import datetime
 import pytest
 
 from packages.agents import SubagentContext
+from packages.agents.writer.repair import build_writer_repair_plan
 from packages.business_intel.homepage import HomepageVerification
 from packages.business_intel.report_quality import compare_run_quality
 from packages.config import Settings
@@ -201,6 +202,40 @@ No unresolved blocker claims were detected, but security and procurement claims 
 - pricing-1: Cursor pricing [source:pricing-1]
 - feature-1: Copilot feature [source:feature-1]
 """
+
+
+def _release_gate_report_depth_issue() -> QCIssue:
+    return QCIssue(
+        id="issue-release-gate-depth",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        field_path="release_gate.report_depth_required",
+        problem="Report core analysis depth does not satisfy the release gate.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="repair report depth before release",
+        ),
+    )
+
+
+def _writer_repair_detail(report_md: str) -> RunDetail:
+    return RunDetail(
+        id="run-writer-repair-plan",
+        topic="Writer repair plan",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        output_language="en-US",
+        plan=AnalysisPlan(
+            topic="Writer repair plan",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+        ),
+        raw_sources=_writer_repair_sources(),
+        report_md=report_md,
+    )
 
 
 def _blocked_release_gate() -> ReportReleaseGate:
@@ -5968,6 +6003,54 @@ async def test_writer_line_repair_preserves_protectable_report_without_llm() -> 
     assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
     assert redo_message.id in record.detail.agent_messages[-1].source_message_ids
     assert stale_message.id not in record.detail.agent_messages[-1].source_message_ids
+
+
+def test_release_gate_duplicate_sections_routes_to_assemble() -> None:
+    report = _writer_repair_protectable_report().replace(
+        "## Competitive Findings",
+        (
+            "## Decision Summary\n"
+            "Short duplicate summary created by assembly ordering damage. [source:pricing-1]\n\n"
+            "## Competitive Findings"
+        ),
+        1,
+    )
+    detail = _writer_repair_detail(report)
+
+    plan = build_writer_repair_plan(detail, [_release_gate_report_depth_issue()])
+
+    assert plan.mode == "assemble"
+    assert (
+        plan.reason
+        == "release gate failure is deterministic report structure damage"
+    )
+    assert plan.previous_report_protectable is True
+    assert plan.anti_regression_required is False
+
+
+def test_release_gate_thin_core_without_structure_damage_routes_to_full() -> None:
+    report = """# Cursor vs Copilot Direct Battlecard
+
+## Decision Summary
+Too thin to make a release decision. [source:pricing-1]
+
+## Competitive Findings
+- Pricing evidence exists but the analysis is not deep. [source:pricing-1]
+
+## Competitor Deep Dives
+- Cursor and Copilot still need deeper assessment. [source:feature-1]
+
+## SWOT Analysis
+- Strengths: early evidence exists. [source:pricing-1]
+
+## Source Quality & Coverage
+Verified source coverage exists, but the core analysis remains thin. [source:pricing-1]
+"""
+    detail = _writer_repair_detail(report)
+
+    plan = build_writer_repair_plan(detail, [_release_gate_report_depth_issue()])
+
+    assert plan.mode == "full"
 
 
 @pytest.mark.asyncio

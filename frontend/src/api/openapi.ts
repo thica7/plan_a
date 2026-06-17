@@ -6809,7 +6809,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "run_created" | "node_started" | "node_completed" | "interrupt" | "qa_issue" | "report_updated" | "revision_recorded" | "run_completed" | "run_failed" | "agent.started" | "agent.finished" | "tool.called" | "rag.retrieved" | "self_consistency.sampled" | "memory.recalled" | "memory.feedback_captured" | "hitl.reviewed" | "claim.validated" | "qa.blocked" | "redo.routed" | "benchmark.scored" | "report.ready" | "runtime.command" | "writer_preflight" | "writer_segment_preflight" | "writer_segment_validated" | "writer_assembly_completed" | "writer_quality_preflight" | "writer_quality_preflight_repair";
+            type: "run_created" | "node_started" | "node_completed" | "interrupt" | "qa_issue" | "report_updated" | "revision_recorded" | "run_completed" | "run_failed" | "agent.started" | "agent.finished" | "tool.called" | "rag.retrieved" | "self_consistency.sampled" | "memory.recalled" | "memory.feedback_captured" | "hitl.reviewed" | "claim.validated" | "qa.blocked" | "redo.routed" | "benchmark.scored" | "report.ready" | "runtime.command" | "writer_preflight" | "writer_segment_preflight" | "writer_segment_validated" | "writer_assembly_completed" | "writer_assemble_repair_completed" | "writer_quality_preflight" | "writer_quality_preflight_repair";
             /** Agent */
             agent?: string | null;
             /** Subagent */

@@ -12,6 +12,7 @@ from packages.agents.writer.assembler import assemble_report_sections
 from packages.agents.writer.evidence_pack import build_writer_evidence_pack
 from packages.agents.writer.quality_preflight import run_writer_quality_preflight
 from packages.agents.writer.repair import (
+    WriterRepairPlan,
     apply_line_repair,
     build_writer_repair_plan,
     replace_markdown_section,
@@ -237,7 +238,48 @@ class WriterAgentMixin:
         else:
             repair_plan = None
         timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
-        if repair_plan is not None and repair_plan.mode == "line":
+        assemble_repair_succeeded = False
+        if repair_plan is not None and repair_plan.mode == "assemble":
+            writer_repair_mode = repair_plan.mode
+            writer_repair_sections = repair_plan.sections
+            writer_repair_decision = repair_plan.reason
+            previous_report_protected = repair_plan.previous_report_protectable
+            assembled = assemble_report_sections(
+                [previous_report],
+                output_language=detail.output_language,
+                competitors=detail.plan.competitors,
+            )
+            preflight = run_writer_quality_preflight(detail, assembled.markdown)
+            await self.emit(
+                detail.id,
+                "writer_assemble_repair_completed",
+                "writer",
+                None,
+                "Writer assembler repair completed",
+                {
+                    "assembly": assembled.telemetry,
+                    "quality_preflight": preflight.telemetry_payload(),
+                },
+            )
+            if preflight.passed:
+                detail.report_md = self._harden_report_markdown(
+                    detail,
+                    assembled.markdown,
+                )
+                writer_mode = "writer repair: assemble"
+                assemble_repair_succeeded = True
+            else:
+                repair_plan = WriterRepairPlan(
+                    mode="full",
+                    reason="assembler repair did not pass writer quality preflight",
+                    previous_report_protectable=True,
+                    anti_regression_required=True,
+                )
+        if (
+            not assemble_repair_succeeded
+            and repair_plan is not None
+            and repair_plan.mode == "line"
+        ):
             writer_repair_mode = repair_plan.mode
             writer_repair_sections = repair_plan.sections
             writer_repair_decision = repair_plan.reason
@@ -247,7 +289,11 @@ class WriterAgentMixin:
                 apply_line_repair(previous_report, redo_issues),
             )
             writer_mode = "writer repair: line"
-        elif repair_plan is not None and repair_plan.mode == "section":
+        elif (
+            not assemble_repair_succeeded
+            and repair_plan is not None
+            and repair_plan.mode == "section"
+        ):
             writer_repair_mode = repair_plan.mode
             writer_repair_sections = repair_plan.sections
             writer_repair_decision = repair_plan.reason
@@ -359,7 +405,7 @@ class WriterAgentMixin:
                         anti_regression_reason=anti_regression_reason,
                         previous_report_protected=previous_report_protected,
                     )
-        else:
+        elif not assemble_repair_succeeded:
             if repair_plan is not None and repair_plan.mode == "full":
                 writer_repair_mode = repair_plan.mode
                 writer_repair_sections = repair_plan.sections

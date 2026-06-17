@@ -32,6 +32,7 @@ EXPECTED_EVENT_TYPES = {
     "writer_segment_preflight",
     "writer_segment_validated",
     "writer_assembly_completed",
+    "writer_assemble_repair_completed",
     "writer_quality_preflight",
     "writer_quality_preflight_repair",
 }

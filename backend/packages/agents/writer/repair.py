@@ -11,7 +11,7 @@ from packages.research.evidence import publishable_text_noise_problem
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import QCIssue
 
-WriterRepairMode = Literal["line", "section", "full"]
+WriterRepairMode = Literal["line", "section", "assemble", "full"]
 
 LINE_REPAIR_MAX_ISSUES = 5
 UPSTREAM_SECTION_REPAIR_MAX_SECTIONS = 2
@@ -122,6 +122,13 @@ def build_writer_repair_plan(
         )
 
     if _has_release_gate_report_depth_issue(issues):
+        if _has_deterministic_report_structure_damage(detail):
+            return WriterRepairPlan(
+                mode="assemble",
+                reason="release gate failure is deterministic report structure damage",
+                previous_report_protectable=True,
+                anti_regression_required=False,
+            )
         return WriterRepairPlan(
             mode="full",
             reason="release_gate.report_depth_required requires full core rewrite",
@@ -358,6 +365,18 @@ def _report_line_numbers(issues: list[QCIssue]) -> list[int]:
 
 def _has_release_gate_report_depth_issue(issues: list[QCIssue]) -> bool:
     return any(issue.field_path == "release_gate.report_depth_required" for issue in issues)
+
+
+def _has_deterministic_report_structure_damage(detail: RunDetail) -> bool:
+    if not detail.report_md.strip():
+        return False
+
+    comparison = compare_run_quality(detail)
+    metric_by_name = {metric.name: metric.target_value for metric in comparison.metrics}
+    duplicate_count = int(metric_by_name.get("duplicate_section_count") or 0)
+    core_depth = float(metric_by_name.get("core_section_depth_score") or 0.0)
+    core_analysis_depth = float(metric_by_name.get("core_analysis_depth_score") or 0.0)
+    return duplicate_count > 0 or (core_depth == 0.0 and core_analysis_depth >= 0.6)
 
 
 def _target_sections(issues: list[QCIssue]) -> list[str]:
