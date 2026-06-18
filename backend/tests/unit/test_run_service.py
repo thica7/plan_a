@@ -6358,7 +6358,7 @@ async def test_writer_assemble_repair_preflight_failure_falls_back_to_full(
 
 
 @pytest.mark.asyncio
-async def test_writer_assemble_repair_rag_gap_fill_gate_falls_back_to_full() -> None:
+async def test_writer_assemble_repair_hardens_rag_gap_fill_without_full_rewrite() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -6417,20 +6417,18 @@ async def test_writer_assemble_repair_rag_gap_fill_gate_falls_back_to_full() -> 
 
     await service._real_writer_step(record)
 
-    assert llm_calls == 1
+    assert llm_calls == 0
     repair_event = next(
         event
         for event in record.events
         if event.type == "writer_assemble_repair_completed"
     )
-    assert repair_event.payload["quality_gate_passed"] is False
-    assert "rag_gap_fill_section_score" in repair_event.payload["quality_gate_reasons"]
+    assert repair_event.payload["quality_gate_passed"] is True
+    assert "rag_gap_fill_section_score" not in repair_event.payload["quality_gate_reasons"]
     payload = record.detail.agent_messages[-1].payload
-    assert payload["writer_repair_mode"] == "full"
-    assert (
-        payload["writer_repair_decision"]
-        == "assembler repair did not pass writer quality preflight or depth gate"
-    )
+    assert payload["writer_mode"] == "writer repair: assemble"
+    assert payload["writer_repair_mode"] == "assemble"
+    assert "## RAG Gap Fill" in record.detail.report_md
 
 
 @pytest.mark.asyncio

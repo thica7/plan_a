@@ -285,8 +285,9 @@ class WriterAgentMixin:
                 output_language=detail.output_language,
                 competitors=detail.plan.competitors,
             )
-            preflight = run_writer_quality_preflight(detail, assembled.markdown)
-            quality_gate = _assemble_repair_quality_gate(detail, assembled.markdown)
+            assembled_markdown = self._harden_report_markdown(detail, assembled.markdown)
+            preflight = run_writer_quality_preflight(detail, assembled_markdown)
+            quality_gate = _assemble_repair_quality_gate(detail, assembled_markdown)
             await self.emit(
                 detail.id,
                 "writer_assemble_repair_completed",
@@ -300,10 +301,7 @@ class WriterAgentMixin:
                 },
             )
             if preflight.passed and quality_gate["quality_gate_passed"]:
-                detail.report_md = self._harden_report_markdown(
-                    detail,
-                    assembled.markdown,
-                )
+                detail.report_md = assembled_markdown
                 writer_mode = "writer repair: assemble"
                 assemble_repair_succeeded = True
             else:
@@ -1293,6 +1291,89 @@ class WriterAgentMixin:
             "allowed_source_ids in Segment Evidence Pack JSON."
         )
         deep_dive_competitor = competitor or "<segment_competitor>"
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        localized_subheadings = {
+            "pricing_packaging": (
+                "\u5b9a\u4ef7\u4e0e\u5305\u88c5"
+                if is_zh
+                else "Pricing and Packaging"
+            ),
+            "feature_workflow": (
+                "\u529f\u80fd\u4e0e\u5de5\u4f5c\u6d41\u80fd\u529b"
+                if is_zh
+                else "Feature and Workflow Capability"
+            ),
+            "user_persona_adoption": (
+                "\u7528\u6237\u753b\u50cf\u4e0e\u91c7\u7528"
+                if is_zh
+                else "User Persona and Adoption"
+            ),
+            "cross_competitor": (
+                "\u8de8\u7ade\u54c1\u98ce\u9669\u4e0e\u542f\u793a"
+                if is_zh
+                else "Cross-Competitor Risks and Implications"
+            ),
+            "direct_user_community": (
+                "\u76f4\u63a5\u7528\u6237/\u793e\u533a\u4fe1\u53f7"
+                if is_zh
+                else "Direct User / Community Signals"
+            ),
+            "simulated_research": (
+                "\u6a21\u62df\u8c03\u7814/\u8bbf\u8c08\u4fe1\u53f7"
+                if is_zh
+                else "Simulated Survey and Interview Signals"
+            ),
+            "adoption_blockers": (
+                "\u91c7\u7528\u969c\u788d" if is_zh else "Adoption Blockers"
+            ),
+            "switching_triggers": (
+                "\u5207\u6362\u89e6\u53d1" if is_zh else "Switching Triggers"
+            ),
+            "evidence_gaps": (
+                "\u8bc1\u636e\u7f3a\u53e3" if is_zh else "Evidence Gaps"
+            ),
+            "positioning_core": (
+                "\u5b9a\u4f4d\u4e0e\u6838\u5fc3\u4ef7\u503c"
+                if is_zh
+                else "Positioning and Core Value"
+            ),
+            "feature_capabilities": (
+                "\u529f\u80fd\u80fd\u529b" if is_zh else "Feature Capabilities"
+            ),
+            "community_feedback": (
+                "\u793e\u533a\u53cd\u9988\u3001\u91c7\u7528\u969c\u788d\u4e0e\u5207\u6362\u89e6\u53d1"
+                if is_zh
+                else "Community Feedback, Adoption Blockers, and Switching Triggers"
+            ),
+            "competitive_plays": (
+                "\u7ade\u4e89\u6253\u6cd5\u4e0e\u8bc1\u636e\u7f3a\u53e3"
+                if is_zh
+                else "Competitive Plays and Evidence Gaps"
+            ),
+            "strengths": "\u4f18\u52bf" if is_zh else "Strengths",
+            "weaknesses": "\u52a3\u52bf" if is_zh else "Weaknesses",
+            "opportunities": "\u673a\u4f1a" if is_zh else "Opportunities",
+            "threats": "\u5a01\u80c1" if is_zh else "Threats",
+            "official_vs_community": (
+                "\u5b98\u65b9\u4e8b\u5b9e\u4e0e\u793e\u533a\u89c2\u5bdf"
+                if is_zh
+                else "Official Facts vs Community Observations"
+            ),
+            "repeated_signals": (
+                "\u91cd\u590d\u4fe1\u53f7" if is_zh else "Repeated Signals"
+            ),
+            "contested_signals": (
+                "\u6709\u4e89\u8bae\u6216\u4f4e\u7f6e\u4fe1\u4fe1\u53f7"
+                if is_zh
+                else "Contested or Low-Confidence Signals"
+            ),
+            "dimension": "\u7ef4\u5ea6" if is_zh else "Dimension",
+            "competitor_1": "\u7ade\u54c1 1" if is_zh else "<competitor 1>",
+            "competitor_2": "\u7ade\u54c1 2" if is_zh else "<competitor 2>",
+        }
+
+        def subheading(key: str) -> str:
+            return localized_subheadings[key]
 
         def h2(key: str) -> str:
             return f"## {report_label(detail.output_language, key)}"
@@ -1321,10 +1402,10 @@ class WriterAgentMixin:
                     "- Recommended decision / buying posture.",
                     "- Confidence level and what must not be overstated.",
                     h2("competitive_findings"),
-                    "### Pricing and Packaging",
-                    "### Feature and Workflow Capability",
-                    "### User Persona and Adoption",
-                    "### Cross-Competitor Risks and Implications",
+                    f"### {subheading('pricing_packaging')}",
+                    f"### {subheading('feature_workflow')}",
+                    f"### {subheading('user_persona_adoption')}",
+                    f"### {subheading('cross_competitor')}",
                     (
                         "Must include: at least three cited bullets and one "
                         "cross-competitor comparison."
@@ -1338,15 +1419,15 @@ class WriterAgentMixin:
                     "Required segment outline:",
                     h2("review_theme_summary"),
                     "### <competitor>",
-                    "#### Direct User / Community Signals",
-                    "#### Simulated Survey and Interview Signals",
-                    "#### Adoption Blockers",
-                    "#### Switching Triggers",
-                    "#### Evidence Gaps",
+                    f"#### {subheading('direct_user_community')}",
+                    f"#### {subheading('simulated_research')}",
+                    f"#### {subheading('adoption_blockers')}",
+                    f"#### {subheading('switching_triggers')}",
+                    f"#### {subheading('evidence_gaps')}",
                     h2("community_evidence_triangulation"),
-                    "### Official Facts vs Community Observations",
-                    "### Repeated Signals",
-                    "### Contested or Low-Confidence Signals",
+                    f"### {subheading('official_vs_community')}",
+                    f"### {subheading('repeated_signals')}",
+                    f"### {subheading('contested_signals')}",
                     (
                         "Must include: separate direct user/community signals from "
                         "simulated survey/interview signals."
@@ -1360,12 +1441,12 @@ class WriterAgentMixin:
                     "Required segment outline:",
                     h2("competitor_deep_dives"),
                     f"### {deep_dive_competitor}",
-                    "#### Positioning and Core Value",
-                    "#### Pricing and Packaging",
-                    "#### Feature Capabilities",
-                    "#### User Persona and Adoption",
-                    "#### Community Feedback, Adoption Blockers, and Switching Triggers",
-                    "#### Competitive Plays and Evidence Gaps",
+                    f"#### {subheading('positioning_core')}",
+                    f"#### {subheading('pricing_packaging')}",
+                    f"#### {subheading('feature_capabilities')}",
+                    f"#### {subheading('user_persona_adoption')}",
+                    f"#### {subheading('community_feedback')}",
+                    f"#### {subheading('competitive_plays')}",
                     (
                         "Must include: exactly one competitor ownership H3 matching "
                         "segment_competitor."
@@ -1378,14 +1459,17 @@ class WriterAgentMixin:
                 [
                     "Required segment outline:",
                     h2("side_by_side_matrix"),
-                    "| Dimension | <competitor 1> | <competitor 2> |",
+                    (
+                        f"| {subheading('dimension')} | {subheading('competitor_1')} | "
+                        f"{subheading('competitor_2')} |"
+                    ),
                     "|---|---|---|",
                     h2("swot_analysis"),
                     "### <competitor>",
-                    "#### Strengths",
-                    "#### Weaknesses",
-                    "#### Opportunities",
-                    "#### Threats",
+                    f"#### {subheading('strengths')}",
+                    f"#### {subheading('weaknesses')}",
+                    f"#### {subheading('opportunities')}",
+                    f"#### {subheading('threats')}",
                     (
                         "Must include: matrix interpretation and all four SWOT quadrants "
                         "for every competitor."
@@ -1522,7 +1606,8 @@ class WriterAgentMixin:
                     "allowed_source_ids. Do not invent source IDs. Use exact [source:ID] "
                     "syntax with no space after source:. Do not combine multiple source "
                     "IDs inside one [source:...] token; write consecutive citations "
-                    "like [source:A][source:B]. "
+                    "like [source:A][source:B]. Do not put citations in headings or "
+                    "table header rows. "
                     "Do not use web_search_result or confidence < 0.75 as the sole support "
                     "for a winner, legal/security certification, pricing, or procurement "
                     "recommendation. If evidence is incomplete, say the conclusion is "
@@ -1555,7 +1640,9 @@ class WriterAgentMixin:
                     "Do not write headings outside this segment's contract. "
                     "Do not write support or appendix sections unless "
                     "segment_kind=support_fragment. If segment_kind=evidence_shard, "
-                    "do not write any ## H2 headings.\n"
+                    "do not write any ## H2 headings. Never mention Segment Evidence Pack, "
+                    "Writer Evidence Pack, source_registry, allowed_source_ids, or other "
+                    "writer-internal field names in the reader-facing markdown.\n"
                     f"Confirmed Memory Preferences:\n{memory_context}\n"
                     f"Layer Report Context: {layer_context}\n"
                     f"{self._writer_community_policy_text()}\n"
@@ -1760,21 +1847,12 @@ class WriterAgentMixin:
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         layer = detail.plan.competitor_layer
         if layer == "L1":
-            if is_zh:
-                bullets = [
-                    f"- 直接战报定位：把当前赢家作为短期替代或对抗话术的候选主线，但只在引用证据覆盖的范围内使用。{refs}",
-                    f"- 反对意见处理：优先围绕定价、包装、功能对齐、采购阻力和切换触发组织回答，不把弱单元格包装成确定结论。{refs}",
-                    f"- 行动偏向：使用置信度最高的维度赢家作为初始战报骨架，并在发布前验证单来源、低置信度或社区观察支持的声明。{refs}",
-                    f"- 落地检查：每条战报话术都要同时包含可引用证据、目标买家、可能反驳点和下一步验证任务，避免只给一句赢家判断。{refs}",
-                ]
-            else:
-                bullets = [
-                    f"- Direct-use position: treat the current winners as candidate near-term replacement or objection-handling lines only within the cited evidence boundary.{refs}",
-                    f"- Objection handling: organize responses around pricing, packaging, feature parity, procurement friction, and switching triggers without turning weak cells into settled conclusions.{refs}",
-                    f"- Action bias: use the highest-confidence dimension winners as the initial battlecard spine, then verify single-source, low-confidence, or community-observed claims before publication.{refs}",
-                    f"- Deployment check: every battlecard line should pair cited evidence, target buyer, likely rebuttal, and next validation task instead of stopping at a one-sentence winner claim.{refs}",
-                ]
-        elif layer == "L2":
+            return [
+                "",
+                f"## {heading}",
+                *self._backfill_l1_battlecard_bullets(detail, source_ids, is_zh=is_zh),
+            ]
+        if layer == "L2":
             if is_zh:
                 bullets = [
                     f"- 相邻工作流威胁：从工作流重叠、集成杠杆和切换成本阅读矩阵，而不是只比较孤立功能。{refs}",
@@ -1820,6 +1898,81 @@ class WriterAgentMixin:
                     f"- Next action: fill the sources that could change winner judgments before expanding support-layer audit material.{refs}",
                 ]
         return ["", f"## {heading}", *bullets]
+
+    def _backfill_l1_battlecard_bullets(
+        self,
+        detail: RunDetail,
+        source_ids: list[str],
+        *,
+        is_zh: bool,
+    ) -> list[str]:
+        competitors = detail.plan.competitors[:4] or [detail.topic]
+        dimensions = ", ".join(detail.plan.dimensions[:3]) or (
+            "\u6838\u5fc3\u7ef4\u5ea6" if is_zh else "core dimensions"
+        )
+        bullets: list[str] = []
+        for competitor in competitors:
+            refs = self._format_source_refs(
+                self._battlecard_source_ids_for_competitor(
+                    detail, competitor, fallback_source_ids=source_ids
+                )
+            )
+            if is_zh:
+                bullets.extend(
+                    [
+                        (
+                            f"- {competitor} \u4e70\u65b9\u89e6\u53d1\uff1a\u5f53\u5ba2\u6237\u4f18\u5148\u8ba8\u8bba "
+                            f"{dimensions} \u7684\u53ef\u9a8c\u8bc1\u5dee\u5f02\u65f6\uff0c\u7528\u5df2\u5f15\u7528\u8bc1\u636e\u6253\u5f00\u5bf9\u8bdd\uff0c"
+                            f"\u4e0d\u628a\u5f31\u8bc1\u636e\u653e\u5927\u6210\u7edd\u5bf9\u8d62\u5bb6\u3002{refs}"
+                        ),
+                        (
+                            f"- {competitor} \u53cd\u5bf9\u610f\u89c1\u56de\u5e94\uff1a\u5148\u627f\u8ba4\u5355\u6765\u6e90\u3001"
+                            "\u793e\u533a\u89c2\u5bdf\u6216\u6a21\u62df\u8c03\u7814\u7684\u8bc1\u636e\u8fb9\u754c\uff0c"
+                            "\u518d\u8981\u6c42\u5ba2\u6237\u7528 POC\u3001\u91c7\u8d2d\u6216\u5b89\u5168\u6750\u6599\u9a8c\u8bc1\u3002"
+                            f"{refs}"
+                        ),
+                    ]
+                )
+            else:
+                bullets.extend(
+                    [
+                        (
+                            f"- {competitor} Buyer trigger: lead when the account asks for "
+                            f"verifiable differences across {dimensions}; keep the point tied "
+                            f"to cited evidence instead of presenting a universal winner.{refs}"
+                        ),
+                        (
+                            f"- {competitor} Objection response: acknowledge single-source, "
+                            "community-observed, or simulated-research limits first, then turn "
+                            f"the unresolved point into a POC, procurement, or security validation task.{refs}"
+                        ),
+                    ]
+                )
+        return bullets
+
+    def _battlecard_source_ids_for_competitor(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        *,
+        fallback_source_ids: list[str],
+    ) -> list[str]:
+        competitor_key = competitor.casefold()
+        source_ids: list[str] = []
+        seen: set[str] = set()
+        for source in detail.raw_sources:
+            matches = source.competitor.casefold() == competitor_key or any(
+                item.casefold() == competitor_key for item in source.covered_competitors
+            )
+            if not matches or source.id in seen:
+                continue
+            seen.add(source.id)
+            source_ids.append(source.id)
+            if len(source_ids) >= 2:
+                break
+        if source_ids:
+            return source_ids
+        return fallback_source_ids[:2]
 
     def _backfill_executive_summary_section(
         self, detail: RunDetail, source_ids: list[str]
@@ -2443,13 +2596,154 @@ class WriterAgentMixin:
 
     def _harden_report_markdown(self, detail: RunDetail, markdown: str) -> str:
         repaired = repair_mojibake_text(markdown)
-        return self._ensure_report_claim_citations(
+        required = self._ensure_report_required_sections(detail, repaired)
+        battlecard_repaired = self._repair_template_battlecard_section(detail, required)
+        sanitized = self._sanitize_report_hygiene(
             detail,
             self._repair_report_source_tokens(
                 detail,
-                self._ensure_report_required_sections(detail, repaired),
+                battlecard_repaired,
             ),
         )
+        cited = self._ensure_report_claim_citations(detail, sanitized)
+        return self._sanitize_report_hygiene(detail, cited)
+
+    def _repair_template_battlecard_section(
+        self, detail: RunDetail, markdown: str
+    ) -> str:
+        if self._layer_section_label_key(detail) != "battlecard":
+            return markdown
+        section = self._find_report_h2_section(markdown, self._report_label_aliases("battlecard"))
+        if section is None:
+            return markdown
+        section_body = section[2].casefold()
+        template_phrases = (
+            "direct battlecard positioning",
+            "direct-use position",
+            "objection handling",
+            "action bias",
+            "deployment check",
+            "every battlecard line should",
+            "current winner as the short-term",
+            "直接战报定位",
+            "反对意见处理",
+            "行动偏向",
+            "落地检查",
+            "当前赢家作为短期",
+        )
+        if not any(phrase in section_body for phrase in template_phrases):
+            return markdown
+        replacement = "\n".join(
+            self._backfill_layer_sections_lines(detail, self._matrix_source_ids(detail))
+        ).strip()
+        return replace_markdown_section(
+            markdown,
+            "battlecard",
+            detail.output_language,
+            replacement,
+        )
+
+    def _find_report_h2_section(
+        self, markdown: str, aliases: Iterable[str]
+    ) -> tuple[int, int, str] | None:
+        matches = list(self._iter_report_h2_headings(markdown))
+        alias_list = list(aliases)
+        for index, match in enumerate(matches):
+            if not any(
+                self._report_heading_matches(match.group(1), alias)
+                for alias in alias_list
+            ):
+                continue
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
+            return match.start(), end, markdown[match.end() : end]
+        return None
+
+    def _sanitize_report_hygiene(self, detail: RunDetail, markdown: str) -> str:
+        lines = markdown.splitlines()
+        sanitized_lines: list[str] = []
+        evidence_appendix_aliases = self._report_label_aliases("evidence_appendix")
+        in_evidence_appendix = False
+        for index, line in enumerate(lines):
+            if self._report_line_contains_writer_internal_terms(line):
+                continue
+            sanitized = self._localize_common_template_heading(detail, line)
+            stripped = sanitized.strip()
+            h2_match = re.match(r"^\s*##\s+(.+?)\s*#*\s*$", stripped)
+            if h2_match is not None:
+                in_evidence_appendix = any(
+                    self._report_heading_matches(h2_match.group(1), alias)
+                    for alias in evidence_appendix_aliases
+                )
+            if stripped.startswith("#"):
+                sanitized = SOURCE_TOKEN_RE.sub("", sanitized).rstrip()
+            elif self._report_table_header_line_has_citation(lines, index):
+                sanitized = SOURCE_TOKEN_RE.sub("", sanitized).rstrip()
+            elif in_evidence_appendix and stripped.startswith("-"):
+                sanitized = SOURCE_TOKEN_RE.sub("", sanitized).rstrip()
+            sanitized_lines.append(sanitized)
+        return "\n".join(sanitized_lines).strip()
+
+    def _localize_common_template_heading(self, detail: RunDetail, line: str) -> str:
+        if normalize_output_language(detail.output_language) != "zh-CN":
+            return line
+        match = re.match(r"^(\s*#{3,4}\s+)(.+?)(\s*)$", line)
+        if match is None:
+            return line
+        prefix, heading, suffix = match.groups()
+        localized = self._zh_common_template_heading(heading)
+        if localized is None:
+            return line
+        return f"{prefix}{localized}{suffix}"
+
+    def _zh_common_template_heading(self, heading: str) -> str | None:
+        normalized = re.sub(r"\s+", " ", heading.strip()).casefold()
+        return {
+            "pricing and packaging": "\u5b9a\u4ef7\u4e0e\u5305\u88c5",
+            "feature and workflow capability": "\u529f\u80fd\u4e0e\u5de5\u4f5c\u6d41\u80fd\u529b",
+            "user persona and adoption": "\u7528\u6237\u753b\u50cf\u4e0e\u91c7\u7528",
+            "cross-competitor risks and implications": "\u8de8\u7ade\u54c1\u98ce\u9669\u4e0e\u542f\u793a",
+            "direct user / community signals": "\u76f4\u63a5\u7528\u6237/\u793e\u533a\u4fe1\u53f7",
+            "simulated survey and interview signals": "\u6a21\u62df\u8c03\u7814/\u8bbf\u8c08\u4fe1\u53f7",
+            "adoption blockers": "\u91c7\u7528\u969c\u788d",
+            "switching triggers": "\u5207\u6362\u89e6\u53d1",
+            "evidence gaps": "\u8bc1\u636e\u7f3a\u53e3",
+            "positioning and core value": "\u5b9a\u4f4d\u4e0e\u6838\u5fc3\u4ef7\u503c",
+            "feature capabilities": "\u529f\u80fd\u80fd\u529b",
+            "community feedback, adoption blockers, and switching triggers": "\u793e\u533a\u53cd\u9988\u3001\u91c7\u7528\u969c\u788d\u4e0e\u5207\u6362\u89e6\u53d1",
+            "competitive plays and evidence gaps": "\u7ade\u4e89\u6253\u6cd5\u4e0e\u8bc1\u636e\u7f3a\u53e3",
+            "strengths": "\u4f18\u52bf",
+            "weaknesses": "\u52a3\u52bf",
+            "opportunities": "\u673a\u4f1a",
+            "threats": "\u5a01\u80c1",
+            "official facts vs community observations": "\u5b98\u65b9\u4e8b\u5b9e\u4e0e\u793e\u533a\u89c2\u5bdf",
+            "repeated signals": "\u91cd\u590d\u4fe1\u53f7",
+            "contested or low-confidence signals": "\u6709\u4e89\u8bae\u6216\u4f4e\u7f6e\u4fe1\u4fe1\u53f7",
+        }.get(normalized)
+
+    def _report_line_contains_writer_internal_terms(self, line: str) -> bool:
+        return any(
+            term in line
+            for term in (
+                "Segment Evidence Pack",
+                "Writer Evidence Pack",
+                "source_registry",
+                "allowed_source_ids",
+                "represented_by",
+            )
+        )
+
+    def _report_table_header_line_has_citation(
+        self, lines: Sequence[str], index: int
+    ) -> bool:
+        line = lines[index].strip()
+        if not line.startswith("|") or "[source:" not in line.casefold():
+            return False
+        next_line = ""
+        for candidate in lines[index + 1 :]:
+            if candidate.strip():
+                next_line = candidate.strip()
+                break
+        return bool(next_line) and re.fullmatch(r"\|?[\s|\-:]+\|?", next_line) is not None
 
     def _ensure_report_required_sections(self, detail: RunDetail, markdown: str) -> str:
         hardened = markdown.strip()
@@ -4045,9 +4339,13 @@ class WriterAgentMixin:
         return f"[source:{replacement_ids[0]}]"
 
     def _ensure_report_claim_citations(self, detail: RunDetail, markdown: str) -> str:
+        lines = markdown.splitlines()
         hardened_lines: list[str] = []
-        for line in markdown.splitlines():
+        for index, line in enumerate(lines):
             if not self._report_line_needs_citation(line):
+                hardened_lines.append(line)
+                continue
+            if self._report_table_header_line(lines, index):
                 hardened_lines.append(line)
                 continue
             if self._extract_cited_source_ids(line):
@@ -4064,6 +4362,17 @@ class WriterAgentMixin:
             else:
                 hardened_lines.append(f"{stripped} {citation_text}")
         return "\n".join(hardened_lines)
+
+    def _report_table_header_line(self, lines: Sequence[str], index: int) -> bool:
+        line = lines[index].strip()
+        if not line.startswith("|"):
+            return False
+        next_line = ""
+        for candidate in lines[index + 1 :]:
+            if candidate.strip():
+                next_line = candidate.strip()
+                break
+        return bool(next_line) and re.fullmatch(r"\|?[\s|\-:]+\|?", next_line) is not None
 
     def _report_line_needs_citation(self, line: str) -> bool:
         stripped = line.strip()

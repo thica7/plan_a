@@ -53,6 +53,9 @@ REPORT_RICHNESS_MINIMUMS = {
     "core_section_depth_score": 1.0,
     "swot_section_score": 1.0,
     "rag_gap_fill_section_score": 1.0,
+    "localized_heading_score": 1.0,
+    "battlecard_section_score": 1.0,
+    "citation_hygiene_score": 1.0,
 }
 STRONG_CONCLUSION_RE = re.compile(
     r"\b("

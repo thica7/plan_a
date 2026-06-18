@@ -204,6 +204,12 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "community_evidence_section_score": _community_evidence_section_score(detail),
         "swot_section_score": _swot_section_score(detail),
         "rag_gap_fill_section_score": _rag_gap_fill_section_score(detail),
+        "localized_heading_score": _localized_heading_score(detail),
+        "battlecard_section_score": _battlecard_section_score(detail),
+        "citation_hygiene_score": _citation_hygiene_score(detail.report_md),
+        "claim_self_consistency_warning_count": float(
+            _claim_self_consistency_warning_count(detail)
+        ),
         "qa_blocker_count": float(
             len([finding for finding in detail.qa_findings if finding.severity == "blocker"])
         ),
@@ -241,6 +247,12 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "community_evidence_section_score": values["community_evidence_section_score"],
         "swot_section_score": values["swot_section_score"],
         "rag_gap_fill_section_score": values["rag_gap_fill_section_score"],
+        "localized_heading_score": values["localized_heading_score"],
+        "battlecard_section_score": values["battlecard_section_score"],
+        "citation_hygiene_score": values["citation_hygiene_score"],
+        "claim_self_consistency_warning_count": max(
+            0.0, 1.0 - min(values["claim_self_consistency_warning_count"] / 3.0, 1.0)
+        ),
         "qa_blocker_count": max(0.0, 1.0 - min(values["qa_blocker_count"] / 3.0, 1.0)),
         "warning_count": max(0.0, 1.0 - min(values["warning_count"] / 12.0, 1.0)),
     }
@@ -280,6 +292,10 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         and values["community_evidence_section_score"] >= 1.0
         and values["swot_section_score"] >= 1.0
         and values["rag_gap_fill_section_score"] >= 1.0
+        and values["localized_heading_score"] >= 1.0
+        and values["battlecard_section_score"] >= 1.0
+        and values["citation_hygiene_score"] >= 1.0
+        and values["claim_self_consistency_warning_count"] <= 0
         and values["qa_blocker_count"] <= 0
     )
     return _QualitySnapshot(
@@ -323,6 +339,10 @@ def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower
         ("review_theme_section_score", 0.02, "higher_is_better"),
         ("swot_section_score", 0.02, "higher_is_better"),
         ("rag_gap_fill_section_score", 0.02, "higher_is_better"),
+        ("localized_heading_score", 0.0, "higher_is_better"),
+        ("battlecard_section_score", 0.0, "higher_is_better"),
+        ("citation_hygiene_score", 0.0, "higher_is_better"),
+        ("claim_self_consistency_warning_count", 0.0, "lower_is_better"),
         ("qa_blocker_count", 0.05, "lower_is_better"),
         ("warning_count", 0.01, "lower_is_better"),
     ]
@@ -414,11 +434,16 @@ def _signal_checks(detail: RunDetail, snapshot: _QualitySnapshot) -> list[RunQua
         ("review_theme_section_score", 1.0),
         ("swot_section_score", 1.0),
         ("rag_gap_fill_section_score", 1.0),
+        ("localized_heading_score", 1.0),
+        ("battlecard_section_score", 1.0),
+        ("citation_hygiene_score", 1.0),
     ]:
         if snapshot.values[name] < minimum:
             report_blockers.append(name)
     if snapshot.values["duplicate_section_count"] > 0:
         report_blockers.append("duplicate_section_count")
+    if snapshot.values["claim_self_consistency_warning_count"] > 0:
+        report_blockers.append("claim_self_consistency_warning_count")
     if snapshot.values["qa_blocker_count"] > 0:
         report_blockers.append("qa_blocker_count")
 
@@ -640,6 +665,41 @@ def _warning_count(detail: RunDetail) -> int:
             return non_release_qa_warning_count + release_warning_count
         return non_release_qa_warning_count + int(release_gate["warn_count"])
     return len(qa_warnings)
+
+
+def _claim_self_consistency_warning_count(detail: RunDetail) -> int:
+    release_gate = _quality_metadata(detail).get("release_gate")
+    if isinstance(release_gate, dict):
+        release_issues = release_gate.get("issues")
+        if isinstance(release_issues, list):
+            return len(
+                [
+                    issue
+                    for issue in release_issues
+                    if isinstance(issue, dict)
+                    and issue.get("severity") == "warn"
+                    and issue.get("rule_id") == "claim_self_consistency_required"
+                ]
+            )
+        warn_count = release_gate.get("warn_count")
+        if isinstance(warn_count, int):
+            return len(
+                [
+                    finding
+                    for finding in detail.qa_findings
+                    if finding.severity == "warn"
+                    and finding.field_path
+                    == "release_gate.claim_self_consistency_required"
+                ]
+            )
+    return len(
+        [
+            finding
+            for finding in detail.qa_findings
+            if finding.severity == "warn"
+            and finding.field_path == "release_gate.claim_self_consistency_required"
+        ]
+    )
 
 
 def _quality_metadata(detail: RunDetail) -> dict[str, object]:
@@ -1267,6 +1327,13 @@ def _has_heading(markdown: str, needles: tuple[str, ...]) -> bool:
     return any(any(needle in heading for needle in normalized_needles) for heading in headings)
 
 
+def _all_markdown_headings(markdown: str) -> list[str]:
+    return [
+        _clean_heading(match.group(1))
+        for match in re.finditer(r"^\s*#{1,4}\s+(.+?)\s*$", markdown, flags=re.MULTILINE)
+    ]
+
+
 def _claim_risk_section_score(markdown: str) -> float:
     return (
         1.0
@@ -1317,6 +1384,124 @@ def _community_evidence_section_score(detail: RunDetail) -> float:
     if "community observation" in body and "official" in body:
         return 0.75
     return 0.0
+
+
+ENGLISH_TEMPLATE_HEADING_PHRASES = (
+    "executive summary",
+    "decision summary",
+    "competitive findings",
+    "pricing and packaging",
+    "feature and workflow",
+    "user persona and adoption",
+    "cross-competitor",
+    "direct user / community signals",
+    "simulated survey and interview signals",
+    "adoption blockers",
+    "switching triggers",
+    "evidence gaps",
+    "positioning and core value",
+    "feature capabilities",
+    "community feedback",
+    "competitive plays",
+    "strengths",
+    "weaknesses",
+    "opportunities",
+    "threats",
+    "official facts vs community observations",
+    "repeated signals",
+    "contested or low-confidence signals",
+    "source quality",
+    "evidence appendix",
+)
+
+
+def _localized_heading_score(detail: RunDetail) -> float:
+    output_language = (detail.output_language or "").casefold()
+    if not output_language.startswith("zh"):
+        return 1.0
+    if not _has_cjk_heading(detail.report_md):
+        return 1.0
+    for heading in _all_markdown_headings(detail.report_md):
+        normalized = _normalize_heading(heading)
+        if any(phrase in normalized for phrase in ENGLISH_TEMPLATE_HEADING_PHRASES):
+            return 0.0
+    return 1.0
+
+
+def _has_cjk_heading(markdown: str) -> bool:
+    return any(re.search(r"[\u3400-\u9fff]", heading) for heading in _all_markdown_headings(markdown))
+
+
+BATTLECARD_TEMPLATE_PHRASES = (
+    "direct battlecard positioning",
+    "objection handling",
+    "action bias",
+    "deployment check",
+    "every battlecard line should",
+    "current winner as the short-term",
+    "\u76f4\u63a5\u6218\u62a5\u5b9a\u4f4d",
+    "\u53cd\u5bf9\u610f\u89c1\u5904\u7406",
+    "\u884c\u52a8\u504f\u5411",
+    "\u843d\u5730\u68c0\u67e5",
+    "\u5f53\u524d\u8d62\u5bb6\u4f5c\u4e3a\u77ed\u671f",
+)
+
+
+def _battlecard_section_score(detail: RunDetail) -> float:
+    section = _find_section_before_support(detail.report_md, _report_label_aliases("battlecard"))
+    if section is None:
+        return 1.0
+    normalized_body = repair_mojibake_text(section.body).casefold()
+    if any(phrase in normalized_body for phrase in BATTLECARD_TEMPLATE_PHRASES):
+        return 0.0
+    chars, rows = _body_content_summary(section.body)
+    if chars < 520 and rows < 4:
+        return 0.0
+    competitors = [item for item in detail.plan.competitors if item]
+    if competitors:
+        mentioned = sum(
+            1 for competitor in competitors if competitor.casefold() in normalized_body
+        )
+        if len(competitors) >= 2 and mentioned < 2:
+            return 0.0
+    return 1.0
+
+
+INTERNAL_WRITER_REPORT_TERMS = (
+    "Segment Evidence Pack",
+    "Writer Evidence Pack",
+    "source_registry",
+    "allowed_source_ids",
+    "represented_by",
+)
+
+
+def _citation_hygiene_score(markdown: str) -> float:
+    report_md = repair_mojibake_text(markdown)
+    if any(term in report_md for term in INTERNAL_WRITER_REPORT_TERMS):
+        return 0.0
+    lines = report_md.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#") and "[source:" in stripped.casefold():
+            return 0.0
+        if _table_header_line_has_citation(lines, index):
+            return 0.0
+    return 1.0
+
+
+def _table_header_line_has_citation(lines: list[str], index: int) -> bool:
+    line = lines[index].strip()
+    if not line.startswith("|") or "[source:" not in line.casefold():
+        return False
+    next_line = ""
+    for candidate in lines[index + 1 :]:
+        if candidate.strip():
+            next_line = candidate.strip()
+            break
+    return bool(next_line) and re.fullmatch(r"\|?[\s|\-:]+\|?", next_line) is not None
 
 
 def _swot_section_score(detail: RunDetail) -> float:
@@ -1756,6 +1941,21 @@ def _clean_recommendations(
         recommendations.append(
             "Add a RAG Gap Fill section with retrieval queries or grounded context for open "
             "collector evidence gaps."
+        )
+    if target.values.get("localized_heading_score", 1.0) < 1.0:
+        recommendations.append(
+            "Localize report structure headings so the output language does not mix in English "
+            "template labels such as Pricing and Packaging or Strengths/Weaknesses."
+        )
+    if target.values.get("battlecard_section_score", 1.0) < 1.0:
+        recommendations.append(
+            "Rewrite the Battlecard as competitor-specific talk tracks with buyer context, "
+            "objections, rebuttals, and evidence limits instead of generic battlecard instructions."
+        )
+    if target.values.get("citation_hygiene_score", 1.0) < 1.0:
+        recommendations.append(
+            "Repair citation hygiene: remove citations from headings and table headers, and keep "
+            "writer-internal source registry terms out of the reader-facing report."
         )
     if (
         target.values.get("report_source_token_count", 0.0) > 0

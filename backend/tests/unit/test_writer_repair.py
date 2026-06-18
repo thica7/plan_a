@@ -261,6 +261,35 @@ def test_writer_repair_routes_release_gate_depth_to_named_section_when_scoped() 
     assert plan.anti_regression_required is True
 
 
+def test_writer_repair_routes_deterministic_hygiene_damage_to_assemble() -> None:
+    damaged_report = (
+        _protectable_report()
+        + "\n\nFull list is available in Segment Evidence Pack JSON source_registry. "
+        "[source:source-0]"
+    )
+    detail = _detail(report_md=damaged_report)
+    issue = QCIssue(
+        id="issue-report-hygiene-required",
+        severity="blocker",
+        detected_by="coverage",
+        target_agent="writer",
+        field_path="release_gate.report_depth_required",
+        problem=(
+            "Report core richness metrics are below release minimums: "
+            "citation_hygiene_score=0.00 (<1.00)."
+        ),
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="Repair report citation hygiene without rewriting the full report.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "assemble"
+    assert "deterministic report structure damage" in plan.reason
+
+
 def test_writer_repair_claim_risk_review_wording_does_not_target_user_reviews() -> None:
     detail = _detail(report_md=_protectable_report())
     issue = QCIssue(
@@ -298,6 +327,41 @@ def test_writer_repair_maps_battlecard_watchouts_to_battlecard_only() -> None:
 
     assert plan.mode == "section"
     assert plan.sections == ["battlecard"]
+
+
+def test_writer_repair_routes_claim_self_consistency_warns_to_scoped_sections() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issues: list[QCIssue] = []
+    for index, subagent in enumerate(
+        ["persona", "persona", "persona", "feature", "pricing"], start=1
+    ):
+        issues.append(
+            QCIssue(
+                id=f"claim-self-consistency-{index}",
+                severity="warn",
+                detected_by="coverage",
+                target_agent="collector",
+                target_subagent=subagent,
+                target_competitor="Cursor",
+                field_path="release_gate.claim_self_consistency_required",
+                problem=(
+                    "claim_self_consistency_required: validation is weak; "
+                    "recommended_action=rewrite_claim; failed_checks=text_support."
+                ),
+                redo_scope=RedoScope(
+                    kind="writer_only",
+                    target_subagent=subagent,
+                    target_competitor="Cursor",
+                    rationale="Rewrite weak claim or downgrade conclusion.",
+                ),
+            )
+        )
+
+    plan = build_writer_repair_plan(detail, issues, upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["review_theme_summary", "competitive_findings"]
+    assert plan.anti_regression_required is True
 
 
 def test_apply_line_repair_removes_only_still_noisy_lines() -> None:
