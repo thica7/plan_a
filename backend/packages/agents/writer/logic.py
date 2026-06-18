@@ -1133,8 +1133,10 @@ class WriterAgentMixin:
         detail: RunDetail,
         segment: dict[str, object],
     ) -> str:
-        section_id = str(segment.get("section_id") or segment.get("segment_name") or "")
+        section_id = str(segment.get("section_id") or "")
         segment_name = str(segment.get("segment_name") or "")
+        if not section_id and segment_name == "user_research":
+            section_id = "review_theme_summary"
         competitor = str(segment.get("segment_competitor") or "").strip()
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         source_warning = (
@@ -1162,7 +1164,7 @@ class WriterAgentMixin:
                     source_warning,
                 ]
             )
-        if section_id == "review_theme_summary" or segment_name == "user_research":
+        if section_id == "review_theme_summary":
             return "\n".join(
                 [
                     "Required segment outline:",

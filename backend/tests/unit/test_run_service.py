@@ -9420,6 +9420,46 @@ async def test_writer_segment_prompt_includes_competitor_deep_dive_template(
 
 
 @pytest.mark.asyncio
+async def test_writer_segment_prompt_prefers_explicit_section_id_over_legacy_name(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-template-explicit-section",
+    )
+    captured: dict[str, str] = {}
+    segment = _segmented_writer_segment(
+        segment_name="user_research",
+        section_id="competitor_deep_dives",
+        segment_competitor="Cursor",
+        allowed_source_id="cursor-pricing",
+    )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return "## Competitor Deep Dives\n### Cursor\nPricing is visible. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="",
+        retry_count=0,
+    )
+
+    prompt = captured["user"]
+    assert "## Competitor Deep Dives" in prompt
+    assert "### Cursor" in prompt
+    assert "#### Simulated Survey and Interview Signals" not in prompt
+
+
+@pytest.mark.asyncio
 async def test_writer_segment_prompt_includes_all_segment_outlines(monkeypatch) -> None:
     service = _segmented_writer_service()
     record = _segmented_writer_record(service, run_id="run-segment-template-all")
