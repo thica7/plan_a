@@ -1133,10 +1133,8 @@ class WriterAgentMixin:
         detail: RunDetail,
         segment: dict[str, object],
     ) -> str:
-        section_id = str(segment.get("section_id") or "")
-        segment_name = str(segment.get("segment_name") or "")
-        if not section_id and segment_name == "user_research":
-            section_id = "review_theme_summary"
+        contract = segment_contract_for(segment)
+        section_id = contract.section_id
         competitor = str(segment.get("segment_competitor") or "").strip()
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         source_warning = (
@@ -1145,6 +1143,20 @@ class WriterAgentMixin:
         )
         deep_dive_competitor = competitor or "<segment_competitor>"
 
+        if contract.segment_kind == "evidence_shard":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    "Evidence shard only.",
+                    "Do not write any ## H2 heading.",
+                    "Return compact cited evidence notes as bullets.",
+                    (
+                        "Preserve exact source IDs for facts that should be cited by "
+                        "the section writer."
+                    ),
+                    source_warning,
+                ]
+            )
         if section_id == "decision_summary":
             return "\n".join(
                 [
@@ -1235,15 +1247,15 @@ class WriterAgentMixin:
                         "Support headings are allowed and optional; include only "
                         "applicable support sections."
                     ),
-                    "## Evidence & QA Support",
-                    "## Source Quality & Coverage",
-                    "## User Research Evidence",
-                    "## RAG Gap Fill",
-                    "## Scenario QA Checklist",
-                    "## Confidence Notes",
-                    "## Claim Risk and Evidence Limits",
-                    "## Next Collection Plan",
-                    "## Evidence Appendix",
+                    f"## {report_label(detail.output_language, 'evidence_support')}",
+                    f"## {report_label(detail.output_language, 'source_quality')}",
+                    f"## {report_label(detail.output_language, 'user_research_evidence')}",
+                    f"## {report_label(detail.output_language, 'rag_gap_fill')}",
+                    f"## {report_label(detail.output_language, 'scenario_checklist')}",
+                    f"## {report_label(detail.output_language, 'confidence_notes')}",
+                    f"## {report_label(detail.output_language, 'claim_risk')}",
+                    f"## {report_label(detail.output_language, 'next_collection')}",
+                    f"## {report_label(detail.output_language, 'evidence_appendix')}",
                     (
                         "Must include: concise source-quality, coverage, confidence, "
                         "and gap support without restarting core analysis."

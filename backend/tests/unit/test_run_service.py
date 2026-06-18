@@ -9460,6 +9460,161 @@ async def test_writer_segment_prompt_prefers_explicit_section_id_over_legacy_nam
 
 
 @pytest.mark.asyncio
+async def test_writer_segment_support_prompt_uses_canonical_support_labels(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-template-support-labels",
+    )
+    captured: dict[str, str] = {}
+    segment = _segmented_writer_segment(
+        segment_name="support_appendix",
+        section_id="evidence_support",
+        segment_kind="support_fragment",
+        allowed_source_id="cursor-pricing",
+    )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return "## Evidence & QA Support\nSupport. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="",
+        retry_count=0,
+    )
+
+    prompt = captured["user"]
+    assert "## Claim Validation & Evidence Risk" in prompt
+    assert "## Next Collection / Verification Plan" in prompt
+    assert "## Claim Risk and Evidence Limits" not in prompt
+    assert "## Next Collection Plan" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_evidence_shard_prompt_outline_has_no_h2(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-template-shard-outline",
+    )
+    captured: dict[str, str] = {}
+    segment = _segmented_writer_segment(
+        segment_name="decision_summary",
+        section_id="decision_summary",
+        segment_kind="evidence_shard",
+        allowed_source_id="cursor-pricing",
+        segment_batch="sources:1",
+    )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return "- Pricing is visible. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="",
+        retry_count=0,
+    )
+
+    prompt = captured["user"]
+    outline_block = prompt.split("Required segment outline:", 1)[1].split(
+        "Confirmed Memory Preferences:",
+        1,
+    )[0]
+    assert "Do not write any ## H2 heading" in outline_block
+    assert "Return compact cited evidence notes" in outline_block
+    assert not any(
+        line.startswith("## ") for line in outline_block.splitlines()
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_prompt_resolves_legacy_names_without_section_id(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-template-legacy-names",
+    )
+    captured_prompts: list[str] = []
+    cases = [
+        ("decision_summary", None, "## Decision Summary", "### Pricing and Packaging"),
+        (
+            "user_research",
+            None,
+            "## User Review Themes",
+            "#### Simulated Survey and Interview Signals",
+        ),
+        (
+            "competitor_deep_dives",
+            "Cursor",
+            "## Competitor Deep Dives",
+            "### Cursor",
+        ),
+        ("swot_matrix", None, "## Side-by-Side Decision Matrix", "#### Threats"),
+        (
+            "support_appendix",
+            None,
+            "## Evidence & QA Support",
+            "## Evidence Appendix",
+        ),
+    ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured_prompts.append(kwargs["user"])
+        return "## Evidence & QA Support\nSupport. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    for segment_name, competitor, required_text, second_text in cases:
+        segment = _segmented_writer_segment(
+            segment_name=segment_name,
+            section_id=segment_name,
+            segment_competitor=competitor,
+            allowed_source_id="cursor-pricing",
+        )
+        segment.pop("section_id")
+        if segment_name == "support_appendix":
+            segment["segment_kind"] = "support_fragment"
+
+        await service._writer_segment_markdown(
+            record,
+            segment=segment,
+            timeout_seconds=1,
+            language_guidance="Use English.",
+            memory_context="none",
+            layer_context="none",
+            required_sections="",
+            retry_count=0,
+        )
+
+        prompt = captured_prompts[-1]
+        assert "Required segment outline:" in prompt
+        assert required_text in prompt
+        assert second_text in prompt
+
+
+@pytest.mark.asyncio
 async def test_writer_segment_prompt_includes_all_segment_outlines(monkeypatch) -> None:
     service = _segmented_writer_service()
     record = _segmented_writer_record(service, run_id="run-segment-template-all")
