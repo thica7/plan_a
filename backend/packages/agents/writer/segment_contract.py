@@ -297,7 +297,11 @@ def validate_segment_contract(
             missing_required_heading_keys=missing_required_heading_keys,
         )
 
-    if contract.section_id == "competitor_deep_dives" and contract.segment_competitor:
+    if (
+        contract.segment_kind == "section_fragment"
+        and contract.section_id == "competitor_deep_dives"
+        and contract.segment_competitor
+    ):
         expected_competitor = _normalize_heading(contract.segment_competitor)
         competitor_h3_headings = [
             _normalize_heading(heading) for heading in _h3_headings(markdown)

@@ -81,6 +81,28 @@ def test_evidence_shard_contract_rejects_any_h2() -> None:
     assert result.errors == ["evidence_shard must not contain H2 headings"]
 
 
+def test_competitor_deep_dive_evidence_shard_preserves_owner_without_h3() -> None:
+    contract = segment_contract_for(
+        {
+            "segment_name": "competitor_deep_dives",
+            "section_id": "competitor_deep_dives",
+            "segment_kind": "evidence_shard",
+            "segment_competitor": "Cursor",
+            "output_language": "en-US",
+        }
+    )
+    markdown = "- Cursor shard note [source:cursor-pricing]"
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert contract.segment_kind == "evidence_shard"
+    assert contract.section_id == "competitor_deep_dives"
+    assert contract.segment_competitor == "Cursor"
+    assert contract.allow_h2 is False
+    assert result.status == "pass"
+    assert result.errors == []
+
+
 def test_evidence_shard_kind_takes_precedence_over_support_section() -> None:
     contract = segment_contract_for(
         {

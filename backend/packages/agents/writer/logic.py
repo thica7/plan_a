@@ -927,12 +927,7 @@ class WriterAgentMixin:
         required_sections: str,
     ):
         detail = record.detail
-        contract_segment = (
-            {**segment, "segment_competitor": None}
-            if segment.get("segment_kind") == "evidence_shard"
-            else segment
-        )
-        contract = segment_contract_for(contract_segment)
+        contract = segment_contract_for(segment)
         segment_with_contract = {
             **segment,
             "allowed_heading_keys": list(contract.allowed_heading_keys),
