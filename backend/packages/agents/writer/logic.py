@@ -810,8 +810,8 @@ class WriterAgentMixin:
     ) -> list[str]:
         detail = record.detail
         sections: list[str] = []
-        shards_by_section: dict[str, list[str]] = {}
-        section_allowed_source_ids: dict[str, set[str]] = {}
+        shards_by_section: dict[tuple[str, str | None], list[str]] = {}
+        section_allowed_source_ids: dict[tuple[str, str | None], set[str]] = {}
         for segment in segments:
             segment_md, contract = await self._writer_validated_segment_markdown(
                 record,
@@ -825,8 +825,21 @@ class WriterAgentMixin:
             )
             if contract.segment_kind == "evidence_shard":
                 section_id = contract.section_id
-                shards_by_section.setdefault(section_id, []).append(segment_md)
-                section_allowed_source_ids.setdefault(section_id, set()).update(
+                segment_competitor = (
+                    segment.get("segment_competitor")
+                    if isinstance(segment.get("segment_competitor"), str)
+                    else None
+                )
+                shard_key = (
+                    section_id,
+                    (
+                        segment_competitor
+                        if section_id == "competitor_deep_dives"
+                        else None
+                    ),
+                )
+                shards_by_section.setdefault(shard_key, []).append(segment_md)
+                section_allowed_source_ids.setdefault(shard_key, set()).update(
                     source_id
                     for source_id in (segment.get("allowed_source_ids") or [])
                     if isinstance(source_id, str)
@@ -834,12 +847,15 @@ class WriterAgentMixin:
                 continue
             sections.append(segment_md)
 
-        for section_id, shard_notes in shards_by_section.items():
+        for (section_id, segment_competitor), shard_notes in shards_by_section.items():
             section_segment = self._writer_section_segment_from_shards(
                 detail,
                 section_id=section_id,
+                segment_competitor=segment_competitor,
                 shard_notes=shard_notes,
-                allowed_source_ids=section_allowed_source_ids[section_id],
+                allowed_source_ids=section_allowed_source_ids[
+                    (section_id, segment_competitor)
+                ],
             )
             section_md, _ = await self._writer_validated_segment_markdown(
                 record,
@@ -859,13 +875,20 @@ class WriterAgentMixin:
         detail: RunDetail,
         *,
         section_id: str,
+        segment_competitor: str | None,
         shard_notes: Sequence[str],
         allowed_source_ids: set[str],
     ) -> dict[str, object]:
+        segment_name = (
+            f"{section_id} {segment_competitor}"
+            if section_id == "competitor_deep_dives" and segment_competitor
+            else section_id
+        )
         section_segment: dict[str, object] = {
-            "segment_name": section_id,
+            "segment_name": segment_name,
             "segment_kind": "section_fragment",
             "section_id": section_id,
+            "segment_competitor": segment_competitor,
             "output_language": detail.output_language,
             "segment_input_chars": 0,
             "allowed_source_ids": sorted(allowed_source_ids),
@@ -904,7 +927,12 @@ class WriterAgentMixin:
         required_sections: str,
     ):
         detail = record.detail
-        contract = segment_contract_for(segment)
+        contract_segment = (
+            {**segment, "segment_competitor": None}
+            if segment.get("segment_kind") == "evidence_shard"
+            else segment
+        )
+        contract = segment_contract_for(contract_segment)
         segment_with_contract = {
             **segment,
             "allowed_heading_keys": list(contract.allowed_heading_keys),

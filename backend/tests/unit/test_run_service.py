@@ -8538,6 +8538,115 @@ async def test_evidence_shard_outputs_notes_then_section_writer_outputs_one_h2(
 
 
 @pytest.mark.asyncio
+async def test_writer_segment_shard_synthesis_preserves_competitor(monkeypatch):
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-shard-synthesis-competitor",
+        competitors=["Cursor", "Claude Code"],
+    )
+    pack = _SegmentedWriterFakePack(
+        [
+            _segmented_writer_segment(
+                segment_name="competitor_deep_dives",
+                section_id="competitor_deep_dives",
+                segment_kind="evidence_shard",
+                segment_competitor="Cursor",
+                segment_batch="sources:1",
+                allowed_source_id="cursor-pricing",
+            ),
+            _segmented_writer_segment(
+                segment_name="competitor_deep_dives",
+                section_id="competitor_deep_dives",
+                segment_kind="evidence_shard",
+                segment_competitor="Cursor",
+                segment_batch="sources:2",
+                allowed_source_id="cursor-feature",
+            ),
+            _segmented_writer_segment(
+                segment_name="competitor_deep_dives",
+                section_id="competitor_deep_dives",
+                segment_kind="evidence_shard",
+                segment_competitor="Claude Code",
+                segment_batch="sources:1",
+                allowed_source_id="claude-pricing",
+            ),
+            _segmented_writer_segment(
+                segment_name="competitor_deep_dives",
+                section_id="competitor_deep_dives",
+                segment_kind="evidence_shard",
+                segment_competitor="Claude Code",
+                segment_batch="sources:2",
+                allowed_source_id="claude-feature",
+            ),
+        ]
+    )
+    captured_sections: list[dict[str, object]] = []
+
+    async def fake_segment_writer(*args, **kwargs):
+        segment = kwargs["segment"]
+        if segment["segment_kind"] == "evidence_shard":
+            return (
+                f"- {segment['segment_competitor']} shard {segment['segment_batch']} "
+                f"[source:{segment['allowed_source_ids'][0]}]"
+            )
+        captured_sections.append(dict(segment))
+        if segment["segment_competitor"] == "Cursor":
+            return (
+                "## Competitor Deep Dives\n"
+                "### Cursor\n"
+                "Cursor synthesis cites only Cursor sources. "
+                "[source:cursor-pricing][source:cursor-feature]"
+            )
+        return (
+            "## Competitor Deep Dives\n"
+            "### Claude Code\n"
+            "Claude synthesis cites only Claude sources. "
+            "[source:claude-pricing][source:claude-feature]"
+        )
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
+
+    report = await service._writer_segmented_report_markdown(
+        record,
+        evidence_pack_result=pack,
+        timeout_seconds=60,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    assert [segment["segment_competitor"] for segment in captured_sections] == [
+        "Cursor",
+        "Claude Code",
+    ]
+    assert captured_sections[0]["allowed_source_ids"] == [
+        "cursor-feature",
+        "cursor-pricing",
+    ]
+    assert captured_sections[1]["allowed_source_ids"] == [
+        "claude-feature",
+        "claude-pricing",
+    ]
+    assert captured_sections[0]["segment_name"] == "competitor_deep_dives Cursor"
+    assert captured_sections[1]["segment_name"] == "competitor_deep_dives Claude Code"
+    assert "### Cursor" in report
+    assert "### Claude Code" in report
+
+
+@pytest.mark.asyncio
 async def test_segmented_writer_backfills_missing_competitive_findings(
     monkeypatch,
 ) -> None:
