@@ -231,3 +231,68 @@ def test_valid_user_research_contract_passes_localized_heading() -> None:
     assert result.forbidden_heading_keys == []
     assert result.invalid_heading_keys == []
     assert result.errors == []
+
+
+def test_competitor_deep_dive_requires_matching_competitor_heading() -> None:
+    contract = segment_contract_for(
+        {
+            "segment_name": "competitor_deep_dives",
+            "section_id": "competitor_deep_dives",
+            "segment_competitor": "GitHub Copilot",
+            "output_language": "en-US",
+        }
+    )
+    markdown = (
+        "## Competitor Deep Dives\n"
+        "### Pricing and Packaging\n"
+        "GitHub Copilot pricing is visible. [source:copilot-pricing]"
+    )
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert contract.segment_competitor == "GitHub Copilot"
+    assert result.status == "retry"
+    assert result.errors == ["segment is missing required competitor heading"]
+
+
+def test_competitor_deep_dive_accepts_exact_competitor_h3() -> None:
+    contract = segment_contract_for(
+        {
+            "segment_name": "competitor_deep_dives",
+            "section_id": "competitor_deep_dives",
+            "segment_competitor": "GitHub Copilot",
+            "output_language": "en-US",
+        }
+    )
+    markdown = (
+        "## Competitor Deep Dives\n"
+        "### GitHub Copilot\n"
+        "GitHub Copilot pricing is visible. [source:copilot-pricing]"
+    )
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert result.status == "pass"
+    assert result.errors == []
+
+
+def test_competitor_deep_dive_rejects_competitor_heading_at_h4() -> None:
+    contract = segment_contract_for(
+        {
+            "segment_name": "competitor_deep_dives",
+            "section_id": "competitor_deep_dives",
+            "segment_competitor": "GitHub Copilot",
+            "output_language": "en-US",
+        }
+    )
+    markdown = (
+        "## Competitor Deep Dives\n"
+        "### Pricing and Packaging\n"
+        "#### GitHub Copilot\n"
+        "GitHub Copilot pricing is visible. [source:copilot-pricing]"
+    )
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert result.status == "retry"
+    assert result.errors == ["segment is missing required competitor heading"]

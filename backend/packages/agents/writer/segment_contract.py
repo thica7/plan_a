@@ -100,6 +100,7 @@ HEADING_KEY_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 _H2_RE = re.compile(r"(?m)^##\s+(.+?)\s*$")
+_H3_RE = re.compile(r"(?m)^###\s+(.+?)\s*$")
 _DASH_TRANSLATION = str.maketrans(
     {
         "\u2010": "-",
@@ -136,6 +137,7 @@ class SegmentContract:
     segment_kind: SegmentKind
     section_id: str
     output_language: str
+    segment_competitor: str | None = None
     allowed_heading_keys: tuple[str, ...] = field(default_factory=tuple)
     required_heading_keys: tuple[str, ...] = field(default_factory=tuple)
     forbidden_heading_keys: tuple[str, ...] = field(default_factory=tuple)
@@ -159,6 +161,7 @@ def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
     segment_kind = _segment_kind(segment.get("segment_kind"))
     segment_name = _segment_name_for(segment, segment_kind)
     section_id = _section_id_for(segment)
+    segment_competitor = _string_value(segment.get("segment_competitor"))
     essential = bool(segment.get("segment_essential", True))
 
     if segment_kind != "evidence_shard" and section_id == "evidence_support":
@@ -169,6 +172,7 @@ def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
             segment_kind=segment_kind,
             section_id=section_id,
             output_language=output_language,
+            segment_competitor=segment_competitor,
             allowed_heading_keys=(),
             required_heading_keys=(),
             forbidden_heading_keys=(),
@@ -190,6 +194,7 @@ def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
         segment_kind=segment_kind,
         section_id=section_id,
         output_language=output_language,
+        segment_competitor=segment_competitor,
         allowed_heading_keys=allowed_heading_keys,
         required_heading_keys=required_heading_keys,
         forbidden_heading_keys=forbidden_heading_keys,
@@ -292,6 +297,22 @@ def validate_segment_contract(
             missing_required_heading_keys=missing_required_heading_keys,
         )
 
+    if contract.section_id == "competitor_deep_dives" and contract.segment_competitor:
+        expected_competitor = _normalize_heading(contract.segment_competitor)
+        competitor_h3_headings = [
+            _normalize_heading(heading) for heading in _h3_headings(markdown)
+        ]
+        if expected_competitor not in competitor_h3_headings:
+            return SegmentValidationResult(
+                status="retry",
+                errors=["segment is missing required competitor heading"],
+                h2_headings=h2_headings,
+                forbidden_headings=[],
+                forbidden_heading_keys=[],
+                invalid_heading_keys=[],
+                missing_required_heading_keys=[],
+            )
+
     return SegmentValidationResult(
         status="pass",
         errors=[],
@@ -347,6 +368,10 @@ def _strip_leading_heading_decoration(heading: str) -> str:
 
 def _h2_headings(markdown: str) -> list[str]:
     return [match.group(1).strip() for match in _H2_RE.finditer(markdown)]
+
+
+def _h3_headings(markdown: str) -> list[str]:
+    return [match.group(1).strip() for match in _H3_RE.finditer(markdown)]
 
 
 def _section_id_for(segment: Mapping[str, object]) -> str:
