@@ -17181,3 +17181,19 @@ def test_writer_source_appendix_backfill_uses_registry_rows() -> None:
 
     assert any("[source:cursor-pricing]" in line for line in appendix)
     assert not any("Cursor Pro costs $20 per month." in line for line in appendix)
+
+
+def test_backfill_competitor_deep_dives_uses_competitor_h3() -> None:
+    service = _segmented_writer_service()
+    detail = _segmented_writer_detail(
+        run_id="run-backfill-deep-dive-h3",
+        competitors=["Cursor", "GitHub Copilot"],
+    )
+
+    lines = service._backfill_competitor_deep_dives_section(detail)
+    markdown = "\n".join(lines)
+
+    assert "## Competitor Deep Dives" in markdown
+    assert "\n### Cursor\n" in f"\n{markdown}\n"
+    assert "\n### GitHub Copilot\n" in f"\n{markdown}\n"
+    assert markdown.index("### Cursor") < markdown.index("### GitHub Copilot")

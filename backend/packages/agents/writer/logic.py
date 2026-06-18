@@ -1965,6 +1965,7 @@ class WriterAgentMixin:
         ]
         matrix = detail.comparison_matrix
         for competitor in detail.plan.competitors:
+            lines.append(f"### {competitor}")
             if matrix is None:
                 source_ids = [
                     source.id for source in detail.raw_sources if source.competitor == competitor
@@ -1984,16 +1985,17 @@ class WriterAgentMixin:
                     )
                 else:
                     lines.append(
-                        f"- {competitor} wins: not established yet; use verified evidence before "
+                        "- Positioning: not established yet; use verified evidence before "
                         f"claiming advantage.{self._format_source_refs(source_ids)}"
                     )
                     lines.append(
-                        f"- {competitor} weaknesses: under-covered dimensions remain unresolved "
-                        f"until more sources are linked.{self._format_source_refs(source_ids)}"
+                        "- Pricing, feature, and persona watchouts: under-covered dimensions "
+                        "remain unresolved until more sources are linked."
+                        f"{self._format_source_refs(source_ids)}"
                     )
                     lines.append(
-                        f"- {competitor} watchouts: avoid absolute claims until QA and source "
-                        f"coverage improve.{self._format_source_refs(source_ids)}"
+                        "- Evidence gaps: avoid absolute claims until QA and source coverage "
+                        f"improve.{self._format_source_refs(source_ids)}"
                     )
                 continue
 
@@ -2031,17 +2033,17 @@ class WriterAgentMixin:
                 wins = ", ".join(winning_dimensions) or "no confirmed dimension winner yet"
                 weaknesses = ", ".join(weaker_dimensions) or "no explicit matrix loss yet"
                 lines.append(
-                    f"- {competitor} wins: {wins}; keep the claim scoped to the cited "
-                    f"dimension evidence.{self._format_source_refs(source_ids)}"
+                    f"- Wins: {wins}; keep the claim scoped to the cited dimension "
+                    f"evidence.{self._format_source_refs(source_ids)}"
                 )
                 lines.append(
-                    f"- {competitor} weaknesses: {weaknesses}; verify whether gaps are real "
-                    "competitive disadvantages or collection limits."
+                    f"- Weaknesses: {weaknesses}; verify whether gaps are real competitive "
+                    "disadvantages or collection limits."
                     f"{self._format_source_refs(source_ids)}"
                 )
                 lines.append(
-                    f"- {competitor} watchouts: monitor pricing, packaging, feature, and buyer "
-                    "objection claims before turning this into external messaging."
+                    "- Watchouts: monitor pricing, packaging, feature, and buyer objection "
+                    "claims before turning this into external messaging."
                     f"{self._format_source_refs(source_ids)}"
                 )
         return lines
