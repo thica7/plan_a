@@ -9380,6 +9380,129 @@ async def test_writer_segment_prompt_includes_source_quality_and_user_research_p
 
 
 @pytest.mark.asyncio
+async def test_writer_segment_prompt_includes_competitor_deep_dive_template(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-template-deep-dive")
+    captured: dict[str, str] = {}
+    segment = _segmented_writer_segment(
+        segment_name="competitor_deep_dives Cursor",
+        section_id="competitor_deep_dives",
+        segment_competitor="Cursor",
+        allowed_source_id="cursor-pricing",
+    )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return "## Competitor Deep Dives\n### Cursor\nPricing is visible. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="",
+        retry_count=0,
+    )
+
+    prompt = captured["user"]
+    assert "Required segment outline:" in prompt
+    assert "## Competitor Deep Dives" in prompt
+    assert "### Cursor" in prompt
+    assert "#### Pricing and Packaging" in prompt
+    assert "#### Community Feedback, Adoption Blockers, and Switching Triggers" in prompt
+    assert "Do not copy placeholder source IDs" in prompt
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_prompt_includes_all_segment_outlines(monkeypatch) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-template-all")
+    captured_prompts: list[str] = []
+    cases = [
+        (
+            "decision_summary",
+            "decision_summary",
+            None,
+            "## Decision Summary",
+            "### Pricing and Packaging",
+        ),
+        (
+            "user_research",
+            "review_theme_summary",
+            None,
+            "## User Review Themes",
+            "#### Simulated Survey and Interview Signals",
+        ),
+        (
+            "swot_matrix",
+            "swot_matrix",
+            None,
+            "## Side-by-Side Decision Matrix",
+            "#### Threats",
+        ),
+        (
+            "support_appendix",
+            "evidence_support",
+            None,
+            "## Evidence & QA Support",
+            "## Evidence Appendix",
+        ),
+    ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured_prompts.append(kwargs["user"])
+        user = kwargs["user"]
+        if "section_id=decision_summary" in user:
+            return (
+                "## Decision Summary\nDecision. [source:cursor-pricing]\n\n"
+                "## Competitive Findings\nFindings. [source:cursor-pricing]"
+            )
+        if "section_id=review_theme_summary" in user:
+            return "## User Review Themes\nTheme. [source:cursor-pricing]"
+        if "section_id=swot_matrix" in user:
+            return (
+                "## Side-by-Side Decision Matrix\nMatrix. [source:cursor-pricing]\n\n"
+                "## SWOT Analysis\nSWOT. [source:cursor-pricing]"
+            )
+        return "## Evidence & QA Support\nSupport. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    for segment_name, section_id, competitor, required_text, second_text in cases:
+        segment = _segmented_writer_segment(
+            segment_name=segment_name,
+            section_id=section_id,
+            segment_competitor=competitor,
+            allowed_source_id="cursor-pricing",
+            segment_kind=(
+                "support_fragment"
+                if section_id == "evidence_support"
+                else "section_fragment"
+            ),
+        )
+        await service._writer_segment_markdown(
+            record,
+            segment=segment,
+            timeout_seconds=1,
+            language_guidance="Use English.",
+            memory_context="none",
+            layer_context="none",
+            required_sections="",
+            retry_count=0,
+        )
+        prompt = captured_prompts[-1]
+        assert "Required segment outline:" in prompt
+        assert required_text in prompt
+        assert second_text in prompt
+
+
+@pytest.mark.asyncio
 async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

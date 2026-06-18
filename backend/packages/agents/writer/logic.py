@@ -1128,6 +1128,135 @@ class WriterAgentMixin:
             return sanitizer(markdown, allowed_source_ids=allowed_source_ids)
         return markdown
 
+    def _writer_segment_required_outline(
+        self,
+        detail: RunDetail,
+        segment: dict[str, object],
+    ) -> str:
+        section_id = str(segment.get("section_id") or segment.get("segment_name") or "")
+        segment_name = str(segment.get("segment_name") or "")
+        competitor = str(segment.get("segment_competitor") or "").strip()
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        source_warning = (
+            "Do not copy placeholder source IDs from examples. Use only IDs from "
+            "allowed_source_ids in Segment Evidence Pack JSON."
+        )
+        deep_dive_competitor = competitor or "<segment_competitor>"
+
+        if section_id == "decision_summary":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    "## Decision Summary",
+                    "- Recommended decision / buying posture.",
+                    "- Confidence level and what must not be overstated.",
+                    "## Competitive Findings",
+                    "### Pricing and Packaging",
+                    "### Feature and Workflow Capability",
+                    "### User Persona and Adoption",
+                    "### Cross-Competitor Risks and Implications",
+                    (
+                        "Must include: at least three cited bullets and one "
+                        "cross-competitor comparison."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "review_theme_summary" or segment_name == "user_research":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    "## User Review Themes",
+                    "### <competitor>",
+                    "#### Direct User / Community Signals",
+                    "#### Simulated Survey and Interview Signals",
+                    "#### Adoption Blockers",
+                    "#### Switching Triggers",
+                    "#### Evidence Gaps",
+                    "## Community Evidence Triangulation",
+                    "### Official Facts vs Community Observations",
+                    "### Repeated Signals",
+                    "### Contested or Low-Confidence Signals",
+                    (
+                        "Must include: separate direct user/community signals from "
+                        "simulated survey/interview signals."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "competitor_deep_dives":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    "## Competitor Deep Dives"
+                    if not is_zh
+                    else f"## {report_label(detail.output_language, 'competitor_deep_dives')}",
+                    f"### {deep_dive_competitor}",
+                    "#### Positioning and Core Value",
+                    "#### Pricing and Packaging",
+                    "#### Feature Capabilities",
+                    "#### User Persona and Adoption",
+                    "#### Community Feedback, Adoption Blockers, and Switching Triggers",
+                    "#### Competitive Plays and Evidence Gaps",
+                    (
+                        "Must include: exactly one competitor ownership H3 matching "
+                        "segment_competitor."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "swot_matrix":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    "## Side-by-Side Decision Matrix",
+                    "| Dimension | <competitor 1> | <competitor 2> |",
+                    "|---|---|---|",
+                    "## SWOT Analysis",
+                    "### <competitor>",
+                    "#### Strengths",
+                    "#### Weaknesses",
+                    "#### Opportunities",
+                    "#### Threats",
+                    (
+                        "Must include: matrix interpretation and all four SWOT quadrants "
+                        "for every competitor."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "evidence_support":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    (
+                        "Support headings are allowed and optional; include only "
+                        "applicable support sections."
+                    ),
+                    "## Evidence & QA Support",
+                    "## Source Quality & Coverage",
+                    "## User Research Evidence",
+                    "## RAG Gap Fill",
+                    "## Scenario QA Checklist",
+                    "## Confidence Notes",
+                    "## Claim Risk and Evidence Limits",
+                    "## Next Collection Plan",
+                    "## Evidence Appendix",
+                    (
+                        "Must include: concise source-quality, coverage, confidence, "
+                        "and gap support without restarting core analysis."
+                    ),
+                    source_warning,
+                ]
+            )
+        return "\n".join(
+            [
+                "Required segment outline:",
+                "Write only headings allowed by this segment contract.",
+                source_warning,
+            ]
+        )
+
     async def _writer_segment_markdown(
         self,
         record: RunRecord,
@@ -1161,6 +1290,7 @@ class WriterAgentMixin:
             for heading in segment.get("forbidden_h2_headings", [])
             if isinstance(heading, str)
         )
+        segment_outline = self._writer_segment_required_outline(detail, segment)
         citation_warning = ""
         if citation_error_ids:
             citation_warning = (
@@ -1243,6 +1373,7 @@ class WriterAgentMixin:
                     f"{required_h2_headings or 'none'}\n"
                     "Forbidden H2 headings for this segment: "
                     f"{forbidden_h2_headings or 'none'}\n"
+                    f"{segment_outline}\n"
                     f"{citation_warning}"
                     f"{contract_warning}"
                     f"{user_research_gap_instruction}"
