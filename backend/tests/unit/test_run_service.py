@@ -8178,7 +8178,8 @@ async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch
             )
         if "segment_name=competitor_deep_dives" in user:
             return (
-                "## Competitor Deep Dives\nCursor has repository-aware workflows. "
+                "## Competitor Deep Dives\n### Cursor\n"
+                "Cursor has repository-aware workflows. "
                 "[source:cursor-source-2]"
             )
         if "segment_name=swot_matrix" in user:
@@ -9899,7 +9900,8 @@ async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
             )
         if "segment_name=competitor_deep_dives" in user:
             return (
-                "## Competitor Deep Dives\nCursor has cited evidence. "
+                "## Competitor Deep Dives\n### Cursor\n"
+                "Cursor has cited evidence. "
                 "[source:cursor-pricing]"
             )
         if "segment_name=swot_matrix" in user:
@@ -10011,7 +10013,8 @@ async def test_writer_segment_sanitizes_spacing_and_combined_citations(monkeypat
             )
         if "segment_name=competitor_deep_dives" in user:
             return (
-                "## Competitor Deep Dives\nCodex pricing has cited evidence. "
+                "## Competitor Deep Dives\n### OpenAI Codex\n"
+                "Codex pricing has cited evidence. "
                 "[source:raw-source-openai-codex-pricing]"
             )
         if "segment_name=swot_matrix" in user:
