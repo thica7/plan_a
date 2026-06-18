@@ -979,6 +979,7 @@ class WriterAgentMixin:
             f"Writer segment prepared: {segment['segment_name']}",
             payload,
         )
+        segment_retry_count = 0
         segment_md = await self._writer_segment_markdown(
             record,
             segment=segment_with_contract,
@@ -1011,6 +1012,7 @@ class WriterAgentMixin:
                 retry_count=1,
                 citation_error_ids=invalid_sources,
             )
+            segment_retry_count = 1
             segment_md = self._sanitize_writer_segment_citations(
                 evidence_pack_result,
                 segment_md,
@@ -1025,6 +1027,41 @@ class WriterAgentMixin:
                 "Writer segment cited invalid source IDs after retry: "
                 f"{', '.join(invalid_sources)}"
             )
+        truncation_error = self._writer_segment_truncation_error(segment_md)
+        if truncation_error:
+            retry_count = max(1, segment_retry_count + 1)
+            segment_md = await self._writer_segment_markdown(
+                record,
+                segment=segment_with_contract,
+                timeout_seconds=timeout_seconds,
+                language_guidance=language_guidance,
+                memory_context=memory_context,
+                layer_context=layer_context,
+                required_sections=required_sections,
+                retry_count=retry_count,
+                contract_errors=[truncation_error],
+            )
+            segment_retry_count = retry_count
+            segment_md = self._sanitize_writer_segment_citations(
+                evidence_pack_result,
+                segment_md,
+                allowed_source_ids=allowed_source_ids,
+            )
+            invalid_sources = evidence_pack_result.validate_segment_citations(
+                segment_md,
+                allowed_source_ids=allowed_source_ids,
+            )
+            if invalid_sources:
+                raise RuntimeError(
+                    "Writer segment cited invalid source IDs after truncation retry: "
+                    f"{', '.join(invalid_sources)}"
+                )
+            truncation_error = self._writer_segment_truncation_error(segment_md)
+            if truncation_error:
+                raise RuntimeError(
+                    "Writer segment appears truncated after retry: "
+                    f"{segment['segment_name']}: {truncation_error}"
+                )
         validation = validate_segment_contract(segment_md, contract)
         await self.emit(
             detail.id,
@@ -1045,7 +1082,7 @@ class WriterAgentMixin:
                 "missing_required_heading_keys": list(
                     validation.missing_required_heading_keys
                 ),
-                "segment_retry_count": 0,
+                "segment_retry_count": segment_retry_count,
             },
         )
         if validation.status != "pass":
@@ -1054,6 +1091,7 @@ class WriterAgentMixin:
             contract_missing_required_heading_keys = (
                 validation.missing_required_heading_keys
             )
+            retry_count = max(1, segment_retry_count + 1)
             segment_md = await self._writer_segment_markdown(
                 record,
                 segment=segment_with_contract,
@@ -1062,13 +1100,14 @@ class WriterAgentMixin:
                 memory_context=memory_context,
                 layer_context=layer_context,
                 required_sections=required_sections,
-                retry_count=1,
+                retry_count=retry_count,
                 contract_errors=contract_errors,
                 contract_forbidden_headings=contract_forbidden_headings,
                 contract_missing_required_heading_keys=(
                     contract_missing_required_heading_keys
                 ),
             )
+            segment_retry_count = retry_count
             segment_md = self._sanitize_writer_segment_citations(
                 evidence_pack_result,
                 segment_md,
@@ -1079,6 +1118,7 @@ class WriterAgentMixin:
                 allowed_source_ids=allowed_source_ids,
             )
             if invalid_sources:
+                retry_count = max(1, segment_retry_count + 1)
                 segment_md = await self._writer_segment_markdown(
                     record,
                     segment=segment_with_contract,
@@ -1087,7 +1127,7 @@ class WriterAgentMixin:
                     memory_context=memory_context,
                     layer_context=layer_context,
                     required_sections=required_sections,
-                    retry_count=2,
+                    retry_count=retry_count,
                     citation_error_ids=invalid_sources,
                     contract_errors=contract_errors,
                     contract_forbidden_headings=contract_forbidden_headings,
@@ -1095,6 +1135,7 @@ class WriterAgentMixin:
                         contract_missing_required_heading_keys
                     ),
                 )
+                segment_retry_count = retry_count
                 segment_md = self._sanitize_writer_segment_citations(
                     evidence_pack_result,
                     segment_md,
@@ -1110,6 +1151,48 @@ class WriterAgentMixin:
                     f"{', '.join(invalid_sources)}"
                 )
             validation = validate_segment_contract(segment_md, contract)
+            truncation_error = self._writer_segment_truncation_error(segment_md)
+            if truncation_error:
+                retry_count = max(1, segment_retry_count + 1)
+                segment_md = await self._writer_segment_markdown(
+                    record,
+                    segment=segment_with_contract,
+                    timeout_seconds=timeout_seconds,
+                    language_guidance=language_guidance,
+                    memory_context=memory_context,
+                    layer_context=layer_context,
+                    required_sections=required_sections,
+                    retry_count=retry_count,
+                    contract_errors=[*contract_errors, truncation_error],
+                    contract_forbidden_headings=contract_forbidden_headings,
+                    contract_missing_required_heading_keys=(
+                        contract_missing_required_heading_keys
+                    ),
+                )
+                segment_retry_count = retry_count
+                segment_md = self._sanitize_writer_segment_citations(
+                    evidence_pack_result,
+                    segment_md,
+                    allowed_source_ids=allowed_source_ids,
+                )
+                invalid_sources = evidence_pack_result.validate_segment_citations(
+                    segment_md,
+                    allowed_source_ids=allowed_source_ids,
+                )
+                if invalid_sources:
+                    raise RuntimeError(
+                        "Writer segment cited invalid source IDs after "
+                        "contract truncation retry: "
+                        f"{', '.join(invalid_sources)}"
+                    )
+                validation = validate_segment_contract(segment_md, contract)
+                truncation_error = self._writer_segment_truncation_error(segment_md)
+                if truncation_error:
+                    raise RuntimeError(
+                        "Writer segment appears truncated after contract "
+                        f"truncation retry: {segment['segment_name']}: "
+                        f"{truncation_error}"
+                    )
             if validation.status != "pass":
                 raise RuntimeError(
                     "Writer segment violated heading contract after retry: "
@@ -1134,10 +1217,56 @@ class WriterAgentMixin:
                     "missing_required_heading_keys": list(
                         validation.missing_required_heading_keys
                     ),
-                    "segment_retry_count": 1,
+                    "segment_retry_count": segment_retry_count,
                 },
             )
         return segment_md.strip(), contract
+
+    def _writer_segment_truncation_error(self, markdown: str) -> str | None:
+        stripped = markdown.strip()
+        if not stripped:
+            return None
+        last_line = next(
+            (line.strip() for line in reversed(stripped.splitlines()) if line.strip()),
+            "",
+        )
+        if not last_line:
+            return None
+        if re.search(r"\[source:[^\]]*$", last_line):
+            return "segment output ended with an incomplete source citation"
+        if last_line.startswith(("#", "```")):
+            return None
+        if self._writer_segment_tail_is_complete(last_line):
+            return None
+        if re.match(r"^(?:[-*+]\s+|\d+[.)]\s+|\|)", last_line):
+            return "segment output ended with an incomplete list or table row"
+        if last_line.endswith((",", ":", ";")):
+            return "segment output ended with a dangling clause"
+        return None
+
+    def _writer_segment_tail_is_complete(self, line: str) -> bool:
+        line_without_citations = re.sub(r"\s*\[source:[^\]]+\]", "", line).rstrip()
+        if not line_without_citations:
+            return False
+        if re.search(r"[.!?。！？…?)）\]}`|】》”’\"]$", line_without_citations):
+            return True
+        if re.search(r"\[source:[^\]]+\]", line):
+            return not self._writer_segment_tail_has_dangling_fragment(
+                line_without_citations
+            )
+        return False
+
+    def _writer_segment_tail_has_dangling_fragment(self, line: str) -> bool:
+        text = re.sub(r"^[-*+]\s+", "", line.strip())
+        if not text:
+            return True
+        return bool(
+            re.search(
+                r"(?:虽然|因为|由于|如果|若|当|在|对|与|和|及|或|但|而|并|将|为|是|的|"
+                r"功能面|技术面|安全面|定价面|市场面|用户面)$",
+                text,
+            )
+        )
 
     def _sanitize_writer_segment_citations(
         self,
@@ -1186,6 +1315,8 @@ class WriterAgentMixin:
             return "\n".join(
                 [
                     "Required segment outline:",
+                    h2("executive_summary"),
+                    "- 3-5 cited bullets: final recommendation, competitor posture, confidence/risk boundary, immediate next action.",
                     h2("decision_summary"),
                     "- Recommended decision / buying posture.",
                     "- Confidence level and what must not be overstated.",
@@ -1689,6 +1820,76 @@ class WriterAgentMixin:
                     f"- Next action: fill the sources that could change winner judgments before expanding support-layer audit material.{refs}",
                 ]
         return ["", f"## {heading}", *bullets]
+
+    def _backfill_executive_summary_section(
+        self, detail: RunDetail, source_ids: list[str]
+    ) -> list[str]:
+        refs = self._format_source_refs(source_ids)
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        competitors = ", ".join(detail.plan.competitors) or detail.topic
+        dimensions = ", ".join(detail.plan.dimensions) or (
+            "\u8bf7\u6c42\u7ef4\u5ea6" if is_zh else "requested dimensions"
+        )
+        if detail.comparison_matrix is not None and detail.comparison_matrix.winner_by_dimension:
+            winners = ", ".join(
+                f"{dimension}: {winner}"
+                for dimension, winner in detail.comparison_matrix.winner_by_dimension.items()
+                if winner
+            )
+        else:
+            winners = (
+                "\u5c1a\u65e0\u8db3\u591f\u7a33\u5b9a\u7684\u7ef4\u5ea6\u8d62\u5bb6"
+                if is_zh
+                else "no sufficiently stable dimension winner yet"
+            )
+        if is_zh:
+            return [
+                "",
+                f"## {report_label(detail.output_language, 'executive_takeaway')}",
+                (
+                    f"- \u6838\u5fc3\u7ed3\u8bba\uff1a\u672c\u62a5\u544a\u5bf9 {competitors} "
+                    f"\u5728 {dimensions} \u4e0a\u7684\u7ade\u4e89\u4f4d\u7f6e\u8fdb\u884c\u51b3\u7b56\u5bfc\u5411\u5bf9\u6bd4\uff1b"
+                    f"\u5f53\u524d\u7ef4\u5ea6\u4fe1\u53f7\u4e3a {winners}\u3002{refs}"
+                ),
+                (
+                    "- \u51b3\u7b56\u59ff\u6001\uff1a\u4f18\u5148\u91c7\u7528\u6709\u9ad8\u7f6e\u4fe1\u5ea6\u6765\u6e90"
+                    "\u548c\u53ef\u8ffd\u6eaf\u5f15\u7528\u652f\u6491\u7684\u7ed3\u8bba\uff0c\u5c06\u5355\u6765\u6e90\u3001"
+                    f"\u793e\u533a\u4fe1\u53f7\u6216\u4f4e\u7f6e\u4fe1\u5ea6\u6750\u6599\u7559\u4f5c\u9a8c\u8bc1\u4efb\u52a1\u3002{refs}"
+                ),
+                (
+                    "- \u98ce\u9669\u8fb9\u754c\uff1a\u4e0d\u5e94\u628a\u77e9\u9635\u8d62\u5bb6\u3001\u4ef7\u683c\u4f18\u52bf\u3001"
+                    "\u4f01\u4e1a\u91c7\u8d2d\u51c6\u5907\u5ea6\u6216\u5b89\u5168\u5408\u89c4\u63a8\u65ad\u5199\u6210"
+                    f"\u8131\u79bb\u8bc1\u636e\u7684\u7edd\u5bf9\u6392\u540d\u3002{refs}"
+                ),
+                (
+                    "- \u7acb\u5373\u884c\u52a8\uff1a\u5148\u5bf9\u5f71\u54cd\u91c7\u8d2d\u5224\u65ad\u7684\u5173\u952e"
+                    "\u8bc1\u636e\u7f3a\u53e3\u505a\u8865\u91c7\uff0c\u518d\u5c06\u672c\u62a5\u544a\u8f6c\u5316\u4e3a"
+                    f"\u9500\u552e\u6218\u62a5\u6216\u4ea7\u54c1\u5e94\u5bf9\u8def\u7ebf\u3002{refs}"
+                ),
+            ]
+        return [
+            "",
+            f"## {report_label(detail.output_language, 'executive_takeaway')}",
+            (
+                f"- Core conclusion: this report compares {competitors} across {dimensions} "
+                f"for a decision-grade competitive readout; current dimension signals are {winners}.{refs}"
+            ),
+            (
+                "- Decision posture: prioritize claims backed by high-confidence, traceable "
+                "sources and keep single-source, community-only, or lower-confidence material "
+                f"as validation work rather than final proof.{refs}"
+            ),
+            (
+                "- Risk boundary: do not turn matrix winners, pricing advantages, enterprise "
+                "procurement readiness, or security assumptions into absolute rankings detached "
+                f"from the cited evidence.{refs}"
+            ),
+            (
+                "- Immediate next action: fill the evidence gaps that could change the buying "
+                "judgment before converting this report into a sales battlecard or product "
+                f"response roadmap.{refs}"
+            ),
+        ]
 
     def _backfill_decision_summary_section(
         self, detail: RunDetail, source_ids: list[str]
@@ -2266,15 +2467,7 @@ class WriterAgentMixin:
         core_section_groups = [
             (
                 executive_headings,
-                [
-                    "",
-                    f"## {report_label(detail.output_language, 'executive_takeaway')}",
-                    (
-                        "This report is structured as decision analysis first, with evidence "
-                        "and QA support after the core competitive readout."
-                        f"{self._format_source_refs(source_ids)}"
-                    ),
-                ],
+                self._backfill_executive_summary_section(detail, source_ids),
             ),
             (
                 self._report_label_aliases("decision_summary"),
@@ -2377,7 +2570,7 @@ class WriterAgentMixin:
         ]
         support_order_heading_groups = self._support_report_heading_alias_groups()
         for heading, heading_aliases, lines in support_section_groups:
-            if lines and not self._report_has_any_h2_heading(
+            if lines and not self._report_has_any_heading(
                 hardened, heading_aliases
             ):
                 support_index = next(

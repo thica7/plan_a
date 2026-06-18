@@ -133,6 +133,18 @@ def build_writer_repair_plan(
         )
 
     if _has_release_gate_report_depth_issue(issues):
+        sections = _target_sections(issues)
+        if len(sections) == 1:
+            return WriterRepairPlan(
+                mode="section",
+                reason=(
+                    "release_gate.report_depth_required maps to one section; "
+                    "scoped section repair selected"
+                ),
+                previous_report_protectable=True,
+                sections=sections,
+                anti_regression_required=True,
+            )
         return WriterRepairPlan(
             mode="full",
             reason="release_gate.report_depth_required requires full core rewrite",

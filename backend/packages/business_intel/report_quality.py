@@ -180,6 +180,9 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "report_length_score": min(len(detail.report_md) / 2500.0, 1.0),
         "report_structure_score": _report_structure_score(detail),
         "duplicate_section_count": float(_duplicate_section_count(detail.report_md)),
+        "executive_summary_section_score": _executive_summary_section_score(
+            detail.report_md
+        ),
         "decision_summary_section_score": _decision_summary_section_score(detail.report_md),
         "competitive_findings_section_score": _competitive_findings_section_score(
             detail.report_md
@@ -222,6 +225,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         "duplicate_section_count": max(
             0.0, 1.0 - min(values["duplicate_section_count"] / 3.0, 1.0)
         ),
+        "executive_summary_section_score": values["executive_summary_section_score"],
         "decision_summary_section_score": values["decision_summary_section_score"],
         "competitive_findings_section_score": values["competitive_findings_section_score"],
         "competitor_deep_dive_section_score": values["competitor_deep_dive_section_score"],
@@ -260,6 +264,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         and values["source_coverage_rate"] >= 0.5
         and values["report_structure_score"] >= 0.7
         and values["duplicate_section_count"] <= 0
+        and values["executive_summary_section_score"] >= 1.0
         and values["decision_summary_section_score"] >= 1.0
         and values["competitive_findings_section_score"] >= 1.0
         and values["competitor_deep_dive_section_score"] >= 1.0
@@ -299,10 +304,11 @@ def _metric_specs() -> list[tuple[str, float, Literal["higher_is_better", "lower
         ("gap_resolution_rate", 0.03, "higher_is_better"),
         ("field_support_rate", 0.03, "higher_is_better"),
         ("validated_claim_rate", 0.03, "higher_is_better"),
-        ("llm_call_signal", 0.06, "higher_is_better"),
+        ("llm_call_signal", 0.04, "higher_is_better"),
         ("report_length_score", 0.0, "higher_is_better"),
         ("report_structure_score", 0.03, "higher_is_better"),
         ("duplicate_section_count", 0.01, "lower_is_better"),
+        ("executive_summary_section_score", 0.02, "higher_is_better"),
         ("decision_summary_section_score", 0.03, "higher_is_better"),
         ("competitive_findings_section_score", 0.03, "higher_is_better"),
         ("competitor_deep_dive_section_score", 0.03, "higher_is_better"),
@@ -839,6 +845,19 @@ DUPLICATE_SECTION_ALIAS_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
+def _executive_summary_section_score(markdown: str) -> float:
+    return _section_depth_score(
+        markdown,
+        _report_label_aliases(
+            "executive_takeaway",
+            "executive_summary",
+            "executive_overview",
+        ),
+        320,
+        3,
+    )
+
+
 def _decision_summary_section_score(markdown: str) -> float:
     return _core_section_score(markdown, _report_label_aliases("decision_summary"))
 
@@ -878,6 +897,15 @@ def _core_analysis_depth_score(markdown: str) -> float:
 
 def _core_section_depth_score(detail: RunDetail) -> float:
     specs = [
+        (
+            _report_label_aliases(
+                "executive_takeaway",
+                "executive_summary",
+                "executive_overview",
+            ),
+            320,
+            3,
+        ),
         (_report_label_aliases("decision_summary"), 450, 3),
         (_report_label_aliases("competitive_findings"), 600, 4),
         (
@@ -905,19 +933,31 @@ def _core_section_depth_score(detail: RunDetail) -> float:
     scores: list[float] = []
     swot_aliases = _swot_section_aliases()
     for aliases, min_chars, min_rows in specs:
-        section = _find_section_before_support(detail.report_md, aliases)
-        if section is None:
-            scores.append(0.0)
-            continue
-        chars, rows = _body_content_summary(section.body)
-        score = max(
-            min(chars / float(min_chars), 1.0),
-            min(rows / float(min_rows), 1.0),
-        )
-        if aliases == swot_aliases and not _has_structured_swot_quadrants(section.body):
-            score = min(score, 0.5)
+        score = _section_depth_score(detail.report_md, aliases, min_chars, min_rows)
+        if aliases == swot_aliases:
+            section = _find_section_before_support(detail.report_md, aliases)
+            if section is not None and not _has_structured_swot_quadrants(section.body):
+                score = min(score, 0.5)
+            elif section is None:
+                score = 0.0
         scores.append(score)
     return min(scores) if scores else 0.0
+
+
+def _section_depth_score(
+    markdown: str,
+    aliases: tuple[str, ...],
+    min_chars: int,
+    min_rows: int,
+) -> float:
+    section = _find_section_before_support(markdown, aliases)
+    if section is None:
+        return 0.0
+    chars, rows = _body_content_summary(section.body)
+    return max(
+        min(chars / float(min_chars), 1.0),
+        min(rows / float(min_rows), 1.0),
+    )
 
 
 def _core_support_balance_score(markdown: str) -> float:

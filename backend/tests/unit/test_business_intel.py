@@ -2037,6 +2037,47 @@ def test_report_release_gate_blocks_strong_conclusion_from_search_only_source() 
     } <= {issue.rule_id for issue in gate.issues}
 
 
+def test_report_release_gate_does_not_treat_appendix_caveat_as_strong_conclusion() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="community-risk-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="snippet_only",
+            title="Cursor pricing community risk",
+            url="https://example.com/community-risk",
+            snippet="Community users mention rate-limit concerns.",
+            content_hash="hash-1",
+            reliability_score=0.55,
+            quality_label="unreviewed",
+        )
+    ]
+    report = _report_version(
+        report_md=(
+            "## Evidence Appendix\n"
+            "QA rule: community posts only identify pricing risk and are not used "
+            "as winner or procurement recommendation evidence. [source:community-risk-1]"
+        ),
+        evidence_ids=["evidence-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=[],
+    )
+
+    assert "strong_conclusion_uses_weak_source" not in {
+        issue.rule_id for issue in gate.issues
+    }
+
+
 def test_report_release_gate_blocks_missing_source_tokens() -> None:
     competitor = _competitor()
     evidence = [

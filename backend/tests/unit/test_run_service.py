@@ -120,8 +120,15 @@ def _writer_repair_protectable_report() -> str:
     return """# Cursor vs Copilot Direct Battlecard
 
 ## Executive Summary
-Cursor has stronger pricing transparency, while Copilot has integration breadth.
-[source:pricing-1] [source:feature-1]
+- Recommendation: position Cursor as the clearer standalone pricing challenger when the buyer
+  needs explainable spend, while keeping Copilot as the incumbent workflow defense for Microsoft
+  oriented accounts. [source:pricing-1] [source:feature-1]
+- Confidence boundary: the report supports pricing and workflow positioning, but should not claim
+  enterprise rollout readiness until security, procurement, and onboarding evidence are verified.
+  [source:feature-1]
+- Immediate action: use the next account conversation to test whether pricing clarity or bundled
+  distribution matters more, then collect the missing procurement proof before recommending a
+  deployment path. [source:pricing-1]
 
 ## Decision Summary
 Recommended action: use Cursor's pricing clarity as the initial L1 battlecard point while
@@ -7370,8 +7377,8 @@ async def test_writer_full_repair_plan_uses_full_rewrite_metadata() -> None:
         nonlocal llm_calls
         llm_calls += 1
         return _writer_repair_protectable_report().replace(
-            "Cursor has stronger pricing transparency",
-            "Normal writer refresh keeps Cursor's stronger pricing transparency",
+            "position Cursor as the clearer standalone pricing challenger",
+            "Normal writer refresh positions Cursor as the clearer standalone pricing challenger",
         )
 
     service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
@@ -7459,7 +7466,7 @@ async def test_writer_upstream_changed_allows_full_rewrite_with_guard_metadata()
 
     async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
         return _writer_repair_protectable_report().replace(
-            "Cursor has stronger pricing transparency",
+            "position Cursor as the clearer standalone pricing challenger",
             "Cursor has updated pricing transparency",
         )
 
@@ -8518,6 +8525,170 @@ async def test_writer_segment_preflight_emits_contract_metadata(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_writer_segment_retries_truncated_markdown(monkeypatch) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-retries-truncated-markdown",
+    )
+    pack = _SegmentedWriterFakePack()
+    segment = _segmented_writer_segment(
+        segment_name="swot_matrix",
+        section_id="swot_matrix",
+        allowed_source_id="cursor-pricing",
+    )
+    retry_counts: list[int] = []
+
+    async def fake_segment_writer(*args, **kwargs):
+        retry_counts.append(kwargs["retry_count"])
+        if kwargs["retry_count"] == 0:
+            return (
+                "## Side-by-Side Decision Matrix\n"
+                "| Dimension | Cursor |\n"
+                "|---|---|\n"
+                "| Pricing | clear [source:cursor-pricing] |\n\n"
+                "## SWOT Analysis\n"
+                "### Cursor\n"
+                "#### Strengths\n"
+                "- Cursor pricing is clear [source:cursor-pricing]\n\n"
+                "#### Weaknesses\n"
+                "- Agent single request cost"
+            )
+        return (
+            "## Side-by-Side Decision Matrix\n"
+            "| Dimension | Cursor |\n"
+            "|---|---|\n"
+            "| Pricing | clear [source:cursor-pricing] |\n\n"
+            "## SWOT Analysis\n"
+            "### Cursor\n"
+            "#### Strengths\n"
+            "- Cursor pricing is clear [source:cursor-pricing]\n\n"
+            "#### Weaknesses\n"
+            "- Cost still needs validation [source:cursor-pricing]\n\n"
+            "#### Opportunities\n"
+            "- Use pricing clarity in evaluation [source:cursor-pricing]\n\n"
+            "#### Threats\n"
+            "- Bundled competitors can defend procurement [source:cursor-pricing]."
+        )
+
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+
+    segment_md, _contract = await service._writer_validated_segment_markdown(
+        record,
+        evidence_pack_result=pack,
+        segment=segment,
+        timeout_seconds=60,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    assert retry_counts == [0, 1]
+    assert "#### Threats" in segment_md
+
+
+def test_writer_segment_truncation_accepts_cjk_sentence_endings() -> None:
+    service = _segmented_writer_service()
+
+    error = service._writer_segment_truncation_error(
+        "## SWOT 分析\n"
+        "### Windsurf\n"
+        "#### Threats\n"
+        "- 定价策略若不稳定，可能导致现有用户流失。"
+    )
+
+    assert error is None
+
+
+def test_writer_segment_truncation_does_not_hide_dangling_fragment_before_citation() -> None:
+    service = _segmented_writer_service()
+
+    error = service._writer_segment_truncation_error(
+        "## 竞争发现\n"
+        "- Windsurf 虽然功能面 [source:cursor-pricing]"
+    )
+
+    assert error == "segment output ended with an incomplete list or table row"
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_retries_truncated_markdown_after_contract_retry(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-retries-truncated-markdown-after-contract",
+    )
+    pack = _SegmentedWriterFakePack()
+    segment = _segmented_writer_segment(
+        segment_name="swot_matrix",
+        section_id="swot_matrix",
+        allowed_source_id="cursor-pricing",
+    )
+    retry_counts: list[int] = []
+    contract_errors_by_call: list[list[str]] = []
+
+    async def fake_segment_writer(*args, **kwargs):
+        retry_counts.append(kwargs["retry_count"])
+        contract_errors_by_call.append(list(kwargs.get("contract_errors") or []))
+        if kwargs["retry_count"] == 0:
+            return (
+                "## SWOT Analysis\n"
+                "Cursor pricing visibility is a strength. [source:cursor-pricing]"
+            )
+        if kwargs["retry_count"] == 1:
+            return (
+                "## Side-by-Side Decision Matrix\n"
+                "| Dimension | Cursor |\n"
+                "|---|---|\n"
+                "| Pricing | clear [source:cursor-pricing] |\n\n"
+                "## SWOT Analysis\n"
+                "### Cursor\n"
+                "#### Strengths\n"
+                "- Cursor pricing is clear [source:cursor-pricing]\n\n"
+                "#### Weaknesses\n"
+                "- Agent single request cost"
+            )
+        return (
+            "## Side-by-Side Decision Matrix\n"
+            "| Dimension | Cursor |\n"
+            "|---|---|\n"
+            "| Pricing | clear [source:cursor-pricing] |\n\n"
+            "## SWOT Analysis\n"
+            "### Cursor\n"
+            "#### Strengths\n"
+            "- Cursor pricing is clear [source:cursor-pricing]\n\n"
+            "#### Weaknesses\n"
+            "- Cost still needs validation [source:cursor-pricing]\n\n"
+            "#### Opportunities\n"
+            "- Use pricing clarity in evaluation [source:cursor-pricing]\n\n"
+            "#### Threats\n"
+            "- Bundled competitors can defend procurement [source:cursor-pricing]."
+        )
+
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+
+    segment_md, _contract = await service._writer_validated_segment_markdown(
+        record,
+        evidence_pack_result=pack,
+        segment=segment,
+        timeout_seconds=60,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    assert retry_counts == [0, 1, 2]
+    assert any(
+        "incomplete list" in error for error in contract_errors_by_call[-1]
+    )
+    assert "#### Threats" in segment_md
+
+
+@pytest.mark.asyncio
 async def test_evidence_shard_outputs_notes_then_section_writer_outputs_one_h2(
     monkeypatch,
 ):
@@ -9180,7 +9351,7 @@ async def test_segmented_writer_repairs_citations_after_contract_retry(
         "retry",
         "pass",
     ]
-    assert validated_events[1].payload["segment_retry_count"] == 1
+    assert validated_events[1].payload["segment_retry_count"] == 2
 
 
 @pytest.mark.asyncio
@@ -10478,7 +10649,7 @@ async def test_writer_section_repair_iterates_budgeted_segment_payloads(
                 }
             ],
             "repair_input_chars": 640,
-            "segment_input_target_chars": 160_000,
+            "segment_input_target_chars": 240_000,
         }
 
     class FakeMetrics:

@@ -46,6 +46,7 @@ class DoubaoClient:
         self._last_usage: LLMUsage | None = None
         self._last_provider: str | None = None
         self._last_model: str | None = None
+        self._last_finish_reason: str | None = None
         self._last_route_decision: ModelRouteDecision | None = None
 
     async def complete_json(
@@ -78,6 +79,7 @@ class DoubaoClient:
                 self._last_usage = None
                 self._last_provider = None
                 self._last_model = None
+                self._last_finish_reason = None
         raise LLMError("LLM JSON request failed for all providers: " + " | ".join(errors))
 
     async def complete_text(self, *, system: str, user: str) -> str:
@@ -98,6 +100,7 @@ class DoubaoClient:
                 self._last_usage = None
                 self._last_provider = None
                 self._last_model = None
+                self._last_finish_reason = None
         raise LLMError("LLM request failed for all providers: " + " | ".join(errors))
 
     async def _complete_text_with_provider(
@@ -176,9 +179,16 @@ class DoubaoClient:
         self._last_provider = provider.name
         self._last_model = provider.model
         try:
-            content = data["choices"][0]["message"]["content"]
+            choice = data["choices"][0]
+            content = choice["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMError("LLM response did not contain choices[0].message.content.") from exc
+        finish_reason = choice.get("finish_reason") if isinstance(choice, dict) else None
+        self._last_finish_reason = str(finish_reason) if finish_reason is not None else None
+        if self._last_finish_reason == "length":
+            raise _RetryableLLMError(
+                "LLM response stopped because the output length limit was reached."
+            )
         if not isinstance(content, str) or not content.strip():
             raise _RetryableLLMError("LLM returned empty content.")
         return content
@@ -199,6 +209,9 @@ class DoubaoClient:
 
     def last_model(self) -> str | None:
         return self._last_model or self._settings.ark_model or self._settings.backup_llm_model
+
+    def last_finish_reason(self) -> str | None:
+        return self._last_finish_reason
 
     def last_route_decision(self) -> ModelRouteDecision | None:
         return self._last_route_decision

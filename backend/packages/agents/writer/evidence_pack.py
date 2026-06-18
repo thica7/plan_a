@@ -25,7 +25,7 @@ QUOTE_EXCERPT_LIMIT = 400
 QUOTE_USED_BY_FACT_LIMIT = 12
 STRUCTURED_KNOWLEDGE_LIST_LIMIT = 8
 STRUCTURED_KNOWLEDGE_TEXT_LIMIT = 700
-SINGLE_CALL_CONTEXT_TARGET_CHARS = 160_000
+SINGLE_CALL_CONTEXT_TARGET_CHARS = 240_000
 SEGMENT_INPUT_TARGET_CHARS = SINGLE_CALL_CONTEXT_TARGET_CHARS
 SEGMENT_SOURCE_BATCH_SIZE = 4
 SEGMENT_FACT_BATCH_SIZE = 32
@@ -1156,7 +1156,7 @@ class WriterEvidencePackResult(BaseModel):
             filtered_cells.append(
                 {
                     **cell,
-                    "value": _trim(str(cell.get("value", "")), 240),
+                    "value": str(cell.get("value", "")),
                     "source_ids": source_ids,
                 }
             )

@@ -236,6 +236,31 @@ def test_writer_repair_routes_release_gate_report_depth_to_full_rewrite() -> Non
     assert "report_depth_required" in plan.reason
 
 
+def test_writer_repair_routes_release_gate_depth_to_named_section_when_scoped() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-report-depth-decision-summary",
+        severity="blocker",
+        detected_by="coverage",
+        target_agent="writer",
+        field_path="release_gate.report_depth_required",
+        problem=(
+            "Report core richness metrics are below release minimums: "
+            "core_section_depth_score=0.96 (<1.00). Decision Summary is too thin."
+        ),
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="Expand Decision Summary without rewriting the full report.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["decision_summary"]
+    assert plan.anti_regression_required is True
+
+
 def test_writer_repair_claim_risk_review_wording_does_not_target_user_reviews() -> None:
     detail = _detail(report_md=_protectable_report())
     issue = QCIssue(

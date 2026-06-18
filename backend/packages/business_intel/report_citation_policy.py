@@ -30,11 +30,15 @@ STRONG_CONCLUSION_RE = re.compile(
 )
 QUALITATIVE_SECTION_RE = re.compile(
     r"\b(caveat|risk|persona|user research|buyer research|validation plan|"
-    r"verification plan|evidence gap|limitations?)\b",
+    r"verification plan|evidence gap|limitations?)\b|"
+    r"(证据缺口|验证计划|下一步采集|采集与验证|风险|用户研究|用户评价|"
+    r"置信度说明|声明校验|证据风险)",
     flags=re.IGNORECASE,
 )
 APPENDIX_SECTION_RE = re.compile(
-    r"\b(appendix|source quality|source coverage|release gate|qa|claim validation)\b",
+    r"\b(appendix|source quality|source coverage|release gate|qa|claim validation)\b|"
+    r"(附录|来源质量|来源覆盖|证据与\s*QA|证据支撑|声明校验|证据风险|"
+    r"场景\s*QA|RAG\s*缺口|用户研究证据)",
     flags=re.IGNORECASE,
 )
 

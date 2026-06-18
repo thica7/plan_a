@@ -8,6 +8,7 @@ from packages.business_intel.claim_validator import validate_project_claims
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS, evaluate_business_qa
 from packages.business_intel.planning import build_business_intel_plan
 from packages.business_intel.report_quality import compare_run_quality
+from packages.business_intel.report_citation_policy import report_section_policy
 from packages.business_intel.scorer import score_project_readiness
 from packages.business_intel.source_reconciliation import (
     evidence_by_source_token,
@@ -47,6 +48,7 @@ COMMUNITY_RELEASE_GRADE_SOURCE_TYPES = {
 MIN_REPORT_STRUCTURE_SCORE = 0.7
 MIN_REPORT_BODY_CHARS = 900
 REPORT_RICHNESS_MINIMUMS = {
+    "executive_summary_section_score": 1.0,
     "core_analysis_depth_score": 0.8,
     "core_section_depth_score": 1.0,
     "swot_section_score": 1.0,
@@ -819,8 +821,15 @@ def _report_citation_quality_issues(
     evidence_by_token = evidence_by_source_token(evidence)
 
     issues: list[BusinessQAFinding] = []
+    section_heading = ""
     for line in report_version.report_md.splitlines():
+        heading_match = re.match(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$", line)
+        if heading_match:
+            section_heading = heading_match.group(1).strip()
+            continue
         if not STRONG_CONCLUSION_RE.search(line):
+            continue
+        if report_section_policy(section_heading, line) != "strong_conclusion":
             continue
         weak = [
             evidence_by_token[normalized]

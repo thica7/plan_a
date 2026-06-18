@@ -3625,6 +3625,9 @@ class RunService(
                 metadata["llm_provider"] = provider
             if model:
                 metadata["llm_model"] = model
+            finish_reason = self._last_llm_finish_reason()
+            if finish_reason:
+                metadata["finish_reason"] = finish_reason
             metadata.update(self._llm_route_metadata())
             return metadata
         metadata = {"token_usage_source": "provider"}
@@ -3632,6 +3635,9 @@ class RunService(
             metadata["llm_provider"] = provider
         if model:
             metadata["llm_model"] = model
+        finish_reason = self._last_llm_finish_reason()
+        if finish_reason:
+            metadata["finish_reason"] = finish_reason
         metadata.update(self._llm_route_metadata())
         prompt_tokens = getattr(usage, "prompt_tokens", None)
         completion_tokens = getattr(usage, "completion_tokens", None)
@@ -3643,6 +3649,13 @@ class RunService(
         if total_tokens is not None:
             metadata["total_tokens"] = int(total_tokens)
         return metadata
+
+    def _last_llm_finish_reason(self) -> str | None:
+        getter = getattr(self._llm, "last_finish_reason", None)
+        if callable(getter):
+            value = getter()
+            return str(value) if value else None
+        return None
 
     def _llm_route_metadata(self) -> dict[str, str]:
         route_decision = getattr(self._llm, "last_route_decision", None)

@@ -78,6 +78,33 @@ def test_quality_expects_community_section_when_community_evidence_exists() -> N
     assert round(sum(metric.weight for metric in comparison.metrics), 6) == 1.0
 
 
+def test_quality_scores_thin_executive_summary_below_release_minimum() -> None:
+    thin_executive_report = re.sub(
+        r"## Executive Summary\n.*?\n\n## Decision Summary",
+        (
+            "## Executive Summary\n"
+            "This report is structured as decision analysis first, with evidence and QA support "
+            "after the core competitive readout. [source:source-0]\n\n"
+            "## Decision Summary"
+        ),
+        _structured_report_md(),
+        flags=re.S,
+    )
+    detail = _run_detail(
+        run_id="thin-executive-summary",
+        execution_mode="real",
+        source_count=4,
+        report_md=thin_executive_report,
+        metrics=RunMetrics(llm_calls=3),
+    )
+
+    comparison = compare_run_quality(detail, baseline=detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["executive_summary_section_score"].target_value < 1.0
+    assert metrics["core_section_depth_score"].target_value < 1.0
+
+
 def test_compare_run_quality_scores_real_run_against_baseline() -> None:
     baseline = _run_detail(
         run_id="baseline-run",
@@ -2031,9 +2058,9 @@ def test_writer_hardening_puts_core_analysis_before_evidence_support() -> None:
     assert metrics["layer_analysis_section_score"] == 1.0
     assert "Recommended action:" in report
     assert "Do not overstate" in report
-    assert "wins:" in report
-    assert "weaknesses:" in report
-    assert "watchouts:" in report
+    assert "wins:" in report.casefold()
+    assert "weaknesses:" in report.casefold()
+    assert "watchouts:" in report.casefold()
     assert report.index("## Evidence & QA Support") > report.index("## Battlecard")
 
 
@@ -2421,8 +2448,10 @@ def test_writer_hardening_inserts_missing_core_sections_before_support_sections(
     )
     assert "Recommended action:" in report
     assert "Do not overstate" in report
-    assert "wins:" in report
-    assert "weaknesses:" in report
+    assert "## Competitor Deep Dives" in report
+    assert "Positioning:" in report
+    assert "Evidence gaps:" in report
+    assert "watchouts:" in report.casefold()
     assert "watchouts:" in report
     assert "Cursor has a clearer pricing position than Copilot. [source:source-0]" in report
 
@@ -2508,7 +2537,7 @@ def test_writer_hardens_report_with_claim_validation_risk_section() -> None:
     assert "confidence 0.52" in report
     assert "weak source mix" in report
     assert "needs triangulation" in report
-    assert "QA warn `qa-weak-security`" in report
+    assert "QA warn: Security recommendation is based on search-only evidence." in report
     assert "Missing official trust-center evidence" in report
     assert "[source:source-0]" in report
 
@@ -2549,7 +2578,7 @@ def test_writer_hardens_report_with_rag_gap_fill_context() -> None:
     )
 
     assert "## RAG Gap Fill" in report
-    assert "gap-security-evidence" in report
+    assert "Suggested retrieval query: Cursor security Missing official trust-center" in report
     assert "Suggested retrieval query: Cursor security Missing official trust-center" in report
     assert "Run the Evidence Gap Fill action" in report
     assert "[source:source-0]" in report
@@ -3156,6 +3185,37 @@ Collect procurement and security proof before publication. [source:source-2]
     assert "## Source Quality & Coverage" not in report
 
 
+def test_writer_backfills_substantive_executive_summary_without_placeholder() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="missing-executive-summary",
+        execution_mode="real",
+        source_count=4,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.output_language = "en-US"
+    markdown_without_executive = re.sub(
+        r"## Executive Summary\n.*?\n\n## Decision Summary",
+        "## Decision Summary",
+        _structured_report_md(),
+        flags=re.S,
+    )
+
+    report = writer._harden_report_markdown(detail, markdown_without_executive)
+
+    assert "This report is structured as decision analysis first" not in report
+    executive_match = re.search(
+        r"## Executive (?:Summary|Takeaway)\n(?P<body>.*?)(?=\n## Decision Summary)",
+        report,
+        flags=re.S,
+    )
+    assert executive_match is not None
+    executive_body = executive_match.group("body")
+    assert len(re.sub(r"\[source:[^\]]+\]", "", executive_body).strip()) >= 320
+    assert len(re.findall(r"(?m)^[-*]\s+", executive_body)) >= 3
+
+
 def test_writer_repairs_dimension_named_source_tokens() -> None:
     writer = _WriterHarness()
     detail = _run_detail(
@@ -3408,8 +3468,15 @@ def _structured_report_md() -> str:
 # Cursor vs Copilot Direct Battlecard
 
 ## Executive Summary
-Cursor has stronger pricing transparency, while Copilot has integration breadth.
-[source:source-0] [source:source-1]
+- Recommendation: lead with Cursor when the buyer needs standalone pricing clarity and fast
+  evaluation, but keep Copilot as the incumbent defense when Microsoft workflow breadth matters.
+  [source:source-0] [source:source-1]
+- Confidence boundary: the report can support pricing and workflow positioning, but it should not
+  claim enterprise readiness until security, SSO, and procurement evidence are verified.
+  [source:source-2]
+- Immediate action: run the account conversation as a clarity-versus-bundling tradeoff, then collect
+  procurement proof before turning the comparison into a deployment recommendation.
+  [source:source-0] [source:source-3]
 
 ## Decision Summary
 Recommended action: use Cursor's pricing transparency as the initial L1 battlecard point, while

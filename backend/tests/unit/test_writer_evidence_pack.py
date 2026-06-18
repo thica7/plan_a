@@ -6,6 +6,7 @@ from packages.agents.writer.evidence_pack import (
     QUOTE_EXCERPT_LIMIT,
     SEGMENT_INPUT_TARGET_CHARS,
     SEGMENT_SOURCE_BATCH_SIZE,
+    SINGLE_CALL_CONTEXT_TARGET_CHARS,
     WriterEvidencePack,
     WriterEvidencePackMetrics,
     WriterEvidencePackResult,
@@ -151,6 +152,11 @@ def test_writer_evidence_pack_includes_all_raw_sources() -> None:
     assert result.metrics.raw_source_count == 30
     assert result.metrics.represented_source_count == 30
     assert result.metrics.dropped_source_count == 0
+
+
+def test_single_call_context_threshold_is_240k() -> None:
+    assert SINGLE_CALL_CONTEXT_TARGET_CHARS == 240_000
+    assert SEGMENT_INPUT_TARGET_CHARS == 240_000
 
 
 def test_evidence_pack_marks_noisy_source_without_inventing_signal() -> None:
@@ -465,6 +471,51 @@ def test_identical_pricing_facts_dedupe_across_source_specific_metadata() -> Non
     assert "confidence" not in fact.values
     assert "evidence_item_ids" not in fact.values
     assert result.metrics.deduped_fact_count == 1
+
+
+def test_segment_matrix_keeps_full_matrix_cell_value() -> None:
+    long_value = (
+        "Persona evidence explains enterprise rollout, procurement objections, "
+        "developer switching triggers, repository context needs, and adoption blockers. "
+        * 5
+    ).strip()
+    source = RawSource(
+        id="cursor-persona",
+        competitor="Cursor",
+        dimension="persona",
+        source_type="webpage_verified",
+        title="Cursor persona evidence",
+        snippet="Cursor persona evidence supports enterprise rollout analysis.",
+        content_hash="cursor-persona-hash",
+        confidence=0.96,
+    )
+    detail = _detail_with_sources([source])
+    detail.comparison_matrix = ComparisonMatrix(
+        competitors=["Cursor"],
+        dimensions=["persona"],
+        winner_by_dimension={"persona": "Cursor"},
+        summary=["Cursor persona cell has detailed enterprise evidence."],
+        cells=[
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="persona",
+                value=long_value,
+                source_ids=["cursor-persona"],
+                confidence=0.96,
+            )
+        ],
+    )
+
+    result = build_writer_evidence_pack(detail)
+    swot_segment = next(
+        segment
+        for segment in result.segment_inputs()
+        if segment["segment_name"] == "swot_matrix"
+    )
+    cells = swot_segment["matrix"]["cells"]
+
+    assert len(long_value) > 240
+    assert cells[0]["value"] == long_value
 
 
 def test_pricing_conflicts_use_canonical_price_and_cycle_values() -> None:
