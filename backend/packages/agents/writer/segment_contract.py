@@ -316,6 +316,16 @@ def validate_segment_contract(
                 invalid_heading_keys=[],
                 missing_required_heading_keys=[],
             )
+        if any(heading != expected_competitor for heading in competitor_h3_headings):
+            return SegmentValidationResult(
+                status="retry",
+                errors=["segment contains non-competitor H3 headings"],
+                h2_headings=h2_headings,
+                forbidden_headings=[],
+                forbidden_heading_keys=[],
+                invalid_heading_keys=[],
+                missing_required_heading_keys=[],
+            )
 
     return SegmentValidationResult(
         status="pass",

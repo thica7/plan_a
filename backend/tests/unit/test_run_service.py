@@ -9892,6 +9892,103 @@ async def test_writer_segment_prompt_includes_all_segment_outlines(monkeypatch) 
 
 
 @pytest.mark.asyncio
+async def test_writer_segment_prompt_localizes_core_outline_h2_headings(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-template-localized-h2",
+    )
+    record.detail.output_language = "zh-CN"
+    captured_prompts: list[str] = []
+    cases = [
+        (
+            "decision_summary",
+            "decision_summary",
+            [
+                "decision_summary",
+                "competitive_findings",
+            ],
+        ),
+        (
+            "user_research",
+            "review_theme_summary",
+            [
+                "review_theme_summary",
+                "community_evidence_triangulation",
+            ],
+        ),
+        (
+            "swot_matrix",
+            "swot_matrix",
+            [
+                "side_by_side_matrix",
+                "swot_analysis",
+            ],
+        ),
+    ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured_prompts.append(kwargs["user"])
+        user = kwargs["user"]
+        if "section_id=decision_summary" in user:
+            return (
+                f"## {report_label('zh-CN', 'decision_summary')}\n"
+                "Decision. [source:cursor-pricing]\n\n"
+                f"## {report_label('zh-CN', 'competitive_findings')}\n"
+                "Findings. [source:cursor-pricing]"
+            )
+        if "section_id=review_theme_summary" in user:
+            return (
+                f"## {report_label('zh-CN', 'review_theme_summary')}\n"
+                "Theme. [source:cursor-pricing]\n\n"
+                f"## {report_label('zh-CN', 'community_evidence_triangulation')}\n"
+                "Triangulation. [source:cursor-pricing]"
+            )
+        return (
+            f"## {report_label('zh-CN', 'side_by_side_matrix')}\n"
+            "Matrix. [source:cursor-pricing]\n\n"
+            f"## {report_label('zh-CN', 'swot_analysis')}\n"
+            "SWOT. [source:cursor-pricing]"
+        )
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    for segment_name, section_id, expected_heading_keys in cases:
+        segment = _segmented_writer_segment(
+            segment_name=segment_name,
+            section_id=section_id,
+            allowed_source_id="cursor-pricing",
+        )
+        segment["output_language"] = "zh-CN"
+
+        await service._writer_segment_markdown(
+            record,
+            segment=segment,
+            timeout_seconds=1,
+            language_guidance="Use Simplified Chinese.",
+            memory_context="none",
+            layer_context="none",
+            required_sections="",
+            retry_count=0,
+        )
+
+        prompt = captured_prompts[-1]
+        for key in expected_heading_keys:
+            assert f"## {report_label('zh-CN', key)}" in prompt
+        for english_heading in [
+            "## Decision Summary",
+            "## Competitive Findings",
+            "## User Review Themes",
+            "## Community Evidence Triangulation",
+            "## Side-by-Side Decision Matrix",
+            "## SWOT Analysis",
+        ]:
+            assert english_heading not in prompt
+
+
+@pytest.mark.asyncio
 async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),

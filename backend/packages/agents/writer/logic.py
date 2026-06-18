@@ -1159,12 +1159,14 @@ class WriterAgentMixin:
         contract = segment_contract_for(segment)
         section_id = contract.section_id
         competitor = str(segment.get("segment_competitor") or "").strip()
-        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         source_warning = (
             "Do not copy placeholder source IDs from examples. Use only IDs from "
             "allowed_source_ids in Segment Evidence Pack JSON."
         )
         deep_dive_competitor = competitor or "<segment_competitor>"
+
+        def h2(key: str) -> str:
+            return f"## {report_label(detail.output_language, key)}"
 
         if contract.segment_kind == "evidence_shard":
             return "\n".join(
@@ -1184,10 +1186,10 @@ class WriterAgentMixin:
             return "\n".join(
                 [
                     "Required segment outline:",
-                    "## Decision Summary",
+                    h2("decision_summary"),
                     "- Recommended decision / buying posture.",
                     "- Confidence level and what must not be overstated.",
-                    "## Competitive Findings",
+                    h2("competitive_findings"),
                     "### Pricing and Packaging",
                     "### Feature and Workflow Capability",
                     "### User Persona and Adoption",
@@ -1203,14 +1205,14 @@ class WriterAgentMixin:
             return "\n".join(
                 [
                     "Required segment outline:",
-                    "## User Review Themes",
+                    h2("review_theme_summary"),
                     "### <competitor>",
                     "#### Direct User / Community Signals",
                     "#### Simulated Survey and Interview Signals",
                     "#### Adoption Blockers",
                     "#### Switching Triggers",
                     "#### Evidence Gaps",
-                    "## Community Evidence Triangulation",
+                    h2("community_evidence_triangulation"),
                     "### Official Facts vs Community Observations",
                     "### Repeated Signals",
                     "### Contested or Low-Confidence Signals",
@@ -1225,9 +1227,7 @@ class WriterAgentMixin:
             return "\n".join(
                 [
                     "Required segment outline:",
-                    "## Competitor Deep Dives"
-                    if not is_zh
-                    else f"## {report_label(detail.output_language, 'competitor_deep_dives')}",
+                    h2("competitor_deep_dives"),
                     f"### {deep_dive_competitor}",
                     "#### Positioning and Core Value",
                     "#### Pricing and Packaging",
@@ -1246,10 +1246,10 @@ class WriterAgentMixin:
             return "\n".join(
                 [
                     "Required segment outline:",
-                    "## Side-by-Side Decision Matrix",
+                    h2("side_by_side_matrix"),
                     "| Dimension | <competitor 1> | <competitor 2> |",
                     "|---|---|---|",
-                    "## SWOT Analysis",
+                    h2("swot_analysis"),
                     "### <competitor>",
                     "#### Strengths",
                     "#### Weaknesses",
@@ -1270,15 +1270,15 @@ class WriterAgentMixin:
                         "Support headings are allowed and optional; include only "
                         "applicable support sections."
                     ),
-                    f"## {report_label(detail.output_language, 'evidence_support')}",
-                    f"## {report_label(detail.output_language, 'source_quality')}",
-                    f"## {report_label(detail.output_language, 'user_research_evidence')}",
-                    f"## {report_label(detail.output_language, 'rag_gap_fill')}",
-                    f"## {report_label(detail.output_language, 'scenario_checklist')}",
-                    f"## {report_label(detail.output_language, 'confidence_notes')}",
-                    f"## {report_label(detail.output_language, 'claim_risk')}",
-                    f"## {report_label(detail.output_language, 'next_collection')}",
-                    f"## {report_label(detail.output_language, 'evidence_appendix')}",
+                    h2("evidence_support"),
+                    h2("source_quality"),
+                    h2("user_research_evidence"),
+                    h2("rag_gap_fill"),
+                    h2("scenario_checklist"),
+                    h2("confidence_notes"),
+                    h2("claim_risk"),
+                    h2("next_collection"),
+                    h2("evidence_appendix"),
                     (
                         "Must include: concise source-quality, coverage, confidence, "
                         "and gap support without restarting core analysis."
@@ -1290,6 +1290,12 @@ class WriterAgentMixin:
             [
                 "Required segment outline:",
                 "Write only headings allowed by this segment contract.",
+                *[
+                    h2(key)
+                    for key in (
+                        contract.required_heading_keys or contract.allowed_heading_keys
+                    )
+                ],
                 source_warning,
             ]
         )
