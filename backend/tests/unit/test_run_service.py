@@ -8361,6 +8361,90 @@ def _segmented_writer_segment(
     }
 
 
+def test_writer_required_sections_ignore_nested_support_like_headings() -> None:
+    service = _segmented_writer_service()
+    detail = _segmented_writer_detail(
+        run_id="run-harden-ignore-nested-support",
+        competitors=["Cursor", "GitHub Copilot"],
+    )
+    markdown = """## Decision Summary
+Decision exists. [source:cursor-pricing]
+
+## Competitive Findings
+Findings exist. [source:cursor-pricing]
+
+## User Review Themes
+Themes exist. [source:cursor-pricing]
+
+## Competitor Deep Dives
+### Cursor
+Cursor deep dive begins. [source:cursor-pricing]
+### Confidence Notes
+Nested confidence note belongs inside Cursor's deep dive.
+### GitHub Copilot
+Copilot deep dive must stay before support sections. [source:cursor-pricing]
+
+## Side-by-Side Decision Matrix
+Matrix exists. [source:cursor-pricing]
+
+## SWOT Analysis
+SWOT exists. [source:cursor-pricing]
+"""
+
+    hardened = service._ensure_report_required_sections(detail, markdown)
+
+    assert hardened.index("### GitHub Copilot") < hardened.index(
+        "## Source Quality & Coverage"
+    )
+    assert hardened.index("### GitHub Copilot") < hardened.index(
+        "## Evidence Appendix"
+    )
+
+
+def test_writer_required_sections_ignore_chinese_nested_support_like_headings() -> None:
+    service = _segmented_writer_service()
+    detail = _segmented_writer_detail(
+        run_id="run-harden-ignore-nested-support-zh",
+        competitors=["Cursor", "GitHub Copilot"],
+    )
+    detail.output_language = "zh-CN"
+    confidence_heading = report_label("zh-CN", "confidence_notes")
+    source_quality_heading = report_label("zh-CN", "source_quality")
+    evidence_appendix_heading = report_label("zh-CN", "evidence_appendix")
+    markdown = f"""## {report_label("zh-CN", "decision_summary")}
+已有决策摘要。[source:cursor-pricing]
+
+## {report_label("zh-CN", "competitive_findings")}
+已有竞争发现。[source:cursor-pricing]
+
+## {report_label("zh-CN", "review_theme_summary")}
+已有用户评价整理。[source:cursor-pricing]
+
+## {report_label("zh-CN", "competitor_deep_dives")}
+### Cursor
+Cursor 深挖开始。[source:cursor-pricing]
+### {confidence_heading}
+这是嵌套置信度说明，不是报告级支持章节。
+### GitHub Copilot
+Copilot 深挖必须留在支持章节之前。[source:cursor-pricing]
+
+## {report_label("zh-CN", "side_by_side_matrix")}
+已有矩阵。[source:cursor-pricing]
+
+## {report_label("zh-CN", "swot_analysis")}
+已有 SWOT。[source:cursor-pricing]
+"""
+
+    hardened = service._ensure_report_required_sections(detail, markdown)
+
+    assert hardened.index("### GitHub Copilot") < hardened.index(
+        f"## {source_quality_heading}"
+    )
+    assert hardened.index("### GitHub Copilot") < hardened.index(
+        f"## {evidence_appendix_heading}"
+    )
+
+
 @pytest.mark.asyncio
 async def test_writer_segment_preflight_emits_contract_metadata(monkeypatch) -> None:
     service = _segmented_writer_service()

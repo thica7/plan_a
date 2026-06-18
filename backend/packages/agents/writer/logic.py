@@ -2300,7 +2300,7 @@ class WriterAgentMixin:
         core_blocks = [
             self._section_body(lines)
             for headings, lines in core_section_groups
-            if lines and not self._report_has_any_heading(hardened, headings)
+            if lines and not self._report_has_any_h2_heading(hardened, headings)
         ]
         if core_blocks:
             support_headings = [
@@ -2308,7 +2308,9 @@ class WriterAgentMixin:
                 for aliases in self._support_report_heading_alias_groups()
                 for heading in aliases
             ]
-            insert_at = self._first_report_heading_index(hardened, support_headings)
+            insert_at = self._first_report_h2_heading_index(
+                hardened, support_headings
+            )
             core_block = "\n\n".join(core_blocks)
             if insert_at is None:
                 hardened = f"{hardened}\n\n{core_block}"
@@ -2367,7 +2369,9 @@ class WriterAgentMixin:
         ]
         support_order_heading_groups = self._support_report_heading_alias_groups()
         for heading, heading_aliases, lines in support_section_groups:
-            if lines and not self._report_has_any_heading(hardened, heading_aliases):
+            if lines and not self._report_has_any_h2_heading(
+                hardened, heading_aliases
+            ):
                 support_index = next(
                     index
                     for index, aliases in enumerate(support_order_heading_groups)
@@ -2378,7 +2382,9 @@ class WriterAgentMixin:
                     for aliases in support_order_heading_groups[support_index + 1 :]
                     for later_heading in aliases
                 ]
-                insert_at = self._first_report_heading_index(hardened, later_headings)
+                insert_at = self._first_report_h2_heading_index(
+                    hardened, later_headings
+                )
                 section_body = self._section_body(lines)
                 if insert_at is None:
                     hardened = f"{hardened}\n\n{section_body}"
@@ -2434,6 +2440,40 @@ class WriterAgentMixin:
 
     def _report_has_any_heading(self, markdown: str, headings: Iterable[str]) -> bool:
         return any(self._report_has_heading(markdown, heading) for heading in headings)
+
+    def _report_has_h2_heading(self, markdown: str, heading: str) -> bool:
+        return any(
+            self._report_heading_matches(match.group(1), heading)
+            for match in self._iter_report_h2_headings(markdown)
+        )
+
+    def _report_has_any_h2_heading(
+        self, markdown: str, headings: Iterable[str]
+    ) -> bool:
+        return any(
+            self._report_has_h2_heading(markdown, heading) for heading in headings
+        )
+
+    def _first_report_h2_heading_index(
+        self, markdown: str, headings: Iterable[str]
+    ) -> int | None:
+        heading_list = list(headings)
+        positions = [
+            match.start()
+            for match in self._iter_report_h2_headings(markdown)
+            if any(
+                self._report_heading_matches(match.group(1), heading)
+                for heading in heading_list
+            )
+        ]
+        return min(positions) if positions else None
+
+    def _iter_report_h2_headings(self, markdown: str) -> Iterable[re.Match[str]]:
+        return re.finditer(
+            r"^\s*##\s+(.+?)\s*#*\s*$",
+            markdown,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
 
     def _first_report_heading_index(
         self, markdown: str, headings: Iterable[str]
