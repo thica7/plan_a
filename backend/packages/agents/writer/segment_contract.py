@@ -69,6 +69,12 @@ SECTION_ALLOWED_KEYS: dict[str, tuple[str, ...]] = {
     "evidence_support": SUPPORT_HEADING_KEYS,
     "final_report": CORE_HEADING_KEYS + SUPPORT_HEADING_KEYS,
 }
+SECTION_REQUIRED_KEYS: dict[str, tuple[str, ...]] = {
+    "decision_summary": ("decision_summary", "competitive_findings"),
+    "review_theme_summary": ("review_theme_summary",),
+    "competitor_deep_dives": ("competitor_deep_dives",),
+    "swot_matrix": ("side_by_side_matrix", "swot_analysis"),
+}
 HEADING_KEY_ALIASES: dict[str, tuple[str, ...]] = {
     "executive_summary": ("Executive Summary",),
     "executive_takeaway": ("Executive Takeaway",),
@@ -131,6 +137,7 @@ class SegmentContract:
     section_id: str
     output_language: str
     allowed_heading_keys: tuple[str, ...] = field(default_factory=tuple)
+    required_heading_keys: tuple[str, ...] = field(default_factory=tuple)
     forbidden_heading_keys: tuple[str, ...] = field(default_factory=tuple)
     allow_h2: bool = True
     essential: bool = True
@@ -144,6 +151,7 @@ class SegmentValidationResult:
     forbidden_headings: list[str]
     forbidden_heading_keys: list[str]
     invalid_heading_keys: list[str]
+    missing_required_heading_keys: list[str]
 
 
 def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
@@ -162,16 +170,19 @@ def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
             section_id=section_id,
             output_language=output_language,
             allowed_heading_keys=(),
+            required_heading_keys=(),
             forbidden_heading_keys=(),
             allow_h2=False,
             essential=essential,
         )
 
     allowed_heading_keys = SECTION_ALLOWED_KEYS.get(section_id, (section_id,))
+    required_heading_keys = SECTION_REQUIRED_KEYS.get(section_id, ())
     forbidden_heading_keys = _forbidden_heading_keys(segment_kind, section_id)
     if segment_kind == "final_report":
         section_id = "final_report"
         allowed_heading_keys = SECTION_ALLOWED_KEYS["final_report"]
+        required_heading_keys = ()
         forbidden_heading_keys = ()
 
     return SegmentContract(
@@ -180,6 +191,7 @@ def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
         section_id=section_id,
         output_language=output_language,
         allowed_heading_keys=allowed_heading_keys,
+        required_heading_keys=required_heading_keys,
         forbidden_heading_keys=forbidden_heading_keys,
         allow_h2=True,
         essential=essential,
@@ -197,6 +209,7 @@ def validate_segment_contract(
             forbidden_headings=[],
             forbidden_heading_keys=[],
             invalid_heading_keys=[],
+            missing_required_heading_keys=[],
         )
 
     h2_headings = _h2_headings(markdown)
@@ -208,10 +221,12 @@ def validate_segment_contract(
             forbidden_headings=[],
             forbidden_heading_keys=[],
             invalid_heading_keys=[],
+            missing_required_heading_keys=[],
         )
 
     allowed_heading_keys = set(contract.allowed_heading_keys)
     forbidden_heading_key_set = set(contract.forbidden_heading_keys)
+    present_heading_keys: set[str] = set()
     unknown_headings: list[str] = []
     forbidden_headings: list[str] = []
     forbidden_heading_keys: list[str] = []
@@ -221,6 +236,7 @@ def validate_segment_contract(
         if heading_key is None:
             unknown_headings.append(heading)
             continue
+        present_heading_keys.add(heading_key)
         if heading_key in allowed_heading_keys:
             continue
         if heading_key in forbidden_heading_key_set:
@@ -237,6 +253,7 @@ def validate_segment_contract(
             forbidden_headings=[],
             forbidden_heading_keys=[],
             invalid_heading_keys=[],
+            missing_required_heading_keys=[],
         )
 
     if forbidden_headings:
@@ -247,6 +264,7 @@ def validate_segment_contract(
             forbidden_headings=forbidden_headings,
             forbidden_heading_keys=forbidden_heading_keys,
             invalid_heading_keys=invalid_heading_keys,
+            missing_required_heading_keys=[],
         )
 
     if invalid_heading_keys:
@@ -257,6 +275,21 @@ def validate_segment_contract(
             forbidden_headings=[],
             forbidden_heading_keys=[],
             invalid_heading_keys=invalid_heading_keys,
+            missing_required_heading_keys=[],
+        )
+
+    missing_required_heading_keys = [
+        key for key in contract.required_heading_keys if key not in present_heading_keys
+    ]
+    if missing_required_heading_keys:
+        return SegmentValidationResult(
+            status="retry",
+            errors=["segment is missing required H2 headings"],
+            h2_headings=h2_headings,
+            forbidden_headings=[],
+            forbidden_heading_keys=[],
+            invalid_heading_keys=[],
+            missing_required_heading_keys=missing_required_heading_keys,
         )
 
     return SegmentValidationResult(
@@ -266,6 +299,7 @@ def validate_segment_contract(
         forbidden_headings=[],
         forbidden_heading_keys=[],
         invalid_heading_keys=[],
+        missing_required_heading_keys=[],
     )
 
 

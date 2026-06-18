@@ -2642,6 +2642,7 @@ class RunService(
             projection.report_version,
             project=project,
             store=self._enterprise_store,
+            projection=projection,
         )
         return evaluate_report_release_gate(
             project=project,
@@ -2760,6 +2761,7 @@ class RunService(
                     projection.report_version,
                     project=project,
                     store=self._enterprise_store,
+                    projection=projection,
                 )
         if metadata.get("release_gate") == release_gate_metadata:
             return False

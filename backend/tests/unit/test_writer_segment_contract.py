@@ -115,16 +115,20 @@ def test_empty_segment_output_fails() -> None:
     assert result.errors == ["segment output is empty"]
 
 
-def test_body_text_without_h2_passes_contract() -> None:
+def test_required_section_body_text_without_h2_retries() -> None:
     contract = segment_contract_for(
         {"segment_name": "decision_summary", "output_language": "en-US"}
     )
 
     result = validate_segment_contract("Plain body text without headings.", contract)
 
-    assert result.status == "pass"
+    assert result.status == "retry"
     assert result.h2_headings == []
-    assert result.errors == []
+    assert result.missing_required_heading_keys == [
+        "decision_summary",
+        "competitive_findings",
+    ]
+    assert result.errors == ["segment is missing required H2 headings"]
 
 
 def test_contract_honors_explicit_section_id_and_segment_essential() -> None:
@@ -158,6 +162,32 @@ def test_known_heading_outside_allowed_contract_is_invalid_not_forbidden() -> No
     assert result.forbidden_heading_keys == []
     assert result.invalid_heading_keys == ["competitor_deep_dives"]
     assert result.errors == ["segment contains H2 headings outside its allowed contract"]
+
+
+def test_decision_summary_contract_requires_competitive_findings() -> None:
+    contract = segment_contract_for(
+        {"segment_name": "decision_summary", "output_language": "en-US"}
+    )
+    markdown = f"## {report_label('en-US', 'decision_summary')}\nDecision only."
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert result.status == "retry"
+    assert result.missing_required_heading_keys == ["competitive_findings"]
+    assert result.errors == ["segment is missing required H2 headings"]
+
+
+def test_swot_matrix_contract_requires_side_by_side_matrix_and_swot() -> None:
+    contract = segment_contract_for(
+        {"segment_name": "swot_matrix", "output_language": "en-US"}
+    )
+    markdown = f"## {report_label('en-US', 'swot_analysis')}\nSWOT only."
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert result.status == "retry"
+    assert result.missing_required_heading_keys == ["side_by_side_matrix"]
+    assert result.errors == ["segment is missing required H2 headings"]
 
 
 def test_unknown_h2_heading_retries_with_unknown_heading_error() -> None:

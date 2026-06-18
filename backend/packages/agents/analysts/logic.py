@@ -1996,8 +1996,9 @@ class AnalystAgentMixin:
         return sum(confidences) / len(confidences)
 
     def _extract_price_hint(self, text: str) -> str:
-        match = self._price_hint_regex().search(text)
-        if match:
+        for match in self._price_hint_regex().finditer(text):
+            if self._price_hint_is_noise(text, match):
+                continue
             return " ".join(match.group(0).split())
         if re.search(r"\bfree\b|no credit card required", text, flags=re.IGNORECASE):
             return "$0"
@@ -2032,6 +2033,8 @@ class AnalystAgentMixin:
             )
             seen_keys.add((tiers[-1].name.casefold(), tiers[-1].price.casefold()))
         for index, match in enumerate(self._price_hint_regex().finditer(text), start=1):
+            if self._price_hint_is_noise(text, match):
+                continue
             price = " ".join(match.group(0).split())
             window = self._pricing_window_around_match(text, match)
             name = self._extract_pricing_tier_name_near_price(text, match)
@@ -2065,6 +2068,22 @@ class AnalystAgentMixin:
                 claims=claims,
             )
         ]
+
+    def _price_hint_is_noise(self, text: str, match: re.Match[str]) -> bool:
+        price = match.group(0)
+        if self._extract_billing_cycle_hint(price) != "unknown":
+            return False
+        window = text[max(0, match.start() - 64) : min(len(text), match.end() + 96)]
+        return bool(
+            re.search(
+                r"\b(?:promo|promotional|trial\s+balance|credit\s+balance)\b|"
+                r"\b(?:in|as|worth)\s+credits?\b|"
+                r"\bcredits?\s+(?:balance|included)\b|"
+                r"\bnot\s+(?:a\s+)?(?:plan\s+)?price\b",
+                window,
+                flags=re.IGNORECASE,
+            )
+        )
 
     def _billing_cycle_for_price_window(self, price: str, window: str) -> str:
         price_cycle = self._extract_billing_cycle_hint(price)

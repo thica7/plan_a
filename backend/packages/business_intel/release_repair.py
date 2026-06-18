@@ -70,14 +70,7 @@ def apply_release_gate_warning_report_repair(
             targets=[],
         )
 
-    section = release_repair_section(
-        targets,
-        gate=gate,
-        before_warn_count=gate.warn_count,
-        after_warn_count=after_gate.warn_count if after_gate is not None else None,
-        after_issue_count=after_gate.issue_count if after_gate is not None else None,
-    )
-    repaired = replace_or_insert_section(report_md, RELEASE_REPAIR_HEADING, section)
+    repaired = remove_release_repair_section(report_md)
     return ReleaseReportRepairResult(
         report_md=repaired,
         changed=repaired != report_md,
@@ -87,6 +80,15 @@ def apply_release_gate_warning_report_repair(
         after_issue_count=after_gate.issue_count if after_gate is not None else None,
         targets=targets,
     )
+
+
+def remove_release_repair_section(report_md: str) -> str:
+    stripped = report_md.rstrip()
+    pattern = re.compile(
+        rf"(^##\s+{re.escape(RELEASE_REPAIR_HEADING)}\s*$.*?)(?=^##\s+|\Z)",
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    return pattern.sub("", stripped).rstrip()
 
 
 def release_repair_targets(

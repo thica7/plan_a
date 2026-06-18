@@ -44,7 +44,14 @@ from packages.rag.grounded_prompt import build_run_grounding_prompt
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
 from packages.schema.api_dto import RunDetail
-from packages.schema.models import FeatureNode, KnowledgeClaim, QCIssue, RawSource, SWOTItem
+from packages.schema.models import (
+    ComparisonCell,
+    FeatureNode,
+    KnowledgeClaim,
+    QCIssue,
+    RawSource,
+    SWOTItem,
+)
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
@@ -762,8 +769,9 @@ class WriterAgentMixin:
         if preflight.passed:
             return assembled.markdown
 
+        hardened = self._harden_report_markdown(detail, assembled.markdown)
         repaired = assemble_report_sections(
-            [assembled.markdown],
+            [hardened],
             output_language=detail.output_language,
             competitors=detail.plan.competitors,
         )
@@ -774,7 +782,11 @@ class WriterAgentMixin:
             "writer",
             None,
             "Writer assembled report quality preflight repair completed",
-            repaired_preflight.telemetry_payload(),
+            {
+                **repaired_preflight.telemetry_payload(),
+                "initial_failure_reasons": list(preflight.failure_reasons),
+                "repair_strategy": "harden_required_sections",
+            },
         )
         if repaired_preflight.passed:
             return repaired.markdown
@@ -896,10 +908,15 @@ class WriterAgentMixin:
         segment_with_contract = {
             **segment,
             "allowed_heading_keys": list(contract.allowed_heading_keys),
+            "required_heading_keys": list(contract.required_heading_keys),
             "forbidden_heading_keys": list(contract.forbidden_heading_keys),
             "allowed_h2_headings": [
                 report_label(detail.output_language, key)
                 for key in contract.allowed_heading_keys
+            ],
+            "required_h2_headings": [
+                report_label(detail.output_language, key)
+                for key in contract.required_heading_keys
             ],
             "forbidden_h2_headings": [
                 report_label(detail.output_language, key)
@@ -917,6 +934,7 @@ class WriterAgentMixin:
             "segment_kind": contract.segment_kind,
             "section_id": contract.section_id,
             "allowed_heading_keys": list(contract.allowed_heading_keys),
+            "required_heading_keys": list(contract.required_heading_keys),
             "forbidden_heading_keys": list(contract.forbidden_heading_keys),
             "segment_essential": contract.essential,
             "segment_competitor": segment.get("segment_competitor"),
@@ -1001,12 +1019,18 @@ class WriterAgentMixin:
                 "forbidden_headings": list(validation.forbidden_headings),
                 "forbidden_heading_keys": list(validation.forbidden_heading_keys),
                 "invalid_heading_keys": list(validation.invalid_heading_keys),
+                "missing_required_heading_keys": list(
+                    validation.missing_required_heading_keys
+                ),
                 "segment_retry_count": 0,
             },
         )
         if validation.status != "pass":
             contract_errors = validation.errors
             contract_forbidden_headings = validation.forbidden_headings
+            contract_missing_required_heading_keys = (
+                validation.missing_required_heading_keys
+            )
             segment_md = await self._writer_segment_markdown(
                 record,
                 segment=segment_with_contract,
@@ -1018,6 +1042,9 @@ class WriterAgentMixin:
                 retry_count=1,
                 contract_errors=contract_errors,
                 contract_forbidden_headings=contract_forbidden_headings,
+                contract_missing_required_heading_keys=(
+                    contract_missing_required_heading_keys
+                ),
             )
             segment_md = self._sanitize_writer_segment_citations(
                 evidence_pack_result,
@@ -1041,6 +1068,9 @@ class WriterAgentMixin:
                     citation_error_ids=invalid_sources,
                     contract_errors=contract_errors,
                     contract_forbidden_headings=contract_forbidden_headings,
+                    contract_missing_required_heading_keys=(
+                        contract_missing_required_heading_keys
+                    ),
                 )
                 segment_md = self._sanitize_writer_segment_citations(
                     evidence_pack_result,
@@ -1078,6 +1108,9 @@ class WriterAgentMixin:
                     "forbidden_headings": list(validation.forbidden_headings),
                     "forbidden_heading_keys": list(validation.forbidden_heading_keys),
                     "invalid_heading_keys": list(validation.invalid_heading_keys),
+                    "missing_required_heading_keys": list(
+                        validation.missing_required_heading_keys
+                    ),
                     "segment_retry_count": 1,
                 },
             )
@@ -1109,12 +1142,18 @@ class WriterAgentMixin:
         citation_error_ids: list[str] | None = None,
         contract_errors: list[str] | None = None,
         contract_forbidden_headings: list[str] | None = None,
+        contract_missing_required_heading_keys: list[str] | None = None,
     ) -> str:
         detail = record.detail
         segment_json = json.dumps(segment, ensure_ascii=False)
         allowed_h2_headings = ", ".join(
             heading
             for heading in segment.get("allowed_h2_headings", [])
+            if isinstance(heading, str)
+        )
+        required_h2_headings = ", ".join(
+            heading
+            for heading in segment.get("required_h2_headings", [])
             if isinstance(heading, str)
         )
         forbidden_h2_headings = ", ".join(
@@ -1134,9 +1173,11 @@ class WriterAgentMixin:
         contract_warning = ""
         if contract_errors:
             forbidden = ", ".join(contract_forbidden_headings or [])
+            missing = ", ".join(contract_missing_required_heading_keys or [])
             contract_warning = (
                 "Previous segment violated its heading contract: "
                 f"{'; '.join(contract_errors)}. "
+                f"Missing required H2 heading keys: {missing or 'none'}. "
                 f"Forbidden H2 headings found: {forbidden or 'none'}. "
                 "Rewrite only this segment and obey the segment contract exactly.\n"
             )
@@ -1198,6 +1239,8 @@ class WriterAgentMixin:
                     f"retry_count={retry_count}\n"
                     "Allowed H2 headings for this segment: "
                     f"{allowed_h2_headings or 'none'}\n"
+                    "Required H2 headings for this segment: "
+                    f"{required_h2_headings or 'none'}\n"
                     "Forbidden H2 headings for this segment: "
                     f"{forbidden_h2_headings or 'none'}\n"
                     f"{citation_warning}"
@@ -1671,6 +1714,81 @@ class WriterAgentMixin:
             )
         return lines
 
+    def _backfill_side_by_side_matrix_section(self, detail: RunDetail) -> list[str]:
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        lines = [
+            "",
+            f"## {report_label(detail.output_language, 'side_by_side_matrix')}",
+        ]
+        matrix = detail.comparison_matrix
+        if matrix is None or not matrix.cells:
+            refs = self._format_source_refs(self._matrix_source_ids(detail))
+            if is_zh:
+                lines.extend(
+                    [
+                        f"- 结构化对比矩阵尚不可用；所有维度判断都应先作为证据缺口处理。{refs}",
+                        f"- 宣布赢家前，需要先为每个竞品和维度补齐或重新生成矩阵单元格。{refs}",
+                    ]
+                )
+            else:
+                lines.extend(
+                    [
+                        (
+                            "- The structured comparison matrix is not available yet; "
+                            f"treat all dimension-level reads as evidence gaps.{refs}"
+                        ),
+                        (
+                            "- Before declaring winners, collect or regenerate matrix cells "
+                            f"for every requested competitor and dimension.{refs}"
+                        ),
+                    ]
+                )
+            return lines
+
+        matrix_refs = self._format_source_refs(self._matrix_source_ids(detail))
+        winners = ", ".join(
+            f"{dimension}: {winner}"
+            for dimension, winner in matrix.winner_by_dimension.items()
+            if winner
+        )
+        if winners:
+            prefix = (
+                "- 结构化矩阵中的赢家信号："
+                if is_zh
+                else "- Winner signals from the structured matrix: "
+            )
+            lines.append(f"{prefix}{winners}.{matrix_refs}")
+        summary_prefix = "- 矩阵备注：" if is_zh else "- Matrix note: "
+        for summary_item in matrix.summary[:3]:
+            lines.append(
+                f"{summary_prefix}"
+                f"{self._markdown_table_cell(summary_item, limit=260)}{matrix_refs}"
+            )
+
+        table_header = (
+            "| 竞品 | 维度 | 发现 | 置信度 | 证据 |"
+            if is_zh
+            else "| Competitor | Dimension | Finding | Confidence | Evidence |"
+        )
+        lines.extend(
+            [
+                "",
+                table_header,
+                "| --- | --- | --- | --- | --- |",
+            ]
+        )
+        for cell in self._ordered_comparison_cells(detail):
+            refs = self._format_source_refs(cell.source_ids)
+            lines.append(
+                "| "
+                f"{self._markdown_table_cell(cell.competitor)} | "
+                f"{self._markdown_table_cell(cell.dimension)} | "
+                f"{self._markdown_table_cell(cell.value, limit=260)} | "
+                f"{cell.confidence:.2f} | "
+                f"{refs or '-'} |"
+            )
+        return lines
+
     def _backfill_competitor_deep_dives_section(self, detail: RunDetail) -> list[str]:
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         lines = [
@@ -1887,9 +2005,9 @@ class WriterAgentMixin:
         for issue in detail.qa_findings[:3]:
             planned += 1
             if is_zh:
-                lines.append(f"- 解决 QA 发现 `{issue.id}`：{issue.problem}")
+                lines.append(f"- 解决 QA 发现：{issue.problem}")
             else:
-                lines.append(f"- Resolve QA finding `{issue.id}`: {issue.problem}")
+                lines.append(f"- Resolve QA finding: {issue.problem}")
         if planned == 0:
             if is_zh:
                 lines.append(
@@ -1997,6 +2115,10 @@ class WriterAgentMixin:
             (
                 self._report_label_aliases("competitor_deep_dives"),
                 self._backfill_competitor_deep_dives_section(detail),
+            ),
+            (
+                self._report_label_aliases("side_by_side_matrix"),
+                self._backfill_side_by_side_matrix_section(detail),
             ),
             (
                 self._report_label_aliases("swot_analysis"),
@@ -2917,6 +3039,27 @@ class WriterAgentMixin:
                     return source_ids
         return source_ids
 
+    def _ordered_comparison_cells(self, detail: RunDetail) -> list[ComparisonCell]:
+        matrix = detail.comparison_matrix
+        if matrix is None:
+            return []
+        ordered_cells: list[ComparisonCell] = []
+        seen_indexes: set[int] = set()
+        competitors = matrix.competitors or detail.plan.competitors
+        dimensions = matrix.dimensions or detail.plan.dimensions
+        for competitor in competitors:
+            for dimension in dimensions:
+                for index, cell in enumerate(matrix.cells):
+                    if index in seen_indexes:
+                        continue
+                    if cell.competitor == competitor and cell.dimension == dimension:
+                        ordered_cells.append(cell)
+                        seen_indexes.add(index)
+        for index, cell in enumerate(matrix.cells):
+            if index not in seen_indexes:
+                ordered_cells.append(cell)
+        return ordered_cells
+
     def _format_source_refs(self, source_ids: Iterable[str]) -> str:
         unique = []
         seen: set[str] = set()
@@ -3213,6 +3356,7 @@ class WriterAgentMixin:
             issue
             for issue in detail.qa_findings
             if issue.target_agent == "collector" and issue.severity in {"warn", "blocker"}
+            and not issue.field_path.startswith("release_gate.")
         ]
         if not collector_gaps:
             return []
@@ -3232,13 +3376,13 @@ class WriterAgentMixin:
                 query = self._gap_fill_query(detail, issue)
                 sources = self._format_source_refs(self._matrix_source_ids(detail))
                 lines.append(
-                    f"- 差距 `{issue.id}`：{issue.problem} 目标={target}；"
+                    f"- 差距：{issue.problem} 目标={target}；"
                     f"竞品={competitor}；重新执行={scope.kind}。"
                     f"建议的检索查询：{query}。{sources}"
                 )
             lines.append(
                 "- 运行“证据差距填补”操作以检索、重排并附加已证实的证据。"
-                "生成的草案版本应链接已填补的差距 ID 和检索上下文。"
+                "详细差距标识和检索上下文保留在运行审计元数据中。"
             )
         else:
             lines = [
@@ -3256,14 +3400,14 @@ class WriterAgentMixin:
                 query = self._gap_fill_query(detail, issue)
                 sources = self._format_source_refs(self._matrix_source_ids(detail))
                 lines.append(
-                    f"- Gap `{issue.id}`: {issue.problem} Target={target}; "
+                    f"- Gap: {issue.problem} Target={target}; "
                     f"competitor={competitor}; redo={scope.kind}. "
                     f"Suggested retrieval query: {query}.{sources}"
                 )
             lines.append(
                 "- Run the Evidence Gap Fill action to retrieve, rerank, and attach verified "
-                "evidence. The resulting draft version should link filled gap IDs and "
-                "retrieval contexts."
+                "evidence. Detailed gap identifiers and retrieval contexts stay in the run "
+                "audit metadata."
             )
         return lines
 
@@ -3348,12 +3492,12 @@ class WriterAgentMixin:
         for issue in detail.qa_findings[:4]:
             if is_zh:
                 lines.append(
-                    f"- QA {issue.severity} `{issue.id}`："
+                    f"- QA {issue.severity}："
                     f"{self._trim_sentence(issue.problem)}"
                 )
             else:
                 lines.append(
-                    f"- QA {issue.severity} `{issue.id}`: "
+                    f"- QA {issue.severity}: "
                     f"{self._trim_sentence(issue.problem)}"
                 )
 
@@ -3434,6 +3578,12 @@ class WriterAgentMixin:
         if len(text) <= limit:
             return text
         return f"{text[: limit - 1].rstrip()}..."
+
+    def _markdown_table_cell(self, value: object, *, limit: int | None = None) -> str:
+        text = " ".join(str(value or "").split())
+        if limit is not None:
+            text = self._trim_sentence(text, limit)
+        return text.replace("|", "\\|") or "-"
 
     def _extract_cited_source_ids(self, report_md: str) -> set[str]:
         cited = set(source_tokens(report_md))

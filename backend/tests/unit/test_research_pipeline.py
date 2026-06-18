@@ -658,6 +658,92 @@ def test_pricing_extractor_marks_open_weight_pricing_not_applicable() -> None:
     assert gaps == []
 
 
+def test_pricing_extractor_normalizes_price_rows_without_credit_noise() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding assistant pricing",
+        competitor="GitHub Copilot",
+        dimension="pricing",
+    )
+    page = CapturedPage(
+        candidate_id="candidate-copilot-pricing",
+        requested_url="https://github.com/features/copilot/plans",
+        final_url="https://github.com/features/copilot/plans",
+        status="ok",
+        title="GitHub Copilot plans",
+        text=(
+            "Business costs $19 per user per month. "
+            "Enterprise costs $39 per user per month. "
+            "Promotional documentation mentions $70 in credits for a separate "
+            "trial balance, which is not a plan price."
+        ),
+        content_hash="hash-copilot-pricing",
+        status_code=200,
+        fetch_method="webfetch_v2",
+        quality_score=0.94,
+    )
+
+    extraction = extract_pricing_model(brief, page)
+    evidence_items = admit_evidence_items(
+        [extraction],
+        captured_pages=[page],
+        min_accept_confidence=0.35,
+    )
+    normalized = normalized_fields_from_evidence_items(evidence_items)
+
+    assert extraction.fields["price_rows"] == [
+        {
+            "tier_name": "Business",
+            "price": "$19 per user",
+            "billing_cycle": "monthly",
+            "usage_limit": "",
+        },
+        {
+            "tier_name": "Enterprise",
+            "price": "$39 per user",
+            "billing_cycle": "monthly",
+            "usage_limit": "",
+        },
+    ]
+    assert [(field.tier_name, field.price) for field in normalized] == [
+        ("Business", "$19 per user"),
+        ("Enterprise", "$39 per user"),
+    ]
+    assert "$70" not in {field.price for field in normalized}
+
+
+def test_pricing_extractor_keeps_plan_price_with_credit_limit() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI plan pricing",
+        competitor="OpenAI Codex",
+        dimension="pricing",
+    )
+    page = CapturedPage(
+        candidate_id="candidate-codex-pricing",
+        requested_url="https://openai.com/codex/pricing",
+        final_url="https://openai.com/codex/pricing",
+        status="ok",
+        title="OpenAI Codex pricing",
+        text="Go costs $8 per month and includes 125 credits for Codex usage.",
+        content_hash="hash-codex-pricing",
+        status_code=200,
+        fetch_method="webfetch_v2",
+        quality_score=0.94,
+    )
+
+    extraction = extract_pricing_model(brief, page)
+
+    assert extraction.fields["price_rows"] == [
+        {
+            "tier_name": "Go",
+            "price": "$8 per month",
+            "billing_cycle": "monthly",
+            "usage_limit": "125 credits",
+        }
+    ]
+
+
 def test_feature_extractor_emits_slot_matrix_and_gap_repair_task() -> None:
     brief = ResearchBrief(
         run_id="run-1",

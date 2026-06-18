@@ -353,46 +353,7 @@ class QualityAgentMixin:
         ensure_sections = getattr(self, "_ensure_report_required_sections", None)
         if callable(ensure_sections):
             detail.report_md = ensure_sections(detail, detail.report_md)
-        severity_counts = {
-            "blocker": sum(1 for issue in detail.qa_findings if issue.severity == "blocker"),
-            "warn": sum(1 for issue in detail.qa_findings if issue.severity == "warn"),
-            "info": sum(1 for issue in detail.qa_findings if issue.severity == "info"),
-        }
-        if detail.qa_findings:
-            top_issues = "\n".join(
-                f"- {issue.severity}: {issue.problem}"
-                for issue in sorted(
-                    detail.qa_findings,
-                    key=lambda item: {"blocker": 0, "warn": 1, "info": 2}.get(item.severity, 3),
-                )[:8]
-            )
-            if severity_counts["blocker"]:
-                status_text = "**Status: blocked for review.**"
-                readiness_text = (
-                    "This report is not ready for enterprise publishing until these issues "
-                    "are resolved or explicitly force-passed by a reviewer."
-                )
-            else:
-                status_text = "**Status: passed with warnings.**"
-                readiness_text = (
-                    "This report is publishable from the deterministic QA perspective, "
-                    "with warnings retained for reviewer attention."
-                )
-            section = (
-                "\n\n## Final QA Gate Status\n"
-                f"{status_text} "
-                f"QA found {severity_counts['blocker']} blocker(s), "
-                f"{severity_counts['warn']} warning(s), and {severity_counts['info']} "
-                f"info item(s). {readiness_text}\n\n"
-                f"{top_issues}"
-            )
-        else:
-            section = (
-                "\n\n## Final QA Gate Status\n"
-                "**Status: passed.** No unresolved deterministic QA findings were recorded "
-                "for this run."
-            )
-        detail.report_md = detail.report_md.rstrip() + section
+        detail.report_md = detail.report_md.rstrip()
 
     def _strip_stale_qa_claims(self, markdown: str) -> str:
         patterns = [
@@ -405,7 +366,7 @@ class QualityAgentMixin:
         for pattern in patterns:
             cleaned = re.sub(
                 pattern,
-                "Unresolved QA findings are summarized in the Final QA Gate Status section.",
+                "Unresolved QA findings are tracked in the run QA metadata.",
                 cleaned,
                 flags=re.IGNORECASE,
             )

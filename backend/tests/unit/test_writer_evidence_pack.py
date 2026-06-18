@@ -2103,6 +2103,44 @@ def test_segment_citation_sanitizer_prefixes_allowed_bare_raw_source_hash() -> N
     ) == ["deadbeefdeadbeefdead"]
 
 
+def test_segment_citation_sanitizer_removes_placeholder_source_id() -> None:
+    source = RawSource(
+        id="raw-source-cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor pricing is documented.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+    )
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+    allowed_source_ids = {"raw-source-cursor-pricing"}
+
+    sanitized = result.sanitize_segment_citations(
+        "Use exact citation syntax like [source:ID], then cite Cursor pricing "
+        "[source:raw-source-cursor-pricing].",
+        allowed_source_ids=allowed_source_ids,
+    )
+
+    assert "[source:ID]" not in sanitized
+    assert "[source:raw-source-cursor-pricing]" in sanitized
+    assert result.validate_segment_citations(
+        sanitized,
+        allowed_source_ids=allowed_source_ids,
+    ) == []
+
+    unknown = result.sanitize_segment_citations(
+        "Unknown concrete IDs still fail. [source:raw-source-missing]",
+        allowed_source_ids=allowed_source_ids,
+    )
+
+    assert result.validate_segment_citations(
+        unknown,
+        allowed_source_ids=allowed_source_ids,
+    ) == ["raw-source-missing"]
+
+
 def test_segment_citation_validation_rejects_fact_derived_source_token() -> None:
     source = RawSource(
         id="raw-source-cursor-community",

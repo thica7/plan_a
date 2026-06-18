@@ -35,6 +35,29 @@ def normalized_pricing_fields_from_evidence_items(
         return []
 
     model_type = _first_text(pricing_items, "pricing_model_type")
+    price_rows = _pricing_rows(pricing_items)
+    if price_rows:
+        enterprise_condition = _first_text(pricing_items, "enterprise_condition")
+        competitor = _first_attr(pricing_items, "competitor")
+        confidence = max((item.confidence for item in pricing_items), default=0.0)
+        source_url = _first_attr(pricing_items, "source_url") or None
+        return [
+            NormalizedPricingField(
+                competitor=competitor,
+                model_type=model_type,
+                tier_name=row["tier_name"],
+                price=row["price"],
+                billing_cycle=row["billing_cycle"],
+                usage_limit=row["usage_limit"],
+                enterprise_condition=enterprise_condition,
+                source_quote=row["source_quote"],
+                evidence_item_ids=row["evidence_item_ids"],
+                source_url=source_url,
+                confidence=confidence,
+            )
+            for row in price_rows
+        ]
+
     tier_names = _list_texts(pricing_items, "tier_names")
     prices = _list_texts(pricing_items, "price_points")
     billing_cycles = _list_texts(pricing_items, "billing_cycle")
@@ -63,6 +86,43 @@ def normalized_pricing_fields_from_evidence_items(
         )
         for index in range(rows)
     ]
+
+
+def _pricing_rows(items: list[EvidenceItem]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for item in items:
+        if item.field != "price_rows":
+            continue
+        raw_rows = item.value if isinstance(item.value, list) else []
+        for raw_row in raw_rows:
+            if not isinstance(raw_row, Mapping):
+                continue
+            tier_name = _clean_text(raw_row.get("tier_name"))
+            price = _clean_text(raw_row.get("price"))
+            if not price:
+                continue
+            billing_cycle = _clean_text(raw_row.get("billing_cycle"))
+            usage_limit = _clean_text(raw_row.get("usage_limit"))
+            key = (tier_name.casefold(), price.casefold(), billing_cycle.casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(
+                {
+                    "tier_name": tier_name,
+                    "price": price,
+                    "billing_cycle": billing_cycle,
+                    "usage_limit": usage_limit,
+                    "source_quote": item.quote.strip(),
+                    "evidence_item_ids": [item.id],
+                }
+            )
+    return rows
+
+
+def _clean_text(value: object) -> str:
+    return " ".join(str(value or "").split()).strip()
 
 
 def normalized_feature_fields_from_evidence_items(

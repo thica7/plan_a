@@ -476,6 +476,56 @@ def test_report_release_gate_scope_uses_version_competitors_not_stale_project_li
     ]
 
 
+def test_report_scope_filters_projection_records_to_report_version_ids() -> None:
+    store = EnterpriseMemoryStore()
+    detail = _detail()
+    context = store.start_run(detail, project_id="project-reused")
+    projection = build_enterprise_projection(
+        detail,
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        competitor_id_map=context.competitor_id_map,
+    )
+    extra_evidence = projection.evidence_records[0].model_copy(
+        update={
+            "id": "evidence-stale",
+            "run_id": "run-stale",
+            "raw_source_id": "pricing-stale",
+            "snippet": "Historical evidence from a previous projection.",
+            "content_hash": "hash-stale",
+            "reliability_score": 0.55,
+        }
+    )
+    extra_claim = projection.claim_records[0].model_copy(
+        update={
+            "id": "claim-stale",
+            "run_id": "run-stale",
+            "claim_text": "Historical claim should not be evaluated for this report.",
+            "evidence_ids": ["evidence-stale"],
+            "confidence": 0.55,
+        }
+    )
+    store.save_projection(projection)
+    store.evidence_records[extra_evidence.id] = extra_evidence
+    store.claim_records[extra_claim.id] = extra_claim
+    contaminated_version = projection.report_version.model_copy(
+        update={
+            "evidence_ids": [*projection.report_version.evidence_ids, extra_evidence.id],
+            "claim_ids": [*projection.report_version.claim_ids, extra_claim.id],
+        }
+    )
+    store.report_versions[projection.report_version.id] = contaminated_version
+    project = store.get_project(context.project_id)
+
+    assert project is not None
+    scope = build_report_scope(contaminated_version, project=project, store=store)
+
+    assert [item.id for item in scope.evidence] == projection.report_version.evidence_ids
+    assert [item.id for item in scope.claims] == projection.report_version.claim_ids
+    assert "evidence-stale" not in scope.metadata["scoped_evidence_ids"]
+    assert "claim-stale" not in scope.metadata["scoped_claim_ids"]
+
+
 def test_enterprise_store_tracks_evidence_lifecycle_across_runs() -> None:
     store = EnterpriseMemoryStore()
     first_detail = _detail()

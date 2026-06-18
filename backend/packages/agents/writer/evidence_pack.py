@@ -1993,9 +1993,13 @@ def _sanitize_segment_citations(markdown: str, allowed_source_ids: set[str]) -> 
 
     def replace(match: re.Match[str]) -> str:
         raw_token = next(group for group in match.groups() if group is not None)
-        parts = _source_citation_parts(raw_token)
+        parts = [
+            part
+            for part in _source_citation_parts(raw_token)
+            if not _is_placeholder_source_token(part)
+        ]
         if not parts:
-            return match.group(0)
+            return ""
         if len(parts) == 1:
             token = _canonical_segment_source_token(parts[0], allowed)
             return f"[source:{token}]" if is_valid_source_token(token) else match.group(0)
@@ -2009,6 +2013,24 @@ def _sanitize_segment_citations(markdown: str, allowed_source_ids: set[str]) -> 
         return match.group(0)
 
     return SOURCE_CITATION_RE.sub(replace, markdown or "")
+
+
+_PLACEHOLDER_SOURCE_TOKENS = {
+    "id",
+    "source",
+    "source-id",
+    "source_id",
+    "raw-source",
+    "raw-source-id",
+    "raw_source_id",
+    "evidence",
+    "evidence-id",
+    "evidence_id",
+}
+
+
+def _is_placeholder_source_token(token: str) -> bool:
+    return normalize_source_token(token).casefold() in _PLACEHOLDER_SOURCE_TOKENS
 
 
 def _canonical_segment_source_token(token: str, allowed_source_ids: set[str]) -> str:

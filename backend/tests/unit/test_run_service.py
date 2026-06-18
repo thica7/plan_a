@@ -21,6 +21,7 @@ from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDeta
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
+    EvidenceRecord,
     EnterpriseRunProjection,
     ModelRouteCandidate,
     ModelRouteDecision,
@@ -2753,9 +2754,9 @@ def test_final_qa_sync_replaces_stale_clean_report_claim() -> None:
     service._sync_report_with_final_qa(detail)
 
     assert "None flagged" not in detail.report_md
-    assert "Final QA Gate Status" in detail.report_md
-    assert "Status: blocked for review" in detail.report_md
-    assert "No evidence sources were collected for pricing." in detail.report_md
+    assert "Final QA Gate Status" not in detail.report_md
+    assert "Status: blocked for review" not in detail.report_md
+    assert "missing-pricing" not in detail.report_md
 
 
 def test_final_qa_sync_adds_rag_gap_fill_for_collector_warnings() -> None:
@@ -2817,8 +2818,9 @@ def test_final_qa_sync_adds_rag_gap_fill_for_collector_warnings() -> None:
 
     assert "## RAG Gap Fill" in detail.report_md
     assert "Suggested retrieval query: A pricing Pricing source needs verified" in detail.report_md
-    assert "## Final QA Gate Status" in detail.report_md
-    assert "Status: passed with warnings" in detail.report_md
+    assert "unverified-pricing-a" not in detail.report_md
+    assert "## Final QA Gate Status" not in detail.report_md
+    assert "Status: passed with warnings" not in detail.report_md
     assert "Status: blocked for review" not in detail.report_md
 
 
@@ -8390,7 +8392,10 @@ async def test_writer_segment_preflight_emits_contract_metadata(monkeypatch) -> 
     )
 
     async def fake_segment_writer(*args, **kwargs):
-        return "## Decision Summary\nDecision [source:raw-source-a]."
+        return (
+            "## Decision Summary\nDecision [source:raw-source-a].\n\n"
+            "## Competitive Findings\nFindings [source:raw-source-a]."
+        )
 
     class PassingPreflight:
         passed = True
@@ -8473,7 +8478,9 @@ async def test_evidence_shard_outputs_notes_then_section_writer_outputs_one_h2(
             )
         return (
             "## Decision Summary\n"
-            "Merged shard note [source:raw-source-a][source:raw-source-b]."
+            "Merged shard note [source:raw-source-a][source:raw-source-b].\n\n"
+            "## Competitive Findings\n"
+            "Merged shard finding [source:raw-source-a][source:raw-source-b]."
         )
 
     class PassingPreflight:
@@ -8501,6 +8508,7 @@ async def test_evidence_shard_outputs_notes_then_section_writer_outputs_one_h2(
 
     assert calls == ["evidence_shard", "evidence_shard", "section_fragment"]
     assert report.count("## Decision Summary") == 1
+    assert report.count("## Competitive Findings") == 1
     assert "Merged shard note" in report
     synthesized_segment = captured_segments[2]
     assert synthesized_segment["shard_notes"] == [
@@ -8513,8 +8521,10 @@ async def test_evidence_shard_outputs_notes_then_section_writer_outputs_one_h2(
     assert synthesized_segment["segment_batch"] == "from_evidence_shards"
     contract_keys = {
         "allowed_heading_keys",
+        "required_heading_keys",
         "forbidden_heading_keys",
         "allowed_h2_headings",
+        "required_h2_headings",
         "forbidden_h2_headings",
     }
     synthesized_payload = {
@@ -8525,6 +8535,267 @@ async def test_evidence_shard_outputs_notes_then_section_writer_outputs_one_h2(
     assert synthesized_segment["segment_input_chars"] == len(
         json.dumps(synthesized_payload, ensure_ascii=False)
     )
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_backfills_missing_competitive_findings(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-backfill-findings")
+    record.detail.raw_sources = [
+        RawSource(
+            id=source_id,
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title=f"Source {source_id}",
+            snippet=f"Snippet for {source_id}.",
+            content_hash=f"{source_id}-hash",
+            confidence=0.96,
+        )
+        for source_id in (
+            "raw-source-a",
+            "raw-source-b",
+            "raw-source-c",
+            "raw-source-d",
+            "raw-source-e",
+        )
+    ]
+    segments = [
+        _segmented_writer_segment(
+            segment_name="decision_summary",
+            section_id="decision_summary",
+            segment_kind="evidence_shard",
+            allowed_source_id="raw-source-a",
+            segment_batch="sources:1",
+        ),
+        _segmented_writer_segment(
+            segment_name="decision_summary",
+            section_id="decision_summary",
+            segment_kind="evidence_shard",
+            allowed_source_id="raw-source-b",
+            segment_batch="sources:2",
+        ),
+        _segmented_writer_segment(
+            segment_name="user_research",
+            section_id="review_theme_summary",
+            allowed_source_id="raw-source-c",
+        ),
+        _segmented_writer_segment(
+            segment_name="competitor_deep_dives Cursor",
+            section_id="competitor_deep_dives",
+            allowed_source_id="raw-source-d",
+            segment_competitor="Cursor",
+        ),
+        _segmented_writer_segment(
+            segment_name="swot_matrix",
+            section_id="swot_matrix",
+            allowed_source_id="raw-source-e",
+        ),
+        _segmented_writer_segment(
+            segment_name="support_appendix",
+            section_id="evidence_support",
+            segment_kind="support_fragment",
+            allowed_source_id="raw-source-e",
+        ),
+    ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        if "sources:1" in user:
+            return "- Decision shard one."
+        if "sources:2" in user:
+            return "- Decision shard two."
+        if (
+            "segment_name=decision_summary" in user
+            and "from_evidence_shards" in user
+        ):
+            if "retry_count=1" in user:
+                return (
+                    "## Decision Summary\n"
+                    "Cursor pricing is visible. "
+                    "[source:raw-source-a][source:raw-source-b]\n\n"
+                    "## Competitive Findings\n"
+                    "Cursor has the clearest pricing signal. "
+                    "[source:raw-source-a][source:raw-source-b]"
+                )
+            return (
+                "## Decision Summary\n"
+                "Cursor pricing is visible, but the segment omitted competitive "
+                "findings. [source:raw-source-a][source:raw-source-b]"
+            )
+        if "segment_name=user_research" in user:
+            return "## User Review Themes\nUsers mention pricing. [source:raw-source-c]"
+        if "segment_name=competitor_deep_dives Cursor" in user:
+            return "## Competitor Deep Dives\n### Cursor\nVisible pricing. [source:raw-source-d]"
+        if "segment_name=swot_matrix" in user:
+            return (
+                "## Side-by-Side Decision Matrix\nCursor pricing is visible. "
+                "[source:raw-source-e]\n\n"
+                "## SWOT Analysis\nStrengths include pricing visibility. "
+                "[source:raw-source-e]"
+            )
+        if "segment_name=support_appendix" in user:
+            return "## Evidence & QA Support\nPricing source attached. [source:raw-source-e]"
+        raise AssertionError(f"unexpected writer segment prompt: {user}")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(segments=segments),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._real_writer_step(record)
+
+    report_md = record.detail.report_md
+    assert "## Competitive Findings" in report_md
+    assert record.detail.status == "running"
+    validated_events = [
+        event
+        for event in record.events
+        if event.type == "writer_segment_validated"
+        and event.payload["section_id"] == "decision_summary"
+    ]
+    assert [event.payload["validation_status"] for event in validated_events[-2:]] == [
+        "retry",
+        "pass",
+    ]
+    assert validated_events[-2].payload["missing_required_heading_keys"] == [
+        "competitive_findings"
+    ]
+    repair_events = [
+        event for event in record.events if event.type == "writer_quality_preflight_repair"
+    ]
+    assert not repair_events
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_backfills_missing_side_by_side_matrix(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-backfill-matrix")
+    record.detail.raw_sources = [
+        RawSource(
+            id=source_id,
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title=f"Source {source_id}",
+            snippet=f"Snippet for {source_id}.",
+            content_hash=f"{source_id}-hash",
+            confidence=0.96,
+        )
+        for source_id in (
+            "raw-source-a",
+            "raw-source-b",
+            "raw-source-c",
+            "raw-source-d",
+            "raw-source-e",
+        )
+    ]
+    record.detail.comparison_matrix = ComparisonMatrix(
+        competitors=["Cursor"],
+        dimensions=["pricing"],
+        cells=[
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="pricing",
+                value="Cursor publishes team pricing with visible per-seat tiers.",
+                source_ids=["raw-source-e"],
+                confidence=0.96,
+            )
+        ],
+        winner_by_dimension={"pricing": "Cursor"},
+        summary=["pricing: Cursor has the clearest public pricing evidence."],
+    )
+    segments = [
+        _segmented_writer_segment(
+            segment_name="decision_summary",
+            section_id="decision_summary",
+            allowed_source_id="raw-source-a",
+        ),
+        _segmented_writer_segment(
+            segment_name="user_research",
+            section_id="review_theme_summary",
+            allowed_source_id="raw-source-c",
+        ),
+        _segmented_writer_segment(
+            segment_name="competitor_deep_dives Cursor",
+            section_id="competitor_deep_dives",
+            allowed_source_id="raw-source-d",
+            segment_competitor="Cursor",
+        ),
+        _segmented_writer_segment(
+            segment_name="swot_matrix",
+            section_id="swot_matrix",
+            allowed_source_id="raw-source-e",
+        ),
+        _segmented_writer_segment(
+            segment_name="support_appendix",
+            section_id="evidence_support",
+            segment_kind="support_fragment",
+            allowed_source_id="raw-source-e",
+        ),
+    ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        if "segment_name=decision_summary" in user:
+            return (
+                "## Decision Summary\n"
+                "Cursor pricing is visible. [source:raw-source-a]\n\n"
+                "## Competitive Findings\n"
+                "Cursor has the clearest pricing signal. [source:raw-source-a]"
+            )
+        if "segment_name=user_research" in user:
+            return "## User Review Themes\nUsers mention pricing. [source:raw-source-c]"
+        if "segment_name=competitor_deep_dives Cursor" in user:
+            return "## Competitor Deep Dives\n### Cursor\nVisible pricing. [source:raw-source-d]"
+        if "segment_name=swot_matrix" in user:
+            if "retry_count=1" in user:
+                return (
+                    "## Side-by-Side Decision Matrix\n"
+                    "Cursor publishes team pricing with visible per-seat tiers. "
+                    "[source:raw-source-e]\n\n"
+                    "## SWOT Analysis\n"
+                    "Strengths include pricing visibility. [source:raw-source-e]"
+                )
+            return "## SWOT Analysis\nStrengths include pricing visibility. [source:raw-source-e]"
+        if "segment_name=support_appendix" in user:
+            return "## Evidence & QA Support\nPricing source attached. [source:raw-source-e]"
+        raise AssertionError(f"unexpected writer segment prompt: {user}")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(segments=segments),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._real_writer_step(record)
+
+    report_md = record.detail.report_md
+    assert "## Side-by-Side Decision Matrix" in report_md
+    assert "Cursor publishes team pricing" in report_md
+    assert record.detail.status == "running"
+    validated_events = [
+        event
+        for event in record.events
+        if event.type == "writer_segment_validated"
+        and event.payload["section_id"] == "swot_matrix"
+    ]
+    assert [event.payload["validation_status"] for event in validated_events] == [
+        "retry",
+        "pass",
+    ]
+    assert validated_events[0].payload["missing_required_heading_keys"] == [
+        "side_by_side_matrix"
+    ]
+    repair_events = [
+        event for event in record.events if event.type == "writer_quality_preflight_repair"
+    ]
+    assert not repair_events
 
 
 @pytest.mark.asyncio
@@ -8545,7 +8816,12 @@ async def test_segmented_writer_retries_when_segment_uses_forbidden_heading(
         if "retry_count=1" in user:
             assert "Previous segment violated its heading contract" in user
             assert "Forbidden H2 headings found: Evidence Support" in user
-            return "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]"
+            return (
+                "## Decision Summary\n"
+                "Cursor pricing is visible. [source:cursor-pricing]\n\n"
+                "## Competitive Findings\n"
+                "Cursor has visible pricing evidence. [source:cursor-pricing]"
+            )
         return (
             "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]\n\n"
             "## Evidence Support\nSupport belongs elsewhere. [source:cursor-pricing]"
@@ -8573,7 +8849,8 @@ async def test_segmented_writer_retries_when_segment_uses_forbidden_heading(
 
     assert len(calls) == 2
     assert "## Evidence Support" not in record.detail.report_md
-    assert "## Executive Summary" in record.detail.report_md
+    assert "## Decision Summary" in record.detail.report_md
+    assert "## Competitive Findings" in record.detail.report_md
     validated_events = [
         event for event in record.events if event.type == "writer_segment_validated"
     ]
@@ -8582,6 +8859,67 @@ async def test_segmented_writer_retries_when_segment_uses_forbidden_heading(
         "pass",
     ]
     assert validated_events[0].payload["forbidden_headings"] == ["Evidence Support"]
+    assert validated_events[0].payload["segment_retry_count"] == 0
+    assert validated_events[1].payload["segment_retry_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_retries_when_swot_segment_omits_matrix(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-required-heading")
+    calls: list[str] = []
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        calls.append(user)
+        if "retry_count=1" in user:
+            assert "Previous segment violated its heading contract" in user
+            assert "Missing required H2 heading keys: side_by_side_matrix" in user
+            return (
+                "## Side-by-Side Decision Matrix\n"
+                "Cursor pricing is visible. [source:cursor-pricing]\n\n"
+                "## SWOT Analysis\n"
+                "Cursor pricing visibility is a strength. [source:cursor-pricing]"
+            )
+        return (
+            "## SWOT Analysis\n"
+            "Cursor pricing visibility is a strength. [source:cursor-pricing]"
+        )
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(
+            segment_name="swot_matrix",
+            section_id="swot_matrix",
+        ),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
+
+    await service._real_writer_step(record)
+
+    assert len(calls) == 2
+    assert "## Side-by-Side Decision Matrix" in record.detail.report_md
+    validated_events = [
+        event for event in record.events if event.type == "writer_segment_validated"
+    ]
+    assert [event.payload["validation_status"] for event in validated_events] == [
+        "retry",
+        "pass",
+    ]
     assert validated_events[0].payload["segment_retry_count"] == 0
     assert validated_events[1].payload["segment_retry_count"] == 1
 
@@ -8607,10 +8945,16 @@ async def test_segmented_writer_repairs_citations_after_contract_retry(
             )
         if len(calls) == 2:
             assert "Previous segment violated its heading contract" in user
-            return "## Executive Summary\nCursor pricing is visible. [source:missing-source]"
+            return (
+                "## Decision Summary\nCursor pricing is visible. [source:missing-source]\n\n"
+                "## Competitive Findings\nVisible pricing evidence. [source:missing-source]"
+            )
         assert "Previous segment cited source IDs outside this segment" in user
         assert "Previous segment violated its heading contract" in user
-        return "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]"
+        return (
+            "## Decision Summary\nCursor pricing is visible. [source:cursor-pricing]\n\n"
+            "## Competitive Findings\nVisible pricing evidence. [source:cursor-pricing]"
+        )
 
     monkeypatch.setattr(
         "packages.agents.writer.logic.build_writer_evidence_pack",
@@ -8721,12 +9065,16 @@ async def test_segmented_writer_assembles_duplicate_sections_before_return(
         if "segment_name=decision_summary" in user and "sources:1" in user:
             return (
                 "## Decision Summary\n"
-                "Decision from sources:1 [source:raw-source-a]."
+                "Decision from sources:1 [source:raw-source-a].\n\n"
+                "## Competitive Findings\n"
+                "Findings from sources:1 [source:raw-source-a]."
             )
         if "segment_name=decision_summary" in user and "sources:2" in user:
             return (
                 "## Decision Summary\n"
-                "Decision from sources:2 [source:raw-source-b]."
+                "Decision from sources:2 [source:raw-source-b].\n\n"
+                "## Competitive Findings\n"
+                "Findings from sources:2 [source:raw-source-b]."
             )
         if "segment_name=competitive_findings" in user:
             return "## Competitive Findings\nFindings [source:raw-source-c]."
@@ -8774,9 +9122,10 @@ async def test_segmented_writer_assembles_duplicate_sections_before_return(
     ]
     assert len(assembly_events) == 1
     payload = assembly_events[0].payload
-    assert payload["duplicate_section_count_before"] == 1
+    assert payload["duplicate_section_count_before"] == 3
     assert payload["duplicate_section_count_after"] == 0
     assert "decision_summary" in payload["merged_section_keys"]
+    assert "competitive_findings" in payload["merged_section_keys"]
 
 
 @pytest.mark.asyncio
@@ -8911,7 +9260,12 @@ async def test_segmented_writer_does_not_serialize_full_evidence_pack(monkeypatc
     async def fake_trace_llm_text(*args, **kwargs):
         user = kwargs["user"]
         if "segment_name=decision_summary" in user:
-            return "## Decision Summary\nCursor has visible pricing. [source:cursor-pricing]"
+            return (
+                "## Decision Summary\n"
+                "Cursor has visible pricing. [source:cursor-pricing]\n\n"
+                "## Competitive Findings\n"
+                "Cursor has visible pricing evidence. [source:cursor-pricing]"
+            )
         if "segment_name=competitive_findings" in user:
             return "## Competitive Findings\nCursor has visible pricing. [source:cursor-pricing]"
         if "segment_name=user_research" in user:
@@ -9695,7 +10049,9 @@ async def test_writer_section_repair_synthesizes_evidence_shards_once(
         ]
         return (
             "## Decision Summary\n"
-            "Repaired shard note [source:raw-source-a][source:raw-source-b]."
+            "Repaired shard note [source:raw-source-a][source:raw-source-b].\n\n"
+            "## Competitive Findings\n"
+            "Repaired shard finding [source:raw-source-a][source:raw-source-b]."
         )
 
     async def fake_trace_llm_text(*args, **kwargs):
@@ -9716,6 +10072,7 @@ async def test_writer_section_repair_synthesizes_evidence_shards_once(
 
     assert calls == ["evidence_shard", "evidence_shard", "section_fragment"]
     assert result.count("## Decision Summary") == 1
+    assert result.count("## Competitive Findings") == 1
     assert "Repaired shard note" in result
 
 
@@ -12039,12 +12396,10 @@ def test_release_gate_quality_metadata_records_followup_tasks() -> None:
         == "Collect a second independent pricing source."
     )
     assert metadata["redo_scopes"][0]["target_subagent"] == "pricing"
-    assert "## Release Gate Follow-up Repairs" in projection.report_version.report_md
-    assert projection.report_version.report_md.count("## Release Gate Follow-up Repairs") == 1
-    assert "- Follow-up targets: 1 warning(s) grouped for reviewer attention." in (
+    assert "## Release Gate Follow-up Repairs" not in projection.report_version.report_md
+    assert "claim_self_consistency_required: 1 warning(s)" not in (
         projection.report_version.report_md
     )
-    assert "claim_self_consistency_required: 1 warning(s)" in projection.report_version.report_md
     assert "Collect a second independent pricing source." not in projection.report_version.report_md
 
 
@@ -12088,17 +12443,111 @@ def test_release_gate_quality_metadata_records_blocked_status_in_report() -> Non
     assert metadata["allowed"] is False
     assert metadata["status"] == "blocked"
     assert metadata["warning_repair"]["changed"] is True
-    assert "## Release Gate Follow-up Repairs" in projection.report_version.report_md
+    assert "## Release Gate Follow-up Repairs" not in projection.report_version.report_md
     assert (
         "- Release gate status: blocked; 1 blocker(s), 0 warning(s), "
         "1 total issue(s)."
-    ) in projection.report_version.report_md
-    assert "claim_uses_low_confidence_evidence: 1 blocker(s)" in (
+    ) not in projection.report_version.report_md
+    assert "claim_uses_low_confidence_evidence: 1 blocker(s)" not in (
         projection.report_version.report_md
     )
-    assert projection.report_version.report_md.index(
-        "## Release Gate Follow-up Repairs"
-    ) < projection.report_version.report_md.index("## Final QA Gate Status")
+
+
+def test_release_gate_quality_metadata_uses_current_projection_scope() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+        enterprise_store=store,
+    )
+    detail = RunDetail(
+        id="run-current-scope",
+        topic="Release gate current scope",
+        status="completed",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="Release gate current scope",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+    )
+    context = store.start_run(detail, project_id="project-current-scope")
+    competitor_id = context.competitor_id_map["Cursor"]
+    old_evidence = EvidenceRecord(
+        id="evidence-old",
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        run_id=detail.id,
+        raw_source_id="raw-old",
+        competitor_id=competitor_id,
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Old pricing",
+        snippet="Old pricing source.",
+        content_hash="old",
+        reliability_score=0.9,
+    )
+    fresh_evidence = EvidenceRecord(
+        id="evidence-fresh",
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        run_id=detail.id,
+        raw_source_id="raw-fresh",
+        competitor_id=competitor_id,
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Fresh pricing",
+        snippet="Fresh pricing source.",
+        content_hash="fresh",
+        reliability_score=0.9,
+    )
+    old_version = ReportVersionRecord(
+        id="report-version-current-scope",
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        run_id=detail.id,
+        version_number=1,
+        topic_normalized="release-gate-current-scope",
+        competitor_layer="L1",
+        competitor_set_hash="hash-current-scope",
+        report_md="# Report\n[source:raw-old]",
+        evidence_ids=[old_evidence.id],
+    )
+    store.save_projection(
+        EnterpriseRunProjection(
+            workspace_id=context.workspace_id,
+            project_id=context.project_id,
+            run_id=detail.id,
+            evidence_records=[old_evidence],
+            report_version=old_version,
+        )
+    )
+    fresh_projection = EnterpriseRunProjection(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        run_id=detail.id,
+        evidence_records=[old_evidence, fresh_evidence],
+        report_version=old_version.model_copy(
+            update={
+                "report_md": "# Report\n[source:raw-old][source:raw-fresh]",
+                "evidence_ids": [old_evidence.id, fresh_evidence.id],
+            }
+        ),
+    )
+
+    service._attach_release_gate_quality_metadata(fresh_projection, _blocked_release_gate())
+
+    scope = fresh_projection.report_version.quality_metadata["release_gate"]["report_scope"]
+    assert scope["scoped_evidence_ids"] == [old_evidence.id, fresh_evidence.id]
 
 
 @pytest.mark.asyncio
@@ -14126,6 +14575,48 @@ def test_deterministic_pricing_payload_maps_claude_code_max_tiers() -> None:
         for tier in tiers
         if tier["price"] in {"$100/month", "$200/month"}
     ] == [("Max", "$100/month"), ("Max", "$200/month")]
+
+
+def test_deterministic_pricing_payload_ignores_credit_balance_prices() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    sources = [
+        {
+            "id": "copilot-pricing",
+            "title": "GitHub Copilot pricing",
+            "snippet": (
+                "Business costs $19 per user per month. "
+                "Enterprise costs $39 per user per month. "
+                "A promotional trial balance mentions $70 in credits, but that is "
+                "not an Enterprise plan price."
+            ),
+            "confidence": 0.95,
+        }
+    ]
+
+    pricing = service._deterministic_structured_knowledge_payload(
+        competitor="GitHub Copilot",
+        dimension="pricing",
+        dimension_sources=sources,
+    )
+
+    tiers = pricing["pricing_model"]["tiers"]
+    assert ("Business", "$19 per user per month") in [
+        (tier["name"], tier["price"]) for tier in tiers
+    ]
+    assert ("Enterprise", "$39 per user per month") in [
+        (tier["name"], tier["price"]) for tier in tiers
+    ]
+    assert "$70" not in {tier["price"] for tier in tiers}
 
 
 def test_structured_pricing_payload_appends_missing_paid_tiers_from_sources() -> None:
