@@ -22,7 +22,7 @@ def _normalize_heading(text: str) -> str:
     return _WHITESPACE_RE.sub(" ", text).strip().casefold()
 
 
-_ENGLISH_STRUCTURAL_H3_H4 = frozenset(
+_ENGLISH_STRUCTURAL_HEADINGS = frozenset(
     _normalize_heading(heading)
     for heading in (
         *_EN_LABELS.values(),
@@ -124,16 +124,15 @@ def _validate_headings(
                 )
             )
 
-        if is_zh and level in {3, 4}:
+        if is_zh and level in {2, 3, 4}:
             clean_text = SOURCE_TOKEN_RE.sub("", text)
-            if _normalize_heading(clean_text) in _ENGLISH_STRUCTURAL_H3_H4:
+            if _normalize_heading(clean_text) in _ENGLISH_STRUCTURAL_HEADINGS:
                 issues.append(
                     PublicationContractIssue(
                         code="english_structural_heading_in_zh",
                         line_number=line_number,
                         message=(
-                            "zh-CN report contains an English structural H3/H4 "
-                            "heading."
+                            "zh-CN report contains an English structural heading."
                         ),
                         repair_target="renderer",
                     )

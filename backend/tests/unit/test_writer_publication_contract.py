@@ -43,6 +43,30 @@ def test_rejects_broader_renderer_style_english_headings_in_zh_report() -> None:
     assert {issue.repair_target for issue in matching_issues} == {"renderer"}
 
 
+def test_rejects_top_level_english_structural_headings_in_zh_report() -> None:
+    markdown = (
+        "## Executive Summary\n\n"
+        "正文。\n\n"
+        "## Decision Matrix\n\n"
+        "正文。\n\n"
+        "## Support Materials\n"
+    )
+
+    result = validate_publication_contract(
+        markdown,
+        structured_report=_report("zh-CN"),
+        allowed_source_ids=set(),
+    )
+
+    matching_issues = [
+        issue
+        for issue in result.issues
+        if issue.code == "english_structural_heading_in_zh"
+    ]
+    assert [issue.line_number for issue in matching_issues] == [1, 5, 9]
+    assert {issue.repair_target for issue in matching_issues} == {"renderer"}
+
+
 def test_allows_standalone_english_competitor_heading_in_zh_report() -> None:
     markdown = "## 用户评价整理\n\n### Cursor\n\n正文 [source:raw-source-a]\n"
 
@@ -54,6 +78,23 @@ def test_allows_standalone_english_competitor_heading_in_zh_report() -> None:
 
     assert result.passed
     assert result.issues == []
+
+
+def test_rejects_citation_in_appendix_table_header() -> None:
+    markdown = (
+        "| 来源 ID [source:raw-source-a] | 标题 | 竞品 | 维度 | 角色 | 置信度 |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| raw-source-a | Source title | Cursor | pricing | official_fact | high |\n"
+    )
+
+    result = validate_publication_contract(
+        markdown,
+        structured_report=_report("zh-CN"),
+        allowed_source_ids={"raw-source-a"},
+    )
+
+    assert result.issue_codes() == ["citation_in_table_header"]
+    assert result.issues[0].repair_target == "renderer"
 
 
 def test_rejects_citations_in_headings_and_table_headers() -> None:
