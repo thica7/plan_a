@@ -287,7 +287,7 @@ def get_settings() -> Settings:
         ),
         writer_structured_report_enabled=_env_bool(
             "WRITER_STRUCTURED_REPORT_ENABLED",
-            False,
+            True,
         ),
         langfuse_public_key=os.getenv("LANGFUSE_PUBLIC_KEY") or None,
         langfuse_secret_key=os.getenv("LANGFUSE_SECRET_KEY") or None,

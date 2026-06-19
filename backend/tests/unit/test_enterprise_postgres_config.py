@@ -53,10 +53,14 @@ def test_writer_timeout_settings_allow_explicit_override(monkeypatch) -> None:
     assert settings.writer_timeout_seconds == 600.0
 
 
-def test_writer_structured_report_enabled_defaults_to_true_after_integration_gate() -> None:
-    from packages.config.settings import Settings
+def test_writer_structured_report_enabled_defaults_to_true_after_integration_gate(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(ENV_FILE_LOADING_FLAG, "0")
+    monkeypatch.delenv("WRITER_STRUCTURED_REPORT_ENABLED", raising=False)
+    get_settings.cache_clear()
 
-    settings = Settings()
+    settings = get_settings()
 
     assert settings.writer_structured_report_enabled is True
 
