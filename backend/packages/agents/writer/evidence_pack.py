@@ -8,6 +8,7 @@ from typing import Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from packages.business_intel.entity_resolver import is_trusted_url_for_competitor
 from packages.identity.source_resolver import (
     is_valid_source_token,
     normalize_source_token,
@@ -59,6 +60,12 @@ class WriterSourceRegistryItem(BaseModel):
     url: str | None = None
     confidence: float
     candidate_origin: str = "unknown"
+    authority_role: Literal[
+        "vendor_official",
+        "community",
+        "user_research",
+        "third_party",
+    ] = "third_party"
     quality_score: float = 0.0
     short_source_note: str = ""
     has_normalized_fields: bool = False
@@ -1237,6 +1244,7 @@ def _prompt_safe_registry_item(item: WriterSourceRegistryItem) -> dict[str, obje
         "url": item.url,
         "confidence": item.confidence,
         "candidate_origin": item.candidate_origin,
+        "authority_role": item.authority_role,
         "quality_score": item.quality_score,
         "short_source_note": item.short_source_note,
         "has_normalized_fields": item.has_normalized_fields,
@@ -1420,6 +1428,22 @@ COMMUNITY_SOURCE_TYPES = {
 }
 
 
+def _source_authority_role(
+    source: RawSource,
+) -> Literal["vendor_official", "community", "user_research", "third_party"]:
+    source_type = source.source_type.casefold()
+    if source.metadata.get("community_evidence") or source_type in COMMUNITY_SOURCE_TYPES:
+        return "community"
+    if source_type in USER_RESEARCH_SOURCE_TYPES:
+        return "user_research"
+    if source_type in {"official_docs", "official_webpage"}:
+        return "vendor_official"
+    if source_type == "webpage_verified" and source.url is not None:
+        if is_trusted_url_for_competitor(source.competitor, str(source.url)):
+            return "vendor_official"
+    return "third_party"
+
+
 def build_writer_evidence_pack(detail: RunDetail) -> WriterEvidencePackResult:
     builder = _WriterEvidencePackBuilder(detail)
     return builder.build()
@@ -1455,6 +1479,7 @@ class _WriterEvidencePackBuilder:
 
     def _register_source(self, source: RawSource) -> None:
         fields = normalized_fields_from_source(source)
+        authority_role = _source_authority_role(source)
         item = WriterSourceRegistryItem(
             id=source.id,
             competitor=source.competitor,
@@ -1465,6 +1490,7 @@ class _WriterEvidencePackBuilder:
             url=str(source.url) if source.url else None,
             confidence=round(source.confidence, 3),
             candidate_origin=source.candidate_origin,
+            authority_role=authority_role,
             quality_score=round(source.quality_score, 3),
             short_source_note=_trim(_clean(source.title), SOURCE_NOTE_LIMIT),
             has_normalized_fields=bool(fields),
@@ -1473,13 +1499,11 @@ class _WriterEvidencePackBuilder:
         self.registry_by_id[source.id] = item
         group = self._group(source.competitor, source.dimension)
         group.source_ids = _unique([*group.source_ids, source.id])
-        if source.source_type.casefold() in OFFICIAL_SOURCE_TYPES:
+        if authority_role == "vendor_official":
             group.official_source_ids = _unique([*group.official_source_ids, source.id])
-        if source.source_type.casefold() in COMMUNITY_SOURCE_TYPES or source.metadata.get(
-            "community_evidence"
-        ):
+        if authority_role == "community":
             group.community_source_ids = _unique([*group.community_source_ids, source.id])
-        if source.source_type.casefold() in USER_RESEARCH_SOURCE_TYPES:
+        if authority_role == "user_research":
             group.user_research_source_ids = _unique(
                 [*group.user_research_source_ids, source.id]
             )

@@ -118,6 +118,68 @@ def test_evidence_pack_source_registry_represents_every_accepted_source() -> Non
     assert result.metrics.largest_source_projection_chars >= expected_projection_chars
 
 
+def test_evidence_pack_only_marks_vendor_trusted_sources_as_official() -> None:
+    sources = [
+        RawSource(
+            id="cursor-official",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.com/pricing",
+            snippet="Cursor Pro costs $20 per month.",
+            content_hash="cursor-official-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="cursor-third-party",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing guide",
+            url="https://example.com/cursor-pricing-guide",
+            snippet="A third-party guide estimates Cursor pricing.",
+            content_hash="cursor-third-party-hash",
+            confidence=0.9,
+        ),
+        RawSource(
+            id="cursor-community",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing forum",
+            url="https://forum.cursor.com/t/pricing",
+            snippet="Users discuss Cursor pricing.",
+            content_hash="cursor-community-hash",
+            confidence=0.92,
+            metadata={"community_evidence": True},
+        ),
+    ]
+
+    result = build_writer_evidence_pack(_detail_with_sources(sources))
+
+    group = result.pack.groups[0]
+    assert group.official_source_ids == ["cursor-official"]
+    assert "cursor-third-party" not in group.official_source_ids
+    assert "cursor-community" in group.community_source_ids
+
+    registry_by_id = {item.id: item for item in result.pack.source_registry}
+    assert registry_by_id["cursor-official"].authority_role == "vendor_official"
+    assert registry_by_id["cursor-third-party"].authority_role == "third_party"
+    assert registry_by_id["cursor-community"].authority_role == "community"
+
+    prompt_payload = json.loads(result.to_prompt_json())
+    roles_by_id = {
+        item["id"]: item["authority_role"]
+        for item in prompt_payload["source_registry"]
+    }
+    assert roles_by_id == {
+        "cursor-official": "vendor_official",
+        "cursor-third-party": "third_party",
+        "cursor-community": "community",
+    }
+
+
 def test_writer_evidence_pack_includes_all_raw_sources() -> None:
     sources = [
         RawSource(

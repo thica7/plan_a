@@ -1831,6 +1831,109 @@ def test_qa_allows_community_observation_when_official_sources_unavailable() -> 
     assert not any("community observation as official" in issue.problem for issue in issues)
 
 
+def test_qa_allows_community_risk_caveat_before_source_citation_colon() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-risk-caveat-source-token",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Windsurf"],
+            dimensions=["pricing", "feature"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Windsurf",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Windsurf pricing reddit",
+                url="https://reddit.com/r/windsurf/comments/pricing",
+                snippet="Community users report pricing volatility.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md=(
+            "## 声明风险\n"
+            "Windsurf's pricing and feature claims are heavily based on community "
+            "sources, which may not reflect the official, current, or stable "
+            "product offering. [source:reddit-pricing]"
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
+def test_qa_ignores_real_chinese_support_material_caveats() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-real-zh-support",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Windsurf"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Windsurf",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Windsurf pricing reddit",
+                url="https://reddit.com/r/windsurf/comments/pricing",
+                snippet="Community users report pricing volatility.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md=(
+            "## 执行摘要\n"
+            "核心结论保持谨慎。\n\n"
+            "## 支撑材料\n"
+            "Official Windsurf pricing: community users report volatility. "
+            "[source:reddit-pricing]"
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
 def test_qa_blocks_community_official_commitment_with_colon_phrasing() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -11820,6 +11923,20 @@ async def test_collector_preserves_official_sources_when_community_search_fails(
     assert len(record.detail.raw_sources) == 1
     assert record.detail.raw_sources[0].source_type == "webpage_verified"
     assert str(record.detail.raw_sources[0].url) == "https://cursor.com/pricing"
+    community_failure_messages = [
+        message
+        for message in record.detail.agent_messages
+        if message.message_type == "community_search_failed"
+    ]
+    assert len(community_failure_messages) == 1
+    assert community_failure_messages[0].payload["competitor"] == "Cursor"
+    assert community_failure_messages[0].payload["dimension"] == "pricing"
+    assert community_failure_messages[0].payload["error"] == "community search down"
+    issues = service._build_qa_issues(record.detail)
+    assert not any(
+        "Community triangulation was not attempted" in issue.problem
+        for issue in issues
+    )
     collector_done = next(
         event
         for event in reversed(service.get_trace(detail.id) or [])

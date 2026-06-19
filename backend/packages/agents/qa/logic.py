@@ -27,6 +27,7 @@ from packages.sources import (
 )
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+SOURCE_TOKEN_TEXT_RE = re.compile(r"(?:\[source:[^\]]+\]|\u3010source:[^\u3011]+\u3011)")
 REVIEW_SUMMARY_DIMENSION_HINTS = (
     "review",
     "persona",
@@ -594,8 +595,11 @@ class QualityAgentMixin:
                 str(message.payload.get("dimension") or ""),
             )
             for message in detail.agent_messages
-            if message.message_type == "community_search_completed"
-            and isinstance(message.payload, dict)
+            if (
+                message.message_type
+                in {"community_search_completed", "community_search_failed"}
+                and isinstance(message.payload, dict)
+            )
         }
         issues: list[QCIssue] = []
         for competitor in detail.plan.competitors:
@@ -626,7 +630,7 @@ class QualityAgentMixin:
                         target_subagent=dimension,
                         target_competitor=competitor,
                         field_path=(
-                            "agent_messages.community_search_completed"
+                            "agent_messages.community_search_attempt"
                             f"[{competitor}][{dimension}]"
                         ),
                         problem=problem,
@@ -1317,7 +1321,7 @@ class QualityAgentMixin:
         for line_number, line in enumerate(detail.report_md.splitlines(), start=1):
             if section_index.is_support_or_audit_line(line_number):
                 continue
-            normalized = line.casefold()
+            normalized = SOURCE_TOKEN_TEXT_RE.sub("", line).casefold()
             if not self._is_community_official_commitment_line(normalized):
                 continue
             line_source_ids = [
@@ -1470,6 +1474,16 @@ class QualityAgentMixin:
                 "official source not found",
                 "no official evidence",
                 "without official evidence",
+                "may not reflect official",
+                "may not reflect the official",
+                "does not reflect official",
+                "does not reflect the official",
+                "not reflect official",
+                "not reflect the official",
+                "may not represent official",
+                "may not represent the official",
+                "not represent official",
+                "not represent the official",
             )
         )
 

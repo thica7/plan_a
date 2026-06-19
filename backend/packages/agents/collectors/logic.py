@@ -2019,6 +2019,25 @@ class CollectorAgentMixin:
                 )
             except Exception as exc:  # noqa: BLE001 - optional community search degrades.
                 collect_payload["community_error"] = str(exc)
+                self._append_agent_message(
+                    record,
+                    from_agent="collector",
+                    to_agent="collect_join",
+                    message_type="community_search_failed",
+                    payload_schema="CommunitySearchSummary",
+                    payload={
+                        "competitor": competitor,
+                        "dimension": dimension,
+                        "queries": [],
+                        "query_count": 0,
+                        "candidate_count": 0,
+                        "candidate_ids": [],
+                        "no_result": True,
+                        "failed": True,
+                        "error": str(exc),
+                    },
+                    source_message_ids=[task_message.id],
+                )
                 community_sources = []
             for source in community_sources:
                 if not self._source_already_in_batch(source, sources):
@@ -2121,6 +2140,7 @@ class CollectorAgentMixin:
             message_types={
                 "raw_sources_collected",
                 "community_search_completed",
+                "community_search_failed",
                 "cross_competitor_sources_collected",
                 "cross_competitor_search_failed",
             },
@@ -2139,6 +2159,7 @@ class CollectorAgentMixin:
             consumer_agent="collect_join",
             message_types={
                 "community_search_completed",
+                "community_search_failed",
                 "cross_competitor_sources_collected",
                 "cross_competitor_search_failed",
             },

@@ -619,6 +619,8 @@ export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) 
     "writer_quality_preflight",
     "writer_quality_preflight_repair",
     "writer_structured_repair_selected",
+    "writer_structured_section_started",
+    "writer_structured_section_completed",
     "writer_structured_report_validated",
     "writer_publication_contract_validated",
     "writer_markdown_fallback_used",

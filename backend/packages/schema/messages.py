@@ -83,6 +83,8 @@ class CommunitySearchSummaryMessagePayload(_MessagePayload):
     candidate_count: int = Field(ge=0)
     candidate_ids: list[str] = Field(default_factory=list)
     no_result: bool = False
+    failed: bool = False
+    error: str | None = None
 
 
 class QCIssueCollectionMessagePayload(_MessagePayload):

@@ -357,11 +357,26 @@ def _structured_section_schema(schema_name: object) -> type[BaseModel]:
     return schemas[str(schema_name)]
 
 
+def _structured_section_language_instruction(segment: dict[str, object]) -> str:
+    if normalize_output_language(segment.get("output_language")) == "zh-CN":
+        return (
+            "Write every narrative text field in Simplified Chinese. Preserve "
+            "product names, source IDs, URLs, and technical terms such as model "
+            "names and API names in their original language when appropriate."
+        )
+    return "Write every narrative text field in English."
+
+
 def _structured_section_inputs(
     *, evidence_pack_result, competitors: list[str], dimensions: list[str]
 ) -> dict[str, dict[str, object]]:
     segment_inputs = _structured_budgeted_segment_inputs(evidence_pack_result)
     base = None if segment_inputs else evidence_pack_result.to_prompt_json()
+    output_language = getattr(
+        getattr(evidence_pack_result, "pack", None),
+        "output_language",
+        "zh-CN",
+    )
     inputs: dict[str, dict[str, object]] = {}
     for item in build_structured_writer_section_plan(
         competitors=competitors,
@@ -372,6 +387,7 @@ def _structured_section_inputs(
             "section_id": section_id,
             "competitor": item.get("competitor"),
             "dimensions": item.get("dimensions", dimensions),
+            "output_language": output_language,
         }
         if segment_inputs:
             matching_segments = _select_structured_evidence_segments(
@@ -1113,7 +1129,8 @@ class WriterAgentMixin:
             competitors=competitors,
             dimensions=dimensions,
         )
-        for item in plan:
+        total_sections = len(plan)
+        for index, item in enumerate(plan, start=1):
             key = _structured_section_key(item)
             if "allowed_source_ids" in section_inputs[key]:
                 section_allowed_source_ids = {
@@ -1123,12 +1140,37 @@ class WriterAgentMixin:
                 }
             else:
                 section_allowed_source_ids = allowed_source_ids
+            event_payload: dict[str, object] = {
+                "section_key": key,
+                "section_id": str(item["section_id"]),
+                "section_index": index,
+                "section_total": total_sections,
+                "allowed_source_count": len(section_allowed_source_ids),
+            }
+            if item.get("competitor") is not None:
+                event_payload["competitor"] = str(item["competitor"])
+            await self.emit(
+                detail.id,
+                "writer_structured_section_started",
+                "writer",
+                key,
+                f"Writing structured report section {index}/{total_sections}: {key}",
+                event_payload,
+            )
             sections[key] = await self._writer_structured_section_json(
                 record,
                 segment=section_inputs[key],
                 section_schema=_structured_section_schema(item["schema"]),
                 allowed_source_ids=section_allowed_source_ids,
                 timeout_seconds=timeout_seconds,
+            )
+            await self.emit(
+                detail.id,
+                "writer_structured_section_completed",
+                "writer",
+                key,
+                f"Structured report section completed {index}/{total_sections}: {key}",
+                event_payload,
             )
 
         executive_summary = sections["executive_summary"]
@@ -1353,16 +1395,21 @@ class WriterAgentMixin:
             "[source:",
             "[source token:",
         )
+        language_guidance = _structured_section_language_instruction(segment)
         return "\n".join(
             [
                 "Return JSON only.",
                 "Do not write Markdown headings.",
+                language_guidance,
                 "Do not include markdown citation tokens inside text fields.",
                 "Put citations only in source_ids.",
                 "Use only allowed_source_ids.",
                 (
                     "Choose evidence_role precisely: official/product/vendor facts use "
-                    "official_fact; user/community/forum signals use community_signal; "
+                    "official_fact only when the cited source_registry item has "
+                    "authority_role=vendor_official; third-party webpage_verified "
+                    "sources are not official by default. user/community/forum signals "
+                    "use community_signal; "
                     "simulated interviews/surveys use simulated_research; reasoned "
                     "conclusions use inference; missing/unsupported evidence uses "
                     "evidence_gap."

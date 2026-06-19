@@ -48,10 +48,24 @@ class _WriterHarness(WriterAgentMixin):
     def __init__(self, responses: list[str]) -> None:
         self.responses = responses
         self.prompts: list[str] = []
+        self.emitted_events: list[tuple[str, str, str | None, str | None, str, dict[str, object] | None]] = []
 
     async def _trace_llm_text(self, record, *, agent, subagent, name, system, user) -> str:
         self.prompts.append(system + "\n" + user)
         return self.responses.pop(0)
+
+    async def emit(
+        self,
+        run_id: str,
+        event_type: str,
+        node: str | None,
+        subagent: str | None,
+        message: str,
+        payload: dict[str, object] | None = None,
+    ) -> None:
+        self.emitted_events.append(
+            (run_id, event_type, node, subagent, message, payload)
+        )
 
 
 def _run_detail_for_structured_writer() -> RunDetail:
@@ -580,6 +594,84 @@ def test_structured_section_prompt_includes_evidence_role_guidance() -> None:
     assert "reasoned conclusions" in prompt
     assert "missing/unsupported evidence" in prompt
     assert "[source:" not in prompt
+
+
+def test_structured_section_prompt_requires_requested_output_language() -> None:
+    prompt = _WriterHarness([])._structured_section_prompt(
+        segment={
+            "section_id": "executive_summary",
+            "content": "Evidence",
+            "output_language": "zh-CN",
+        },
+        section_schema=ExecutiveSummarySection,
+        allowed_source_ids={"raw-source-a"},
+    )
+
+    assert "Write every narrative text field in Simplified Chinese" in prompt
+    assert "product names, source IDs, URLs, and technical terms" in prompt
+
+
+@pytest.mark.asyncio
+async def test_structured_writer_emits_section_progress_events(monkeypatch) -> None:
+    harness = _WriterHarness([])
+    record = _writer_record_with_sources(["raw-source-a", "raw-source-b"])
+    fixture = _report("zh-CN")
+
+    async def section_json(record, *, segment, section_schema, allowed_source_ids, timeout_seconds):
+        section_id = segment["section_id"]
+        if section_id == "executive_summary":
+            return fixture.core.executive_summary
+        if section_id == "decision_summary":
+            return SimpleNamespace(items=fixture.core.decision_summary)
+        if section_id == "competitive_findings":
+            return SimpleNamespace(items=fixture.core.competitive_findings)
+        if section_id == "user_review_themes":
+            return fixture.core.user_review_themes
+        if section_id == "competitor_deep_dive":
+            competitor = str(segment["competitor"])
+            return fixture.core.competitor_deep_dives[0].model_copy(
+                update={"competitor": competitor}
+            )
+        if section_id == "decision_matrix":
+            return fixture.core.decision_matrix
+        if section_id == "swot":
+            return fixture.core.swot
+        if section_id == "battlecard":
+            return fixture.core.battlecard
+        if section_id == "community_triangulation":
+            return SimpleNamespace(items=fixture.core.community_triangulation)
+        if section_id == "support":
+            return fixture.support
+        raise AssertionError(f"unexpected section_id {section_id}")
+
+    monkeypatch.setattr(harness, "_writer_structured_section_json", section_json)
+
+    await harness._writer_structured_report(
+        record,
+        evidence_pack_result=_minimal_evidence_pack_result(),
+        timeout_seconds=10,
+    )
+
+    started = [
+        event
+        for event in harness.emitted_events
+        if event[1] == "writer_structured_section_started"
+    ]
+    completed = [
+        event
+        for event in harness.emitted_events
+        if event[1] == "writer_structured_section_completed"
+    ]
+    expected_count = len(
+        build_structured_writer_section_plan(
+            competitors=record.detail.plan.competitors,
+            dimensions=record.detail.plan.dimensions,
+        )
+    )
+    assert len(started) == expected_count
+    assert len(completed) == expected_count
+    assert started[0][5]["section_key"] == "executive_summary"
+    assert completed[-1][5]["section_key"] == "support"
 
 
 @pytest.mark.asyncio
