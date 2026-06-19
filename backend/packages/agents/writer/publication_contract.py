@@ -9,7 +9,7 @@ from packages.agents.writer.structured_hygiene import (
     has_source_token,
     is_valid_source_id,
 )
-from packages.agents.writer.structured_renderer import _EN_LABELS
+from packages.agents.writer.structured_renderer import _EN_LABELS, _ZH_LABELS
 from packages.agents.writer.structured_report import StructuredReport
 
 
@@ -30,7 +30,51 @@ _ENGLISH_STRUCTURAL_HEADINGS = frozenset(
         "Direct User / Community Signals",
         "Simulated Survey and Interview Signals",
         "Battlecard",
+        "Source Appendix",
+        "Claim Support Audit",
     )
+)
+_CORE_SECTION_KEYS = (
+    "executive_summary",
+    "decision_summary",
+    "competitive_findings",
+    "user_review_themes",
+    "competitor_deep_dives",
+    "decision_matrix",
+    "swot",
+    "battlecard",
+    "community_triangulation",
+)
+_SUPPORT_SECTION_KEYS = (
+    "support_materials",
+    "source_quality",
+    "user_research_evidence",
+    "rag_gap_fill",
+    "scenario_qa",
+    "claim_risk",
+    "next_collection",
+    "evidence_appendix",
+)
+_EN_CORE_SECTION_HEADINGS = frozenset(
+    _normalize_heading(heading)
+    for heading in (
+        *(_EN_LABELS[key] for key in _CORE_SECTION_KEYS),
+        "Battlecard",
+    )
+)
+_ZH_CORE_SECTION_HEADINGS = frozenset(
+    _normalize_heading(_ZH_LABELS[key]) for key in _CORE_SECTION_KEYS
+)
+_EN_SUPPORT_SECTION_HEADINGS = frozenset(
+    _normalize_heading(heading)
+    for heading in (
+        *(_EN_LABELS[key] for key in _SUPPORT_SECTION_KEYS),
+        "Source Appendix",
+        "Claim Support Audit",
+    )
+)
+_ZH_SUPPORT_SECTION_HEADINGS = frozenset(
+    _normalize_heading(_ZH_LABELS[key]) for key in _SUPPORT_SECTION_KEYS
 )
 _INTERNAL_TERM_PATTERNS = tuple(
     re.compile(pattern, re.IGNORECASE)
@@ -42,6 +86,7 @@ _INTERNAL_TERM_PATTERNS = tuple(
         r"Writer Evidence Pack",
         r"\bfact:",
         r"\bsignal:",
+        r"\bkb:[A-Za-z0-9_.:#-]+",
     )
 )
 
@@ -235,23 +280,38 @@ def _validate_core_support_order(
     issues: list[PublicationContractIssue],
 ) -> None:
     if is_zh:
-        core_line = _find_h2(lines, {"战报"})
-        support_line = _find_h2(lines, {"支撑材料"})
+        core_headings = _ZH_CORE_SECTION_HEADINGS
+        support_headings = _ZH_SUPPORT_SECTION_HEADINGS
     else:
-        core_line = _find_h2(lines, {"battlecard", "battlecards"})
-        support_line = _find_h2(lines, {"support materials"})
+        core_headings = _EN_CORE_SECTION_HEADINGS
+        support_headings = _EN_SUPPORT_SECTION_HEADINGS
 
-    if core_line is None or support_line is None or support_line > core_line:
-        return
+    first_support_line: int | None = None
+    for line_number, line in enumerate(lines, start=1):
+        heading = _parse_heading(line)
+        if heading is None:
+            continue
 
-    issues.append(
-        PublicationContractIssue(
-            code="support_before_core",
-            line_number=support_line,
-            message="Support materials appear before the core battlecard section.",
-            repair_target="renderer",
-        )
-    )
+        level, text = heading
+        if level != 2:
+            continue
+
+        normalized = _normalize_heading(SOURCE_TOKEN_RE.sub("", text))
+        if normalized in support_headings and first_support_line is None:
+            first_support_line = line_number
+        if normalized in core_headings and first_support_line is not None:
+            issues.append(
+                PublicationContractIssue(
+                    code="support_before_core",
+                    line_number=first_support_line,
+                    message=(
+                        "Support, audit, appendix, or QA sections appear before "
+                        "all core business report sections are complete."
+                    ),
+                    repair_target="renderer",
+                )
+            )
+            return
 
 
 def _parse_heading(line: str) -> tuple[int, str] | None:
@@ -259,17 +319,6 @@ def _parse_heading(line: str) -> tuple[int, str] | None:
     if match is None:
         return None
     return len(match.group(1)), match.group(2).strip()
-
-
-def _find_h2(lines: list[str], headings: set[str]) -> int | None:
-    for line_number, line in enumerate(lines, start=1):
-        heading = _parse_heading(line)
-        if heading is None:
-            continue
-        level, text = heading
-        if level == 2 and _normalize_heading(text) in headings:
-            return line_number
-    return None
 
 
 def _is_table_header(lines: list[str], index: int) -> bool:
