@@ -45,8 +45,12 @@ def _clean_report():
 def _validate(report, *, allowed_source_ids=None, strong_source_ids=None):
     return validate_structured_report(
         report,
-        allowed_source_ids=allowed_source_ids or DEFAULT_SOURCE_IDS,
-        strong_source_ids=strong_source_ids or DEFAULT_SOURCE_IDS,
+        allowed_source_ids=(
+            DEFAULT_SOURCE_IDS if allowed_source_ids is None else allowed_source_ids
+        ),
+        strong_source_ids=(
+            DEFAULT_SOURCE_IDS if strong_source_ids is None else strong_source_ids
+        ),
     )
 
 
@@ -102,6 +106,17 @@ def test_invalid_source_id_grammar_is_rejected_before_publication() -> None:
         report,
         allowed_source_ids={*DEFAULT_SOURCE_IDS, "bad source id"},
     )
+
+    assert not validation.passed
+    assert any(
+        issue.code == "invalid_source_id"
+        and issue.path == "core.executive_summary.recommendation.source_ids[0]"
+        for issue in validation.issues
+    )
+
+
+def test_explicit_empty_allowed_source_ids_are_not_replaced_by_defaults() -> None:
+    validation = _validate(_clean_report(), allowed_source_ids=set())
 
     assert not validation.passed
     assert any(
@@ -265,6 +280,61 @@ def test_markdown_source_token_leakage_is_rejected_in_cited_text_and_matrix_summ
     )
 
 
+@pytest.mark.parametrize(
+    ("field_label", "expected_path"),
+    [
+        ("appendix_title", "support.evidence_appendix[0].title"),
+        ("battlecard_target_buyer", "core.battlecard.plays[0].target_buyer"),
+        ("topic", "topic"),
+        ("competitor_heading", "competitors[0]"),
+        ("matrix_dimension", "core.decision_matrix.dimensions[0].dimension"),
+    ],
+)
+def test_markdown_source_token_leakage_is_rejected_in_renderer_visible_strings(
+    field_label: str,
+    expected_path: str,
+) -> None:
+    report = _clean_report()
+    raw_text = "leaked renderer-visible value [source:raw-source-a]"
+    if field_label == "appendix_title":
+        report.support.evidence_appendix[0].title = raw_text
+    elif field_label == "battlecard_target_buyer":
+        report.core.battlecard.plays[0].target_buyer = raw_text
+    elif field_label == "topic":
+        report.topic = raw_text
+    elif field_label == "competitor_heading":
+        report.competitors[0] = raw_text
+    elif field_label == "matrix_dimension":
+        report.core.decision_matrix.dimensions[0].dimension = raw_text
+    else:
+        raise AssertionError(f"Unhandled field label: {field_label}")
+
+    validation = _validate(report)
+
+    assert not validation.passed
+    assert any(
+        issue.code == "markdown_source_token_in_text"
+        and issue.path == expected_path
+        for issue in validation.issues
+    )
+
+
+def test_internal_terms_are_rejected_in_battlecard_target_buyer() -> None:
+    report = _clean_report()
+    report.core.battlecard.plays[0].target_buyer = (
+        "Engineering lead using source_registry notes"
+    )
+
+    validation = _validate(report)
+
+    assert not validation.passed
+    assert any(
+        issue.code == "internal_term_leak"
+        and issue.path == "core.battlecard.plays[0].target_buyer"
+        for issue in validation.issues
+    )
+
+
 def test_missing_competitor_coverage_is_rejected() -> None:
     validation = _validate(_report())
 
@@ -355,6 +425,14 @@ def test_clean_fixture_with_all_requested_competitors_covered_passes() -> None:
     assert validation.passed
     assert validation.issues == []
     assert validation.issue_codes() == []
+
+
+def test_validation_passing_report_renders_without_hygiene_errors() -> None:
+    report = _clean_report()
+    validation = _validate(report)
+
+    assert validation.passed
+    render_structured_report(report)
 
 
 def test_telemetry_payload_includes_status_counts_codes_and_repair_targets() -> None:

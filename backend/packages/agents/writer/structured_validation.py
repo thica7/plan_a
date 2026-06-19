@@ -4,6 +4,10 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from packages.agents.writer.structured_hygiene import (
+    has_source_token,
+    is_valid_source_id,
+)
 from packages.agents.writer.structured_report import (
     BattlecardPlay,
     CitedText,
@@ -11,8 +15,6 @@ from packages.agents.writer.structured_report import (
 )
 
 
-_SOURCE_ID_RE = re.compile(r"^[A-Za-z0-9_.:#-]+$")
-_SOURCE_TOKEN_RE = re.compile(r"\[source:[^\]]+\]", re.IGNORECASE)
 _INTERNAL_TERM_RES = [
     re.compile(pattern, re.IGNORECASE)
     for pattern in (
@@ -140,7 +142,7 @@ def _validate_source_id(
     repair_target: str,
     issues: list[StructuredValidationIssue],
 ) -> None:
-    if not _SOURCE_ID_RE.fullmatch(source_id):
+    if not is_valid_source_id(source_id):
         issues.append(
             StructuredValidationIssue(
                 code="invalid_source_id",
@@ -199,7 +201,9 @@ def _validate_competitor_coverage(
     report: StructuredReport,
     issues: list[StructuredValidationIssue],
 ) -> None:
-    requested = [(competitor, _competitor_key(competitor)) for competitor in report.competitors]
+    requested = [
+        (competitor, _competitor_key(competitor)) for competitor in report.competitors
+    ]
     section_sets = {
         "competitor_deep_dives": {
             _competitor_key(deep_dive.competitor)
@@ -275,7 +279,6 @@ def _validate_text_leakage(
             cited_text.text,
             path=f"{path}.text",
             repair_target=path,
-            check_source_tokens=True,
             issues=issues,
         )
 
@@ -284,17 +287,30 @@ def _validate_text_leakage(
             cell.summary,
             path=f"{path}.summary",
             repair_target=path,
-            check_source_tokens=True,
+            issues=issues,
+        )
+
+    for path, text, repair_target in _iter_renderer_visible_strings(report):
+        _validate_text_field(
+            text,
+            path=path,
+            repair_target=repair_target,
             issues=issues,
         )
 
     for path, row in report.iter_source_appendix_rows():
+        _validate_text_field(
+            row.source_id,
+            path=f"{path}.source_id",
+            repair_target=path,
+            check_internal_terms=False,
+            issues=issues,
+        )
         for field_name in ("title", "url", "competitor", "dimension"):
             _validate_text_field(
                 getattr(row, field_name),
                 path=f"{path}.{field_name}",
                 repair_target=path,
-                check_source_tokens=False,
                 issues=issues,
             )
 
@@ -304,10 +320,10 @@ def _validate_text_field(
     *,
     path: str,
     repair_target: str,
-    check_source_tokens: bool,
     issues: list[StructuredValidationIssue],
+    check_internal_terms: bool = True,
 ) -> None:
-    if check_source_tokens and _SOURCE_TOKEN_RE.search(text):
+    if has_source_token(text):
         issues.append(
             StructuredValidationIssue(
                 code="markdown_source_token_in_text",
@@ -317,7 +333,9 @@ def _validate_text_field(
             )
         )
 
-    if any(pattern.search(text) for pattern in _INTERNAL_TERM_RES):
+    if check_internal_terms and any(
+        pattern.search(text) for pattern in _INTERNAL_TERM_RES
+    ):
         issues.append(
             StructuredValidationIssue(
                 code="internal_term_leak",
@@ -326,6 +344,55 @@ def _validate_text_field(
                 repair_target=repair_target,
             )
         )
+
+
+def _iter_renderer_visible_strings(
+    report: StructuredReport,
+) -> list[tuple[str, str, str]]:
+    fields: list[tuple[str, str, str]] = [
+        ("topic", report.topic, "topic"),
+    ]
+    fields.extend(
+        (f"competitors[{index}]", competitor, "competitors")
+        for index, competitor in enumerate(report.competitors)
+    )
+    fields.extend(
+        (f"dimensions[{index}]", dimension, "dimensions")
+        for index, dimension in enumerate(report.dimensions)
+    )
+
+    for index, posture in enumerate(report.core.executive_summary.competitor_postures):
+        path = f"core.executive_summary.competitor_postures[{index}].competitor"
+        fields.append((path, posture.competitor, "core.executive_summary"))
+
+    for index, theme in enumerate(report.core.user_review_themes.competitor_themes):
+        path = f"core.user_review_themes.competitor_themes[{index}].competitor"
+        fields.append((path, theme.competitor, "core.user_review_themes"))
+
+    for index, deep_dive in enumerate(report.core.competitor_deep_dives):
+        path = f"core.competitor_deep_dives[{index}].competitor"
+        fields.append((path, deep_dive.competitor, "core.competitor_deep_dives"))
+
+    for row_index, row in enumerate(report.core.decision_matrix.dimensions):
+        path = f"core.decision_matrix.dimensions[{row_index}].dimension"
+        fields.append((path, row.dimension, "core.decision_matrix"))
+        for cell_index, cell in enumerate(row.cells):
+            cell_path = (
+                f"core.decision_matrix.dimensions[{row_index}]"
+                f".cells[{cell_index}].competitor"
+            )
+            fields.append((cell_path, cell.competitor, "core.decision_matrix"))
+
+    for index, swot in enumerate(report.core.swot.competitors):
+        path = f"core.swot.competitors[{index}].competitor"
+        fields.append((path, swot.competitor, "core.swot"))
+
+    for index, play in enumerate(report.core.battlecard.plays):
+        path = f"core.battlecard.plays[{index}]"
+        fields.append((f"{path}.competitor", play.competitor, "core.battlecard"))
+        fields.append((f"{path}.target_buyer", play.target_buyer, "core.battlecard"))
+
+    return fields
 
 
 def _validate_battlecards(

@@ -3,6 +3,10 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
+from packages.agents.writer.structured_hygiene import (
+    has_source_token,
+    is_valid_source_id,
+)
 from packages.agents.writer.structured_report import (
     CitedText,
     MatrixCell,
@@ -11,8 +15,6 @@ from packages.agents.writer.structured_report import (
 )
 
 
-_RAW_SOURCE_TOKEN_RE = re.compile(r"\[source:[^\]]+\]", re.IGNORECASE)
-_SOURCE_ID_RE = re.compile(r"^[A-Za-z0-9_.:#-]+$")
 _WHITESPACE_RE = re.compile(r"\s+")
 
 _ZH_LABELS = {
@@ -385,13 +387,13 @@ def _table_cell(value: str) -> str:
 def _inline_text(value: str, field_name: str) -> str:
     if not isinstance(value, str):
         raise ValueError(f"{field_name} must be a string")
-    if _RAW_SOURCE_TOKEN_RE.search(value):
+    if has_source_token(value):
         raise ValueError(f"{field_name} must not contain Markdown source tokens")
     return _WHITESPACE_RE.sub(" ", value).strip()
 
 
 def _source_id(value: str) -> str:
     source_id = _inline_text(value, "source id")
-    if not _SOURCE_ID_RE.fullmatch(source_id):
+    if not is_valid_source_id(source_id):
         raise ValueError("source id contains invalid characters")
     return source_id

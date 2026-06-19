@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from packages.agents.writer.structured_hygiene import has_source_token
 
 Confidence = Literal["high", "medium", "low"]
 EvidenceRole = Literal[
@@ -14,8 +15,6 @@ EvidenceRole = Literal[
     "inference",
     "evidence_gap",
 ]
-
-_SOURCE_TOKEN_RE = re.compile(r"\[source:[^\]]+\]", re.IGNORECASE)
 
 
 def _clean_source_ids(value: list[str]) -> list[str]:
@@ -48,7 +47,7 @@ class CitedText(BaseModel):
         if not isinstance(value, str):
             raise ValueError("text must be a string")
         text = value.strip()
-        if _SOURCE_TOKEN_RE.search(text):
+        if has_source_token(text):
             raise ValueError("text must not contain Markdown source tokens")
         return text
 
@@ -131,7 +130,7 @@ class MatrixCell(BaseModel):
         if not isinstance(value, str):
             raise ValueError("matrix summary must be a string")
         summary = value.strip()
-        if _SOURCE_TOKEN_RE.search(summary):
+        if has_source_token(summary):
             raise ValueError("matrix summary must not contain Markdown source tokens")
         return summary
 
