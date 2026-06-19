@@ -8443,6 +8443,32 @@ def _structured_writer_raw_sources() -> list[RawSource]:
     ]
 
 
+def _attach_structured_writer_redo(record: RunRecord) -> None:
+    issue = QCIssue(
+        id="issue-structured-repair-battlecard",
+        severity="warn",
+        detected_by="schema",
+        target_agent="writer",
+        field_path="report_md.section[battlecard]",
+        problem="battlecard_template_only",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="Repair structured battlecard output.",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="writer_only",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+
+
 def test_real_writer_uses_structured_path_when_enabled(monkeypatch) -> None:
     service = _segmented_writer_service()
     service._settings = replace(
@@ -8453,6 +8479,7 @@ def test_real_writer_uses_structured_path_when_enabled(monkeypatch) -> None:
     record = _segmented_writer_record(service, competitors=["Cursor", "Windsurf"])
     record.detail.output_language = "zh-CN"
     record.detail.raw_sources = _structured_writer_raw_sources()
+    _attach_structured_writer_redo(record)
 
     structured_report = _structured_writer_fixture_report(record.detail)
 
@@ -8472,6 +8499,15 @@ def test_real_writer_uses_structured_path_when_enabled(monkeypatch) -> None:
     event_types = [event.type for event in record.events]
     assert "writer_structured_report_validated" in event_types
     assert "writer_publication_contract_validated" in event_types
+    selected_event = next(
+        event
+        for event in record.events
+        if event.type == "writer_structured_repair_selected"
+    )
+    assert selected_event.payload == {
+        "targets": ["core.battlecard"],
+        "llm_required": True,
+    }
     assert any(
         span.name == "writer_structured_report_validated"
         for span in record.detail.trace_spans
@@ -8520,6 +8556,56 @@ def test_real_writer_traces_markdown_fallback_when_structured_path_fails(
         span.name == "writer_markdown_fallback_used"
         for span in record.detail.trace_spans
     )
+
+
+def test_structured_repair_selection_not_emitted_when_markdown_fallback_used(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(
+        service,
+        run_id="run-structured-repair-fallback",
+        competitors=["Cursor", "Windsurf"],
+    )
+    record.detail.output_language = "zh-CN"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+    _attach_structured_writer_redo(record)
+
+    async def fake_structured_report(
+        self,
+        record,
+        evidence_pack_result,
+        timeout_seconds,
+    ):
+        raise ValueError("structured section failed")
+
+    async def fake_markdown_writer(
+        self,
+        record,
+        evidence_pack_result,
+        timeout_seconds,
+    ):
+        return "## 鎵ц鎽樿\n\nFallback report. [source:raw-source-a]\n"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
+        fake_structured_report,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_markdown_report_from_evidence_pack",
+        fake_markdown_writer,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    event_types = [event.type for event in record.events]
+    assert "writer_markdown_fallback_used" in event_types
+    assert "writer_structured_repair_selected" not in event_types
 
 
 def test_writer_required_sections_ignore_nested_support_like_headings() -> None:

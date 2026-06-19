@@ -548,20 +548,6 @@ class WriterAgentMixin:
             for issue in redo_issues
             if (target := structured_repair_target_for_issue(issue)) is not None
         ]
-        if self._settings.writer_structured_report_enabled and structured_targets:
-            await self.emit(
-                detail.id,
-                "writer_structured_repair_selected",
-                "writer",
-                None,
-                "Structured repair targets selected",
-                {
-                    "targets": list(dict.fromkeys(structured_targets)),
-                    "llm_required": any(
-                        target != "renderer" for target in structured_targets
-                    ),
-                },
-            )
         redo_source_message_ids = [message.id for message in redo_messages]
         if writer_only_pending_issue_ids:
             writer_only_messages_without_issue_ids: list[str] = []
@@ -885,6 +871,21 @@ class WriterAgentMixin:
                             raise ValueError(
                                 "structured writer publication contract failed: "
                                 + ", ".join(publication_validation.issue_codes())
+                            )
+                        if structured_targets:
+                            await self.emit(
+                                detail.id,
+                                "writer_structured_repair_selected",
+                                "writer",
+                                None,
+                                "Structured repair targets selected",
+                                {
+                                    "targets": list(dict.fromkeys(structured_targets)),
+                                    "llm_required": any(
+                                        target != "renderer"
+                                        for target in structured_targets
+                                    ),
+                                },
                             )
                         report_md = rendered
                         writer_mode = "real structured writer call"
