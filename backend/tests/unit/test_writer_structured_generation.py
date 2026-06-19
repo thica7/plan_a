@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from packages.agents.writer.assembler import StructuredReportAssembler
-from packages.agents.writer.logic import WriterAgentMixin
+from packages.agents.writer.logic import (
+    WriterAgentMixin,
+    build_structured_writer_section_plan,
+)
 from packages.agents.writer.structured_report import ExecutiveSummarySection
+from packages.orchestrator.service import RunRecord
+from packages.schema.api_dto import RunDetail
+from packages.schema.models import AnalysisPlan, RawSource
 from test_writer_structured_renderer import _report
 
 
@@ -44,6 +51,118 @@ class _WriterHarness(WriterAgentMixin):
     async def _trace_llm_text(self, record, *, agent, subagent, name, system, user) -> str:
         self.prompts.append(system + "\n" + user)
         return self.responses.pop(0)
+
+
+def _run_detail_for_structured_writer() -> RunDetail:
+    return RunDetail(
+        id="run-structured-writer-generation",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at="2026-06-19T00:00:00",
+        updated_at="2026-06-19T00:00:00",
+        output_language="zh-CN",
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor", "Windsurf"],
+            dimensions=["pricing", "feature", "persona"],
+        ),
+    )
+
+
+def _raw_source(source_id: str) -> RawSource:
+    return RawSource(
+        id=source_id,
+        competitor="Cursor" if source_id != "raw-source-b" else "Windsurf",
+        dimension="pricing" if source_id != "raw-source-survey" else "persona",
+        source_type=(
+            "webpage_verified"
+            if source_id != "raw-source-survey"
+            else "simulated_interview"
+        ),
+        title=f"Source {source_id}",
+        snippet=f"Evidence from {source_id}.",
+        content_hash=f"{source_id}-hash",
+        confidence=0.9,
+    )
+
+
+def _writer_record_with_sources(source_ids: list[str]) -> RunRecord:
+    detail = _run_detail_for_structured_writer()
+    detail.raw_sources = [_raw_source(source_id) for source_id in source_ids]
+    return RunRecord(detail=detail)
+
+
+class _MinimalEvidencePackResult:
+    metrics = SimpleNamespace(segment_count=6)
+
+    def to_prompt_json(self) -> str:
+        return json.dumps(
+            {
+                "coverage": {"raw_source_count": 3},
+                "claims": [{"text": "compact evidence", "source_ids": ["raw-source-a"]}],
+            }
+        )
+
+    def segment_inputs(self) -> list[dict[str, object]]:
+        return []
+
+
+def _minimal_evidence_pack_result() -> _MinimalEvidencePackResult:
+    return _MinimalEvidencePackResult()
+
+
+def test_structured_section_plan_has_core_before_support_and_no_markdown_layout_ownership() -> None:
+    plan = build_structured_writer_section_plan(
+        competitors=["Cursor", "Windsurf"],
+        dimensions=["pricing", "feature", "persona"],
+    )
+
+    assert [item["section_id"] for item in plan][:4] == [
+        "executive_summary",
+        "decision_summary",
+        "competitive_findings",
+        "user_review_themes",
+    ]
+    assert plan[-1]["section_id"] == "support"
+    assert all(item["owns_markdown_layout"] is False for item in plan)
+
+
+@pytest.mark.asyncio
+async def test_writer_structured_report_builds_full_report_from_section_payloads(monkeypatch) -> None:
+    from test_writer_structured_renderer import _report
+
+    record = _writer_record_with_sources(
+        ["raw-source-a", "raw-source-b", "raw-source-survey"]
+    )
+    fixture = _report("zh-CN")
+    harness = _WriterHarness([])
+
+    async def fake_section_json(
+        record, *, segment, section_schema, allowed_source_ids, timeout_seconds
+    ):
+        mapping = {
+            "ExecutiveSummarySection": fixture.core.executive_summary,
+            "UserReviewThemesSection": fixture.core.user_review_themes,
+            "DecisionMatrixSection": fixture.core.decision_matrix,
+            "SwotSection": fixture.core.swot,
+            "BattlecardSection": fixture.core.battlecard,
+            "ReportSupport": fixture.support,
+        }
+        if section_schema.__name__ in mapping:
+            return mapping[section_schema.__name__]
+        return fixture.core.competitor_deep_dives[0]
+
+    monkeypatch.setattr(harness, "_writer_structured_section_json", fake_section_json)
+
+    report = await harness._writer_structured_report(
+        record,
+        evidence_pack_result=_minimal_evidence_pack_result(),
+        timeout_seconds=10,
+    )
+
+    assert report.core.executive_summary.recommendation.text
+    assert report.support.evidence_appendix[0].source_id == "raw-source-a"
 
 
 def test_structured_section_prompt_includes_evidence_role_guidance() -> None:

@@ -33,7 +33,19 @@ from packages.agents.writer.segment_contract import (
     validate_segment_contract,
 )
 from packages.agents.writer.structured_renderer import render_structured_report
-from packages.agents.writer.structured_report import StructuredReport
+from packages.agents.writer.structured_report import (
+    BattlecardSection,
+    CitedText,
+    CompetitorDeepDiveSection,
+    DecisionMatrixSection,
+    ExecutiveSummarySection,
+    ReportCore,
+    ReportMetadata,
+    ReportSupport,
+    StructuredReport,
+    SwotSection,
+    UserReviewThemesSection,
+)
 from packages.agents.writer.structured_validation import validate_structured_report
 from packages.business_intel.release_gate import REPORT_RICHNESS_MINIMUMS
 from packages.business_intel.report_quality import compare_run_quality
@@ -242,6 +254,117 @@ def _strong_writer_source_ids(detail: RunDetail) -> set[str]:
         if metadata.get("official_source") is True or metadata.get("trusted_source") is True:
             strong.add(source.id)
     return strong
+
+
+def build_structured_writer_section_plan(
+    *, competitors: list[str], dimensions: list[str]
+) -> list[dict[str, object]]:
+    return [
+        {
+            "section_id": "executive_summary",
+            "schema": "ExecutiveSummarySection",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "decision_summary",
+            "schema": "list[CitedText]",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "competitive_findings",
+            "schema": "list[CitedText]",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "user_review_themes",
+            "schema": "UserReviewThemesSection",
+            "owns_markdown_layout": False,
+        },
+        *[
+            {
+                "section_id": "competitor_deep_dive",
+                "competitor": competitor,
+                "schema": "CompetitorDeepDiveSection",
+                "owns_markdown_layout": False,
+            }
+            for competitor in competitors
+        ],
+        {
+            "section_id": "decision_matrix",
+            "dimensions": list(dimensions),
+            "schema": "DecisionMatrixSection",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "swot",
+            "schema": "SwotSection",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "battlecard",
+            "schema": "BattlecardSection",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "community_triangulation",
+            "schema": "list[CitedText]",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "support",
+            "schema": "ReportSupport",
+            "owns_markdown_layout": False,
+        },
+    ]
+
+
+def _structured_section_inputs(
+    *, evidence_pack_result, competitors: list[str], dimensions: list[str]
+) -> dict[str, dict[str, object]]:
+    base = evidence_pack_result.to_prompt_json()
+    inputs: dict[str, dict[str, object]] = {}
+    for item in build_structured_writer_section_plan(
+        competitors=competitors,
+        dimensions=dimensions,
+    ):
+        section_id = str(item["section_id"])
+        key = section_id
+        if section_id == "competitor_deep_dive":
+            key = f"competitor_deep_dive::{item['competitor']}"
+        inputs[key] = {
+            "section_id": section_id,
+            "competitor": item.get("competitor"),
+            "dimensions": item.get("dimensions", dimensions),
+            "evidence_pack": base,
+        }
+    return inputs
+
+
+def _default_decision_summary(
+    executive_summary: ExecutiveSummarySection,
+) -> list[CitedText]:
+    return [
+        executive_summary.recommendation,
+        executive_summary.risk_adjusted_rationale,
+    ]
+
+
+def _default_competitive_findings(
+    deep_dives: list[CompetitorDeepDiveSection],
+) -> list[CitedText]:
+    findings: list[CitedText] = []
+    for deep_dive in deep_dives:
+        findings.extend(deep_dive.positioning[:1])
+        findings.extend(deep_dive.pricing_packaging[:1])
+        findings.extend(deep_dive.feature_capabilities[:1])
+    return findings[:8] or [
+        CitedText(
+            text="核心竞争发现需要更多结构化证据支撑。",
+            source_ids=[],
+            confidence="low",
+            evidence_role="evidence_gap",
+        )
+    ]
 
 
 class WriterEvidencePreflightError(RuntimeError):
@@ -839,7 +962,96 @@ class WriterAgentMixin:
         evidence_pack_result,
         timeout_seconds: float,
     ) -> StructuredReport:
-        raise ValueError("structured writer section planner is not connected")
+        detail = record.detail
+        competitors = list(detail.plan.competitors)
+        dimensions = list(detail.plan.dimensions)
+        allowed_source_ids = {source.id for source in detail.raw_sources}
+        section_inputs = _structured_section_inputs(
+            evidence_pack_result=evidence_pack_result,
+            competitors=competitors,
+            dimensions=dimensions,
+        )
+
+        executive_summary = await self._writer_structured_section_json(
+            record,
+            segment=section_inputs["executive_summary"],
+            section_schema=ExecutiveSummarySection,
+            allowed_source_ids=allowed_source_ids,
+            timeout_seconds=timeout_seconds,
+        )
+        user_review_themes = await self._writer_structured_section_json(
+            record,
+            segment=section_inputs["user_review_themes"],
+            section_schema=UserReviewThemesSection,
+            allowed_source_ids=allowed_source_ids,
+            timeout_seconds=timeout_seconds,
+        )
+        deep_dives = [
+            await self._writer_structured_section_json(
+                record,
+                segment=section_inputs[f"competitor_deep_dive::{competitor}"],
+                section_schema=CompetitorDeepDiveSection,
+                allowed_source_ids=allowed_source_ids,
+                timeout_seconds=timeout_seconds,
+            )
+            for competitor in competitors
+        ]
+        decision_matrix = await self._writer_structured_section_json(
+            record,
+            segment=section_inputs["decision_matrix"],
+            section_schema=DecisionMatrixSection,
+            allowed_source_ids=allowed_source_ids,
+            timeout_seconds=timeout_seconds,
+        )
+        swot = await self._writer_structured_section_json(
+            record,
+            segment=section_inputs["swot"],
+            section_schema=SwotSection,
+            allowed_source_ids=allowed_source_ids,
+            timeout_seconds=timeout_seconds,
+        )
+        battlecard = await self._writer_structured_section_json(
+            record,
+            segment=section_inputs["battlecard"],
+            section_schema=BattlecardSection,
+            allowed_source_ids=allowed_source_ids,
+            timeout_seconds=timeout_seconds,
+        )
+        support = await self._writer_structured_section_json(
+            record,
+            segment=section_inputs["support"],
+            section_schema=ReportSupport,
+            allowed_source_ids=allowed_source_ids,
+            timeout_seconds=timeout_seconds,
+        )
+
+        return StructuredReport(
+            output_language=detail.output_language,
+            topic=detail.topic,
+            competitors=competitors,
+            dimensions=dimensions,
+            core=ReportCore(
+                executive_summary=executive_summary,
+                decision_summary=_default_decision_summary(executive_summary),
+                competitive_findings=_default_competitive_findings(deep_dives),
+                user_review_themes=user_review_themes,
+                competitor_deep_dives=deep_dives,
+                decision_matrix=decision_matrix,
+                swot=swot,
+                battlecard=battlecard,
+                community_triangulation=[],
+            ),
+            support=support,
+            metadata=ReportMetadata(
+                writer_mode="structured",
+                segment_count=int(
+                    getattr(evidence_pack_result.metrics, "segment_count", 0)
+                ),
+                source_count=len(detail.raw_sources),
+                warnings=[],
+                structured_report_version="1",
+            ),
+        )
 
     async def _writer_markdown_report_from_evidence_pack(
         self,
