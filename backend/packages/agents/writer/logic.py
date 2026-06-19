@@ -27,6 +27,7 @@ from packages.agents.writer.repair import (
     replace_markdown_section,
     report_regression_problem,
     section_regression_problem,
+    structured_repair_target_for_issue,
 )
 from packages.agents.writer.segment_contract import (
     segment_contract_for,
@@ -542,6 +543,25 @@ class WriterAgentMixin:
             if pending_redo.redo_scope.kind == "writer_only":
                 writer_only_pending_issue_ids = pending_issue_ids
         redo_issues = list(redo_issue_by_id.values())
+        structured_targets = [
+            target
+            for issue in redo_issues
+            if (target := structured_repair_target_for_issue(issue)) is not None
+        ]
+        if self._settings.writer_structured_report_enabled and structured_targets:
+            await self.emit(
+                detail.id,
+                "writer_structured_repair_selected",
+                "writer",
+                None,
+                "Structured repair targets selected",
+                {
+                    "targets": list(dict.fromkeys(structured_targets)),
+                    "llm_required": any(
+                        target != "renderer" for target in structured_targets
+                    ),
+                },
+            )
         redo_source_message_ids = [message.id for message in redo_messages]
         if writer_only_pending_issue_ids:
             writer_only_messages_without_issue_ids: list[str] = []

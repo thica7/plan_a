@@ -107,6 +107,74 @@ class MarkdownSection:
     end: int
 
 
+def structured_repair_target_for_issue(issue: QCIssue) -> str | None:
+    code = _structured_issue_code(issue)
+    path = issue.field_path or ""
+    if code == "battlecard_template_only":
+        return "core.battlecard"
+    if code == "executive_summary_template_only":
+        return "core.executive_summary"
+    if code in {
+        "citation_in_table_header",
+        "citation_in_heading",
+        "english_structural_heading_in_zh",
+    }:
+        return "renderer"
+    if code == "internal_term_leak":
+        return _structured_path_prefix(path)
+    if code == "release_gate.claim_self_consistency_required":
+        lowered = _structured_issue_haystack(issue)
+        if "user_review" in lowered or "persona" in lowered:
+            return "core.user_review_themes"
+        if "pricing" in lowered:
+            return "core.decision_matrix"
+        if "feature" in lowered:
+            return "core.competitor_deep_dives"
+    return None
+
+
+def _structured_issue_haystack(issue: QCIssue) -> str:
+    return " ".join(
+        value
+        for value in [
+            issue.field_path,
+            issue.problem,
+            issue.target_subagent or "",
+            issue.redo_scope.target_subagent or "",
+            issue.redo_scope.rationale,
+        ]
+        if value
+    ).casefold()
+
+
+def _structured_issue_code(issue: QCIssue) -> str:
+    raw_code = getattr(issue, "code", "")
+    if isinstance(raw_code, str) and raw_code:
+        return raw_code
+    if issue.field_path == "release_gate.claim_self_consistency_required":
+        return issue.field_path
+    if issue.problem in {
+        "battlecard_template_only",
+        "executive_summary_template_only",
+        "citation_in_table_header",
+        "citation_in_heading",
+        "english_structural_heading_in_zh",
+        "internal_term_leak",
+        "release_gate.claim_self_consistency_required",
+    }:
+        return issue.problem
+    return ""
+
+
+def _structured_path_prefix(path: str) -> str:
+    if path.startswith("core."):
+        parts = path.split(".")
+        if len(parts) >= 2:
+            field = parts[1].split("[", 1)[0]
+            return ".".join([parts[0], field])
+    return "structured_section"
+
+
 def build_writer_repair_plan(
     detail: RunDetail,
     issues: list[QCIssue],
