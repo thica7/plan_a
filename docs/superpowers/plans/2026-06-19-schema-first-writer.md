@@ -1030,6 +1030,7 @@ from packages.agents.writer.structured_report import (
     StructuredReport,
 )
 from packages.agents.writer.structured_validation import validate_structured_report
+from packages.research.evidence.strength import EvidenceStrengthDecision
 
 
 def _cited(text: str, source_id: str = "raw-source-a") -> CitedText:
@@ -1038,6 +1039,23 @@ def _cited(text: str, source_id: str = "raw-source-a") -> CitedText:
         source_ids=[source_id],
         confidence="high",
         evidence_role="official_fact",
+    )
+
+
+def _strength(
+    source_id: str = "raw-source-a",
+    *,
+    strength: str = "high_confidence_verified",
+    confidence: float = 0.95,
+    source_type: str = "official",
+) -> EvidenceStrengthDecision:
+    return EvidenceStrengthDecision(
+        evidence_id=source_id,
+        source_type=source_type,
+        strength=strength,
+        confidence=confidence,
+        quality_label="accepted",
+        reason="test",
     )
 
 
@@ -1063,7 +1081,11 @@ def _report() -> StructuredReport:
 
 
 def test_validation_passes_complete_report() -> None:
-    result = validate_structured_report(_report(), allowed_source_ids={"raw-source-a"})
+    result = validate_structured_report(
+        _report(),
+        allowed_source_ids={"raw-source-a"},
+        source_strengths={"raw-source-a": _strength()},
+    )
     assert result.passed is True
     assert result.issues == []
 
@@ -1102,6 +1124,36 @@ def test_validation_requires_per_competitor_coverage() -> None:
     report.core.competitor_deep_dives = report.core.competitor_deep_dives[:1]
     result = validate_structured_report(report, allowed_source_ids={"raw-source-a"})
     assert result.has_issue("missing_competitor_deep_dive")
+
+
+def test_validation_rejects_strong_recommendation_backed_only_by_synthetic_signal() -> None:
+    report = _report()
+    result = validate_structured_report(
+        report,
+        allowed_source_ids={"raw-source-a"},
+        source_strengths={
+            "raw-source-a": _strength(
+                strength="synthetic_signal",
+                confidence=0.86,
+                source_type="survey_simulated",
+            )
+        },
+    )
+    assert result.has_issue("strong_claim_without_strong_evidence")
+
+
+def test_validation_requires_each_swot_quadrant_or_explicit_gap() -> None:
+    report = _report()
+    report.core.swot.competitors[0].threats = []
+    result = validate_structured_report(report, allowed_source_ids={"raw-source-a"})
+    assert result.has_issue("swot_quadrant_missing")
+
+
+def test_validation_requires_executive_posture_for_each_competitor() -> None:
+    report = _report()
+    report.core.executive_summary.competitor_postures = []
+    result = validate_structured_report(report, allowed_source_ids={"raw-source-a"})
+    assert result.has_issue("missing_executive_competitor_posture")
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1119,10 +1171,11 @@ Create `backend/packages/agents/writer/structured_validation.py`:
 ```python
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
 from packages.agents.writer.structured_report import CitedText, StructuredReport
+from packages.research.evidence.strength import EvidenceStrengthDecision
 
 INTERNAL_TERMS = (
     "Segment Evidence Pack",
@@ -1174,12 +1227,15 @@ def validate_structured_report(
     report: StructuredReport,
     *,
     allowed_source_ids: set[str],
+    source_strengths: Mapping[str, EvidenceStrengthDecision] | None = None,
 ) -> StructuredReportValidation:
     issues: list[StructuredReportValidationIssue] = []
     issues.extend(_source_id_issues(report, allowed_source_ids))
+    issues.extend(_source_strength_issues(report, source_strengths or {}))
     issues.extend(_internal_term_issues(report))
     issues.extend(_executive_summary_issues(report))
     issues.extend(_competitor_coverage_issues(report))
+    issues.extend(_swot_quadrant_issues(report))
     issues.extend(_battlecard_issues(report))
     return StructuredReportValidation(passed=not issues, issues=issues)
 
@@ -1210,6 +1266,37 @@ def _source_id_issues(
                             message=f"Unknown source id: {source_id}",
                         )
                     )
+    return issues
+
+
+def _source_strength_issues(
+    report: StructuredReport,
+    source_strengths: Mapping[str, EvidenceStrengthDecision],
+) -> list[StructuredReportValidationIssue]:
+    if not source_strengths:
+        return []
+    issues: list[StructuredReportValidationIssue] = []
+    strong_paths = {
+        "report.core.executive_summary.recommendation",
+        "report.core.executive_summary.risk_adjusted_rationale",
+        "report.core.decision_summary.buying_posture",
+    }
+    for path, item in _iter_cited_text(report):
+        if path not in strong_paths:
+            continue
+        decisions = [source_strengths.get(source_id) for source_id in item.source_ids]
+        if not any(decision and decision.can_support_strong_report_section() for decision in decisions):
+            issues.append(
+                StructuredReportValidationIssue(
+                    code="strong_claim_without_strong_evidence",
+                    path=f"{path}.source_ids",
+                    message=(
+                        "Executive recommendation and buying posture require at least "
+                        "one verified/high-confidence source; simulated/community-only "
+                        "evidence can support caveats, not strong recommendations."
+                    ),
+                )
+            )
     return issues
 
 
@@ -1253,7 +1340,13 @@ def _competitor_coverage_issues(report: StructuredReport) -> list[StructuredRepo
     user_theme_competitors = {item.competitor for item in report.core.user_review_themes.competitor_themes}
     swot_competitors = {item.competitor for item in report.core.swot.competitors}
     battlecard_competitors = {item.competitor for item in report.core.battlecard.plays}
+    posture_competitors = {
+        item.competitor
+        for item in report.core.executive_summary.competitor_postures
+        if getattr(item, "competitor", None)
+    }
     for code, path, actual in [
+        ("missing_executive_competitor_posture", "core.executive_summary.competitor_postures", posture_competitors),
         ("missing_competitor_deep_dive", "core.competitor_deep_dives", deep_dive_competitors),
         ("missing_competitor_user_theme", "core.user_review_themes.competitor_themes", user_theme_competitors),
         ("missing_competitor_swot", "core.swot.competitors", swot_competitors),
@@ -1266,6 +1359,26 @@ def _competitor_coverage_issues(report: StructuredReport) -> list[StructuredRepo
                     code=code,
                     path=path,
                     message=f"Missing structured coverage for {competitor}.",
+                )
+            )
+    return issues
+
+
+def _swot_quadrant_issues(report: StructuredReport) -> list[StructuredReportValidationIssue]:
+    issues: list[StructuredReportValidationIssue] = []
+    for competitor_index, swot in enumerate(report.core.swot.competitors):
+        for quadrant in ("strengths", "weaknesses", "opportunities", "threats"):
+            values = getattr(swot, quadrant)
+            if values:
+                continue
+            issues.append(
+                StructuredReportValidationIssue(
+                    code="swot_quadrant_missing",
+                    path=f"core.swot.competitors[{competitor_index}].{quadrant}",
+                    message=(
+                        f"SWOT quadrant '{quadrant}' is empty for {swot.competitor}; "
+                        "write an evidence-gap item instead of silently omitting it."
+                    ),
                 )
             )
     return issues
@@ -1422,6 +1535,59 @@ def test_contract_rejects_unknown_source_ids() -> None:
         allowed_source_ids={"raw-source-a"},
     )
     assert result.has_issue("unknown_source_id")
+
+
+def test_contract_rejects_support_sections_before_core_sections() -> None:
+    markdown = """
+## 证据附录
+- Source index only.
+
+## 执行摘要
+- Recommendation. [source:raw-source-a]
+""".strip()
+    result = validate_publication_contract(
+        markdown,
+        structured_report=None,
+        output_language="zh-CN",
+        allowed_source_ids={"raw-source-a"},
+    )
+    assert result.has_issue("support_before_core")
+
+
+def test_contract_rejects_appendix_citation_noise() -> None:
+    markdown = """
+## 执行摘要
+- Recommendation. [source:raw-source-a]
+
+## 证据附录
+| source [source:raw-source-a] | note |
+| --- | --- |
+| raw-source-a | Official page. |
+""".strip()
+    result = validate_publication_contract(
+        markdown,
+        structured_report=None,
+        output_language="zh-CN",
+        allowed_source_ids={"raw-source-a"},
+    )
+    assert result.has_issue("appendix_citation_noise")
+
+
+def test_contract_rejects_markdown_only_template_executive_summary() -> None:
+    markdown = """
+## 执行摘要
+- 核心结论：This report is structured as decision analysis first. [source:raw-source-a]
+- 决策姿态：Use the report sections below. [source:raw-source-a]
+- 风险边界：Review evidence later. [source:raw-source-a]
+- 立即行动：Read the appendix. [source:raw-source-a]
+""".strip()
+    result = validate_publication_contract(
+        markdown,
+        structured_report=None,
+        output_language="zh-CN",
+        allowed_source_ids={"raw-source-a"},
+    )
+    assert result.has_issue("executive_summary_template_only")
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1440,6 +1606,7 @@ Create `backend/packages/agents/writer/publication_contract.py`:
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from packages.agents.writer.structured_report import StructuredReport
@@ -1450,6 +1617,7 @@ from packages.agents.writer.structured_validation import (
     validate_structured_report,
 )
 from packages.identity.source_resolver import source_tokens
+from packages.research.evidence.strength import EvidenceStrengthDecision
 
 ENGLISH_TEMPLATE_HEADING_PHRASES = (
     "executive summary",
@@ -1466,6 +1634,24 @@ ENGLISH_TEMPLATE_HEADING_PHRASES = (
     "opportunities",
     "threats",
     "evidence appendix",
+)
+CORE_HEADING_MARKERS = (
+    "执行摘要",
+    "决策摘要",
+    "竞争发现",
+    "用户评价",
+    "竞品深挖",
+    "SWOT",
+    "决策矩阵",
+    "战报",
+)
+SUPPORT_HEADING_MARKERS = (
+    "证据附录",
+    "支撑",
+    "QA",
+    "RAG",
+    "声明风险",
+    "下一步采集",
 )
 
 
@@ -1492,9 +1678,13 @@ def validate_publication_contract(
     structured_report: StructuredReport | None,
     output_language: str,
     allowed_source_ids: set[str],
+    source_strengths: Mapping[str, EvidenceStrengthDecision] | None = None,
 ) -> PublicationContractResult:
     issues: list[PublicationContractIssue] = []
     issues.extend(_heading_issues(markdown, output_language))
+    issues.extend(_core_support_order_issues(markdown))
+    issues.extend(_executive_summary_template_issues(markdown))
+    issues.extend(_appendix_shape_issues(markdown))
     issues.extend(_citation_placement_issues(markdown))
     issues.extend(_internal_term_issues(markdown))
     issues.extend(_battlecard_issues(markdown))
@@ -1503,6 +1693,7 @@ def validate_publication_contract(
         structured = validate_structured_report(
             structured_report,
             allowed_source_ids=allowed_source_ids,
+            source_strengths=source_strengths,
         )
         issues.extend(_from_structured_issue(issue) for issue in structured.issues)
     return PublicationContractResult(passed=not issues, issues=issues)
@@ -1537,6 +1728,75 @@ def _heading_issues(markdown: str, output_language: str) -> list[PublicationCont
     return issues
 
 
+def _core_support_order_issues(markdown: str) -> list[PublicationContractIssue]:
+    first_support_line: int | None = None
+    first_core_after_support_line: int | None = None
+    for line_number, line in enumerate(markdown.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped.startswith("## "):
+            continue
+        if any(marker.casefold() in stripped.casefold() for marker in SUPPORT_HEADING_MARKERS):
+            first_support_line = first_support_line or line_number
+            continue
+        if first_support_line is not None and any(
+            marker.casefold() in stripped.casefold() for marker in CORE_HEADING_MARKERS
+        ):
+            first_core_after_support_line = line_number
+            break
+    if first_support_line is None or first_core_after_support_line is None:
+        return []
+    return [
+        PublicationContractIssue(
+            code="support_before_core",
+            path=f"report_md.line[{first_support_line}]",
+            message="Support/audit material appears before all core business sections are complete.",
+            deterministic=True,
+        )
+    ]
+
+
+def _executive_summary_template_issues(markdown: str) -> list[PublicationContractIssue]:
+    summary = _section_body(markdown, "执行摘要")
+    if not summary:
+        return []
+    normalized = re.sub(r"\s+", " ", summary).casefold()
+    template_hits = sum(
+        phrase in normalized
+        for phrase in (
+            "this report is structured as decision analysis first",
+            "核心结论",
+            "决策姿态",
+            "风险边界",
+            "立即行动",
+        )
+    )
+    if template_hits < 3:
+        return []
+    return [
+        PublicationContractIssue(
+            code="executive_summary_template_only",
+            path="report_md.executive_summary",
+            message="Executive summary is still a structural template rather than a substantive recommendation.",
+        )
+    ]
+
+
+def _appendix_shape_issues(markdown: str) -> list[PublicationContractIssue]:
+    appendix = _section_body(markdown, "证据附录")
+    if not appendix:
+        return []
+    if "[source:" not in appendix.casefold():
+        return []
+    return [
+        PublicationContractIssue(
+            code="appendix_citation_noise",
+            path="report_md.evidence_appendix",
+            message="Evidence appendix should list source IDs and metadata, not reader-facing citation tokens.",
+            deterministic=True,
+        )
+    ]
+
+
 def _citation_placement_issues(markdown: str) -> list[PublicationContractIssue]:
     lines = markdown.splitlines()
     issues: list[PublicationContractIssue] = []
@@ -1563,6 +1823,24 @@ def _table_header_line_has_citation(lines: list[str], index: int) -> bool:
             next_line = candidate.strip()
             break
     return bool(next_line) and re.fullmatch(r"\|?[\s|\-:]+\|?", next_line) is not None
+
+
+def _section_body(markdown: str, heading_marker: str) -> str:
+    lines = markdown.splitlines()
+    start: int | None = None
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("## ") and heading_marker in stripped:
+            start = index + 1
+            break
+    if start is None:
+        return ""
+    end = len(lines)
+    for index in range(start, len(lines)):
+        if lines[index].startswith("## "):
+            end = index
+            break
+    return "\n".join(lines[start:end])
 
 
 def _internal_term_issues(markdown: str) -> list[PublicationContractIssue]:
@@ -2147,6 +2425,33 @@ def test_section_requests_preserve_allowed_source_ids_and_competitor() -> None:
 
     assert requests[0].segment_competitor == "Cursor"
     assert requests[0].allowed_source_ids == {"raw-source-c"}
+
+
+def test_section_requests_group_real_evidence_shards_by_segment_kind() -> None:
+    requests = structured_section_requests(
+        [
+            {
+                "segment_name": "review shard 1",
+                "section_id": "review_theme_summary",
+                "segment_kind": "evidence_shard",
+                "allowed_source_ids": ["raw-source-a"],
+                "groups": [{"id": "a"}],
+            },
+            {
+                "segment_name": "review shard 2",
+                "section_id": "review_theme_summary",
+                "segment_kind": "evidence_shard",
+                "allowed_source_ids": ["raw-source-b"],
+                "groups": [{"id": "b"}],
+            },
+        ]
+    )
+
+    assert len(requests) == 1
+    assert requests[0].section_id == "review_theme_summary"
+    assert requests[0].request_kind == "section_from_shards"
+    assert requests[0].allowed_source_ids == {"raw-source-a", "raw-source-b"}
+    assert len(requests[0].segment["shard_segments"]) == 2
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -2195,6 +2500,7 @@ class StructuredSectionRequest:
     segment_competitor: str | None
     allowed_source_ids: set[str]
     essential: bool = True
+    request_kind: str = "direct_section"
 
 
 SECTION_EXPANSION: dict[str, tuple[tuple[str, type[BaseModel]], ...]] = {
@@ -2227,21 +2533,15 @@ def structured_section_requests(
 ) -> list[StructuredSectionRequest]:
     requests: list[StructuredSectionRequest] = []
     seen: set[tuple[str, str | None]] = set()
+    shard_groups: dict[tuple[str, str | None], list[dict[str, object]]] = {}
     for segment in segments:
         section_id = str(segment.get("section_id") or "")
-        if section_id == "evidence_shard":
+        segment_competitor = _segment_competitor(segment)
+        if segment.get("segment_kind") == "evidence_shard":
+            shard_groups.setdefault((section_id, segment_competitor), []).append(segment)
             continue
         expanded = SECTION_EXPANSION.get(section_id, ())
-        segment_competitor = (
-            str(segment.get("segment_competitor"))
-            if isinstance(segment.get("segment_competitor"), str)
-            else None
-        )
-        allowed_source_ids = {
-            source_id
-            for source_id in segment.get("allowed_source_ids", [])
-            if isinstance(source_id, str)
-        }
+        allowed_source_ids = _allowed_source_ids([segment])
         for output_section_id, schema_class in expanded:
             dedupe_key = (
                 output_section_id,
@@ -2260,7 +2560,49 @@ def structured_section_requests(
                     essential=bool(segment.get("segment_essential", True)),
                 )
             )
+    for (section_id, segment_competitor), shards in shard_groups.items():
+        for output_section_id, schema_class in SECTION_EXPANSION.get(section_id, ()):
+            dedupe_key = (
+                output_section_id,
+                segment_competitor if output_section_id == "competitor_deep_dives" else None,
+            )
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            requests.append(
+                StructuredSectionRequest(
+                    section_id=output_section_id,
+                    schema_class=schema_class,
+                    segment={
+                        "section_id": section_id,
+                        "segment_kind": "section_from_shards",
+                        "segment_competitor": segment_competitor,
+                        "shard_segments": [dict(shard) for shard in shards],
+                    },
+                    segment_competitor=segment_competitor,
+                    allowed_source_ids=_allowed_source_ids(shards),
+                    essential=any(bool(shard.get("segment_essential", True)) for shard in shards),
+                    request_kind="section_from_shards",
+                )
+            )
     return requests
+
+
+def _segment_competitor(segment: dict[str, object]) -> str | None:
+    return (
+        str(segment.get("segment_competitor"))
+        if isinstance(segment.get("segment_competitor"), str)
+        else None
+    )
+
+
+def _allowed_source_ids(segments: list[dict[str, object]]) -> set[str]:
+    return {
+        source_id
+        for segment in segments
+        for source_id in segment.get("allowed_source_ids", [])
+        if isinstance(source_id, str)
+    }
 ```
 
 - [ ] **Step 4: Run section planner tests**
@@ -2295,6 +2637,7 @@ from packages.agents.writer.structured_generation import (
     StructuredSectionGenerationError,
     build_structured_section_prompt,
     parse_structured_section_payload,
+    validate_structured_section_sources,
 )
 from packages.agents.writer.structured_report import ExecutiveSummarySection
 
@@ -2332,6 +2675,40 @@ def test_prompt_contains_json_only_contract_and_allowed_sources() -> None:
     assert "Return JSON only" in prompt
     assert "raw-source-a" in prompt
     assert "[source:" not in prompt.split("Schema JSON:", 1)[0]
+
+
+def test_prompt_includes_retry_errors_without_markdown_citation_token() -> None:
+    prompt = build_structured_section_prompt(
+        topic="AI coding agent comparison",
+        competitors=["Cursor"],
+        dimensions=["pricing"],
+        section_id="executive_summary",
+        schema_class=ExecutiveSummarySection,
+        segment_payload={"groups": []},
+        allowed_source_ids={"raw-source-a"},
+        output_language="zh-CN",
+        retry_errors=["Invalid JSON: expected object"],
+    )
+    assert "Previous attempt errors" in prompt
+    assert "Invalid JSON: expected object" in prompt
+    assert "[source:" not in prompt.split("Schema JSON:", 1)[0]
+
+
+def test_validate_structured_section_sources_rejects_unknown_ids() -> None:
+    payload = parse_structured_section_payload(
+        """
+{
+  "recommendation": {"text": "Use a guarded shortlist.", "source_ids": ["raw-source-missing"], "confidence": "high", "evidence_role": "official_fact"},
+  "risk_adjusted_rationale": {"text": "Capability and evidence risk diverge.", "source_ids": ["raw-source-a"], "confidence": "high", "evidence_role": "official_fact"},
+  "competitor_postures": [],
+  "confidence_boundary": {"text": "Do not overstate weak sources.", "source_ids": ["raw-source-a"], "confidence": "medium", "evidence_role": "inference"},
+  "next_actions": [{"text": "Collect buyer validation.", "source_ids": ["raw-source-a"], "confidence": "medium", "evidence_role": "inference"}]
+}
+""",
+        ExecutiveSummarySection,
+    )
+    with pytest.raises(StructuredSectionGenerationError, match="raw-source-missing"):
+        validate_structured_section_sources(payload, allowed_source_ids={"raw-source-a"})
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -2350,6 +2727,7 @@ Create `backend/packages/agents/writer/structured_generation.py`:
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -2388,11 +2766,19 @@ def build_structured_section_prompt(
     segment_payload: dict[str, object],
     allowed_source_ids: set[str],
     output_language: str,
+    retry_errors: list[str] | None = None,
 ) -> str:
     schema_json = json.dumps(schema_class.model_json_schema(), ensure_ascii=False)
     segment_json = json.dumps(segment_payload, ensure_ascii=False, default=str)
+    retry_block = ""
+    if retry_errors:
+        retry_block = (
+            "\nPrevious attempt errors:\n"
+            + "\n".join(f"- {error}" for error in retry_errors)
+            + "\nFix only these issues while preserving the same facts and allowed source IDs.\n"
+        )
     return (
-        "Return JSON only. Do not write Markdown headings. Do not put [source:...] "
+        "Return JSON only. Do not write Markdown headings. Do not write Markdown citation "
         "tokens inside text fields. Put citations only in source_ids. Use only the "
         "allowed_source_ids listed below. Label evidence_role accurately as "
         "official_fact, community_signal, simulated_research, inference, or evidence_gap. "
@@ -2403,9 +2789,27 @@ def build_structured_section_prompt(
         f"Dimensions: {', '.join(dimensions)}\n"
         f"Section ID: {section_id}\n"
         f"Allowed source IDs: {', '.join(sorted(allowed_source_ids))}\n\n"
+        f"{retry_block}"
         f"Schema JSON: {schema_json}\n\n"
         f"Evidence segment JSON: {segment_json}\n"
     )
+
+
+def validate_structured_section_sources(
+    payload: BaseModel,
+    *,
+    allowed_source_ids: set[str],
+) -> None:
+    unknown = sorted(
+        source_id
+        for source_id in _iter_source_ids(payload)
+        if source_id not in allowed_source_ids
+    )
+    if unknown:
+        raise StructuredSectionGenerationError(
+            "Structured section used source IDs outside its allowed set: "
+            + ", ".join(unknown)
+        )
 
 
 def _strip_fenced_json(text: str) -> str:
@@ -2417,6 +2821,22 @@ def _strip_fenced_json(text: str) -> str:
             lines = lines[:-1]
         return "\n".join(lines).strip()
     return text
+
+
+def _iter_source_ids(value: object) -> Iterable[str]:
+    if isinstance(value, str):
+        return
+    if isinstance(value, list):
+        for item in value:
+            yield from _iter_source_ids(item)
+        return
+    if hasattr(value, "source_ids"):
+        for source_id in getattr(value, "source_ids"):
+            if isinstance(source_id, str):
+                yield source_id
+    if hasattr(value, "model_fields"):
+        for field_name in value.model_fields:
+            yield from _iter_source_ids(getattr(value, field_name))
 ```
 
 - [ ] **Step 4: Run generation helper tests**
@@ -2444,6 +2864,13 @@ git commit -m "feat(writer): add structured section generation helpers"
 - [ ] **Step 1: Add failing settings and orchestration tests**
 
 Add these tests near the existing writer tests in `backend/tests/unit/test_run_service.py`:
+
+If not already present in the file, add:
+
+```python
+import json
+from types import SimpleNamespace
+```
 
 ```python
 @pytest.mark.asyncio
@@ -2525,12 +2952,118 @@ async def test_writer_structured_failure_falls_back_visibly(monkeypatch) -> None
 
     assert any(event.type == "writer_markdown_fallback_used" for event in record.events)
     assert "Markdown fallback report" in record.detail.report_md
+
+
+def _executive_summary_request():
+    from packages.agents.writer.structured_report import ExecutiveSummarySection
+    from packages.agents.writer.structured_sections import StructuredSectionRequest
+
+    return StructuredSectionRequest(
+        section_id="executive_summary",
+        schema_class=ExecutiveSummarySection,
+        segment={"section_id": "decision_summary", "groups": []},
+        segment_competitor=None,
+        allowed_source_ids={"pricing-1"},
+        essential=True,
+    )
+
+
+def _minimal_evidence_pack_result():
+    return SimpleNamespace(
+        segment_inputs=lambda: [],
+        pack=SimpleNamespace(source_registry=[]),
+    )
+
+
+def _minimal_structured_report_from_payload(*args, **kwargs):
+    return SimpleNamespace()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "first_response",
+    [
+        "{not json",
+        "## Executive Summary\n- markdown, not JSON",
+        json.dumps(
+            {
+                "recommendation": {"text": "Bad source.", "source_ids": ["raw-source-missing"], "confidence": "high", "evidence_role": "official_fact"},
+                "risk_adjusted_rationale": {"text": "Capability and evidence risk diverge.", "source_ids": ["pricing-1"], "confidence": "high", "evidence_role": "official_fact"},
+                "competitor_postures": [{"competitor": "Cursor", "posture": "shortlist", "rationale": {"text": "Pricing source is accepted.", "source_ids": ["pricing-1"], "confidence": "high", "evidence_role": "official_fact"}}],
+                "confidence_boundary": {"text": "Keep claims bounded.", "source_ids": ["pricing-1"], "confidence": "medium", "evidence_role": "inference"},
+                "next_actions": [{"text": "Validate buyer fit.", "source_ids": ["pricing-1"], "confidence": "medium", "evidence_role": "inference"}],
+            },
+            ensure_ascii=False,
+        ),
+    ],
+)
+async def test_structured_section_generation_retries_once_before_success(monkeypatch, first_response) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://example.invalid",
+            llm_timeout_seconds=5,
+            llm_temperature=0,
+            writer_timeout_seconds=5,
+            writer_structured_report_enabled=True,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Structured retry",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+            output_language="zh-CN",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+
+    responses = iter(
+        [
+            first_response,
+            json.dumps(
+                {
+                    "recommendation": {"text": "Use guarded adoption.", "source_ids": ["pricing-1"], "confidence": "high", "evidence_role": "official_fact"},
+                    "risk_adjusted_rationale": {"text": "Evidence supports bounded action.", "source_ids": ["pricing-1"], "confidence": "high", "evidence_role": "official_fact"},
+                    "competitor_postures": [{"competitor": "Cursor", "posture": "shortlist", "rationale": {"text": "Pricing source is accepted.", "source_ids": ["pricing-1"], "confidence": "high", "evidence_role": "official_fact"}}],
+                    "confidence_boundary": {"text": "Keep claims bounded.", "source_ids": ["pricing-1"], "confidence": "medium", "evidence_role": "inference"},
+                    "next_actions": [{"text": "Validate buyer fit.", "source_ids": ["pricing-1"], "confidence": "medium", "evidence_role": "inference"}],
+                },
+                ensure_ascii=False,
+            ),
+        ]
+    )
+
+    async def fake_llm(*args, **kwargs):
+        return next(responses)
+
+    monkeypatch.setattr("packages.agents.writer.logic.structured_section_requests", lambda segments: [_executive_summary_request()])
+    monkeypatch.setattr("packages.agents.writer.logic.assemble_structured_report", _minimal_structured_report_from_payload)
+    monkeypatch.setattr("packages.agents.writer.logic.validate_structured_report", lambda *args, **kwargs: SimpleNamespace(passed=True, issues=[]))
+    monkeypatch.setattr("packages.agents.writer.logic.validate_publication_contract", lambda *args, **kwargs: SimpleNamespace(passed=True, issues=[]))
+    monkeypatch.setattr("packages.agents.writer.logic.render_structured_report", lambda report: "## 执行摘要\n- Use guarded adoption. [source:pricing-1]")
+    monkeypatch.setattr(service, "_trace_llm_text", fake_llm)
+
+    report_md = await service._writer_structured_report_markdown(
+        record,
+        evidence_pack_result=_minimal_evidence_pack_result(),
+        timeout_seconds=5,
+    )
+
+    assert "Use guarded adoption" in report_md
+    event = next(event for event in record.events if event.type == "writer_structured_section_generated")
+    assert event.payload["retry_count"] == 1
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```powershell
-conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py::test_writer_uses_structured_path_when_enabled backend/tests/unit/test_run_service.py::test_writer_structured_failure_falls_back_visibly -q
+conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py::test_writer_uses_structured_path_when_enabled backend/tests/unit/test_run_service.py::test_writer_structured_failure_falls_back_visibly backend/tests/unit/test_run_service.py::test_structured_section_generation_retries_once_before_success -q
 ```
 
 Expected: FAIL because `Settings` has no `writer_structured_report_enabled` field and `RunService` has no `_writer_structured_report_markdown`.
@@ -2563,8 +3096,10 @@ from packages.agents.writer.structured_assembler import (
 )
 from packages.agents.writer.publication_contract import validate_publication_contract
 from packages.agents.writer.structured_generation import (
+    StructuredSectionGenerationError,
     build_structured_section_prompt,
     parse_structured_section_payload,
+    validate_structured_section_sources,
 )
 from packages.agents.writer.structured_renderer import render_structured_report
 from packages.agents.writer.structured_report import (
@@ -2574,6 +3109,7 @@ from packages.agents.writer.structured_report import (
 )
 from packages.agents.writer.structured_sections import structured_section_requests
 from packages.agents.writer.structured_validation import validate_structured_report
+from packages.research.evidence.strength import classify_evidence_strength
 ```
 
 Add a method to `WriterAgentMixin`:
@@ -2599,34 +3135,61 @@ Add a method to `WriterAgentMixin`:
 
         payloads: list[StructuredSectionPayload] = []
         for request in requests:
-            prompt = build_structured_section_prompt(
-                topic=detail.topic,
-                competitors=detail.plan.competitors,
-                dimensions=detail.plan.dimensions,
-                section_id=request.section_id,
-                schema_class=request.schema_class,
-                segment_payload=request.segment,
-                allowed_source_ids=request.allowed_source_ids,
-                output_language=detail.output_language,
-            )
-            raw_text = await asyncio.wait_for(
-                self._trace_llm_text(
-                    record,
-                    agent="writer",
-                    subagent=request.section_id,
-                    name="structured_section_writer",
-                    system=(
-                        "You write one structured competitive-intelligence report section. "
-                        "Return valid JSON only and obey the schema exactly."
+            retry_errors: list[str] = []
+            parsed_payload = None
+            retry_count = 0
+            for attempt in range(2):
+                prompt = build_structured_section_prompt(
+                    topic=detail.topic,
+                    competitors=detail.plan.competitors,
+                    dimensions=detail.plan.dimensions,
+                    section_id=request.section_id,
+                    schema_class=request.schema_class,
+                    segment_payload=request.segment,
+                    allowed_source_ids=request.allowed_source_ids,
+                    output_language=detail.output_language,
+                    retry_errors=retry_errors,
+                )
+                raw_text = await asyncio.wait_for(
+                    self._trace_llm_text(
+                        record,
+                        agent="writer",
+                        subagent=request.section_id,
+                        name="structured_section_writer",
+                        system=(
+                            "You write one structured competitive-intelligence report section. "
+                            "Return valid JSON only and obey the schema exactly. Multiple sources "
+                            "belong in the source_ids array, never in Markdown citation syntax."
+                        ),
+                        user=prompt,
                     ),
-                    user=prompt,
-                ),
-                timeout=timeout_seconds,
-            )
-            parsed_payload = parse_structured_section_payload(
-                raw_text,
-                request.schema_class,
-            )
+                    timeout=timeout_seconds,
+                )
+                try:
+                    parsed_payload = parse_structured_section_payload(
+                        raw_text,
+                        request.schema_class,
+                    )
+                    validate_structured_section_sources(
+                        parsed_payload,
+                        allowed_source_ids=request.allowed_source_ids,
+                    )
+                    retry_count = attempt
+                    break
+                except StructuredSectionGenerationError as exc:
+                    retry_errors = [str(exc)]
+                    if attempt == 1:
+                        await self.emit(
+                            detail.id,
+                            "writer_structured_section_failed",
+                            "writer",
+                            request.section_id,
+                            f"Structured section failed after retry: {request.section_id}",
+                            {"section_id": request.section_id, "error": str(exc), "retry_count": 1},
+                        )
+                        raise
+            if parsed_payload is None:
+                raise RuntimeError(f"structured section did not produce payload: {request.section_id}")
             payloads.append(
                 StructuredSectionPayload(
                     section_id=request.section_id,
@@ -2644,6 +3207,8 @@ Add a method to `WriterAgentMixin`:
                     "schema_name": request.schema_class.__name__,
                     "source_count": len(request.allowed_source_ids),
                     "validation_status": "parsed",
+                    "retry_count": retry_count,
+                    "request_kind": request.request_kind,
                 },
             )
 
@@ -2673,10 +3238,24 @@ Add a method to `WriterAgentMixin`:
                 structured_report_version="structured_report.v1",
             ),
         )
+        await self.emit(
+            detail.id,
+            "writer_structured_report_assembled",
+            "writer",
+            None,
+            "Structured report assembled from section payloads.",
+            {"section_payload_count": len(payloads), "segment_count": len(requests)},
+        )
         allowed_source_ids = {source.id for source in detail.raw_sources}
+        source_strengths = {
+            source.id: classify_evidence_strength(source)
+            for source in detail.raw_sources
+            if source.id in allowed_source_ids
+        }
         validation = validate_structured_report(
             structured_report,
             allowed_source_ids=allowed_source_ids,
+            source_strengths=source_strengths,
         )
         await self.emit(
             detail.id,
@@ -2701,6 +3280,15 @@ Add a method to `WriterAgentMixin`:
             structured_report=structured_report,
             output_language=detail.output_language,
             allowed_source_ids=allowed_source_ids,
+            source_strengths=source_strengths,
+        )
+        await self.emit(
+            detail.id,
+            "writer_markdown_rendered",
+            "writer",
+            None,
+            "Structured report rendered to markdown.",
+            {"markdown_chars": len(markdown), "renderer": "structured_renderer"},
         )
         await self.emit(
             detail.id,
@@ -2763,7 +3351,7 @@ Extract the existing Markdown generation block into `_writer_markdown_report_pat
 - [ ] **Step 6: Run targeted integration tests**
 
 ```powershell
-conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py::test_writer_uses_structured_path_when_enabled backend/tests/unit/test_run_service.py::test_writer_structured_failure_falls_back_visibly -q
+conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py::test_writer_uses_structured_path_when_enabled backend/tests/unit/test_run_service.py::test_writer_structured_failure_falls_back_visibly backend/tests/unit/test_run_service.py::test_structured_section_generation_retries_once_before_success -q
 ```
 
 Expected: PASS.
@@ -2775,7 +3363,283 @@ git add backend/packages/config/settings.py backend/packages/agents/writer/logic
 git commit -m "feat(writer): route structured writer behind flag"
 ```
 
-### Task 10: Repair Routing And Quality Gate Integration
+### Task 10: Structured Section Repair
+
+**Files:**
+- Create: `backend/packages/agents/writer/structured_repair.py`
+- Modify: `backend/packages/agents/writer/logic.py`
+- Test: `backend/tests/unit/test_writer_structured_repair.py`
+- Test: `backend/tests/unit/test_run_service.py`
+
+- [ ] **Step 1: Write failing structured repair tests**
+
+Add `backend/tests/unit/test_writer_structured_repair.py`:
+
+```python
+from packages.agents.writer.structured_repair import (
+    StructuredRepairTarget,
+    structured_repair_target_for_issue,
+)
+from packages.quality.models import QCIssue, RedoScope
+
+
+def _issue(field_path: str) -> QCIssue:
+    return QCIssue(
+        id=field_path,
+        severity="warn",
+        detected_by="coverage",
+        target_agent="writer",
+        target_subagent=None,
+        target_competitor=None,
+        field_path=field_path,
+        problem="test",
+        redo_scope=RedoScope(kind="writer_only", rationale="structured repair"),
+    )
+
+
+def test_structured_repair_routes_publication_contract_battlecard_to_section() -> None:
+    target = structured_repair_target_for_issue(_issue("publication_contract.battlecard_template_only"))
+
+    assert target == StructuredRepairTarget(
+        section_id="battlecard",
+        repair_kind="regenerate_section",
+        deterministic=False,
+        reason="battlecard template-only publication issue",
+    )
+
+
+def test_structured_repair_routes_persona_self_consistency_to_user_review_themes() -> None:
+    target = structured_repair_target_for_issue(_issue("release_gate.claim_self_consistency_required.persona"))
+
+    assert target is not None
+    assert target.section_id == "review_theme_summary"
+    assert target.repair_kind == "regenerate_section"
+
+
+def test_structured_repair_routes_renderer_hygiene_to_render_only() -> None:
+    target = structured_repair_target_for_issue(_issue("publication_contract.citation_in_table_header"))
+
+    assert target is not None
+    assert target.section_id is None
+    assert target.repair_kind == "render_only"
+    assert target.deterministic is True
+
+
+def test_structured_repair_ignores_unknown_markdown_only_issue() -> None:
+    assert structured_repair_target_for_issue(_issue("report_md.line[12]")) is None
+```
+
+Add to `backend/tests/unit/test_run_service.py`:
+
+```python
+@pytest.mark.asyncio
+async def test_structured_writer_only_redo_regenerates_target_section(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://example.invalid",
+            llm_timeout_seconds=5,
+            llm_temperature=0,
+            writer_timeout_seconds=5,
+            writer_structured_report_enabled=True,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Structured repair",
+            competitors=["Cursor"],
+            dimensions=["pricing", "persona"],
+            execution_mode="real",
+            output_language="zh-CN",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = "## 战报\n- Direct battlecard positioning. [source:pricing-1]"
+    record.detail.quality_issues = [
+        QCIssue(
+            id="battlecard-template",
+            severity="warn",
+            detected_by="coverage",
+            target_agent="writer",
+            target_subagent=None,
+            target_competitor=None,
+            field_path="publication_contract.battlecard_template_only",
+            problem="Battlecard template-only.",
+            redo_scope=RedoScope(kind="writer_only", rationale="repair battlecard"),
+        )
+    ]
+    record.detail.writer_structured_report_payload = _complete_structured_report_payload()
+
+    regenerated_sections: list[str] = []
+
+    async def fake_regenerate_section(record, *, structured_report, target, evidence_pack_result, timeout_seconds):
+        regenerated_sections.append(target.section_id)
+        return _structured_report_payload_with_repaired_battlecard()
+
+    monkeypatch.setattr(service, "_writer_regenerate_structured_section", fake_regenerate_section)
+    monkeypatch.setattr("packages.agents.writer.logic.render_structured_report", lambda report: "## 战报\n- Competitor-specific play. [source:pricing-1]")
+
+    await service._real_writer_step(record)
+
+    assert regenerated_sections == ["battlecard"]
+    assert "Competitor-specific play" in record.detail.report_md
+    assert any(event.type == "writer_structured_repair_selected" for event in record.events)
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```powershell
+conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_writer_structured_repair.py backend/tests/unit/test_run_service.py::test_structured_writer_only_redo_regenerates_target_section -q
+```
+
+Expected: FAIL because `structured_repair.py`, structured payload persistence, and structured redo routing do not exist.
+
+- [ ] **Step 3: Implement repair target mapping**
+
+Create `backend/packages/agents/writer/structured_repair.py`:
+
+```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Literal
+
+from packages.quality.models import QCIssue
+
+RepairKind = Literal["regenerate_section", "render_only"]
+
+
+@dataclass(frozen=True)
+class StructuredRepairTarget:
+    section_id: str | None
+    repair_kind: RepairKind
+    deterministic: bool
+    reason: str
+
+
+SECTION_REPAIR_PATHS: tuple[tuple[str, str, str], ...] = (
+    ("publication_contract.battlecard_template_only", "battlecard", "battlecard template-only publication issue"),
+    ("publication_contract.executive_summary_template_only", "executive_summary", "executive summary template-only publication issue"),
+    ("release_gate.claim_self_consistency_required.persona", "review_theme_summary", "persona/user evidence self-consistency issue"),
+    ("release_gate.claim_self_consistency_required.feature", "competitive_findings", "feature claim self-consistency issue"),
+    ("release_gate.claim_self_consistency_required.pricing", "decision_matrix", "pricing claim self-consistency issue"),
+)
+RENDER_ONLY_PATHS = {
+    "publication_contract.citation_in_heading",
+    "publication_contract.citation_in_table_header",
+    "publication_contract.english_structural_heading_in_zh",
+    "publication_contract.appendix_citation_noise",
+    "publication_contract.support_before_core",
+}
+
+
+def structured_repair_target_for_issue(issue: QCIssue) -> StructuredRepairTarget | None:
+    field_path = issue.field_path or ""
+    for prefix, section_id, reason in SECTION_REPAIR_PATHS:
+        if field_path.startswith(prefix):
+            return StructuredRepairTarget(
+                section_id=section_id,
+                repair_kind="regenerate_section",
+                deterministic=False,
+                reason=reason,
+            )
+    if field_path in RENDER_ONLY_PATHS:
+        return StructuredRepairTarget(
+            section_id=None,
+            repair_kind="render_only",
+            deterministic=True,
+            reason="deterministic renderer/publication hygiene issue",
+        )
+    return None
+```
+
+- [ ] **Step 4: Persist structured payload for same-run repair**
+
+In `backend/packages/agents/writer/logic.py`, after a structured report validates and before rendering, store a compact JSON payload on the run detail:
+
+```python
+        detail.writer_structured_report_payload = structured_report.model_dump(mode="json")
+```
+
+If `RunDetail` rejects unknown attributes, add an explicit optional field to the existing run-detail model:
+
+```python
+    writer_structured_report_payload: dict[str, object] | None = None
+```
+
+Do not store internal evidence pack IDs or full source text here; this payload is the reader-facing structured report only.
+
+- [ ] **Step 5: Add structured writer-only redo branch**
+
+In `_real_writer_step`, before the Markdown writer-only redo branch, add:
+
+```python
+                if self._settings.writer_structured_report_enabled:
+                    structured_payload = getattr(detail, "writer_structured_report_payload", None)
+                    target = _structured_repair_target_from_issues(detail.quality_issues)
+                    if structured_payload and target is not None:
+                        await self.emit(
+                            detail.id,
+                            "writer_structured_repair_selected",
+                            "writer",
+                            target.section_id,
+                            "Structured writer-only repair selected.",
+                            {
+                                "repair_kind": target.repair_kind,
+                                "section_id": target.section_id,
+                                "reason": target.reason,
+                            },
+                        )
+                        previous = StructuredReport.model_validate(structured_payload)
+                        if target.repair_kind == "render_only":
+                            report_md = render_structured_report(previous)
+                        else:
+                            previous = await self._writer_regenerate_structured_section(
+                                record,
+                                structured_report=previous,
+                                target=target,
+                                evidence_pack_result=evidence_pack_result,
+                                timeout_seconds=timeout_seconds,
+                            )
+                            detail.writer_structured_report_payload = previous.model_dump(mode="json")
+                            report_md = render_structured_report(previous)
+                        writer_mode = "real structured writer repair"
+```
+
+Add helper:
+
+```python
+def _structured_repair_target_from_issues(issues: list[QCIssue]) -> StructuredRepairTarget | None:
+    targets = [structured_repair_target_for_issue(issue) for issue in issues]
+    targets = [target for target in targets if target is not None]
+    if not targets:
+        return None
+    regenerate = [target for target in targets if target.repair_kind == "regenerate_section"]
+    return regenerate[0] if regenerate else targets[0]
+```
+
+Implement `_writer_regenerate_structured_section(...)` by reusing the Task 9 per-section retry loop, replacing exactly `target.section_id` in the prior `StructuredReport`, then re-running `validate_structured_report()`, `render_structured_report()`, and `validate_publication_contract()`.
+
+- [ ] **Step 6: Run structured repair tests**
+
+```powershell
+conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_writer_structured_repair.py backend/tests/unit/test_run_service.py::test_structured_writer_only_redo_regenerates_target_section -q
+```
+
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
+
+```powershell
+git add backend/packages/agents/writer/structured_repair.py backend/packages/agents/writer/logic.py backend/tests/unit/test_writer_structured_repair.py backend/tests/unit/test_run_service.py
+git commit -m "feat(writer): repair structured report sections"
+```
+
+### Task 11: Publication Contract Quality Gate Integration
 
 **Files:**
 - Modify: `backend/packages/agents/writer/repair.py`
@@ -2936,7 +3800,11 @@ In `_metric_specs()`, add zero-weight hard gate metric:
         ("publication_contract_score", 0.0, "higher_is_better"),
 ```
 
-In `_signal_checks()`, add `"publication_contract_score"` to the hard report blockers list with minimum `1.0`.
+In `_signal_checks()`, add `"publication_contract_score"` to the hard report blockers list with minimum `1.0`. If `compare_run_quality()` computes `report_quality_signal` directly instead of only through `_signal_checks()`, add the same hard check explicitly:
+
+```python
+    report_quality_signal = report_quality_signal and values["publication_contract_score"] >= 1.0
+```
 
 Add helper:
 
@@ -2975,7 +3843,7 @@ git add backend/packages/agents/writer/repair.py backend/packages/business_intel
 git commit -m "feat(writer): gate publication contract quality"
 ```
 
-### Task 11: End-To-End Structured Writer Verification
+### Task 12: End-To-End Structured Writer Verification
 
 **Files:**
 - Modify: `backend/tests/unit/test_run_service.py`
@@ -3178,7 +4046,7 @@ Expected: PASS after fixing concrete bugs exposed by the test.
 - [ ] **Step 3: Run focused writer suite**
 
 ```powershell
-conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_writer_structured_report.py backend/tests/unit/test_writer_structured_renderer.py backend/tests/unit/test_writer_structured_validation.py backend/tests/unit/test_writer_publication_contract.py backend/tests/unit/test_writer_structured_assembler.py backend/tests/unit/test_writer_structured_adapter.py backend/tests/unit/test_writer_structured_sections.py backend/tests/unit/test_writer_structured_generation.py backend/tests/unit/test_writer_repair.py -q
+conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_writer_structured_report.py backend/tests/unit/test_writer_structured_renderer.py backend/tests/unit/test_writer_structured_validation.py backend/tests/unit/test_writer_publication_contract.py backend/tests/unit/test_writer_structured_assembler.py backend/tests/unit/test_writer_structured_adapter.py backend/tests/unit/test_writer_structured_sections.py backend/tests/unit/test_writer_structured_generation.py backend/tests/unit/test_writer_structured_repair.py backend/tests/unit/test_writer_repair.py -q
 ```
 
 Expected: PASS.
@@ -3194,7 +4062,7 @@ Expected: PASS, except pre-existing unrelated failures must be recorded with exa
 - [ ] **Step 5: Run ruff**
 
 ```powershell
-conda run -n bd-competiscope-v2 python -m ruff check backend/packages/agents/writer backend/packages/business_intel/report_quality.py backend/packages/business_intel/release_gate.py backend/packages/config/settings.py backend/tests/unit/test_writer_structured_report.py backend/tests/unit/test_writer_structured_renderer.py backend/tests/unit/test_writer_structured_validation.py backend/tests/unit/test_writer_publication_contract.py backend/tests/unit/test_writer_structured_assembler.py backend/tests/unit/test_writer_structured_adapter.py backend/tests/unit/test_writer_structured_sections.py backend/tests/unit/test_writer_structured_generation.py backend/tests/unit/test_writer_repair.py backend/tests/unit/test_run_service.py
+conda run -n bd-competiscope-v2 python -m ruff check backend/packages/agents/writer backend/packages/business_intel/report_quality.py backend/packages/business_intel/release_gate.py backend/packages/config/settings.py backend/tests/unit/test_writer_structured_report.py backend/tests/unit/test_writer_structured_renderer.py backend/tests/unit/test_writer_structured_validation.py backend/tests/unit/test_writer_publication_contract.py backend/tests/unit/test_writer_structured_assembler.py backend/tests/unit/test_writer_structured_adapter.py backend/tests/unit/test_writer_structured_sections.py backend/tests/unit/test_writer_structured_generation.py backend/tests/unit/test_writer_structured_repair.py backend/tests/unit/test_writer_repair.py backend/tests/unit/test_run_service.py
 ```
 
 Expected: PASS.
@@ -3206,13 +4074,46 @@ git add backend/tests/unit/test_run_service.py
 git commit -m "test(writer): cover structured writer end to end"
 ```
 
+- [ ] **Step 7: Enable structured writer by default after Phase 3 passes**
+
+Only after Steps 1-6 pass, modify `backend/packages/config/settings.py` so new real runs use schema-first writer unless explicitly disabled:
+
+```python
+    writer_structured_report_enabled: bool = True
+```
+
+In `get_settings()`, change the env default:
+
+```python
+        writer_structured_report_enabled=_env_bool(
+            "WRITER_STRUCTURED_REPORT_ENABLED",
+            True,
+        ),
+```
+
+Run the settings and focused writer tests again:
+
+```powershell
+conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_run_service.py -q -k "writer"
+conda run -n bd-competiscope-v2 python -m pytest backend/tests/unit/test_writer_structured_report.py backend/tests/unit/test_writer_structured_renderer.py backend/tests/unit/test_writer_structured_validation.py backend/tests/unit/test_writer_publication_contract.py backend/tests/unit/test_writer_structured_assembler.py backend/tests/unit/test_writer_structured_adapter.py backend/tests/unit/test_writer_structured_sections.py backend/tests/unit/test_writer_structured_generation.py backend/tests/unit/test_writer_structured_repair.py backend/tests/unit/test_writer_repair.py -q
+```
+
+Expected: PASS.
+
+- [ ] **Step 8: Commit rollout**
+
+```powershell
+git add backend/packages/config/settings.py backend/tests/unit/test_run_service.py
+git commit -m "feat(writer): enable structured writer by default"
+```
+
 ## Self-Review
 
-**Spec coverage:** The plan implements schema models, deterministic renderer, structured validation, publication contract, structured assembler, Markdown regression adapter, JSON section generation, feature-flagged integration, structured-aware repair, telemetry events, Markdown fallback, and no database migration. It keeps existing `report_md` as canonical output and does not change frontend behavior.
+**Spec coverage:** The plan implements schema models, deterministic renderer, structured validation, publication contract, structured assembler, Markdown regression adapter, shard-aware structured section planning, JSON section generation with retry, feature-flagged integration, structured section repair, publication-contract quality gating, telemetry events, Markdown fallback, rollout to default-on after Phase 3 verification, and no database migration. It keeps existing `report_md` as canonical output and does not change frontend behavior.
 
 **Placeholder scan:** The plan avoids undefined "TBD" work. Each task names exact files, exact tests, exact commands, expected failures, expected passes, and concrete implementation snippets.
 
-**Type consistency:** The plan uses `StructuredReport`, `ReportCore`, `ReportSupport`, `CitedText`, `BattlecardPlay`, `StructuredSectionPayload`, `PartialStructuredReport`, `PublicationContractResult`, and `StructuredSectionRequest` consistently across model, renderer, validator, assembler, adapter, generation, repair, and run-service tasks.
+**Type consistency:** The plan uses `StructuredReport`, `ReportCore`, `ReportSupport`, `CitedText`, `BattlecardPlay`, `StructuredSectionPayload`, `PartialStructuredReport`, `PublicationContractResult`, `StructuredSectionRequest`, `StructuredRepairTarget`, and `EvidenceStrengthDecision` consistently across model, renderer, validator, assembler, adapter, generation, repair, quality-gate, and run-service tasks.
 
 ## Execution Handoff
 
