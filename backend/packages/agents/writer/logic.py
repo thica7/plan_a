@@ -8,6 +8,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, ValidationError
+
 from packages.agents.writer.assembler import assemble_report_sections
 from packages.agents.writer.evidence_pack import (
     SEGMENT_INPUT_TARGET_CHARS,
@@ -175,6 +177,49 @@ def _assemble_repair_quality_gate(
         "quality_gate_metrics": quality_gate_metrics,
         **quality_gate_metrics,
     }
+
+
+def _parse_structured_section_response(
+    response: str,
+    section_schema: type[BaseModel],
+    allowed_source_ids: set[str],
+) -> BaseModel:
+    cleaned_response = response.strip()
+    if not cleaned_response.startswith("{"):
+        raise ValueError("structured writer response must be a JSON object")
+    try:
+        payload = json.loads(cleaned_response)
+        section = section_schema.model_validate(payload)
+    except (json.JSONDecodeError, ValidationError) as exc:
+        raise ValueError(f"structured writer response validation failed: {exc}") from exc
+
+    cited_source_ids = _source_ids_from_section(section)
+    invalid_source_ids = cited_source_ids - allowed_source_ids
+    if invalid_source_ids:
+        invalid = ", ".join(sorted(invalid_source_ids))
+        raise ValueError(f"structured writer response used disallowed source_ids: {invalid}")
+    return section
+
+
+def _source_ids_from_section(section: BaseModel) -> set[str]:
+    source_ids: set[str] = set()
+
+    def collect(value: object) -> None:
+        if isinstance(value, dict):
+            raw_source_ids = value.get("source_ids")
+            if isinstance(raw_source_ids, list):
+                source_ids.update(
+                    source_id for source_id in raw_source_ids if isinstance(source_id, str)
+                )
+            for child in value.values():
+                collect(child)
+            return
+        if isinstance(value, list):
+            for child in value:
+                collect(child)
+
+    collect(section.model_dump())
+    return source_ids
 
 
 class WriterEvidencePreflightError(RuntimeError):
@@ -721,6 +766,108 @@ class WriterAgentMixin:
     def _require_writer_report_output(self, report_md: str) -> None:
         if not report_md.strip():
             raise RuntimeError("Writer returned empty report content")
+
+    async def _writer_structured_section_json(
+        self,
+        record: RunRecord,
+        *,
+        segment: dict[str, object],
+        section_schema: type[BaseModel],
+        allowed_source_ids: set[str],
+        timeout_seconds: float,
+    ) -> BaseModel:
+        prompt = self._structured_section_prompt(
+            segment=segment,
+            section_schema=section_schema,
+            allowed_source_ids=allowed_source_ids,
+        )
+        response = await asyncio.wait_for(
+            self._trace_llm_text(
+                record,
+                agent="writer",
+                subagent=None,
+                name="structured_report_section",
+                system=(
+                    "You are a senior enterprise competitive-intelligence analyst "
+                    "writing one structured report section."
+                ),
+                user=prompt,
+            ),
+            timeout=timeout_seconds,
+        )
+        try:
+            return _parse_structured_section_response(
+                response,
+                section_schema,
+                allowed_source_ids,
+            )
+        except ValueError as exc:
+            retry_prompt = self._structured_section_prompt(
+                segment=segment,
+                section_schema=section_schema,
+                allowed_source_ids=allowed_source_ids,
+                previous_validation_error=str(exc),
+            )
+            retry_response = await asyncio.wait_for(
+                self._trace_llm_text(
+                    record,
+                    agent="writer",
+                    subagent=None,
+                    name="structured_report_section_retry",
+                    system=(
+                        "You are fixing a structured writer JSON response. "
+                        "Return valid JSON only."
+                    ),
+                    user=retry_prompt,
+                ),
+                timeout=timeout_seconds,
+            )
+            return _parse_structured_section_response(
+                retry_response,
+                section_schema,
+                allowed_source_ids,
+            )
+
+    def _structured_section_prompt(
+        self,
+        *,
+        segment: dict[str, object],
+        section_schema: type[BaseModel],
+        allowed_source_ids: set[str],
+        previous_validation_error: str | None = None,
+    ) -> str:
+        schema_json = json.dumps(
+            section_schema.model_json_schema(),
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        allowed_source_ids_json = json.dumps(
+            sorted(allowed_source_ids),
+            ensure_ascii=False,
+        )
+        segment_json = json.dumps(
+            segment,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        ).replace("[source:", "[source token:")
+        previous_error = (previous_validation_error or "none").replace(
+            "[source:",
+            "[source token:",
+        )
+        return "\n".join(
+            [
+                "Return JSON only.",
+                "Do not write Markdown headings.",
+                "Do not include markdown citation tokens inside text fields.",
+                "Put citations only in source_ids.",
+                "Use only allowed_source_ids.",
+                f"Schema JSON: {schema_json}",
+                f"allowed_source_ids JSON: {allowed_source_ids_json}",
+                f"Segment JSON: {segment_json}",
+                f"Previous validation error: {previous_error}",
+            ]
+        )
 
     async def _writer_segmented_report_markdown(
         self,

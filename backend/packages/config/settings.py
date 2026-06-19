@@ -88,12 +88,12 @@ def _env_float(name: str, default: float, *, minimum: float, maximum: float) -> 
 
 @dataclass(frozen=True)
 class Settings:
-    demo_mode: bool
-    ark_api_key: str | None
-    ark_model: str | None
-    ark_base_url: str
-    llm_timeout_seconds: float
-    llm_temperature: float
+    demo_mode: bool = True
+    ark_api_key: str | None = None
+    ark_model: str | None = None
+    ark_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
+    llm_timeout_seconds: float = 90.0
+    llm_temperature: float = 0.2
     llm_max_retries: int = 2
     llm_retry_backoff_seconds: float = 0.25
     backup_llm_api_key: str | None = None
@@ -122,6 +122,7 @@ class Settings:
     analyst_fanout_branch_timeout_seconds: float = 8.0
     comparator_timeout_seconds: float = 120.0
     writer_timeout_seconds: float = 600.0
+    writer_structured_report_enabled: bool = False
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
@@ -283,6 +284,10 @@ def get_settings() -> Settings:
             600.0,
             minimum=0.05,
             maximum=600.0,
+        ),
+        writer_structured_report_enabled=_env_bool(
+            "WRITER_STRUCTURED_REPORT_ENABLED",
+            False,
         ),
         langfuse_public_key=os.getenv("LANGFUSE_PUBLIC_KEY") or None,
         langfuse_secret_key=os.getenv("LANGFUSE_SECRET_KEY") or None,
