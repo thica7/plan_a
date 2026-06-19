@@ -67,7 +67,7 @@ describe("New Run dimension helpers", () => {
       "L3",
     ]);
     expect(starterPresets.map((preset) => preset.scenarioId)).toEqual([
-      "l1_pricing_pack",
+      "l1_direct_battlecard",
       "l2_adjacent_workflow",
       "l3_market_landscape",
     ]);

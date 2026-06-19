@@ -19,6 +19,7 @@ from packages.schema.api_dto import RunDetail
 from packages.schema.models import RawSource
 
 SCHEMA_VERSION = "writer_evidence_pack.v1"
+REPORT_BRIEF_SCHEMA_VERSION = "writer_report_brief.v1"
 UNSTRUCTURED_SIGNAL_LIMIT = 420
 SOURCE_NOTE_LIMIT = 180
 QUOTE_EXCERPT_LIMIT = 400
@@ -159,6 +160,29 @@ class WriterEvidencePack(BaseModel):
     coverage: dict[str, object] = Field(default_factory=dict)
 
 
+
+class WriterReportBrief(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str = REPORT_BRIEF_SCHEMA_VERSION
+    output_language: str = "zh-CN"
+    gate_status: Literal["pass", "warn", "block"] = "pass"
+    blocking_gaps: list[str] = Field(default_factory=list)
+    writer_constraints: list[str] = Field(default_factory=list)
+    allowed_source_ids: list[str] = Field(default_factory=list)
+    source_registry: list[dict[str, object]] = Field(default_factory=list)
+    evidence_groups: list[dict[str, object]] = Field(default_factory=list)
+    quotes: list[dict[str, object]] = Field(default_factory=list)
+    matrix: dict[str, object] = Field(default_factory=dict)
+    structured_knowledge: dict[str, object] = Field(default_factory=dict)
+    coverage: dict[str, object] = Field(default_factory=dict)
+    qa_findings: list[dict[str, object]] = Field(default_factory=list)
+    reflection_gaps: list[str] = Field(default_factory=list)
+
+    def to_prompt_json(self) -> str:
+        return json.dumps(self.model_dump(mode="json"), ensure_ascii=False)
+
+
 class WriterEvidencePackMetrics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -185,12 +209,24 @@ class WriterEvidencePackResult(BaseModel):
     pack: WriterEvidencePack
     metrics: WriterEvidencePackMetrics
     warnings: list[str] = Field(default_factory=list)
+    report_brief: WriterReportBrief | None = None
 
     def to_prompt_json(self) -> str:
         return json.dumps(_prompt_safe_pack_payload(self.pack), ensure_ascii=False)
 
+    def to_report_brief_prompt_json(self) -> str:
+        return self._resolved_report_brief().to_prompt_json()
+
+    def _resolved_report_brief(self) -> WriterReportBrief:
+        if self.report_brief is not None:
+            return self.report_brief
+        return _fallback_report_brief_from_pack(self.pack)
+
     def telemetry_payload(self) -> dict[str, object]:
         payload = self.metrics.model_dump(mode="json")
+        brief = self._resolved_report_brief()
+        payload["writer_report_brief_chars"] = len(brief.to_prompt_json())
+        payload["writer_report_brief_gate_status"] = brief.gate_status
         payload["preflight_warnings"] = list(self.warnings)
         return payload
 
@@ -335,8 +371,13 @@ class WriterEvidencePackResult(BaseModel):
             for segment in segments
             for source_id in _string_list(segment.get("allowed_source_ids"))
         )
+        brief = self._resolved_report_brief()
         payload: dict[str, object] = {
             "schema_version": self.pack.schema_version,
+            "report_brief_schema_version": brief.schema_version,
+            "gate_status": brief.gate_status,
+            "writer_constraints": list(brief.writer_constraints),
+            "reflection_gaps": list(brief.reflection_gaps),
             "repair_sections": section_names,
             "segment_names": sorted(
                 {
@@ -905,8 +946,13 @@ class WriterEvidencePackResult(BaseModel):
                         if isinstance(quote, Mapping):
                             referenced_quote_ids.update(_string_list(quote.get("id")))
         allowed = set(allowed_source_ids)
+        brief = self._resolved_report_brief()
         payload: dict[str, object] = {
             "schema_version": self.pack.schema_version,
+            "report_brief_schema_version": brief.schema_version,
+            "gate_status": brief.gate_status,
+            "writer_constraints": list(brief.writer_constraints),
+            "reflection_gaps": list(brief.reflection_gaps),
             "segment_name": name,
             **_segment_contract_metadata(name, self.pack.output_language),
             "segment_competitor": segment_competitor,
@@ -1205,6 +1251,58 @@ def _prompt_safe_pack_payload(pack: WriterEvidencePack) -> dict[str, object]:
     }
 
 
+def _fallback_report_brief_from_pack(pack: WriterEvidencePack) -> WriterReportBrief:
+    return _report_brief_from_pack(pack)
+
+
+def _report_brief_from_pack(
+    pack: WriterEvidencePack,
+    *,
+    gate_status: Literal["pass", "warn", "block"] = "pass",
+    blocking_gaps: list[str] | None = None,
+    writer_constraints: list[str] | None = None,
+    qa_findings: list[dict[str, object]] | None = None,
+    reflection_gaps: list[str] | None = None,
+) -> WriterReportBrief:
+    blocking_gaps = blocking_gaps or []
+    reflection_gaps = reflection_gaps or []
+    constraints = [
+        "Use comparison_matrix.winner_by_dimension as the only winner source; "
+        "do not recompute winners from raw sources.",
+        "Use only allowed_source_ids for citations; never invent source IDs.",
+    ]
+    if gate_status == "block":
+        constraints.append(
+            "Treat the report as draft-only until blocking coverage gaps are resolved."
+        )
+    elif gate_status == "warn":
+        constraints.append(
+            "Surface coverage and confidence gaps in support sections before any recommendation."
+        )
+    for gap in blocking_gaps:
+        constraints.append(f"Do not overstate conclusions affected by: {gap}")
+    constraints.extend(writer_constraints or [])
+    allowed_source_ids = [item.id for item in pack.source_registry]
+    return WriterReportBrief(
+        output_language=pack.output_language,
+        gate_status=gate_status,
+        blocking_gaps=_unique(blocking_gaps),
+        writer_constraints=_unique(constraints),
+        allowed_source_ids=allowed_source_ids,
+        source_registry=[_prompt_safe_registry_item(item) for item in pack.source_registry],
+        evidence_groups=[
+            _prompt_safe_group_payload(group, projection="full") for group in pack.groups
+        ],
+        quotes=[
+            _prompt_safe_quote_payload(quote, compact=True) for quote in pack.quotes
+        ],
+        matrix=pack.matrix,
+        structured_knowledge=pack.structured_knowledge,
+        coverage=pack.coverage,
+        qa_findings=qa_findings or [],
+        reflection_gaps=_unique(reflection_gaps),
+    )
+
 def _segment_contract_metadata(
     segment_name: str,
     output_language: str,
@@ -1451,8 +1549,51 @@ class _WriterEvidencePackBuilder:
         )
         pack.coverage = self._coverage_summary(pack)
         metrics = self._metrics(pack)
-        return WriterEvidencePackResult(pack=pack, metrics=metrics, warnings=self.warnings)
+        report_brief = self._report_brief(pack)
+        return WriterEvidencePackResult(
+            pack=pack,
+            metrics=metrics,
+            warnings=self.warnings,
+            report_brief=report_brief,
+        )
 
+    def _report_brief(self, pack: WriterEvidencePack) -> WriterReportBrief:
+        latest_reflection = self.detail.reflections[-1] if self.detail.reflections else None
+        gate_status: Literal["pass", "warn", "block"] = "pass"
+        blocking_gaps: list[str] = []
+        writer_constraints: list[str] = []
+        reflection_gaps: list[str] = []
+        if latest_reflection is not None:
+            gate_status = latest_reflection.gate_status
+            blocking_gaps = list(latest_reflection.blocking_gaps)
+            writer_constraints = list(latest_reflection.writer_constraints)
+            reflection_gaps = [
+                *latest_reflection.coverage_gaps,
+                *latest_reflection.confidence_outliers,
+                *latest_reflection.cross_competitor_gaps,
+            ]
+        qa_findings = [
+            {
+                "id": issue.id,
+                "severity": issue.severity,
+                "detected_by": issue.detected_by,
+                "target_agent": issue.target_agent,
+                "target_subagent": issue.target_subagent,
+                "target_competitor": issue.target_competitor,
+                "field_path": issue.field_path,
+                "problem": issue.problem,
+                "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            }
+            for issue in self.detail.qa_findings[:12]
+        ]
+        return _report_brief_from_pack(
+            pack,
+            gate_status=gate_status,
+            blocking_gaps=blocking_gaps,
+            writer_constraints=writer_constraints,
+            qa_findings=qa_findings,
+            reflection_gaps=reflection_gaps,
+        )
     def _register_source(self, source: RawSource) -> None:
         fields = normalized_fields_from_source(source)
         item = WriterSourceRegistryItem(

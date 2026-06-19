@@ -3507,7 +3507,14 @@ async def test_reflector_prompt_includes_comparison_matrix_digest() -> None:
 
     assert "Comparison Matrix JSON:" in captured_user
     assert '"source_ids": ["pricing-a"]' in captured_user
-    assert record.detail.reflections[-1].cross_competitor_gaps == []
+    reflection = record.detail.reflections[-1]
+    assert reflection.cross_competitor_gaps == []
+    assert reflection.gate_status == "pass"
+    assert reflection.blocking_gaps == []
+    assert any(
+        "comparison_matrix.winner_by_dimension" in constraint
+        for constraint in reflection.writer_constraints
+    )
     assert record.detail.agent_messages[-1].payload["module_status"] == "llm"
     completed = [event for event in record.events if event.agent == "reflector"][-1]
     assert completed.payload["module_status"] == "llm"
@@ -7931,7 +7938,7 @@ async def test_writer_empty_output_fails_without_previous_report() -> None:
 
 
 @pytest.mark.asyncio
-async def test_writer_uses_evidence_pack_for_llm_prompt() -> None:
+async def test_writer_uses_report_brief_for_llm_prompt() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -8010,7 +8017,7 @@ async def test_writer_uses_evidence_pack_for_llm_prompt() -> None:
 
     await service._real_writer_step(record)
 
-    assert "Writer Evidence Pack JSON:" in captured_user
+    assert "Writer Report Brief JSON:" in captured_user
     assert "Writer Context JSON:" not in captured_user
     assert "source_registry" in captured_user
     assert "around 5,500 characters" not in captured_user
@@ -8031,7 +8038,7 @@ async def test_writer_uses_evidence_pack_for_llm_prompt() -> None:
 
 
 @pytest.mark.asyncio
-async def test_writer_uses_evidence_pack_context_and_emits_preflight(monkeypatch) -> None:
+async def test_writer_uses_report_brief_context_and_emits_preflight(monkeypatch) -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -8078,6 +8085,8 @@ async def test_writer_uses_evidence_pack_context_and_emits_preflight(monkeypatch
         assert preflight_event.payload["raw_source_count"] == 1
         assert preflight_event.payload["source_registry_count"] >= 1
         assert preflight_event.payload["writer_evidence_pack_chars"] > 0
+        assert preflight_event.payload["writer_report_brief_chars"] > 0
+        assert preflight_event.payload["writer_report_brief_gate_status"] == "pass"
         captured["user"] = kwargs["user"]
         return (
             "# Report\n\n"
@@ -8089,7 +8098,7 @@ async def test_writer_uses_evidence_pack_context_and_emits_preflight(monkeypatch
 
     await service._real_writer_step(record)
 
-    assert "Writer Evidence Pack JSON:" in captured["user"]
+    assert "Writer Report Brief JSON:" in captured["user"]
     assert "Writer Context JSON:" not in captured["user"]
     assert "source_registry" in captured["user"]
 
@@ -10490,7 +10499,7 @@ async def test_writer_segment_retry_fails_when_citations_stay_invalid(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_writer_section_repair_uses_evidence_pack_context(monkeypatch) -> None:
+async def test_writer_section_repair_uses_report_brief_context(monkeypatch) -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -10539,7 +10548,7 @@ async def test_writer_section_repair_uses_evidence_pack_context(monkeypatch) -> 
         previous_report="## User Review Themes\nThin.",
     )
 
-    assert "Writer Evidence Pack JSON:" in captured["user"]
+    assert "Writer Repair Context JSON:" in captured["user"]
     assert "Writer Context JSON:" not in captured["user"]
     assert "source_registry" in captured["user"]
     assert "cursor-persona" in captured["user"]
@@ -10626,7 +10635,7 @@ async def test_writer_section_repair_uses_segment_payload_for_segmented_pack(
     )
 
     assert not full_serialized
-    assert "Writer Evidence Pack JSON:" in captured["user"]
+    assert "Writer Repair Context JSON:" in captured["user"]
     assert "repair_sections" in captured["user"]
     assert "cursor-persona" in captured["user"]
 
@@ -10750,7 +10759,7 @@ async def test_writer_section_repair_iterates_budgeted_segment_payloads(
     )
     assert not full_serialized
     assert len(calls) == 2
-    assert all("Writer Evidence Pack JSON:" in user for user in calls)
+    assert all("Writer Repair Context JSON:" in user for user in calls)
     assert '"repair_part": 1' in calls[0]
     assert '"repair_part": 2' in calls[1]
     assert "Part 1 cites" in result
@@ -17499,3 +17508,65 @@ def test_backfill_competitor_deep_dives_uses_competitor_h3() -> None:
     assert "\n### Cursor\n" in f"\n{markdown}\n"
     assert "\n### GitHub Copilot\n" in f"\n{markdown}\n"
     assert markdown.index("### Cursor") < markdown.index("### GitHub Copilot")
+
+
+@pytest.mark.asyncio
+async def test_reflector_blocks_writer_when_matrix_cell_lacks_source_ids() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    async def fake_complete_json(*, system: str, user: str, schema_hint: str) -> dict:  # noqa: ARG001
+        return {
+            "coverage_gaps": [],
+            "confidence_outliers": [],
+            "cross_competitor_gaps": [],
+            "suggested_redo_dimension": None,
+        }
+
+    service._llm.complete_json = fake_complete_json  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Reflector gate",
+            competitors=["A"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.comparison_matrix = ComparisonMatrix(
+        competitors=["A"],
+        dimensions=["pricing"],
+        cells=[
+            ComparisonCell(
+                competitor="A",
+                dimension="pricing",
+                value="A publishes pricing.",
+                source_ids=[],
+                confidence=0.9,
+            )
+        ],
+        winner_by_dimension={"pricing": "A"},
+        summary=["A has a pricing cell but no source IDs."],
+    )
+
+    await service._real_reflector_step(record)
+
+    reflection = record.detail.reflections[-1]
+    assert reflection.gate_status == "block"
+    assert reflection.blocking_gaps == [
+        "Comparison cell for A / pricing has no source_ids."
+    ]
+    assert any("draft-only" in constraint for constraint in reflection.writer_constraints)
+    issues = service._build_reflector_qa_issues(record.detail)
+    assert len(issues) == 1
+    assert issues[0].severity == "blocker"
+    assert issues[0].target_agent == "collector"

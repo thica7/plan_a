@@ -8,37 +8,34 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from packages.agents.writer.assembler import assemble_report_sections
-from packages.agents.writer.evidence_pack import (
-    SEGMENT_INPUT_TARGET_CHARS,
-    build_writer_evidence_pack,
+from packages.agents.writer.assembler import (
+    assemble_report_sections,
+    join_section_repair_parts,
 )
+from packages.agents.writer.evidence_pack import build_writer_evidence_pack
+from packages.agents.writer.prompt_builder import (
+    WriterPromptBuilder,
+    writer_user_research_policy_text,
+)
+from packages.agents.writer.quality_gate import WriterQualityGate
 from packages.agents.writer.quality_preflight import run_writer_quality_preflight
-from packages.agents.writer.repair import (
-    WriterRepairPlan,
-    apply_line_repair,
-    build_writer_repair_plan,
-    replace_markdown_section,
-    report_regression_problem,
-    section_regression_problem,
+from packages.agents.writer.repair import WriterRepairPlan
+from packages.agents.writer.repair_planner import WriterRepairPlanner
+from packages.agents.writer.sanitizer import CitationGuard, ReportSanitizer
+from packages.agents.writer.section_writer import (
+    SectionWriter,
+    refresh_segment_input_chars,
 )
 from packages.agents.writer.segment_contract import (
     segment_contract_for,
     validate_segment_contract,
 )
-from packages.business_intel.release_gate import REPORT_RICHNESS_MINIMUMS
-from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.i18n.language import (
     language_instruction,
     normalize_output_language,
     repair_mojibake_text,
     report_label,
-)
-from packages.identity.source_resolver import (
-    SOURCE_TOKEN_RE,
-    source_token_match_value,
-    source_tokens,
 )
 from packages.rag.grounded_prompt import build_run_grounding_prompt
 from packages.research.evidence.normalization import normalized_fields_from_source
@@ -146,37 +143,6 @@ WRITER_NORMALIZED_FIELD_LONG_KEY_PARTS = (
 WRITER_NORMALIZED_SNIPPET_LIMIT = 1600
 
 
-def writer_user_research_policy_text() -> str:
-    source_types = ", ".join(USER_RESEARCH_SOURCE_TYPE_ORDER)
-    return (
-        f"Treat {source_types} as user-research signals, not as official factual proof."
-    )
-
-
-def _assemble_repair_quality_gate(
-    detail: RunDetail,
-    markdown: str,
-) -> dict[str, object]:
-    candidate = detail.model_copy(update={"report_md": markdown})
-    comparison = compare_run_quality(candidate)
-    metric_by_name = {metric.name: metric.target_value for metric in comparison.metrics}
-    quality_gate_metrics = {
-        name: float(metric_by_name.get(name) or 0.0)
-        for name in REPORT_RICHNESS_MINIMUMS
-    }
-    reasons = [
-        name
-        for name, minimum in REPORT_RICHNESS_MINIMUMS.items()
-        if quality_gate_metrics[name] < minimum
-    ]
-    return {
-        "quality_gate_passed": not reasons,
-        "quality_gate_reasons": reasons,
-        "quality_gate_metrics": quality_gate_metrics,
-        **quality_gate_metrics,
-    }
-
-
 class WriterEvidencePreflightError(RuntimeError):
     """Raised when writer evidence cannot safely be sent to the LLM."""
 
@@ -266,7 +232,7 @@ class WriterAgentMixin:
             )
         )
         if redo_issues or upstream_data_changed:
-            repair_plan = build_writer_repair_plan(
+            repair_plan = self._writer_repair_planner().plan(
                 detail,
                 redo_issues,
                 upstream_data_changed=upstream_data_changed,
@@ -287,7 +253,9 @@ class WriterAgentMixin:
             )
             assembled_markdown = self._harden_report_markdown(detail, assembled.markdown)
             preflight = run_writer_quality_preflight(detail, assembled_markdown)
-            quality_gate = _assemble_repair_quality_gate(detail, assembled_markdown)
+            quality_gate = self._writer_quality_gate().assemble_repair_gate(
+                detail, assembled_markdown
+            )
             await self.emit(
                 detail.id,
                 "writer_assemble_repair_completed",
@@ -325,7 +293,10 @@ class WriterAgentMixin:
             previous_report_protected = repair_plan.previous_report_protectable
             detail.report_md = self._harden_report_markdown(
                 detail,
-                apply_line_repair(previous_report, redo_issues),
+                self._writer_repair_planner().apply_line_repair(
+                    previous_report,
+                    redo_issues,
+                ),
             )
             writer_mode = "writer repair: line"
         elif (
@@ -349,7 +320,7 @@ class WriterAgentMixin:
                         timeout=timeout_seconds,
                     )
                     self._require_writer_report_output(section_md)
-                    report_md = replace_markdown_section(
+                    report_md = self._writer_repair_planner().replace_section(
                         report_md,
                         section,
                         detail.output_language,
@@ -382,10 +353,12 @@ class WriterAgentMixin:
                             "metrics": repair_comparison_metrics,
                         }
                     )
-                    anti_regression_reason = section_regression_problem(
-                        previous_detail,
-                        candidate_detail,
-                        protected_sections=repair_plan.sections,
+                    anti_regression_reason = (
+                        self._writer_repair_planner().section_regression_problem(
+                            previous_detail,
+                            candidate_detail,
+                            protected_sections=repair_plan.sections,
+                        )
                     )
                 if anti_regression_reason:
                     detail.report_md = self._preserve_hardened_previous_report(
@@ -490,70 +463,26 @@ class WriterAgentMixin:
                     )
                     writer_mode = "real segmented LLM call"
                 else:
-                    writer_context_json = evidence_pack_result.to_prompt_json()
+                    writer_context_json = evidence_pack_result.to_report_brief_prompt_json()
+                    prompt = self._writer_prompt_builder().first_draft_prompt(
+                        detail,
+                        language_guidance=language_guidance,
+                        user_research_policy=user_research_policy,
+                        memory_context=memory_context,
+                        layer_context=layer_context,
+                        grounding_prompt=grounding_prompt,
+                        community_policy_text=self._writer_community_policy_text(),
+                        writer_context_json=writer_context_json,
+                        required_sections=required_sections,
+                    )
                     report_md = await asyncio.wait_for(
                         self._trace_llm_text(
                             record,
                             agent="writer",
                             subagent=None,
                             name="report_writer",
-                            system=(
-                                "You are a senior enterprise competitive-intelligence analyst. "
-                                "Produce a concise decision-grade markdown first draft, not a short "
-                                "summary. Use an analysis-first structure: lead with an executive "
-                                "takeaway, decision summary, competitive findings, competitor deep "
-                                "dives, and the selected layer-specific analysis. Put source quality, "
-                                "scenario QA, claim risk, RAG gap-fill, verification tasks, and the "
-                                "evidence appendix after the core analysis as support material. Write "
-                                "with consulting depth: side-by-side matrices, dimension analysis, "
-                                "risks, buying implications, and explicit next validation tasks. Cite "
-                                "factual claims with existing source IDs using [source:ID]. Do not "
-                                "invent source IDs. "
-                                "Do not use web_search_result or confidence < 0.75 as the sole support "
-                                "for a winner, legal/security certification, pricing, or procurement "
-                                "recommendation. If evidence is incomplete, say the conclusion is "
-                                "tentative and list the exact evidence gap. Do not claim all sources "
-                                "are verified when any source_type is web_search_result or "
-                                "llm_public_knowledge. "
-                                "Follow the Grounded Evidence Contract exactly. "
-                                f"{language_guidance} "
-                                f"{user_research_policy} "
-                                "Honor confirmed memory guidance when it does not conflict with "
-                                "evidence, schema requirements, or compliance policy. "
-                                "Use the requested competitive layer to choose the report shape: L1 "
-                                "is a direct battlecard, L2 is adjacent workflow and enterprise-risk "
-                                "analysis, and L3 is market landscape and category strategy."
-                            ),
-                            user=(
-                                f"Topic: {detail.topic}\n"
-                                f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                                f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                                f"Competitive Layer: {detail.plan.competitor_layer}\n"
-                                f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
-                                "Scenario Recommended Dimensions: "
-                                f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
-                                f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
-                                f"Confirmed Memory Preferences:\n{memory_context}\n"
-                                f"Layer Report Context: {layer_context}\n"
-                                f"{grounding_prompt}\n"
-                                f"{self._writer_community_policy_text()}\n"
-                                f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
-                                f"Required sections:\n{required_sections}\n"
-                                "Target 16,000-20,000 characters for the first draft. Use about "
-                                "70-80% of the report on the Core analysis layer: decision summary, "
-                                "competitive findings, user review themes, competitor deep dives, "
-                                "SWOT, matrix interpretation, and layer-specific implications. "
-                                "Core section minimums: Decision Summary 800+ characters; "
-                                "Competitive Findings 1,200+; User Review Themes 1,000+ when "
-                                "review, community, survey, interview, or persona evidence exists; "
-                                "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
-                                "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
-                                "Threats for every competitor; Matrix Interpretation 900+; "
-                                "Layer-specific Battlecard/Workflow/Market section 1,200+. Keep "
-                                "the Support/audit layer concise and complete; it is the audit trail, "
-                                "not the main readout. Prefer deeper cited analysis and decision "
-                                "implications over repeated source IDs or QA boilerplate."
-                            ),
+                            system=prompt.system,
+                            user=prompt.user,
                         ),
                         timeout=timeout_seconds,
                     )
@@ -595,10 +524,12 @@ class WriterAgentMixin:
                         "competitor_deep_dives",
                         self._layer_section_label_key(detail),
                     ]
-                    anti_regression_reason = report_regression_problem(
-                        previous_detail,
-                        candidate_detail,
-                        protected_sections=protected_sections,
+                    anti_regression_reason = (
+                        self._writer_repair_planner().report_regression_problem(
+                            previous_detail,
+                            candidate_detail,
+                            protected_sections=protected_sections,
+                        )
                     )
                 if anti_regression_reason:
                     detail.report_md = self._preserve_hardened_previous_report(
@@ -720,6 +651,34 @@ class WriterAgentMixin:
         if not report_md.strip():
             raise RuntimeError("Writer returned empty report content")
 
+    def _writer_prompt_builder(self) -> WriterPromptBuilder:
+        return WriterPromptBuilder()
+
+    def _writer_quality_gate(self) -> WriterQualityGate:
+        return WriterQualityGate()
+
+    def _writer_repair_planner(self) -> WriterRepairPlanner:
+        return WriterRepairPlanner()
+    def _report_sanitizer(self) -> ReportSanitizer:
+        return ReportSanitizer(
+            label_aliases=self._report_label_aliases,
+            heading_matches=self._report_heading_matches,
+            localize_heading=self._localize_common_template_heading,
+        )
+
+    def _citation_guard(self) -> CitationGuard:
+        return CitationGuard(
+            source_ids_for_line=self._source_ids_for_report_line,
+            claim_line_tokens=CLAIM_LINE_TOKENS,
+            cjk_text_re=CJK_TEXT_RE,
+        )
+
+    def _section_writer(self) -> SectionWriter:
+        return SectionWriter(
+            validated_segment_markdown=self._writer_validated_segment_markdown,
+            shard_segment_factory=self._writer_section_segment_from_shards,
+        )
+
     async def _writer_segmented_report_markdown(
         self,
         record: RunRecord,
@@ -806,67 +765,16 @@ class WriterAgentMixin:
         layer_context: str,
         required_sections: str,
     ) -> list[str]:
-        detail = record.detail
-        sections: list[str] = []
-        shards_by_section: dict[tuple[str, str | None], list[str]] = {}
-        section_allowed_source_ids: dict[tuple[str, str | None], set[str]] = {}
-        for segment in segments:
-            segment_md, contract = await self._writer_validated_segment_markdown(
-                record,
-                evidence_pack_result=evidence_pack_result,
-                segment=segment,
-                timeout_seconds=timeout_seconds,
-                language_guidance=language_guidance,
-                memory_context=memory_context,
-                layer_context=layer_context,
-                required_sections=required_sections,
-            )
-            if contract.segment_kind == "evidence_shard":
-                section_id = contract.section_id
-                segment_competitor = (
-                    segment.get("segment_competitor")
-                    if isinstance(segment.get("segment_competitor"), str)
-                    else None
-                )
-                shard_key = (
-                    section_id,
-                    (
-                        segment_competitor
-                        if section_id == "competitor_deep_dives"
-                        else None
-                    ),
-                )
-                shards_by_section.setdefault(shard_key, []).append(segment_md)
-                section_allowed_source_ids.setdefault(shard_key, set()).update(
-                    source_id
-                    for source_id in (segment.get("allowed_source_ids") or [])
-                    if isinstance(source_id, str)
-                )
-                continue
-            sections.append(segment_md)
-
-        for (section_id, segment_competitor), shard_notes in shards_by_section.items():
-            section_segment = self._writer_section_segment_from_shards(
-                detail,
-                section_id=section_id,
-                segment_competitor=segment_competitor,
-                shard_notes=shard_notes,
-                allowed_source_ids=section_allowed_source_ids[
-                    (section_id, segment_competitor)
-                ],
-            )
-            section_md, _ = await self._writer_validated_segment_markdown(
-                record,
-                evidence_pack_result=evidence_pack_result,
-                segment=section_segment,
-                timeout_seconds=timeout_seconds,
-                language_guidance=language_guidance,
-                memory_context=memory_context,
-                layer_context=layer_context,
-                required_sections=required_sections,
-            )
-            sections.append(section_md)
-        return sections
+        return await self._section_writer().write_markdown_parts(
+            record,
+            evidence_pack_result=evidence_pack_result,
+            segments=segments,
+            timeout_seconds=timeout_seconds,
+            language_guidance=language_guidance,
+            memory_context=memory_context,
+            layer_context=layer_context,
+            required_sections=required_sections,
+        )
 
     def _writer_section_segment_from_shards(
         self,
@@ -877,40 +785,16 @@ class WriterAgentMixin:
         shard_notes: Sequence[str],
         allowed_source_ids: set[str],
     ) -> dict[str, object]:
-        segment_name = (
-            f"{section_id} {segment_competitor}"
-            if section_id == "competitor_deep_dives" and segment_competitor
-            else section_id
+        return SectionWriter.build_section_segment_from_shards(
+            detail,
+            section_id=section_id,
+            segment_competitor=segment_competitor,
+            shard_notes=shard_notes,
+            allowed_source_ids=allowed_source_ids,
         )
-        section_segment: dict[str, object] = {
-            "segment_name": segment_name,
-            "segment_kind": "section_fragment",
-            "section_id": section_id,
-            "segment_competitor": segment_competitor,
-            "output_language": detail.output_language,
-            "segment_input_chars": 0,
-            "allowed_source_ids": sorted(allowed_source_ids),
-            "groups": [],
-            "sources": [],
-            "shard_notes": list(shard_notes),
-            "segment_batch": "from_evidence_shards",
-        }
-        self._refresh_segment_input_chars(section_segment)
-        if section_segment["segment_input_chars"] > SEGMENT_INPUT_TARGET_CHARS:
-            section_segment["segment_input_target_chars"] = SEGMENT_INPUT_TARGET_CHARS
-            section_segment["segment_over_budget_reason"] = (
-                "shard_notes_exceed_budget"
-            )
-            self._refresh_segment_input_chars(section_segment)
-        return section_segment
 
     def _refresh_segment_input_chars(self, segment: dict[str, object]) -> None:
-        segment["segment_input_chars"] = 0
-        while True:
-            segment_input_chars = len(json.dumps(segment, ensure_ascii=False))
-            if segment["segment_input_chars"] == segment_input_chars:
-                return
-            segment["segment_input_chars"] = segment_input_chars
+        refresh_segment_input_chars(segment)
 
     async def _writer_validated_segment_markdown(
         self,
@@ -1593,64 +1477,34 @@ class WriterAgentMixin:
                 "Write exactly one canonical report section or allowed section group from those notes.\n"
             )
         user_research_policy = writer_user_research_policy_text()
+        prompt = self._writer_prompt_builder().segment_prompt(
+            detail,
+            segment=segment,
+            segment_json=segment_json,
+            retry_count=retry_count,
+            allowed_h2_headings=allowed_h2_headings,
+            required_h2_headings=required_h2_headings,
+            forbidden_h2_headings=forbidden_h2_headings,
+            segment_outline=segment_outline,
+            citation_warning=citation_warning,
+            contract_warning=contract_warning,
+            user_research_gap_instruction=user_research_gap_instruction,
+            shard_instruction=shard_instruction,
+            language_guidance=language_guidance,
+            user_research_policy=user_research_policy,
+            memory_context=memory_context,
+            layer_context=layer_context,
+            community_policy_text=self._writer_community_policy_text(),
+            required_sections=required_sections,
+        )
         return await asyncio.wait_for(
             self._trace_llm_text(
                 record,
                 agent="writer",
                 subagent=None,
                 name="report_writer_segment",
-                system=(
-                    "You are a senior enterprise competitive-intelligence analyst writing "
-                    "one section group of a larger markdown report. Return only markdown "
-                    "for this segment. Cite factual claims only with source IDs in "
-                    "allowed_source_ids. Do not invent source IDs. Use exact [source:ID] "
-                    "syntax with no space after source:. Do not combine multiple source "
-                    "IDs inside one [source:...] token; write consecutive citations "
-                    "like [source:A][source:B]. Do not put citations in headings or "
-                    "table header rows. "
-                    "Do not use web_search_result or confidence < 0.75 as the sole support "
-                    "for a winner, legal/security certification, pricing, or procurement "
-                    "recommendation. If evidence is incomplete, say the conclusion is "
-                    "tentative and list the exact evidence gap. Do not claim all sources "
-                    "are verified when any source_type is web_search_result or "
-                    "llm_public_knowledge. "
-                    f"{user_research_policy} "
-                    f"{language_guidance}"
-                ),
-                user=(
-                    f"Topic: {detail.topic}\n"
-                    f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                    f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                    f"segment_name={segment['segment_name']}\n"
-                    f"segment_kind={segment.get('segment_kind', 'section_fragment')}\n"
-                    f"section_id={segment.get('section_id', segment['segment_name'])}\n"
-                    f"segment_competitor={segment.get('segment_competitor') or 'all'}\n"
-                    f"retry_count={retry_count}\n"
-                    "Allowed H2 headings for this segment: "
-                    f"{allowed_h2_headings or 'none'}\n"
-                    "Required H2 headings for this segment: "
-                    f"{required_h2_headings or 'none'}\n"
-                    "Forbidden H2 headings for this segment: "
-                    f"{forbidden_h2_headings or 'none'}\n"
-                    f"{segment_outline}\n"
-                    f"{citation_warning}"
-                    f"{contract_warning}"
-                    f"{user_research_gap_instruction}"
-                    f"{shard_instruction}"
-                    "Do not write headings outside this segment's contract. "
-                    "Do not write support or appendix sections unless "
-                    "segment_kind=support_fragment. If segment_kind=evidence_shard, "
-                    "do not write any ## H2 headings. Never mention Segment Evidence Pack, "
-                    "Writer Evidence Pack, source_registry, allowed_source_ids, or other "
-                    "writer-internal field names in the reader-facing markdown.\n"
-                    f"Confirmed Memory Preferences:\n{memory_context}\n"
-                    f"Layer Report Context: {layer_context}\n"
-                    f"{self._writer_community_policy_text()}\n"
-                    f"Segment Evidence Pack JSON: {segment_json}\n\n"
-                    f"Required sections for full report:\n{required_sections}\n"
-                    "Write with consulting depth for this segment. Keep support material "
-                    "concise and preserve [source:ID] citation syntax."
-                ),
+                system=prompt.system,
+                user=prompt.user,
             ),
             timeout=timeout_seconds,
         )
@@ -1697,7 +1551,7 @@ class WriterAgentMixin:
             repair_payloads = []
             repair_segments = []
             repair_has_evidence_shards = False
-            writer_context_jsons = [evidence_pack_result.to_prompt_json()]
+            writer_context_jsons = [evidence_pack_result.to_report_brief_prompt_json()]
         telemetry_payload = (
             evidence_pack_result.telemetry_payload()
             if hasattr(evidence_pack_result, "telemetry_payload")
@@ -1747,33 +1601,23 @@ class WriterAgentMixin:
 
         repaired_sections = []
         for writer_context_json in writer_context_jsons:
+            prompt = self._writer_prompt_builder().section_repair_prompt(
+                detail,
+                sections=sections,
+                section_headings=section_headings,
+                language_guidance=language_guidance,
+                community_policy_text=self._writer_community_policy_text(),
+                writer_context_json=writer_context_json,
+                previous_report=previous_report,
+            )
             repaired_sections.append(
                 await self._trace_llm_text(
                     record,
                     agent="writer",
                     subagent=None,
                     name="report_section_repair",
-                    system=(
-                        "You are a senior enterprise competitive-intelligence analyst repairing "
-                        "one section of an existing markdown report. Return only the requested "
-                        "section markdown. Preserve existing [source:ID] syntax, never invent "
-                        "source IDs, and cite factual claims with available source IDs. "
-                        f"{language_guidance}"
-                    ),
-                    user=(
-                        f"Topic: {detail.topic}\n"
-                        f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                        f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                        f"Repair only these sections: {', '.join(sections)}\n"
-                        f"Expected section headings:\n{section_headings}\n"
-                        "return only the requested section markdown; do not rewrite unrelated "
-                        "sections or include commentary outside the section.\n"
-                        "Use the exact requested level-2 heading for each returned section.\n"
-                        "You must preserve existing [source:ID] syntax.\n"
-                        f"{self._writer_community_policy_text()}\n"
-                        f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
-                        f"Previous report:\n{previous_report}"
-                    ),
+                    system=prompt.system,
+                    user=prompt.user,
                 )
             )
         return self._join_section_repair_parts(repaired_sections, section_headings)
@@ -1799,29 +1643,7 @@ class WriterAgentMixin:
         parts: Sequence[str],
         section_headings: str,
     ) -> str:
-        requested_headings = {
-            line.split("->", 1)[1].strip()
-            for line in section_headings.splitlines()
-            if "->" in line
-        }
-        seen_headings: set[str] = set()
-        cleaned_parts: list[str] = []
-        for part in parts:
-            cleaned_lines: list[str] = []
-            for line in part.strip().splitlines():
-                heading = line.strip()
-                is_top_level_heading = heading.startswith("## ") and not heading.startswith(
-                    "### "
-                )
-                if heading in requested_headings or is_top_level_heading:
-                    if heading in seen_headings:
-                        continue
-                    seen_headings.add(heading)
-                cleaned_lines.append(line)
-            cleaned_part = "\n".join(cleaned_lines).strip()
-            if cleaned_part:
-                cleaned_parts.append(cleaned_part)
-        return "\n\n".join(cleaned_parts)
+        return join_section_repair_parts(parts, section_headings)
 
     def _preserve_hardened_previous_report(
         self,
@@ -2636,7 +2458,7 @@ class WriterAgentMixin:
         replacement = "\n".join(
             self._backfill_layer_sections_lines(detail, self._matrix_source_ids(detail))
         ).strip()
-        return replace_markdown_section(
+        return self._writer_repair_planner().replace_section(
             markdown,
             "battlecard",
             detail.output_language,
@@ -2659,29 +2481,7 @@ class WriterAgentMixin:
         return None
 
     def _sanitize_report_hygiene(self, detail: RunDetail, markdown: str) -> str:
-        lines = markdown.splitlines()
-        sanitized_lines: list[str] = []
-        evidence_appendix_aliases = self._report_label_aliases("evidence_appendix")
-        in_evidence_appendix = False
-        for index, line in enumerate(lines):
-            if self._report_line_contains_writer_internal_terms(line):
-                continue
-            sanitized = self._localize_common_template_heading(detail, line)
-            stripped = sanitized.strip()
-            h2_match = re.match(r"^\s*##\s+(.+?)\s*#*\s*$", stripped)
-            if h2_match is not None:
-                in_evidence_appendix = any(
-                    self._report_heading_matches(h2_match.group(1), alias)
-                    for alias in evidence_appendix_aliases
-                )
-            if stripped.startswith("#"):
-                sanitized = SOURCE_TOKEN_RE.sub("", sanitized).rstrip()
-            elif self._report_table_header_line_has_citation(lines, index):
-                sanitized = SOURCE_TOKEN_RE.sub("", sanitized).rstrip()
-            elif in_evidence_appendix and stripped.startswith("-"):
-                sanitized = SOURCE_TOKEN_RE.sub("", sanitized).rstrip()
-            sanitized_lines.append(sanitized)
-        return "\n".join(sanitized_lines).strip()
+        return self._report_sanitizer().sanitize_report_hygiene(detail, markdown)
 
     def _localize_common_template_heading(self, detail: RunDetail, line: str) -> str:
         if normalize_output_language(detail.output_language) != "zh-CN":
@@ -2721,29 +2521,12 @@ class WriterAgentMixin:
         }.get(normalized)
 
     def _report_line_contains_writer_internal_terms(self, line: str) -> bool:
-        return any(
-            term in line
-            for term in (
-                "Segment Evidence Pack",
-                "Writer Evidence Pack",
-                "source_registry",
-                "allowed_source_ids",
-                "represented_by",
-            )
-        )
+        return ReportSanitizer.line_contains_writer_internal_terms(line)
 
     def _report_table_header_line_has_citation(
         self, lines: Sequence[str], index: int
     ) -> bool:
-        line = lines[index].strip()
-        if not line.startswith("|") or "[source:" not in line.casefold():
-            return False
-        next_line = ""
-        for candidate in lines[index + 1 :]:
-            if candidate.strip():
-                next_line = candidate.strip()
-                break
-        return bool(next_line) and re.fullmatch(r"\|?[\s|\-:]+\|?", next_line) is not None
+        return ReportSanitizer.table_header_line_has_citation(lines, index)
 
     def _ensure_report_required_sections(self, detail: RunDetail, markdown: str) -> str:
         hardened = markdown.strip()
@@ -4289,33 +4072,10 @@ class WriterAgentMixin:
         return text.replace("|", "\\|") or "-"
 
     def _extract_cited_source_ids(self, report_md: str) -> set[str]:
-        cited = set(source_tokens(report_md))
-        for pattern in (
-            r"(?<![-\w])source(?:\s+id)?\s*:\s*([A-Za-z0-9_.:-]+)",
-            r"\[source(?:\s+id)?\s+([A-Za-z0-9_.:-]+)\]",
-        ):
-            cited.update(re.findall(pattern, report_md, flags=re.IGNORECASE))
-        return cited
+        return CitationGuard.extract_cited_source_ids(report_md)
 
     def _repair_report_source_tokens(self, detail: RunDetail, markdown: str) -> str:
-        valid_source_ids = {source.id for source in detail.raw_sources}
-        if not valid_source_ids:
-            return markdown
-
-        repaired_lines: list[str] = []
-        for line in markdown.splitlines():
-            repaired_lines.append(
-                SOURCE_TOKEN_RE.sub(
-                    lambda match, current_line=line: self._repair_report_source_token(
-                        detail,
-                        current_line,
-                        source_token_match_value(match),
-                        valid_source_ids,
-                    ),
-                    line,
-                )
-            )
-        return "\n".join(repaired_lines)
+        return self._citation_guard().repair_report_source_tokens(detail, markdown)
 
     def _repair_report_source_token(
         self,
@@ -4324,89 +4084,24 @@ class WriterAgentMixin:
         token: str,
         valid_source_ids: set[str],
     ) -> str:
-        source_id = token.split("#", 1)[0]
-        if source_id in valid_source_ids:
-            return f"[source:{token}]"
-
-        dimension_match = [
-            source.id
-            for source in detail.raw_sources
-            if source.dimension.casefold() == source_id.casefold()
-        ]
-        replacement_ids = dimension_match or self._source_ids_for_report_line(detail, line)
-        if not replacement_ids:
-            return f"[source:{token}]"
-        return f"[source:{replacement_ids[0]}]"
+        return self._citation_guard().repair_report_source_token(
+            detail,
+            line,
+            token,
+            valid_source_ids,
+        )
 
     def _ensure_report_claim_citations(self, detail: RunDetail, markdown: str) -> str:
-        lines = markdown.splitlines()
-        hardened_lines: list[str] = []
-        for index, line in enumerate(lines):
-            if not self._report_line_needs_citation(line):
-                hardened_lines.append(line)
-                continue
-            if self._report_table_header_line(lines, index):
-                hardened_lines.append(line)
-                continue
-            if self._extract_cited_source_ids(line):
-                hardened_lines.append(line)
-                continue
-            source_ids = self._source_ids_for_report_line(detail, line)
-            if not source_ids:
-                hardened_lines.append(line)
-                continue
-            citation_text = " ".join(f"[source:{source_id}]" for source_id in source_ids[:2])
-            stripped = line.rstrip()
-            if stripped.startswith("|") and stripped.endswith("|"):
-                hardened_lines.append(f"{stripped[:-1].rstrip()} {citation_text} |")
-            else:
-                hardened_lines.append(f"{stripped} {citation_text}")
-        return "\n".join(hardened_lines)
+        return self._citation_guard().ensure_report_claim_citations(detail, markdown)
 
     def _report_table_header_line(self, lines: Sequence[str], index: int) -> bool:
-        line = lines[index].strip()
-        if not line.startswith("|"):
-            return False
-        next_line = ""
-        for candidate in lines[index + 1 :]:
-            if candidate.strip():
-                next_line = candidate.strip()
-                break
-        return bool(next_line) and re.fullmatch(r"\|?[\s|\-:]+\|?", next_line) is not None
+        return CitationGuard.report_table_header_line(lines, index)
 
     def _report_line_needs_citation(self, line: str) -> bool:
-        stripped = line.strip()
-        if not stripped:
-            return False
-        if stripped.startswith("#"):
-            return False
-        if set(stripped) <= {"-", " ", "|", ":"}:
-            return False
-        if re.fullmatch(r"\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?", stripped):
-            return False
-        if self._report_line_is_explicit_gap_statement(stripped):
-            return False
-        if CJK_TEXT_RE.search(stripped):
-            normalized = stripped.casefold()
-            if len(stripped) >= 12 and any(
-                token in normalized for token in CLAIM_LINE_TOKENS
-            ):
-                return True
-        return bool(re.search(r"[A-Za-z0-9]", stripped)) and len(stripped) >= 24
+        return self._citation_guard().report_line_needs_citation(line)
 
     def _report_line_is_explicit_gap_statement(self, line: str) -> bool:
-        normalized = line.casefold()
-        return any(
-            marker in normalized
-            for marker in (
-                "evidence gap",
-                "no cited swot",
-                "no cited item",
-                "no cited user-review",
-                "证据缺口",
-                "尚无可引用",
-            )
-        )
+        return CitationGuard.report_line_is_explicit_gap_statement(line)
 
     def _source_ids_for_report_line(self, detail: RunDetail, line: str) -> list[str]:
         normalized = line.casefold()

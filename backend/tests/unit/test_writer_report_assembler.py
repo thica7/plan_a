@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from packages.agents.writer.assembler import assemble_report_sections
+from packages.agents.writer.assembler import (
+    assemble_report_sections,
+    join_section_repair_parts,
+)
 from packages.i18n.language import report_label
 
 
@@ -102,3 +105,27 @@ def test_assembler_handles_zh_labels() -> None:
     assert result.markdown.index(f"## {deep_dives}") < result.markdown.index(
         f"## {evidence}"
     )
+
+def test_join_section_repair_parts_keeps_requested_sections_only() -> None:
+    result = join_section_repair_parts(
+        [
+            (
+                "## Decision Summary\n"
+                "Keep the repaired decision section [source:decision-1].\n\n"
+                "## SWOT Analysis\n"
+                "Drop this unrelated repaired section [source:swot-1]."
+            ),
+            (
+                "## Competitor Deep Dives\n"
+                "Keep the repaired competitor section [source:deep-1]."
+            ),
+        ],
+        "## Decision Summary\n## Competitor Deep Dives",
+    )
+
+    assert "## Decision Summary" in result
+    assert "Keep the repaired decision section [source:decision-1]." in result
+    assert "## Competitor Deep Dives" in result
+    assert "Keep the repaired competitor section [source:deep-1]." in result
+    assert "## SWOT Analysis" not in result
+    assert "Drop this unrelated repaired section" not in result

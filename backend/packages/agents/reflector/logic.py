@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from packages.identity import stable_prefixed_id
 from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
@@ -52,7 +52,8 @@ class ReflectorAgentMixin:
                     f"{json.dumps(self._source_digest(detail.raw_sources), ensure_ascii=False)}"
                 ),
                 schema_hint='{"coverage_gaps":["gap"],"confidence_outliers":["outlier"],"cross_competitor_gaps":["gap"],'
-                '"suggested_redo_dimension":"dimension or null"}',
+                '"suggested_redo_dimension":"dimension or null","gate_status":"pass|warn|block",'
+                '"blocking_gaps":["gap"],"writer_constraints":["constraint"]}',
             )
         except Exception as exc:  # noqa: BLE001 - deterministic reflection keeps the run alive.
             payload = self._deterministic_reflector_payload(detail)
@@ -63,6 +64,9 @@ class ReflectorAgentMixin:
                 "error": str(exc),
             }
         module_status = "fallback" if fallback.get("used") else "llm"
+        coverage_gaps = self._string_list(payload.get("coverage_gaps"))
+        confidence_outliers = self._string_list(payload.get("confidence_outliers"))
+        cross_competitor_gaps = self._string_list(payload.get("cross_competitor_gaps"))
         suggested_dimension = payload.get("suggested_redo_dimension")
         suggested_redos = []
         if isinstance(suggested_dimension, str) and suggested_dimension in detail.plan.dimensions:
@@ -73,13 +77,29 @@ class ReflectorAgentMixin:
                     rationale=f"Reflector suggested more {suggested_dimension} evidence.",
                 )
             )
+        gate_status, blocking_gaps = self._reflection_gate(
+            detail,
+            coverage_gaps=coverage_gaps,
+            confidence_outliers=confidence_outliers,
+            cross_competitor_gaps=cross_competitor_gaps,
+            llm_gate_status=payload.get("gate_status"),
+            llm_blocking_gaps=self._string_list(payload.get("blocking_gaps")),
+        )
+        writer_constraints = self._reflection_writer_constraints(
+            gate_status=gate_status,
+            blocking_gaps=blocking_gaps,
+            llm_constraints=self._string_list(payload.get("writer_constraints")),
+        )
         detail.reflections.append(
             ReflectionRecord(
                 iteration=1,
-                coverage_gaps=self._string_list(payload.get("coverage_gaps")),
-                confidence_outliers=self._string_list(payload.get("confidence_outliers")),
-                cross_competitor_gaps=self._string_list(payload.get("cross_competitor_gaps")),
+                coverage_gaps=coverage_gaps,
+                confidence_outliers=confidence_outliers,
+                cross_competitor_gaps=cross_competitor_gaps,
                 suggested_redos=suggested_redos,
+                gate_status=gate_status,
+                blocking_gaps=blocking_gaps,
+                writer_constraints=writer_constraints,
             )
         )
         self._append_agent_message(
@@ -105,8 +125,121 @@ class ReflectorAgentMixin:
                 if module_status == "fallback"
                 else "Reflector completed."
             ),
-            {"reflection": payload, "fallback": fallback, "module_status": module_status},
+            {
+                "reflection": {
+                    **payload,
+                    "gate_status": gate_status,
+                    "blocking_gaps": blocking_gaps,
+                    "writer_constraints": writer_constraints,
+                },
+                "fallback": fallback,
+                "module_status": module_status,
+            },
         )
+
+    def _reflection_gate(
+        self,
+        detail: RunDetail,
+        *,
+        coverage_gaps: list[str],
+        confidence_outliers: list[str],
+        cross_competitor_gaps: list[str],
+        llm_gate_status: object,
+        llm_blocking_gaps: list[str],
+    ) -> tuple[Literal["pass", "warn", "block"], list[str]]:
+        blocking_gaps: list[str] = []
+        if detail.comparison_matrix is None:
+            blocking_gaps.append("Comparison matrix is missing before writing.")
+        else:
+            cells_by_key = {
+                (cell.competitor.casefold(), cell.dimension.casefold()): cell
+                for cell in detail.comparison_matrix.cells
+            }
+            for dimension in detail.plan.dimensions:
+                for competitor in detail.plan.competitors:
+                    cell = cells_by_key.get(
+                        (competitor.casefold(), dimension.casefold())
+                    )
+                    if cell is None:
+                        blocking_gaps.append(
+                            f"Missing comparison cell for {competitor} / {dimension}."
+                        )
+                        continue
+                    if not cell.source_ids:
+                        blocking_gaps.append(
+                            f"Comparison cell for {competitor} / {dimension} has no source_ids."
+                        )
+
+        for finding in [*cross_competitor_gaps, *coverage_gaps, *llm_blocking_gaps]:
+            normalized = finding.casefold()
+            is_blocking_gap = any(
+                token in normalized
+                for token in (
+                    "comparison matrix is missing",
+                    "missing comparison matrix",
+                    "missing comparison cell",
+                    "lacks cells",
+                    "has no source_ids",
+                    "has no source ids",
+                )
+            )
+            if is_blocking_gap:
+                blocking_gaps.append(finding)
+
+        blocking_gaps = self._unique_strings(blocking_gaps)[:5]
+        if blocking_gaps:
+            return "block", blocking_gaps
+        if llm_gate_status == "block":
+            return "block", self._unique_strings(llm_blocking_gaps)[:5]
+        if (
+            llm_gate_status == "warn"
+            or coverage_gaps
+            or confidence_outliers
+            or cross_competitor_gaps
+        ):
+            return "warn", []
+        return "pass", []
+
+    def _reflection_writer_constraints(
+        self,
+        *,
+        gate_status: Literal["pass", "warn", "block"],
+        blocking_gaps: list[str],
+        llm_constraints: list[str],
+    ) -> list[str]:
+        constraints = [
+            "Use comparison_matrix.winner_by_dimension as the only winner source; "
+            "do not recompute winners from raw sources.",
+            "Cite only source IDs provided by the report brief/source registry.",
+        ]
+        if gate_status == "block":
+            constraints.append(
+                "Treat this as draft-only until blocking coverage gaps are resolved; "
+                "do not present definitive recommendations."
+            )
+        elif gate_status == "warn":
+            constraints.append(
+                "Surface coverage or confidence gaps in claim risk, RAG gap fill, "
+                "or next collection sections."
+            )
+        for gap in blocking_gaps:
+            constraints.append(f"Do not overstate conclusions affected by: {gap}")
+        constraints.extend(llm_constraints)
+        return self._unique_strings(constraints)[:8]
+
+    def _unique_strings(self, values: list[str]) -> list[str]:
+        unique: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            text = " ".join(str(value or "").split())
+            if not text:
+                continue
+            key = text.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(text)
+        return unique
 
     def _deterministic_reflector_payload(self, detail: RunDetail) -> dict[str, object]:
         coverage_gaps: list[str] = []
@@ -150,7 +283,16 @@ class ReflectorAgentMixin:
 
         latest = detail.reflections[-1]
         issues: list[QCIssue] = []
+        surfaced_findings = {
+            *latest.coverage_gaps,
+            *latest.confidence_outliers,
+            *latest.cross_competitor_gaps,
+        }
+        blocking_only_gaps = [
+            gap for gap in latest.blocking_gaps if gap not in surfaced_findings
+        ]
         groups = [
+            ("blocking", blocking_only_gaps, "collector", "reflections[-1].blocking_gaps"),
             ("coverage", latest.coverage_gaps, "collector", "reflections[-1].coverage_gaps"),
             (
                 "confidence",
@@ -175,6 +317,11 @@ class ReflectorAgentMixin:
                     continue
                 dimension = self._infer_dimension_from_text(detail, finding)
                 competitor = self._infer_competitor_from_text(detail, finding)
+                issue_target_agent = (
+                    self._blocking_gap_target_agent(finding)
+                    if group_name == "blocking"
+                    else target_agent
+                )
                 issue = QCIssue(
                     id=stable_prefixed_id(
                         "qc-issue",
@@ -184,33 +331,47 @@ class ReflectorAgentMixin:
                         finding,
                         length=16,
                     ),
-                    severity="warn",
+                    severity=("blocker" if finding in latest.blocking_gaps else "warn"),
                     detected_by="reflector",
-                    target_agent=target_agent,
+                    target_agent=issue_target_agent,
                     target_subagent=dimension,
                     target_competitor=competitor
-                    if target_agent in {"collector", "analyst"}
+                    if issue_target_agent in {"collector", "analyst"}
                     else None,
                     field_path=f"{field_path}[{index - 1}]",
                     problem=finding,
                     redo_scope=build_redo_scope(
                         detected_by="reflector",
-                        target_agent=target_agent,
+                        target_agent=issue_target_agent,
                         target_subagent=dimension,
                         target_competitor=competitor
-                        if target_agent in {"collector", "analyst"}
+                        if issue_target_agent in {"collector", "analyst"}
                         else None,
                         field_path=f"{field_path}[{index - 1}]",
                         problem=finding,
                     ),
                     self_found=True,
                 )
-                if target_agent in {"collector", "analyst"} and dimension is None:
+                if issue_target_agent in {"collector", "analyst"} and dimension is None:
                     issue.redo_scope = RedoScope(kind="full", rationale=finding)
                 else:
                     issue.redo_scope = assign_redo_scope(issue)
                 issues.append(issue)
         return issues
+
+    def _blocking_gap_target_agent(self, finding: str) -> str:
+        normalized = finding.casefold()
+        if any(
+            token in normalized
+            for token in (
+                "comparison matrix is missing",
+                "missing comparison matrix",
+                "missing comparison cell",
+                "lacks cells",
+            )
+        ):
+            return "comparator"
+        return "collector"
 
     def _confidence_outlier_is_below_threshold(self, detail: RunDetail, text: str) -> bool:
         normalized = text.casefold()

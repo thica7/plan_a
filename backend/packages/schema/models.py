@@ -56,6 +56,9 @@ class ReflectionRecord(BaseModel):
     confidence_outliers: list[str] = Field(default_factory=list)
     cross_competitor_gaps: list[str] = Field(default_factory=list)
     suggested_redos: list[RedoScope] = Field(default_factory=list)
+    gate_status: Literal["pass", "warn", "block"] = "pass"
+    blocking_gaps: list[str] = Field(default_factory=list)
+    writer_constraints: list[str] = Field(default_factory=list)
 
 
 class AnalysisPlanTask(BaseModel):

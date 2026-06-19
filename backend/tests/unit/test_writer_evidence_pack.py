@@ -23,6 +23,7 @@ from packages.schema.models import (
     PricingModel,
     PricingTier,
     RawSource,
+    ReflectionRecord,
 )
 
 
@@ -2254,3 +2255,95 @@ def test_segment_citation_validation_rejects_full_width_source_outside_allowlist
     )
 
     assert errors == ["cursor-pricing"]
+
+
+def test_report_brief_falls_back_for_manual_pack_result() -> None:
+    result = WriterEvidencePackResult(
+        pack=WriterEvidencePack(
+            source_registry=[
+                WriterSourceRegistryItem(
+                    id="cursor-pricing",
+                    competitor="Cursor",
+                    dimension="pricing",
+                    source_type="webpage_verified",
+                    title="Cursor pricing",
+                    confidence=0.9,
+                    represented_by=["fact:cursor-pricing"],
+                )
+            ],
+            matrix={"winner_by_dimension": {"pricing": "Cursor"}},
+        ),
+        metrics=WriterEvidencePackMetrics(),
+    )
+
+    payload = json.loads(result.to_report_brief_prompt_json())
+    telemetry = result.telemetry_payload()
+
+    assert payload["schema_version"] == "writer_report_brief.v1"
+    assert payload["allowed_source_ids"] == ["cursor-pricing"]
+    assert payload["gate_status"] == "pass"
+    assert "raw_sources" not in payload
+    assert any(
+        "comparison_matrix.winner_by_dimension" in constraint
+        for constraint in payload["writer_constraints"]
+    )
+    assert telemetry["writer_report_brief_gate_status"] == "pass"
+    assert telemetry["writer_report_brief_chars"] > 0
+
+
+def test_report_brief_inherits_reflector_gate_and_constraints() -> None:
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.example/pricing",
+        snippet="Cursor Pro is priced at $20/month for individual developers.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.94,
+    )
+    detail = _detail_with_sources([source])
+    detail.plan.competitors = ["Cursor"]
+    detail.plan.dimensions = ["pricing"]
+    detail.comparison_matrix = ComparisonMatrix(
+        competitors=["Cursor"],
+        dimensions=["pricing"],
+        cells=[
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="pricing",
+                value="Cursor Pro is priced at $20/month for individual developers.",
+                source_ids=["cursor-pricing"],
+                confidence=0.94,
+            )
+        ],
+        winner_by_dimension={"pricing": "Cursor"},
+        summary=["Cursor has clear individual pricing."],
+    )
+    detail.reflections.append(
+        ReflectionRecord(
+            iteration=1,
+            coverage_gaps=["Need independent pricing confirmation."],
+            gate_status="block",
+            blocking_gaps=["Comparison cell for Cursor / pricing has no source_ids."],
+            writer_constraints=["Mention pricing caveat before recommendation."],
+        )
+    )
+
+    result = build_writer_evidence_pack(detail)
+    payload = json.loads(result.to_report_brief_prompt_json())
+
+    assert result.report_brief is not None
+    assert result.report_brief.gate_status == "block"
+    assert result.report_brief.blocking_gaps == [
+        "Comparison cell for Cursor / pricing has no source_ids."
+    ]
+    assert "Mention pricing caveat before recommendation." in result.report_brief.writer_constraints
+    assert payload["schema_version"] == "writer_report_brief.v1"
+    assert payload["gate_status"] == "block"
+    assert payload["allowed_source_ids"] == ["cursor-pricing"]
+    assert payload["matrix"]["winner_by_dimension"]["pricing"] == "Cursor"
+    assert payload["evidence_groups"]
+    assert "raw_sources" not in payload
+    assert "groups" not in payload

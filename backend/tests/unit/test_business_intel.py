@@ -25,6 +25,7 @@ from packages.business_intel import (
 from packages.business_intel.entity_resolver import trusted_source_candidates
 from packages.business_intel.homepage import verify_homepage
 from packages.business_intel.layers import assess_competitor_layer
+from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
@@ -38,7 +39,6 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
     SourceRegistryRecord,
 )
-from packages.schema.api_dto import RunDetail
 from packages.schema.models import AnalysisPlan, RawSource, RunMetrics
 from packages.skills.registry import SkillRegistry
 
@@ -66,6 +66,39 @@ def test_layer_assessment_detects_market_landscape() -> None:
     assert "many_competitors" in assessment.signals
 
 
+
+def test_pricing_dimension_does_not_override_workflow_or_market_scope() -> None:
+    workflow_plan = build_business_intel_plan(
+        topic="Enterprise AI search workflow pricing and switching risk",
+        competitors=["Glean", "Coveo", "Elastic"],
+        dimensions=["pricing", "integrations", "security"],
+    )
+    landscape_plan = build_business_intel_plan(
+        topic="AI coding assistant market landscape with pricing benchmarks",
+        competitors=["Cursor", "Copilot", "Windsurf", "Tabnine"],
+        dimensions=["pricing", "market", "benchmark"],
+    )
+
+    assert workflow_plan.competitor_layer.layer == "L2"
+    assert workflow_plan.scenario_pack.id in {
+        "enterprise_risk_review",
+        "l2_adjacent_workflow",
+    }
+    assert "pricing" in workflow_plan.recommended_dimensions
+    assert landscape_plan.competitor_layer.layer == "L3"
+    assert landscape_plan.scenario_pack.id == "l3_market_landscape"
+    assert "pricing" in landscape_plan.recommended_dimensions
+
+
+def test_focused_pricing_scope_still_selects_l1_pricing_pack() -> None:
+    plan = build_business_intel_plan(
+        topic="Cursor vs Copilot pricing packaging comparison",
+        competitors=["Cursor", "Copilot"],
+        dimensions=["pricing", "feature"],
+    )
+
+    assert plan.competitor_layer.layer == "L1"
+    assert plan.scenario_pack.id == "l1_pricing_pack"
 def test_business_plan_selects_scenario_and_rules() -> None:
     plan = build_business_intel_plan(
         topic="Enterprise AI assistant security review",
