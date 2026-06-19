@@ -53,12 +53,12 @@ def test_writer_timeout_settings_allow_explicit_override(monkeypatch) -> None:
     assert settings.writer_timeout_seconds == 600.0
 
 
-def test_writer_structured_report_enabled_defaults_to_false_until_integration_gate() -> None:
+def test_writer_structured_report_enabled_defaults_to_true_after_integration_gate() -> None:
     from packages.config.settings import Settings
 
     settings = Settings()
 
-    assert settings.writer_structured_report_enabled is False
+    assert settings.writer_structured_report_enabled is True
 
 
 def test_env_file_candidates_include_source_root_when_cwd_is_backend(tmp_path: Path) -> None:

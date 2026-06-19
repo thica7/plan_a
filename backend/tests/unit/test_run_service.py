@@ -6279,6 +6279,7 @@ async def test_writer_assemble_repair_preflight_failure_falls_back_to_full(
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
     llm_calls = 0
@@ -6371,6 +6372,7 @@ async def test_writer_assemble_repair_rag_gap_fill_gate_falls_back_to_full() -> 
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
     llm_calls = 0
@@ -6447,6 +6449,7 @@ async def test_writer_assemble_repair_thin_support_order_falls_back_to_full() ->
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
     llm_calls = 0
@@ -6538,6 +6541,7 @@ async def test_writer_assemble_repair_release_depth_boundary_falls_back_to_full(
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
     llm_calls = 0
@@ -7371,6 +7375,7 @@ async def test_writer_full_repair_plan_uses_full_rewrite_metadata() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
     llm_calls = 0
@@ -8292,6 +8297,7 @@ def _segmented_writer_service() -> RunService:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=10,
+            writer_structured_report_enabled=False,
         ),
     )
 

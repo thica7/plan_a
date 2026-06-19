@@ -122,7 +122,7 @@ class Settings:
     analyst_fanout_branch_timeout_seconds: float = 8.0
     comparator_timeout_seconds: float = 120.0
     writer_timeout_seconds: float = 600.0
-    writer_structured_report_enabled: bool = False
+    writer_structured_report_enabled: bool = True
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
