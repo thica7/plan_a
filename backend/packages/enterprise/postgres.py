@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -67,6 +68,9 @@ from packages.schema.enterprise import (
 )
 from packages.sources import normalize_report_version_sources
 
+_MIGRATION_LOCK = threading.Lock()
+_MIGRATED_DATABASE_URLS: set[str] = set()
+
 
 class EnterprisePostgresStore:
     """Postgres-backed enterprise repository for Workspace/Project/Evidence projections."""
@@ -88,7 +92,7 @@ class EnterprisePostgresStore:
         self._dict_row = dict_row
         self._jsonb = Jsonb
         if auto_migrate:
-            self.migrate()
+            self._migrate_once()
 
     @contextmanager
     def _connect(
@@ -145,10 +149,21 @@ class EnterprisePostgresStore:
         script = _schema_path().read_text(encoding="utf-8")
         with self._service_connection() as conn:
             with conn.cursor() as cur:
-                for statement in _split_sql(script):
-                    cur.execute(statement)
-                self._copy_legacy_claim_records(cur)
+                cur.execute("SELECT pg_advisory_lock(%s, %s)", (816873309, 20260619))
+                try:
+                    for statement in _split_sql(script):
+                        cur.execute(statement)
+                    self._copy_legacy_claim_records(cur)
+                finally:
+                    cur.execute("SELECT pg_advisory_unlock(%s, %s)", (816873309, 20260619))
             conn.commit()
+
+    def _migrate_once(self) -> None:
+        with _MIGRATION_LOCK:
+            if self.database_url in _MIGRATED_DATABASE_URLS:
+                return
+            self.migrate()
+            _MIGRATED_DATABASE_URLS.add(self.database_url)
 
     def ping(self) -> str:
         with self._service_connection() as conn:
