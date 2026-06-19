@@ -9,7 +9,7 @@ SOURCE_TOKEN_ATTEMPT_RE = re.compile(
     r"(?:\[[^\]\n]*\]|【[^】\n]*】)",
     re.IGNORECASE,
 )
-SOURCE_TOKEN_ATTEMPT_BODY_RE = re.compile(r"^\s*source\s*:", re.IGNORECASE)
+SOURCE_TOKEN_ATTEMPT_BODY_RE = re.compile(r"^\s*source\s*[:\uFF1A]", re.IGNORECASE)
 SOURCE_TOKEN_MARKER = "[source:"
 
 
