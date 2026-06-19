@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import Depends, Header, HTTPException, Request
 
 from app.middleware import auth
+from app.rate_limit import SlidingWindowRateLimiter
 from packages.artifacts import ArtifactStorage, build_artifact_storage
 from packages.auth import EnterpriseUserContext, normalize_role
 from packages.config import Settings, get_settings
@@ -55,6 +56,11 @@ def get_trace_store() -> TraceStore:
 @lru_cache
 def get_graph_checkpointer() -> GraphCheckpointer:
     return GraphCheckpointer.from_default_path()
+
+
+@lru_cache
+def get_create_run_rate_limiter() -> SlidingWindowRateLimiter:
+    return SlidingWindowRateLimiter()
 
 
 _RUN_SERVICE_CACHE: dict[tuple[int, ...], RunService] = {}

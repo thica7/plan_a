@@ -8,11 +8,13 @@ from fastapi.testclient import TestClient
 import packages.runtime.service as runtime_service_module
 from app.deps import (
     get_app_settings,
+    get_create_run_rate_limiter,
     get_enterprise_store,
     get_run_service,
     get_temporal_workflow_service,
 )
 from app.main import create_app
+from app.rate_limit import SlidingWindowRateLimiter
 from packages.auth import EnterpriseUserContext
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
@@ -493,6 +495,94 @@ def test_runs_router_can_cut_over_to_temporal_backend() -> None:
     visible = client.get(f"/api/runs/{run_id_for_idempotency_key('route-cutover-001')}")
     assert visible.status_code == 200
     assert visible.json()["status"] == "queued"
+
+
+def test_runs_router_rate_limits_create_run_by_workspace() -> None:
+    class FakeWorkflowService:
+        async def start_competitive_intel(
+            self,
+            request: RunCreateRequest,
+        ) -> WorkflowStartResponse:
+            assert request.idempotency_key is not None
+            return WorkflowStartResponse(
+                workflow_id=f"competitive-intel-{request.idempotency_key}",
+                run_id=run_id_for_idempotency_key(request.idempotency_key),
+                idempotency_key=request.idempotency_key,
+                task_queue="test-queue",
+                status="started",
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_app_settings] = lambda: _settings(
+        run_orchestration_backend="temporal",
+        create_run_rate_limit_per_window=1,
+        create_run_rate_limit_window_seconds=60.0,
+    )
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    rate_limiter = SlidingWindowRateLimiter()
+    app.dependency_overrides[get_create_run_rate_limiter] = lambda: rate_limiter
+    run_service = _memory_run_service(_settings(run_orchestration_backend="temporal"))
+    app.dependency_overrides[get_run_service] = lambda: run_service
+    client = TestClient(app)
+
+    payload = {
+        "topic": "AI coding assistant rate limit",
+        "competitors": ["Cursor"],
+        "dimensions": ["pricing"],
+        "execution_mode": "demo",
+    }
+
+    first = client.post("/api/runs", json={**payload, "idempotency_key": "rate-limit-001"})
+    second = client.post("/api/runs", json={**payload, "idempotency_key": "rate-limit-002"})
+
+    assert first.status_code == 202
+    assert first.headers["X-Create-Run-RateLimit-Remaining"] == "0"
+    assert second.status_code == 429
+    assert second.headers["Retry-After"] == "60"
+    assert second.json()["detail"]["reason"] == "Create run rate limit exceeded."
+
+
+def test_runs_router_allows_duplicate_idempotency_key_without_rate_limit_penalty() -> None:
+    class FakeWorkflowService:
+        async def start_competitive_intel(
+            self,
+            request: RunCreateRequest,
+        ) -> WorkflowStartResponse:
+            assert request.idempotency_key is not None
+            return WorkflowStartResponse(
+                workflow_id=f"competitive-intel-{request.idempotency_key}",
+                run_id=run_id_for_idempotency_key(request.idempotency_key),
+                idempotency_key=request.idempotency_key,
+                task_queue="test-queue",
+                status="started",
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_app_settings] = lambda: _settings(
+        run_orchestration_backend="temporal",
+        create_run_rate_limit_per_window=1,
+        create_run_rate_limit_window_seconds=60.0,
+    )
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    rate_limiter = SlidingWindowRateLimiter()
+    app.dependency_overrides[get_create_run_rate_limiter] = lambda: rate_limiter
+    run_service = _memory_run_service(_settings(run_orchestration_backend="temporal"))
+    app.dependency_overrides[get_run_service] = lambda: run_service
+    client = TestClient(app)
+    payload = {
+        "topic": "AI coding assistant duplicate submit",
+        "competitors": ["Cursor"],
+        "dimensions": ["pricing"],
+        "execution_mode": "demo",
+        "idempotency_key": "duplicate-rate-limit-001",
+    }
+
+    first = client.post("/api/runs", json=payload)
+    second = client.post("/api/runs", json=payload)
+
+    assert first.status_code == 202
+    assert second.status_code == 201
+    assert second.json()["id"] == first.json()["run_id"]
 
 
 @pytest.mark.asyncio

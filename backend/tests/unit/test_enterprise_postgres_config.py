@@ -55,6 +55,17 @@ def test_writer_timeout_settings_allow_explicit_override(monkeypatch) -> None:
     assert settings.writer_timeout_seconds == 600.0
 
 
+def test_create_run_rate_limit_settings_allow_explicit_override(monkeypatch) -> None:
+    monkeypatch.setenv("CREATE_RUN_RATE_LIMIT_PER_WINDOW", "12")
+    monkeypatch.setenv("CREATE_RUN_RATE_LIMIT_WINDOW_SECONDS", "30")
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.create_run_rate_limit_per_window == 12
+    assert settings.create_run_rate_limit_window_seconds == 30.0
+
+
 def test_env_file_candidates_include_source_root_when_cwd_is_backend(tmp_path: Path) -> None:
     project_root = tmp_path / "plan_a"
     backend_root = project_root / "backend"

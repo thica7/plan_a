@@ -157,6 +157,8 @@ class Settings:
     auth_policy_timeout_seconds: float = 1.0
     evalops_release_mode: Literal["advisory", "blocking"] = "advisory"
     evalops_release_limit: int = 30
+    create_run_rate_limit_per_window: int = 5
+    create_run_rate_limit_window_seconds: float = 60.0
 
     @property
     def has_llm_credentials(self) -> bool:
@@ -383,6 +385,18 @@ def get_settings() -> Settings:
             30,
             minimum=1,
             maximum=200,
+        ),
+        create_run_rate_limit_per_window=_env_int(
+            "CREATE_RUN_RATE_LIMIT_PER_WINDOW",
+            5,
+            minimum=0,
+            maximum=1000,
+        ),
+        create_run_rate_limit_window_seconds=_env_float(
+            "CREATE_RUN_RATE_LIMIT_WINDOW_SECONDS",
+            60.0,
+            minimum=1.0,
+            maximum=3600.0,
         ),
     )
 
