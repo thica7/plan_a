@@ -325,24 +325,6 @@ def build_structured_writer_section_plan(
     ]
 
 
-def _default_competitive_findings(
-    deep_dives: list[CompetitorDeepDiveSection],
-) -> list[CitedText]:
-    findings: list[CitedText] = []
-    for deep_dive in deep_dives:
-        findings.extend(deep_dive.positioning[:1])
-        findings.extend(deep_dive.pricing_packaging[:1])
-        findings.extend(deep_dive.feature_capabilities[:1])
-    return findings[:8] or [
-        CitedText(
-            text="核心竞争发现需要更多结构化证据支撑。",
-            source_ids=[],
-            confidence="low",
-            evidence_role="evidence_gap",
-        )
-    ]
-
-
 class WriterEvidencePreflightError(RuntimeError):
     """Raised when writer evidence cannot safely be sent to the LLM."""
 
@@ -391,15 +373,22 @@ def _structured_section_inputs(
             "dimensions": item.get("dimensions", dimensions),
         }
         if segment_inputs:
-            selected_segments = _select_structured_evidence_segments(
+            matching_segments = _select_structured_evidence_segments(
                 section_id=section_id,
                 competitor=item.get("competitor"),
                 segment_inputs=segment_inputs,
             )
-            segment["evidence_segments"] = selected_segments
-            scoped_source_ids = _source_ids_from_structured_segments(selected_segments)
-            if scoped_source_ids:
-                segment["allowed_source_ids"] = scoped_source_ids
+            primary_segments = matching_segments[:1]
+            omitted_segments = matching_segments[1:]
+            segment["evidence_segments"] = primary_segments
+            segment["allowed_source_ids"] = _source_ids_from_structured_segments(
+                primary_segments
+            )
+            segment["additional_segment_count"] = len(omitted_segments)
+            segment["additional_segment_refs"] = [
+                _structured_segment_ref(omitted_segment)
+                for omitted_segment in omitted_segments
+            ]
         else:
             segment["evidence_pack"] = base
         inputs[_structured_section_key(item)] = segment
@@ -449,7 +438,19 @@ def _select_structured_evidence_segments(
             if segment_competitor and str(segment_competitor) != str(competitor):
                 continue
         selected.append(segment)
-    return selected or list(segment_inputs)
+    return selected
+
+
+def _structured_segment_ref(segment: dict[str, object]) -> dict[str, object]:
+    source_ids = _source_ids_from_structured_segments([segment])
+    return {
+        "segment_name": segment.get("segment_name") or segment.get("section_id"),
+        "segment_competitor": segment.get("segment_competitor")
+        or segment.get("competitor"),
+        "segment_batch": segment.get("segment_batch"),
+        "allowed_source_ids": source_ids,
+        "source_count": len(source_ids),
+    }
 
 
 def _source_ids_from_structured_segments(
@@ -1093,11 +1094,14 @@ class WriterAgentMixin:
         )
         for item in plan:
             key = _structured_section_key(item)
-            section_allowed_source_ids = set(
-                source_id
-                for source_id in section_inputs[key].get("allowed_source_ids", [])
-                if isinstance(source_id, str)
-            ) or allowed_source_ids
+            if "allowed_source_ids" in section_inputs[key]:
+                section_allowed_source_ids = {
+                    source_id
+                    for source_id in section_inputs[key]["allowed_source_ids"]
+                    if isinstance(source_id, str)
+                }
+            else:
+                section_allowed_source_ids = allowed_source_ids
             sections[key] = await self._writer_structured_section_json(
                 record,
                 segment=section_inputs[key],

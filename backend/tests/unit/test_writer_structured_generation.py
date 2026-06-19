@@ -156,6 +156,46 @@ class _SegmentedEvidencePackResult:
         ]
 
 
+class _MultiShardEvidencePackResult:
+    metrics = SimpleNamespace(segment_count=2, segmented_writer_required=True)
+
+    def to_prompt_json(self) -> str:
+        return "FULL_PACK_SHOULD_NOT_BE_REPEATED"
+
+    def segment_inputs(self) -> list[dict[str, object]]:
+        return [
+            {
+                "segment_name": "decision_summary",
+                "segment_batch": 1,
+                "content": "PRIMARY_DECISION_FULL_CONTENT",
+                "allowed_source_ids": ["raw-source-a"],
+            },
+            {
+                "segment_name": "decision_summary",
+                "segment_batch": 2,
+                "content": "SECONDARY_DECISION_FULL_CONTENT",
+                "allowed_source_ids": ["raw-source-b"],
+            },
+        ]
+
+
+class _NoExecutiveEvidencePackResult:
+    metrics = SimpleNamespace(segment_count=1, segmented_writer_required=True)
+
+    def to_prompt_json(self) -> str:
+        return "FULL_PACK_SHOULD_NOT_BE_REPEATED"
+
+    def segment_inputs(self) -> list[dict[str, object]]:
+        return [
+            {
+                "segment_name": "support_appendix",
+                "segment_batch": 1,
+                "content": "SUPPORT_ONLY_FULL_CONTENT",
+                "allowed_source_ids": ["raw-source-a"],
+            }
+        ]
+
+
 def test_structured_section_plan_has_core_before_support_and_no_markdown_layout_ownership() -> None:
     plan = build_structured_writer_section_plan(
         competitors=["Cursor", "Windsurf"],
@@ -298,6 +338,50 @@ def test_structured_section_inputs_fall_back_to_prompt_json_without_segments() -
     )
 
 
+def test_structured_section_inputs_keep_one_primary_segment_and_compact_omitted_refs() -> None:
+    inputs = _structured_section_inputs(
+        evidence_pack_result=_MultiShardEvidencePackResult(),
+        competitors=["Cursor", "Windsurf"],
+        dimensions=["pricing", "feature", "persona"],
+    )
+
+    decision_summary = inputs["decision_summary"]
+    serialized = json.dumps(decision_summary, ensure_ascii=False)
+
+    assert "FULL_PACK_SHOULD_NOT_BE_REPEATED" not in serialized
+    assert len(decision_summary["evidence_segments"]) == 1
+    assert "PRIMARY_DECISION_FULL_CONTENT" in serialized
+    assert "SECONDARY_DECISION_FULL_CONTENT" not in serialized
+    assert decision_summary["allowed_source_ids"] == ["raw-source-a"]
+    assert decision_summary["additional_segment_count"] == 1
+    assert decision_summary["additional_segment_refs"] == [
+        {
+            "segment_name": "decision_summary",
+            "segment_competitor": None,
+            "segment_batch": 2,
+            "allowed_source_ids": ["raw-source-b"],
+            "source_count": 1,
+        }
+    ]
+
+
+def test_structured_section_inputs_keep_empty_scope_when_no_matching_segments() -> None:
+    inputs = _structured_section_inputs(
+        evidence_pack_result=_NoExecutiveEvidencePackResult(),
+        competitors=["Cursor", "Windsurf"],
+        dimensions=["pricing", "feature", "persona"],
+    )
+
+    executive_summary = inputs["executive_summary"]
+    serialized = json.dumps(executive_summary, ensure_ascii=False)
+
+    assert "FULL_PACK_SHOULD_NOT_BE_REPEATED" not in serialized
+    assert "SUPPORT_ONLY_FULL_CONTENT" not in serialized
+    assert executive_summary["evidence_segments"] == []
+    assert executive_summary["allowed_source_ids"] == []
+    assert executive_summary["additional_segment_refs"] == []
+
+
 @pytest.mark.asyncio
 async def test_writer_structured_report_rejects_citations_outside_section_evidence_scope(
     monkeypatch,
@@ -394,6 +478,83 @@ async def test_writer_structured_report_rejects_citations_outside_section_eviden
         await harness._writer_structured_report(
             record,
             evidence_pack_result=_SegmentedEvidencePackResult(),
+            timeout_seconds=10,
+        )
+
+
+@pytest.mark.asyncio
+async def test_writer_structured_report_rejects_citations_when_section_scope_is_empty(
+    monkeypatch,
+) -> None:
+    record = _writer_record_with_sources(["raw-source-a"])
+    harness = _WriterHarness([])
+
+    async def validating_section_json(
+        record, *, segment, section_schema, allowed_source_ids, timeout_seconds
+    ):
+        assert segment["section_id"] == "executive_summary"
+        assert allowed_source_ids == set()
+        payload = {
+            "recommendation": {
+                "text": "Citation should be rejected.",
+                "source_ids": ["raw-source-a"],
+                "confidence": "high",
+                "evidence_role": "official_fact",
+            },
+            "risk_adjusted_rationale": {
+                "text": "No scoped evidence is available.",
+                "source_ids": [],
+                "confidence": "low",
+                "evidence_role": "evidence_gap",
+            },
+            "competitor_postures": [
+                {
+                    "competitor": "Cursor",
+                    "posture": {
+                        "text": "No scoped evidence is available.",
+                        "source_ids": [],
+                        "confidence": "low",
+                        "evidence_role": "evidence_gap",
+                    },
+                }
+            ],
+            "confidence_boundary": {
+                "text": "No scoped evidence is available.",
+                "source_ids": [],
+                "confidence": "low",
+                "evidence_role": "evidence_gap",
+            },
+            "next_actions": [
+                {
+                    "text": "Collect scoped executive-summary evidence.",
+                    "source_ids": [],
+                    "confidence": "low",
+                    "evidence_role": "evidence_gap",
+                }
+            ],
+        }
+        section = section_schema.model_validate(payload)
+        cited_source_ids = {
+            source_id
+            for value in section.model_dump().values()
+            if isinstance(value, dict)
+            for source_id in value.get("source_ids", [])
+            if isinstance(source_id, str)
+        }
+        invalid_source_ids = cited_source_ids - set(allowed_source_ids)
+        if invalid_source_ids:
+            raise ValueError(
+                "structured writer response used disallowed source_ids: "
+                f"{', '.join(sorted(invalid_source_ids))}"
+            )
+        return section
+
+    monkeypatch.setattr(harness, "_writer_structured_section_json", validating_section_json)
+
+    with pytest.raises(ValueError, match="raw-source-a"):
+        await harness._writer_structured_report(
+            record,
+            evidence_pack_result=_NoExecutiveEvidencePackResult(),
             timeout_seconds=10,
         )
 
