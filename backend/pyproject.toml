@@ -40,6 +40,9 @@ reranker = [
 js-render = [
     "playwright>=1.40",
 ]
+load = [
+    "locust>=2.31.0",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
