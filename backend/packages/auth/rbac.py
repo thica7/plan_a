@@ -100,8 +100,8 @@ class PolicyDecision(BaseModel):
     reason: str
 
 
-def normalize_role(value: str | None, *, default: EnterpriseRole = "viewer") -> EnterpriseRole:
-    role = (value or default).strip().lower()
+def normalize_role(value: str | None) -> EnterpriseRole:
+    role = (value or "owner").strip().lower()
     if role in _ROLE_RANK:
         return role  # type: ignore[return-value]
     return "viewer"

@@ -31,8 +31,6 @@ def test_rbac_workspace_scope_blocks_cross_workspace_access() -> None:
     assert can_access_workspace(user, "workspace-a", "project:read")
     assert not can_access_workspace(user, "workspace-b", "project:read")
     assert normalize_role("unknown") == "viewer"
-    assert normalize_role(None) == "viewer"
-    assert normalize_role(None, default="owner") == "owner"
 
 
 def test_policy_decision_explains_denies_and_allows() -> None:

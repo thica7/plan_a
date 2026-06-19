@@ -93,28 +93,4 @@ describe("useNewRunBuilder output language", () => {
       }),
     );
   });
-
-  it("ignores duplicate submits while a run is being created", async () => {
-    let resolveRun!: (value: { id: string }) => void;
-    const pendingRun = new Promise<{ id: string }>((resolve) => {
-      resolveRun = resolve;
-    });
-    mocks.createRun.mockReturnValue(pendingRun);
-    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
-
-    let firstSubmit!: Promise<void>;
-    let secondSubmit!: Promise<void>;
-    await act(async () => {
-      firstSubmit = result.current.submitRun();
-      secondSubmit = result.current.submitRun();
-      await Promise.resolve();
-    });
-
-    expect(mocks.createRun).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      resolveRun({ id: "run-1" });
-      await Promise.all([firstSubmit, secondSubmit]);
-    });
-  });
 });

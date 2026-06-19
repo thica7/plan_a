@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createRun, getRuntime, getWorkspaceQuotaDecision, listScenarioPacks, listSkills } from "../../api/client";
 import type {
@@ -45,7 +45,6 @@ export function useNewRunBuilder() {
   const [hitlEnabled, setHitlEnabled] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const submitInFlightRef = useRef(false);
 
   useEffect(() => {
     getRuntime()
@@ -160,14 +159,10 @@ export function useNewRunBuilder() {
   }
 
   async function submitRun() {
-    if (submitInFlightRef.current) {
-      return;
-    }
     if (runBlockedByQuota) {
       setError(quotaDecision?.reason ?? "Workspace quota blocks new runs.");
       return;
     }
-    submitInFlightRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -188,7 +183,6 @@ export function useNewRunBuilder() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create run");
     } finally {
-      submitInFlightRef.current = false;
       setSubmitting(false);
     }
   }

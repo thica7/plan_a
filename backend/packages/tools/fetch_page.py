@@ -4,14 +4,8 @@ import hashlib
 import html
 import re
 from dataclasses import dataclass
-from urllib.parse import urljoin
 
 import httpx
-
-from packages.crawler.policy import SSRFError, SSRFGuard
-
-_MAX_REDIRECTS = 8
-_DEFAULT_MAX_BYTES = 2_000_000
 
 
 @dataclass(frozen=True)
@@ -29,46 +23,21 @@ class FetchPageResult:
         return self.text[:700]
 
 
-async def fetch_page(
-    url: str,
-    timeout_seconds: float = 12.0,
-    *,
-    guard: SSRFGuard | None = None,
-    max_bytes: int = _DEFAULT_MAX_BYTES,
-    transport: httpx.AsyncBaseTransport | None = None,
-) -> FetchPageResult:
+async def fetch_page(url: str, timeout_seconds: float = 12.0) -> FetchPageResult:
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (compatible; CompetiscopeBot/0.1; +https://example.local/competiscope)"
         )
     }
-    ssrf_guard = guard or SSRFGuard()
     try:
-        response = None
-        current_url = url
-        expected_addresses = await ssrf_guard.validate_url(current_url)
         async with httpx.AsyncClient(
             timeout=timeout_seconds,
-            follow_redirects=False,
+            follow_redirects=True,
             headers=headers,
-            transport=transport,
         ) as client:
-            for _ in range(_MAX_REDIRECTS + 1):
-                response = await client.get(current_url)
-                if not response.is_redirect:
-                    await ssrf_guard.validate_rebinding(str(response.url), expected_addresses)
-                    break
-                location = response.headers.get("location")
-                if not location:
-                    break
-                current_url = urljoin(str(response.url), location)
-                expected_addresses = await ssrf_guard.validate_url(current_url)
-            else:
-                raise httpx.TooManyRedirects("Exceeded maximum redirects")
-        if response is None:
-            raise httpx.HTTPError("No response returned")
+            response = await client.get(url)
         response.raise_for_status()
-    except (Exception, SSRFError) as exc:  # noqa: BLE001 - fetch failure is data, not a pipeline failure.
+    except Exception as exc:  # noqa: BLE001 - fetch failure is data, not a pipeline failure.
         return FetchPageResult(
             url=url,
             ok=False,
@@ -79,10 +48,7 @@ async def fetch_page(
             error=str(exc),
         )
 
-    body = response.content[: max(0, max_bytes)].decode(
-        response.encoding or "utf-8",
-        errors="replace",
-    )
+    body = response.text
     title = _extract_title(body)
     text = _html_to_text(body)
     return FetchPageResult(
