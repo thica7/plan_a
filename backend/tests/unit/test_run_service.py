@@ -8509,9 +8509,13 @@ def test_real_writer_traces_markdown_fallback_when_structured_path_fails(
     asyncio.run(service._real_writer_step(record))
 
     assert "Fallback report" in record.detail.report_md
-    assert "writer_markdown_fallback_used" in [
-        event.type for event in record.events
-    ]
+    fallback_event = next(
+        event
+        for event in record.events
+        if event.type == "writer_markdown_fallback_used"
+    )
+    assert fallback_event.payload == {"reason": "structured section failed"}
+    assert len(fallback_event.payload["reason"]) <= 500
     assert any(
         span.name == "writer_markdown_fallback_used"
         for span in record.detail.trace_spans

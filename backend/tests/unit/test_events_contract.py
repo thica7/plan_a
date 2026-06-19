@@ -35,6 +35,9 @@ EXPECTED_EVENT_TYPES = {
     "writer_assemble_repair_completed",
     "writer_quality_preflight",
     "writer_quality_preflight_repair",
+    "writer_structured_report_validated",
+    "writer_publication_contract_validated",
+    "writer_markdown_fallback_used",
 }
 
 

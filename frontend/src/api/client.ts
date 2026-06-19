@@ -618,6 +618,9 @@ export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) 
     "writer_assemble_repair_completed",
     "writer_quality_preflight",
     "writer_quality_preflight_repair",
+    "writer_structured_report_validated",
+    "writer_publication_contract_validated",
+    "writer_markdown_fallback_used",
   ];
   for (const type of eventTypes) {
     source.addEventListener(type, (message) => {
