@@ -76,6 +76,9 @@ export interface ReflectionRecord {
   confidence_outliers: string[];
   cross_competitor_gaps: string[];
   suggested_redos: RedoScope[];
+  gate_status: "pass" | "warn" | "block";
+  blocking_gaps: string[];
+  writer_constraints: string[];
 }
 
 export interface CompetitorKB {
