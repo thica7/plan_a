@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from packages.agents.writer.structured_renderer import render_structured_report
 from packages.agents.writer.structured_report import (
     BattlecardPlay,
@@ -262,3 +264,95 @@ def test_renderer_keeps_english_appendix_header_for_non_zh_reports() -> None:
         "| Source ID | Title | Competitor | Dimension | Role | Confidence |"
     )
     assert "[source:" not in appendix_header
+
+
+def test_renderer_collapses_inline_newlines_without_creating_markdown_injection() -> None:
+    report = _report()
+    report.topic = "AI coding\n## injected topic"
+    report.competitors[0] = "Cursor\n## injected competitor"
+    report.core.battlecard.plays[0].target_buyer = (
+        "工程负责人\n## injected buyer"
+    )
+    report.core.executive_summary.recommendation.text = "第一行\n| fake row |"
+
+    rendered = render_structured_report(report)
+    lines = rendered.splitlines()
+    matrix_header = next(line for line in lines if line.startswith("| 维度 |"))
+
+    assert lines[0] == "# AI coding ## injected topic"
+    assert "Cursor ## injected competitor" in matrix_header
+    assert "工程负责人 ## injected buyer" in rendered
+    assert "第一行 | fake row | [source:raw-source-a]" in rendered
+    assert "## injected topic" not in lines[1:]
+    assert "## injected competitor" not in lines
+    assert "## injected buyer" not in lines
+    assert "| fake row |" not in lines
+
+
+def test_renderer_rejects_raw_source_tokens_in_structural_and_claim_text() -> None:
+    report = _report()
+    report.topic = "AI coding [source:raw-source-a]"
+
+    with pytest.raises(ValueError, match="source tokens"):
+        render_structured_report(report)
+
+    report = _report()
+    report.core.executive_summary.recommendation.text = (
+        "优先采购 Cursor [source:raw-source-a]"
+    )
+
+    with pytest.raises(ValueError, match="source tokens"):
+        render_structured_report(report)
+
+
+def test_renderer_rejects_invalid_source_ids_before_rendering_citation_tokens() -> None:
+    report = _report()
+    report.core.executive_summary.recommendation.source_ids = ["bad id]"]
+
+    with pytest.raises(ValueError, match="source id"):
+        render_structured_report(report)
+
+
+def test_renderer_escapes_matrix_cell_pipes_and_collapses_newlines() -> None:
+    report = _report()
+    report.core.decision_matrix.dimensions[0].cells[0].summary = (
+        "公开|价格\r\n需要\n核验"
+    )
+
+    rendered = render_structured_report(report)
+    matrix_row = next(
+        line for line in rendered.splitlines() if line.startswith("| pricing |")
+    )
+
+    assert "公开\\|价格 需要 核验 [source:raw-source-a]" in matrix_row
+    assert not any(line.startswith("| 需要") for line in rendered.splitlines())
+
+
+def test_renderer_renders_missing_matrix_cell_as_localized_gap_without_citation() -> None:
+    report = _report()
+    report.core.decision_matrix.dimensions[0].cells = [
+        report.core.decision_matrix.dimensions[0].cells[0]
+    ]
+
+    rendered = render_structured_report(report)
+    matrix_row = next(
+        line for line in rendered.splitlines() if line.startswith("| pricing |")
+    )
+
+    assert matrix_row.endswith("| 证据缺口 |")
+    assert "证据缺口 [source:" not in matrix_row
+
+
+def test_renderer_renders_multiple_source_ids_as_consecutive_tokens() -> None:
+    report = _report()
+    report.core.executive_summary.recommendation.source_ids = [
+        "raw-source-a",
+        "raw-source-b",
+    ]
+
+    rendered = render_structured_report(report)
+
+    assert (
+        "优先以 Cursor 作为团队采购基线。 [source:raw-source-a][source:raw-source-b]"
+        in rendered
+    )

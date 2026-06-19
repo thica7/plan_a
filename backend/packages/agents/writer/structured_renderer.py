@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 
 from packages.agents.writer.structured_report import (
@@ -9,6 +10,10 @@ from packages.agents.writer.structured_report import (
     StructuredReport,
 )
 
+
+_RAW_SOURCE_TOKEN_RE = re.compile(r"\[source:[^\]]+\]", re.IGNORECASE)
+_SOURCE_ID_RE = re.compile(r"^[A-Za-z0-9_.:#-]+$")
+_WHITESPACE_RE = re.compile(r"\s+")
 
 _ZH_LABELS = {
     "adoption_blockers": "采用障碍",
@@ -112,8 +117,9 @@ _EN_LABELS = {
 
 
 def render_structured_report(report: StructuredReport) -> str:
-    labels = _labels_for(report.output_language)
-    lines: list[str] = [f"# {report.topic}", ""]
+    is_zh = _is_zh(report.output_language)
+    labels = _labels_for(is_zh)
+    lines: list[str] = [f"# {_inline_text(report.topic, 'topic')}", ""]
 
     _render_executive_summary(lines, report, labels)
     _heading(lines, 2, labels["decision_summary"])
@@ -122,20 +128,22 @@ def render_structured_report(report: StructuredReport) -> str:
     _bullet_list(lines, report.core.competitive_findings)
     _render_user_review_themes(lines, report, labels)
     _render_deep_dives(lines, report, labels)
-    _render_decision_matrix(lines, report, labels)
+    _render_decision_matrix(lines, report, labels, is_zh)
     _render_swot(lines, report, labels)
     _render_battlecard(lines, report, labels)
     _heading(lines, 2, labels["community_triangulation"])
     _bullet_list(lines, report.core.community_triangulation)
-    _render_support(lines, report, labels)
+    _render_support(lines, report, labels, is_zh)
 
     return "\n".join(lines).strip() + "\n"
 
 
-def _labels_for(output_language: str) -> dict[str, str]:
-    if output_language.lower().startswith("zh"):
-        return _ZH_LABELS
-    return _EN_LABELS
+def _is_zh(output_language: str) -> bool:
+    return output_language.lower().startswith("zh")
+
+
+def _labels_for(is_zh: bool) -> dict[str, str]:
+    return _ZH_LABELS if is_zh else _EN_LABELS
 
 
 def _render_executive_summary(
@@ -201,19 +209,30 @@ def _render_decision_matrix(
     lines: list[str],
     report: StructuredReport,
     labels: dict[str, str],
+    is_zh: bool,
 ) -> None:
     _heading(lines, 2, labels["decision_matrix"])
-    dimension_label = "维度" if labels is _ZH_LABELS else "Dimension"
-    header = [dimension_label, *report.competitors]
+    dimension_label = "维度" if is_zh else "Dimension"
+    competitors = [
+        _inline_text(competitor, "competitor") for competitor in report.competitors
+    ]
+    header = [dimension_label, *competitors]
     lines.append(_table_row(header))
     lines.append(_table_row(["---", *(["---"] * len(report.competitors))]))
     for row in report.core.decision_matrix.dimensions:
-        cells_by_competitor = {cell.competitor: cell for cell in row.cells}
+        cells_by_competitor = {
+            _inline_text(cell.competitor, "matrix cell competitor"): cell
+            for cell in row.cells
+        }
         rendered_cells = [
             _render_matrix_cell(cells_by_competitor.get(competitor), labels)
-            for competitor in report.competitors
+            for competitor in competitors
         ]
-        lines.append(_table_row([row.dimension, *rendered_cells]))
+        lines.append(
+            _table_row(
+                [_inline_text(row.dimension, "matrix dimension"), *rendered_cells]
+            )
+        )
     lines.append("")
     _claim_group(lines, labels["interpretation"], report.core.decision_matrix.interpretation)
     _claim_group(
@@ -245,7 +264,10 @@ def _render_battlecard(
     _heading(lines, 2, labels["battlecard"])
     for play in report.core.battlecard.plays:
         _heading(lines, 3, play.competitor)
-        lines.append(f"- {labels['target_buyer']}: {play.target_buyer}")
+        lines.append(
+            f"- {labels['target_buyer']}: "
+            f"{_inline_text(play.target_buyer, 'target_buyer')}"
+        )
         _labeled_claim(lines, labels["use_when"], play.use_when)
         _claim_group(lines, labels["attack_points"], play.attack_points)
         _claim_group(lines, labels["defense_points"], play.defense_points)
@@ -263,6 +285,7 @@ def _render_support(
     lines: list[str],
     report: StructuredReport,
     labels: dict[str, str],
+    is_zh: bool,
 ) -> None:
     support = report.support
     _heading(lines, 2, labels["support_materials"])
@@ -273,7 +296,7 @@ def _render_support(
     _claim_group(lines, labels["claim_risk"], support.claim_risk)
     _claim_group(lines, labels["next_collection"], support.next_collection)
     _heading(lines, 3, labels["evidence_appendix"])
-    _appendix_table(lines, support.evidence_appendix, labels)
+    _appendix_table(lines, support.evidence_appendix, is_zh)
 
 
 def _claim_group(
@@ -292,33 +315,41 @@ def _bullet_list(lines: list[str], claims: Sequence[CitedText]) -> None:
 
 
 def _labeled_claim(lines: list[str], label: str, claim: CitedText) -> None:
-    lines.append(f"- {label}: {_render_cited_text(claim)}")
+    lines.append(f"- {_inline_text(label, 'label')}: {_render_cited_text(claim)}")
 
 
 def _render_cited_text(claim: CitedText) -> str:
-    return f"{claim.text}{_citation_suffix(claim.source_ids)}"
+    return (
+        f"{_inline_text(claim.text, 'claim text')}"
+        f"{_citation_suffix(claim.source_ids)}"
+    )
 
 
 def _render_matrix_cell(cell: MatrixCell | None, labels: dict[str, str]) -> str:
     if cell is None:
         return labels["matrix_gap"]
-    return f"{cell.summary}{_citation_suffix(cell.source_ids)}"
+    return (
+        f"{_inline_text(cell.summary, 'matrix summary')}"
+        f"{_citation_suffix(cell.source_ids)}"
+    )
 
 
 def _citation_suffix(source_ids: Sequence[str]) -> str:
     if not source_ids:
         return ""
-    return " " + "".join(f"[source:{source_id}]" for source_id in source_ids)
+    return " " + "".join(
+        f"[source:{_source_id(source_id)}]" for source_id in source_ids
+    )
 
 
 def _appendix_table(
     lines: list[str],
     rows: Sequence[SourceAppendixRow],
-    labels: dict[str, str],
+    is_zh: bool,
 ) -> None:
     header = (
         ["来源 ID", "标题", "竞品", "维度", "角色", "置信度"]
-        if labels is _ZH_LABELS
+        if is_zh
         else ["Source ID", "Title", "Competitor", "Dimension", "Role", "Confidence"]
     )
     lines.append(_table_row(header))
@@ -327,10 +358,10 @@ def _appendix_table(
         lines.append(
             _table_row(
                 [
-                    row.source_id,
-                    row.title,
-                    row.competitor,
-                    row.dimension,
+                    _source_id(row.source_id),
+                    _inline_text(row.title, "source title"),
+                    _inline_text(row.competitor, "source competitor"),
+                    _inline_text(row.dimension, "source dimension"),
                     row.evidence_role,
                     row.confidence,
                 ]
@@ -340,7 +371,7 @@ def _appendix_table(
 
 
 def _heading(lines: list[str], level: int, text: str) -> None:
-    lines.append(f"{'#' * level} {text}")
+    lines.append(f"{'#' * level} {_inline_text(text, 'heading')}")
 
 
 def _table_row(values: Sequence[str]) -> str:
@@ -349,3 +380,18 @@ def _table_row(values: Sequence[str]) -> str:
 
 def _table_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\r\n", " ").replace("\n", " ")
+
+
+def _inline_text(value: str, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string")
+    if _RAW_SOURCE_TOKEN_RE.search(value):
+        raise ValueError(f"{field_name} must not contain Markdown source tokens")
+    return _WHITESPACE_RE.sub(" ", value).strip()
+
+
+def _source_id(value: str) -> str:
+    source_id = _inline_text(value, "source id")
+    if not _SOURCE_ID_RE.fullmatch(source_id):
+        raise ValueError("source id contains invalid characters")
+    return source_id
