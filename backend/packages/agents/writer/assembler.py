@@ -9,6 +9,7 @@ from packages.agents.writer.segment_contract import (
     SUPPORT_HEADING_KEYS,
     heading_key_for,
 )
+from packages.agents.writer.structured_report import StructuredReport
 from packages.i18n.language import report_label
 
 CANONICAL_REPORT_ORDER: tuple[str, ...] = CORE_HEADING_KEYS + SUPPORT_HEADING_KEYS
@@ -37,6 +38,41 @@ _UNKNOWN_SUPPORT_TERMS = (
 class AssembledReport:
     markdown: str
     telemetry: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class StructuredReportAssemblyResult:
+    report: StructuredReport
+    telemetry: dict[str, object]
+
+
+class StructuredReportAssembler:
+    def assemble(
+        self,
+        *,
+        report: StructuredReport,
+        expected_competitors: list[str],
+    ) -> StructuredReportAssemblyResult:
+        expected = list(dict.fromkeys(expected_competitors))
+        deep_dive_names = [item.competitor for item in report.core.competitor_deep_dives]
+        user_theme_names = [
+            item.competitor
+            for item in report.core.user_review_themes.competitor_themes
+        ]
+        swot_names = [item.competitor for item in report.core.swot.competitors]
+        battlecard_names = [item.competitor for item in report.core.battlecard.plays]
+        telemetry = {
+            "expected_competitors": expected,
+            "missing_deep_dive_competitors": _missing(expected, deep_dive_names),
+            "duplicate_deep_dive_competitors": _duplicates(deep_dive_names),
+            "missing_user_theme_competitors": _missing(expected, user_theme_names),
+            "duplicate_user_theme_competitors": _duplicates(user_theme_names),
+            "missing_swot_competitors": _missing(expected, swot_names),
+            "duplicate_swot_competitors": _duplicates(swot_names),
+            "missing_battlecard_competitors": _missing(expected, battlecard_names),
+            "duplicate_battlecard_competitors": _duplicates(battlecard_names),
+        }
+        return StructuredReportAssemblyResult(report=report, telemetry=telemetry)
 
 
 @dataclass(frozen=True)
@@ -196,3 +232,18 @@ def _normalize_unknown_heading(heading: str) -> str:
 def _looks_like_support_heading(heading: str) -> bool:
     normalized = heading.casefold()
     return any(term in normalized for term in _UNKNOWN_SUPPORT_TERMS)
+
+
+def _missing(expected: list[str], actual: list[str]) -> list[str]:
+    actual_set = set(actual)
+    return [item for item in expected if item not in actual_set]
+
+
+def _duplicates(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for value in values:
+        if value in seen and value not in duplicates:
+            duplicates.append(value)
+        seen.add(value)
+    return duplicates
