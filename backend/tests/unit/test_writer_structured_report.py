@@ -299,6 +299,65 @@ def test_matrix_cell_strips_summary_and_rejects_source_tokens() -> None:
         )
 
 
+def test_matrix_cell_strips_source_ids_and_removes_blanks() -> None:
+    cell = MatrixCell(
+        competitor="Cursor",
+        summary="Public team pricing is visible.",
+        source_ids=[" raw-source-cursor-pricing ", "", "   "],
+        confidence="high",
+    )
+
+    assert cell.source_ids == ["raw-source-cursor-pricing"]
+
+
+def test_matrix_cell_rejects_duplicate_source_ids() -> None:
+    with pytest.raises(ValidationError, match="source_ids must not contain duplicates"):
+        MatrixCell(
+            competitor="Cursor",
+            summary="Public team pricing is visible.",
+            source_ids=["raw-source-cursor-pricing", " raw-source-cursor-pricing "],
+            confidence="high",
+        )
+
+
+def test_source_appendix_row_strips_source_id_and_title() -> None:
+    row = SourceAppendixRow(
+        source_id=" raw-source-cursor-pricing ",
+        title=" Cursor pricing ",
+        evidence_role="official_fact",
+        confidence="high",
+    )
+
+    assert row.source_id == "raw-source-cursor-pricing"
+    assert row.title == "Cursor pricing"
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "match"),
+    [
+        ("source_id", "   ", "source_id must not be blank"),
+        ("title", "   ", "title must not be blank"),
+        ("source_id", 123, "source_id must be a string"),
+        ("title", 123, "title must be a string"),
+    ],
+)
+def test_source_appendix_row_rejects_invalid_source_id_and_title(
+    field_name: str,
+    value: object,
+    match: str,
+) -> None:
+    payload = {
+        "source_id": "raw-source-cursor-pricing",
+        "title": "Cursor pricing",
+        "evidence_role": "official_fact",
+        "confidence": "high",
+        field_name: value,
+    }
+
+    with pytest.raises(ValidationError, match=match):
+        SourceAppendixRow(**payload)
+
+
 def test_extra_fields_are_forbidden() -> None:
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         CitedText(
@@ -339,3 +398,28 @@ def test_iter_cited_text_includes_representative_paths() -> None:
     assert "core.swot.competitors[0].strengths[0]" in paths
     assert "core.battlecard.plays[0].use_when" in paths
     assert "support.source_quality[0]" in paths
+
+
+def test_structured_report_iterates_matrix_cells_and_appendix_rows() -> None:
+    report = StructuredReport(
+        output_language="zh-CN",
+        topic="AI coding agent competitive analysis",
+        competitors=["Cursor", "Windsurf"],
+        dimensions=["pricing", "feature", "persona"],
+        core=_core(),
+        support=_support(),
+        metadata=ReportMetadata(
+            writer_mode="structured",
+            segment_count=5,
+            source_count=2,
+            warnings=[],
+            structured_report_version="1",
+        ),
+    )
+
+    matrix_paths = {path for path, _cell in report.iter_matrix_cells()}
+    appendix_paths = {path for path, _row in report.iter_source_appendix_rows()}
+
+    assert "core.decision_matrix.dimensions[0].cells[0]" in matrix_paths
+    assert "core.decision_matrix.dimensions[0].cells[1]" in matrix_paths
+    assert appendix_paths == {"support.evidence_appendix[0]"}

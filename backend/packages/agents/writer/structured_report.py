@@ -18,6 +18,22 @@ EvidenceRole = Literal[
 _SOURCE_TOKEN_RE = re.compile(r"\[source:[^\]]+\]", re.IGNORECASE)
 
 
+def _clean_source_ids(value: list[str]) -> list[str]:
+    cleaned = [item.strip() for item in value if item.strip()]
+    if len(cleaned) != len(set(cleaned)):
+        raise ValueError("source_ids must not contain duplicates")
+    return cleaned
+
+
+def _clean_required_string(field_name: str, value: Any) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string")
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} must not be blank")
+    return cleaned
+
+
 class CitedText(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -28,7 +44,7 @@ class CitedText(BaseModel):
 
     @field_validator("text", mode="before")
     @classmethod
-    def _text_has_no_markdown_source_tokens(cls, value: str) -> str:
+    def _text_has_no_markdown_source_tokens(cls, value: Any) -> str:
         if not isinstance(value, str):
             raise ValueError("text must be a string")
         text = value.strip()
@@ -39,10 +55,7 @@ class CitedText(BaseModel):
     @field_validator("source_ids")
     @classmethod
     def _source_ids_are_clean(cls, value: list[str]) -> list[str]:
-        cleaned = [item.strip() for item in value if item.strip()]
-        if len(cleaned) != len(set(cleaned)):
-            raise ValueError("source_ids must not contain duplicates")
-        return cleaned
+        return _clean_source_ids(value)
 
     @model_validator(mode="after")
     def _source_ids_required_except_gap(self) -> CitedText:
@@ -114,13 +127,18 @@ class MatrixCell(BaseModel):
 
     @field_validator("summary", mode="before")
     @classmethod
-    def _summary_has_no_source_tokens(cls, value: str) -> str:
+    def _summary_has_no_source_tokens(cls, value: Any) -> str:
         if not isinstance(value, str):
             raise ValueError("matrix summary must be a string")
         summary = value.strip()
         if _SOURCE_TOKEN_RE.search(summary):
             raise ValueError("matrix summary must not contain Markdown source tokens")
         return summary
+
+    @field_validator("source_ids")
+    @classmethod
+    def _source_ids_are_clean(cls, value: list[str]) -> list[str]:
+        return _clean_source_ids(value)
 
 
 class MatrixDimensionRow(BaseModel):
@@ -185,6 +203,16 @@ class SourceAppendixRow(BaseModel):
     evidence_role: EvidenceRole
     confidence: Confidence
 
+    @field_validator("source_id", mode="before")
+    @classmethod
+    def _source_id_is_clean(cls, value: Any) -> str:
+        return _clean_required_string("source_id", value)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _title_is_clean(cls, value: Any) -> str:
+        return _clean_required_string("title", value)
+
 
 class ReportCore(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -236,6 +264,18 @@ class StructuredReport(BaseModel):
     def iter_cited_text(self) -> Iterable[tuple[str, CitedText]]:
         yield from _walk_cited_text("core", self.core)
         yield from _walk_cited_text("support", self.support)
+
+    def iter_matrix_cells(self) -> Iterable[tuple[str, MatrixCell]]:
+        for row_index, row in enumerate(self.core.decision_matrix.dimensions):
+            for cell_index, cell in enumerate(row.cells):
+                yield (
+                    f"core.decision_matrix.dimensions[{row_index}].cells[{cell_index}]",
+                    cell,
+                )
+
+    def iter_source_appendix_rows(self) -> Iterable[tuple[str, SourceAppendixRow]]:
+        for row_index, row in enumerate(self.support.evidence_appendix):
+            yield f"support.evidence_appendix[{row_index}]", row
 
     def compact_summary(self) -> dict[str, Any]:
         return {
