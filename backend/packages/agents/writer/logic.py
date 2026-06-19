@@ -8,7 +8,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from packages.agents.writer.assembler import (
     StructuredReportAssembler,
@@ -318,37 +318,6 @@ def build_structured_writer_section_plan(
     ]
 
 
-def _structured_section_inputs(
-    *, evidence_pack_result, competitors: list[str], dimensions: list[str]
-) -> dict[str, dict[str, object]]:
-    base = evidence_pack_result.to_prompt_json()
-    inputs: dict[str, dict[str, object]] = {}
-    for item in build_structured_writer_section_plan(
-        competitors=competitors,
-        dimensions=dimensions,
-    ):
-        section_id = str(item["section_id"])
-        key = section_id
-        if section_id == "competitor_deep_dive":
-            key = f"competitor_deep_dive::{item['competitor']}"
-        inputs[key] = {
-            "section_id": section_id,
-            "competitor": item.get("competitor"),
-            "dimensions": item.get("dimensions", dimensions),
-            "evidence_pack": base,
-        }
-    return inputs
-
-
-def _default_decision_summary(
-    executive_summary: ExecutiveSummarySection,
-) -> list[CitedText]:
-    return [
-        executive_summary.recommendation,
-        executive_summary.risk_adjusted_rationale,
-    ]
-
-
 def _default_competitive_findings(
     deep_dives: list[CompetitorDeepDiveSection],
 ) -> list[CitedText]:
@@ -369,6 +338,105 @@ def _default_competitive_findings(
 
 class WriterEvidencePreflightError(RuntimeError):
     """Raised when writer evidence cannot safely be sent to the LLM."""
+
+
+class CitedTextListSection(BaseModel):
+    items: list[CitedText] = Field(min_length=1)
+
+
+def _structured_section_key(item: dict[str, object]) -> str:
+    section_id = str(item["section_id"])
+    if section_id == "competitor_deep_dive":
+        return f"competitor_deep_dive::{item['competitor']}"
+    return section_id
+
+
+def _structured_section_schema(schema_name: object) -> type[BaseModel]:
+    schemas: dict[str, type[BaseModel]] = {
+        "ExecutiveSummarySection": ExecutiveSummarySection,
+        "list[CitedText]": CitedTextListSection,
+        "UserReviewThemesSection": UserReviewThemesSection,
+        "CompetitorDeepDiveSection": CompetitorDeepDiveSection,
+        "DecisionMatrixSection": DecisionMatrixSection,
+        "SwotSection": SwotSection,
+        "BattlecardSection": BattlecardSection,
+        "ReportSupport": ReportSupport,
+    }
+    return schemas[str(schema_name)]
+
+
+def _structured_section_inputs(
+    *, evidence_pack_result, competitors: list[str], dimensions: list[str]
+) -> dict[str, dict[str, object]]:
+    segment_inputs = _structured_budgeted_segment_inputs(evidence_pack_result)
+    base = None if segment_inputs else evidence_pack_result.to_prompt_json()
+    inputs: dict[str, dict[str, object]] = {}
+    for item in build_structured_writer_section_plan(
+        competitors=competitors,
+        dimensions=dimensions,
+    ):
+        section_id = str(item["section_id"])
+        segment = {
+            "section_id": section_id,
+            "competitor": item.get("competitor"),
+            "dimensions": item.get("dimensions", dimensions),
+        }
+        if segment_inputs:
+            segment["evidence_segments"] = _select_structured_evidence_segments(
+                section_id=section_id,
+                competitor=item.get("competitor"),
+                segment_inputs=segment_inputs,
+            )
+        else:
+            segment["evidence_pack"] = base
+        inputs[_structured_section_key(item)] = segment
+    return inputs
+
+
+def _structured_budgeted_segment_inputs(evidence_pack_result) -> list[dict[str, object]]:
+    if not hasattr(evidence_pack_result, "segment_inputs"):
+        return []
+    try:
+        segments = evidence_pack_result.segment_inputs()
+    except TypeError:
+        return []
+    if not isinstance(segments, list):
+        return []
+    return [dict(segment) for segment in segments if isinstance(segment, dict)]
+
+
+def _select_structured_evidence_segments(
+    *,
+    section_id: str,
+    competitor: object,
+    segment_inputs: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    target_segment_names = {
+        "executive_summary": {"decision_summary", "swot_matrix"},
+        "decision_summary": {"decision_summary"},
+        "competitive_findings": {"decision_summary", "swot_matrix"},
+        "user_review_themes": {"user_research"},
+        "competitor_deep_dive": {"competitor_deep_dives"},
+        "decision_matrix": {"decision_summary", "swot_matrix"},
+        "swot": {"swot_matrix"},
+        "battlecard": {"decision_summary", "swot_matrix"},
+        "community_triangulation": {"user_research"},
+        "support": {"support_appendix"},
+    }.get(section_id, set())
+
+    selected: list[dict[str, object]] = []
+    for segment in segment_inputs:
+        segment_name = str(segment.get("segment_name") or segment.get("section_id") or "")
+        if segment_name not in target_segment_names:
+            continue
+        if section_id == "competitor_deep_dive" and competitor is not None:
+            segment_competitor = segment.get("segment_competitor") or segment.get(
+                "competitor"
+            )
+            if segment_competitor and str(segment_competitor) != str(competitor):
+                continue
+        selected.append(segment)
+    return selected or list(segment_inputs)
 
 
 class WriterAgentMixin:
@@ -971,59 +1039,34 @@ class WriterAgentMixin:
             competitors=competitors,
             dimensions=dimensions,
         )
-
-        executive_summary = await self._writer_structured_section_json(
-            record,
-            segment=section_inputs["executive_summary"],
-            section_schema=ExecutiveSummarySection,
-            allowed_source_ids=allowed_source_ids,
-            timeout_seconds=timeout_seconds,
+        sections: dict[str, BaseModel] = {}
+        plan = build_structured_writer_section_plan(
+            competitors=competitors,
+            dimensions=dimensions,
         )
-        user_review_themes = await self._writer_structured_section_json(
-            record,
-            segment=section_inputs["user_review_themes"],
-            section_schema=UserReviewThemesSection,
-            allowed_source_ids=allowed_source_ids,
-            timeout_seconds=timeout_seconds,
-        )
-        deep_dives = [
-            await self._writer_structured_section_json(
+        for item in plan:
+            key = _structured_section_key(item)
+            sections[key] = await self._writer_structured_section_json(
                 record,
-                segment=section_inputs[f"competitor_deep_dive::{competitor}"],
-                section_schema=CompetitorDeepDiveSection,
+                segment=section_inputs[key],
+                section_schema=_structured_section_schema(item["schema"]),
                 allowed_source_ids=allowed_source_ids,
                 timeout_seconds=timeout_seconds,
             )
+
+        executive_summary = sections["executive_summary"]
+        decision_summary = sections["decision_summary"]
+        competitive_findings = sections["competitive_findings"]
+        user_review_themes = sections["user_review_themes"]
+        deep_dives = [
+            sections[f"competitor_deep_dive::{competitor}"]
             for competitor in competitors
         ]
-        decision_matrix = await self._writer_structured_section_json(
-            record,
-            segment=section_inputs["decision_matrix"],
-            section_schema=DecisionMatrixSection,
-            allowed_source_ids=allowed_source_ids,
-            timeout_seconds=timeout_seconds,
-        )
-        swot = await self._writer_structured_section_json(
-            record,
-            segment=section_inputs["swot"],
-            section_schema=SwotSection,
-            allowed_source_ids=allowed_source_ids,
-            timeout_seconds=timeout_seconds,
-        )
-        battlecard = await self._writer_structured_section_json(
-            record,
-            segment=section_inputs["battlecard"],
-            section_schema=BattlecardSection,
-            allowed_source_ids=allowed_source_ids,
-            timeout_seconds=timeout_seconds,
-        )
-        support = await self._writer_structured_section_json(
-            record,
-            segment=section_inputs["support"],
-            section_schema=ReportSupport,
-            allowed_source_ids=allowed_source_ids,
-            timeout_seconds=timeout_seconds,
-        )
+        decision_matrix = sections["decision_matrix"]
+        swot = sections["swot"]
+        battlecard = sections["battlecard"]
+        community_triangulation = sections["community_triangulation"]
+        support = sections["support"]
 
         return StructuredReport(
             output_language=detail.output_language,
@@ -1032,14 +1075,14 @@ class WriterAgentMixin:
             dimensions=dimensions,
             core=ReportCore(
                 executive_summary=executive_summary,
-                decision_summary=_default_decision_summary(executive_summary),
-                competitive_findings=_default_competitive_findings(deep_dives),
+                decision_summary=decision_summary.items,
+                competitive_findings=competitive_findings.items,
                 user_review_themes=user_review_themes,
                 competitor_deep_dives=deep_dives,
                 decision_matrix=decision_matrix,
                 swot=swot,
                 battlecard=battlecard,
-                community_triangulation=[],
+                community_triangulation=community_triangulation.items,
             ),
             support=support,
             metadata=ReportMetadata(

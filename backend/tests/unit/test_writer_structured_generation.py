@@ -9,6 +9,7 @@ from packages.agents.writer.assembler import StructuredReportAssembler
 from packages.agents.writer.logic import (
     WriterAgentMixin,
     build_structured_writer_section_plan,
+    _structured_section_inputs,
 )
 from packages.agents.writer.structured_report import ExecutiveSummarySection
 from packages.orchestrator.service import RunRecord
@@ -112,6 +113,43 @@ def _minimal_evidence_pack_result() -> _MinimalEvidencePackResult:
     return _MinimalEvidencePackResult()
 
 
+class _SegmentedEvidencePackResult:
+    metrics = SimpleNamespace(segment_count=5, segmented_writer_required=True)
+
+    def to_prompt_json(self) -> str:
+        return "FULL_PACK_SHOULD_NOT_BE_REPEATED"
+
+    def segment_inputs(self) -> list[dict[str, object]]:
+        return [
+            {
+                "segment_name": "decision_summary",
+                "content": "budgeted decision evidence",
+            },
+            {
+                "segment_name": "user_research",
+                "content": "budgeted user evidence",
+            },
+            {
+                "segment_name": "competitor_deep_dives",
+                "segment_competitor": "Cursor",
+                "content": "budgeted Cursor evidence",
+            },
+            {
+                "segment_name": "competitor_deep_dives",
+                "segment_competitor": "Windsurf",
+                "content": "budgeted Windsurf evidence",
+            },
+            {
+                "segment_name": "swot_matrix",
+                "content": "budgeted SWOT evidence",
+            },
+            {
+                "segment_name": "support_appendix",
+                "content": "budgeted support evidence",
+            },
+        ]
+
+
 def test_structured_section_plan_has_core_before_support_and_no_markdown_layout_ownership() -> None:
     plan = build_structured_writer_section_plan(
         competitors=["Cursor", "Windsurf"],
@@ -137,10 +175,26 @@ async def test_writer_structured_report_builds_full_report_from_section_payloads
     )
     fixture = _report("zh-CN")
     harness = _WriterHarness([])
+    calls: list[tuple[str, str, object]] = []
 
     async def fake_section_json(
         record, *, segment, section_schema, allowed_source_ids, timeout_seconds
     ):
+        calls.append(
+            (
+                str(segment["section_id"]),
+                section_schema.__name__,
+                segment.get("competitor"),
+            )
+        )
+        if section_schema.__name__ == "CitedTextListSection":
+            return section_schema(
+                items=[
+                    fixture.core.executive_summary.recommendation.model_copy(
+                        update={"text": f"Generated {segment['section_id']}"}
+                    )
+                ]
+            )
         mapping = {
             "ExecutiveSummarySection": fixture.core.executive_summary,
             "UserReviewThemesSection": fixture.core.user_review_themes,
@@ -163,6 +217,76 @@ async def test_writer_structured_report_builds_full_report_from_section_payloads
 
     assert report.core.executive_summary.recommendation.text
     assert report.support.evidence_appendix[0].source_id == "raw-source-a"
+    expected_calls = []
+    for item in build_structured_writer_section_plan(
+        competitors=["Cursor", "Windsurf"],
+        dimensions=["pricing", "feature", "persona"],
+    ):
+        section_id = str(item["section_id"])
+        schema_name = (
+            "CitedTextListSection"
+            if item["schema"] == "list[CitedText]"
+            else str(item["schema"])
+        )
+        expected_calls.append((section_id, schema_name, item.get("competitor")))
+    assert calls == expected_calls
+    assert (
+        "decision_summary",
+        "CitedTextListSection",
+        None,
+    ) in calls
+    assert (
+        "competitive_findings",
+        "CitedTextListSection",
+        None,
+    ) in calls
+    assert (
+        "community_triangulation",
+        "CitedTextListSection",
+        None,
+    ) in calls
+    assert report.core.community_triangulation[0].text == (
+        "Generated community_triangulation"
+    )
+
+
+def test_structured_section_inputs_use_budgeted_segments_when_segmented() -> None:
+    inputs = _structured_section_inputs(
+        evidence_pack_result=_SegmentedEvidencePackResult(),
+        competitors=["Cursor", "Windsurf"],
+        dimensions=["pricing", "feature", "persona"],
+    )
+
+    serialized_inputs = json.dumps(inputs, ensure_ascii=False)
+
+    assert "FULL_PACK_SHOULD_NOT_BE_REPEATED" not in serialized_inputs
+    assert "budgeted decision evidence" in json.dumps(
+        inputs["executive_summary"], ensure_ascii=False
+    )
+    assert "budgeted user evidence" in json.dumps(
+        inputs["user_review_themes"], ensure_ascii=False
+    )
+    assert "budgeted Cursor evidence" in json.dumps(
+        inputs["competitor_deep_dive::Cursor"], ensure_ascii=False
+    )
+    assert "budgeted Windsurf evidence" not in json.dumps(
+        inputs["competitor_deep_dive::Cursor"], ensure_ascii=False
+    )
+    assert "budgeted support evidence" in json.dumps(
+        inputs["support"], ensure_ascii=False
+    )
+
+
+def test_structured_section_inputs_fall_back_to_prompt_json_without_segments() -> None:
+    inputs = _structured_section_inputs(
+        evidence_pack_result=_minimal_evidence_pack_result(),
+        competitors=["Cursor", "Windsurf"],
+        dimensions=["pricing", "feature", "persona"],
+    )
+
+    assert "compact evidence" in json.dumps(
+        inputs["executive_summary"], ensure_ascii=False
+    )
 
 
 def test_structured_section_prompt_includes_evidence_role_guidance() -> None:
