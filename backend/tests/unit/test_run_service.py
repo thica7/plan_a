@@ -1,12 +1,14 @@
 import asyncio
 import json
 import time
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
 
 from packages.agents import SubagentContext
 from packages.agents.writer.repair import build_writer_repair_plan
+from packages.agents.writer.structured_report import StructuredReport
 from packages.business_intel.homepage import HomepageVerification
 from packages.business_intel.report_quality import compare_run_quality
 from packages.config import Settings
@@ -21,8 +23,8 @@ from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDeta
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
-    EvidenceRecord,
     EnterpriseRunProjection,
+    EvidenceRecord,
     ModelRouteCandidate,
     ModelRouteDecision,
     ProjectReadinessScore,
@@ -8366,6 +8368,148 @@ def _segmented_writer_segment(
         "allowed_source_ids": [allowed_source_id],
         "segment_input_chars": 240,
     }
+
+
+def _structured_writer_fixture_report(detail: RunDetail) -> StructuredReport:
+    from test_writer_structured_renderer import _report
+
+    report = _report(detail.output_language or "zh-CN")
+    report.core.user_review_themes.competitor_themes.append(
+        report.core.user_review_themes.competitor_themes[0].model_copy(
+            deep=True,
+            update={"competitor": "Windsurf"},
+        )
+    )
+    report.core.competitor_deep_dives.append(
+        report.core.competitor_deep_dives[0].model_copy(
+            deep=True,
+            update={"competitor": "Windsurf"},
+        )
+    )
+    report.core.swot.competitors.append(
+        report.core.swot.competitors[0].model_copy(
+            deep=True,
+            update={"competitor": "Windsurf"},
+        )
+    )
+    report.core.battlecard.plays.insert(
+        0,
+        report.core.battlecard.plays[0].model_copy(
+            deep=True,
+            update={"competitor": "Cursor"},
+        ),
+    )
+    return report.model_copy(
+        update={
+            "topic": detail.topic,
+            "competitors": list(detail.plan.competitors),
+            "dimensions": list(detail.plan.dimensions),
+        }
+    )
+
+
+def _structured_writer_raw_sources() -> list[RawSource]:
+    return [
+        RawSource(
+            id="raw-source-a",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor pricing is visible.",
+            content_hash="raw-source-a-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="raw-source-b",
+            competitor="Windsurf",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Windsurf pricing",
+            snippet="Windsurf pricing needs refresh.",
+            content_hash="raw-source-b-hash",
+            confidence=0.84,
+        ),
+        RawSource(
+            id="raw-source-survey",
+            competitor="Cursor",
+            dimension="persona",
+            source_type="simulated_interview",
+            title="Simulated interview",
+            snippet="Simulated teams prefer low-friction IDE integration.",
+            content_hash="raw-source-survey-hash",
+            confidence=0.76,
+        ),
+    ]
+
+
+def test_real_writer_uses_structured_path_when_enabled(monkeypatch) -> None:
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(service, competitors=["Cursor", "Windsurf"])
+    record.detail.output_language = "zh-CN"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+
+    structured_report = _structured_writer_fixture_report(record.detail)
+
+    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
+        return structured_report
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
+        fake_structured_report,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    assert "## \u6267\u884c\u6458\u8981" in record.detail.report_md
+    assert "## \u652f\u6491\u6750\u6599" in record.detail.report_md
+    assert "Segment Evidence Pack JSON" not in record.detail.report_md
+    assert any(
+        span.name == "writer_structured_report_validated"
+        for span in record.detail.trace_spans
+    )
+
+
+def test_real_writer_traces_markdown_fallback_when_structured_path_fails(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(service, competitors=["Cursor", "Windsurf"])
+    record.detail.output_language = "zh-CN"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+
+    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
+        raise ValueError("structured section failed")
+
+    async def fake_markdown_writer(self, record, evidence_pack_result, timeout_seconds):
+        return "## 执行摘要\n\nFallback report. [source:raw-source-a]\n"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
+        fake_structured_report,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_markdown_report_from_evidence_pack",
+        fake_markdown_writer,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    assert "Fallback report" in record.detail.report_md
+    assert any(
+        span.name == "writer_markdown_fallback_used"
+        for span in record.detail.trace_spans
+    )
 
 
 def test_writer_required_sections_ignore_nested_support_like_headings() -> None:

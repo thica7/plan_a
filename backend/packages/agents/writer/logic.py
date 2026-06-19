@@ -10,11 +10,15 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ValidationError
 
-from packages.agents.writer.assembler import assemble_report_sections
+from packages.agents.writer.assembler import (
+    StructuredReportAssembler,
+    assemble_report_sections,
+)
 from packages.agents.writer.evidence_pack import (
     SEGMENT_INPUT_TARGET_CHARS,
     build_writer_evidence_pack,
 )
+from packages.agents.writer.publication_contract import validate_publication_contract
 from packages.agents.writer.quality_preflight import run_writer_quality_preflight
 from packages.agents.writer.repair import (
     WriterRepairPlan,
@@ -28,6 +32,9 @@ from packages.agents.writer.segment_contract import (
     segment_contract_for,
     validate_segment_contract,
 )
+from packages.agents.writer.structured_renderer import render_structured_report
+from packages.agents.writer.structured_report import StructuredReport
+from packages.agents.writer.structured_validation import validate_structured_report
 from packages.business_intel.release_gate import REPORT_RICHNESS_MINIMUMS
 from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.scenarios import get_scenario_pack
@@ -220,6 +227,21 @@ def _source_ids_from_section(section: BaseModel) -> set[str]:
 
     collect(section.model_dump())
     return source_ids
+
+
+def _strong_writer_source_ids(detail: RunDetail) -> set[str]:
+    strong: set[str] = set()
+    for source in detail.raw_sources:
+        confidence = getattr(source, "confidence", None)
+        source_type = str(getattr(source, "source_type", "") or "").casefold()
+        metadata = getattr(source, "metadata", {}) or {}
+        if confidence is not None and float(confidence) >= 0.75:
+            strong.add(source.id)
+        if source_type in {"official", "documentation", "pricing"}:
+            strong.add(source.id)
+        if metadata.get("official_source") is True or metadata.get("trusted_source") is True:
+            strong.add(source.id)
+    return strong
 
 
 class WriterEvidencePreflightError(RuntimeError):
@@ -518,91 +540,111 @@ class WriterAgentMixin:
                     anti_regression_reason=anti_regression_reason,
                     previous_report_protected=previous_report_protected,
                 )
-            layer_context = self._writer_layer_context(detail)
-            memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
-            required_sections = self._writer_required_sections(detail)
-            grounding_prompt = await self._writer_grounding_prompt(detail)
-            user_research_policy = writer_user_research_policy_text()
-            language_guidance = language_instruction(detail.output_language)
             try:
-                if evidence_pack_result.metrics.segmented_writer_required:
-                    report_md = await self._writer_segmented_report_markdown(
-                        record,
-                        evidence_pack_result=evidence_pack_result,
-                        timeout_seconds=timeout_seconds,
-                        language_guidance=language_guidance,
-                        memory_context=memory_context,
-                        layer_context=layer_context,
-                        required_sections=required_sections,
-                    )
-                    writer_mode = "real segmented LLM call"
-                else:
-                    writer_context_json = evidence_pack_result.to_prompt_json()
-                    report_md = await asyncio.wait_for(
-                        self._trace_llm_text(
+                if self._settings.writer_structured_report_enabled:
+                    try:
+                        structured_report = await self._writer_structured_report(
+                            record,
+                            evidence_pack_result,
+                            timeout_seconds,
+                        )
+                        assembly = StructuredReportAssembler().assemble(
+                            report=structured_report,
+                            expected_competitors=list(detail.plan.competitors),
+                        )
+                        structured_report = assembly.report
+                        structured_validation = validate_structured_report(
+                            structured_report,
+                            allowed_source_ids={source.id for source in detail.raw_sources},
+                            strong_source_ids=_strong_writer_source_ids(detail),
+                        )
+                        structured_payload = {
+                            **structured_validation.telemetry_payload(),
+                            "assembly": assembly.telemetry,
+                        }
+                        self._trace_local_tool(
                             record,
                             agent="writer",
                             subagent=None,
-                            name="report_writer",
-                            system=(
-                                "You are a senior enterprise competitive-intelligence analyst. "
-                                "Produce a concise decision-grade markdown first draft, not a short "
-                                "summary. Use an analysis-first structure: lead with an executive "
-                                "takeaway, decision summary, competitive findings, competitor deep "
-                                "dives, and the selected layer-specific analysis. Put source quality, "
-                                "scenario QA, claim risk, RAG gap-fill, verification tasks, and the "
-                                "evidence appendix after the core analysis as support material. Write "
-                                "with consulting depth: side-by-side matrices, dimension analysis, "
-                                "risks, buying implications, and explicit next validation tasks. Cite "
-                                "factual claims with existing source IDs using [source:ID]. Do not "
-                                "invent source IDs. "
-                                "Do not use web_search_result or confidence < 0.75 as the sole support "
-                                "for a winner, legal/security certification, pricing, or procurement "
-                                "recommendation. If evidence is incomplete, say the conclusion is "
-                                "tentative and list the exact evidence gap. Do not claim all sources "
-                                "are verified when any source_type is web_search_result or "
-                                "llm_public_knowledge. "
-                                "Follow the Grounded Evidence Contract exactly. "
-                                f"{language_guidance} "
-                                f"{user_research_policy} "
-                                "Honor confirmed memory guidance when it does not conflict with "
-                                "evidence, schema requirements, or compliance policy. "
-                                "Use the requested competitive layer to choose the report shape: L1 "
-                                "is a direct battlecard, L2 is adjacent workflow and enterprise-risk "
-                                "analysis, and L3 is market landscape and category strategy."
+                            name="writer_structured_report_validated",
+                            input_text="structured_report",
+                            output_text=json.dumps(
+                                structured_payload,
+                                ensure_ascii=False,
+                                default=str,
                             ),
-                            user=(
-                                f"Topic: {detail.topic}\n"
-                                f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                                f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                                f"Competitive Layer: {detail.plan.competitor_layer}\n"
-                                f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
-                                "Scenario Recommended Dimensions: "
-                                f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
-                                f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
-                                f"Confirmed Memory Preferences:\n{memory_context}\n"
-                                f"Layer Report Context: {layer_context}\n"
-                                f"{grounding_prompt}\n"
-                                f"{self._writer_community_policy_text()}\n"
-                                f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
-                                f"Required sections:\n{required_sections}\n"
-                                "Target 16,000-20,000 characters for the first draft. Use about "
-                                "70-80% of the report on the Core analysis layer: decision summary, "
-                                "competitive findings, user review themes, competitor deep dives, "
-                                "SWOT, matrix interpretation, and layer-specific implications. "
-                                "Core section minimums: Decision Summary 800+ characters; "
-                                "Competitive Findings 1,200+; User Review Themes 1,000+ when "
-                                "review, community, survey, interview, or persona evidence exists; "
-                                "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
-                                "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
-                                "Threats for every competitor; Matrix Interpretation 900+; "
-                                "Layer-specific Battlecard/Workflow/Market section 1,200+. Keep "
-                                "the Support/audit layer concise and complete; it is the audit trail, "
-                                "not the main readout. Prefer deeper cited analysis and decision "
-                                "implications over repeated source IDs or QA boilerplate."
+                            metadata={
+                                "passed": structured_validation.passed,
+                                "issue_count": len(structured_validation.issues),
+                            },
+                        )
+                        if not structured_validation.passed:
+                            raise ValueError(
+                                "structured writer validation failed: "
+                                + ", ".join(structured_validation.issue_codes())
+                            )
+                        rendered = render_structured_report(structured_report)
+                        publication_validation = validate_publication_contract(
+                            rendered,
+                            structured_report=structured_report,
+                            allowed_source_ids={source.id for source in detail.raw_sources},
+                        )
+                        publication_payload = publication_validation.telemetry_payload()
+                        self._trace_local_tool(
+                            record,
+                            agent="writer",
+                            subagent=None,
+                            name="writer_publication_contract_validated",
+                            input_text="rendered_structured_report",
+                            output_text=json.dumps(
+                                publication_payload,
+                                ensure_ascii=False,
+                                default=str,
                             ),
-                        ),
-                        timeout=timeout_seconds,
+                            metadata={
+                                "passed": publication_validation.passed,
+                                "issue_count": len(publication_validation.issues),
+                            },
+                        )
+                        if not publication_validation.passed:
+                            raise ValueError(
+                                "structured writer publication contract failed: "
+                                + ", ".join(publication_validation.issue_codes())
+                            )
+                        report_md = rendered
+                        writer_mode = "real structured writer call"
+                    except Exception as exc:  # noqa: BLE001 - structured path may be temporarily unavailable.
+                        fallback_reason = str(exc)[:500]
+                        fallback_payload = {"reason": fallback_reason}
+                        self._trace_local_tool(
+                            record,
+                            agent="writer",
+                            subagent=None,
+                            name="writer_markdown_fallback_used",
+                            input_text="structured_writer_exception",
+                            output_text=fallback_reason,
+                            metadata=fallback_payload,
+                        )
+                        report_md = await self._writer_markdown_report_from_evidence_pack(
+                            record,
+                            evidence_pack_result,
+                            timeout_seconds,
+                        )
+                        writer_mode = (
+                            "real segmented LLM call"
+                            if evidence_pack_result.metrics.segmented_writer_required
+                            else "real LLM call"
+                        )
+                else:
+                    report_md = await self._writer_markdown_report_from_evidence_pack(
+                        record,
+                        evidence_pack_result,
+                        timeout_seconds,
+                    )
+                    writer_mode = (
+                        "real segmented LLM call"
+                        if evidence_pack_result.metrics.segmented_writer_required
+                        else "real LLM call"
                     )
                 self._require_writer_report_output(report_md)
                 hardened_report = self._harden_report_markdown(detail, report_md)
@@ -766,6 +808,106 @@ class WriterAgentMixin:
     def _require_writer_report_output(self, report_md: str) -> None:
         if not report_md.strip():
             raise RuntimeError("Writer returned empty report content")
+
+    async def _writer_structured_report(
+        self,
+        record: RunRecord,
+        evidence_pack_result,
+        timeout_seconds: float,
+    ) -> StructuredReport:
+        raise ValueError("structured writer section planner is not connected")
+
+    async def _writer_markdown_report_from_evidence_pack(
+        self,
+        record: RunRecord,
+        evidence_pack_result,
+        timeout_seconds: float,
+    ) -> str:
+        detail = record.detail
+        layer_context = self._writer_layer_context(detail)
+        memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
+        required_sections = self._writer_required_sections(detail)
+        grounding_prompt = await self._writer_grounding_prompt(detail)
+        user_research_policy = writer_user_research_policy_text()
+        language_guidance = language_instruction(detail.output_language)
+        if evidence_pack_result.metrics.segmented_writer_required:
+            return await self._writer_segmented_report_markdown(
+                record,
+                evidence_pack_result=evidence_pack_result,
+                timeout_seconds=timeout_seconds,
+                language_guidance=language_guidance,
+                memory_context=memory_context,
+                layer_context=layer_context,
+                required_sections=required_sections,
+            )
+
+        writer_context_json = evidence_pack_result.to_prompt_json()
+        return await asyncio.wait_for(
+            self._trace_llm_text(
+                record,
+                agent="writer",
+                subagent=None,
+                name="report_writer",
+                system=(
+                    "You are a senior enterprise competitive-intelligence analyst. "
+                    "Produce a concise decision-grade markdown first draft, not a short "
+                    "summary. Use an analysis-first structure: lead with an executive "
+                    "takeaway, decision summary, competitive findings, competitor deep "
+                    "dives, and the selected layer-specific analysis. Put source quality, "
+                    "scenario QA, claim risk, RAG gap-fill, verification tasks, and the "
+                    "evidence appendix after the core analysis as support material. Write "
+                    "with consulting depth: side-by-side matrices, dimension analysis, "
+                    "risks, buying implications, and explicit next validation tasks. Cite "
+                    "factual claims with existing source IDs using [source:ID]. Do not "
+                    "invent source IDs. "
+                    "Do not use web_search_result or confidence < 0.75 as the sole support "
+                    "for a winner, legal/security certification, pricing, or procurement "
+                    "recommendation. If evidence is incomplete, say the conclusion is "
+                    "tentative and list the exact evidence gap. Do not claim all sources "
+                    "are verified when any source_type is web_search_result or "
+                    "llm_public_knowledge. "
+                    "Follow the Grounded Evidence Contract exactly. "
+                    f"{language_guidance} "
+                    f"{user_research_policy} "
+                    "Honor confirmed memory guidance when it does not conflict with "
+                    "evidence, schema requirements, or compliance policy. "
+                    "Use the requested competitive layer to choose the report shape: L1 "
+                    "is a direct battlecard, L2 is adjacent workflow and enterprise-risk "
+                    "analysis, and L3 is market landscape and category strategy."
+                ),
+                user=(
+                    f"Topic: {detail.topic}\n"
+                    f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                    f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                    f"Competitive Layer: {detail.plan.competitor_layer}\n"
+                    f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
+                    "Scenario Recommended Dimensions: "
+                    f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
+                    f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
+                    f"Confirmed Memory Preferences:\n{memory_context}\n"
+                    f"Layer Report Context: {layer_context}\n"
+                    f"{grounding_prompt}\n"
+                    f"{self._writer_community_policy_text()}\n"
+                    f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
+                    f"Required sections:\n{required_sections}\n"
+                    "Target 16,000-20,000 characters for the first draft. Use about "
+                    "70-80% of the report on the Core analysis layer: decision summary, "
+                    "competitive findings, user review themes, competitor deep dives, "
+                    "SWOT, matrix interpretation, and layer-specific implications. "
+                    "Core section minimums: Decision Summary 800+ characters; "
+                    "Competitive Findings 1,200+; User Review Themes 1,000+ when "
+                    "review, community, survey, interview, or persona evidence exists; "
+                    "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
+                    "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
+                    "Threats for every competitor; Matrix Interpretation 900+; "
+                    "Layer-specific Battlecard/Workflow/Market section 1,200+. Keep "
+                    "the Support/audit layer concise and complete; it is the audit trail, "
+                    "not the main readout. Prefer deeper cited analysis and decision "
+                    "implications over repeated source IDs or QA boilerplate."
+                ),
+            ),
+            timeout=timeout_seconds,
+        )
 
     async def _writer_structured_section_json(
         self,
