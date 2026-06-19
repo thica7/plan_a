@@ -562,6 +562,14 @@ class WriterAgentMixin:
                             **structured_validation.telemetry_payload(),
                             "assembly": assembly.telemetry,
                         }
+                        await self.emit(
+                            detail.id,
+                            "writer_structured_report_validated",
+                            "writer",
+                            None,
+                            "Writer structured report validated.",
+                            structured_payload,
+                        )
                         self._trace_local_tool(
                             record,
                             agent="writer",
@@ -590,6 +598,14 @@ class WriterAgentMixin:
                             allowed_source_ids={source.id for source in detail.raw_sources},
                         )
                         publication_payload = publication_validation.telemetry_payload()
+                        await self.emit(
+                            detail.id,
+                            "writer_publication_contract_validated",
+                            "writer",
+                            None,
+                            "Writer publication contract validated.",
+                            publication_payload,
+                        )
                         self._trace_local_tool(
                             record,
                             agent="writer",
@@ -616,6 +632,14 @@ class WriterAgentMixin:
                     except Exception as exc:  # noqa: BLE001 - structured path may be temporarily unavailable.
                         fallback_reason = str(exc)[:500]
                         fallback_payload = {"reason": fallback_reason}
+                        await self.emit(
+                            detail.id,
+                            "writer_markdown_fallback_used",
+                            "writer",
+                            None,
+                            "Structured writer failed; using Markdown writer fallback.",
+                            fallback_payload,
+                        )
                         self._trace_local_tool(
                             record,
                             agent="writer",

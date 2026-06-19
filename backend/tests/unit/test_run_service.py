@@ -8469,6 +8469,9 @@ def test_real_writer_uses_structured_path_when_enabled(monkeypatch) -> None:
     assert "## \u6267\u884c\u6458\u8981" in record.detail.report_md
     assert "## \u652f\u6491\u6750\u6599" in record.detail.report_md
     assert "Segment Evidence Pack JSON" not in record.detail.report_md
+    event_types = [event.type for event in record.events]
+    assert "writer_structured_report_validated" in event_types
+    assert "writer_publication_contract_validated" in event_types
     assert any(
         span.name == "writer_structured_report_validated"
         for span in record.detail.trace_spans
@@ -8506,6 +8509,9 @@ def test_real_writer_traces_markdown_fallback_when_structured_path_fails(
     asyncio.run(service._real_writer_step(record))
 
     assert "Fallback report" in record.detail.report_md
+    assert "writer_markdown_fallback_used" in [
+        event.type for event in record.events
+    ]
     assert any(
         span.name == "writer_markdown_fallback_used"
         for span in record.detail.trace_spans
