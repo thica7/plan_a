@@ -23,6 +23,7 @@ from packages.agents.writer.structured_report import (
     SwotSection,
     UserReviewThemesSection,
 )
+from packages.business_intel.report_sections import build_report_section_index
 
 
 def _claim(
@@ -219,6 +220,35 @@ def test_renderer_localizes_zh_structural_headings_and_keeps_support_after_core(
     assert "### Pricing and Packaging" not in rendered
     assert rendered.index("## 战报") < rendered.index("## 支撑材料")
     assert "Segment Evidence Pack JSON" not in rendered
+
+
+def test_renderer_emits_structured_section_markers_for_layer_indexing() -> None:
+    rendered = render_structured_report(_report())
+
+    assert "<!-- report-section:key=executive_summary layer=core -->" in rendered
+    assert "<!-- report-section:key=evidence_support layer=support -->" in rendered
+
+    index = build_report_section_index(rendered)
+    support_section = next(
+        section for section in index.sections if section.section_key == "evidence_support"
+    )
+    assert support_section.layer == "support"
+    assert index.is_support_or_audit_line(support_section.line_start + 1) is True
+
+
+def test_renderer_omits_empty_claim_group_headings() -> None:
+    report = _report()
+    theme = report.core.user_review_themes.competitor_themes[0]
+    theme.direct_user_signals = []
+    theme.adoption_blockers = []
+    theme.switching_triggers = []
+
+    rendered = render_structured_report(report)
+
+    assert "#### 直接用户与社区信号\n\n####" not in rendered
+    assert "#### 采用障碍\n\n####" not in rendered
+    assert "#### 切换触发器\n\n####" not in rendered
+    assert "#### 模拟调研信号" in rendered
 
 
 def test_renderer_puts_citations_in_body_cells_not_table_headers() -> None:

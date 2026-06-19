@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from packages.agents.writer.assembler import assemble_report_sections
+from packages.business_intel.report_sections import build_report_section_index
 from packages.i18n.language import report_label
 
 
@@ -46,6 +47,33 @@ def test_assembler_merges_duplicate_sections_and_moves_support_after_core() -> N
         "decision_summary",
         "evidence_support",
     }
+
+
+def test_assembler_emits_structured_section_markers_for_known_sections() -> None:
+    result = assemble_report_sections(
+        [
+            "## Decision Summary\nDecision body [source:decision].",
+            "## Evidence and QA Support\nSupport body [source:support].",
+        ],
+        output_language="en-US",
+        competitors=["Acme"],
+    )
+
+    assert "<!-- report-section:key=decision_summary layer=core -->" in result.markdown
+    assert "<!-- report-section:key=evidence_support layer=support -->" in result.markdown
+
+    index = build_report_section_index(result.markdown)
+    decision = next(
+        section for section in index.sections if section.section_key == "decision_summary"
+    )
+    support = next(
+        section for section in index.sections if section.section_key == "evidence_support"
+    )
+    assert decision.layer == "core"
+    assert support.layer == "support"
+    assert result.markdown.index("## Decision Summary") < result.markdown.index(
+        "## Evidence & QA Support"
+    )
 
 
 def test_assembler_preserves_unknown_core_before_support() -> None:

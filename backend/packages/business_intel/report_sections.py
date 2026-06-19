@@ -20,6 +20,7 @@ class ReportSection:
     line_end: int
     body: str
     layer: SectionLayer
+    section_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -51,21 +52,43 @@ class ReportSectionIndex:
         return section is not None and section.layer in {"support", "audit"}
 
 
+@dataclass(frozen=True)
+class ReportSectionMarker:
+    section_key: str | None
+    layer: SectionLayer | None
+
+
+@dataclass(frozen=True)
+class _ReportSectionEntry:
+    heading_match: re.Match[str]
+    marker: ReportSectionMarker | None
+    start: int
+
+
 def build_report_section_index(markdown: str) -> ReportSectionIndex:
     report_md = repair_mojibake_text(markdown or "")
-    matches = list(
+    heading_matches = list(
         re.finditer(r"^\s*(#{1,6})\s+(.+?)\s*#*\s*$", report_md, flags=re.MULTILINE)
     )
+    entries = [
+        _section_entry_for_heading(report_md, match) for match in heading_matches
+    ]
     sections: list[ReportSection] = []
     sticky_support = False
-    for index, match in enumerate(matches):
+    for index, entry in enumerate(entries):
+        match = entry.heading_match
         heading = clean_heading(match.group(2))
         normalized = normalize_heading(heading)
         level = len(match.group(1))
         body_start = match.end()
-        body_end = matches[index + 1].start() if index + 1 < len(matches) else len(report_md)
-        layer = classify_section_layer(normalized, sticky_support=sticky_support)
-        if is_support_layer_heading(normalized):
+        body_end = entries[index + 1].start if index + 1 < len(entries) else len(report_md)
+        marker = entry.marker
+        if marker is not None and marker.layer is not None:
+            layer = marker.layer
+            sticky_support = layer in {"support", "audit"}
+        else:
+            layer = classify_section_layer(normalized, sticky_support=sticky_support)
+        if marker is None and is_support_layer_heading(normalized):
             sticky_support = True
             layer = "audit"
         sections.append(
@@ -73,15 +96,72 @@ def build_report_section_index(markdown: str) -> ReportSectionIndex:
                 heading=heading,
                 normalized_heading=normalized,
                 level=level,
-                start=match.start(),
+                start=entry.start,
                 end=body_end,
-                line_start=_line_number_at(report_md, match.start()),
-                line_end=_line_number_at(report_md, max(body_end - 1, match.start())),
+                line_start=_line_number_at(report_md, entry.start),
+                line_end=_line_number_at(report_md, max(body_end - 1, entry.start)),
                 body=report_md[body_start:body_end].strip(),
                 layer=layer,
+                section_key=marker.section_key if marker is not None else None,
             )
         )
     return ReportSectionIndex(markdown=report_md, sections=tuple(sections))
+
+
+def report_section_marker(section_key: str, layer: SectionLayer) -> str:
+    safe_key = re.sub(r"[^a-z0-9_:-]", "", section_key.casefold())
+    return f"<!-- report-section:key={safe_key} layer={layer} -->"
+
+
+def _section_entry_for_heading(
+    markdown: str,
+    heading_match: re.Match[str],
+) -> _ReportSectionEntry:
+    marker_start, marker = _marker_before_heading(markdown, heading_match.start())
+    return _ReportSectionEntry(
+        heading_match=heading_match,
+        marker=marker,
+        start=marker_start if marker is not None else heading_match.start(),
+    )
+
+
+def _marker_before_heading(
+    markdown: str,
+    heading_start: int,
+) -> tuple[int, ReportSectionMarker | None]:
+    marker_line_end = heading_start
+    if marker_line_end > 0 and markdown[marker_line_end - 1] == "\n":
+        marker_line_end -= 1
+    marker_line_start = markdown.rfind("\n", 0, marker_line_end) + 1
+    marker_line = markdown[marker_line_start:marker_line_end].strip()
+    marker = parse_report_section_marker(marker_line)
+    if marker is None:
+        return heading_start, None
+    return marker_line_start, marker
+
+
+def parse_report_section_marker(line: str) -> ReportSectionMarker | None:
+    match = re.fullmatch(r"<!--\s*report-section:([^>]*)-->", line.strip())
+    if match is None:
+        return None
+    attrs = {
+        key.casefold(): value
+        for key, value in re.findall(r"([A-Za-z_][A-Za-z0-9_-]*)=([A-Za-z0-9_:-]+)", match.group(1))
+    }
+    layer_text = attrs.get("layer")
+    layer: SectionLayer | None = None
+    if layer_text == "core":
+        layer = "core"
+    elif layer_text == "support":
+        layer = "support"
+    elif layer_text == "audit":
+        layer = "audit"
+    section_key = attrs.get("key")
+    if section_key is not None:
+        section_key = re.sub(r"[^a-z0-9_:-]", "", section_key.casefold()) or None
+    if section_key is None and layer is None:
+        return None
+    return ReportSectionMarker(section_key=section_key, layer=layer)
 
 
 def clean_heading(heading: str) -> str:
@@ -132,6 +212,7 @@ SUPPORT_LAYER_NEEDLES = (
     "support / audit",
     "support and audit",
     "supporting evidence and qa",
+    "支撑材料",
     "支持/审计",
     "支持层",
     "审计层",
@@ -154,6 +235,9 @@ SUPPORT_HEADING_NEEDLES = (
     "next collection",
     "verification plan",
     "buyer research",
+    "支撑材料",
+    "证据与 qa 支撑",
+    "证据与qa支撑",
     "rag 缺口补全",
     "rag缺口补全",
     "证据缺口补全",
@@ -188,7 +272,11 @@ AUDIT_HEADING_NEEDLES = (
     "final qa",
     "声明校验",
     "证据风险",
+    "声明校验与证据风险",
     "场景 qa",
+    "场景qa",
+    "场景 qa 清单",
+    "场景qa清单",
     "场景清单",
     "最终 qa",
     "最终qa",

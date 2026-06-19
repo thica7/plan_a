@@ -13,6 +13,7 @@ from packages.agents.writer.structured_report import (
     SourceAppendixRow,
     StructuredReport,
 )
+from packages.business_intel.report_sections import SectionLayer, report_section_marker
 
 
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -124,16 +125,21 @@ def render_structured_report(report: StructuredReport) -> str:
     lines: list[str] = [f"# {_inline_text(report.topic, 'topic')}", ""]
 
     _render_executive_summary(lines, report, labels)
-    _heading(lines, 2, labels["decision_summary"])
+    _section_heading(lines, "decision_summary", "core", labels["decision_summary"])
     _bullet_list(lines, report.core.decision_summary)
-    _heading(lines, 2, labels["competitive_findings"])
+    _section_heading(lines, "competitive_findings", "core", labels["competitive_findings"])
     _bullet_list(lines, report.core.competitive_findings)
     _render_user_review_themes(lines, report, labels)
     _render_deep_dives(lines, report, labels)
     _render_decision_matrix(lines, report, labels, is_zh)
     _render_swot(lines, report, labels)
     _render_battlecard(lines, report, labels)
-    _heading(lines, 2, labels["community_triangulation"])
+    _section_heading(
+        lines,
+        "community_evidence_triangulation",
+        "core",
+        labels["community_triangulation"],
+    )
     _bullet_list(lines, report.core.community_triangulation)
     _render_support(lines, report, labels, is_zh)
 
@@ -154,7 +160,7 @@ def _render_executive_summary(
     labels: dict[str, str],
 ) -> None:
     summary = report.core.executive_summary
-    _heading(lines, 2, labels["executive_summary"])
+    _section_heading(lines, "executive_summary", "core", labels["executive_summary"])
     _labeled_claim(lines, labels["recommendation"], summary.recommendation)
     _labeled_claim(
         lines,
@@ -174,7 +180,7 @@ def _render_user_review_themes(
     labels: dict[str, str],
 ) -> None:
     themes = report.core.user_review_themes
-    _heading(lines, 2, labels["user_review_themes"])
+    _section_heading(lines, "review_theme_summary", "core", labels["user_review_themes"])
     for theme in themes.competitor_themes:
         _heading(lines, 3, theme.competitor)
         _claim_group(lines, labels["direct_user_signals"], theme.direct_user_signals)
@@ -195,7 +201,7 @@ def _render_deep_dives(
     report: StructuredReport,
     labels: dict[str, str],
 ) -> None:
-    _heading(lines, 2, labels["competitor_deep_dives"])
+    _section_heading(lines, "competitor_deep_dives", "core", labels["competitor_deep_dives"])
     for deep_dive in report.core.competitor_deep_dives:
         _heading(lines, 3, deep_dive.competitor)
         _claim_group(lines, labels["positioning"], deep_dive.positioning)
@@ -213,7 +219,7 @@ def _render_decision_matrix(
     labels: dict[str, str],
     is_zh: bool,
 ) -> None:
-    _heading(lines, 2, labels["decision_matrix"])
+    _section_heading(lines, "side_by_side_matrix", "core", labels["decision_matrix"])
     dimension_label = "维度" if is_zh else "Dimension"
     competitors = [
         _inline_text(competitor, "competitor") for competitor in report.competitors
@@ -249,7 +255,7 @@ def _render_swot(
     report: StructuredReport,
     labels: dict[str, str],
 ) -> None:
-    _heading(lines, 2, labels["swot"])
+    _section_heading(lines, "swot_analysis", "core", labels["swot"])
     for competitor in report.core.swot.competitors:
         _heading(lines, 3, competitor.competitor)
         _claim_group(lines, labels["strengths"], competitor.strengths)
@@ -263,7 +269,7 @@ def _render_battlecard(
     report: StructuredReport,
     labels: dict[str, str],
 ) -> None:
-    _heading(lines, 2, labels["battlecard"])
+    _section_heading(lines, "battlecard", "core", labels["battlecard"])
     for play in report.core.battlecard.plays:
         _heading(lines, 3, play.competitor)
         lines.append(
@@ -290,7 +296,7 @@ def _render_support(
     is_zh: bool,
 ) -> None:
     support = report.support
-    _heading(lines, 2, labels["support_materials"])
+    _section_heading(lines, "evidence_support", "support", labels["support_materials"])
     _claim_group(lines, labels["source_quality"], support.source_quality)
     _claim_group(lines, labels["user_research_evidence"], support.user_research_evidence)
     _claim_group(lines, labels["rag_gap_fill"], support.rag_gap_fill)
@@ -306,6 +312,8 @@ def _claim_group(
     heading: str,
     claims: Sequence[CitedText],
 ) -> None:
+    if not claims:
+        return
     _heading(lines, 4, heading)
     _bullet_list(lines, claims)
 
@@ -370,6 +378,16 @@ def _appendix_table(
             )
         )
     lines.append("")
+
+
+def _section_heading(
+    lines: list[str],
+    section_key: str,
+    layer: SectionLayer,
+    text: str,
+) -> None:
+    lines.append(report_section_marker(section_key, layer))
+    _heading(lines, 2, text)
 
 
 def _heading(lines: list[str], level: int, text: str) -> None:

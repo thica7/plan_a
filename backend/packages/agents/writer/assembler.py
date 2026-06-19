@@ -10,6 +10,7 @@ from packages.agents.writer.segment_contract import (
     heading_key_for,
 )
 from packages.agents.writer.structured_report import StructuredReport
+from packages.business_intel.report_sections import SectionLayer, report_section_marker
 from packages.i18n.language import report_label
 
 CANONICAL_REPORT_ORDER: tuple[str, ...] = CORE_HEADING_KEYS + SUPPORT_HEADING_KEYS
@@ -194,10 +195,17 @@ def _render_known_section(
     bodies: Sequence[str],
 ) -> str:
     body = "\n\n".join(body for body in bodies if body)
+    marker = report_section_marker(key, _section_layer_for_key(key))
     heading = f"## {report_label(output_language, key)}"
     if not body:
-        return heading
-    return f"{heading}\n{body}"
+        return f"{marker}\n{heading}"
+    return f"{marker}\n{heading}\n{body}"
+
+
+def _section_layer_for_key(key: str) -> SectionLayer:
+    if key in SUPPORT_HEADING_KEYS:
+        return "support"
+    return "core"
 
 
 def _render_unknown_section(section: _SectionBlock) -> str:

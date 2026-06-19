@@ -4,7 +4,11 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from packages.business_intel.report_sections import build_report_section_index
+from packages.business_intel.report_sections import (
+    SectionLayer,
+    build_report_section_index,
+    parse_report_section_marker,
+)
 from packages.i18n.language import repair_mojibake_text, report_label
 from packages.schema.api_dto import (
     RunDetail,
@@ -90,6 +94,8 @@ class _ReportSection:
     heading: str
     body: str
     start: int
+    layer: SectionLayer = "core"
+    section_key: str | None = None
 
 
 def compare_run_quality(
@@ -1015,7 +1021,8 @@ def _first_support_section(sections: list[_ReportSection]) -> _ReportSection | N
         (
             section
             for section in sections
-            if _heading_matches(section.heading, SUPPORT_SECTION_NEEDLES)
+            if section.layer in {"support", "audit"}
+            or _heading_matches(section.heading, SUPPORT_SECTION_NEEDLES)
         ),
         None,
     )
@@ -1023,6 +1030,8 @@ def _first_support_section(sections: list[_ReportSection]) -> _ReportSection | N
 
 def _report_sections(markdown: str) -> list[_ReportSection]:
     report_md = repair_mojibake_text(markdown)
+    section_index = build_report_section_index(report_md)
+    h2_sections = [section for section in section_index.sections if section.level == 2]
     matches = list(
         re.finditer(
             r"^\s*##(?!#)\s+(.+?)\s*#*\s*$",
@@ -1032,13 +1041,27 @@ def _report_sections(markdown: str) -> list[_ReportSection]:
     )
     sections: list[_ReportSection] = []
     for index, match in enumerate(matches):
+        indexed_section = h2_sections[index] if index < len(h2_sections) else None
         body_start = match.end()
-        body_end = matches[index + 1].start() if index + 1 < len(matches) else len(report_md)
+        if index + 1 < len(h2_sections):
+            body_end = h2_sections[index + 1].start
+        elif index + 1 < len(matches):
+            body_end = matches[index + 1].start()
+        else:
+            body_end = len(report_md)
         sections.append(
             _ReportSection(
-                heading=_clean_heading(match.group(1)),
+                heading=(
+                    indexed_section.heading
+                    if indexed_section is not None
+                    else _clean_heading(match.group(1))
+                ),
                 body=report_md[body_start:body_end].strip(),
-                start=match.start(),
+                start=indexed_section.start if indexed_section is not None else match.start(),
+                layer=indexed_section.layer if indexed_section is not None else "core",
+                section_key=(
+                    indexed_section.section_key if indexed_section is not None else None
+                ),
             )
         )
     return sections
@@ -1123,6 +1146,8 @@ def _body_content_summary(markdown: str) -> tuple[int, int]:
 def _clean_body_line(line: str) -> str:
     stripped = line.strip()
     if not stripped or stripped.startswith("#"):
+        return ""
+    if parse_report_section_marker(stripped) is not None:
         return ""
     if re.fullmatch(r"[\s|\-:]+", stripped):
         return ""
