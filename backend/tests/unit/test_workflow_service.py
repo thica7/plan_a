@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from fastapi.testclient import TestClient
 
+import packages.runtime.service as runtime_service_module
 from app.deps import (
     get_app_settings,
     get_enterprise_store,
@@ -11,9 +13,12 @@ from app.deps import (
     get_temporal_workflow_service,
 )
 from app.main import create_app
+from packages.auth import EnterpriseUserContext
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
+from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.service import RunService
+from packages.runtime import CreateRunCommand, RuntimeCommandService
 from packages.schema.api_dto import (
     MonitorStartRequest,
     MonitorStartResponse,
@@ -488,6 +493,64 @@ def test_runs_router_can_cut_over_to_temporal_backend() -> None:
     visible = client.get(f"/api/runs/{run_id_for_idempotency_key('route-cutover-001')}")
     assert visible.status_code == 200
     assert visible.json()["status"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_runtime_command_defers_temporal_visibility_sync_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeWorkflowService:
+        async def start_competitive_intel(
+            self,
+            request: RunCreateRequest,
+        ) -> WorkflowStartResponse:
+            assert request.idempotency_key is not None
+            return WorkflowStartResponse(
+                workflow_id="competitive-intel-deferred-visibility",
+                run_id=run_id_for_idempotency_key(request.idempotency_key),
+                idempotency_key=request.idempotency_key,
+                task_queue="test-queue",
+                status="started",
+            )
+
+    class DummyTask:
+        pass
+
+    settings = _settings(run_orchestration_backend="temporal")
+    run_service = _memory_run_service(settings)
+
+    async def fail_visibility_sync(request: RunCreateRequest) -> None:
+        raise RuntimeError("database visibility lag")
+
+    scheduled: list[object] = []
+
+    def capture_background_task(coro: object) -> DummyTask:
+        scheduled.append(coro)
+        close = getattr(coro, "close", None)
+        if close is not None:
+            close()
+        return DummyTask()
+
+    monkeypatch.setattr(run_service, "ensure_run_visible", fail_visibility_sync)
+    monkeypatch.setattr(runtime_service_module.asyncio, "create_task", capture_background_task)
+    runtime = RuntimeCommandService(
+        settings=settings,
+        run_service=run_service,
+        workflow_service=FakeWorkflowService(),  # type: ignore[arg-type]
+        enterprise_store=run_service.enterprise_store or EnterpriseMemoryStore(),
+        preference_memory=PreferenceMemoryStore.in_memory(),
+    )
+
+    result = await runtime.create_run(
+        CreateRunCommand(request=_request(idempotency_key="route-visibility-deferred")),
+        actor=EnterpriseUserContext(user_id="user-1", role="owner"),
+    )
+
+    assert result.route == "temporal"
+    assert result.status == "accepted"
+    assert result.run_id == run_id_for_idempotency_key("route-visibility-deferred")
+    assert result.metadata["temporal_visibility_sync"] == "deferred"
+    assert len(scheduled) == 1
 
 
 def test_runs_router_reuses_active_duplicate_for_temporal_cutover() -> None:
