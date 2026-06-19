@@ -15,7 +15,7 @@ EvidenceRole = Literal[
     "evidence_gap",
 ]
 
-_SOURCE_TOKEN_RE = re.compile(r"\[source:[^\]]+\]")
+_SOURCE_TOKEN_RE = re.compile(r"\[source:[^\]]+\]", re.IGNORECASE)
 
 
 class CitedText(BaseModel):
@@ -29,7 +29,9 @@ class CitedText(BaseModel):
     @field_validator("text", mode="before")
     @classmethod
     def _text_has_no_markdown_source_tokens(cls, value: str) -> str:
-        text = str(value).strip()
+        if not isinstance(value, str):
+            raise ValueError("text must be a string")
+        text = value.strip()
         if _SOURCE_TOKEN_RE.search(text):
             raise ValueError("text must not contain Markdown source tokens")
         return text
@@ -113,7 +115,9 @@ class MatrixCell(BaseModel):
     @field_validator("summary", mode="before")
     @classmethod
     def _summary_has_no_source_tokens(cls, value: str) -> str:
-        summary = str(value).strip()
+        if not isinstance(value, str):
+            raise ValueError("matrix summary must be a string")
+        summary = value.strip()
         if _SOURCE_TOKEN_RE.search(summary):
             raise ValueError("matrix summary must not contain Markdown source tokens")
         return summary

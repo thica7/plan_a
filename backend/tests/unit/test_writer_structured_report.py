@@ -216,6 +216,38 @@ def test_cited_text_rejects_markdown_source_tokens() -> None:
         )
 
 
+def test_cited_text_rejects_non_string_text() -> None:
+    with pytest.raises(ValidationError, match="text must be a string"):
+        CitedText(
+            text=123,
+            source_ids=["raw-source-cursor-pricing"],
+            confidence="high",
+            evidence_role="official_fact",
+        )
+
+
+def test_cited_text_rejects_duplicate_source_ids() -> None:
+    with pytest.raises(ValidationError, match="source_ids must not contain duplicates"):
+        CitedText(
+            text="Cursor publishes pricing.",
+            source_ids=["raw-source-cursor-pricing", " raw-source-cursor-pricing "],
+            confidence="high",
+            evidence_role="official_fact",
+        )
+
+
+def test_cited_text_strips_text_and_source_ids() -> None:
+    claim = CitedText(
+        text="  Cursor publishes pricing.  ",
+        source_ids=[" raw-source-cursor-pricing ", "", "   "],
+        confidence="high",
+        evidence_role="official_fact",
+    )
+
+    assert claim.text == "Cursor publishes pricing."
+    assert claim.source_ids == ["raw-source-cursor-pricing"]
+
+
 def test_evidence_gap_is_the_only_empty_source_role() -> None:
     with pytest.raises(ValidationError, match="source_ids are required"):
         CitedText(
@@ -227,3 +259,83 @@ def test_evidence_gap_is_the_only_empty_source_role() -> None:
 
     gap = _gap()
     assert gap.source_ids == []
+
+
+def test_evidence_gap_rejects_high_confidence() -> None:
+    with pytest.raises(ValidationError, match="evidence gaps cannot be high confidence"):
+        CitedText(
+            text="Direct buyer evidence was not collected.",
+            source_ids=[],
+            confidence="high",
+            evidence_role="evidence_gap",
+        )
+
+
+def test_matrix_cell_rejects_non_string_summary() -> None:
+    with pytest.raises(ValidationError, match="matrix summary must be a string"):
+        MatrixCell(
+            competitor="Cursor",
+            summary=123,
+            source_ids=["raw-source-cursor-pricing"],
+            confidence="high",
+        )
+
+
+def test_matrix_cell_strips_summary_and_rejects_source_tokens() -> None:
+    cell = MatrixCell(
+        competitor="Cursor",
+        summary="  Public team pricing is visible.  ",
+        source_ids=["raw-source-cursor-pricing"],
+        confidence="high",
+    )
+    assert cell.summary == "Public team pricing is visible."
+
+    with pytest.raises(ValidationError, match="must not contain Markdown source tokens"):
+        MatrixCell(
+            competitor="Cursor",
+            summary="Public team pricing is visible. [Source:raw-source-cursor-pricing]",
+            source_ids=["raw-source-cursor-pricing"],
+            confidence="high",
+        )
+
+
+def test_extra_fields_are_forbidden() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        CitedText(
+            text="Cursor publishes pricing.",
+            source_ids=["raw-source-cursor-pricing"],
+            confidence="high",
+            evidence_role="official_fact",
+            unexpected_field=True,
+        )
+
+
+def test_iter_cited_text_includes_representative_paths() -> None:
+    report = StructuredReport(
+        output_language="zh-CN",
+        topic="AI coding agent competitive analysis",
+        competitors=["Cursor", "Windsurf"],
+        dimensions=["pricing", "feature", "persona"],
+        core=_core(),
+        support=_support(),
+        metadata=ReportMetadata(
+            writer_mode="structured",
+            segment_count=5,
+            source_count=2,
+            warnings=[],
+            structured_report_version="1",
+        ),
+    )
+
+    paths = {path for path, _claim in report.iter_cited_text()}
+
+    assert "core.executive_summary.recommendation" in paths
+    assert "core.executive_summary.competitor_postures[0].posture" in paths
+    assert (
+        "core.user_review_themes.competitor_themes[0].direct_user_signals[0]"
+        in paths
+    )
+    assert "core.decision_matrix.interpretation[0]" in paths
+    assert "core.swot.competitors[0].strengths[0]" in paths
+    assert "core.battlecard.plays[0].use_when" in paths
+    assert "support.source_quality[0]" in paths
