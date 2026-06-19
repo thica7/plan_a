@@ -237,16 +237,27 @@ def test_renderer_keeps_text_fields_free_of_raw_source_tokens_until_render_time(
     assert "[source: raw-source-a]" not in rendered
 
 
-def test_renderer_omits_metadata_and_keeps_appendix_header_citation_free() -> None:
+def test_renderer_omits_metadata_and_keeps_zh_appendix_header_citation_free() -> None:
     rendered = render_structured_report(_report())
 
     appendix_header = next(
-        line for line in rendered.splitlines() if line.startswith("| Source ID |")
+        line for line in rendered.splitlines() if line.startswith("| 来源 ID |")
     )
 
     assert "structured_report_version" not in rendered
     assert "writer_mode" not in rendered
     assert "source_count" not in rendered
+    assert appendix_header == "| 来源 ID | 标题 | 竞品 | 维度 | 角色 | 置信度 |"
+    assert "[source:" not in appendix_header
+
+
+def test_renderer_keeps_english_appendix_header_for_non_zh_reports() -> None:
+    rendered = render_structured_report(_report(output_language="en-US"))
+
+    appendix_header = next(
+        line for line in rendered.splitlines() if line.startswith("| Source ID |")
+    )
+
     assert appendix_header == (
         "| Source ID | Title | Competitor | Dimension | Role | Confidence |"
     )

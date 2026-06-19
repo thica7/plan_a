@@ -273,7 +273,7 @@ def _render_support(
     _claim_group(lines, labels["claim_risk"], support.claim_risk)
     _claim_group(lines, labels["next_collection"], support.next_collection)
     _heading(lines, 3, labels["evidence_appendix"])
-    _appendix_table(lines, support.evidence_appendix)
+    _appendix_table(lines, support.evidence_appendix, labels)
 
 
 def _claim_group(
@@ -311,8 +311,17 @@ def _citation_suffix(source_ids: Sequence[str]) -> str:
     return " " + "".join(f"[source:{source_id}]" for source_id in source_ids)
 
 
-def _appendix_table(lines: list[str], rows: Sequence[SourceAppendixRow]) -> None:
-    lines.append("| Source ID | Title | Competitor | Dimension | Role | Confidence |")
+def _appendix_table(
+    lines: list[str],
+    rows: Sequence[SourceAppendixRow],
+    labels: dict[str, str],
+) -> None:
+    header = (
+        ["来源 ID", "标题", "竞品", "维度", "角色", "置信度"]
+        if labels is _ZH_LABELS
+        else ["Source ID", "Title", "Competitor", "Dimension", "Role", "Confidence"]
+    )
+    lines.append(_table_row(header))
     lines.append("| --- | --- | --- | --- | --- | --- |")
     for row in rows:
         lines.append(
