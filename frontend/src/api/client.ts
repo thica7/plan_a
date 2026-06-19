@@ -76,19 +76,13 @@ import type {
 } from "./types";
 import type { RunEvent } from "./sse_types";
 
-const AUTH_TOKEN_STORAGE_KEY = "competiscope.authToken";
-const USER_ID_STORAGE_KEY = "competiscope.userId";
-const USER_ROLE_STORAGE_KEY = "competiscope.userRole";
-const WORKSPACE_ID_STORAGE_KEY = "competiscope.workspaceId";
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
-    ...init,
     headers: {
       "Content-Type": "application/json",
-      ...apiIdentityHeaders(),
       ...init?.headers,
     },
+    ...init,
   });
 
   if (!response.ok) {
@@ -107,31 +101,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return response.json() as Promise<T>;
-}
-
-function apiIdentityHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {};
-  const token = envValue("VITE_API_BEARER_TOKEN") || storageValue(AUTH_TOKEN_STORAGE_KEY);
-  const userId = envValue("VITE_API_USER_ID") || storageValue(USER_ID_STORAGE_KEY);
-  const userRole = envValue("VITE_API_USER_ROLE") || storageValue(USER_ROLE_STORAGE_KEY);
-  const workspaceId =
-    envValue("VITE_API_WORKSPACE_ID") || storageValue(WORKSPACE_ID_STORAGE_KEY);
-
-  if (token) headers.Authorization = `Bearer ${token}`;
-  if (userId) headers["X-User-Id"] = userId;
-  if (userRole) headers["X-User-Role"] = userRole;
-  if (workspaceId) headers["X-Workspace-Id"] = workspaceId;
-  return headers;
-}
-
-function envValue(name: string): string {
-  const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-  return env?.[name]?.trim() ?? "";
-}
-
-function storageValue(key: string): string {
-  if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(key)?.trim() ?? "";
 }
 
 export function listSkills() {
