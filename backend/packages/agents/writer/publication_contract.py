@@ -9,6 +9,7 @@ from packages.agents.writer.structured_hygiene import (
     has_source_token,
     is_valid_source_id,
 )
+from packages.agents.writer.structured_renderer import _EN_LABELS
 from packages.agents.writer.structured_report import StructuredReport
 
 
@@ -24,18 +25,11 @@ def _normalize_heading(text: str) -> str:
 _ENGLISH_STRUCTURAL_H3_H4 = frozenset(
     _normalize_heading(heading)
     for heading in (
-        "Pricing and Packaging",
+        *_EN_LABELS.values(),
         "Feature and Workflow Capability",
-        "Feature and Workflow Capabilities",
         "Direct User / Community Signals",
-        "Direct User and Community Signals",
         "Simulated Survey and Interview Signals",
-        "Simulated Research Signals",
-        "Positioning and Core Value",
-        "Strengths",
-        "Weaknesses",
-        "Opportunities",
-        "Threats",
+        "Battlecard",
     )
 )
 _INTERNAL_TERM_PATTERNS = tuple(
@@ -304,4 +298,3 @@ def _table_cells(line: str) -> list[str]:
 def _is_separator_cell(cell: str) -> bool:
     normalized = cell.replace(" ", "").strip(":")
     return len(normalized) >= 3 and set(normalized) == {"-"}
-

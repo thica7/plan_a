@@ -19,6 +19,43 @@ def test_rejects_english_structural_heading_in_zh_report() -> None:
     assert result.issues[0].repair_target == "renderer"
 
 
+def test_rejects_broader_renderer_style_english_headings_in_zh_report() -> None:
+    markdown = (
+        "### Next Actions\n\n"
+        "正文。\n\n"
+        "#### Adoption Blockers\n\n"
+        "正文。\n\n"
+        "#### Evidence Gaps\n"
+    )
+
+    result = validate_publication_contract(
+        markdown,
+        structured_report=_report("zh-CN"),
+        allowed_source_ids=set(),
+    )
+
+    matching_issues = [
+        issue
+        for issue in result.issues
+        if issue.code == "english_structural_heading_in_zh"
+    ]
+    assert [issue.line_number for issue in matching_issues] == [1, 5, 9]
+    assert {issue.repair_target for issue in matching_issues} == {"renderer"}
+
+
+def test_allows_standalone_english_competitor_heading_in_zh_report() -> None:
+    markdown = "## 用户评价整理\n\n### Cursor\n\n正文 [source:raw-source-a]\n"
+
+    result = validate_publication_contract(
+        markdown,
+        structured_report=_report("zh-CN"),
+        allowed_source_ids={"raw-source-a"},
+    )
+
+    assert result.passed
+    assert result.issues == []
+
+
 def test_rejects_citations_in_headings_and_table_headers() -> None:
     markdown = (
         "# Topic [source:raw-source-a]\n\n"
