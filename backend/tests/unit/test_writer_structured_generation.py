@@ -124,28 +124,34 @@ class _SegmentedEvidencePackResult:
             {
                 "segment_name": "decision_summary",
                 "content": "budgeted decision evidence",
+                "allowed_source_ids": ["raw-source-a"],
             },
             {
                 "segment_name": "user_research",
                 "content": "budgeted user evidence",
+                "allowed_source_ids": ["raw-source-survey"],
             },
             {
                 "segment_name": "competitor_deep_dives",
                 "segment_competitor": "Cursor",
                 "content": "budgeted Cursor evidence",
+                "allowed_source_ids": ["raw-source-a"],
             },
             {
                 "segment_name": "competitor_deep_dives",
                 "segment_competitor": "Windsurf",
                 "content": "budgeted Windsurf evidence",
+                "allowed_source_ids": ["raw-source-b"],
             },
             {
                 "segment_name": "swot_matrix",
                 "content": "budgeted SWOT evidence",
+                "source_registry": [{"id": "raw-source-a"}],
             },
             {
                 "segment_name": "support_appendix",
                 "content": "budgeted support evidence",
+                "source_registry": [{"source_id": "raw-source-b"}],
             },
         ]
 
@@ -275,6 +281,9 @@ def test_structured_section_inputs_use_budgeted_segments_when_segmented() -> Non
     assert "budgeted support evidence" in json.dumps(
         inputs["support"], ensure_ascii=False
     )
+    assert inputs["executive_summary"]["allowed_source_ids"] == ["raw-source-a"]
+    assert inputs["user_review_themes"]["allowed_source_ids"] == ["raw-source-survey"]
+    assert inputs["support"]["allowed_source_ids"] == ["raw-source-b"]
 
 
 def test_structured_section_inputs_fall_back_to_prompt_json_without_segments() -> None:
@@ -287,6 +296,106 @@ def test_structured_section_inputs_fall_back_to_prompt_json_without_segments() -
     assert "compact evidence" in json.dumps(
         inputs["executive_summary"], ensure_ascii=False
     )
+
+
+@pytest.mark.asyncio
+async def test_writer_structured_report_rejects_citations_outside_section_evidence_scope(
+    monkeypatch,
+) -> None:
+    record = _writer_record_with_sources(["raw-source-a", "raw-source-b"])
+    harness = _WriterHarness([])
+
+    async def fake_section_json(
+        record, *, segment, section_schema, allowed_source_ids, timeout_seconds
+    ):
+        if segment["section_id"] == "executive_summary":
+            payload = {
+                "recommendation": {
+                    "text": "Badly scoped recommendation.",
+                    "source_ids": ["raw-source-b"],
+                    "confidence": "high",
+                    "evidence_role": "official_fact",
+                },
+                "risk_adjusted_rationale": {
+                    "text": "Scoped rationale.",
+                    "source_ids": ["raw-source-a"],
+                    "confidence": "high",
+                    "evidence_role": "official_fact",
+                },
+                "competitor_postures": [
+                    {
+                        "competitor": "Cursor",
+                        "posture": {
+                            "text": "Scoped posture.",
+                            "source_ids": ["raw-source-a"],
+                            "confidence": "high",
+                            "evidence_role": "official_fact",
+                        },
+                    }
+                ],
+                "confidence_boundary": {
+                    "text": "Scoped boundary.",
+                    "source_ids": ["raw-source-a"],
+                    "confidence": "high",
+                    "evidence_role": "official_fact",
+                },
+                "next_actions": [
+                    {
+                        "text": "Scoped action.",
+                        "source_ids": ["raw-source-a"],
+                        "confidence": "high",
+                        "evidence_role": "official_fact",
+                    }
+                ],
+            }
+            return section_schema.model_validate(payload)
+        raise AssertionError("generation should stop at the scoped citation failure")
+
+    async def validating_section_json(
+        record, *, segment, section_schema, allowed_source_ids, timeout_seconds
+    ):
+        section = await fake_section_json(
+            record,
+            segment=segment,
+            section_schema=section_schema,
+            allowed_source_ids=allowed_source_ids,
+            timeout_seconds=timeout_seconds,
+        )
+        cited_source_ids: set[str] = set()
+
+        def collect_source_ids(value) -> None:
+            if isinstance(value, dict):
+                raw_source_ids = value.get("source_ids")
+                if isinstance(raw_source_ids, list):
+                    cited_source_ids.update(
+                        source_id
+                        for source_id in raw_source_ids
+                        if isinstance(source_id, str)
+                    )
+                for child in value.values():
+                    collect_source_ids(child)
+                return
+            if isinstance(value, list):
+                for child in value:
+                    collect_source_ids(child)
+
+        collect_source_ids(section.model_dump())
+        invalid_source_ids = cited_source_ids - set(allowed_source_ids)
+        if invalid_source_ids:
+            raise ValueError(
+                "structured writer response used disallowed source_ids: "
+                f"{', '.join(sorted(invalid_source_ids))}"
+            )
+        return section
+
+    monkeypatch.setattr(harness, "_writer_structured_section_json", validating_section_json)
+
+    with pytest.raises(ValueError, match="raw-source-b"):
+        await harness._writer_structured_report(
+            record,
+            evidence_pack_result=_SegmentedEvidencePackResult(),
+            timeout_seconds=10,
+        )
 
 
 def test_structured_section_prompt_includes_evidence_role_guidance() -> None:

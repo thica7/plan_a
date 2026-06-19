@@ -8,7 +8,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from packages.agents.writer.assembler import (
     StructuredReportAssembler,
@@ -341,6 +341,8 @@ class WriterEvidencePreflightError(RuntimeError):
 
 
 class CitedTextListSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     items: list[CitedText] = Field(min_length=1)
 
 
@@ -382,11 +384,15 @@ def _structured_section_inputs(
             "dimensions": item.get("dimensions", dimensions),
         }
         if segment_inputs:
-            segment["evidence_segments"] = _select_structured_evidence_segments(
+            selected_segments = _select_structured_evidence_segments(
                 section_id=section_id,
                 competitor=item.get("competitor"),
                 segment_inputs=segment_inputs,
             )
+            segment["evidence_segments"] = selected_segments
+            scoped_source_ids = _source_ids_from_structured_segments(selected_segments)
+            if scoped_source_ids:
+                segment["allowed_source_ids"] = scoped_source_ids
         else:
             segment["evidence_pack"] = base
         inputs[_structured_section_key(item)] = segment
@@ -437,6 +443,40 @@ def _select_structured_evidence_segments(
                 continue
         selected.append(segment)
     return selected or list(segment_inputs)
+
+
+def _source_ids_from_structured_segments(
+    segments: list[dict[str, object]],
+) -> list[str]:
+    source_ids: set[str] = set()
+
+    def add_source_id(value: object) -> None:
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned:
+                source_ids.add(cleaned)
+
+    def collect_source_registry(value: object) -> None:
+        if isinstance(value, dict):
+            registry = value.get("source_registry")
+            if isinstance(registry, list):
+                for item in registry:
+                    if isinstance(item, dict):
+                        add_source_id(item.get("id"))
+                        add_source_id(item.get("source_id"))
+            allowed = value.get("allowed_source_ids")
+            if isinstance(allowed, list):
+                for source_id in allowed:
+                    add_source_id(source_id)
+            for child in value.values():
+                collect_source_registry(child)
+            return
+        if isinstance(value, list):
+            for child in value:
+                collect_source_registry(child)
+
+    collect_source_registry(segments)
+    return sorted(source_ids)
 
 
 class WriterAgentMixin:
@@ -1046,11 +1086,16 @@ class WriterAgentMixin:
         )
         for item in plan:
             key = _structured_section_key(item)
+            section_allowed_source_ids = set(
+                source_id
+                for source_id in section_inputs[key].get("allowed_source_ids", [])
+                if isinstance(source_id, str)
+            ) or allowed_source_ids
             sections[key] = await self._writer_structured_section_json(
                 record,
                 segment=section_inputs[key],
                 section_schema=_structured_section_schema(item["schema"]),
-                allowed_source_ids=allowed_source_ids,
+                allowed_source_ids=section_allowed_source_ids,
                 timeout_seconds=timeout_seconds,
             )
 
