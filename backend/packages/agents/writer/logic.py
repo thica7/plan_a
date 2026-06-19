@@ -225,10 +225,17 @@ def _source_ids_from_section(section: BaseModel) -> set[str]:
 
     def collect(value: object) -> None:
         if isinstance(value, dict):
+            raw_source_id = value.get("source_id")
+            if isinstance(raw_source_id, str):
+                source_id = raw_source_id.strip()
+                if source_id:
+                    source_ids.add(source_id)
             raw_source_ids = value.get("source_ids")
             if isinstance(raw_source_ids, list):
                 source_ids.update(
-                    source_id for source_id in raw_source_ids if isinstance(source_id, str)
+                    source_id.strip()
+                    for source_id in raw_source_ids
+                    if isinstance(source_id, str) and source_id.strip()
                 )
             for child in value.values():
                 collect(child)

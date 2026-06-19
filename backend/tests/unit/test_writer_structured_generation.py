@@ -11,7 +11,7 @@ from packages.agents.writer.logic import (
     build_structured_writer_section_plan,
     _structured_section_inputs,
 )
-from packages.agents.writer.structured_report import ExecutiveSummarySection
+from packages.agents.writer.structured_report import ExecutiveSummarySection, ReportSupport
 from packages.orchestrator.service import RunRecord
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import AnalysisPlan, RawSource
@@ -530,3 +530,35 @@ async def test_structured_section_json_retries_invalid_json_once() -> None:
     assert section.recommendation.text == "Choose Cursor."
     assert len(harness.prompts) == 2
     assert "Return JSON only" in harness.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_structured_section_json_rejects_disallowed_support_appendix_source_id() -> None:
+    payload = {
+        "source_quality": [],
+        "user_research_evidence": [],
+        "rag_gap_fill": [],
+        "scenario_qa": [],
+        "claim_risk": [],
+        "next_collection": [],
+        "evidence_appendix": [
+            {
+                "source_id": "raw-source-b",
+                "title": "Out of scope source",
+                "competitor": "Windsurf",
+                "dimension": "pricing",
+                "evidence_role": "official_fact",
+                "confidence": "high",
+            }
+        ],
+    }
+    harness = _WriterHarness([json.dumps(payload), json.dumps(payload)])
+
+    with pytest.raises(ValueError, match="raw-source-b"):
+        await harness._writer_structured_section_json(
+            record=object(),
+            segment={"section_id": "support", "content": "Evidence"},
+            section_schema=ReportSupport,
+            allowed_source_ids={"raw-source-a"},
+            timeout_seconds=5.0,
+        )
