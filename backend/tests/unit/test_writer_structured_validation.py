@@ -131,6 +131,40 @@ def test_weak_recommendation_evidence_rejects_gap_roles_and_missing_strong_sourc
     assert any(issue.code == "weak_recommendation_evidence" for issue in validation.issues)
 
 
+@pytest.mark.parametrize("evidence_role", ["simulated_research", "evidence_gap"])
+def test_risk_adjusted_rationale_weak_evidence_roles_are_rejected(
+    evidence_role: str,
+) -> None:
+    report = _clean_report()
+    report.core.executive_summary.risk_adjusted_rationale.evidence_role = (
+        evidence_role
+    )
+
+    validation = _validate(report)
+
+    assert not validation.passed
+    assert any(
+        issue.code == "weak_recommendation_evidence"
+        and issue.path == "core.executive_summary.risk_adjusted_rationale"
+        and issue.repair_target == "core.executive_summary"
+        for issue in validation.issues
+    )
+
+
+def test_risk_adjusted_rationale_missing_strong_source_is_rejected() -> None:
+    report = _clean_report()
+
+    validation = _validate(report, strong_source_ids={"raw-source-a"})
+
+    assert not validation.passed
+    assert any(
+        issue.code == "weak_recommendation_evidence"
+        and issue.path == "core.executive_summary.risk_adjusted_rationale"
+        and issue.repair_target == "core.executive_summary"
+        for issue in validation.issues
+    )
+
+
 def test_template_only_battlecard_is_rejected() -> None:
     report = _clean_report()
     play = report.core.battlecard.plays[0]
@@ -238,6 +272,18 @@ def test_missing_competitor_coverage_is_rejected() -> None:
     assert any(
         issue.code == "competitor_coverage_missing"
         and "Windsurf" in issue.message
+        and "user_review_themes" in issue.message
+        for issue in validation.issues
+    )
+    assert any(
+        issue.code == "competitor_coverage_missing"
+        and "Windsurf" in issue.message
+        and "swot" in issue.message
+        for issue in validation.issues
+    )
+    assert any(
+        issue.code == "competitor_coverage_missing"
+        and "Windsurf" in issue.message
         and "competitor_deep_dives" in issue.message
         for issue in validation.issues
     )
@@ -245,6 +291,46 @@ def test_missing_competitor_coverage_is_rejected() -> None:
         issue.code == "competitor_coverage_missing"
         and "Cursor" in issue.message
         and "battlecard" in issue.message
+        for issue in validation.issues
+    )
+
+
+def test_missing_user_theme_competitor_coverage_is_rejected() -> None:
+    report = _clean_report()
+    report.core.user_review_themes.competitor_themes = [
+        theme
+        for theme in report.core.user_review_themes.competitor_themes
+        if theme.competitor != "Windsurf"
+    ]
+
+    validation = _validate(report)
+
+    assert not validation.passed
+    assert any(
+        issue.code == "competitor_coverage_missing"
+        and issue.path == "core.user_review_themes.competitor_themes"
+        and "Windsurf" in issue.message
+        and "user_review_themes" in issue.message
+        for issue in validation.issues
+    )
+
+
+def test_missing_swot_competitor_coverage_is_rejected() -> None:
+    report = _clean_report()
+    report.core.swot.competitors = [
+        swot
+        for swot in report.core.swot.competitors
+        if swot.competitor != "Windsurf"
+    ]
+
+    validation = _validate(report)
+
+    assert not validation.passed
+    assert any(
+        issue.code == "competitor_coverage_missing"
+        and issue.path == "core.swot.competitors"
+        and "Windsurf" in issue.message
+        and "swot" in issue.message
         for issue in validation.issues
     )
 
