@@ -609,7 +609,12 @@ async def test_runtime_command_defers_temporal_visibility_sync_failure(
     settings = _settings(run_orchestration_backend="temporal")
     run_service = _memory_run_service(settings)
 
-    async def fail_visibility_sync(request: RunCreateRequest) -> None:
+    async def fail_visibility_sync(
+        request: RunCreateRequest,
+        *,
+        skip_active_duplicate_check: bool = False,
+    ) -> None:
+        assert skip_active_duplicate_check is True
         raise RuntimeError("database visibility lag")
 
     scheduled: list[object] = []

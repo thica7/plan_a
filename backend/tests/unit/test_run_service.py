@@ -629,6 +629,42 @@ async def test_ensure_run_visible_reuses_recent_active_duplicate() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ensure_run_visible_can_skip_active_duplicate_reuse() -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+
+    first = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:visible-first",
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity", "Claude"],
+            dimensions=["pricing", "feature"],
+            execution_mode="demo",
+        )
+    )
+    visible = await service.ensure_run_visible(
+        RunCreateRequest(
+            idempotency_key="ui-run:visible-second",
+            topic="AI research assistant competitive analysis",
+            competitors=["Claude", "Perplexity"],
+            dimensions=["feature", "pricing"],
+            execution_mode="demo",
+        ),
+        skip_active_duplicate_check=True,
+    )
+
+    assert visible.id != first.id
+    assert visible.idempotency_key == "ui-run:visible-second"
+
+
+@pytest.mark.asyncio
 async def test_duplicate_run_short_circuits_pre_create_verification(monkeypatch) -> None:
     settings = Settings(
         demo_mode=True,

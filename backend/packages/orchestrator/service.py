@@ -467,8 +467,16 @@ class RunService(
             )
         return detail
 
-    async def ensure_run_visible(self, request: RunCreateRequest) -> RunDetail:
-        detail = await self.create_run(request)
+    async def ensure_run_visible(
+        self,
+        request: RunCreateRequest,
+        *,
+        skip_active_duplicate_check: bool = False,
+    ) -> RunDetail:
+        detail = await self.create_run(
+            request,
+            skip_active_duplicate_check=skip_active_duplicate_check,
+        )
         self._persist_run(detail.id)
         return detail
 

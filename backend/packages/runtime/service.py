@@ -786,7 +786,10 @@ class RuntimeCommandService:
         request: RunCreateRequest,
     ) -> None:
         visible_request = request.model_copy(update={"idempotency_key": result.idempotency_key})
-        detail = await self._run_service.ensure_run_visible(visible_request)
+        detail = await self._run_service.ensure_run_visible(
+            visible_request,
+            skip_active_duplicate_check=True,
+        )
         if detail.id != result.run_id:
             raise RuntimeError(
                 f"Temporal returned run_id={result.run_id}, but local visibility "
