@@ -30,8 +30,10 @@
   - Builds JSON-only prompts, parses model output, retries with schema errors, and returns typed section payloads.
 - Modify: `backend/packages/agents/writer/logic.py`
   - Adds structured writer orchestration behind `Settings.writer_structured_report_enabled`. Existing Markdown path remains fallback.
-- Modify: `backend/packages/agents/writer/repair.py`
+- Create: `backend/packages/agents/writer/structured_repair.py`
   - Adds structured repair target mapping for publication-contract and claim consistency issues.
+- Modify: `backend/packages/agents/writer/repair.py`
+  - Keeps Markdown repair routing compatible while structured repair becomes the preferred path for structured runs.
 - Modify: `backend/packages/config/settings.py`
   - Adds `writer_structured_report_enabled`.
 - Modify: `backend/packages/business_intel/report_quality.py`
@@ -1485,7 +1487,11 @@ git commit -m "feat(writer): validate structured reports"
 Add `backend/tests/unit/test_writer_publication_contract.py`:
 
 ```python
-from packages.agents.writer.publication_contract import validate_publication_contract
+from packages.agents.writer.publication_contract import (
+    PublicationContractIssue,
+    publication_contract_issue_field_path,
+    validate_publication_contract,
+)
 
 
 def test_contract_rejects_zh_report_with_english_template_headings() -> None:
@@ -1614,6 +1620,19 @@ def test_contract_rejects_markdown_only_template_executive_summary() -> None:
         allowed_source_ids={"raw-source-a"},
     )
     assert result.has_issue("executive_summary_template_only")
+
+
+def test_contract_issue_field_path_combines_code_and_schema_path() -> None:
+    issue = PublicationContractIssue(
+        code="internal_term_leak",
+        path="report.core.executive_summary.recommendation.text",
+        message="Internal term leaked.",
+    )
+
+    assert (
+        publication_contract_issue_field_path(issue)
+        == "publication_contract.internal_term_leak.core.executive_summary.recommendation.text"
+    )
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1924,6 +1943,13 @@ def _from_structured_issue(issue: StructuredReportValidationIssue) -> Publicatio
         message=issue.message,
         deterministic=issue.deterministic,
     )
+
+
+def publication_contract_issue_field_path(issue: PublicationContractIssue) -> str:
+    path = issue.path
+    if path.startswith("report."):
+        path = path.removeprefix("report.")
+    return f"publication_contract.{issue.code}.{path}".rstrip(".")
 ```
 
 - [ ] **Step 4: Run publication tests**
@@ -2320,7 +2346,13 @@ from packages.agents.writer.publication_contract import (
     validate_publication_contract,
 )
 from packages.agents.writer.quality_preflight import run_writer_quality_preflight
-from packages.agents.writer.structured_report import StructuredReport
+from packages.agents.writer.structured_report import (
+    CitedText,
+    ReportCore,
+    ReportMetadata,
+    ReportSupport,
+    StructuredReport,
+)
 
 
 @dataclass(frozen=True)
@@ -2485,7 +2517,35 @@ def test_section_requests_group_real_evidence_shards_by_segment_kind() -> None:
     assert requests[0].section_id == "review_theme_summary"
     assert requests[0].request_kind == "section_from_shards"
     assert requests[0].allowed_source_ids == {"raw-source-a", "raw-source-b"}
-    assert len(requests[0].segment["shard_segments"]) == 2
+    assert len(requests[0].segment["grouped_segments"]) == 2
+    assert requests[0].segment_competitor is None
+
+
+def test_section_requests_group_competitor_review_fragments_before_dedupe() -> None:
+    requests = structured_section_requests(
+        [
+            {
+                "segment_name": "Cursor review fragment",
+                "section_id": "review_theme_summary",
+                "segment_kind": "section_fragment",
+                "segment_competitor": "Cursor",
+                "allowed_source_ids": ["raw-source-a"],
+            },
+            {
+                "segment_name": "Copilot review fragment",
+                "section_id": "review_theme_summary",
+                "segment_kind": "section_fragment",
+                "segment_competitor": "GitHub Copilot",
+                "allowed_source_ids": ["raw-source-b"],
+            },
+        ]
+    )
+
+    assert len(requests) == 1
+    assert requests[0].section_id == "review_theme_summary"
+    assert requests[0].request_kind == "section_from_grouped_fragments"
+    assert requests[0].allowed_source_ids == {"raw-source-a", "raw-source-b"}
+    assert len(requests[0].segment["grouped_segments"]) == 2
     assert requests[0].segment_competitor is None
 
 
@@ -2592,12 +2652,12 @@ def structured_section_requests(
 ) -> list[StructuredSectionRequest]:
     requests: list[StructuredSectionRequest] = []
     seen: set[tuple[str, str | None]] = set()
-    shard_groups: dict[tuple[str, str | None], list[dict[str, object]]] = {}
+    grouped_segments: dict[tuple[str, str | None], list[dict[str, object]]] = {}
     for segment in segments:
         section_id = str(segment.get("section_id") or "")
         segment_competitor = _segment_competitor(segment)
-        if segment.get("segment_kind") == "evidence_shard":
-            shard_groups.setdefault(_shard_group_key(section_id, segment_competitor), []).append(segment)
+        if _should_group_segment(section_id, segment, segment_competitor):
+            grouped_segments.setdefault(_group_key(section_id, segment_competitor), []).append(segment)
             continue
         expanded = SECTION_EXPANSION.get(section_id, ())
         allowed_source_ids = _allowed_source_ids([segment])
@@ -2619,7 +2679,7 @@ def structured_section_requests(
                     essential=bool(segment.get("segment_essential", True)),
                 )
             )
-    for (section_id, segment_competitor), shards in shard_groups.items():
+    for (section_id, segment_competitor), grouped in grouped_segments.items():
         for output_section_id, schema_class in SECTION_EXPANSION.get(section_id, ()):
             dedupe_key = (
                 output_section_id,
@@ -2628,20 +2688,25 @@ def structured_section_requests(
             if dedupe_key in seen:
                 continue
             seen.add(dedupe_key)
+            request_kind = (
+                "section_from_shards"
+                if all(segment.get("segment_kind") == "evidence_shard" for segment in grouped)
+                else "section_from_grouped_fragments"
+            )
             requests.append(
                 StructuredSectionRequest(
                     section_id=output_section_id,
                     schema_class=schema_class,
                     segment={
                         "section_id": section_id,
-                        "segment_kind": "section_from_shards",
+                        "segment_kind": request_kind,
                         "segment_competitor": segment_competitor,
-                        "shard_segments": [dict(shard) for shard in shards],
+                        "grouped_segments": [dict(segment) for segment in grouped],
                     },
                     segment_competitor=segment_competitor,
-                    allowed_source_ids=_allowed_source_ids(shards),
-                    essential=any(bool(shard.get("segment_essential", True)) for shard in shards),
-                    request_kind="section_from_shards",
+                    allowed_source_ids=_allowed_source_ids(grouped),
+                    essential=any(bool(segment.get("segment_essential", True)) for segment in grouped),
+                    request_kind=request_kind,
                 )
             )
     return requests
@@ -2655,7 +2720,17 @@ def _segment_competitor(segment: dict[str, object]) -> str | None:
     )
 
 
-def _shard_group_key(section_id: str, segment_competitor: str | None) -> tuple[str, str | None]:
+def _should_group_segment(
+    section_id: str,
+    segment: dict[str, object],
+    segment_competitor: str | None,
+) -> bool:
+    if segment.get("segment_kind") == "evidence_shard":
+        return True
+    return section_id == "review_theme_summary" and segment_competitor is not None
+
+
+def _group_key(section_id: str, segment_competitor: str | None) -> tuple[str, str | None]:
     if section_id == "competitor_deep_dives":
         return section_id, segment_competitor
     return section_id, None
@@ -3041,7 +3116,37 @@ def _minimal_evidence_pack_result():
 
 
 def _minimal_structured_report_from_payload(*args, **kwargs):
-    return SimpleNamespace()
+    from packages.agents.writer.structured_report import (
+        CitedText,
+        ReportCore,
+        ReportMetadata,
+        ReportSupport,
+        StructuredReport,
+    )
+
+    def cited(text: str) -> CitedText:
+        return CitedText(
+            text=text,
+            source_ids=["pricing-1"],
+            confidence="high",
+            evidence_role="official_fact",
+        )
+
+    return StructuredReport(
+        output_language="zh-CN",
+        topic="Structured retry",
+        competitors=["Cursor"],
+        dimensions=["pricing"],
+        core=ReportCore.minimal_for_tests(competitors=["Cursor"], cited_factory=cited),
+        support=ReportSupport.minimal_for_tests(cited_factory=cited),
+        metadata=ReportMetadata(
+            writer_mode="structured",
+            segment_count=1,
+            source_count=1,
+            warnings=[],
+            structured_report_version="structured_report.v1",
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -3183,6 +3288,7 @@ from packages.agents.writer.structured_report import (
     EvidenceAppendixSection,
     ReportMetadata,
     SourceAppendixItem,
+    StructuredReport,
 )
 from packages.agents.writer.structured_sections import structured_section_requests
 from packages.agents.writer.structured_validation import validate_structured_report
@@ -3416,6 +3522,25 @@ REQUIRED_STRUCTURED_SECTION_IDS = {
     "claim_risk",
     "next_collection",
 }
+CORE_RENDERED_HEADING_MARKERS = (
+    "执行摘要",
+    "决策摘要",
+    "竞争发现",
+    "用户评价",
+    "竞品深挖",
+    "SWOT",
+    "决策矩阵",
+    "战报",
+)
+SUPPORT_RENDERED_HEADING_MARKERS = (
+    "证据附录",
+    "证据质量",
+    "用户研究证据",
+    "RAG",
+    "场景 QA",
+    "声明风险",
+    "下一步采集",
+)
 
 
 def _missing_structured_section_ids(payloads: list[StructuredSectionPayload]) -> list[str]:
@@ -3444,11 +3569,19 @@ def _structured_competitor_coverage(report: StructuredReport) -> dict[str, list[
 
 
 def _rendered_core_section_count(markdown: str) -> int:
-    return sum(1 for line in markdown.splitlines() if line.startswith("## ") and "附录" not in line and "QA" not in line)
+    return _rendered_heading_count(markdown, CORE_RENDERED_HEADING_MARKERS)
 
 
 def _rendered_support_section_count(markdown: str) -> int:
-    return sum(1 for line in markdown.splitlines() if line.startswith("## ") and ("附录" in line or "QA" in line))
+    return _rendered_heading_count(markdown, SUPPORT_RENDERED_HEADING_MARKERS)
+
+
+def _rendered_heading_count(markdown: str, markers: tuple[str, ...]) -> int:
+    return sum(
+        1
+        for line in markdown.splitlines()
+        if line.startswith("## ") and any(marker in line for marker in markers)
+    )
 ```
 
 - [ ] **Step 5: Route `_real_writer_step` through structured path**
@@ -3574,7 +3707,14 @@ def test_structured_repair_ignores_unknown_markdown_only_issue() -> None:
 Add to `backend/tests/unit/test_run_service.py`:
 
 ```python
-from packages.agents.writer.structured_report import StructuredReport
+from packages.agents.writer.structured_report import (
+    CitedText,
+    ReportCore,
+    ReportMetadata,
+    ReportSupport,
+    StructuredReport,
+)
+from packages.orchestrator.service import PendingGraphRedo
 from packages.schema.models import QCIssue, RedoScope
 
 
@@ -3656,6 +3796,16 @@ async def test_structured_writer_only_redo_regenerates_target_section(monkeypatc
             redo_scope=RedoScope(kind="writer_only", rationale="repair battlecard"),
         )
     ]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="writer_only",
+        redo_scope=record.detail.qa_findings[0].redo_scope,
+        redo_scopes=[record.detail.qa_findings[0].redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=["battlecard-template"],
+        qa_issue_ids_before=[],
+        issue_count_before=0,
+    )
     record.detail.writer_structured_report_payload = _complete_structured_report_payload()
 
     regenerated_sections: list[str] = []
@@ -3771,40 +3921,69 @@ Do not store internal evidence pack IDs or full source text here; this payload i
 
 - [ ] **Step 5: Add structured writer-only redo branch**
 
-In `_real_writer_step`, before the Markdown writer-only redo branch, add:
+In `backend/packages/agents/writer/logic.py`, add imports:
 
 ```python
-                if self._settings.writer_structured_report_enabled:
-                    structured_payload = getattr(detail, "writer_structured_report_payload", None)
-                    target = _structured_repair_target_from_issues(detail.qa_findings)
-                    if structured_payload and target is not None:
-                        await self.emit(
-                            detail.id,
-                            "writer_structured_repair_selected",
-                            "writer",
-                            target.section_id,
-                            "Structured writer-only repair selected.",
-                            {
-                                "repair_kind": target.repair_kind,
-                                "section_id": target.section_id,
-                                "reason": target.reason,
-                            },
-                        )
-                        previous = StructuredReport.model_validate(structured_payload)
-                        if target.repair_kind == "render_only":
-                            report_md = render_structured_report(previous)
-                        else:
-                            previous = await self._writer_regenerate_structured_section(
-                                record,
-                                structured_report=previous,
-                                target=target,
-                                evidence_pack_result=evidence_pack_result,
-                                timeout_seconds=timeout_seconds,
-                            )
-                            detail.writer_structured_report_payload = previous.model_dump(mode="json")
-                            report_md = render_structured_report(previous)
-                        writer_mode = "real structured writer repair"
+from packages.agents.writer.structured_repair import (
+    StructuredRepairTarget,
+    structured_repair_target_for_issue,
+)
 ```
+
+In `_real_writer_step`, initialize a structured-repair guard next to the existing repair state:
+
+```python
+        structured_repair_succeeded = False
+```
+
+Then add this branch after the deterministic line-repair branch and before the existing Markdown section/full writer repair branches. The branch must assign `detail.report_md`, harden the rendered Markdown, and prevent later Markdown repair branches from running:
+
+```python
+        elif (
+            not assemble_repair_succeeded
+            and repair_plan is not None
+            and self._settings.writer_structured_report_enabled
+        ):
+            structured_payload = getattr(detail, "writer_structured_report_payload", None)
+            target = _structured_repair_target_from_issues(detail.qa_findings)
+            if structured_payload and target is not None:
+                await self.emit(
+                    detail.id,
+                    "writer_structured_repair_selected",
+                    "writer",
+                    target.section_id,
+                    "Structured writer-only repair selected.",
+                    {
+                        "repair_kind": target.repair_kind,
+                        "section_id": target.section_id,
+                        "reason": target.reason,
+                    },
+                )
+                previous = StructuredReport.model_validate(structured_payload)
+                if target.repair_kind == "render_only":
+                    repaired_structured = previous
+                else:
+                    repaired_structured = await self._writer_regenerate_structured_section(
+                        record,
+                        structured_report=previous,
+                        target=target,
+                        evidence_pack_result=evidence_pack_result,
+                        timeout_seconds=timeout_seconds,
+                    )
+                    detail.writer_structured_report_payload = repaired_structured.model_dump(mode="json")
+                detail.report_md = self._harden_report_markdown(
+                    detail,
+                    render_structured_report(repaired_structured),
+                )
+                writer_mode = "writer repair: structured"
+                writer_repair_mode = "structured"
+                writer_repair_sections = [target.section_id] if target.section_id else []
+                writer_repair_decision = target.reason
+                previous_report_protected = True
+                structured_repair_succeeded = True
+```
+
+Add `and not structured_repair_succeeded` to the following Markdown section/full repair branches so a successful structured repair cannot be overwritten by the older Markdown path.
 
 Add helper:
 
@@ -3974,7 +4153,10 @@ def _has_publication_contract_deterministic_issue(issues: list[QCIssue]) -> bool
 In `backend/packages/business_intel/report_quality.py`, import:
 
 ```python
-from packages.agents.writer.publication_contract import validate_publication_contract
+from packages.agents.writer.publication_contract import (
+    publication_contract_issue_field_path,
+    validate_publication_contract,
+)
 ```
 
 In `_snapshot()`, add:
@@ -4022,6 +4204,14 @@ In `backend/packages/business_intel/release_gate.py`, add:
 ```
 
 to `REPORT_RICHNESS_MINIMUMS`.
+
+When converting `PublicationContractIssue` objects into `QCIssue` records for repair routing, set:
+
+```python
+field_path = publication_contract_issue_field_path(contract_issue)
+```
+
+Do not hand-compose `publication_contract.*` strings elsewhere; this keeps publication-contract detection and structured repair routing on one field-path convention.
 
 - [ ] **Step 6: Run targeted tests**
 
