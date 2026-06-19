@@ -198,6 +198,27 @@ def test_rejects_malformed_source_tokens_and_ids() -> None:
     assert result.issue_codes() == ["invalid_source_id"]
 
 
+def test_rejects_malformed_source_token_attempts_in_heading_table_and_body() -> None:
+    markdown = (
+        "### Heading [source :raw-source-a]\n\n"
+        "| Dimension [ source:raw-source-a] | Cursor |\n"
+        "| --- | --- |\n"
+        "| pricing | Body citation 【source:raw-source-a】 |\n"
+    )
+
+    result = validate_publication_contract(
+        markdown,
+        structured_report=None,
+        allowed_source_ids={"raw-source-a"},
+    )
+
+    invalid_issues = [
+        issue for issue in result.issues if issue.code == "invalid_source_id"
+    ]
+    assert [issue.line_number for issue in invalid_issues] == [1, 3, 5]
+    assert result.issue_codes() == ["invalid_source_id"]
+
+
 def test_rejects_support_before_core_for_zh_and_non_zh() -> None:
     zh_result = validate_publication_contract(
         "## 支撑材料\n\n补充内容。\n\n## 战报\n\n核心内容。\n",

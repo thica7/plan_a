@@ -6,6 +6,7 @@ from typing import Any
 
 from packages.agents.writer.structured_hygiene import (
     SOURCE_TOKEN_RE,
+    find_malformed_source_token_attempts,
     has_source_token,
     is_valid_source_id,
 )
@@ -15,7 +16,6 @@ from packages.agents.writer.structured_report import StructuredReport
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 _WHITESPACE_RE = re.compile(r"\s+")
-_SOURCE_MARKER = "[source:"
 
 
 def _normalize_heading(text: str) -> str:
@@ -230,25 +230,17 @@ def _validate_source_citations(
     issues: list[PublicationContractIssue],
 ) -> None:
     for line_number, line in enumerate(lines, start=1):
-        matches = list(SOURCE_TOKEN_RE.finditer(line))
-        matched_starts = {match.start() for match in matches}
-        search_from = 0
-        lowered = line.casefold()
-        while True:
-            marker_start = lowered.find(_SOURCE_MARKER, search_from)
-            if marker_start == -1:
-                break
-            if marker_start not in matched_starts:
-                issues.append(
-                    PublicationContractIssue(
-                        code="invalid_source_id",
-                        line_number=line_number,
-                        message="Malformed Markdown source citation token.",
-                        repair_target="structured_section",
-                    )
+        for _token in find_malformed_source_token_attempts(line):
+            issues.append(
+                PublicationContractIssue(
+                    code="invalid_source_id",
+                    line_number=line_number,
+                    message="Malformed Markdown source citation token.",
+                    repair_target="structured_section",
                 )
-            search_from = marker_start + len(_SOURCE_MARKER)
+            )
 
+        matches = list(SOURCE_TOKEN_RE.finditer(line))
         for match in matches:
             token = match.group(0)
             source_id = token[token.find(":") + 1 : -1]
