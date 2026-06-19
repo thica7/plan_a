@@ -862,6 +862,13 @@ class WriterAgentMixin:
                 "Do not include markdown citation tokens inside text fields.",
                 "Put citations only in source_ids.",
                 "Use only allowed_source_ids.",
+                (
+                    "Choose evidence_role precisely: official/product/vendor facts use "
+                    "official_fact; user/community/forum signals use community_signal; "
+                    "simulated interviews/surveys use simulated_research; reasoned "
+                    "conclusions use inference; missing/unsupported evidence uses "
+                    "evidence_gap."
+                ),
                 f"Schema JSON: {schema_json}",
                 f"allowed_source_ids JSON: {allowed_source_ids_json}",
                 f"Segment JSON: {segment_json}",

@@ -46,6 +46,29 @@ class _WriterHarness(WriterAgentMixin):
         return self.responses.pop(0)
 
 
+def test_structured_section_prompt_includes_evidence_role_guidance() -> None:
+    prompt = _WriterHarness([])._structured_section_prompt(
+        segment={"section_id": "executive_summary", "content": "Evidence"},
+        section_schema=ExecutiveSummarySection,
+        allowed_source_ids={"raw-source-a"},
+    )
+
+    for role in (
+        "official_fact",
+        "community_signal",
+        "simulated_research",
+        "inference",
+        "evidence_gap",
+    ):
+        assert role in prompt
+    assert "official/product/vendor facts" in prompt
+    assert "user/community/forum signals" in prompt
+    assert "simulated interviews/surveys" in prompt
+    assert "reasoned conclusions" in prompt
+    assert "missing/unsupported evidence" in prompt
+    assert "[source:" not in prompt
+
+
 @pytest.mark.asyncio
 async def test_structured_section_json_accepts_valid_json_and_rejects_markdown_citations() -> None:
     payload = {
