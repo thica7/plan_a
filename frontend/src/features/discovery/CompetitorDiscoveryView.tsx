@@ -1,4 +1,5 @@
 import { SearchCheck } from "lucide-react";
+import { useTranslation } from '../../stores/i18n';
 import type { CompetitorDiscovery } from "../../api/types";
 
 interface CompetitorDiscoveryViewProps {
@@ -6,6 +7,8 @@ interface CompetitorDiscoveryViewProps {
 }
 
 export function CompetitorDiscoveryView({ discovery }: CompetitorDiscoveryViewProps) {
+  const { t } = useTranslation();
+
   if (!discovery) {
     return null;
   }
@@ -13,7 +16,7 @@ export function CompetitorDiscoveryView({ discovery }: CompetitorDiscoveryViewPr
   return (
     <section className="panel discovery-panel">
       <div className="panel-heading-row">
-        <h2>Competitor discovery</h2>
+        <h2>{t('discovery.title')}</h2>
         <SearchCheck size={17} aria-hidden />
       </div>
 
@@ -31,11 +34,11 @@ export function CompetitorDiscoveryView({ discovery }: CompetitorDiscoveryViewPr
               <span>{candidate.selected ? "Selected" : "Candidate"} · {Math.round(candidate.confidence * 100)}%</span>
             </div>
             {candidate.rationale ? <p>{candidate.rationale}</p> : null}
-            {(candidate.evidence_urls ?? []).length > 0 ? (
+            {candidate.evidence_urls.length > 0 ? (
               <div className="candidate-evidence">
-                {(candidate.evidence_urls ?? []).slice(0, 2).map((url, index) => (
+                {candidate.evidence_urls.slice(0, 2).map((url, index) => (
                   <a href={url} key={url} rel="noreferrer" target="_blank">
-                    {(candidate.evidence_titles ?? [])[index] || url}
+                    {candidate.evidence_titles[index] || url}
                   </a>
                 ))}
               </div>

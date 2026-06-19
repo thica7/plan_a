@@ -47,6 +47,7 @@ from packages.hitl import (
     lifecycle_stage_for_resume_decision,
     review_kind_for_stage,
 )
+from packages.i18n.language import normalize_output_language, report_label
 from packages.identity import (
     compute_competitor_set_hash,
     compute_content_hash,
@@ -76,7 +77,7 @@ from packages.orchestrator.graph import (
     build_real_analysis_graph,
     build_scoped_redo_graph,
 )
-from packages.refs import normalize_dimension_refs
+from packages.refs import merge_ordered_refs, normalize_dimension_refs
 from packages.research.evaluation import quality_gaps_from_release_gate
 from packages.research.repair import (
     repair_task_to_redo_scope,
@@ -157,6 +158,7 @@ def _active_run_fingerprint(
     competitor_layer: str | None,
     scenario_id: str | None,
     execution_mode: str,
+    output_language: str,
     auto_redo_warn_enabled: bool,
     hitl_enabled: bool,
 ) -> str:
@@ -169,6 +171,7 @@ def _active_run_fingerprint(
         "competitor_layer": competitor_layer or "auto",
         "scenario_id": scenario_id or "auto",
         "execution_mode": execution_mode,
+        "output_language": output_language,
         "auto_redo_warn_enabled": auto_redo_warn_enabled,
         "hitl_enabled": hitl_enabled,
     }
@@ -195,6 +198,21 @@ def _factual_quality_sources(sources: list[RawSource]) -> list[RawSource]:
         if source.source_type
         and source.source_type.casefold() not in QUALITY_USER_RESEARCH_SOURCE_TYPES
     ]
+
+
+def _compact_run_detail(detail: RunDetail) -> RunDetail:
+    """Return UI-friendly run detail without replay-heavy trace payloads."""
+    compact_spans = [
+        span.model_copy(update={"full_input": "", "full_output": ""})
+        for span in detail.trace_spans
+    ]
+    return detail.model_copy(
+        update={
+            "trace_spans": compact_spans,
+            "agent_messages": [],
+            "tool_call_messages": [],
+        }
+    )
 
 
 @dataclass
@@ -267,7 +285,16 @@ class RunService(
         self._lock = asyncio.Lock()
         self._hydrate_runs()
 
-    async def create_run(self, request: RunCreateRequest) -> RunDetail:
+    @property
+    def enterprise_store(self) -> EnterpriseStore | None:
+        return self._enterprise_store
+
+    async def create_run(
+        self,
+        request: RunCreateRequest,
+        *,
+        skip_active_duplicate_check: bool = False,
+    ) -> RunDetail:
         self._ensure_workspace_quota_allows_run(request.workspace_id)
         execution_mode = self._resolve_execution_mode(request.execution_mode)
         competitors = self._normalize_competitor_names(request.competitors)
@@ -290,8 +317,10 @@ class RunService(
             if request.auto_redo_warn_enabled is None
             else request.auto_redo_warn_enabled
         )
-        hitl_enabled = (
-            self._settings.hitl_enabled if request.hitl_enabled is None else request.hitl_enabled
+        hitl_enabled = self._resolve_hitl_enabled(
+            request,
+            execution_mode=execution_mode,
+            requested_competitors=request.competitors,
         )
         duplicate_fingerprint = _active_run_fingerprint(
             workspace_id=request.workspace_id,
@@ -302,11 +331,14 @@ class RunService(
             competitor_layer=request.competitor_layer,
             scenario_id=request.scenario_id,
             execution_mode=execution_mode,
+            output_language=request.output_language,
             auto_redo_warn_enabled=auto_redo_warn_enabled,
             hitl_enabled=hitl_enabled,
         )
-        async with self._lock:
-            duplicate = self._find_active_duplicate_run(duplicate_fingerprint, now)
+        duplicate = None
+        if not skip_active_duplicate_check:
+            async with self._lock:
+                duplicate = self._find_active_duplicate_run(duplicate_fingerprint, now)
         if duplicate is not None:
             return duplicate.detail
 
@@ -383,6 +415,7 @@ class RunService(
             topic=request.topic,
             status="queued",
             execution_mode=execution_mode,
+            output_language=request.output_language,
             created_at=now,
             updated_at=now,
             plan=plan,
@@ -434,16 +467,64 @@ class RunService(
             )
         return detail
 
-    async def ensure_run_visible(self, request: RunCreateRequest) -> RunDetail:
-        detail = await self.create_run(request)
+    async def ensure_run_visible(
+        self,
+        request: RunCreateRequest,
+        *,
+        skip_active_duplicate_check: bool = False,
+    ) -> RunDetail:
+        detail = await self.create_run(
+            request,
+            skip_active_duplicate_check=skip_active_duplicate_check,
+        )
         self._persist_run(detail.id)
         return detail
+
+    async def find_active_duplicate_run(self, request: RunCreateRequest) -> RunDetail | None:
+        execution_mode = self._resolve_execution_mode(request.execution_mode)
+        competitors = self._normalize_competitor_names(request.competitors)
+        if not competitors:
+            competitors = self._scenario_seed_competitors(request.scenario_id)
+        valid_dimensions = self._normalize_requested_dimensions(
+            request.dimensions,
+            require_core_schema=not competitors,
+        )
+        auto_redo_warn_enabled = (
+            self._settings.auto_redo_warn_enabled
+            if request.auto_redo_warn_enabled is None
+            else request.auto_redo_warn_enabled
+        )
+        hitl_enabled = self._resolve_hitl_enabled(
+            request,
+            execution_mode=execution_mode,
+            requested_competitors=request.competitors,
+        )
+        fingerprint = _active_run_fingerprint(
+            workspace_id=request.workspace_id,
+            project_id=request.project_id,
+            topic=request.topic,
+            competitors=competitors,
+            dimensions=valid_dimensions,
+            competitor_layer=request.competitor_layer,
+            scenario_id=request.scenario_id,
+            execution_mode=execution_mode,
+            output_language=request.output_language,
+            auto_redo_warn_enabled=auto_redo_warn_enabled,
+            hitl_enabled=hitl_enabled,
+        )
+        async with self._lock:
+            duplicate = self._find_active_duplicate_run(fingerprint, datetime.utcnow())
+        return duplicate.detail if duplicate is not None else None
 
     def ensure_workspace_quota_allows_run(self, workspace_id: str) -> None:
         self._ensure_workspace_quota_allows_run(workspace_id)
 
     def list_runs(self) -> list[RunSummary]:
-        self._refresh_runs_from_journal()
+        for record in self._runs.values():
+            self._repair_inconsistent_hitl_status(record)
+            self._hydrate_pending_interrupt_from_detail(record)
+        if self._journal is not None:
+            return self._journal.load_run_summaries()
         return [
             RunSummary(
                 id=record.detail.id,
@@ -463,11 +544,28 @@ class RunService(
             )
         ]
 
-    def get_run(self, run_id: str) -> RunDetail | None:
+    def get_run(
+        self,
+        run_id: str,
+        *,
+        include_trace_payloads: bool = True,
+    ) -> RunDetail | None:
         record = self._load_run_record(run_id)
         if record is None:
             return None
-        return self._with_enterprise_projection(record.detail)
+        self._repair_inconsistent_hitl_status(record)
+        self._hydrate_pending_interrupt_from_detail(record)
+        detail = self._with_enterprise_projection(record.detail)
+        if include_trace_payloads:
+            return detail
+        return _compact_run_detail(detail)
+
+    def run_exists(self, run_id: str) -> bool:
+        if run_id in self._runs:
+            return True
+        if self._journal is None:
+            return False
+        return self._journal.run_exists(run_id)
 
     def _find_active_duplicate_run(
         self,
@@ -604,7 +702,23 @@ class RunService(
 
     def has_pending_interrupt(self, run_id: str) -> bool:
         record = self._runs.get(run_id)
-        return bool(record and record.pending_interrupts)
+        return bool(
+            record
+            and any(
+                not pending.get("resume_in_progress")
+                for pending in record.pending_interrupts.values()
+            )
+        )
+
+    def can_modify_plan_competitors(self, run_id: str) -> bool:
+        record = self._runs.get(run_id)
+        pending = record.pending_interrupts.get("planner") if record else None
+        return bool(
+            record
+            and record.detail.status == "interrupted"
+            and pending
+            and not pending.get("resume_in_progress")
+        )
 
     def _refresh_task_decomposition(self, plan: AnalysisPlan) -> None:
         plan.task_decomposition = self._build_task_decomposition(plan)
@@ -779,7 +893,19 @@ class RunService(
         if record is None:
             return None
         if record.pending_interrupts:
-            stage = next(iter(record.pending_interrupts))
+            stage = self._active_pending_interrupt_stage(record) or next(
+                iter(record.pending_interrupts)
+            )
+            pending = record.pending_interrupts.get(stage, {})
+            if pending.get("resume_in_progress"):
+                return record.detail
+            has_competitor_edits = request.competitors is not None or bool(
+                request.competitor_edits
+            )
+            if has_competitor_edits and request.decision != "modify_plan":
+                raise ValueError("Competitor edits require modify_plan decision.")
+            if has_competitor_edits and stage != "planner":
+                raise ValueError("Competitor edits can only be applied during planner review.")
             hitl_actor_id = (
                 "system"
                 if (request.note or "").startswith("Auto-accepted after HITL timeout")
@@ -792,9 +918,14 @@ class RunService(
                     require_core_schema=self._plan_requires_core_schema(record.detail),
                 )
                 self._refresh_task_decomposition(record.detail.plan)
+            if stage == "planner":
+                self._apply_planner_competitor_review(record.detail, request)
             memory_feedback_payload = self._capture_hitl_memory_feedback(record, request)
             if memory_feedback_payload is not None:
                 self._refresh_quality_metrics(record.detail)
+            pending["resume_in_progress"] = True
+            pending["resume_decision"] = request.decision
+            record.pending_interrupts[stage] = pending
             await self._record_hitl_lifecycle_event(
                 record,
                 lifecycle_stage=lifecycle_stage_for_resume_decision(
@@ -811,6 +942,10 @@ class RunService(
                 note=request.note or "",
                 metadata={
                     "dimensions": request.dimensions or [],
+                    "competitors": request.competitors or [],
+                    "competitor_edits": [
+                        edit.model_dump(mode="json") for edit in request.competitor_edits
+                    ],
                     "pending_interrupt": record.pending_interrupts.get(stage, {}),
                 },
             )
@@ -828,7 +963,13 @@ class RunService(
                 target_id=run_id,
                 result_action="graph_resume_scheduled",
                 note=request.note or "",
-                metadata={"dimensions": request.dimensions or []},
+                metadata={
+                    "dimensions": request.dimensions or [],
+                    "competitors": request.competitors or [],
+                    "competitor_edits": [
+                        edit.model_dump(mode="json") for edit in request.competitor_edits
+                    ],
+                },
             )
             await self.emit(
                 run_id,
@@ -847,7 +988,13 @@ class RunService(
                     "HITL feedback was captured as reviewable MemoryAgent candidate input.",
                     memory_feedback_payload,
                 )
+            if hitl_actor_id == "system":
+                record.pending_interrupts.setdefault(stage, {})["auto_resume"] = (
+                    request.model_dump(mode="json", exclude_none=True)
+                )
             asyncio.create_task(self._resume_interrupted_graph(run_id, request))
+            return record.detail
+        if request.decision in {"accept", "modify_plan", "force_pass"}:
             return record.detail
         if request.decision == "redo" and not record.detail.qa_findings:
             await self._record_hitl_lifecycle_event(
@@ -1149,7 +1296,10 @@ class RunService(
                 record,
                 kind=kind,
                 thread_id=thread_id,
-                graph_input=Command(resume=request.model_dump(mode="json", exclude_none=True)),
+                graph_input=Command(
+                    resume=request.model_dump(mode="json", exclude_none=True),
+                    update={"run_id": run_id},
+                ),
             )
             if not completed:
                 return
@@ -1373,6 +1523,21 @@ class RunService(
             message_types={"raw_sources_collected"},
         )
         detail.raw_sources = self._normalize_collected_sources(detail, dimensions)
+        # Auto-ingest collected sources into KB
+        try:
+            from packages.tools.ingest_document import ingest_document_tool
+            for source in detail.raw_sources:
+                if source.text:
+                    await ingest_document_tool.ainvoke({
+                        "url": source.url or "",
+                        "title": source.title or "",
+                        "text": source.text[:50000],
+                        "competitor": source.competitor or "",
+                        "dimension": source.dimension or "",
+                        "source_type": source.source_type or "web",
+                    })
+        except Exception:
+            pass  # Non-fatal: KB ingestion should not block pipeline
         self._append_agent_message(
             record,
             from_agent="collect_join",
@@ -1626,15 +1791,20 @@ class RunService(
                 },
             )
             self._schedule_hitl_timeout(record, stage)
-        resumed = interrupt(
-            {
-                **payload,
-                "stage": stage,
-                "interrupt_node": interrupt_node,
-                "interrupt_protocol": "langgraph_interrupt_command_resume",
-                "run_id": detail.id,
-            }
-        )
+        pending = record.pending_interrupts.get(stage) or {}
+        auto_resume = pending.pop("auto_resume", None)
+        if auto_resume is not None:
+            resumed = auto_resume
+        else:
+            resumed = interrupt(
+                {
+                    **payload,
+                    "stage": stage,
+                    "interrupt_node": interrupt_node,
+                    "interrupt_protocol": "langgraph_interrupt_command_resume",
+                    "run_id": detail.id,
+                }
+            )
         record.pending_interrupts.pop(stage, None)
         self._cancel_hitl_timeout(record, stage)
         if isinstance(resumed, HitlResumeRequest):
@@ -1668,6 +1838,9 @@ class RunService(
                 return
             pending = current.pending_interrupts.get(stage)
             if not pending or current.detail.status != "interrupted":
+                return
+            if not self._pending_interrupt_matches_current_node(current, stage, pending):
+                current.pending_interrupts.pop(stage, None)
                 return
             await self.emit(
                 run_id,
@@ -1703,6 +1876,26 @@ class RunService(
             if task is None or task.done() or task is current_task:
                 continue
             task.cancel()
+
+    def _active_pending_interrupt_stage(self, record: RunRecord) -> str | None:
+        for stage, pending in record.pending_interrupts.items():
+            if self._pending_interrupt_matches_current_node(record, stage, pending):
+                return stage
+        return None
+
+    def _pending_interrupt_matches_current_node(
+        self,
+        record: RunRecord,
+        stage: str,
+        pending: dict[str, Any],
+    ) -> bool:
+        current_node = record.detail.current_node
+        if current_node is None:
+            return False
+        interrupt_node = pending.get("interrupt_node")
+        if interrupt_node == current_node:
+            return True
+        return stage in {"planner", "qa"} and current_node == f"{stage}_hitl"
 
     async def _run_real_scoped_redo(self, record: RunRecord, scope: RedoScope) -> None:
         detail = record.detail
@@ -1751,18 +1944,19 @@ class RunService(
             if scope.kind == "collector":
                 if scoped_competitors:
                     target_competitors = scoped_competitors
-                    detail.raw_sources = [
-                        source
-                        for source in detail.raw_sources
-                        if not (
-                            source.dimension == dimension
-                            and any(
-                                self._source_matches_competitor(source, competitor)
-                                for competitor in scoped_competitors
-                            )
-                        )
-                    ]
-                    for competitor in scoped_competitors:
+                    removed_source_ids = self._remove_sources_for_collector_redo(
+                        detail,
+                        dimension=dimension,
+                        scoped_competitors=scoped_competitors,
+                    )
+                    dependent_competitors = self._competitors_with_removed_source_dependency(
+                        detail,
+                        dimension=dimension,
+                        removed_source_ids=removed_source_ids,
+                    )
+                    for competitor in merge_ordered_refs(
+                        [*scoped_competitors, *dependent_competitors]
+                    ):
                         self._clear_competitor_dimension_output(detail, competitor, dimension)
                 else:
                     detail.raw_sources = [
@@ -1790,6 +1984,51 @@ class RunService(
         detail.updated_at = datetime.utcnow()
         self._persist_run(detail.id)
         return dimensions, target_competitors
+
+    def _remove_sources_for_collector_redo(
+        self,
+        detail: RunDetail,
+        *,
+        dimension: str,
+        scoped_competitors: list[str],
+    ) -> set[str]:
+        removed_source_ids: set[str] = set()
+        retained_sources: list[RawSource] = []
+        for source in detail.raw_sources:
+            should_remove = source.dimension == dimension and any(
+                self._source_matches_competitor(source, competitor)
+                for competitor in scoped_competitors
+            )
+            if should_remove:
+                removed_source_ids.add(source.id)
+                continue
+            retained_sources.append(source)
+        detail.raw_sources = retained_sources
+        return removed_source_ids
+
+    def _competitors_with_removed_source_dependency(
+        self,
+        detail: RunDetail,
+        *,
+        dimension: str,
+        removed_source_ids: set[str],
+    ) -> list[str]:
+        if not removed_source_ids:
+            return []
+        dependent: list[str] = []
+        for competitor in detail.plan.competitors:
+            kb = detail.competitor_kbs.get(competitor)
+            knowledge = detail.competitor_knowledge.get(competitor)
+            serialized = json.dumps(
+                {
+                    "kb_slice": kb.slices.get(dimension, []) if kb else [],
+                    "knowledge": knowledge.model_dump(mode="json") if knowledge else {},
+                },
+                ensure_ascii=False,
+            )
+            if any(source_id in serialized for source_id in removed_source_ids):
+                dependent.append(competitor)
+        return dependent
 
     async def _prepare_graph_redo_from_qa(self, record: RunRecord) -> dict[str, object]:
         detail = record.detail
@@ -2411,6 +2650,7 @@ class RunService(
             projection.report_version,
             project=project,
             store=self._enterprise_store,
+            projection=projection,
         )
         return evaluate_report_release_gate(
             project=project,
@@ -2529,6 +2769,7 @@ class RunService(
                     projection.report_version,
                     project=project,
                     store=self._enterprise_store,
+                    projection=projection,
                 )
         if metadata.get("release_gate") == release_gate_metadata:
             return False
@@ -2569,6 +2810,7 @@ class RunService(
                 detail.qa_findings = retained
                 detail.updated_at = datetime.utcnow()
                 self._refresh_quality_metrics(detail)
+                self._sync_latest_revision_issue_count(detail)
             return []
 
         gaps = quality_gaps_from_release_gate(gate)
@@ -2603,7 +2845,27 @@ class RunService(
         detail.qa_findings = [*retained, *release_issues]
         detail.updated_at = datetime.utcnow()
         self._refresh_quality_metrics(detail)
+        self._sync_latest_revision_issue_count(detail)
         return release_issues
+
+    def _sync_latest_revision_issue_count(self, detail: RunDetail) -> None:
+        if not detail.revisions:
+            return
+        latest = detail.revisions[-1]
+        if latest.after_md and latest.after_md != detail.report_md:
+            return
+        issue_count_after = len(detail.qa_findings)
+        if latest.issue_count_after == issue_count_after:
+            return
+        detail.revisions[-1] = latest.model_copy(
+            update={
+                "issue_count_after": issue_count_after,
+                "convergence_ratio": self._convergence_ratio(
+                    latest.issue_count_before,
+                    issue_count_after,
+                ),
+            }
+        )
 
     def _release_gate_detected_by(self, scope: RedoScope) -> str:
         if scope.kind == "writer_only":
@@ -2708,10 +2970,12 @@ class RunService(
         if self._journal is None:
             return
         for detail in self._journal.load_runs():
-            self._runs[detail.id] = RunRecord(
+            record = RunRecord(
                 detail=detail,
                 events=self._journal.load_events(detail.id),
             )
+            self._hydrate_pending_interrupt_from_detail(record)
+            self._runs[detail.id] = record
 
     def _refresh_runs_from_journal(self) -> None:
         if self._journal is None:
@@ -2734,10 +2998,50 @@ class RunService(
         if record is None:
             record = RunRecord(detail=detail, events=events)
             self._runs[detail.id] = record
+            self._hydrate_pending_interrupt_from_detail(record)
             return record
         record.detail = detail
         record.events = events
+        self._hydrate_pending_interrupt_from_detail(record)
         return record
+
+    def _hydrate_pending_interrupt_from_detail(self, record: RunRecord) -> None:
+        self._repair_inconsistent_hitl_status(record)
+        detail = record.detail
+        if detail.status != "interrupted" or record.pending_interrupts:
+            return
+        stage = None
+        if detail.current_node == "planner_hitl":
+            stage = "planner"
+        elif detail.current_node == "qa_hitl":
+            stage = "qa"
+        if stage is None:
+            return
+        graph_kind: Literal["real", "demo", "scoped_redo"] = (
+            "demo" if detail.execution_mode == "demo" else "real"
+        )
+        thread_id = (
+            compute_graph_thread_id(detail.id, "demo") if graph_kind == "demo" else detail.id
+        )
+        record.active_graph_kind = graph_kind
+        record.active_thread_id = thread_id
+        record.pending_interrupts[stage] = {
+            "stage": stage,
+            "graph_kind": graph_kind,
+            "thread_id": thread_id,
+            "interrupt_node": detail.current_node,
+            "hydrated_from": "run_journal",
+        }
+
+    def _repair_inconsistent_hitl_status(self, record: RunRecord) -> None:
+        detail = record.detail
+        if detail.status != "running":
+            return
+        if detail.current_node not in {"planner_hitl", "qa_hitl"}:
+            return
+        detail.status = "interrupted"
+        detail.updated_at = datetime.utcnow()
+        self._persist_run(detail.id)
 
     def _persist_run(self, run_id: str) -> None:
         if self._journal is None:
@@ -3329,6 +3633,9 @@ class RunService(
                 metadata["llm_provider"] = provider
             if model:
                 metadata["llm_model"] = model
+            finish_reason = self._last_llm_finish_reason()
+            if finish_reason:
+                metadata["finish_reason"] = finish_reason
             metadata.update(self._llm_route_metadata())
             return metadata
         metadata = {"token_usage_source": "provider"}
@@ -3336,6 +3643,9 @@ class RunService(
             metadata["llm_provider"] = provider
         if model:
             metadata["llm_model"] = model
+        finish_reason = self._last_llm_finish_reason()
+        if finish_reason:
+            metadata["finish_reason"] = finish_reason
         metadata.update(self._llm_route_metadata())
         prompt_tokens = getattr(usage, "prompt_tokens", None)
         completion_tokens = getattr(usage, "completion_tokens", None)
@@ -3347,6 +3657,13 @@ class RunService(
         if total_tokens is not None:
             metadata["total_tokens"] = int(total_tokens)
         return metadata
+
+    def _last_llm_finish_reason(self) -> str | None:
+        getter = getattr(self._llm, "last_finish_reason", None)
+        if callable(getter):
+            value = getter()
+            return str(value) if value else None
+        return None
 
     def _llm_route_metadata(self) -> dict[str, str]:
         route_decision = getattr(self._llm, "last_route_decision", None)
@@ -3655,13 +3972,27 @@ class RunService(
         content_hash = compute_content_hash(
             f"{detail.id}:{competitor}:{dimension}:{len(detail.raw_sources) + 1}"
         )[:16]
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        title = (
+            f"{competitor} {dimension} 证据固定装置"
+            if is_zh
+            else f"{competitor} {dimension} evidence fixture"
+        )
+        snippet = (
+            f"在 Demo 运行中，为 {competitor} {dimension} 提取的具体结构化证据。"
+            if is_zh
+            else (
+                f"Demo evidence fixture for {competitor} {dimension} "
+                "with a concrete structured claim."
+            )
+        )
         source_id = compute_raw_source_id(
             source_type="webpage_verified",
             competitor=competitor,
             dimension=dimension,
             url=f"https://example.com/{self._issue_id_fragment(competitor)}/{dimension}",
             content_hash=content_hash,
-            title=f"{competitor} {dimension} evidence fixture",
+            title=title,
             run_id=detail.id,
             source_role="demo",
         )
@@ -3671,17 +4002,33 @@ class RunService(
             covered_competitors=[competitor],
             dimension=dimension,
             source_type="webpage_verified",
-            title=f"{competitor} {dimension} evidence fixture",
+            title=title,
             url=f"https://example.com/{self._issue_id_fragment(competitor)}/{dimension}",
-            snippet=(
-                f"Demo evidence fixture for {competitor} {dimension} "
-                "with a concrete structured claim."
-            ),
+            snippet=snippet,
             content_hash=content_hash,
             confidence=0.82,
         )
 
-    def _demo_reflection(self, dimension: str) -> ReflectionRecord:
+    def _demo_reflection(self, detail: RunDetail, dimension: str) -> ReflectionRecord:
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        if is_zh:
+            return ReflectionRecord(
+                iteration=1,
+                coverage_gaps=[
+                    f"在此 Demo 切片中，只有第一个竞品具有 {dimension} 证据。"
+                ],
+                confidence_outliers=[],
+                cross_competitor_gaps=[
+                    f"{dimension} 对比在最终评分前需要另一个来源。"
+                ],
+                suggested_redos=[
+                    RedoScope(
+                        kind="collector",
+                        target_subagent=dimension,
+                        rationale=f"{dimension} 证据覆盖不完整。",
+                    )
+                ],
+            )
         return ReflectionRecord(
             iteration=1,
             coverage_gaps=[
@@ -3700,11 +4047,17 @@ class RunService(
             ],
         )
 
-    def _demo_issue(self, dimension: str) -> QCIssue:
+    def _demo_issue(self, detail: RunDetail, dimension: str) -> QCIssue:
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        rationale = (
+            f"{dimension} 证据覆盖不完整。"
+            if is_zh
+            else f"{dimension.title()} evidence coverage is incomplete."
+        )
         scope = RedoScope(
             kind="collector",
             target_subagent=dimension,
-            rationale=f"{dimension.title()} evidence coverage is incomplete.",
+            rationale=rationale,
         )
         return QCIssue(
             id=stable_prefixed_id("qc-demo", dimension, "coverage", length=16),
@@ -3713,7 +4066,11 @@ class RunService(
             target_agent="collector",
             target_subagent=dimension,
             field_path=f"raw_sources[{dimension}]",
-            problem=f"{dimension.title()} collector returned evidence for only one competitor.",
+            problem=(
+                f"{dimension} 收集器仅返回了一个竞品的证据。"
+                if is_zh
+                else f"{dimension.title()} collector returned evidence for only one competitor."
+            ),
             redo_scope=scope,
             self_found=True,
         )
@@ -3725,36 +4082,78 @@ class RunService(
         if not source_refs:
             source_refs = ""
         memory_section = self._demo_memory_section(detail)
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        scenario_dimensions = ", ".join(
+            detail.plan.scenario_recommended_dimensions or detail.plan.dimensions
+        )
+        if is_zh:
+            return (
+                f"# {detail.plan.topic}\n\n"
+                f"## {report_label(detail.output_language, 'executive_summary')}\n"
+                f"本次 Demo 运行覆盖了 {competitors}，涉及维度有 {dimensions}，证明了"
+                "事件、来源、反思、QA 发现和报告 Markdown 都可以流畅地通过结构化 DTO 传输。"
+                f"{source_refs}\n\n"
+                f"## {report_label(detail.output_language, 'source_quality')}\n"
+                "Demo 证据被投射到企业 EvidenceRecord 模型中，保留来源 ID "
+                f"以供发布门禁和报告视图追溯。{source_refs}\n\n"
+                f"{memory_section}"
+                f"## {report_label(detail.output_language, 'side_by_side_matrix')}\n"
+                "| 维度 | 竞品 |\n"
+                "| --- | --- |\n"
+                f"| {dimensions} | {competitors} {source_refs} |\n\n"
+                f"## {report_label(detail.output_language, 'scenario_checklist')}\n"
+                f"- 场景：{detail.plan.scenario_id or 'auto'}；竞品层："
+                f"{detail.plan.competitor_layer}；推荐维度："
+                f"{scenario_dimensions}。\n"
+                f"- QA 规则：{', '.join(detail.plan.qa_rule_ids) or '默认架构检查'}\n\n"
+                f"## {report_label(detail.output_language, 'battlecard')}\n"
+                "将此 Demo 报告用作直接的战报脚手架：在用作可发布建议之前，"
+                f"验证定价、功能和画像声明。{source_refs}\n\n"
+                f"## {report_label(detail.output_language, 'claim_risk')}\n"
+                "Demo 结论属于契约检查，并非最终的市场建议。在附带当前官方来源"
+                f"和声明验证之前，将低置信度或合成证据视为受评审门禁限制。{source_refs}\n\n"
+                f"## {report_label(detail.output_language, 'next_collection')}\n"
+                "将 Demo 证据替换为当前的官方网页，然后在发布前重新运行声明验证"
+                f"和发布门禁评审。{source_refs}\n\n"
+                f"## {report_label(detail.output_language, 'evidence_appendix')}\n"
+                + "\n".join(
+                    f"- {source.id}：{source.title} / {source.source_type} [source:{source.id}]"
+                    for source in detail.raw_sources[:8]
+                )
+                + "\n\n"
+                "本次 Demo 运行证明了契约：事件、来源、反思、QA 发现和报告 "
+                "Markdown 均流畅地通过结构化 DTO 传输。"
+            )
         return (
             f"# {detail.plan.topic}\n\n"
-            "## Executive Summary\n"
+            f"## {report_label(detail.output_language, 'executive_summary')}\n"
             f"This demo run covers {competitors} across {dimensions} and proves that "
             "events, sources, reflections, QA findings, and report markdown flow through "
             f"structured DTOs.{source_refs}\n\n"
-            "## Source Quality & Coverage\n"
+            f"## {report_label(detail.output_language, 'source_quality')}\n"
             "Demo evidence is projected into the enterprise EvidenceRecord model with source "
             f"IDs preserved for release-gate and report-view traceability.{source_refs}\n\n"
             f"{memory_section}"
-            "## Side-by-Side Decision Matrix\n"
+            f"## {report_label(detail.output_language, 'side_by_side_matrix')}\n"
             "| Dimension | Competitors |\n"
             "| --- | --- |\n"
             f"| {dimensions} | {competitors} {source_refs} |\n\n"
-            "## Scenario QA Checklist\n"
+            f"## {report_label(detail.output_language, 'scenario_checklist')}\n"
             f"- Scenario: {detail.plan.scenario_id or 'auto'}; layer: "
             f"{detail.plan.competitor_layer}; recommended dimensions: "
             f"{', '.join(detail.plan.scenario_recommended_dimensions or detail.plan.dimensions)}.\n"
             f"- QA rules: {', '.join(detail.plan.qa_rule_ids) or 'default schema checks'}\n\n"
-            "## Battlecard\n"
+            f"## {report_label(detail.output_language, 'battlecard')}\n"
             "Use this demo report as a direct battlecard scaffold: verify pricing, feature, "
             f"and persona claims before using it as a publishable recommendation.{source_refs}\n\n"
-            "## Claim Validation & Evidence Risk\n"
+            f"## {report_label(detail.output_language, 'claim_risk')}\n"
             "Demo conclusions are contract checks, not final market recommendations. Treat "
             "low-confidence or synthetic evidence as review-gated until current official "
             f"sources and claim validation are attached.{source_refs}\n\n"
-            "## Next Collection / Verification Plan\n"
+            f"## {report_label(detail.output_language, 'next_collection')}\n"
             "Replace demo evidence with current official webpages, then rerun claim validation "
             f"and release gate review before publication.{source_refs}\n\n"
-            "## Evidence Appendix\n"
+            f"## {report_label(detail.output_language, 'evidence_appendix')}\n"
             + "\n".join(
                 f"- {source.id}: {source.title} / {source.source_type} [source:{source.id}]"
                 for source in detail.raw_sources[:8]
@@ -3767,18 +4166,30 @@ class RunService(
     def _demo_memory_section(self, detail: RunDetail) -> str:
         if not detail.plan.memory_prompt_context:
             return ""
-        candidate_ids = ", ".join(detail.plan.memory_candidate_ids) or "none"
-        lines = [
-            "## Memory Context",
-            (
-                "Confirmed MemoryAgent guidance was used as planning and writing context; "
-                "any remembered domain fact still needs current evidence before publication."
-            ),
-            f"- Candidate IDs: {candidate_ids}",
-            f"- Recall score: {detail.plan.memory_recall_score}/100",
-        ]
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        candidate_ids = ", ".join(detail.plan.memory_candidate_ids) or ("无" if is_zh else "none")
+        if is_zh:
+            lines = [
+                f"## {report_label(detail.output_language, 'memory_context')}",
+                (
+                    "已确认的 MemoryAgent 指导被用作规划和写作上下文；"
+                    "任何被记住的领域事实在发布前仍需要当前的证据支持。"
+                ),
+                f"- 候选 ID：{candidate_ids}",
+                f"- 召回得分：{detail.plan.memory_recall_score}/100",
+            ]
+        else:
+            lines = [
+                f"## {report_label(detail.output_language, 'memory_context')}",
+                (
+                    "Confirmed MemoryAgent guidance was used as planning and writing context; "
+                    "any remembered domain fact still needs current evidence before publication."
+                ),
+                f"- Candidate IDs: {candidate_ids}",
+                f"- Recall score: {detail.plan.memory_recall_score}/100",
+            ]
         lines.extend(
-            f"- {_memory_context_label(item)}: {item}"
+            f"- {_memory_context_label(item, is_zh=is_zh)}: {item}"
             for item in detail.plan.memory_prompt_context[:6]
         )
         return "\n".join(lines) + "\n\n"
@@ -3794,6 +4205,19 @@ class RunService(
         if self._settings.default_execution_mode == "real":
             return "real" if model_policy.real_execution_allowed else "demo"
         return "demo"
+
+    def _resolve_hitl_enabled(
+        self,
+        request: RunCreateRequest,
+        *,
+        execution_mode: str,
+        requested_competitors: list[str],
+    ) -> bool:
+        if request.hitl_enabled is not None:
+            return request.hitl_enabled
+        if self._settings.hitl_enabled:
+            return True
+        return execution_mode == "real" and len(requested_competitors) == 0
 
     def _normalize_competitor_names(self, value: object) -> list[str]:
         if not isinstance(value, list):
@@ -3812,6 +4236,139 @@ class RunService(
             if len(names) >= 8:
                 break
         return names
+
+    def _normalize_requested_competitors(self, competitors: list[str]) -> list[str]:
+        names: list[str] = []
+        seen: set[str] = set()
+        for item in competitors:
+            name = re.sub(r"\s+", " ", str(item)).strip()
+            if not name:
+                continue
+            key = name.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            names.append(name)
+        if not names:
+            raise ValueError("At least one competitor is required for planner review.")
+        if len(names) > 8:
+            raise ValueError("Planner review supports at most 8 competitors.")
+        return names
+
+    def _apply_planner_competitor_review(
+        self,
+        detail: RunDetail,
+        request: HitlResumeRequest,
+    ) -> None:
+        if request.competitors is None:
+            return
+        competitors = self._normalize_requested_competitors(request.competitors)
+        detail.plan.homepage_hints = self._migrate_plan_homepage_map(
+            detail.plan.homepage_hints,
+            competitors,
+            request.competitor_edits,
+        )
+        detail.plan.homepage_verified = self._migrate_plan_homepage_map(
+            detail.plan.homepage_verified,
+            competitors,
+            request.competitor_edits,
+        )
+        detail.plan.competitors = competitors
+        detail.competitor_discovery = self._updated_competitor_discovery(
+            detail.competitor_discovery,
+            competitors,
+            request.competitor_edits,
+        )
+        self._refresh_task_decomposition(detail.plan)
+
+    def _migrate_plan_homepage_map(
+        self,
+        homepage_map: dict[str, Any],
+        competitors: list[str],
+        competitor_edits: list[Any],
+    ) -> dict[str, Any]:
+        final_by_key = {name.casefold(): name for name in competitors}
+        rename_by_old_key = {
+            edit.name.casefold(): edit.new_name
+            for edit in competitor_edits
+            if edit.action == "rename"
+            and edit.new_name is not None
+            and edit.new_name.casefold() in final_by_key
+        }
+        migrated: dict[str, Any] = {}
+        for name, value in homepage_map.items():
+            target = rename_by_old_key.get(name.casefold(), name)
+            final_name = final_by_key.get(target.casefold())
+            if final_name is not None:
+                migrated[final_name] = value
+        return migrated
+
+    def _updated_competitor_discovery(
+        self,
+        discovery: CompetitorDiscovery | None,
+        competitors: list[str],
+        competitor_edits: list[Any],
+    ) -> CompetitorDiscovery:
+        if discovery is None:
+            discovery = CompetitorDiscovery(query="", selected_competitors=[])
+        final_keys = {name.casefold() for name in competitors}
+        candidates = list(discovery.candidates)
+        candidate_by_key = {candidate.name.casefold(): candidate for candidate in candidates}
+        renamed_source_by_final_key = {
+            edit.new_name.casefold(): edit.name
+            for edit in competitor_edits
+            if edit.action == "rename"
+            and edit.new_name is not None
+            and edit.new_name.casefold() in final_keys
+        }
+
+        for candidate in candidates:
+            candidate.selected = candidate.name.casefold() in final_keys
+
+        next_rank = max((candidate.rank for candidate in candidates), default=0) + 1
+        for competitor in competitors:
+            key = competitor.casefold()
+            reason = self._competitor_edit_reason(competitor, competitor_edits)
+            existing = candidate_by_key.get(key)
+            if existing is not None:
+                existing.selected = True
+                if reason and not existing.rationale:
+                    existing.rationale = reason
+                continue
+
+            renamed_from = renamed_source_by_final_key.get(key)
+            source = candidate_by_key.get(renamed_from.casefold()) if renamed_from else None
+            candidate = CompetitorCandidate(
+                name=competitor,
+                rank=source.rank if source is not None else next_rank,
+                selected=True,
+                rationale=source.rationale if source is not None else reason,
+                evidence_titles=list(source.evidence_titles) if source is not None else [],
+                evidence_urls=list(source.evidence_urls) if source is not None else [],
+                confidence=source.confidence if source is not None else 0.5,
+            )
+            if not candidate.rationale:
+                candidate.rationale = reason
+            candidates.append(candidate)
+            candidate_by_key[key] = candidate
+            next_rank += 1
+
+        discovery.candidates = candidates
+        discovery.selected_competitors = competitors
+        return discovery
+
+    def _competitor_edit_reason(self, competitor: str, competitor_edits: list[Any]) -> str:
+        key = competitor.casefold()
+        for edit in competitor_edits:
+            if edit.action == "add" and edit.name.casefold() == key:
+                return edit.reason or edit.source_note
+            if (
+                edit.action == "rename"
+                and edit.new_name is not None
+                and edit.new_name.casefold() == key
+            ):
+                return edit.reason
+        return ""
 
     def _normalize_requested_dimensions(
         self,
@@ -4112,15 +4669,15 @@ def _hitl_lifecycle_message(event: HitlLifecycleEvent) -> str:
     return f"HITL lifecycle {event.lifecycle_stage}: {stage} decision={decision}{action}."
 
 
-def _memory_context_label(item: str) -> str:
+def _memory_context_label(item: str, *, is_zh: bool = False) -> str:
     normalized = item.casefold()
     if normalized.startswith("[domain fact") or "domain fact" in normalized:
-        return "Domain fact"
+        return "领域事实" if is_zh else "Domain fact"
     if normalized.startswith("[qa policy") or "qa policy" in normalized:
-        return "QA policy"
+        return "QA策略" if is_zh else "QA policy"
     if normalized.startswith("[failure pattern") or "failure pattern" in normalized:
-        return "Failure pattern"
-    return "Guidance"
+        return "失败模式" if is_zh else "Failure pattern"
+    return "指导" if is_zh else "Guidance"
 
 
 def _metadata_int(value: object) -> int:

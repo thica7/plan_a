@@ -4,15 +4,26 @@ import asyncio
 import base64
 
 import pytest
+from pydantic import ValidationError
 
 from app.routes.knowledge import (
     BatchIngestItem,
     BatchIngestOptions,
     BatchIngestRequest,
+    _require_kb_access,
     _row_to_crawl_job,
     create_knowledge_batch,
 )
+from packages.auth import EnterpriseUserContext
 from packages.knowledge.repository import KnowledgeRepository
+
+
+def _user(role: str = "owner") -> EnterpriseUserContext:
+    return EnterpriseUserContext(
+        user_id=f"{role}-user",
+        role=role,  # type: ignore[arg-type]
+        workspace_id="default-workspace",
+    )
 
 
 @pytest.mark.asyncio
@@ -41,7 +52,7 @@ async def test_batch_ingest_accepts_valid_items_and_records_rejections(tmp_path)
             options=BatchIngestOptions(max_concurrent=2, fail_fast=False),
         )
 
-        response = await create_knowledge_batch(request, repo, None)
+        response = await create_knowledge_batch(request, repo, None, _user())
         job = await _wait_for_job(repo, response.job_id)
         documents = await repo.list_documents(limit=10)
 
@@ -79,7 +90,7 @@ async def test_batch_ingest_records_failed_items_without_blocking_batch(tmp_path
             options=BatchIngestOptions(max_concurrent=2, fail_fast=False),
         )
 
-        response = await create_knowledge_batch(request, repo, None)
+        response = await create_knowledge_batch(request, repo, None, _user())
         job = await _wait_for_job(repo, response.job_id)
 
         assert response.accepted == 2
@@ -107,6 +118,44 @@ def test_knowledge_crawl_job_row_tolerates_invalid_result_metadata() -> None:
     }
 
     assert _row_to_crawl_job(row).result_metadata == {}
+
+
+def test_batch_ingest_rejects_oversized_batches() -> None:
+    with pytest.raises(ValidationError):
+        BatchIngestRequest(
+            items=[BatchIngestItem(source="text", text="ok") for _ in range(101)]
+        )
+
+
+@pytest.mark.asyncio
+async def test_batch_ingest_rejects_unsupported_mime(tmp_path) -> None:
+    repo = KnowledgeRepository(str(tmp_path / "knowledge.db"))
+    await repo.initialise()
+    try:
+        request = BatchIngestRequest(
+            items=[
+                BatchIngestItem(
+                    source="base64",
+                    content_b64=base64.b64encode(b"payload").decode("ascii"),
+                    mime="application/octet-stream",
+                    filename="payload.bin",
+                )
+            ],
+        )
+
+        response = await create_knowledge_batch(request, repo, None, _user())
+
+        assert response.accepted == 0
+        assert response.rejected[0].reason == "mime is not supported"
+    finally:
+        await repo.close()
+
+
+def test_kb_write_requires_analyst_or_higher() -> None:
+    with pytest.raises(Exception) as exc_info:
+        _require_kb_access(_user("viewer"), "memory:write")
+
+    assert getattr(exc_info.value, "status_code", None) == 403
 
 
 async def _wait_for_job(repo: KnowledgeRepository, job_id: str):

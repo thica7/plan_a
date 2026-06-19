@@ -1,0 +1,39 @@
+.workbench-overview {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.workbench-overview-grid {
+  align-items: stretch;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.workbench-support-grid {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.workbench-card {
+  min-width: 0;
+}
+
+.coverage-heatmap-panel,
+.trace-timeline-panel {
+  min-height: 260px;
+}
+
+.coverage-heatmap-panel,
+.trace-timeline-panel {
+  grid-column: span 2;
+}
+
+.report-review-studio-panel {
+  grid-column: span 1;
+}

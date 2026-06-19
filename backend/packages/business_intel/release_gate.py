@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
 import re
 from urllib.parse import urlparse
 
 from packages.business_intel.claim_validator import validate_project_claims
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS, evaluate_business_qa
 from packages.business_intel.planning import build_business_intel_plan
+from packages.business_intel.report_quality import compare_run_quality
+from packages.business_intel.report_citation_policy import report_section_policy
 from packages.business_intel.scorer import score_project_readiness
 from packages.business_intel.source_reconciliation import (
     evidence_by_source_token,
@@ -13,7 +16,9 @@ from packages.business_intel.source_reconciliation import (
     normalize_source_token,
     source_tokens,
 )
+from packages.i18n.language import repair_mojibake_text
 from packages.identity import compute_release_gate_issue_id
+from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     BusinessQAFinding,
     ClaimRecord,
@@ -25,12 +30,33 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
     SourceRegistryRecord,
 )
+from packages.schema.models import AnalysisPlan, RawSource, RunMetrics
 
 MIN_VERIFIED_EVIDENCE_RATE = 0.8
 MIN_READY_SCORE = 85
 MIN_RELEASE_SOURCE_CONFIDENCE = 0.75
+MIN_COMMUNITY_RELEASE_CLUSTER_CONFIDENCE = 0.70
+COMMUNITY_RELEASE_GRADE_LABELS = {"official_confirmed", "community_triangulated"}
+COMMUNITY_RELEASE_GRADE_SOURCE_TYPES = {
+    "github_discussion",
+    "github_issue",
+    "community_forum",
+    "reddit_thread",
+    "review_site",
+    "developer_blog",
+}
 MIN_REPORT_STRUCTURE_SCORE = 0.7
 MIN_REPORT_BODY_CHARS = 900
+REPORT_RICHNESS_MINIMUMS = {
+    "executive_summary_section_score": 1.0,
+    "core_analysis_depth_score": 0.8,
+    "core_section_depth_score": 1.0,
+    "swot_section_score": 1.0,
+    "rag_gap_fill_section_score": 1.0,
+    "localized_heading_score": 1.0,
+    "battlecard_section_score": 1.0,
+    "citation_hygiene_score": 1.0,
+}
 STRONG_CONCLUSION_RE = re.compile(
     r"\b("
     r"winner|leading option|best option|safer|safest|recommended|recommendation|"
@@ -91,6 +117,12 @@ def evaluate_report_release_gate(
         *_report_integrity_issues(report_version, scoped_evidence, scoped_claims),
         *_report_structure_issues(report_version),
         *_report_depth_issues(report_version),
+        *_report_richness_issues(
+            report_version,
+            competitors=scoped_competitors,
+            evidence=report_scoped_evidence,
+            dimensions=dimensions,
+        ),
         *_source_quality_issues(scoped_evidence, competitor_names_by_id),
         *_claim_evidence_quality_issues(scoped_claims, scoped_evidence, competitor_names_by_id),
         *_claim_validation_issues(scoped_claims, scoped_evidence, competitor_names_by_id),
@@ -319,28 +351,34 @@ def _source_quality_issues(
                 ),
             )
         )
-    verified = [
+    release_grade_candidates = [
         item
         for item in evidence
-        if item.source_type == "webpage_verified"
-        and item.quality_label not in BAD_QUALITY_LABELS
-        and item.reliability_score >= 0.5
+        if _is_release_grade_rate_candidate(item)
     ]
-    verified_rate = len(verified) / len(evidence)
-    if verified_rate >= MIN_VERIFIED_EVIDENCE_RATE:
+    release_grade_denominator = release_grade_candidates or evidence
+    release_grade = [
+        item
+        for item in release_grade_denominator
+        if _is_release_grade_evidence(item, min_reliability_score=0.5)
+    ]
+    release_grade_rate = len(release_grade) / len(release_grade_denominator)
+    if release_grade_rate >= MIN_VERIFIED_EVIDENCE_RATE:
         return issues
     issues.append(
         _gate_issue(
             "verified_evidence_rate",
-            "Verified evidence rate",
+            "Release-grade evidence rate",
             (
-                f"Only {verified_rate:.0%} of report evidence is verified and usable; "
+                f"Only {release_grade_rate:.0%} of release-relevant report evidence is "
+                "release-grade; "
                 f"minimum is {MIN_VERIFIED_EVIDENCE_RATE:.0%}."
             ),
-            evidence_ids=[item.id for item in evidence],
-            **_issue_scope_from_evidence(evidence, competitor_names_by_id),
+            evidence_ids=[item.id for item in release_grade_denominator],
+            **_issue_scope_from_evidence(release_grade_denominator, competitor_names_by_id),
             recommendation=(
-                "Replace weak sources with verified webpages or mark bad evidence stale/rejected."
+                "Replace weak sources with verified webpages, high-confidence triangulated "
+                "community evidence, or mark bad evidence stale/rejected."
             ),
         )
     )
@@ -366,6 +404,71 @@ def _source_robots_status(evidence: EvidenceRecord) -> str:
     if "robots" in source_type and "blocked" in source_type:
         return "blocked"
     return "unknown"
+
+
+def _is_release_grade_evidence(
+    evidence: EvidenceRecord,
+    *,
+    min_reliability_score: float,
+) -> bool:
+    if (
+        evidence.quality_label in BAD_QUALITY_LABELS
+        or evidence.reliability_score < min_reliability_score
+    ):
+        return False
+    if evidence.source_type == "webpage_verified":
+        return True
+    if evidence.source_type not in COMMUNITY_RELEASE_GRADE_SOURCE_TYPES:
+        return False
+    if evidence.reliability_score < MIN_RELEASE_SOURCE_CONFIDENCE:
+        return False
+    return _has_release_grade_community_cluster(evidence)
+
+
+def _is_release_grade_rate_candidate(evidence: EvidenceRecord) -> bool:
+    if evidence.source_type == "webpage_verified":
+        return True
+    return (
+        evidence.source_type in COMMUNITY_RELEASE_GRADE_SOURCE_TYPES
+        and _has_release_grade_community_cluster(evidence)
+    )
+
+
+def _has_release_grade_community_cluster(evidence: EvidenceRecord) -> bool:
+    clusters = evidence.metadata.get("community_claim_clusters")
+    if not isinstance(clusters, list):
+        return False
+    for cluster in clusters:
+        if not isinstance(cluster, dict):
+            continue
+        label = str(cluster.get("label") or "")
+        if label not in COMMUNITY_RELEASE_GRADE_LABELS:
+            continue
+        confidence = _optional_float(cluster.get("confidence"))
+        if confidence is None or confidence < MIN_COMMUNITY_RELEASE_CLUSTER_CONFIDENCE:
+            continue
+        if label == "official_confirmed":
+            return True
+        source_ids = cluster.get("source_ids")
+        source_count = len(source_ids) if isinstance(source_ids, list) else 0
+        independent_count = _optional_int(cluster.get("independent_domain_count"))
+        if source_count >= 2 or (independent_count is not None and independent_count >= 2):
+            return True
+    return False
+
+
+def _optional_float(value: object) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_int(value: object) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _issue_scope_from_evidence(
@@ -394,10 +497,9 @@ def _claim_evidence_quality_issues(
             item
             for evidence_id in claim.evidence_ids
             if (item := evidence_by_id.get(evidence_id)) is not None
-            and (
-                item.source_type != "webpage_verified"
-                or item.reliability_score < MIN_RELEASE_SOURCE_CONFIDENCE
-                or item.quality_label in BAD_QUALITY_LABELS
+            and not _is_release_grade_evidence(
+                item,
+                min_reliability_score=MIN_RELEASE_SOURCE_CONFIDENCE,
             )
         ]
         if not weak:
@@ -408,7 +510,7 @@ def _claim_evidence_quality_issues(
                 "Claim evidence confidence",
                 (
                     f"Claim {claim.id} depends on {len(weak)} weak evidence item(s); "
-                    "release claims require verified webpage evidence with confidence >= "
+                    "release claims require release-grade evidence with confidence >= "
                     f"{MIN_RELEASE_SOURCE_CONFIDENCE:.2f}."
                 ),
                 claim_ids=[claim.id],
@@ -417,8 +519,8 @@ def _claim_evidence_quality_issues(
                 competitor_name=competitor_names_by_id.get(claim.competitor_id),
                 dimension=claim.claim_type,
                 recommendation=(
-                    "Redo collection for this claim using official or fetched webpages before "
-                    "publishing."
+                    "Redo collection for this claim using official, fetched webpages, or "
+                    "high-confidence triangulated community evidence before publishing."
                 ),
             )
         )
@@ -449,39 +551,56 @@ def _report_structure_issues(report_version: ReportVersionRecord) -> list[Busine
 
 
 def _report_structure_score(report_version: ReportVersionRecord) -> tuple[float, list[str]]:
+    report_md = repair_mojibake_text(report_version.report_md)
     checks = [
         (
             "Executive Summary",
-            _has_heading(report_version.report_md, ("executive summary", "executive overview")),
+            _has_heading(
+                report_md,
+                ("executive summary", "executive overview", "执行摘要", "执行概览"),
+            ),
         ),
         (
             "Source Quality & Coverage",
-            _has_heading(report_version.report_md, ("source quality", "source coverage")),
+            _has_heading(report_md, ("source quality", "source coverage", "来源质量", "来源覆盖")),
         ),
         (
             "Decision Matrix",
-            _has_heading(report_version.report_md, ("matrix", "dimension winners", "side-by-side")),
+            _has_heading(
+                report_md,
+                ("matrix", "dimension winners", "side-by-side", "决策矩阵", "对比矩阵", "维度结论"),
+            ),
         ),
         (
             "Scenario QA Checklist",
-            _has_heading(report_version.report_md, ("scenario qa", "scenario checklist")),
+            _has_heading(report_md, ("scenario qa", "scenario checklist", "场景 qa", "场景清单")),
         ),
         (
             "Claim Validation & Evidence Risk",
-            _has_heading(report_version.report_md, ("claim validation", "evidence risk")),
+            _has_heading(report_md, ("claim validation", "evidence risk", "声明校验", "证据风险")),
         ),
         (
             "Next Collection / Verification Plan",
             _has_heading(
-                report_version.report_md,
-                ("next collection", "verification plan", "evidence gap"),
+                report_md,
+                (
+                    "next collection",
+                    "verification plan",
+                    "evidence gap",
+                    "下一步采集",
+                    "验证计划",
+                    "证据缺口",
+                ),
             ),
         ),
         (
             "Evidence Appendix",
-            _has_heading(report_version.report_md, ("evidence appendix", "source appendix")),
+            _has_heading(
+                report_md,
+                ("evidence appendix", "source appendix", "证据附录", "来源附录"),
+            ),
         ),
-        ("Layer-Specific Analysis", _has_layer_heading(report_version)),
+        ("Layer-Specific Analysis", _has_layer_heading(report_version, report_md=report_md)),
     ]
     passed = sum(1 for _name, ok in checks if ok)
     missing = [name for name, ok in checks if not ok]
@@ -508,17 +627,126 @@ def _report_depth_issues(report_version: ReportVersionRecord) -> list[BusinessQA
     ]
 
 
-def _has_layer_heading(report_version: ReportVersionRecord) -> bool:
+def _report_richness_issues(
+    report_version: ReportVersionRecord,
+    *,
+    competitors: list[CompetitorRecord],
+    evidence: list[EvidenceRecord],
+    dimensions: list[str],
+) -> list[BusinessQAFinding]:
+    if len(competitors) < 2 or not report_version.report_md.strip():
+        return []
+    detail = _release_report_quality_detail(
+        report_version,
+        competitors=competitors,
+        evidence=evidence,
+        dimensions=dimensions,
+    )
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric.target_value for metric in comparison.metrics}
+    failed = [
+        f"{name}={metrics.get(name, 0.0):.2f} (<{minimum:.2f})"
+        for name, minimum in REPORT_RICHNESS_MINIMUMS.items()
+        if metrics.get(name, 0.0) < minimum
+    ]
+    if not failed:
+        return []
+    return [
+        _gate_issue(
+            "report_depth_required",
+            "Report core richness required",
+            (
+                "Report core richness metrics are below release minimums: "
+                f"{'; '.join(failed)}."
+            ),
+            recommendation=(
+                "Redo the writer report with expanded evidence-backed core analysis, explicit "
+                "SWOT quadrants, fuller section-level tradeoffs, and a concrete RAG gap-fill "
+                "summary before marking the run complete."
+            ),
+        )
+    ]
+
+
+def _release_report_quality_detail(
+    report_version: ReportVersionRecord,
+    *,
+    competitors: list[CompetitorRecord],
+    evidence: list[EvidenceRecord],
+    dimensions: list[str],
+) -> RunDetail:
+    competitor_names_by_id = {item.id: item.name for item in competitors}
+    raw_sources = [
+        RawSource(
+            id=item.id,
+            competitor=competitor_names_by_id.get(item.competitor_id, item.competitor_id),
+            dimension=item.dimension or "general",
+            source_type=item.source_type,
+            title=item.title,
+            url=item.url,
+            snippet=item.snippet,
+            content_hash=item.content_hash or item.id,
+            confidence=item.reliability_score,
+            quality_score=item.reliability_score,
+            metadata={
+                **item.metadata,
+                "raw_source_id": item.raw_source_id,
+                "release_evidence_id": item.id,
+            },
+        )
+        for item in evidence
+    ]
+    now = datetime.utcnow()
+    has_sources = bool(raw_sources)
+    return RunDetail(
+        id=report_version.run_id or report_version.id,
+        workspace_id=report_version.workspace_id,
+        project_id=report_version.project_id,
+        topic=report_version.topic_normalized,
+        status="completed",
+        execution_mode="real",
+        created_at=report_version.created_at or now,
+        updated_at=report_version.created_at or now,
+        plan=AnalysisPlan(
+            topic=report_version.topic_normalized,
+            competitors=[item.name for item in competitors],
+            dimensions=dimensions or ["pricing", "feature", "persona"],
+            competitor_layer=report_version.competitor_layer,
+        ),
+        raw_sources=raw_sources,
+        metrics=RunMetrics(
+            llm_calls=3,
+            source_coverage_rate=1.0 if has_sources else 0.0,
+            verified_source_rate=1.0 if has_sources else 0.0,
+            claim_citation_rate=1.0 if has_sources else 0.0,
+            schema_pass_rate=1.0,
+        ),
+        report_md=report_version.report_md,
+    )
+
+
+def _has_layer_heading(
+    report_version: ReportVersionRecord,
+    *,
+    report_md: str | None = None,
+) -> bool:
+    markdown = (
+        report_md if report_md is not None else repair_mojibake_text(report_version.report_md)
+    )
     layer = report_version.competitor_layer
     if layer == "L1":
-        return _has_heading(report_version.report_md, ("battlecard", "sales objection"))
+        return _has_heading(markdown, ("battlecard", "sales objection", "战报", "销售异议"))
     if layer == "L2":
-        return _has_heading(report_version.report_md, ("workflow", "enterprise risk", "switching"))
+        return _has_heading(
+            markdown,
+            ("workflow", "enterprise risk", "switching", "工作流", "企业风险", "替换成本"),
+        )
     if layer == "L3":
         return _has_heading(
-            report_version.report_md, ("market landscape", "segmentation", "benchmark")
+            markdown,
+            ("market landscape", "segmentation", "benchmark", "市场格局", "市场分层", "竞品集群"),
         )
-    return _has_heading(report_version.report_md, ("business implication", "strategy"))
+    return _has_heading(markdown, ("business implication", "strategy", "业务影响", "战略"))
 
 
 def _has_heading(markdown: str, needles: tuple[str, ...]) -> bool:
@@ -596,17 +824,23 @@ def _report_citation_quality_issues(
     evidence_by_token = evidence_by_source_token(evidence)
 
     issues: list[BusinessQAFinding] = []
+    section_heading = ""
     for line in report_version.report_md.splitlines():
+        heading_match = re.match(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$", line)
+        if heading_match:
+            section_heading = heading_match.group(1).strip()
+            continue
         if not STRONG_CONCLUSION_RE.search(line):
+            continue
+        if report_section_policy(section_heading, line) != "strong_conclusion":
             continue
         weak = [
             evidence_by_token[normalized]
             for token in _cited_source_tokens(line)
             if (normalized := normalize_source_token(token)) in evidence_by_token
-            and (
-                evidence_by_token[normalized].source_type != "webpage_verified"
-                or evidence_by_token[normalized].reliability_score < MIN_RELEASE_SOURCE_CONFIDENCE
-                or evidence_by_token[normalized].quality_label in BAD_QUALITY_LABELS
+            and not _is_release_grade_evidence(
+                evidence_by_token[normalized],
+                min_reliability_score=MIN_RELEASE_SOURCE_CONFIDENCE,
             )
         ]
         if not weak:

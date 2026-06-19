@@ -1,4 +1,4 @@
-import type { CompetitorLayer, ScenarioPack } from "../api/types";
+import type { CompetitorLayer, ScenarioPack } from "../../api/types";
 
 export const coreDimensions = ["pricing", "feature", "persona"];
 const maxRunDimensions = 8;

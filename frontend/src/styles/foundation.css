@@ -1,0 +1,194 @@
+@import "./design-tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+
+  /* Legacy color mappings - gradually migrate to design tokens */
+  --color-canvas: var(--gray-50);
+  --color-surface: var(--bg-1);
+  --color-surface-muted: var(--gray-50);
+  --color-surface-strong: var(--gray-100);
+  --color-surface-raised: var(--bg-elevated);
+  --color-sidebar: #0c1726;
+  --color-sidebar-muted: #9ca3af;
+  --color-sidebar-line: rgba(148, 163, 184, 0.16);
+  --color-topbar: rgba(255, 255, 255, 0.94);
+  --color-text: var(--gray-900);
+  --color-text-soft: var(--gray-700);
+  --color-muted: var(--gray-500);
+  --color-muted-2: var(--gray-400);
+  --color-border: var(--gray-200);
+  --color-border-soft: var(--gray-100);
+  --color-accent: var(--primary-600);
+  --color-accent-strong: var(--primary-700);
+  --color-accent-soft: var(--primary-50);
+  --color-info: var(--info-500);
+  --color-info-soft: var(--info-50);
+  --color-warning: var(--warning-600);
+  --color-warning-soft: var(--warning-50);
+  --color-danger: var(--error-500);
+  --color-danger-soft: var(--error-50);
+  --color-success: var(--success-600);
+  --color-success-soft: var(--success-50);
+
+  --font-ui: var(--font-sans);
+  --font-mono: var(--font-mono-token);
+  --font-size-caption: 11px;
+  --font-size-label: var(--text-xs);
+  --font-size-control: 13px;
+  --font-size-body: var(--text-sm);
+  --font-size-panel-title: var(--text-base);
+  --font-size-page-title: var(--text-3xl);
+  --line-height-tight: var(--leading-tight);
+  --line-height-body: var(--leading-normal);
+  --line-height-reading: var(--leading-relaxed);
+  --font-weight-label: var(--font-bold);
+  --font-weight-control: var(--font-semibold);
+  --font-weight-title: var(--font-bold);
+
+  --space-1: var(--spacing-1);
+  --space-2: var(--spacing-2);
+  --space-3: var(--spacing-2);
+  --space-4: var(--spacing-3);
+  --space-5: var(--spacing-3);
+  --space-6: var(--spacing-4);
+  --space-7: var(--spacing-4);
+  --space-8: var(--spacing-5);
+  --space-9: var(--spacing-5);
+  --space-10: var(--spacing-6);
+  --space-11: var(--spacing-8);
+  --space-12: var(--spacing-8);
+
+  --radius-xs: var(--radius-sm-token);
+  --radius-sm: var(--radius-md-token);
+  --radius-md: var(--radius-lg-token);
+  --radius-pill: var(--radius-full);
+
+  --shadow-soft: var(--shadow-sm);
+  --shadow: var(--shadow-md);
+  --shadow-raised: var(--shadow-lg);
+  --focus-ring: 0 0 0 3px rgba(51, 112, 255, 0.2);
+  --motion-fast: var(--transition-fast);
+  --motion-med: var(--transition-base);
+
+  --bg: var(--color-canvas);
+  --surface: var(--color-surface);
+  --surface-muted: var(--color-surface-muted);
+  --surface-strong: var(--color-surface-strong);
+  --text: var(--color-text);
+  --text-soft: var(--color-text-soft);
+  --muted: var(--color-muted);
+  --muted-2: var(--color-muted-2);
+  --border: var(--color-border);
+  --border-soft: var(--color-border-soft);
+  --accent: var(--color-accent);
+  --accent-strong: var(--color-accent-strong);
+  --accent-soft: var(--color-accent-soft);
+  --blue: var(--color-info);
+  --blue-soft: var(--color-info-soft);
+  --amber: var(--color-warning);
+  --amber-soft: var(--color-warning-soft);
+  --warning: var(--color-warning);
+  --warning-soft: var(--color-warning-soft);
+  --danger: var(--color-danger);
+  --danger-soft: var(--color-danger-soft);
+  --success: var(--color-success);
+  --success-soft: var(--color-success-soft);
+  --focus: var(--focus-ring);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg);
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  letter-spacing: 0;
+  line-height: var(--line-height-body);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: 0;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition:
+    background-color var(--motion-fast),
+    border-color var(--motion-fast),
+    box-shadow var(--motion-fast),
+    color var(--motion-fast),
+    transform var(--motion-fast);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+a {
+  color: inherit;
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+}
+
+::selection {
+  background: rgba(15, 118, 110, 0.16);
+  color: var(--text);
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--border-soft);
+  margin: var(--space-8) 0;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+.spin {
+  animation: spin 950ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

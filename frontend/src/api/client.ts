@@ -18,6 +18,7 @@ import type {
   EvidenceGapFillResult,
   EvidenceGapReport,
   EvidenceRecord,
+  HitlResumePayload,
   KnowledgeGraphReadModel,
   MemoryCandidate,
   MemoryCandidateStatus,
@@ -75,13 +76,19 @@ import type {
 } from "./types";
 import type { RunEvent } from "./sse_types";
 
+const AUTH_TOKEN_STORAGE_KEY = "competiscope.authToken";
+const USER_ID_STORAGE_KEY = "competiscope.userId";
+const USER_ROLE_STORAGE_KEY = "competiscope.userRole";
+const WORKSPACE_ID_STORAGE_KEY = "competiscope.workspaceId";
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
+    ...init,
     headers: {
       "Content-Type": "application/json",
+      ...apiIdentityHeaders(),
       ...init?.headers,
     },
-    ...init,
   });
 
   if (!response.ok) {
@@ -100,6 +107,31 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+function apiIdentityHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const token = envValue("VITE_API_BEARER_TOKEN") || storageValue(AUTH_TOKEN_STORAGE_KEY);
+  const userId = envValue("VITE_API_USER_ID") || storageValue(USER_ID_STORAGE_KEY);
+  const userRole = envValue("VITE_API_USER_ROLE") || storageValue(USER_ROLE_STORAGE_KEY);
+  const workspaceId =
+    envValue("VITE_API_WORKSPACE_ID") || storageValue(WORKSPACE_ID_STORAGE_KEY);
+
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (userId) headers["X-User-Id"] = userId;
+  if (userRole) headers["X-User-Role"] = userRole;
+  if (workspaceId) headers["X-Workspace-Id"] = workspaceId;
+  return headers;
+}
+
+function envValue(name: string): string {
+  const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+  return env?.[name]?.trim() ?? "";
+}
+
+function storageValue(key: string): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(key)?.trim() ?? "";
 }
 
 export function listSkills() {
@@ -175,8 +207,9 @@ export function rejectReportWorkflow(
   );
 }
 
-export function getRun(runId: string) {
-  return request<RunDetail>(`/runs/${runId}`);
+export function getRun(runId: string, options: { includeTracePayloads?: boolean } = {}) {
+  const params = options.includeTracePayloads ? "?include_trace_payloads=true" : "";
+  return request<RunDetail>(`/runs/${runId}${params}`);
 }
 
 export function getRunQualityComparison(runId: string, baselineRunId?: string) {
@@ -237,14 +270,7 @@ export function getToolCallMessages(runId: string) {
   return request<ToolCallMessage[]>(`/runs/${runId}/trace/tool-calls`);
 }
 
-export function resumeRun(
-  runId: string,
-  payload: {
-    decision: "accept" | "modify_plan" | "force_pass" | "redo";
-    note?: string;
-    dimensions?: string[];
-  },
-) {
+export function resumeRun(runId: string, payload: HitlResumePayload) {
   return request<RunDetail>(`/runs/${runId}/resume`, {
     method: "POST",
     body: JSON.stringify(payload),
@@ -615,6 +641,14 @@ export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) 
     "redo.routed",
     "benchmark.scored",
     "report.ready",
+    "runtime.command",
+    "writer_preflight",
+    "writer_segment_preflight",
+    "writer_segment_validated",
+    "writer_assembly_completed",
+    "writer_assemble_repair_completed",
+    "writer_quality_preflight",
+    "writer_quality_preflight_repair",
   ];
   for (const type of eventTypes) {
     source.addEventListener(type, (message) => {

@@ -8,6 +8,7 @@ from packages.research.capture import CaptureCache, capture_candidate, select_ca
 from packages.research.capture.policy import (
     capture_failure_reason,
     capture_rejection_reason,
+    fallback_candidate_reason,
     invalid_candidate_reason,
 )
 from packages.research.discovery import (
@@ -25,6 +26,7 @@ from packages.research.evidence import (
     normalized_fields_as_dicts,
     normalized_fields_from_evidence_items,
     raw_source_from_capture,
+    raw_sources_from_research_result,
     snippet_from_evidence_items,
     source_quality_problem,
 )
@@ -42,6 +44,7 @@ from packages.research.models import (
     ExtractionResult,
     QualityGap,
     ResearchBrief,
+    ResearchResult,
     SourceCandidate,
 )
 from packages.research.pipeline import run_research_pipeline
@@ -133,6 +136,33 @@ def test_search_candidate_confidence_requires_competitor_relevance() -> None:
     )
 
     assert candidates[0].confidence < 0.5
+
+
+def test_community_search_reddit_candidate_keeps_community_confidence() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agent",
+        competitor="Cursor",
+        dimension="pricing",
+    )
+
+    candidates = search_result_candidates(
+        brief,
+        [
+            SearchResult(
+                title="Cursor pricing reddit",
+                url="https://www.reddit.com/r/cursor/comments/abc",
+                snippet="Cursor Pro users discuss the $20 per month plan and usage limits.",
+            )
+        ],
+        origin="community_search",
+        query="Cursor pricing reddit user reports",
+    )
+
+    candidate = candidates[0]
+    assert candidate.origin == "community_search"
+    assert candidate.confidence == 0.62
+    assert fallback_candidate_reason(candidate) == ""
 
 
 def test_capture_selection_defers_low_confidence_homepage_candidates() -> None:
@@ -383,6 +413,118 @@ def test_raw_source_from_capture_preserves_candidate_and_fetch_lineage() -> None
     assert source_quality_problem(source) is None
 
 
+def test_source_quality_accepts_trusted_windsurf_docs_redirect_with_devin_rebrand() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI Coding Agent",
+        competitor="Windsurf",
+        dimension="feature",
+        homepage_hint="https://windsurf.com/",
+    )
+    candidate = SourceCandidate(
+        title="Windsurf official plugin docs",
+        url="https://docs.windsurf.com/plugins",
+        origin="trusted_registry",
+        competitor="Windsurf",
+        dimension="feature",
+        rank=0,
+        confidence=0.98,
+    )
+    captured = CapturedPage(
+        candidate_id=candidate.id,
+        requested_url=candidate.url,
+        final_url="https://docs.devin.ai/windsurf/plugins/changelog",
+        status="ok",
+        title="Changelog - Devin Docs",
+        text="",
+        content_hash="hash-windsurf-devin-docs",
+        status_code=200,
+        fetch_method="basic_httpx",
+        quality_score=1.0,
+        text_length=220,
+    )
+
+    source = raw_source_from_capture(
+        brief,
+        candidate,
+        captured,
+        confidence=0.96,
+        snippet=(
+            "Windsurf is now Devin Desktop. Devin Docs describes Windsurf Cascade "
+            "plugins, agentic coding workflows, autocomplete, MCP, and developer "
+            "IDE features for engineering teams."
+        ),
+    )
+
+    assert source_quality_problem(source) is None
+
+
+def test_raw_source_admission_reports_rejection_reason_for_accepted_evidence() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI Coding Agent",
+        competitor="Cursor",
+        dimension="feature",
+    )
+    candidate = SourceCandidate(
+        id="candidate-cursor-confused",
+        title="Cursor pagination docs",
+        url="https://example.com/cursor-pagination",
+        origin="web_search",
+        competitor="Cursor",
+        dimension="feature",
+        rank=0,
+        confidence=0.7,
+    )
+    page = CapturedPage(
+        id="page-cursor-confused",
+        candidate_id=candidate.id,
+        requested_url=candidate.url,
+        final_url=candidate.url,
+        status="ok",
+        title="Cursor pagination docs",
+        text="Cursor pagination APIs expose database cursor features for developers.",
+        content_hash="hash-cursor-confused",
+        fetch_method="basic_httpx",
+        quality_score=0.9,
+    )
+    item = EvidenceItem(
+        competitor="Cursor",
+        dimension="feature",
+        field="workflow_capability",
+        value="database cursor pagination",
+        source_candidate_id=candidate.id,
+        captured_page_id=page.id,
+        source_url=page.final_url,
+        quote="Cursor pagination APIs expose database cursor features for developers.",
+        confidence=0.9,
+        status="accepted",
+    )
+    diagnostics: list[dict[str, object]] = []
+
+    sources = raw_sources_from_research_result(
+        brief,
+        ResearchResult(
+            brief=brief,
+            candidates=[candidate],
+            captured_pages=[page],
+            evidence_items=[item],
+        ),
+        batch_sources=[],
+        target_source_count=1,
+        requires_accepted_evidence=True,
+        source_exists=lambda _url, _sources: False,
+        confidence_for_source=lambda _candidate, _page, _snippet, _items: 0.96,
+        fallback_snippet=lambda page: page.snippet,
+        rejection_diagnostics=diagnostics,
+    )
+
+    assert sources == []
+    assert diagnostics
+    assert diagnostics[0]["reason"] == "source_quality_problem"
+    assert "rather than Cursor" in str(diagnostics[0]["detail"])
+
+
 def test_normalized_fields_are_built_from_accepted_evidence_items() -> None:
     pricing_model = EvidenceItem(
         competitor="A",
@@ -514,6 +656,92 @@ def test_pricing_extractor_marks_open_weight_pricing_not_applicable() -> None:
     assert extraction.fields["pricing_model_type"] == "open_weight_self_hosted"
     assert extraction.not_applicable_reason
     assert gaps == []
+
+
+def test_pricing_extractor_normalizes_price_rows_without_credit_noise() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding assistant pricing",
+        competitor="GitHub Copilot",
+        dimension="pricing",
+    )
+    page = CapturedPage(
+        candidate_id="candidate-copilot-pricing",
+        requested_url="https://github.com/features/copilot/plans",
+        final_url="https://github.com/features/copilot/plans",
+        status="ok",
+        title="GitHub Copilot plans",
+        text=(
+            "Business costs $19 per user per month. "
+            "Enterprise costs $39 per user per month. "
+            "Promotional documentation mentions $70 in credits for a separate "
+            "trial balance, which is not a plan price."
+        ),
+        content_hash="hash-copilot-pricing",
+        status_code=200,
+        fetch_method="webfetch_v2",
+        quality_score=0.94,
+    )
+
+    extraction = extract_pricing_model(brief, page)
+    evidence_items = admit_evidence_items(
+        [extraction],
+        captured_pages=[page],
+        min_accept_confidence=0.35,
+    )
+    normalized = normalized_fields_from_evidence_items(evidence_items)
+
+    assert extraction.fields["price_rows"] == [
+        {
+            "tier_name": "Business",
+            "price": "$19 per user",
+            "billing_cycle": "monthly",
+            "usage_limit": "",
+        },
+        {
+            "tier_name": "Enterprise",
+            "price": "$39 per user",
+            "billing_cycle": "monthly",
+            "usage_limit": "",
+        },
+    ]
+    assert [(field.tier_name, field.price) for field in normalized] == [
+        ("Business", "$19 per user"),
+        ("Enterprise", "$39 per user"),
+    ]
+    assert "$70" not in {field.price for field in normalized}
+
+
+def test_pricing_extractor_keeps_plan_price_with_credit_limit() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI plan pricing",
+        competitor="OpenAI Codex",
+        dimension="pricing",
+    )
+    page = CapturedPage(
+        candidate_id="candidate-codex-pricing",
+        requested_url="https://openai.com/codex/pricing",
+        final_url="https://openai.com/codex/pricing",
+        status="ok",
+        title="OpenAI Codex pricing",
+        text="Go costs $8 per month and includes 125 credits for Codex usage.",
+        content_hash="hash-codex-pricing",
+        status_code=200,
+        fetch_method="webfetch_v2",
+        quality_score=0.94,
+    )
+
+    extraction = extract_pricing_model(brief, page)
+
+    assert extraction.fields["price_rows"] == [
+        {
+            "tier_name": "Go",
+            "price": "$8 per month",
+            "billing_cycle": "monthly",
+            "usage_limit": "125 credits",
+        }
+    ]
 
 
 def test_feature_extractor_emits_slot_matrix_and_gap_repair_task() -> None:
@@ -745,6 +973,15 @@ def test_quote_quality_rejects_truncated_fragments() -> None:
     )
 
     assert reason == "quote_truncated_fragment"
+
+
+def test_quote_quality_accepts_chinese_business_sentence() -> None:
+    reason = quote_quality_problem(
+        "最高影响维度结论：该产品定价方案按月计费，企业客户可以按席位购买并控制预算。",
+        dimension="pricing",
+    )
+
+    assert reason is None
 
 
 @pytest.mark.asyncio

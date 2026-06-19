@@ -5,7 +5,6 @@ tools_allowlist:
   - web_search
   - fetch_page
   - find_official_docs
-  - extract_facts
 query_templates:
   - "{competitor} features"
   - "{competitor} product docs"

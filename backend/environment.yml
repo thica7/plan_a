@@ -6,4 +6,4 @@ dependencies:
   - pip
   - pip:
       - -e ".[dev,trace]"
-      - pydantic-ai>=0.8.0
+      - pydantic-ai-slim[openai]==1.106.0

@@ -26,6 +26,7 @@ def extract_pricing_model(brief: ResearchBrief, page: CapturedPage) -> Extractio
     pricing_model_type = _pricing_model_type(brief.competitor, normalized)
     fields = {
         "pricing_model_type": pricing_model_type,
+        "price_rows": _price_rows(text),
         "tier_names": _tier_names(text),
         "price_points": _price_points(text),
         "billing_cycle": _billing_cycle(normalized),
@@ -88,24 +89,157 @@ def _pricing_model_type(competitor: str, normalized_text: str) -> str:
 
 def _tier_names(text: str) -> list[str]:
     names = []
-    for token in ("Free", "Pro", "Team", "Business", "Enterprise", "Max", "Plus"):
+    for token in ("Free", "Go", "Pro", "Team", "Business", "Enterprise", "Max", "Plus", "Edu"):
         if re.search(rf"\b{re.escape(token)}\b", text, flags=re.IGNORECASE):
             names.append(token)
     return names
 
 
 def _price_points(text: str) -> list[str]:
+    matches: list[str] = []
+    for clause in _pricing_clauses(text):
+        for match in _price_match_regex().finditer(clause):
+            if _price_match_is_noise(clause, match):
+                continue
+            if not _price_match_has_pricing_context(clause, match):
+                continue
+            matches.append(" ".join(match.group(0).split()))
+    return _dedupe(matches)
+
+
+def _price_rows(text: str) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for clause in _pricing_clauses(text):
+        for match in _price_match_regex().finditer(clause):
+            if _price_match_is_noise(clause, match):
+                continue
+            tier_name = _tier_name_near_price(clause, match)
+            if not tier_name and not _price_match_has_metered_unit(match.group(0)):
+                continue
+            price = " ".join(match.group(0).split())
+            key = (tier_name.casefold(), price.casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(
+                {
+                    "tier_name": tier_name,
+                    "price": price,
+                    "billing_cycle": _billing_cycle_for_clause(clause),
+                    "usage_limit": _first_usage_limit(clause),
+                }
+            )
+    return rows
+
+
+def _price_match_regex() -> re.Pattern[str]:
+    return re.compile(
+        r"(?:\$|USD\s*)\s?\d+(?:\.\d+)?"
+        r"(?:\s*(?:/|per)\s*(?:month|mo|year|yr|user|seat|developer|"
+        r"active\s+day|day|1M tokens|MTok|million tokens|tokens?))?",
+        flags=re.IGNORECASE,
+    )
+
+
+def _pricing_clauses(text: str) -> list[str]:
+    clauses = re.split(r"(?<=[.!?。；;])\s+|\n+|\s+\|\s+", text)
+    return [clause.strip() for clause in clauses if clause.strip()]
+
+
+def _price_match_is_noise(clause: str, match: re.Match[str]) -> bool:
+    unit = match.group(0).casefold()
+    if re.search(r"\b(per|/)\s*(?:month|mo|year|yr|user|seat|developer|1m|million|mtok|tokens?)\b", unit):
+        return False
+    window = clause[max(0, match.start() - 48) : min(len(clause), match.end() + 72)]
+    return bool(
+        re.search(
+            r"\b(?:promo|promotional|coupon|trial\s+balance|credit\s+balance)\b|"
+            r"\b(?:in|as|worth)\s+credits?\b|"
+            r"\bcredits?\s+(?:balance|included)\b|"
+            r"\bnot\s+(?:a\s+)?(?:plan\s+)?price\b",
+            window,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _price_match_has_pricing_context(clause: str, match: re.Match[str]) -> bool:
+    lowered = clause.casefold()
+    if _tier_name_near_price(clause, match):
+        return True
+    if _price_match_has_metered_unit(match.group(0)):
+        return True
+    return bool(
+        re.search(
+            r"\b(price|pricing|costs?|plans?|billing|per\s+user|per\s+seat|"
+            r"monthly|annually|enterprise|contact sales)\b",
+            lowered,
+        )
+    )
+
+
+def _price_match_has_metered_unit(price: str) -> bool:
+    return bool(
+        re.search(
+            r"(?:/|per)\s*(?:1m|million|mtok|tokens?|active\s+day|day|request)",
+            price,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _tier_name_near_price(clause: str, match: re.Match[str]) -> str:
+    before = clause[max(0, match.start() - 80) : match.start()]
+    after = clause[match.end() : min(len(clause), match.end() + 60)]
+    for text in (before, after):
+        name = _last_tier_name(text)
+        if name:
+            return name
+    return ""
+
+
+def _last_tier_name(text: str) -> str:
+    candidates: list[tuple[int, str]] = []
+    for token in (
+        "Free",
+        "Go",
+        "Pro",
+        "Team",
+        "Teams",
+        "Business",
+        "Enterprise",
+        "Max",
+        "Plus",
+        "Edu",
+    ):
+        for match in re.finditer(rf"\b{re.escape(token)}\b", text, flags=re.IGNORECASE):
+            label = "Team" if token == "Teams" else token
+            candidates.append((match.start(), label))
+    if not candidates:
+        return ""
+    return max(candidates, key=lambda item: item[0])[1]
+
+
+def _billing_cycle_for_clause(clause: str) -> str:
+    lowered = clause.casefold()
+    if re.search(r"\b(per month|/month|monthly|/mo|per mo)\b", lowered):
+        return "monthly"
+    if re.search(r"\b(per year|/year|annual|annually|yearly|/yr|per yr)\b", lowered):
+        return "annual"
+    if re.search(r"\b(per token|per 1m|/1m|mtok|million tokens|active day|per day)\b", lowered):
+        return "usage"
+    return ""
+
+
+def _first_usage_limit(clause: str) -> str:
     matches = re.findall(
-        r"(?:\$|USD\s*)\s?\d+(?:\.\d+)?(?:\s*/\s?(?:month|year|user|seat|1M tokens|MTok))?",
-        text,
+        r"\b\d(?:[\d,]*)(?:\.\d+)?\s*(?:k|m|million|billion)?\s+"
+        r"(?:tokens?|requests?|credits?|seats?|users?|context|messages)\b",
+        clause,
         flags=re.IGNORECASE,
     )
-    token_matches = re.findall(
-        r"\$\s?\d+(?:\.\d+)?\s*(?:input|output)?\s*(?:/|per)\s*(?:1M|million|MTok|tokens?)",
-        text,
-        flags=re.IGNORECASE,
-    )
-    return _dedupe([*matches, *token_matches])
+    return " ".join(matches[0].split()) if matches else ""
 
 
 def _billing_cycle(normalized_text: str) -> list[str]:
@@ -158,6 +292,14 @@ def _quotes(page: CapturedPage, fields: dict[str, object]) -> list[EvidenceQuote
 
 
 def _window_for_field(text: str, field: str, value: object) -> str:
+    if field == "price_rows" and isinstance(value, list):
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            price = str(item.get("price") or "")
+            if price:
+                return _window_for_value(text, price)
+        return _window_for_terms(text, ("pricing", "plans", "billing", "enterprise"))
     if field == "pricing_model_type":
         model_type = str(value)
         if model_type == "api_usage_based":

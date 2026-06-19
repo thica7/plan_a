@@ -16,7 +16,7 @@ async def stream_run(
     request: Request,
     service: RunServiceDep,
 ) -> EventSourceResponse:
-    if service.get_run(run_id) is None:
+    if not service.run_exists(run_id):
         raise HTTPException(status_code=404, detail="Run not found")
 
     async def event_generator():

@@ -75,6 +75,16 @@ class RawSourceDigestMessagePayload(_MessagePayload):
     after_count: int | None = Field(default=None, ge=0)
 
 
+class CommunitySearchSummaryMessagePayload(_MessagePayload):
+    competitor: str
+    dimension: str
+    queries: list[str] = Field(default_factory=list)
+    query_count: int = Field(ge=0)
+    candidate_count: int = Field(ge=0)
+    candidate_ids: list[str] = Field(default_factory=list)
+    no_result: bool = False
+
+
 class QCIssueCollectionMessagePayload(_MessagePayload):
     qa_findings: list[QCIssue] = Field(default_factory=list)
     phase: str | None = None
@@ -117,15 +127,24 @@ class CompetitorKBDigestMessagePayload(_MessagePayload):
 
 class ComparisonMatrixMessagePayload(_MessagePayload):
     comparison_matrix: ComparisonMatrix
+    module_status: Literal["llm", "fallback"] = "llm"
+    fallback: dict[str, Any] = Field(default_factory=dict)
 
 
 class ReflectionRecordMessagePayload(_MessagePayload):
     reflection: ReflectionRecord
+    module_status: Literal["llm", "fallback"] = "llm"
+    fallback: dict[str, Any] = Field(default_factory=dict)
 
 
 class MarkdownReportMessagePayload(_MessagePayload):
     report_md: str
     writer_mode: str = ""
+    writer_repair_mode: Literal["none", "line", "section", "assemble", "full"] = "none"
+    writer_repair_sections: list[str] = Field(default_factory=list)
+    writer_repair_decision: str = ""
+    anti_regression_reason: str | None = None
+    previous_report_protected: bool = False
     error: str | None = None
 
 
@@ -173,6 +192,7 @@ AGENT_MESSAGE_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "AnalysisTaskPayload": AnalysisTaskMessagePayload,
     "CollectTaskPayload": CollectTaskMessagePayload,
     "CollectorDispatchPlan": DispatchPlanMessagePayload,
+    "CommunitySearchSummary": CommunitySearchSummaryMessagePayload,
     "CompetitorKBDigest": CompetitorKBDigestMessagePayload,
     "CompetitorKnowledge": CompetitorKnowledgeMessagePayload,
     "ComparisonMatrix": ComparisonMatrixMessagePayload,

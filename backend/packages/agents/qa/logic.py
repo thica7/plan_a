@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
+from packages.business_intel.report_sections import build_report_section_index
 from packages.identity import stable_prefixed_id
 from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
 from packages.research.evidence import publishable_text_noise_problem
@@ -12,18 +14,93 @@ from packages.schema.models import (
     CompetitorKnowledge,
     KnowledgeClaim,
     QCIssue,
+    RawSource,
     RedoScope,
+    ReviewThemeItem,
+    ReviewThemeSummary,
 )
 from packages.sources import (
     malformed_source_tokens,
     resolve_source_token,
     source_token_alias_map,
+    source_tokens,
 )
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+REVIEW_SUMMARY_DIMENSION_HINTS = (
+    "review",
+    "persona",
+    "user",
+    "customer",
+    "buyer",
+    "feedback",
+    "adoption",
+    "switching",
+)
+PERSONA_EVIDENCE_DIMENSION_HINTS = (
+    "persona",
+    "user",
+    "customer",
+    "buyer",
+    "review",
+    "feedback",
+    "adoption",
+    "switching",
+)
+PERSONA_SYNTHETIC_SOURCE_TYPES = {"survey_simulated"}
+PERSONA_QUALITATIVE_SOURCE_TYPES = {
+    "survey_response",
+    "interview_record",
+    "manual_transcript",
+    "manual_note",
+    "manual",
+}
+COMMUNITY_PUBLIC_SOURCE_TYPES = {
+    "community_forum",
+    "reddit_thread",
+    "github_discussion",
+    "github_issue",
+    "review_site",
+    "developer_blog",
+}
+PERSONA_PUBLIC_SOURCE_TYPES = {"webpage_verified", *COMMUNITY_PUBLIC_SOURCE_TYPES}
+PERSONA_SIGNAL_TERMS = (
+    "persona",
+    "target user",
+    "customer",
+    "customers",
+    "buyer",
+    "developer",
+    "developers",
+    "engineering team",
+    "enterprise team",
+    "team",
+    "case study",
+    "customer story",
+    "review",
+    "feedback",
+    "adoption",
+    "onboarding",
+    "switching",
+    "workflow fit",
+    "use case",
+    "pain point",
+)
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
+
+
+@dataclass(frozen=True)
+class PersonaEvidenceStrength:
+    source_count: int
+    verified_count: int
+    qualitative_count: int
+    synthetic_count: int
+    persona_signal_count: int
+    has_independent_public_signal: bool
+    is_weak: bool
+    reason: str
 
 
 class QualityAgentMixin:
@@ -276,46 +353,7 @@ class QualityAgentMixin:
         ensure_sections = getattr(self, "_ensure_report_required_sections", None)
         if callable(ensure_sections):
             detail.report_md = ensure_sections(detail, detail.report_md)
-        severity_counts = {
-            "blocker": sum(1 for issue in detail.qa_findings if issue.severity == "blocker"),
-            "warn": sum(1 for issue in detail.qa_findings if issue.severity == "warn"),
-            "info": sum(1 for issue in detail.qa_findings if issue.severity == "info"),
-        }
-        if detail.qa_findings:
-            top_issues = "\n".join(
-                f"- {issue.severity}: {issue.problem}"
-                for issue in sorted(
-                    detail.qa_findings,
-                    key=lambda item: {"blocker": 0, "warn": 1, "info": 2}.get(item.severity, 3),
-                )[:8]
-            )
-            if severity_counts["blocker"]:
-                status_text = "**Status: blocked for review.**"
-                readiness_text = (
-                    "This report is not ready for enterprise publishing until these issues "
-                    "are resolved or explicitly force-passed by a reviewer."
-                )
-            else:
-                status_text = "**Status: passed with warnings.**"
-                readiness_text = (
-                    "This report is publishable from the deterministic QA perspective, "
-                    "with warnings retained for reviewer attention."
-                )
-            section = (
-                "\n\n## Final QA Gate Status\n"
-                f"{status_text} "
-                f"QA found {severity_counts['blocker']} blocker(s), "
-                f"{severity_counts['warn']} warning(s), and {severity_counts['info']} "
-                f"info item(s). {readiness_text}\n\n"
-                f"{top_issues}"
-            )
-        else:
-            section = (
-                "\n\n## Final QA Gate Status\n"
-                "**Status: passed.** No unresolved deterministic QA findings were recorded "
-                "for this run."
-            )
-        detail.report_md = detail.report_md.rstrip() + section
+        detail.report_md = detail.report_md.rstrip()
 
     def _strip_stale_qa_claims(self, markdown: str) -> str:
         patterns = [
@@ -328,7 +366,7 @@ class QualityAgentMixin:
         for pattern in patterns:
             cleaned = re.sub(
                 pattern,
-                "Unresolved QA findings are summarized in the Final QA Gate Status section.",
+                "Unresolved QA findings are tracked in the run QA metadata.",
                 cleaned,
                 flags=re.IGNORECASE,
             )
@@ -347,9 +385,20 @@ class QualityAgentMixin:
         issues.extend(self._build_analyst_qa_issues(detail, missing_dimensions))
         issues.extend(self._build_phantom_citation_issues(detail))
         issues.extend(self._build_text_quality_issues(detail))
+        issues.extend(self._build_community_official_commitment_issues(detail))
         issues.extend(self._build_matrix_consistency_issues(detail))
         issues.extend(self._build_reflector_qa_issues(detail))
-        return issues
+        return self._dedupe_qa_issues(issues)
+
+    def _dedupe_qa_issues(self, issues: list[QCIssue]) -> list[QCIssue]:
+        deduped: list[QCIssue] = []
+        seen_ids: set[str] = set()
+        for issue in issues:
+            if issue.id in seen_ids:
+                continue
+            seen_ids.add(issue.id)
+            deduped.append(issue)
+        return deduped
 
     def _missing_dimensions(self, detail: RunDetail) -> list[str]:
         return [
@@ -357,6 +406,86 @@ class QualityAgentMixin:
             for dimension in detail.plan.dimensions
             if not any(source.dimension == dimension for source in detail.raw_sources)
         ]
+
+    def _dimension_needs_persona_strength_gate(self, dimension: str) -> bool:
+        normalized = dimension.casefold().replace("-", "_")
+        return any(hint in normalized for hint in PERSONA_EVIDENCE_DIMENSION_HINTS)
+
+    def _persona_source_text(self, source: RawSource) -> str:
+        return " ".join([source.title, str(source.url or ""), source.snippet]).casefold()
+
+    def _persona_source_is_synthetic(self, source: RawSource) -> bool:
+        return source.source_type in PERSONA_SYNTHETIC_SOURCE_TYPES or bool(
+            source.metadata.get("fallback_synthetic")
+            or source.metadata.get("synthetic_fallback")
+            or source.metadata.get("survey_interview_synthetic")
+        )
+
+    def _source_has_persona_signal(self, source: RawSource) -> bool:
+        text = self._persona_source_text(source)
+        return any(term in text for term in PERSONA_SIGNAL_TERMS)
+
+    def _persona_evidence_strength(
+        self,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+    ) -> PersonaEvidenceStrength:
+        sources = [
+            source
+            for source in detail.raw_sources
+            if source.dimension == dimension and self._source_matches_competitor(source, competitor)
+        ]
+        verified_count = sum(
+            1 for source in sources if source.source_type in PERSONA_PUBLIC_SOURCE_TYPES
+        )
+        qualitative_count = sum(
+            1 for source in sources if source.source_type in PERSONA_QUALITATIVE_SOURCE_TYPES
+        )
+        synthetic_count = sum(1 for source in sources if self._persona_source_is_synthetic(source))
+        signal_count = sum(1 for source in sources if self._source_has_persona_signal(source))
+        public_signal = any(
+            source.source_type in PERSONA_PUBLIC_SOURCE_TYPES
+            and not self._persona_source_is_synthetic(source)
+            and self._source_has_persona_signal(source)
+            for source in sources
+        )
+        if not sources:
+            reason = "no_sources"
+        elif len(sources) == 1 and self._persona_source_is_synthetic(sources[0]):
+            reason = "single_low_confidence_synthetic"
+        elif (
+            len(sources) == 1
+            and sources[0].source_type in PERSONA_QUALITATIVE_SOURCE_TYPES
+            and sources[0].confidence < 0.7
+        ):
+            reason = "single_low_confidence_qualitative"
+        elif (
+            len(sources) == 1
+            and sources[0].source_type in PERSONA_QUALITATIVE_SOURCE_TYPES
+            and sources[0].confidence >= 0.8
+            and signal_count > 0
+            and not self._persona_source_is_synthetic(sources[0])
+        ):
+            reason = "strong"
+        elif synthetic_count == len(sources):
+            reason = "synthetic_only"
+        elif signal_count == 0:
+            reason = "no_persona_signal"
+        elif not public_signal and len(sources) < 2:
+            reason = "too_few_sources"
+        else:
+            reason = "strong"
+        return PersonaEvidenceStrength(
+            source_count=len(sources),
+            verified_count=verified_count,
+            qualitative_count=qualitative_count,
+            synthetic_count=synthetic_count,
+            persona_signal_count=signal_count,
+            has_independent_public_signal=public_signal,
+            is_weak=reason != "strong",
+            reason=reason,
+        )
 
     def _build_collect_qa_issues(self, detail: RunDetail) -> list[QCIssue]:
         issues: list[QCIssue] = []
@@ -369,6 +498,8 @@ class QualityAgentMixin:
             for source in detail.raw_sources
             if source.dimension in detail.plan.dimensions
             and source.source_type != "webpage_verified"
+            and source.source_type not in COMMUNITY_PUBLIC_SOURCE_TYPES
+            and not source.metadata.get("community_evidence")
             and source.url is not None
         ]
 
@@ -441,6 +572,73 @@ class QualityAgentMixin:
 
         issues.extend(self._build_source_quality_issues(detail))
         issues.extend(self._build_source_coverage_issues(detail, missing_dimensions))
+        issues.extend(self._build_persona_evidence_strength_issues(detail, missing_dimensions))
+        issues.extend(self._build_community_attempt_issues(detail))
+        return issues
+
+    def _build_community_attempt_issues(self, detail: RunDetail) -> list[QCIssue]:
+        if detail.execution_mode != "real":
+            return []
+        if not self._settings.collector_community_enabled:
+            return []
+        if self._settings.collector_community_target_sources_per_branch <= 0:
+            return []
+        search_enabled = getattr(getattr(self, "_search", None), "is_enabled", True)
+        if callable(search_enabled):
+            search_enabled = search_enabled()
+        if not search_enabled:
+            return []
+        attempted = {
+            (
+                str(message.payload.get("competitor") or ""),
+                str(message.payload.get("dimension") or ""),
+            )
+            for message in detail.agent_messages
+            if message.message_type == "community_search_completed"
+            and isinstance(message.payload, dict)
+        }
+        issues: list[QCIssue] = []
+        for competitor in detail.plan.competitors:
+            for dimension in detail.plan.dimensions:
+                has_community_source = any(
+                    source.dimension == dimension
+                    and self._source_matches_competitor(source, competitor)
+                    and source.metadata.get("community_evidence")
+                    for source in detail.raw_sources
+                )
+                if has_community_source or (competitor, dimension) in attempted:
+                    continue
+                problem = (
+                    f"Community triangulation was not attempted for {competitor} / {dimension}."
+                )
+                issues.append(
+                    QCIssue(
+                        id=stable_prefixed_id(
+                            "qc-issue",
+                            "community-not-attempted",
+                            competitor,
+                            dimension,
+                            length=16,
+                        ),
+                        severity="warn",
+                        detected_by="coverage",
+                        target_agent="collector",
+                        target_subagent=dimension,
+                        target_competitor=competitor,
+                        field_path=(
+                            "agent_messages.community_search_completed"
+                            f"[{competitor}][{dimension}]"
+                        ),
+                        problem=problem,
+                        redo_scope=RedoScope(
+                            kind="collector",
+                            target_subagent=dimension,
+                            target_competitor=competitor,
+                            rationale=problem,
+                        ),
+                        self_found=False,
+                    )
+                )
         return issues
 
     def _build_source_quality_issues(self, detail: RunDetail) -> list[QCIssue]:
@@ -581,6 +779,56 @@ class QualityAgentMixin:
                 )
         return issues
 
+    def _build_persona_evidence_strength_issues(
+        self,
+        detail: RunDetail,
+        missing_dimensions: list[str],
+    ) -> list[QCIssue]:
+        issues: list[QCIssue] = []
+        for dimension in detail.plan.dimensions:
+            if dimension in missing_dimensions:
+                continue
+            if not self._dimension_needs_persona_strength_gate(dimension):
+                continue
+            for competitor in detail.plan.competitors:
+                strength = self._persona_evidence_strength(detail, dimension, competitor)
+                if not strength.is_weak or strength.reason == "no_sources":
+                    continue
+                field_path = f"raw_sources[{dimension}][{competitor}]"
+                problem = (
+                    f"{competitor} {dimension} evidence is weak: "
+                    f"{strength.reason.replace('_', ' ')} with {strength.source_count} "
+                    f"source(s), {strength.verified_count} verified public source(s), and "
+                    f"{strength.persona_signal_count} persona signal source(s)."
+                )
+                issue = QCIssue(
+                    id=stable_prefixed_id(
+                        "qc-issue",
+                        "weak-persona-evidence",
+                        dimension,
+                        competitor,
+                        strength.reason,
+                        length=16,
+                    ),
+                    severity="blocker" if detail.execution_mode == "real" else "warn",
+                    detected_by="coverage",
+                    target_agent="collector",
+                    target_subagent=dimension,
+                    target_competitor=competitor,
+                    field_path=field_path,
+                    problem=problem,
+                    redo_scope=RedoScope(
+                        kind="collector",
+                        target_subagent=dimension,
+                        target_competitor=competitor,
+                        rationale=f"Collect stronger public {dimension} evidence for {competitor}.",
+                    ),
+                    self_found=False,
+                )
+                issue.redo_scope = assign_redo_scope(issue)
+                issues.append(issue)
+        return issues
+
     def _build_analyst_qa_issues(
         self,
         detail: RunDetail,
@@ -615,7 +863,10 @@ class QualityAgentMixin:
             return bool(
                 knowledge.user_personas.summary_claims
                 or any(segment.claims for segment in knowledge.user_personas.segments)
+                or self._qa_review_summary_has_cited_items(knowledge)
             )
+        if self._dimension_uses_review_summary(dimension):
+            return self._qa_review_summary_has_cited_items(knowledge)
         return bool(
             knowledge.feature_tree.summary_claims
             or any(node.claims for node in knowledge.feature_tree.nodes)
@@ -778,9 +1029,18 @@ class QualityAgentMixin:
             )
             field_path = f"competitor_knowledge[{competitor}].user_personas.segments"
         elif (
+            self._dimension_uses_review_summary(dimension)
+            and not self._qa_review_summary_has_cited_items(knowledge)
+        ):
+            problem = (
+                f"{competitor} review schema has claims but no cited review_summary themes."
+            )
+            field_path = f"competitor_knowledge[{competitor}].review_summary"
+        elif (
             "pricing" not in dimension_key
             and "persona" not in dimension_key
             and "user" not in dimension_key
+            and not self._dimension_uses_review_summary(dimension)
             and not knowledge.feature_tree.nodes
         ):
             problem = f"{competitor} feature schema has claims but no feature_tree.nodes entries."
@@ -818,12 +1078,12 @@ class QualityAgentMixin:
             return []
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
-            return [
+            claims = [
                 *knowledge.pricing_model.notes,
                 *[claim for tier in knowledge.pricing_model.tiers for claim in tier.claims],
             ]
-        if "persona" in dimension_key or "user" in dimension_key:
-            return [
+        elif "persona" in dimension_key or "user" in dimension_key:
+            claims = [
                 *knowledge.user_personas.summary_claims,
                 *[
                     claim
@@ -831,10 +1091,68 @@ class QualityAgentMixin:
                     for claim in segment.claims
                 ],
             ]
-        return [
-            *knowledge.feature_tree.summary_claims,
-            *[claim for node in knowledge.feature_tree.nodes for claim in node.claims],
-        ]
+        elif self._dimension_uses_review_summary(dimension):
+            claims = []
+        else:
+            claims = [
+                *knowledge.feature_tree.summary_claims,
+                *[claim for node in knowledge.feature_tree.nodes for claim in node.claims],
+            ]
+        if self._dimension_uses_review_summary(dimension):
+            claims = [*claims, *self._qa_review_summary_claims(knowledge)]
+        return claims
+
+    def _dimension_uses_review_summary(self, dimension: str) -> bool:
+        key = dimension.casefold().replace("-", "_")
+        return any(hint in key for hint in REVIEW_SUMMARY_DIMENSION_HINTS)
+
+    def _qa_review_summary_has_cited_items(self, knowledge: CompetitorKnowledge) -> bool:
+        return bool(self._qa_review_summary_claims(knowledge))
+
+    def _qa_review_summary_claims(self, knowledge: CompetitorKnowledge) -> list[KnowledgeClaim]:
+        claims: list[KnowledgeClaim] = []
+        seen: set[tuple[str, tuple[str, ...]]] = set()
+        for item in (
+            *knowledge.review_summary.praise_themes,
+            *knowledge.review_summary.complaint_themes,
+            *knowledge.review_summary.adoption_blockers,
+            *knowledge.review_summary.switching_triggers,
+        ):
+            if not item.source_ids:
+                continue
+            source_ids = self._ordered_source_ids(item.source_ids)
+            if not source_ids:
+                continue
+            claim_text = self._qa_review_theme_claim_text(item)
+            key = (claim_text.casefold(), tuple(source_ids))
+            if key in seen:
+                continue
+            seen.add(key)
+            claims.append(
+                KnowledgeClaim(
+                    claim=claim_text,
+                    source_ids=source_ids,
+                    confidence=item.confidence,
+                )
+            )
+        return claims
+
+    def _qa_review_theme_claim_text(self, item: ReviewThemeItem) -> str:
+        theme = " ".join((item.theme or "").split())
+        evidence = " ".join((item.evidence or "").split())
+        if theme and evidence:
+            return f"{theme}: {evidence}"
+        return theme or evidence or "Review theme"
+
+    def _ordered_source_ids(self, source_ids: list[str]) -> list[str]:
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for source_id in source_ids:
+            clean = str(source_id).strip()
+            if clean and clean not in seen:
+                seen.add(clean)
+                ordered.append(clean)
+        return ordered
 
     def _build_empty_analyst_issues(
         self,
@@ -987,6 +1305,173 @@ class QualityAgentMixin:
         issues.extend(self._build_report_text_quality_issues(detail))
         issues.extend(self._build_claim_text_quality_issues(detail))
         return issues
+
+    def _build_community_official_commitment_issues(
+        self,
+        detail: RunDetail,
+    ) -> list[QCIssue]:
+        source_by_id = {source.id: source for source in detail.raw_sources}
+        source_aliases = self._source_alias_map(detail)
+        section_index = build_report_section_index(detail.report_md)
+        issues: list[QCIssue] = []
+        for line_number, line in enumerate(detail.report_md.splitlines(), start=1):
+            if section_index.is_support_or_audit_line(line_number):
+                continue
+            normalized = line.casefold()
+            if not self._is_community_official_commitment_line(normalized):
+                continue
+            line_source_ids = [
+                source_id
+                for cited_id in source_tokens(line)
+                for source_id in [resolve_source_token(cited_id, source_aliases)]
+                if source_id is not None
+            ]
+            for source_id in line_source_ids:
+                source = source_by_id.get(source_id)
+                if source is None:
+                    continue
+                if not source.metadata.get("community_evidence"):
+                    continue
+                if source.metadata.get("official_commitment"):
+                    continue
+                if self._line_cites_scoped_official_source(
+                    line_source_ids,
+                    community_source=source,
+                    source_by_id=source_by_id,
+                ):
+                    continue
+                if self._community_source_has_official_confirmed_cluster(
+                    source,
+                    source_by_id=source_by_id,
+                ):
+                    continue
+                problem = (
+                    "Report presents a community observation as official commitment; "
+                    f"line {line_number} cites {source_id}."
+                )
+                issues.append(
+                    QCIssue(
+                        id=stable_prefixed_id(
+                            "qc-issue",
+                            "community-official-commitment",
+                            source_id,
+                            line_number,
+                            length=16,
+                        ),
+                        severity="blocker",
+                        detected_by="citation",
+                        target_agent="writer",
+                        field_path=f"report_md.line[{line_number}]",
+                        problem=problem,
+                        redo_scope=RedoScope(
+                            kind="writer_only",
+                            rationale=problem,
+                        ),
+                        self_found=False,
+                    )
+                )
+        return issues
+
+    def _line_cites_scoped_official_source(
+        self,
+        line_source_ids: list[str],
+        *,
+        community_source: RawSource,
+        source_by_id: dict[str, RawSource],
+    ) -> bool:
+        return any(
+            self._is_scoped_official_source(
+                source_by_id.get(source_id),
+                community_source=community_source,
+            )
+            for source_id in line_source_ids
+        )
+
+    def _community_source_has_official_confirmed_cluster(
+        self,
+        source: RawSource,
+        *,
+        source_by_id: dict[str, RawSource],
+    ) -> bool:
+        clusters = source.metadata.get("community_claim_clusters")
+        if not isinstance(clusters, list):
+            return False
+        for cluster in clusters:
+            if not isinstance(cluster, dict):
+                continue
+            if cluster.get("label") != "official_confirmed":
+                continue
+            official_source_ids = cluster.get("official_source_ids")
+            if not isinstance(official_source_ids, list):
+                continue
+            if any(
+                isinstance(official_source_id, str)
+                and self._is_scoped_official_source(
+                    source_by_id.get(official_source_id),
+                    community_source=source,
+                )
+                for official_source_id in official_source_ids
+            ):
+                return True
+        return False
+
+    def _is_scoped_official_source(
+        self,
+        source: RawSource | None,
+        *,
+        community_source: RawSource,
+    ) -> bool:
+        if source is None:
+            return False
+        if source.metadata.get("community_evidence"):
+            return False
+        return (
+            source.source_type == "webpage_verified"
+            and source.competitor == community_source.competitor
+            and source.dimension == community_source.dimension
+        )
+
+    def _is_community_official_commitment_line(self, normalized_line: str) -> bool:
+        if self._is_community_official_caveat(normalized_line):
+            return False
+        return any(
+            (
+                re.search(
+                    pattern,
+                    normalized_line,
+                )
+                is not None
+            )
+            for pattern in (
+                r"\bofficial\b.{0,80}\b(?:is|are|confirms?|confirmed)\b",
+                r"\bofficial\b.{0,80}:",
+                r"\bofficial\s+pricing\s*:",
+                r"\baccording to official\b.{0,80}",
+                r"\bofficial docs say\b",
+                r"\bofficial sources confirm\b",
+                r"\bofficially confirmed\b",
+                r"\bofficial commitment\b",
+            )
+        )
+
+    def _is_community_official_caveat(self, normalized_line: str) -> bool:
+        return any(
+            phrase in normalized_line
+            for phrase in (
+                "not official",
+                "no official confirmation",
+                "not an official",
+                "not an official commitment",
+                "unofficial",
+                "not officially confirmed",
+                "official sources were unavailable",
+                "official sources unavailable",
+                "official sources are unavailable",
+                "official source not found",
+                "no official evidence",
+                "without official evidence",
+            )
+        )
 
     def _build_report_text_quality_issues(self, detail: RunDetail) -> list[QCIssue]:
         issues: list[QCIssue] = []
@@ -1320,6 +1805,11 @@ class QualityAgentMixin:
         knowledge = detail.competitor_knowledge.get(competitor)
         if knowledge is None:
             return
+        valid_source_ids = {
+            source.id
+            for source in detail.raw_sources
+            if self._source_matches_competitor(source, competitor)
+        }
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
             knowledge.pricing_model.tiers = []
@@ -1330,12 +1820,51 @@ class QualityAgentMixin:
         else:
             knowledge.feature_tree.nodes = []
             knowledge.feature_tree.summary_claims = []
-        valid_source_ids = {
-            source.id
-            for source in detail.raw_sources
-            if self._source_matches_competitor(source, competitor)
-        }
+        if self._dimension_uses_review_summary(dimension):
+            self._clear_review_summary_removed_sources(
+                knowledge,
+                competitor=competitor,
+                dimension=dimension,
+                valid_source_ids=valid_source_ids,
+            )
         knowledge.source_ids = [
             source_id for source_id in knowledge.source_ids if source_id in valid_source_ids
         ]
         detail.competitor_knowledge[competitor] = knowledge
+
+    def _clear_review_summary_removed_sources(
+        self,
+        knowledge: CompetitorKnowledge,
+        *,
+        competitor: str,
+        dimension: str,
+        valid_source_ids: set[str],
+    ) -> None:
+        review_summary = knowledge.review_summary
+        review_summary.source_ids = self._ordered_source_ids(
+            [source_id for source_id in review_summary.source_ids if source_id in valid_source_ids]
+        )
+        has_cited_theme = False
+        for items in (
+            review_summary.praise_themes,
+            review_summary.complaint_themes,
+            review_summary.adoption_blockers,
+            review_summary.switching_triggers,
+        ):
+            retained_items: list[ReviewThemeItem] = []
+            for item in items:
+                had_source_ids = bool(item.source_ids)
+                item.source_ids = self._ordered_source_ids(
+                    [source_id for source_id in item.source_ids if source_id in valid_source_ids]
+                )
+                if item.source_ids:
+                    has_cited_theme = True
+                    retained_items.append(item)
+                elif not had_source_ids:
+                    retained_items.append(item)
+            items[:] = retained_items
+        if not review_summary.source_ids and not has_cited_theme:
+            knowledge.review_summary = ReviewThemeSummary(
+                competitor=competitor,
+                dimension=dimension,
+            )

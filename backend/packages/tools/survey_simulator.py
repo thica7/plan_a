@@ -23,8 +23,12 @@ def survey_simulator(
     if qa_feedback:
         feedback_hint = f" Redo focus: {qa_feedback[0].get('problem', '')}"
     summary = (
-        f"Synthetic interview note for {competitor} in {topic}: buyers evaluate {dimension} "
-        f"through fit with workflow, onboarding effort, and switching risk.{feedback_hint}"
+        f"Synthetic interview note for {competitor} in {topic}: proxy respondents include "
+        "an individual developer testing daily productivity, a team technical lead planning "
+        "pull request workflow rollout, and an enterprise platform buyer reviewing governance. "
+        f"They evaluate {dimension} through workflow fit, onboarding effort, migration cost, "
+        "security controls, budget approval, context quality, and switching risk."
+        f"{feedback_hint}"
     )
     return [
         InterviewRecord(

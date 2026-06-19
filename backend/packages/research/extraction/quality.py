@@ -43,6 +43,14 @@ _DIMENSION_SIGNALS: dict[str, tuple[str, ...]] = {
         "mtok",
         "enterprise",
         "contact sales",
+        "定价",
+        "价格",
+        "计费",
+        "按月",
+        "按年",
+        "席位",
+        "预算",
+        "企业",
     ),
     "persona": (
         "customer",
@@ -56,6 +64,14 @@ _DIMENSION_SIGNALS: dict[str, tuple[str, ...]] = {
         "workflow",
         "productivity",
         "organization",
+        "用户",
+        "客户",
+        "开发者",
+        "团队",
+        "企业",
+        "使用场景",
+        "工作流",
+        "组织",
     ),
     "feature": (
         "feature",
@@ -71,6 +87,16 @@ _DIMENSION_SIGNALS: dict[str, tuple[str, ...]] = {
         "admin",
         "sso",
         "sdk",
+        "功能",
+        "模型",
+        "代理",
+        "工作流",
+        "编码",
+        "代码",
+        "代码库",
+        "上下文",
+        "安全",
+        "管理",
     ),
 }
 
@@ -217,9 +243,12 @@ def _looks_like_business_sentence(normalized_text: str) -> bool:
 
 
 def _looks_like_truncated_fragment(text: str) -> bool:
-    first_word = re.sub(r"^[^A-Za-z0-9]+", "", text).split(" ", 1)[0]
-    if not first_word:
+    match = re.search(r"\w+", text, flags=re.UNICODE)
+    if not match:
         return True
+    first_word = match.group(0)
+    if not first_word.isascii():
+        return False
     suspicious_prefixes = {
         "mpletions",
         "ull",

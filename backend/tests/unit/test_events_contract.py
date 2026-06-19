@@ -27,6 +27,14 @@ EXPECTED_EVENT_TYPES = {
     "redo.routed",
     "benchmark.scored",
     "report.ready",
+    "runtime.command",
+    "writer_preflight",
+    "writer_segment_preflight",
+    "writer_segment_validated",
+    "writer_assembly_completed",
+    "writer_assemble_repair_completed",
+    "writer_quality_preflight",
+    "writer_quality_preflight_repair",
 }
 
 
@@ -39,9 +47,13 @@ def test_frontend_subscribes_to_backend_sse_event_types() -> None:
     client_source = (base_dir / "frontend" / "src" / "api" / "client.ts").read_text(
         encoding="utf-8"
     )
+    sse_types_source = (base_dir / "frontend" / "src" / "api" / "sse_types.ts").read_text(
+        encoding="utf-8"
+    )
 
     for event_type in EXPECTED_EVENT_TYPES:
         assert f'"{event_type}"' in client_source
+        assert f'"{event_type}"' in sse_types_source
 
 
 def test_run_event_to_sse_round_trips_payload() -> None:

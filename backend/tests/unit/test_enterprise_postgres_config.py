@@ -1,15 +1,20 @@
+import sys
+import types
+from datetime import datetime
 from importlib.util import find_spec
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from packages.config.settings import (
     DEFAULT_ENTERPRISE_DATABASE_URL,
+    ENV_FILE_LOADING_FLAG,
     _env_file_candidates,
     get_settings,
 )
 from packages.enterprise import EnterprisePostgresStore
-from packages.enterprise.postgres import _split_sql
+from packages.enterprise.postgres import _MIGRATED_DATABASE_URLS, _split_sql
 from packages.enterprise.postgres_sanitizer import sanitize_postgres_text, sanitize_postgres_value
 from packages.schema.enterprise import EvidenceRecord
 
@@ -26,6 +31,7 @@ def test_enterprise_store_settings_default_to_postgres(monkeypatch) -> None:
     monkeypatch.delenv("ENTERPRISE_DATABASE_URL", raising=False)
     monkeypatch.delenv("RUN_ORCHESTRATION_BACKEND", raising=False)
     monkeypatch.delenv("TEMPORAL_TRAFFIC_PERCENT", raising=False)
+    monkeypatch.delenv("COMPARATOR_TIMEOUT_SECONDS", raising=False)
     monkeypatch.delenv("WRITER_TIMEOUT_SECONDS", raising=False)
     get_settings.cache_clear()
 
@@ -36,16 +42,28 @@ def test_enterprise_store_settings_default_to_postgres(monkeypatch) -> None:
     assert settings.run_orchestration_backend == "temporal"
     assert settings.temporal_traffic_percent == 100
     assert settings.llm_timeout_seconds == 90.0
-    assert settings.writer_timeout_seconds == 90.0
+    assert settings.comparator_timeout_seconds == 120.0
+    assert settings.writer_timeout_seconds == 600.0
 
 
 def test_writer_timeout_settings_allow_explicit_override(monkeypatch) -> None:
-    monkeypatch.setenv("WRITER_TIMEOUT_SECONDS", "45")
+    monkeypatch.setenv("WRITER_TIMEOUT_SECONDS", "600")
     get_settings.cache_clear()
 
     settings = get_settings()
 
-    assert settings.writer_timeout_seconds == 45.0
+    assert settings.writer_timeout_seconds == 600.0
+
+
+def test_create_run_rate_limit_settings_allow_explicit_override(monkeypatch) -> None:
+    monkeypatch.setenv("CREATE_RUN_RATE_LIMIT_PER_WINDOW", "12")
+    monkeypatch.setenv("CREATE_RUN_RATE_LIMIT_WINDOW_SECONDS", "30")
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.create_run_rate_limit_per_window == 12
+    assert settings.create_run_rate_limit_window_seconds == 30.0
 
 
 def test_env_file_candidates_include_source_root_when_cwd_is_backend(tmp_path: Path) -> None:
@@ -58,6 +76,30 @@ def test_env_file_candidates_include_source_root_when_cwd_is_backend(tmp_path: P
     assert project_root / ".env" in candidates
     assert backend_root / ".env" in candidates
     assert len(candidates) == len({path.resolve() for path in candidates})
+
+
+def test_settings_do_not_load_env_files_when_disabled(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(ENV_FILE_LOADING_FLAG, "0")
+    monkeypatch.delenv("LLM_TIMEOUT_SECONDS", raising=False)
+    (tmp_path / ".env").write_text("LLM_TIMEOUT_SECONDS=12\n", encoding="utf-8")
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.llm_timeout_seconds == 90.0
+
+
+def test_settings_load_env_files_when_enabled(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(ENV_FILE_LOADING_FLAG, "1")
+    monkeypatch.delenv("LLM_TIMEOUT_SECONDS", raising=False)
+    (tmp_path / ".env").write_text("LLM_TIMEOUT_SECONDS=12\n", encoding="utf-8")
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.llm_timeout_seconds == 12.0
 
 
 def test_enterprise_store_settings_allow_explicit_memory(monkeypatch) -> None:
@@ -126,6 +168,38 @@ def test_postgres_store_can_be_constructed_without_migrating() -> None:
     assert store.database_url == "postgresql://user:pass@localhost:5432/db"
 
 
+def test_postgres_store_auto_migrates_database_url_once(monkeypatch) -> None:
+    psycopg = types.ModuleType("psycopg")
+    psycopg.connect = object()
+    rows = types.ModuleType("psycopg.rows")
+    rows.dict_row = object()
+    json_module = types.ModuleType("psycopg.types.json")
+    json_module.Jsonb = object()
+    monkeypatch.setitem(sys.modules, "psycopg", psycopg)
+    monkeypatch.setitem(sys.modules, "psycopg.rows", rows)
+    monkeypatch.setitem(sys.modules, "psycopg.types.json", json_module)
+    _MIGRATED_DATABASE_URLS.clear()
+    migrate_calls: list[str] = []
+
+    def fake_migrate(self: EnterprisePostgresStore) -> None:
+        migrate_calls.append(self.database_url)
+
+    monkeypatch.setattr(EnterprisePostgresStore, "migrate", fake_migrate)
+
+    first = EnterprisePostgresStore("postgresql://user:pass@localhost:5432/db")
+    second = EnterprisePostgresStore("postgresql://user:pass@localhost:5432/db")
+
+    assert first.database_url == second.database_url
+    assert migrate_calls == ["postgresql://user:pass@localhost:5432/db"]
+
+
+def test_postgres_migration_uses_database_advisory_lock() -> None:
+    source = Path("backend/packages/enterprise/postgres.py").read_text(encoding="utf-8")
+
+    assert "pg_advisory_lock" in source
+    assert "pg_advisory_unlock" in source
+
+
 def test_postgres_store_sets_service_role_rls_context_on_connections() -> None:
     fake_conn = _FakePostgresConnection()
     store = object.__new__(EnterprisePostgresStore)
@@ -186,6 +260,23 @@ def test_postgres_store_filters_generated_columns_when_validating_rows() -> None
     assert not hasattr(evidence, "search_vector")
 
 
+def test_postgres_workspace_usage_read_path_does_not_upsert_workspace() -> None:
+    store = object.__new__(EnterprisePostgresStore)
+    store.database_url = "postgresql://user:pass@localhost:5432/db"
+    store._dict_row = object()
+    fake_conn = _FakeWorkspaceUsageConnection()
+    store._connect = lambda *args, **kwargs: fake_conn  # noqa: ARG005
+
+    usage = store.get_workspace_usage("workspace-a")
+
+    assert usage.workspace_id == "workspace-a"
+    assert usage.run_count == 2
+    assert not any("INSERT INTO workspaces" in sql for sql, _ in fake_conn.cursor_obj.executed)
+    assert not any(
+        "INSERT INTO workspace_members" in sql for sql, _ in fake_conn.cursor_obj.executed
+    )
+
+
 def test_postgres_sanitizer_removes_nul_and_control_chars_from_text() -> None:
     assert sanitize_postgres_text("alpha\x00beta\x18gamma") == "alphabeta gamma"
 
@@ -229,3 +320,71 @@ class _FakePostgresConnection:
     ) -> "_FakePostgresConnection":
         self.executed.append((sql, params or ()))
         return self
+
+
+class _FakeWorkspaceUsageConnection:
+    def __init__(self) -> None:
+        self.cursor_obj = _FakeWorkspaceUsageCursor()
+        self.committed = False
+
+    def __enter__(self) -> "_FakeWorkspaceUsageConnection":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def cursor(self) -> "_FakeWorkspaceUsageCursor":
+        return self.cursor_obj
+
+    def commit(self) -> None:
+        self.committed = True
+
+
+class _FakeWorkspaceUsageCursor:
+    def __init__(self) -> None:
+        self.executed: list[tuple[str, tuple[Any, ...]]] = []
+        self._next_row: dict[str, Any] | None = None
+
+    def __enter__(self) -> "_FakeWorkspaceUsageCursor":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def execute(
+        self,
+        sql: str,
+        params: tuple[Any, ...] | None = None,
+    ) -> "_FakeWorkspaceUsageCursor":
+        self.executed.append((sql, params or ()))
+        if "INSERT INTO workspaces" in sql or "INSERT INTO workspace_members" in sql:
+            raise AssertionError("workspace usage reads must not upsert workspace records")
+        if "SELECT * FROM workspaces" in sql:
+            self._next_row = {
+                "id": "workspace-a",
+                "name": "Workspace A",
+                "description": "",
+                "is_active": True,
+                "monthly_run_quota": 1000,
+                "monthly_token_quota": 2_000_000,
+                "monthly_cost_quota_usd": 100.0,
+                "quota_enforcement": "block",
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+            }
+        elif "FROM runs" in sql:
+            self._next_row = {
+                "run_count": 2,
+                "completed_run_count": 1,
+                "failed_run_count": 0,
+                "interrupted_run_count": 0,
+                "input_tokens_estimate": 100,
+                "output_tokens_estimate": 50,
+                "cost_estimate_usd": 0.01,
+            }
+        else:
+            self._next_row = None
+        return self
+
+    def fetchone(self) -> dict[str, Any] | None:
+        return self._next_row

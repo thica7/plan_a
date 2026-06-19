@@ -1,0 +1,466 @@
+@media (max-width: 1580px) {
+  .enterprise-work-stack {
+    grid-template-columns: 1fr;
+  }
+
+  .report-command-row,
+  .report-reading-grid,
+  .activity-workbench,
+  .evidence-workbench,
+  .governance-summary-row,
+  .governance-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .enterprise-work-stack > .concept-inspector {
+    max-height: none;
+    position: static;
+  }
+
+  .run-review-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .run-review-side-rail,
+  .report-reader-layout {
+    position: static;
+    grid-template-columns: 1fr;
+  }
+
+  .run-source-list {
+    max-height: none;
+  }
+
+  .report-review-desk,
+  .report-source-rail,
+  .activity-side-rail,
+  .evidence-side-rail,
+  .governance-audit-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 1180px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .shell-backdrop {
+    background: rgba(12, 23, 38, 0.44);
+    border: 0;
+    bottom: 0;
+    cursor: pointer;
+    left: 0;
+    padding: 0;
+    position: fixed;
+    right: 0;
+    top: 0;
+    z-index: 35;
+  }
+
+  .app-shell.sidebar-open .shell-backdrop {
+    display: block;
+  }
+
+  .sidebar {
+    bottom: 0;
+    left: 0;
+    max-width: calc(100vw - 32px);
+    position: fixed;
+    top: 0;
+    transform: translateX(-104%);
+    transition: transform var(--motion-med);
+    width: 286px;
+    z-index: 45;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .topbar-menu-button {
+    display: inline-flex;
+  }
+
+  .run-builder,
+  .run-command-grid,
+  .execution-mode-grid,
+  .product-workspace-body,
+  .report-review-workspace,
+  .detail-grid,
+  .run-review-score-grid,
+  .run-review-lower-grid,
+  .run-report-summary-row,
+  .report-reader-layout,
+  .enterprise-layout,
+  .enterprise-shell-grid,
+  .workspace-two-column,
+  .evidence-workbench,
+  .report-command-row,
+  .report-reading-grid,
+  .activity-workbench,
+  .governance-summary-row,
+  .governance-detail-grid,
+  .project-summary,
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .run-builder-rail,
+  .product-project-rail,
+  .product-inspector-rail,
+  .report-outline-panel,
+  .report-review-inspector,
+  .project-rail,
+  .inspector-panel,
+  .report-source-rail,
+  .evidence-side-rail,
+  .concept-inspector,
+  .report-review-desk,
+  .activity-side-rail,
+  .governance-audit-panel {
+    max-height: none;
+    position: static;
+  }
+
+  .workbench-status-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .history-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .history-filter-panel {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .history-search-control {
+    grid-column: 1 / -1;
+  }
+
+  .report-review-status-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .status-metric:nth-child(odd) {
+    border-left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell,
+  .content-shell,
+  .main-pane,
+  .work-surface,
+  .run-detail,
+  .enterprise-workbench {
+    max-width: 100%;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .app-shell,
+  .content-shell {
+    overflow-x: hidden;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    display: grid;
+    gap: 12px;
+    height: auto;
+    padding: 12px 16px;
+  }
+
+  .topbar-context {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .context-switcher {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .workspace-context {
+    grid-column: 2;
+  }
+
+  .product-context {
+    grid-column: 1 / -1;
+  }
+
+  .topbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    overflow: visible;
+    padding-bottom: 0;
+    scrollbar-width: none;
+    width: 100%;
+  }
+
+  .topbar-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .topbar-actions > * {
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .topbar-actions .primary-link {
+    flex: 1 1 138px;
+  }
+
+  .topbar-actions .status-badge {
+    flex: 1 1 104px;
+  }
+
+  .sidebar {
+    gap: 10px;
+    max-width: 100vw;
+    padding: 18px 12px 12px;
+    width: min(286px, calc(100vw - 28px));
+  }
+
+  .brand {
+    grid-template-columns: 32px minmax(0, 1fr);
+    min-height: 38px;
+    padding: 0;
+  }
+
+  .brand-mark {
+    height: 32px;
+    width: 32px;
+  }
+
+  .status-badge,
+  .primary-link {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .main-pane {
+    max-width: 100vw;
+    overflow-x: hidden;
+    padding: 18px 14px 36px;
+  }
+
+  .page-header,
+  .page-header-split,
+  .product-project-header {
+    display: grid;
+    max-width: 100%;
+    min-width: 0;
+    overflow: visible;
+    width: 100%;
+  }
+
+  .page-header > div {
+    max-width: 100%;
+    min-width: 0;
+    overflow: visible;
+    width: 100%;
+  }
+
+  .product-header-actions {
+    justify-content: start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .product-project-header {
+    gap: 12px;
+    grid-template-columns: 1fr;
+  }
+
+  .project-title-row h1 {
+    font-size: 27px;
+  }
+
+  .page-header h1 {
+    font-size: 27px;
+    max-width: 100%;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+    width: 100%;
+  }
+
+  .page-header p {
+    max-width: 100%;
+    overflow: visible;
+    overflow-wrap: break-word;
+    text-overflow: clip;
+    white-space: normal;
+    width: 100%;
+  }
+
+  .header-stat {
+    justify-items: start;
+    width: 100%;
+  }
+
+  .run-meta-row {
+    max-width: 100%;
+    min-width: 0;
+    overflow: visible;
+    width: 100%;
+  }
+
+  .run-meta-row span {
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .nav-list a {
+    box-sizing: border-box;
+    font-size: 13px;
+    min-height: 36px;
+    max-width: 100%;
+    padding: 0 10px;
+  }
+
+  .field-grid,
+  .preset-grid,
+  .skill-grid,
+  .depth-option-grid,
+  .execution-mode-grid,
+  .evidence-source-meta,
+  .evidence-ledger-row,
+  .revision-compact-grid,
+  .competitor-score-grid,
+  .competitor-rank-row,
+  .competitor-asset-metrics,
+  .workbench-status-strip,
+  .report-review-status-strip,
+  .report-review-status-metric,
+  .metric-grid,
+  .source-trace-metrics,
+  .source-trace-grid,
+  .playback-meta,
+  .playback-columns,
+  .revision-diff-grid,
+  .history-row,
+  .trace-list li,
+  .span-list li {
+    grid-template-columns: 1fr;
+  }
+
+  .history-filter-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .history-filter-panel label,
+  .history-filter-panel strong {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .history-filter-panel select {
+    flex: 1 1 auto;
+  }
+
+  .history-row-header {
+    display: none;
+  }
+
+  .history-row {
+    align-items: start;
+  }
+
+  .panel,
+  .qa-panel,
+  .form-section {
+    padding: 14px;
+  }
+
+  .project-rail {
+    max-height: 360px;
+    overflow: auto;
+  }
+
+  .segmented-control,
+  .enterprise-tabs,
+  .module-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .data-table {
+    overflow-x: auto;
+  }
+
+  .action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-review-toolbar,
+  .report-mode-toggle,
+  .report-find-control {
+    width: 100%;
+  }
+
+  .report-mode-toggle button {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .report-review-export-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .source-registry-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .evidence-ledger-list,
+  .gap-card-list {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .evidence-review-actions {
+    justify-items: stretch;
+  }
+
+  .run-review-overview,
+  .run-review-main,
+  .run-review-card,
+  .run-flow-panel,
+  .run-review-side-rail {
+    min-width: 0;
+  }
+
+  .run-review-score {
+    font-size: 42px;
+  }
+
+  .run-review-card .large-metric {
+    font-size: 28px;
+  }
+
+  .status-metric + .status-metric {
+    border-left: 0;
+    border-top: 1px solid var(--border-soft);
+  }
+
+  .report-reader-body {
+    padding: 16px;
+  }
+
+  .report-panel h1 {
+    font-size: 22px;
+  }
+
+  .report-source-panel {
+    max-height: none;
+  }
+}

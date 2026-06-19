@@ -1,14 +1,19 @@
+import math
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.deps import (
+    get_app_settings,
+    get_create_run_rate_limiter,
     get_enterprise_user_context,
     get_run_service,
     get_runtime_command_service,
 )
+from app.rate_limit import RateLimitDecision, SlidingWindowRateLimiter
 from packages.auth import EnterpriseUserContext
 from packages.business_intel import compare_run_quality
+from packages.config import Settings
 from packages.orchestrator.service import RunService
 from packages.runtime import CreateRunCommand, RuntimeCommandError, RuntimeCommandService
 from packages.schema.api_dto import (
@@ -21,9 +26,14 @@ from packages.schema.api_dto import (
 from packages.schema.survey import UserResearchImportRequest, UserResearchImportResult
 
 router = APIRouter()
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 RuntimeCommandServiceDep = Annotated[RuntimeCommandService, Depends(get_runtime_command_service)]
 EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
+CreateRunRateLimiterDep = Annotated[
+    SlidingWindowRateLimiter,
+    Depends(get_create_run_rate_limiter),
+]
 
 
 @router.post(
@@ -36,7 +46,11 @@ async def create_run(
     response: Response,
     runtime: RuntimeCommandServiceDep,
     user: EnterpriseUserDep,
+    settings: SettingsDep,
+    rate_limiter: CreateRunRateLimiterDep,
 ) -> RunDetail | WorkflowStartResponse:
+    rate_limit = _enforce_create_run_rate_limit(request, settings, rate_limiter)
+    response.headers["X-Create-Run-RateLimit-Remaining"] = str(rate_limit.remaining)
     try:
         result = await runtime.create_run(CreateRunCommand(request=request), actor=user)
     except RuntimeCommandError as exc:
@@ -72,8 +86,9 @@ async def list_runs(service: RunServiceDep) -> list[RunSummary]:
 async def get_run(
     run_id: str,
     service: RunServiceDep,
+    include_trace_payloads: bool = Query(default=False),
 ) -> RunDetail:
-    detail = service.get_run(run_id)
+    detail = service.get_run(run_id, include_trace_payloads=include_trace_payloads)
     if detail is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return detail
@@ -110,3 +125,30 @@ async def get_run_quality_comparison(
 
 def _raise_runtime_command_error(error: RuntimeCommandError) -> None:
     raise HTTPException(status_code=error.status_code, detail=error.detail)
+
+
+def _enforce_create_run_rate_limit(
+    request: RunCreateRequest,
+    settings: Settings,
+    rate_limiter: SlidingWindowRateLimiter,
+) -> RateLimitDecision:
+    decision = rate_limiter.allow(
+        f"workspace:{request.workspace_id}",
+        limit=settings.create_run_rate_limit_per_window,
+        window_seconds=settings.create_run_rate_limit_window_seconds,
+        unique_id=request.idempotency_key,
+    )
+    if decision.allowed:
+        return decision
+    retry_after = max(1, math.ceil(decision.retry_after_seconds))
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "reason": "Create run rate limit exceeded.",
+            "workspace_id": request.workspace_id,
+            "limit": settings.create_run_rate_limit_per_window,
+            "window_seconds": settings.create_run_rate_limit_window_seconds,
+            "retry_after_seconds": retry_after,
+        },
+        headers={"Retry-After": str(retry_after)},
+    )

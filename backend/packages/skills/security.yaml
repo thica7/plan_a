@@ -5,7 +5,6 @@ tools_allowlist:
   - web_search
   - fetch_page
   - find_official_docs
-  - extract_facts
 query_templates:
   - "{competitor} security compliance"
   - "{competitor} SOC 2 GDPR"

@@ -10,6 +10,8 @@ DEFAULT_ENTERPRISE_DATABASE_URL = (
     "postgresql://competiscope:competiscope@127.0.0.1:55432/competiscope?connect_timeout=5"
 )
 
+ENV_FILE_LOADING_FLAG = "COMPETISCOPE_LOAD_ENV_FILES"
+
 
 def _load_env_file(path: Path) -> None:
     if not path.exists():
@@ -109,13 +111,17 @@ class Settings:
     collector_react_max_turns: int = 3
     collector_target_verified_sources_per_branch: int = 3
     collector_search_max_results: int = 6
+    collector_community_enabled: bool = True
+    collector_community_queries_per_branch: int = 3
+    collector_community_max_results_per_query: int = 5
+    collector_community_target_sources_per_branch: int = 2
     analyst_react_enabled: bool = True
     analyst_react_max_turns: int = 3
     analyst_react_fanout_threshold: int = 8
     analyst_branch_timeout_seconds: float = 25.0
     analyst_fanout_branch_timeout_seconds: float = 8.0
-    comparator_timeout_seconds: float = 8.0
-    writer_timeout_seconds: float = 90.0
+    comparator_timeout_seconds: float = 120.0
+    writer_timeout_seconds: float = 600.0
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
@@ -151,6 +157,8 @@ class Settings:
     auth_policy_timeout_seconds: float = 1.0
     evalops_release_mode: Literal["advisory", "blocking"] = "advisory"
     evalops_release_limit: int = 30
+    create_run_rate_limit_per_window: int = 5
+    create_run_rate_limit_window_seconds: float = 60.0
 
     @property
     def has_llm_credentials(self) -> bool:
@@ -177,8 +185,9 @@ class Settings:
 
 @lru_cache
 def get_settings() -> Settings:
-    for path in _env_file_candidates():
-        _load_env_file(path)
+    if _env_bool(ENV_FILE_LOADING_FLAG, True):
+        for path in _env_file_candidates():
+            _load_env_file(path)
     enterprise_backend = os.getenv("ENTERPRISE_STORE_BACKEND", "postgres").strip().lower()
     enterprise_database_url = os.getenv("ENTERPRISE_DATABASE_URL")
     if enterprise_backend == "postgres" and not enterprise_database_url:
@@ -226,6 +235,25 @@ def get_settings() -> Settings:
             minimum=3,
             maximum=10,
         ),
+        collector_community_enabled=_env_bool("COLLECTOR_COMMUNITY_ENABLED", True),
+        collector_community_queries_per_branch=_env_int(
+            "COLLECTOR_COMMUNITY_QUERIES_PER_BRANCH",
+            3,
+            minimum=0,
+            maximum=10,
+        ),
+        collector_community_max_results_per_query=_env_int(
+            "COLLECTOR_COMMUNITY_MAX_RESULTS_PER_QUERY",
+            5,
+            minimum=1,
+            maximum=20,
+        ),
+        collector_community_target_sources_per_branch=_env_int(
+            "COLLECTOR_COMMUNITY_TARGET_SOURCES_PER_BRANCH",
+            2,
+            minimum=0,
+            maximum=6,
+        ),
         analyst_react_enabled=_env_bool("ANALYST_REACT_ENABLED", True),
         analyst_react_max_turns=max(1, min(6, int(os.getenv("ANALYST_REACT_MAX_TURNS", "3")))),
         analyst_react_fanout_threshold=_env_int(
@@ -248,15 +276,15 @@ def get_settings() -> Settings:
         ),
         comparator_timeout_seconds=_env_float(
             "COMPARATOR_TIMEOUT_SECONDS",
-            8.0,
+            120.0,
             minimum=0.05,
             maximum=120.0,
         ),
         writer_timeout_seconds=_env_float(
             "WRITER_TIMEOUT_SECONDS",
-            90.0,
+            600.0,
             minimum=0.05,
-            maximum=120.0,
+            maximum=600.0,
         ),
         langfuse_public_key=os.getenv("LANGFUSE_PUBLIC_KEY") or None,
         langfuse_secret_key=os.getenv("LANGFUSE_SECRET_KEY") or None,
@@ -358,7 +386,36 @@ def get_settings() -> Settings:
             minimum=1,
             maximum=200,
         ),
+        create_run_rate_limit_per_window=_env_int(
+            "CREATE_RUN_RATE_LIMIT_PER_WINDOW",
+            5,
+            minimum=0,
+            maximum=1000,
+        ),
+        create_run_rate_limit_window_seconds=_env_float(
+            "CREATE_RUN_RATE_LIMIT_WINDOW_SECONDS",
+            60.0,
+            minimum=1.0,
+            maximum=3600.0,
+        ),
     )
+
+
+def validate_env_vars() -> None:
+    """Validate critical environment variables on startup."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    warnings = []
+    if not os.getenv("PPLX_API_KEY"):
+        warnings.append("PPLX_API_KEY not set - online search will be disabled")
+    if not os.getenv("ARK_API_KEY"):
+        warnings.append("ARK_API_KEY not set - primary LLM unavailable")
+    if not os.getenv("BACKUP_LLM_API_KEY"):
+        warnings.append("BACKUP_LLM_API_KEY not set - no LLM fallback")
+
+    for msg in warnings:
+        logger.warning(msg)
 
 
 if __name__ == "__main__":

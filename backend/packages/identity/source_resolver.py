@@ -18,8 +18,12 @@ if TYPE_CHECKING:
 
 RAW_SOURCE_ALIASES_KEY = "raw_source_aliases"
 RUN_RAW_SOURCE_ID_KEY = "run_raw_source_id"
-SOURCE_TOKEN_RE = re.compile(r"\[source:([A-Za-z0-9_.:#-]+)\]")
-ANY_SOURCE_TOKEN_RE = re.compile(r"\[source:([^\]]+)\]")
+SOURCE_TOKEN_RE = re.compile(
+    r"(?:\[source:([A-Za-z0-9_.:#-]+)\]|\u3010source:([A-Za-z0-9_.:#-]+)\u3011)"
+)
+ANY_SOURCE_TOKEN_RE = re.compile(
+    r"(?:\[source:([^\]]+)\]|\u3010source:([^\u3011]+)\u3011)"
+)
 VALID_SOURCE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.:#-]+$")
 
 SourceResolutionStatus = Literal["resolved", "alias", "out_of_scope", "missing", "malformed"]
@@ -121,6 +125,10 @@ class SourceResolutionIndex:
         return dict(self._scoped_by_token)
 
 
+def source_token_match_value(match: re.Match[str]) -> str:
+    return next(group for group in match.groups() if group is not None)
+
+
 def normalize_report_version_sources(
     version: ReportVersionRecord,
     evidence: Iterable[EvidenceRecord],
@@ -160,7 +168,7 @@ def normalize_report_source_tokens(
 
     def replace(match: re.Match[str]) -> str:
         nonlocal changed
-        token = match.group(1)
+        token = source_token_match_value(match)
         if not is_valid_source_token(token):
             resolutions.append(
                 SourceResolution(
@@ -266,7 +274,8 @@ def build_source_reconciliation(
         scoped_evidence_ids=scoped_ids if scope_was_provided else None,
     )
     report_tokens = dedupe_strings(
-        normalize_source_token(token) for token in ANY_SOURCE_TOKEN_RE.findall(report_md)
+        normalize_source_token(token)
+        for token in source_tokens(report_md, include_malformed=True)
     )
     resolutions = list(
         precomputed_resolutions
@@ -354,7 +363,7 @@ def resolve_source_token(
 
 def source_tokens(markdown: str, *, include_malformed: bool = False) -> list[str]:
     pattern = ANY_SOURCE_TOKEN_RE if include_malformed else SOURCE_TOKEN_RE
-    return [match.group(1) for match in pattern.finditer(markdown)]
+    return [source_token_match_value(match) for match in pattern.finditer(markdown)]
 
 
 def malformed_source_tokens(markdown: str) -> list[str]:

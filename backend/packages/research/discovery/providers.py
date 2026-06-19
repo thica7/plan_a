@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import cast
 
+from packages.community.source_classifier import classify_community_source
 from packages.research.discovery.ranking import rank_and_dedupe_candidates
 from packages.research.models import CandidateOrigin, ResearchBrief, SourceCandidate
 from packages.search import SearchResult
@@ -44,6 +45,7 @@ def _candidate_origin(origin: str) -> CandidateOrigin:
         "trusted_registry",
         "perplexity",
         "web_search",
+        "community_search",
         "homepage_derived",
         "llm_fallback",
         "manual",
@@ -59,6 +61,16 @@ def _search_confidence(
     competitor: str,
 ) -> float:
     url = result.url.casefold()
+    if origin == "community_search":
+        classification = classify_community_source(
+            url=result.url,
+            title=result.title,
+            snippet=result.snippet,
+        )
+        base = classification.base_confidence
+        if not _mentions_competitor(result, competitor):
+            return max(0.35, base - 0.24)
+        return base
     if origin == "perplexity":
         base = 0.72
     elif origin == "web_search":

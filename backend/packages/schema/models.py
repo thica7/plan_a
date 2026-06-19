@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 
 class RedoScope(BaseModel):
@@ -173,6 +173,67 @@ class UserPersonaModel(BaseModel):
     summary_claims: list[KnowledgeClaim] = Field(default_factory=list)
 
 
+ReviewSentimentHint = Literal["positive", "mixed", "negative", "unknown"]
+
+
+class ReviewThemeItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    theme: str
+    evidence: str = ""
+    source_ids: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidence_gap: bool = False
+
+    @model_validator(mode="after")
+    def require_gap_for_uncited_item(self) -> ReviewThemeItem:
+        if not self.source_ids and not self.evidence_gap:
+            raise ValueError("uncited review theme items must set evidence_gap=True")
+        return self
+
+
+class ReviewThemeSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    competitor: str = ""
+    dimension: str = "review"
+    praise_themes: list[ReviewThemeItem] = Field(default_factory=list)
+    complaint_themes: list[ReviewThemeItem] = Field(default_factory=list)
+    adoption_blockers: list[ReviewThemeItem] = Field(default_factory=list)
+    switching_triggers: list[ReviewThemeItem] = Field(default_factory=list)
+    persona_segments: list[str] = Field(default_factory=list)
+    sentiment_hint: ReviewSentimentHint = "unknown"
+    source_ids: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class SWOTItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    source_ids: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidence_gap: bool = False
+
+    @model_validator(mode="after")
+    def require_gap_for_uncited_item(self) -> SWOTItem:
+        if not self.source_ids and not self.evidence_gap:
+            raise ValueError("uncited SWOT items must set evidence_gap=True")
+        return self
+
+
+class SWOTAnalysis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    competitor: str = ""
+    strengths: list[SWOTItem] = Field(default_factory=list)
+    weaknesses: list[SWOTItem] = Field(default_factory=list)
+    opportunities: list[SWOTItem] = Field(default_factory=list)
+    threats: list[SWOTItem] = Field(default_factory=list)
+    source_ids: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class CompetitorKnowledge(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -180,6 +241,8 @@ class CompetitorKnowledge(BaseModel):
     feature_tree: FeatureTree = Field(default_factory=FeatureTree)
     pricing_model: PricingModel = Field(default_factory=PricingModel)
     user_personas: UserPersonaModel = Field(default_factory=UserPersonaModel)
+    review_summary: ReviewThemeSummary = Field(default_factory=ReviewThemeSummary)
+    swot_analysis: SWOTAnalysis = Field(default_factory=SWOTAnalysis)
     source_ids: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
 

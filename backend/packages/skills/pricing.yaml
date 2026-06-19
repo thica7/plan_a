@@ -5,7 +5,6 @@ tools_allowlist:
   - web_search
   - robots_check
   - fetch_page
-  - extract_facts
 query_templates:
   - "{competitor} pricing plans cost"
   - "{competitor} site:*/pricing"

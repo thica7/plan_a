@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from '../../stores/i18n';
 
 interface ManualTabProps {
   competitor?: string;
@@ -21,6 +22,7 @@ async function createManualSource(urls: string[], config: Record<string, unknown
 }
 
 export function ManualTab({ competitor, dimension, priority, onSubmitted }: ManualTabProps) {
+  const { t } = useTranslation();
   const [value, setValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,17 +57,18 @@ export function ManualTab({ competitor, dimension, priority, onSubmitted }: Manu
       {error && <div className="alert alert-error text-sm">{error}</div>}
       <div className="rounded-lg border border-base-300 bg-base-100 p-3">
         <div className="mb-2 flex items-center justify-between text-xs">
-          <span className="font-semibold">Preview</span>
+          <span className="font-semibold">{t('common.preview')}</span>
           <span className="text-base-content/55">{urls.length} URLs</span>
         </div>
         <ol className="grid gap-1 text-xs">
           {urls.slice(0, 10).map((url) => <li key={url} className="truncate">{url}</li>)}
-          {urls.length === 0 && <li className="text-base-content/50">No URLs discovered.</li>}
+          {urls.length === 0 && <li className="text-base-content/50">{t('crawl.noUrls')}</li>}
         </ol>
       </div>
       <button type="button" className="btn btn-primary btn-sm w-fit" onClick={submit} disabled={submitting || urls.length === 0}>
-        {submitting ? 'Submitting...' : 'Submit URL list'}
+        {submitting ? t('crawl.submitting') : t('crawl.submitUrlList')}
       </button>
     </div>
   );
 }
+

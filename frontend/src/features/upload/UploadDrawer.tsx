@@ -1,5 +1,6 @@
 import { ChangeEvent, DragEvent, useMemo, useState } from 'react';
 import { UploadCloud, RotateCw, X } from 'lucide-react';
+import { useTranslation } from '../../stores/i18n';
 import {
   createBatch,
   fileToBase64,
@@ -81,6 +82,7 @@ function applyJobProgress(entries: UploadEntry[], job: IngestJob): UploadEntry[]
 }
 
 export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
+  const { t } = useTranslation();
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [dragging, setDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -186,7 +188,7 @@ export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
         <div className="flex h-full flex-col">
           <div className="flex items-center justify-between border-b border-base-300 p-5">
             <div>
-              <h2 className="text-lg font-bold">Bulk upload</h2>
+              <h2 className="text-lg font-bold">{t('upload.title')}</h2>
               <p className="text-xs text-base-content/60">PDF, DOCX, CSV, JSON, Markdown, HTML, and text up to {maxMb}MB each.</p>
             </div>
             <button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={onClose} aria-label="Close upload drawer">
@@ -206,7 +208,7 @@ export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
             >
               <label className="flex cursor-pointer flex-col items-center gap-3">
                 <UploadCloud className="h-9 w-9 text-primary" />
-                <span className="text-sm font-semibold">Drop files here or choose files</span>
+                <span className="text-sm font-semibold">{t('upload.dropFiles')}</span>
                 <span className="text-xs text-base-content/55">{ACCEPTED_EXTENSIONS.join(' ')}</span>
                 <input className="hidden" type="file" multiple accept={ACCEPTED_EXTENSIONS.join(',')} onChange={handleFileInput} />
               </label>
@@ -230,7 +232,7 @@ export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
               ))}
               {entries.length === 0 && (
                 <p className="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/50">
-                  No files queued.
+                  {t('upload.noFiles')}
                 </p>
               )}
             </div>
@@ -243,10 +245,10 @@ export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
             <div className="flex gap-2">
               <button type="button" className="btn btn-outline btn-sm gap-1" onClick={() => submitEntries(true)} disabled={submitting || !entries.some((entry) => entry.status === 'failed')}>
                 <RotateCw className="h-3.5 w-3.5" />
-                Retry failed
+                {t('upload.retryFailed')}
               </button>
               <button type="button" className="btn btn-primary btn-sm" onClick={() => submitEntries(false)} disabled={submitting || !canSubmit}>
-                {submitting ? 'Uploading...' : 'Start upload'}
+                {submitting ? 'Uploading...' : t('upload.startUpload')}
               </button>
             </div>
           </div>

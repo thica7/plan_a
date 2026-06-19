@@ -1,21 +1,27 @@
 import asyncio
+import json
 import time
 from datetime import datetime
 
 import pytest
 
 from packages.agents import SubagentContext
+from packages.agents.writer.repair import build_writer_repair_plan
 from packages.business_intel.homepage import HomepageVerification
+from packages.business_intel.report_quality import compare_run_quality
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
-from packages.memory import PreferenceMemoryStore
+from packages.i18n.language import report_label
+from packages.identity.source_resolver import source_tokens
+from packages.memory import PreferenceMemoryStore, RunJournal
 from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
-from packages.orchestrator.service import RunService
+from packages.orchestrator.service import PendingGraphRedo, RunRecord, RunService
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
+    EvidenceRecord,
     EnterpriseRunProjection,
     ModelRouteCandidate,
     ModelRouteDecision,
@@ -25,17 +31,27 @@ from packages.schema.enterprise import (
     UserFeedbackRecord,
 )
 from packages.schema.models import (
+    AgentMessage,
     AnalysisPlan,
     ComparisonCell,
     ComparisonMatrix,
+    CompetitorCandidate,
+    CompetitorDiscovery,
     CompetitorKB,
     CompetitorKnowledge,
+    FeatureNode,
+    FeatureTree,
     KnowledgeClaim,
+    PricingTier,
     QCIssue,
     RawSource,
     RedoScope,
     ReflectionRecord,
+    ReviewThemeItem,
+    ReviewThemeSummary,
     RevisionRecord,
+    ToolCallMessage,
+    TraceSpan,
 )
 from packages.search import SearchResult
 from packages.skills.registry import SkillRegistry
@@ -70,6 +86,251 @@ def _collector_issue(issue_id: str, subagent: str, competitor: str) -> QCIssue:
             target_competitor=competitor,
             rationale=f"Collect verified {subagent} evidence for {competitor}.",
         ),
+    )
+
+
+def _writer_repair_sources() -> list[RawSource]:
+    return [
+        RawSource(
+            id="pricing-1",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://example.com/cursor-pricing",
+            snippet="Cursor pricing is published.",
+            content_hash="pricing-1",
+            confidence=0.9,
+        ),
+        RawSource(
+            id="feature-1",
+            competitor="Copilot",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="Copilot feature",
+            url="https://example.com/copilot-feature",
+            snippet="Copilot has IDE integration.",
+            content_hash="feature-1",
+            confidence=0.9,
+        ),
+    ]
+
+
+def _writer_repair_protectable_report() -> str:
+    return """# Cursor vs Copilot Direct Battlecard
+
+## Executive Summary
+- Recommendation: position Cursor as the clearer standalone pricing challenger when the buyer
+  needs explainable spend, while keeping Copilot as the incumbent workflow defense for Microsoft
+  oriented accounts. [source:pricing-1] [source:feature-1]
+- Confidence boundary: the report supports pricing and workflow positioning, but should not claim
+  enterprise rollout readiness until security, procurement, and onboarding evidence are verified.
+  [source:feature-1]
+- Immediate action: use the next account conversation to test whether pricing clarity or bundled
+  distribution matters more, then collect the missing procurement proof before recommending a
+  deployment path. [source:pricing-1]
+
+## Decision Summary
+Recommended action: use Cursor's pricing clarity as the initial L1 battlecard point while
+keeping Copilot's bundled distribution as the procurement counter-position.
+- Do not overstate a winner beyond pricing and workflow evidence; enterprise security proof
+still needs direct validation before procurement guidance becomes firm. [source:feature-1]
+- Immediate next move: collect one current trust-center source and one buyer-objection source
+so sales can separate pricing clarity from rollout risk. [source:pricing-1]
+[source:pricing-1] [source:feature-1]
+
+## Competitive Findings
+- Pricing: Cursor has clearer standalone pricing evidence, which makes the sales response easier.
+[source:pricing-1]
+- Feature: Copilot has broad IDE integration evidence, which gives it a defensible adoption path.
+[source:feature-1]
+- Persona: developer evaluators can understand Cursor's focused value faster, while platform
+buyers may still prefer Copilot's Microsoft adjacency for governance and procurement continuity.
+[source:pricing-1] [source:feature-1]
+
+## Competitor Deep Dives
+- Cursor wins on pricing clarity and focused workflow; watchouts remain procurement and
+security proof.
+[source:pricing-1]
+- Copilot wins on distribution and IDE breadth; watchouts remain direct packaging comparison.
+[source:feature-1]
+- Cursor weakness: the available evidence does not yet prove enterprise rollout readiness, so
+sales should keep security claims qualified until a verified trust source is collected.
+[source:feature-1]
+- Copilot weakness: bundled familiarity can obscure standalone value comparison, so evaluators
+need pricing and onboarding proof before accepting it as the default choice. [source:pricing-1]
+
+## User Review Themes
+User review themes show Cursor is easier to explain during procurement, while Copilot benefits from
+existing Microsoft workflow familiarity. [source:pricing-1]
+- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]
+- Adoption blocker: security review and procurement packaging still need deeper evidence.
+[source:feature-1]
+
+## SWOT Analysis
+- Strengths: Cursor has pricing clarity that sales can explain quickly. [source:pricing-1]
+- Weaknesses: Enterprise procurement proof remains incomplete. [source:feature-1]
+- Opportunities: Buyer education can focus on standalone value. [source:pricing-1]
+- Threats: Copilot can defend through Microsoft distribution. [source:feature-1]
+
+## Battlecard
+Sales should use pricing transparency and switching objections as the first battlecard line.
+[source:pricing-1] [source:feature-1]
+- Response guidance: lead with Cursor's transparent evaluation path when buyers ask for direct
+developer workflow value. [source:pricing-1]
+- Objection handling: acknowledge Copilot's Microsoft distribution advantage, then ask whether
+the buyer needs bundled familiarity or a focused coding workflow proof. [source:feature-1]
+- Follow-up: request security, onboarding, and procurement evidence before making an absolute
+replacement claim. [source:pricing-1] [source:feature-1]
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Copilot |
+| --- | --- | --- |
+| Pricing | clearer standalone price [source:pricing-1] | bundled context [source:feature-1] |
+| Feature | focused workflow proof [source:pricing-1] | IDE breadth [source:feature-1] |
+| Persona | direct evaluator path [source:pricing-1] | platform continuity [source:feature-1] |
+| Security | qualify readiness [source:feature-1] | verify governance [source:feature-1] |
+| Procurement | lead with clarity [source:pricing-1] | separate bundle value [source:feature-1] |
+| Follow-up | collect objections [source:pricing-1] | gather rollout proof [source:feature-1] |
+
+## Source Quality & Coverage
+The run uses verified pages for both target competitors. [source:pricing-1] [source:feature-1]
+
+## User Research Evidence
+Review and buyer-feedback inputs are directional demand evidence. [source:pricing-1]
+
+## Scenario QA Checklist
+- Scenario: l1_pricing_pack; layer: L1; recommended dimensions: pricing, feature, persona.
+
+## Claim Validation & Evidence Risk
+No unresolved blocker claims were detected, but security and procurement claims remain gated.
+[source:pricing-1] [source:feature-1]
+
+## Evidence Appendix
+- pricing-1: Cursor pricing [source:pricing-1]
+- feature-1: Copilot feature [source:feature-1]
+"""
+
+
+def _writer_repair_release_depth_report() -> str:
+    report = _writer_repair_protectable_report()
+    report = report.replace(
+        "## Competitive Findings\n",
+        (
+            "## Competitive Findings\n"
+            "- Buyer implication: Cursor should be positioned as the clearer standalone "
+            "evaluation path when procurement needs explainable spend, while Copilot should "
+            "be challenged on whether bundled distribution actually reduces rollout risk. "
+            "[source:pricing-1] [source:feature-1]\n"
+            "- Decision guardrail: do not turn pricing clarity into a universal winner claim; "
+            "use it to open discovery, then validate security, onboarding, and admin controls "
+            "before recommending replacement. [source:pricing-1] [source:feature-1]\n"
+        ),
+        1,
+    )
+    report = report.replace(
+        "## Competitor Deep Dives\n",
+        (
+            "## Competitor Deep Dives\n"
+            "- Cursor opportunity: the standalone pricing story gives sales a concrete wedge "
+            "for accounts that dislike opaque bundle math, but it still needs procurement and "
+            "security evidence before becoming a deployment recommendation. [source:pricing-1]\n"
+            "- Copilot opportunity: Microsoft adjacency can reduce perceived adoption friction, "
+            "but evaluators should separate existing license familiarity from proven coding "
+            "workflow advantage. [source:feature-1]\n"
+        ),
+        1,
+    )
+    report = report.replace(
+        "## User Review Themes\n",
+        (
+            "## User Review Themes\n"
+            "- Switching trigger: buyers who need a visible standalone evaluation path can use "
+            "Cursor pricing clarity to start a smaller pilot before procurement review. "
+            "[source:pricing-1]\n"
+            "- Adoption blocker: Copilot's Microsoft distribution can feel safer to platform "
+            "teams, so the report should ask whether procurement continuity matters more than "
+            "focused developer workflow proof. [source:feature-1]\n"
+        ),
+        1,
+    )
+    report = report.replace(
+        (
+            "## SWOT Analysis\n"
+            "- Strengths: Cursor has pricing clarity that sales can explain quickly. "
+            "[source:pricing-1]\n"
+            "- Weaknesses: Enterprise procurement proof remains incomplete. [source:feature-1]\n"
+            "- Opportunities: Buyer education can focus on standalone value. [source:pricing-1]\n"
+            "- Threats: Copilot can defend through Microsoft distribution. [source:feature-1]"
+        ),
+        (
+            "## SWOT Analysis\n"
+            "- Strengths: Cursor has pricing clarity that sales can explain quickly, while "
+            "Copilot has distribution breadth that keeps it credible in Microsoft-centered "
+            "accounts. [source:pricing-1] [source:feature-1]\n"
+            "- Weaknesses: Cursor still needs enterprise procurement proof, and Copilot still "
+            "needs direct standalone value comparison before buyers should accept it as the "
+            "default. [source:pricing-1] [source:feature-1]\n"
+            "- Opportunities: Buyer education can focus on standalone value, pilot clarity, "
+            "and separating workflow gains from bundle familiarity. [source:pricing-1]\n"
+            "- Threats: Copilot can defend through Microsoft distribution, procurement "
+            "continuity, and lower perceived switching risk. [source:feature-1]"
+        ),
+        1,
+    )
+    report = report.replace(
+        "## Battlecard\n",
+        (
+            "## Battlecard\n"
+            "Use the battlecard to qualify buyer priorities before naming a preferred path: "
+            "standalone price clarity favors Cursor discovery, while Microsoft governance "
+            "continuity favors Copilot defense. [source:pricing-1] [source:feature-1]\n"
+        ),
+        1,
+    )
+    report = report.replace(
+        "| Follow-up | collect objections [source:pricing-1] | gather rollout proof [source:feature-1] |",
+        (
+            "| Follow-up | collect objections [source:pricing-1] | gather rollout proof [source:feature-1] |\n"
+            "| Security | verify trust-center evidence [source:feature-1] | verify admin controls [source:feature-1] |\n"
+            "| Procurement | document standalone purchase path [source:pricing-1] | separate bundle discount from value [source:feature-1] |"
+        ),
+        1,
+    )
+    return report
+
+
+def _release_gate_report_depth_issue() -> QCIssue:
+    return QCIssue(
+        id="issue-release-gate-depth",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        field_path="release_gate.report_depth_required",
+        problem="Report core analysis depth does not satisfy the release gate.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="repair report depth before release",
+        ),
+    )
+
+
+def _writer_repair_detail(report_md: str) -> RunDetail:
+    return RunDetail(
+        id="run-writer-repair-plan",
+        topic="Writer repair plan",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        output_language="en-US",
+        plan=AnalysisPlan(
+            topic="Writer repair plan",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+        ),
+        raw_sources=_writer_repair_sources(),
+        report_md=report_md,
     )
 
 
@@ -333,6 +594,77 @@ async def test_create_run_reuses_recent_active_duplicate_even_with_new_key() -> 
 
 
 @pytest.mark.asyncio
+async def test_ensure_run_visible_reuses_recent_active_duplicate() -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+
+    first = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:visible-first",
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity", "Claude"],
+            dimensions=["pricing", "feature"],
+            execution_mode="demo",
+        )
+    )
+    duplicate = await service.ensure_run_visible(
+        RunCreateRequest(
+            idempotency_key="ui-run:visible-second",
+            topic="AI research assistant competitive analysis",
+            competitors=["Claude", "Perplexity"],
+            dimensions=["feature", "pricing"],
+            execution_mode="demo",
+        )
+    )
+
+    assert duplicate.id == first.id
+    assert duplicate.idempotency_key == first.idempotency_key
+
+
+@pytest.mark.asyncio
+async def test_ensure_run_visible_can_skip_active_duplicate_reuse() -> None:
+    settings = Settings(
+        demo_mode=True,
+        ark_api_key=None,
+        ark_model=None,
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+    )
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=settings)
+
+    first = await service.create_run(
+        RunCreateRequest(
+            idempotency_key="ui-run:visible-first",
+            topic="AI research assistant competitive analysis",
+            competitors=["Perplexity", "Claude"],
+            dimensions=["pricing", "feature"],
+            execution_mode="demo",
+        )
+    )
+    visible = await service.ensure_run_visible(
+        RunCreateRequest(
+            idempotency_key="ui-run:visible-second",
+            topic="AI research assistant competitive analysis",
+            competitors=["Claude", "Perplexity"],
+            dimensions=["feature", "pricing"],
+            execution_mode="demo",
+        ),
+        skip_active_duplicate_check=True,
+    )
+
+    assert visible.id != first.id
+    assert visible.idempotency_key == "ui-run:visible-second"
+
+
+@pytest.mark.asyncio
 async def test_duplicate_run_short_circuits_pre_create_verification(monkeypatch) -> None:
     settings = Settings(
         demo_mode=True,
@@ -549,6 +881,73 @@ async def test_run_request_can_enable_hitl_per_run() -> None:
 
 
 @pytest.mark.asyncio
+async def test_real_topic_only_run_enables_planner_review_by_default() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            backup_llm_api_key="backup-key",
+            backup_llm_model="backup-model",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=False,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Agentic AI IDE",
+                competitors=[],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+
+        assert detail.hitl_enabled is True
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_explicit_hitl_false_overrides_topic_only_default() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            backup_llm_api_key="backup-key",
+            backup_llm_model="backup-model",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Agentic AI IDE",
+                competitors=[],
+                dimensions=["pricing"],
+                execution_mode="real",
+                hitl_enabled=False,
+            )
+        )
+
+        assert detail.hitl_enabled is False
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_topic_only_run_discovers_competitors_in_planner() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -685,6 +1084,12 @@ async def test_survey_interview_enrichment_emits_research_evidence_payload() -> 
     assert "Synthetic interview record" in interview_source.snippet
     assert survey_source.covered_competitors == ["Cursor"]
     assert interview_source.covered_competitors == ["Cursor"]
+    assert survey_source.confidence == 0.76
+    assert interview_source.confidence == 0.82
+    assert survey_source.metadata["fallback_synthetic"] is True
+    assert survey_source.metadata["survey_interview_synthetic"] is True
+    assert interview_source.metadata["fallback_synthetic"] is True
+    assert interview_source.metadata["survey_interview_synthetic"] is True
     assert record.detail.competitor_knowledge["Cursor"].user_personas.summary_claims
     completed = next(
         event
@@ -897,6 +1302,926 @@ def test_real_collect_qa_blocks_unverified_url_evidence_without_memory_policy() 
     assert issues
     assert issues[0].severity == "blocker"
     assert "not fetched webpage evidence" in issues[0].problem
+
+
+def test_collect_qa_blocks_single_low_confidence_persona_proxy() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-weak-persona",
+        topic="AI coding assistant persona comparison",
+        status="running",
+        execution_mode="real",
+        created_at="2026-06-11T00:00:00",
+        updated_at="2026-06-11T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant persona comparison",
+            competitors=["Windsurf"],
+            dimensions=["persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="raw-source-windsurf-persona-proxy",
+                competitor="Windsurf",
+                covered_competitors=["Windsurf"],
+                dimension="persona",
+                source_type="interview_record",
+                title="Windsurf persona interview proxy",
+                snippet=(
+                    "Proxy interview mentions workflow fit, onboarding effort, "
+                    "and switching risk."
+                ),
+                content_hash="windsurf-persona-proxy-hash",
+                confidence=0.62,
+                metadata={"fallback_synthetic": True},
+            )
+        ],
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+
+    weak_issue = next(issue for issue in issues if "persona evidence is weak" in issue.problem)
+    assert weak_issue.severity == "blocker"
+    assert weak_issue.target_agent == "collector"
+    assert weak_issue.target_subagent == "persona"
+    assert weak_issue.target_competitor == "Windsurf"
+    assert weak_issue.redo_scope.kind == "collector"
+    assert weak_issue.redo_scope.target_subagent == "persona"
+    assert weak_issue.redo_scope.target_competitor == "Windsurf"
+
+
+def test_collect_qa_accepts_public_and_interview_persona_evidence() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-strong-persona",
+        topic="AI coding assistant persona comparison",
+        status="running",
+        execution_mode="real",
+        created_at="2026-06-11T00:00:00",
+        updated_at="2026-06-11T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant persona comparison",
+            competitors=["Cursor"],
+            dimensions=["persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-customer-story",
+                competitor="Cursor",
+                covered_competitors=["Cursor"],
+                dimension="persona",
+                source_type="webpage_verified",
+                title="Cursor customer story for engineering teams",
+                url="https://www.cursor.com/customers/example",
+                snippet=(
+                    "Engineering teams and developers adopted Cursor for workflow fit, "
+                    "onboarding, and AI coding use cases."
+                ),
+                content_hash="cursor-customer-story-hash",
+                confidence=0.92,
+            ),
+            RawSource(
+                id="cursor-interview",
+                competitor="Cursor",
+                covered_competitors=["Cursor"],
+                dimension="persona",
+                source_type="interview_record",
+                title="Cursor buyer interview",
+                snippet=(
+                    "Developer teams cited customer adoption, switching cost, "
+                    "and workflow fit."
+                ),
+                content_hash="cursor-interview-hash",
+                confidence=0.78,
+            ),
+        ],
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+
+    assert not [issue for issue in issues if "persona evidence is weak" in issue.problem]
+
+
+def test_persona_strength_accepts_community_public_signal() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-persona-strength",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-persona",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="reddit_thread",
+                title="Cursor adoption thread",
+                url="https://reddit.com/r/cursor/comments/adoption",
+                snippet="Developers and enterprise teams discuss onboarding and workflow fit.",
+                content_hash="hash",
+                confidence=0.68,
+                metadata={"community_evidence": True},
+            )
+        ],
+    )
+
+    issues = service._build_persona_evidence_strength_issues(detail, [])
+
+    assert issues == []
+
+
+def test_collect_qa_does_not_block_typed_community_sources_as_unverified() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-source-qa",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        agent_messages=[
+            AgentMessage(
+                id="msg-community-search",
+                run_id="run-community-source-qa",
+                from_agent="collector",
+                to_agent="collect_join",
+                message_type="community_search_completed",
+                payload_schema="CommunitySearchSummary",
+                payload={
+                    "competitor": "Cursor",
+                    "dimension": "pricing",
+                    "queries": ["Cursor pricing usage limit reddit AI coding assistants"],
+                    "query_count": 1,
+                    "candidate_count": 1,
+                    "candidate_ids": ["candidate-1"],
+                    "no_result": False,
+                },
+            )
+        ],
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+
+    assert not any("not fetched webpage evidence" in issue.problem for issue in issues)
+
+
+def test_qa_blocks_community_observation_written_as_official_commitment() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-official-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={
+                    "community_evidence": True,
+                    "community_claim_clusters": [
+                        {
+                            "label": "community_observed",
+                            "claim": "Community sources report pricing at $20 per month.",
+                            "source_ids": ["reddit-pricing"],
+                        }
+                    ],
+                },
+            )
+        ],
+        report_md="## Pricing\nOfficial Cursor pricing is $20 per month. [source:reddit-pricing]",
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert any(
+        issue.severity == "blocker"
+        and "community observation as official" in issue.problem
+        for issue in issues
+    )
+
+
+def test_qa_allows_community_official_commitment_when_same_line_cites_official_source() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-same-line",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="community-hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            ),
+            RawSource(
+                id="cursor-official-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="official-hash",
+                confidence=0.9,
+            ),
+        ],
+        report_md=(
+            "## Pricing\n"
+            "Official Cursor pricing is $20 per month. "
+            "[source:reddit-pricing] [source:cursor-official-pricing]"
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
+def test_qa_allows_official_confirmed_community_cluster() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-cluster",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="community-hash",
+                confidence=0.62,
+                metadata={
+                    "community_evidence": True,
+                    "community_claim_clusters": [
+                        {
+                            "label": "official_confirmed",
+                            "claim": "Community and official sources report $20 per month.",
+                            "source_ids": ["reddit-pricing"],
+                            "official_source_ids": ["cursor-official-pricing"],
+                        }
+                    ],
+                },
+            ),
+            RawSource(
+                id="cursor-official-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="official-hash",
+                confidence=0.9,
+            ),
+        ],
+        report_md="## Pricing\nOfficial Cursor pricing is $20 per month. [source:reddit-pricing]",
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
+def test_qa_warns_when_community_triangulation_was_not_attempted() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx-key",
+        )
+    )
+    detail = RunDetail(
+        id="run-community-missing-attempt",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-official-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor pricing plans are available.",
+                content_hash="hash",
+                confidence=0.82,
+            )
+        ],
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert any(
+        issue.severity == "warn"
+        and "Community triangulation was not attempted" in issue.problem
+        for issue in issues
+    )
+
+
+def test_qa_allows_community_observation_caveated_as_not_official() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-caveat",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md=(
+            "## Pricing\n"
+            "Community observation only, not official confirmation. [source:reddit-pricing]"
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
+def test_qa_allows_community_observation_when_official_sources_unavailable() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-unavailable",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md=(
+            "## Pricing\n"
+            "Official sources were unavailable; community users report Cursor Pro "
+            "at $20 per month. [source:reddit-pricing]"
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
+def test_qa_blocks_community_official_commitment_with_colon_phrasing() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-colon-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md="## Pricing\nOfficial Cursor pricing: $20 per month. [source:reddit-pricing]",
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert any(
+        issue.severity == "blocker"
+        and "community observation as official" in issue.problem
+        for issue in issues
+    )
+
+
+def test_qa_blocks_community_official_commitment_with_according_to_phrasing() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-according-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md=(
+            "## Pricing\n"
+            "According to official pricing: $20 per month for Cursor Pro. "
+            "[source:reddit-pricing]"
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert any(
+        issue.severity == "blocker"
+        and "community observation as official" in issue.problem
+        for issue in issues
+    )
+
+
+def test_qa_blocks_community_official_commitment_via_resolved_source_alias() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-alias-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md=(
+            "## Pricing\n"
+            "Official Cursor pricing is $20 per month. [source:reddit-pricing#chunk]"
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert any(
+        issue.severity == "blocker"
+        and "community observation as official" in issue.problem
+        for issue in issues
+    )
+
+
+def test_qa_ignores_community_official_commitment_repeats_in_support_audit_sections() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-official-audit-repeat",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md=(
+            "## Pricing\n"
+            "Community sources report Cursor Pro around $20 per month; this is not "
+            "official confirmation. [source:reddit-pricing]\n\n"
+            "## RAG 缺口补全\n"
+            "| 缺口 | 建议检索/取证 | 当前状态 |\n"
+            "| --- | --- | --- |\n"
+            "| pricing | official pricing page | community source may be stale "
+            "[source:reddit-pricing] |\n\n"
+            "## Final QA Gate Status\n"
+            "- blocker repeated text: Report presents a community observation as official "
+            "commitment; line 7 cites reddit-pricing."
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
+
+
+def test_qa_does_not_warn_community_attempt_when_community_collection_disabled() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            collector_community_enabled=False,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-disabled-attempt",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-official-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor pricing plans are available.",
+                content_hash="hash",
+                confidence=0.82,
+            )
+        ],
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any(
+        issue.severity == "warn"
+        and "Community triangulation was not attempted" in issue.problem
+        for issue in issues
+    )
+
+
+def test_qa_does_not_warn_community_attempt_when_community_target_zero() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            collector_community_target_sources_per_branch=0,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-target-zero-attempt",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-official-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor pricing plans are available.",
+                content_hash="hash",
+                confidence=0.82,
+            )
+        ],
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    assert not any(
+        issue.severity == "warn"
+        and "Community triangulation was not attempted" in issue.problem
+        for issue in issues
+    )
+
+
+def test_collect_qa_does_not_emit_writer_community_official_commitment() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-community-collect-no-writer-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="hash",
+                confidence=0.62,
+                metadata={"community_evidence": True},
+            )
+        ],
+        report_md="## Pricing\nOfficial Cursor pricing is $20 per month. [source:reddit-pricing]",
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+
+    assert not any("community observation as official" in issue.problem for issue in issues)
 
 
 def test_feature_collection_uses_known_official_source_registry() -> None:
@@ -1472,9 +2797,9 @@ def test_final_qa_sync_replaces_stale_clean_report_claim() -> None:
     service._sync_report_with_final_qa(detail)
 
     assert "None flagged" not in detail.report_md
-    assert "Final QA Gate Status" in detail.report_md
-    assert "Status: blocked for review" in detail.report_md
-    assert "No evidence sources were collected for pricing." in detail.report_md
+    assert "Final QA Gate Status" not in detail.report_md
+    assert "Status: blocked for review" not in detail.report_md
+    assert "missing-pricing" not in detail.report_md
 
 
 def test_final_qa_sync_adds_rag_gap_fill_for_collector_warnings() -> None:
@@ -1494,6 +2819,7 @@ def test_final_qa_sync_adds_rag_gap_fill_for_collector_warnings() -> None:
         topic="Test",
         status="running",
         execution_mode="real",
+        output_language="en-US",
         created_at="2026-05-23T00:00:00",
         updated_at="2026-05-23T00:00:00",
         plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
@@ -1535,8 +2861,9 @@ def test_final_qa_sync_adds_rag_gap_fill_for_collector_warnings() -> None:
 
     assert "## RAG Gap Fill" in detail.report_md
     assert "Suggested retrieval query: A pricing Pricing source needs verified" in detail.report_md
-    assert "## Final QA Gate Status" in detail.report_md
-    assert "Status: passed with warnings" in detail.report_md
+    assert "unverified-pricing-a" not in detail.report_md
+    assert "## Final QA Gate Status" not in detail.report_md
+    assert "Status: passed with warnings" not in detail.report_md
     assert "Status: blocked for review" not in detail.report_md
 
 
@@ -1592,6 +2919,239 @@ def test_qa_marks_phantom_citation_as_writer_only_blocker() -> None:
     assert phantom[0].redo_scope.kind == "writer_only"
 
 
+def test_qa_ignores_raw_source_metadata_text_when_checking_phantom_citations() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["persona"]),
+        report_md=(
+            '| High risk | "A subjective community claim" | '
+            "raw-source:a15f4ee6cbfc6f7f8453 (Reddit snippet, confidence 0.55) | "
+            "Treat as a weak signal, not a factual citation. |\n"
+            "A separate factual sentence cites the source correctly "
+            "[source:raw-source-a15f4ee6cbfc6f7f8453]."
+        ),
+        raw_sources=[
+            RawSource(
+                id="raw-source-a15f4ee6cbfc6f7f8453",
+                competitor="A",
+                dimension="persona",
+                source_type="snippet_only",
+                title="A subjective community claim",
+                url="https://example.com/community",
+                snippet="A subjective community claim.",
+                content_hash="a15f4ee6cbfc6f7f8453",
+                confidence=0.55,
+            )
+        ],
+    )
+
+    issues = service._build_phantom_citation_issues(detail)
+
+    assert issues == []
+
+
+def test_writer_repairs_fullwidth_unknown_source_tokens_to_canonical_source() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://example.com/pricing",
+                snippet="A costs $10.",
+                content_hash="abc",
+                confidence=0.8,
+            )
+        ],
+    )
+
+    repaired = service._repair_report_source_tokens(
+        detail,
+        "A pricing is documented. \u3010source:pricing-404\u3011",
+    )
+
+    assert repaired == "A pricing is documented. [source:pricing-1]"
+
+
+def test_analyst_slice_merge_discards_unknown_source_citations() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        output_language="en-US",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://example.com/pricing",
+                snippet="A costs $10.",
+                content_hash="abc",
+                confidence=0.8,
+            )
+        ],
+    )
+
+    service._merge_competitor_kb_slice(
+        detail,
+        "A",
+        "pricing",
+        [
+            "A publishes a $10 monthly plan [source:pricing-1].",
+            "A pricing row copied from another product [source:pricing-404].",
+        ],
+    )
+
+    assert detail.competitor_kbs["A"].slices["pricing"] == [
+        "A publishes a $10 monthly plan [source:pricing-1]."
+    ]
+    claims = service._structured_claims_for_dimension(
+        detail.competitor_knowledge["A"],
+        "pricing",
+    )
+    assert any("pricing-1" in claim.source_ids for claim in claims)
+    assert all("pricing-404" not in claim.source_ids for claim in claims)
+
+
+def test_final_qa_deduplicates_repeated_unknown_source_findings() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    knowledge = CompetitorKnowledge(competitor="A")
+    unknown_claim = KnowledgeClaim(
+        claim="A pricing row copied from another product.",
+        source_ids=["pricing-404"],
+        confidence=0.7,
+    )
+    knowledge.pricing_model.notes = [unknown_claim, unknown_claim.model_copy(deep=True)]
+    knowledge.pricing_model.tiers = [
+        PricingTier(
+            name="Pro",
+            price="$10",
+            billing_cycle="monthly",
+            claims=[unknown_claim.model_copy(deep=True)],
+        )
+    ]
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        output_language="en-US",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="A",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="A pricing",
+                url="https://example.com/pricing",
+                snippet="A costs $10.",
+                content_hash="abc",
+                confidence=0.8,
+            )
+        ],
+        competitor_kbs={
+            "A": CompetitorKB(
+                competitor="A",
+                slices={
+                    "pricing": [
+                        "A pricing row copied from another product [source:pricing-404].",
+                        "A pricing row copied from another product [source:pricing-404].",
+                    ]
+                },
+                sources=["pricing-404"],
+                confidence=0.7,
+            )
+        },
+        competitor_knowledge={"A": knowledge},
+        report_md="A pricing is $10 [source:pricing-1].",
+        comparison_matrix=ComparisonMatrix(
+            competitors=["A"],
+            dimensions=["pricing"],
+            cells=[
+                ComparisonCell(
+                    competitor="A",
+                    dimension="pricing",
+                    value="A pricing is $10.",
+                    source_ids=["pricing-1"],
+                    confidence=0.8,
+                )
+            ],
+        ),
+    )
+
+    issues = service._build_qa_issues(detail)
+
+    unknown_source_issues = [issue for issue in issues if "pricing-404" in issue.problem]
+    assert len(unknown_source_issues) == 2
+    assert {issue.detected_by for issue in unknown_source_issues} == {"citation", "schema"}
+
+
 def test_qa_flags_report_text_noise_as_writer_only_blocker() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -1626,6 +3186,42 @@ def test_qa_flags_report_text_noise_as_writer_only_blocker() -> None:
     assert issues[0].detected_by == "text_quality"
     assert issues[0].target_agent == "writer"
     assert issues[0].redo_scope.kind == "writer_only"
+
+
+def test_qa_does_not_flag_markdown_table_separators_as_text_noise() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["pricing"]),
+        report_md=(
+            "# Report\n\n"
+            "| Dimension | A | Source |\n"
+            "| :--- | :--- | :--- |\n"
+            "| Pricing | $10 per seat | [source:pricing-1] |\n\n"
+            "| 维度 | Cursor | GitHub Copilot | Claude Code | 来源/置信度 |\n"
+            "| :--- | :--- | :--- | :--- | :--- |\n"
+            "| 定价模式 | API 用量制 | 席位制 | API 用量制 | verified |\n"
+        ),
+    )
+
+    issues = service._build_report_text_quality_issues(detail)
+
+    assert issues == []
 
 
 def test_qa_flags_structured_claim_text_noise_as_analyst_blocker() -> None:
@@ -1771,6 +3367,60 @@ def test_qa_surfaces_latest_reflector_findings() -> None:
     assert all(issue.severity == "warn" for issue in reflector_issues)
 
 
+def test_reflector_confidence_outlier_uses_lower_qa_threshold() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-reflector-confidence-threshold",
+        topic="AI Coding Agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI Coding Agent",
+            competitors=["Cursor", "Claude Code", "GitHub Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+        ),
+        comparison_matrix=ComparisonMatrix(
+            competitors=["Cursor", "Claude Code", "GitHub Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            cells=[
+                ComparisonCell(
+                    competitor=competitor,
+                    dimension="persona",
+                    value="persona synthesis",
+                    source_ids=[f"{competitor.lower().replace(' ', '-')}-persona"],
+                    confidence=0.76,
+                )
+                for competitor in ["Cursor", "Claude Code", "GitHub Copilot"]
+            ],
+        ),
+        reflections=[
+            ReflectionRecord(
+                iteration=1,
+                confidence_outliers=[
+                    "Persona cells for Cursor, Claude Code, and GitHub Copilot "
+                    "have low confidence (0.76), below 0.85 threshold."
+                ],
+            )
+        ],
+    )
+
+    issues = service._build_reflector_qa_issues(detail)
+
+    assert issues == []
+
+
 @pytest.mark.asyncio
 async def test_reflector_prompt_includes_comparison_matrix_digest() -> None:
     service = RunService(
@@ -1858,6 +3508,98 @@ async def test_reflector_prompt_includes_comparison_matrix_digest() -> None:
     assert "Comparison Matrix JSON:" in captured_user
     assert '"source_ids": ["pricing-a"]' in captured_user
     assert record.detail.reflections[-1].cross_competitor_gaps == []
+    assert record.detail.agent_messages[-1].payload["module_status"] == "llm"
+    completed = [event for event in record.events if event.agent == "reflector"][-1]
+    assert completed.payload["module_status"] == "llm"
+    assert completed.payload["fallback"]["used"] is False
+
+
+@pytest.mark.asyncio
+async def test_reflector_uses_deterministic_fallback_when_llm_json_fails() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    async def fake_complete_json(*, system: str, user: str, schema_hint: str) -> dict:  # noqa: ARG001
+        raise RuntimeError("LLM JSON request failed for all providers")
+
+    service._llm.complete_json = fake_complete_json  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Reflector fallback",
+            competitors=["A", "B"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://a.example/pricing",
+            snippet="A publishes pricing.",
+            content_hash="pricing-a-hash",
+            confidence=0.9,
+        ),
+        RawSource(
+            id="pricing-b",
+            competitor="B",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="B pricing",
+            url="https://b.example/pricing",
+            snippet="B publishes pricing.",
+            content_hash="pricing-b-hash",
+            confidence=0.9,
+        ),
+    ]
+    record.detail.comparison_matrix = ComparisonMatrix(
+        competitors=["A", "B"],
+        dimensions=["pricing"],
+        cells=[
+            ComparisonCell(
+                competitor="A",
+                dimension="pricing",
+                value="A publishes pricing.",
+                source_ids=["pricing-a"],
+                confidence=0.9,
+            ),
+            ComparisonCell(
+                competitor="B",
+                dimension="pricing",
+                value="B publishes pricing.",
+                source_ids=["pricing-b"],
+                confidence=0.9,
+            ),
+        ],
+        winner_by_dimension={"pricing": "tie"},
+        summary=["[majority-vote:pricing] winner=tie; evidence=tie"],
+    )
+
+    await service._real_reflector_step(record)
+
+    assert record.detail.reflections[-1].coverage_gaps == []
+    assert record.detail.reflections[-1].confidence_outliers == []
+    assert record.detail.reflections[-1].cross_competitor_gaps == []
+    assert record.detail.agent_messages[-1].message_type == "reflection_ready"
+    completed = [event for event in record.events if event.agent == "reflector"][-1]
+    assert completed.type == "node_completed"
+    assert completed.payload["module_status"] == "fallback"
+    assert completed.payload["fallback"]["used"] is True
+    assert completed.payload["fallback"]["deterministic_fallback"] is True
+    assert "LLM JSON request failed" in completed.payload["fallback"]["error"]
 
 
 def test_qa_issue_redo_scopes_are_not_placeholders() -> None:
@@ -2022,6 +3764,150 @@ def test_comparison_matrix_uses_kb_and_sources() -> None:
     assert "price=$10" in matrix.cells[0].value
     assert matrix.cells[0].source_ids == ["pricing-1"]
     assert matrix.winner_by_dimension["pricing"] == "A"
+
+
+def test_pricing_tiers_keep_active_day_usage_separate_from_monthly_estimates() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    claim = KnowledgeClaim(
+        claim=(
+            "Claude Code cost reporting mentions $13 per developer per active day, "
+            "while budget estimates can reach $150-250 per developer per month."
+        ),
+        source_ids=["claude-pricing-source"],
+        confidence=0.86,
+    )
+
+    tiers = service._pricing_tiers_from_text(claim.claim, [claim])
+
+    active_day_tier = next(tier for tier in tiers if tier.price.startswith("$13"))
+    monthly_tier = next(tier for tier in tiers if "$150-250" in tier.price)
+    assert active_day_tier.price == "$13 per developer per active day"
+    assert active_day_tier.billing_cycle == "usage"
+    assert monthly_tier.price == "$150-250 per developer per month"
+    assert monthly_tier.billing_cycle == "monthly"
+
+
+def test_review_dimension_produces_review_summary_swot_and_report_sections() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+    source = RawSource(
+        id="review-cursor-1",
+        competitor="Cursor",
+        dimension="review",
+        source_type="review_site",
+        title="Cursor user review",
+        url="https://reviews.example/cursor",
+        snippet=(
+            "Developers praise Cursor for fast coding workflow and team value, "
+            "but complain about confusing onboarding and adoption friction. "
+            "Several users say they switched from older IDE workflows after AI "
+            "pairing became a migration trigger."
+        ),
+        content_hash="review-cursor-hash",
+        confidence=0.88,
+    )
+    detail = RunDetail(
+        id="run-review-swot",
+        topic="Cursor review regression",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        output_language="en-US",
+        plan=AnalysisPlan(
+            topic="Cursor review regression",
+            competitors=["Cursor"],
+            dimensions=["review"],
+        ),
+        raw_sources=[source],
+    )
+
+    payload = service._deterministic_structured_knowledge_payload(
+        competitor="Cursor",
+        dimension="review",
+        dimension_sources=[source.model_dump(mode="json")],
+    )
+    service._merge_structured_knowledge_payload(detail, "Cursor", "review", payload)
+    detail.comparison_matrix = service._build_comparison_matrix(
+        detail,
+        {
+            "matrix_summary": ["Cursor has mixed user review evidence."],
+            "winner_by_dimension": {"review": "Cursor"},
+        },
+    )
+    service._refresh_swot_analyses(detail)
+    detail.report_md = service._harden_report_markdown(detail, "# Cursor Review Regression")
+
+    review_summary = detail.competitor_knowledge["Cursor"].review_summary
+    assert review_summary.competitor == "Cursor"
+    assert review_summary.source_ids == ["review-cursor-1"]
+    assert review_summary.praise_themes
+    assert review_summary.complaint_themes
+    assert review_summary.adoption_blockers
+    assert review_summary.switching_triggers
+    review_items = [
+        *review_summary.praise_themes,
+        *review_summary.complaint_themes,
+        *review_summary.adoption_blockers,
+        *review_summary.switching_triggers,
+    ]
+    assert all(item.source_ids == ["review-cursor-1"] for item in review_items)
+    assert all(item.evidence_gap is False for item in review_items)
+
+    swot_analysis = detail.competitor_knowledge["Cursor"].swot_analysis
+    assert swot_analysis.competitor == "Cursor"
+    assert swot_analysis.strengths
+    assert swot_analysis.weaknesses
+    assert swot_analysis.opportunities
+    assert swot_analysis.threats
+    review_friction_themes = {
+        item.theme
+        for item in [
+            *review_summary.complaint_themes,
+            *review_summary.adoption_blockers,
+        ]
+    }
+    assert any(
+        item.source_ids == ["review-cursor-1"] and item.text in review_friction_themes
+        for item in swot_analysis.weaknesses
+    )
+    assert all(
+        item.evidence_gap and not item.source_ids
+        for item in swot_analysis.threats
+    )
+    assert "User Review Themes" in detail.report_md
+    assert "SWOT" in detail.report_md
+    for quadrant in ("Strengths", "Weaknesses", "Opportunities", "Threats"):
+        assert quadrant in detail.report_md
+    assert any(
+        line.startswith("- Threats:") and "Evidence gap" in line
+        for line in detail.report_md.splitlines()
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+    assert metrics["review_theme_section_score"].target_value == 1.0
+    assert metrics["swot_section_score"].target_value == 1.0
 
 
 def test_comparison_matrix_maps_multi_competitor_sources() -> None:
@@ -2201,7 +4087,10 @@ def test_comparison_matrix_pricing_confidence_signal_cannot_break_structural_tie
     service._merge_kb_slice(
         detail,
         "pricing",
-        {"A": ["A has pricing evidence."], "B": ["B has pricing evidence."]},
+        {
+            "A": ["A has pricing evidence. [source:pricing-a]"],
+            "B": ["B has pricing evidence. [source:pricing-b]"],
+        },
     )
 
     matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
@@ -2833,8 +4722,84 @@ def test_writer_and_reflector_digests_preserve_pricing_matrix_cells() -> None:
     assert "Usage add-on" in writer_digest["summary"][0]
 
 
+def test_writer_and_reflector_digests_preserve_persona_matrix_cells() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    long_persona_value = " | ".join(
+        [
+            (
+                f"segment={segment}; role={role}; company_size={size}; "
+                f"use_cases={use_cases}; pain_points={pain_points}"
+            )
+            for segment, role, size, use_cases, pain_points in [
+                (
+                    "Enterprise engineering teams",
+                    "technical buyer",
+                    "enterprise",
+                    "agentic coding, refactoring, IDE workflow, pull request governance",
+                    "security risk, cost control, developer onboarding, audit readiness",
+                ),
+                (
+                    "Individual developers",
+                    "developer",
+                    "individual",
+                    "code completion, agentic coding, debugging and fixes",
+                    "large codebase maintenance, reliability drift, context loss",
+                ),
+                (
+                    "SMB and startup engineering teams",
+                    "engineering lead",
+                    "startup",
+                    "team rollout, repository modernization, workflow automation",
+                    "budget predictability, switching friction, rollout governance",
+                ),
+            ]
+        ]
+    )
+    detail = RunDetail(
+        id="run-1",
+        topic="Test",
+        status="running",
+        execution_mode="real",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(topic="Test", competitors=["A"], dimensions=["persona"]),
+        comparison_matrix=ComparisonMatrix(
+            competitors=["A"],
+            dimensions=["persona"],
+            cells=[
+                ComparisonCell(
+                    competitor="A",
+                    dimension="persona",
+                    value=long_persona_value,
+                    source_ids=["persona-a"],
+                    confidence=0.9,
+                )
+            ],
+            winner_by_dimension={"persona": "A"},
+            summary=[f"[persona-standardization:persona] {long_persona_value}"],
+        ),
+    )
+
+    writer_digest = service._writer_matrix_digest(detail)
+    reflector_digest = service._reflector_matrix_digest(detail)
+
+    assert writer_digest["cells"][0]["value"] == long_persona_value
+    assert reflector_digest["cells"][0]["value"] == long_persona_value
+    assert writer_digest["summary"][0] == f"[persona-standardization:persona] {long_persona_value}"
+
+
 @pytest.mark.asyncio
-async def test_comparator_timeout_falls_back_to_deterministic_matrix() -> None:
+async def test_comparator_timeout_retries_before_deterministic_fallback() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -2870,8 +4835,11 @@ async def test_comparator_timeout_falls_back_to_deterministic_matrix() -> None:
         )
     ]
     service._merge_kb_slice(record.detail, "pricing", {"A": ["A publishes a $10 plan."]})
+    attempts = 0
 
     async def slow_complete_json(*, system: str, user: str, schema_hint: str) -> dict:
+        nonlocal attempts
+        attempts += 1
         await asyncio.sleep(1)
         return {}
 
@@ -2887,8 +4855,140 @@ async def test_comparator_timeout_falls_back_to_deterministic_matrix() -> None:
         for event in reversed(events)
         if event.type == "node_completed" and event.agent == "comparator"
     )
+    assert attempts == 3
     assert completed.payload["fallback"]["reason"] == "timeout"
+    assert completed.payload["fallback"]["attempts"] == 3
+    assert completed.payload["fallback"]["max_attempts"] == 3
     assert completed.payload["fallback"]["deterministic_fallback"] is True
+
+
+@pytest.mark.asyncio
+async def test_comparator_empty_payload_retries_and_uses_successful_payload() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            comparator_timeout_seconds=30,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Comparator empty retry",
+            competitors=["A", "B"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://a.example/pricing",
+            snippet="A publishes a $10 plan.",
+            content_hash="pricing-a-hash",
+            confidence=0.9,
+        )
+    ]
+    service._merge_kb_slice(record.detail, "pricing", {"A": ["A publishes a $10 plan."]})
+    attempts = 0
+
+    async def eventually_complete_json(*, system: str, user: str, schema_hint: str) -> dict:  # noqa: ARG001
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            return {}
+        return {
+            "matrix_summary": ["Recovered after empty comparator responses."],
+            "winner_by_dimension": {"pricing": "A"},
+        }
+
+    service._llm.complete_json = eventually_complete_json  # type: ignore[method-assign]
+
+    await service._real_comparator_step(record)
+
+    assert record.detail.comparison_matrix is not None
+    completed = [
+        event for event in record.events if event.type == "node_completed" and event.agent == "comparator"
+    ][-1]
+    assert attempts == 3
+    assert completed.payload["fallback"]["used"] is False
+    assert completed.payload["fallback"]["attempts"] == 3
+    assert completed.payload["module_status"] == "llm"
+    assert "Recovered after empty comparator responses." in record.detail.comparison_matrix.summary
+
+
+@pytest.mark.asyncio
+async def test_comparator_llm_error_retries_before_visible_deterministic_matrix() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            comparator_timeout_seconds=30,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Comparator LLM error",
+            competitors=["A", "B"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://a.example/pricing",
+            snippet="A publishes a $10 plan.",
+            content_hash="pricing-a-hash",
+            confidence=0.9,
+        )
+    ]
+    service._merge_kb_slice(record.detail, "pricing", {"A": ["A publishes a $10 plan."]})
+    attempts = 0
+
+    async def failing_complete_json(*, system: str, user: str, schema_hint: str) -> dict:  # noqa: ARG001
+        nonlocal attempts
+        attempts += 1
+        raise RuntimeError("LLM returned empty content.")
+
+    service._llm.complete_json = failing_complete_json  # type: ignore[method-assign]
+
+    await service._real_comparator_step(record)
+
+    assert record.detail.comparison_matrix is not None
+    assert record.detail.comparison_matrix.cells[0].source_ids == ["pricing-a"]
+    completed = [
+        event for event in record.events if event.type == "node_completed" and event.agent == "comparator"
+    ][-1]
+    assert attempts == 3
+    assert completed.payload["fallback"]["used"] is True
+    assert completed.payload["fallback"]["reason"] == "llm_error"
+    assert completed.payload["fallback"]["attempts"] == 3
+    assert completed.payload["fallback"]["max_attempts"] == 3
+    assert completed.payload["fallback"]["deterministic_fallback"] is True
+    assert "LLM returned empty content" in completed.payload["fallback"]["error"]
+    last_message = record.detail.agent_messages[-1]
+    assert last_message.message_type == "comparison_matrix_ready"
+    assert last_message.payload["module_status"] == "fallback"
 
 
 @pytest.mark.asyncio
@@ -2943,6 +5043,48 @@ async def test_collect_join_normalizes_covered_competitors_and_dedupes() -> None
     assert len(record.detail.raw_sources) == 1
     assert record.detail.raw_sources[0].covered_competitors == ["A", "B"]
     assert service.get_trace(detail.id)[-1].subagent == "collect_join"
+
+
+@pytest.mark.asyncio
+async def test_collect_join_preserves_explicit_partial_cross_source_coverage() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Collect join partial coverage",
+            competitors=["A", "B", "C"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-ab",
+            competitor="Cross-model all 3 competitors",
+            covered_competitors=["A", "B"],
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A vs B pricing",
+            url="https://example.com/ab",
+            snippet="A and B pricing comparison.",
+            content_hash="ab-hash",
+            confidence=0.8,
+        )
+    ]
+
+    await service._real_collect_join_step(record, ["pricing"])
+
+    assert record.detail.raw_sources[0].covered_competitors == ["A", "B"]
 
 
 @pytest.mark.asyncio
@@ -3010,6 +5152,214 @@ async def test_collect_join_skips_cross_search_when_branch_coverage_is_complete(
     assert skipped.payload["reason"] == "branch_coverage_complete"
     assert skipped.payload["covered_competitors"] == ["A", "B"]
     assert len(record.detail.raw_sources) == 2
+
+
+@pytest.mark.asyncio
+async def test_cross_competitor_search_rejects_unmatched_single_product_result() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            web_search_provider="perplexity",
+            pplx_api_key="pplx-key",
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding agent",
+            competitors=["Claude Code", "OpenAI Codex"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    async def fake_trace_search(*args, **kwargs):  # noqa: ANN202
+        return [
+            SearchResult(
+                title="Bolt pricing",
+                url="https://bolt.new/pricing",
+                snippet="Bolt pricing has Pro and Team plans for browser coding.",
+            )
+        ]
+
+    async def fake_source_from_search_result(*args, **kwargs):  # noqa: ANN202
+        return RawSource(
+            id="pricing-bolt",
+            competitor="Cross-model all 2 competitors",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Bolt pricing",
+            url="https://bolt.new/pricing",
+            snippet="Bolt pricing has Pro and Team plans for browser coding.",
+            content_hash="bolt-hash",
+            confidence=0.98,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._source_from_search_result = fake_source_from_search_result  # type: ignore[method-assign]
+
+    await service._collect_cross_competitor_evidence(record, ["pricing"])
+
+    assert record.detail.raw_sources == []
+    assert not [
+        message
+        for message in record.detail.agent_messages
+        if message.message_type == "cross_competitor_sources_collected"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_cross_competitor_search_marks_only_mentioned_competitors() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            web_search_provider="perplexity",
+            pplx_api_key="pplx-key",
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding agent",
+            competitors=["Cursor", "Claude Code", "OpenAI Codex"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    async def fake_trace_search(*args, **kwargs):  # noqa: ANN202
+        return [
+            SearchResult(
+                title="Cursor vs Claude Code pricing comparison",
+                url="https://example.com/compare",
+                snippet="Cursor and Claude Code pricing are compared for coding teams.",
+            )
+        ]
+
+    async def fake_source_from_search_result(*args, **kwargs):  # noqa: ANN202
+        return RawSource(
+            id="pricing-compare",
+            competitor="Cross-model all 3 competitors",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor vs Claude Code pricing comparison",
+            url="https://example.com/compare",
+            snippet="Cursor and Claude Code pricing are compared for coding teams.",
+            content_hash="compare-hash",
+            confidence=0.98,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._source_from_search_result = fake_source_from_search_result  # type: ignore[method-assign]
+
+    await service._collect_cross_competitor_evidence(record, ["pricing"])
+
+    assert len(record.detail.raw_sources) == 1
+    assert record.detail.raw_sources[0].covered_competitors == ["Cursor", "Claude Code"]
+
+
+@pytest.mark.asyncio
+async def test_cross_competitor_persona_search_runs_when_branch_coverage_is_weak() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            web_search_provider="perplexity",
+            pplx_api_key="pplx-key",
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistant persona comparison",
+            competitors=["Cursor", "Windsurf"],
+            dimensions=["persona"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources.extend(
+        [
+            RawSource(
+                id="cursor-persona-public",
+                competitor="Cursor",
+                covered_competitors=["Cursor"],
+                dimension="persona",
+                source_type="webpage_verified",
+                title="Cursor customer story",
+                url="https://www.cursor.com/customers/example",
+                snippet="Developer teams adopted Cursor for workflow fit and onboarding.",
+                content_hash="cursor-persona-public-hash",
+                confidence=0.92,
+            ),
+            RawSource(
+                id="windsurf-persona-proxy",
+                competitor="Windsurf",
+                covered_competitors=["Windsurf"],
+                dimension="persona",
+                source_type="interview_record",
+                title="Windsurf persona proxy",
+                snippet="Proxy interview mentions workflow fit and switching risk.",
+                content_hash="windsurf-persona-proxy-hash",
+                confidence=0.62,
+                metadata={"fallback_synthetic": True},
+            ),
+        ]
+    )
+    search_queries: list[str] = []
+
+    async def fake_trace_search(*args, **kwargs):  # noqa: ANN202
+        search_queries.append(kwargs["query"])
+        return [
+            SearchResult(
+                title="Cursor vs Windsurf user adoption comparison",
+                url="https://example.com/adoption-comparison",
+                snippet=(
+                    "Cursor and Windsurf are compared by developer adoption, "
+                    "workflow fit, onboarding, and switching risk."
+                ),
+            )
+        ]
+
+    async def fake_source_from_search_result(*args, **kwargs):  # noqa: ANN202
+        return RawSource(
+            id="persona-compare",
+            competitor="Cross-model all 2 competitors",
+            dimension="persona",
+            source_type="webpage_verified",
+            title="Cursor vs Windsurf user adoption comparison",
+            url="https://example.com/adoption-comparison",
+            snippet=(
+                "Cursor and Windsurf developer adoption, workflow fit, onboarding, "
+                "and switching risk are compared."
+            ),
+            content_hash="persona-compare-hash",
+            confidence=0.9,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._source_from_search_result = fake_source_from_search_result  # type: ignore[method-assign]
+
+    await service._collect_cross_competitor_evidence(record, ["persona"])
+
+    assert search_queries
+    assert any(source.id == "persona-compare" for source in record.detail.raw_sources)
 
 
 def test_qa_marks_matrix_unknown_source_for_comparator_redo() -> None:
@@ -3342,6 +5692,255 @@ def test_redo_issue_selection_batches_largest_competitor_gap_cluster() -> None:
     assert {issue.redo_scope.target_competitor for issue in selected} == {"A", "B", "C"}
 
 
+def test_collector_redo_removing_cross_source_clears_all_dependent_feature_outputs() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-cross-redo-cleanup",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor", "GitHub Copilot", "Claude Code", "Windsurf"],
+            dimensions=["pricing", "feature", "persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cross-feature-old",
+                competitor="Cross-model all 4 competitors",
+                covered_competitors=["Cursor", "GitHub Copilot", "Claude Code", "Windsurf"],
+                dimension="feature",
+                source_type="webpage_verified",
+                title="Cross feature comparison",
+                snippet="Compares feature capabilities across all four competitors.",
+                content_hash="cross-feature-old-hash",
+                confidence=0.9,
+            ),
+            RawSource(
+                id="claude-pricing",
+                competitor="Claude Code",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Claude pricing",
+                snippet="Claude pricing evidence.",
+                content_hash="claude-pricing-hash",
+                confidence=0.96,
+            ),
+        ],
+        competitor_kbs={
+            "Claude Code": CompetitorKB(
+                competitor="Claude Code",
+                slices={"feature": ["Claude feature claim [source:cross-feature-old]"]},
+                sources=["cross-feature-old"],
+            ),
+            "Windsurf": CompetitorKB(
+                competitor="Windsurf",
+                slices={"feature": ["Windsurf feature claim [source:cross-feature-old]"]},
+                sources=["cross-feature-old"],
+            ),
+        },
+        competitor_knowledge={
+            "Claude Code": CompetitorKnowledge(
+                competitor="Claude Code",
+                feature_tree=FeatureTree(
+                    nodes=[
+                        FeatureNode(
+                            name="Agentic coding",
+                            description="Agentic coding support.",
+                            claims=[
+                                KnowledgeClaim(
+                                    claim="Claude Code has agentic coding.",
+                                    source_ids=["cross-feature-old"],
+                                    confidence=0.9,
+                                )
+                            ],
+                        )
+                    ],
+                    summary_claims=[
+                        KnowledgeClaim(
+                            claim="Claude Code feature summary.",
+                            source_ids=["cross-feature-old"],
+                            confidence=0.9,
+                        )
+                    ],
+                ),
+                source_ids=["cross-feature-old"],
+            ),
+            "Windsurf": CompetitorKnowledge(
+                competitor="Windsurf",
+                feature_tree=FeatureTree(
+                    nodes=[
+                        FeatureNode(
+                            name="Cascade",
+                            description="Cascade feature.",
+                            claims=[
+                                KnowledgeClaim(
+                                    claim="Windsurf has Cascade.",
+                                    source_ids=["cross-feature-old"],
+                                    confidence=0.9,
+                                )
+                            ],
+                        )
+                    ],
+                    summary_claims=[
+                        KnowledgeClaim(
+                            claim="Windsurf feature summary.",
+                            source_ids=["cross-feature-old"],
+                            confidence=0.9,
+                        )
+                    ],
+                ),
+                source_ids=["cross-feature-old"],
+            ),
+        },
+    )
+    scope = RedoScope(
+        kind="collector",
+        target_subagent="feature",
+        target_competitor="Windsurf",
+        rationale="redo Windsurf feature evidence",
+    )
+
+    dimensions, target_competitors = service._prepare_redo_scope_inputs(detail, scope)
+
+    assert dimensions == ["feature"]
+    assert target_competitors == ["Windsurf"]
+    assert [source.id for source in detail.raw_sources] == ["claude-pricing"]
+    assert "feature" not in detail.competitor_kbs["Claude Code"].slices
+    assert "feature" not in detail.competitor_kbs["Windsurf"].slices
+    assert detail.competitor_knowledge["Claude Code"].feature_tree.nodes == []
+    assert detail.competitor_knowledge["Windsurf"].feature_tree.nodes == []
+
+
+@pytest.mark.parametrize("dimension", ["persona", "review"])
+def test_collector_redo_clears_removed_review_summary_source_ids(dimension: str) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id=f"run-{dimension}-review-summary-cleanup",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=[dimension, "pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id=f"old-{dimension}-survey",
+                competitor="Cursor",
+                dimension=dimension,
+                source_type="survey_simulated",
+                title=f"Old Cursor {dimension} survey",
+                snippet="Old survey says onboarding creates friction.",
+                content_hash=f"old-{dimension}-survey-hash",
+                confidence=0.82,
+            ),
+            RawSource(
+                id="cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Current pricing evidence.",
+                content_hash="cursor-pricing-hash",
+                confidence=0.93,
+            ),
+        ],
+        competitor_knowledge={
+            "Cursor": CompetitorKnowledge(
+                competitor="Cursor",
+                review_summary=ReviewThemeSummary(
+                    competitor="Cursor",
+                    dimension=dimension,
+                    source_ids=[f"old-{dimension}-survey", "cursor-pricing"],
+                    praise_themes=[
+                        ReviewThemeItem(
+                            theme="Packaging clarity",
+                            evidence="Current pricing evidence remains valid.",
+                            source_ids=["cursor-pricing"],
+                            confidence=0.91,
+                        )
+                    ],
+                    complaint_themes=[
+                        ReviewThemeItem(
+                            theme="Onboarding friction",
+                            evidence="Old survey says onboarding creates friction.",
+                            source_ids=[f"old-{dimension}-survey"],
+                            confidence=0.82,
+                        )
+                    ],
+                ),
+                source_ids=[f"old-{dimension}-survey", "cursor-pricing"],
+            )
+        },
+    )
+    scope = RedoScope(
+        kind="collector",
+        target_subagent=dimension,
+        target_competitor="Cursor",
+        rationale=f"redo Cursor {dimension} evidence",
+    )
+
+    dimensions, target_competitors = service._prepare_redo_scope_inputs(detail, scope)
+
+    review_summary = detail.competitor_knowledge["Cursor"].review_summary
+    removed_source_id = f"old-{dimension}-survey"
+    theme_texts = [
+        item.theme
+        for items in (
+            review_summary.praise_themes,
+            review_summary.complaint_themes,
+            review_summary.adoption_blockers,
+            review_summary.switching_triggers,
+        )
+        for item in items
+    ]
+    theme_source_ids = [
+        source_id
+        for items in (
+            review_summary.praise_themes,
+            review_summary.complaint_themes,
+            review_summary.adoption_blockers,
+            review_summary.switching_triggers,
+        )
+        for item in items
+        for source_id in item.source_ids
+    ]
+    assert dimensions == [dimension]
+    assert target_competitors == ["Cursor"]
+    assert [source.id for source in detail.raw_sources] == ["cursor-pricing"]
+    assert review_summary.source_ids == ["cursor-pricing"]
+    assert "Packaging clarity" in theme_texts
+    assert "Onboarding friction" not in theme_texts
+    assert removed_source_id not in review_summary.source_ids
+    assert removed_source_id not in theme_source_ids
+
+
 @pytest.mark.asyncio
 async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
     service = RunService(
@@ -3362,10 +5961,11 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
     service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
     detail = await service.create_run(
         RunCreateRequest(
-            topic="Writer fallback",
+            topic="Writer previous report preservation",
             competitors=["A"],
             dimensions=["pricing"],
             execution_mode="real",
+            output_language="en-US",
         )
     )
     record = service._runs[detail.id]
@@ -3397,7 +5997,8 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
         winner_by_dimension={"pricing": "A"},
         summary=["A has transparent pricing."],
     )
-    record.detail.report_md = "Previous report. [source:pricing-1]"
+    previous_report = "Previous report. [source:pricing-1]"
+    record.detail.report_md = previous_report
     record.detail.revisions = [
         RevisionRecord(
             id="rev-1", iteration=1, stage="collector", issue_count_before=2, issue_count_after=1
@@ -3406,7 +6007,9 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
 
     await service._real_writer_step(record)
 
-    assert record.detail.report_md == "Previous report. [source:pricing-1]"
+    assert record.detail.report_md.startswith(previous_report)
+    assert record.detail.report_md != previous_report
+    assert "## Executive Takeaway" in record.detail.report_md
     assert record.detail.metrics.revision_count == 1
     assert (
         record.detail.agent_messages[-1].payload["writer_mode"]
@@ -3418,7 +6021,1781 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
 
 
 @pytest.mark.asyncio
-async def test_writer_budget_timeout_generates_deterministic_report() -> None:
+async def test_writer_line_repair_preserves_protectable_report_without_llm() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return "# Replacement should not be used"
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer line repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    noisy_report = _writer_repair_protectable_report().replace(
+        "## SWOT Analysis",
+        "bad line \ufffd\n\n## SWOT Analysis",
+    )
+    record.detail.report_md = noisy_report
+    noisy_line_number = noisy_report.splitlines().index("bad line \ufffd") + 1
+    issue = QCIssue(
+        id="issue-line-noise",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        field_path=f"report_md.line[{noisy_line_number}]",
+        problem=f"Report line {noisy_line_number} contains non-publishable text noise.",
+        redo_scope=RedoScope(kind="writer_only", rationale="repair noisy report line"),
+    )
+    stale_issue = QCIssue(
+        id="issue-stale-writer-only",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        field_path="report_md.line[1]",
+        problem="Older writer-only issue should not be linked to this repair.",
+        redo_scope=RedoScope(kind="writer_only", rationale="stale writer-only repair"),
+    )
+    stale_message = service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": stale_issue.redo_scope.model_dump(mode="json"),
+            "issues": [stale_issue.model_dump(mode="json")],
+            "issue_ids": [stale_issue.id],
+        },
+    )
+    service._consume_queued_agent_messages(
+        record,
+        to_agent="writer_only",
+        consumer_agent="redo_router",
+        message_types={"redo_request"},
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="writer_only",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=noisy_report,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+    redo_message = service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+    service._consume_queued_agent_messages(
+        record,
+        to_agent="writer_only",
+        consumer_agent="redo_router",
+        message_types={"redo_request"},
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 0
+    assert "bad line" not in record.detail.report_md
+    assert "## User Review Themes" in record.detail.report_md
+    assert "## SWOT Analysis" in record.detail.report_md
+    assert record.detail.agent_messages[-1].payload["writer_mode"] == "writer repair: line"
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "line"
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+    assert redo_message.id in record.detail.agent_messages[-1].source_message_ids
+    assert stale_message.id not in record.detail.agent_messages[-1].source_message_ids
+
+
+def test_release_gate_duplicate_sections_routes_to_assemble() -> None:
+    report = _writer_repair_protectable_report().replace(
+        "## Competitive Findings",
+        (
+            "## Decision Summary\n"
+            "Short duplicate summary created by assembly ordering damage. [source:pricing-1]\n\n"
+            "## Competitive Findings"
+        ),
+        1,
+    )
+    detail = _writer_repair_detail(report)
+
+    plan = build_writer_repair_plan(detail, [_release_gate_report_depth_issue()])
+
+    assert plan.mode == "assemble"
+    assert (
+        plan.reason
+        == "release gate failure is deterministic report structure damage"
+    )
+    assert plan.previous_report_protectable is True
+    assert plan.anti_regression_required is False
+
+
+def test_release_gate_thin_core_without_structure_damage_routes_to_full() -> None:
+    report = """# Cursor vs Copilot Direct Battlecard
+
+## Decision Summary
+Too thin to make a release decision. [source:pricing-1]
+
+## Competitive Findings
+- Pricing evidence exists but the analysis is not deep. [source:pricing-1]
+
+## Competitor Deep Dives
+- Cursor and Copilot still need deeper assessment. [source:feature-1]
+
+## SWOT Analysis
+- Strengths: early evidence exists. [source:pricing-1]
+
+## Source Quality & Coverage
+Verified source coverage exists, but the core analysis remains thin. [source:pricing-1]
+"""
+    detail = _writer_repair_detail(report)
+
+    plan = build_writer_repair_plan(detail, [_release_gate_report_depth_issue()])
+
+    assert plan.mode == "full"
+
+
+def test_release_gate_support_order_damage_routes_to_assemble() -> None:
+    support_section = (
+        "## Source Quality & Coverage\n"
+        "The run uses verified pages for both target competitors. "
+        "[source:pricing-1] [source:feature-1]\n\n"
+    )
+    report = _writer_repair_protectable_report().replace(support_section, "").replace(
+        "## SWOT Analysis",
+        f"{support_section}## SWOT Analysis",
+        1,
+    )
+    detail = _writer_repair_detail(report)
+
+    plan = build_writer_repair_plan(detail, [_release_gate_report_depth_issue()])
+
+    assert plan.mode == "assemble"
+    assert (
+        plan.reason
+        == "release gate failure is deterministic report structure damage"
+    )
+    assert plan.anti_regression_required is False
+
+
+@pytest.mark.asyncio
+async def test_writer_assemble_repair_preserves_report_without_llm() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return "# Full rewrite should not be used"
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer assemble repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_release_depth_report().replace(
+        "## Competitive Findings",
+        (
+            "## Decision Summary\n"
+            "Short duplicate summary created by assembly ordering damage. [source:pricing-1]\n\n"
+            "## Competitive Findings"
+        ),
+        1,
+    )
+    issue = _release_gate_report_depth_issue()
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 0
+    assert record.detail.report_md.count("## Decision Summary") == 1
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_mode"] == "writer repair: assemble"
+    assert payload["writer_repair_mode"] == "assemble"
+    assert (
+        payload["writer_repair_decision"]
+        == "release gate failure is deterministic report structure damage"
+    )
+    assert payload["previous_report_protected"] is True
+    repair_events = [
+        event
+        for event in record.events
+        if event.type == "writer_assemble_repair_completed"
+    ]
+    assert len(repair_events) == 1
+    assert "duplicate_section_count_before" in repair_events[0].payload
+    assert "quality_preflight" in repair_events[0].payload
+    assert repair_events[0].payload["quality_gate_passed"] is True
+    assert repair_events[0].payload["quality_gate_reasons"] == []
+
+
+@pytest.mark.asyncio
+async def test_writer_assemble_repair_preflight_failure_falls_back_to_full(
+    monkeypatch,
+) -> None:
+    from packages.agents.writer import logic as writer_logic
+
+    class FailedPreflight:
+        passed = False
+        failure_reasons = ["missing_core_sections"]
+
+        def telemetry_payload(self) -> dict[str, object]:
+            return {"passed": False, "failure_reasons": list(self.failure_reasons)}
+
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return _writer_repair_protectable_report().replace(
+            (
+                "User review themes show Cursor is easier to explain during procurement, "
+                "while Copilot benefits from\nexisting Microsoft workflow familiarity. "
+                "[source:pricing-1]\n"
+                "- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]\n"
+                "- Adoption blocker: security review and procurement packaging still need deeper "
+                "evidence.\n"
+                "[source:feature-1]"
+            ),
+            "Existing evidence does not provide verified user reviews.",
+        )
+
+    monkeypatch.setattr(
+        writer_logic,
+        "run_writer_quality_preflight",
+        lambda detail, markdown: FailedPreflight(),  # noqa: ARG005
+    )
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer assemble fallback",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report().replace(
+        "## Competitive Findings",
+        (
+            "## Decision Summary\n"
+            "Short duplicate summary created by assembly ordering damage. [source:pricing-1]\n\n"
+            "## Competitive Findings"
+        ),
+        1,
+    )
+    issue = _release_gate_report_depth_issue()
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 1
+    repair_event = next(
+        event
+        for event in record.events
+        if event.type == "writer_assemble_repair_completed"
+    )
+    assert repair_event.payload["quality_gate_passed"] is False
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_repair_mode"] == "full"
+    assert (
+        payload["writer_repair_decision"]
+        == "assembler repair did not pass writer quality preflight or depth gate"
+    )
+    assert payload["previous_report_protected"] is True
+    assert payload["anti_regression_reason"]
+
+
+@pytest.mark.asyncio
+async def test_writer_assemble_repair_hardens_rag_gap_fill_without_full_rewrite() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return _writer_repair_release_depth_report()
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer assemble rag gap fallback",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_release_depth_report().replace(
+        "## Competitive Findings",
+        (
+            "## Decision Summary\n"
+            "Short duplicate summary created by assembly ordering damage. [source:pricing-1]\n\n"
+            "## Competitive Findings"
+        ),
+        1,
+    )
+    issue = _release_gate_report_depth_issue()
+    collector_gap_issue = _collector_issue("issue-rag-gap", "pricing", "Cursor")
+    record.detail.qa_findings = [issue, collector_gap_issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 0
+    repair_event = next(
+        event
+        for event in record.events
+        if event.type == "writer_assemble_repair_completed"
+    )
+    assert repair_event.payload["quality_gate_passed"] is True
+    assert "rag_gap_fill_section_score" not in repair_event.payload["quality_gate_reasons"]
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_mode"] == "writer repair: assemble"
+    assert payload["writer_repair_mode"] == "assemble"
+    assert "## RAG Gap Fill" in record.detail.report_md
+
+
+@pytest.mark.asyncio
+async def test_writer_assemble_repair_thin_support_order_falls_back_to_full() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return _writer_repair_protectable_report()
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer thin assemble fallback",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = """# Cursor vs Copilot Direct Battlecard
+
+## Decision Summary
+Too thin to make a release decision. [source:pricing-1]
+
+## Competitive Findings
+- Pricing evidence exists but the analysis is not deep. [source:pricing-1]
+
+## User Review Themes
+- Buyer feedback still needs analysis. [source:feature-1]
+
+## Competitor Deep Dives
+- Cursor and Copilot still need deeper assessment. [source:feature-1]
+
+## Source Quality & Coverage
+Verified source coverage exists, but the core analysis remains thin. [source:pricing-1]
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Copilot |
+| --- | --- | --- |
+| Pricing | clearer [source:pricing-1] | bundled [source:feature-1] |
+
+## SWOT Analysis
+- Strengths: early evidence exists. [source:pricing-1]
+"""
+    issue = _release_gate_report_depth_issue()
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 1
+    repair_event = next(
+        event
+        for event in record.events
+        if event.type == "writer_assemble_repair_completed"
+    )
+    assert repair_event.payload["quality_gate_passed"] is False
+    assert "core_analysis_depth_score" in repair_event.payload["quality_gate_reasons"]
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_repair_mode"] == "full"
+    assert (
+        payload["writer_repair_decision"]
+        == "assembler repair did not pass writer quality preflight or depth gate"
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_assemble_repair_release_depth_boundary_falls_back_to_full() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return _writer_repair_release_depth_report()
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer boundary assemble fallback",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    def boundary_body(seed: str, minimum_chars: int) -> str:
+        sentence = f"{seed} [source:pricing-1] [source:feature-1] "
+        body = sentence
+        while len(body) < minimum_chars:
+            body += sentence
+        return body.strip()
+
+    record.detail.report_md = f"""# Cursor vs Copilot Direct Battlecard
+
+## Decision Summary
+{boundary_body("Recommended action keeps Cursor pricing clarity and Copilot continuity in tension while release proof remains gated.", 560)}
+
+## Competitive Findings
+{boundary_body("The finding frames the choice as standalone clarity versus Microsoft distribution without claiming a final winner.", 760)} Extra release detail now.
+
+## User Review Themes
+{boundary_body("Buyer feedback is directional and should guide discovery on procurement confidence, switching effort, and pilot speed.", 510)} Extra release detail now.
+
+## Competitor Deep Dives
+{boundary_body("Cursor needs procurement proof while Copilot needs standalone value comparison before the account path is publishable.", 510)} Extra release detail now.
+
+## Source Quality & Coverage
+Verified source coverage exists, but this audit section appears before later core sections and
+should be moved after the full analysis layer. [source:pricing-1] [source:feature-1]
+
+## Battlecard
+{boundary_body("The battlecard opens with pricing clarity, handles Microsoft continuity, and asks which buying constraint matters most.", 740)} Extra release detail now.
+
+## Side-by-Side Decision Matrix
+{boundary_body("Matrix interpretation compares pricing, workflow, persona, security, procurement, and follow-up implications.", 620)}
+
+## SWOT Analysis
+- Strengths: Cursor has explainable pricing and Copilot has credible Microsoft distribution for platform teams. [source:pricing-1] [source:feature-1]
+- Weaknesses: Cursor needs procurement proof and Copilot needs standalone value comparison before release. [source:pricing-1] [source:feature-1]
+- Opportunities: Buyer education can separate workflow gains from bundle familiarity during discovery. [source:pricing-1]
+- Threats: Copilot can defend through continuity, governance assumptions, and lower perceived switching risk. [source:feature-1]
+"""
+    issue = _release_gate_report_depth_issue()
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 1
+    repair_event = next(
+        event
+        for event in record.events
+        if event.type == "writer_assemble_repair_completed"
+    )
+    assert repair_event.payload["quality_gate_passed"] is False
+    assert 0.6 <= repair_event.payload["core_analysis_depth_score"] < 0.8
+    assert "core_analysis_depth_score" in repair_event.payload["quality_gate_reasons"]
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_repair_mode"] == "full"
+    assert (
+        payload["writer_repair_decision"]
+        == "assembler repair did not pass writer quality preflight or depth gate"
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_poor_previous_report_allows_full_rewrite() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return _writer_repair_protectable_report()
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer poor draft rewrite",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = "# Report\n\nbad line \ufffd"
+    issue = QCIssue(
+        id="issue-poor-line",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        field_path="report_md.line[3]",
+        problem="Report line 3 contains non-publishable text noise.",
+        redo_scope=RedoScope(kind="writer_only", rationale="repair poor report"),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert "bad line" not in record.detail.report_md
+    assert "## Decision Summary" in record.detail.report_md
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is False
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_replaces_only_target_section() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    captured_user = ""
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal captured_user
+        captured_user = user
+        return (
+            "## User Review Themes\n"
+            "- Praise: Cursor is easier to explain in initial evaluation because pricing is "
+            "direct. "
+            "[source:pricing-1]\n"
+            "- Blocker: Copilot can defend with existing Microsoft workflow familiarity. "
+            "[source:feature-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report().replace(
+        (
+            "User review themes show Cursor is easier to explain during procurement, while Copilot "
+            "benefits from\nexisting Microsoft workflow familiarity. [source:pricing-1]\n"
+            "- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]\n"
+            "- Adoption blocker: security review and procurement packaging still need deeper "
+            "evidence.\n"
+            "[source:feature-1]"
+        ),
+        "Existing evidence does not provide verified user reviews.",
+    )
+    issue = QCIssue(
+        id="issue-review-thin",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section is too thin.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert "Repair only these sections: review_theme_summary" in captured_user
+    assert "return only the requested section markdown" in captured_user
+    assert "preserve existing [source:ID] syntax" in captured_user
+    assert "## Executive Summary" in record.detail.report_md
+    assert "## SWOT Analysis" in record.detail.report_md
+    assert "- Praise: Cursor is easier to explain" in record.detail.report_md
+    assert (
+        "Existing evidence does not provide verified user reviews."
+        not in record.detail.report_md
+    )
+    assert record.detail.agent_messages[-1].payload["writer_mode"] == "writer repair: section"
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "section"
+    assert record.detail.agent_messages[-1].payload["writer_repair_sections"] == [
+        "review_theme_summary"
+    ]
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_preserves_previous_when_review_loses_user_research_sources() -> None:  # noqa: E501
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return (
+            "## User Review Themes\n"
+            "User feedback is thin and mostly inferred from pricing pages. [source:pricing-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer review source preservation",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-1",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor pricing page.",
+            content_hash="pricing-1-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="feature-1",
+            competitor="Copilot",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="Copilot feature",
+            snippet="Copilot feature page.",
+            content_hash="feature-1-hash",
+            confidence=0.9,
+        ),
+        RawSource(
+            id="cursor-survey",
+            competitor="Cursor",
+            dimension="persona",
+            source_type="survey_simulated",
+            title="Cursor survey",
+            snippet="Survey with adoption blockers and switching triggers.",
+            content_hash="cursor-survey-hash",
+            confidence=0.76,
+        ),
+    ]
+    record.detail.report_md = _writer_repair_protectable_report().replace(
+        (
+            "User review themes show Cursor is easier to explain during procurement, while Copilot "
+            "benefits from\nexisting Microsoft workflow familiarity. [source:pricing-1]\n"
+            "- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]\n"
+            "- Adoption blocker: security review and procurement packaging still need deeper "
+            "evidence.\n"
+            "[source:feature-1]"
+        ),
+        "Survey signals show adoption blockers and switching triggers. [source:cursor-survey]",
+    )
+    issue = QCIssue(
+        id="issue-review-repair",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section needs repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert "Survey signals show adoption blockers" in record.detail.report_md
+    assert "[source:cursor-survey]" in record.detail.report_md
+    assert record.detail.agent_messages[-1].payload["writer_mode"] == (
+        "preserved previous report after writer anti-regression"
+    )
+    assert "user research source" in record.detail.agent_messages[-1].payload[
+        "anti_regression_reason"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_writer_only_thin_core_finding_uses_section_repair() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer thin core section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-competitive-findings-thin",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        field_path="report_quality.core_section_depth_score",
+        problem="Competitive Findings section is too thin for decision-grade reporting.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Expand Competitive Findings."),
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="writer_only",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=["issue-competitive-findings-thin"],
+        qa_issue_ids_before=["issue-competitive-findings-thin"],
+        issue_count_before=1,
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        assert "Competitive Findings" in user
+        return (
+            "## Competitive Findings\n"
+            "- Cursor has clearer pricing evaluation signals for buyers comparing direct "
+            "developer workflow tools. [source:pricing-1]\n"
+            "- Copilot retains enterprise familiarity through Microsoft workflow adjacency, "
+            "but this creates a different buying motion. [source:feature-1]\n"
+            "- The decision implication is to test pricing transparency and onboarding proof "
+            "before treating either product as the default winner. [source:pricing-1]"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+
+    await service._real_writer_step(record)
+
+    message = record.detail.agent_messages[-1]
+    assert message.payload["writer_repair_mode"] == "section"
+    assert message.payload["writer_repair_sections"] == ["competitive_findings"]
+    assert (
+        "The decision implication is to test pricing transparency"
+        in record.detail.report_md
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_failure_reports_attempted_metadata() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        raise RuntimeError("section repair failed")
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer section repair failure",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    previous_report = _writer_repair_protectable_report()
+    record.detail.report_md = previous_report
+    issue = QCIssue(
+        id="issue-review-failure",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section needs section repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    expected_report = service._preserve_hardened_previous_report(
+        record.detail,
+        previous_report,
+    )
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert record.detail.report_md == expected_report
+    assert payload["writer_mode"] == "preserved previous report after writer error"
+    assert payload["writer_repair_mode"] == "section"
+    assert payload["writer_repair_sections"] == ["review_theme_summary"]
+    assert (
+        payload["writer_repair_decision"]
+        == "small set of section findings on protectable report"
+    )
+    assert payload["previous_report_protected"] is True
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_preflight_failure_fails_run_with_previous_report(
+    monkeypatch,
+) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer section repair preflight failure",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-review-preflight-failure",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section needs section repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+    llm_called = False
+
+    class FakeResult:
+        def preflight_errors(self):
+            return ["source_not_represented:bad"]
+
+        def to_prompt_json(self):
+            raise AssertionError("to_prompt_json should not be called")
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        nonlocal llm_called
+        llm_called = True
+        return "# should not be called"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeResult(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    with pytest.raises(
+        RuntimeError,
+        match="writer evidence pack preflight failed: source_not_represented:bad",
+    ):
+        await service._real_writer_step(record)
+
+    assert not llm_called
+    assert record.detail.status == "failed"
+    assert any(event.type == "run_failed" for event in record.events)
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_prompt_includes_localized_heading() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    captured_system = ""
+    captured_user = ""
+    localized_heading = report_label("zh-CN", "review_theme_summary")
+
+    async def fake_complete_text(*, system: str, user: str) -> str:
+        nonlocal captured_system, captured_user
+        captured_system = system
+        captured_user = user
+        return (
+            f"## {localized_heading}\n"
+            "- 表扬：Cursor 的定价透明度更容易支持初始评估。 [source:pricing-1]\n"
+            "- 阻力：Copilot 可以依靠 Microsoft 工作流熟悉度防守。 [source:feature-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer localized section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="zh-CN",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-review-zh",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="review_theme_summary",
+        field_path="report_md.section[review_theme_summary]",
+        problem="User Review Themes section needs localized section repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="review_theme_summary",
+            rationale="repair review section",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    prompt = f"{captured_system}\n{captured_user}"
+    assert "Use Simplified Chinese" in prompt
+    assert f"review_theme_summary -> ## {localized_heading}" in captured_user
+    assert f"## {localized_heading}" in record.detail.report_md
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_prompt_includes_community_policy() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    captured_user = ""
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal captured_user
+        captured_user = user
+        return (
+            "## User Review Themes\n"
+            "- Community caveats are directional. [source:community-pricing-a]"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer section repair community policy",
+            competitors=["A", "B"],
+            dimensions=["pricing"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="community-pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="reddit_thread",
+            title="A pricing community thread",
+            url="https://reddit.com/r/a/comments/pricing",
+            snippet="Community users report practical pricing caveats and usage limits.",
+            content_hash="community-pricing-a-hash",
+            confidence=0.68,
+            metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+        )
+    ]
+
+    await service._writer_section_repair_markdown(
+        record,
+        sections=["review_theme_summary"],
+        previous_report="# Existing report",
+    )
+
+    assert "Official facts vs community observations" in captured_user
+    assert "Do not present community observations as official commitments" in captured_user
+
+
+@pytest.mark.asyncio
+async def test_writer_full_rewrite_rejects_collapsed_review_section_when_previous_is_protectable() -> None:  # noqa: E501
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return _writer_repair_protectable_report().replace(
+            (
+                "User review themes show Cursor is easier to explain during procurement, "
+                "while Copilot "
+                "benefits from\nexisting Microsoft workflow familiarity. [source:pricing-1]\n"
+                "- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]\n"
+                "- Adoption blocker: security review and procurement packaging still need "
+                "deeper evidence.\n"
+                "[source:feature-1]"
+            ),
+            "Existing evidence does not provide verified user reviews.",
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer full rewrite guard",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-broad-writer",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        field_path="report_md",
+        problem="Broad writer refresh requested.",
+        redo_scope=RedoScope(kind="writer_only", rationale="refresh writer output"),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+
+    await service._real_writer_step(record)
+
+    assert (
+        "Existing evidence does not provide verified user reviews."
+        not in record.detail.report_md
+    )
+    assert "- Customer theme: pricing clarity supports fast evaluation." in record.detail.report_md
+    assert (
+        record.detail.agent_messages[-1].payload["writer_mode"]
+        == "preserved previous report after writer anti-regression"
+    )
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
+    assert record.detail.agent_messages[-1].payload["anti_regression_reason"]
+
+
+@pytest.mark.asyncio
+async def test_writer_full_repair_plan_uses_full_rewrite_metadata() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+    llm_calls = 0
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        nonlocal llm_calls
+        llm_calls += 1
+        return _writer_repair_protectable_report().replace(
+            "position Cursor as the clearer standalone pricing challenger",
+            "Normal writer refresh positions Cursor as the clearer standalone pricing challenger",
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer full repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="issue-broad-writer",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        target_subagent="narrative_quality",
+        field_path="report_md",
+        problem="Report needs broad narrative quality repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="narrative_quality",
+            rationale="repair broad writer quality",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="writer_only",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="writer_only",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+    service._consume_queued_agent_messages(
+        record,
+        to_agent="writer_only",
+        consumer_agent="redo_router",
+        message_types={"redo_request"},
+    )
+
+    await service._real_writer_step(record)
+
+    assert llm_calls == 1
+    assert record.detail.agent_messages[-1].payload["writer_mode"] == "real LLM call"
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
+    assert record.detail.agent_messages[-1].payload["writer_repair_sections"] == []
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+    assert record.detail.agent_messages[-1].payload["anti_regression_reason"] is None
+    assert "Normal writer refresh" in record.detail.report_md
+
+
+@pytest.mark.asyncio
+async def test_writer_upstream_changed_allows_full_rewrite_with_guard_metadata() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return _writer_repair_protectable_report().replace(
+            "position Cursor as the clearer standalone pricing challenger",
+            "Cursor has updated pricing transparency",
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer upstream rewrite",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    scope = RedoScope(
+        kind="collector",
+        target_subagent="pricing",
+        target_competitor="Cursor",
+        rationale="new pricing evidence",
+    )
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="collector",
+        redo_scope=scope,
+        redo_scopes=[scope],
+        before_md=record.detail.report_md,
+        issue_ids=["collector-issue"],
+        qa_issue_ids_before=["collector-issue"],
+        issue_count_before=1,
+    )
+
+    await service._real_writer_step(record)
+
+    assert "Cursor has updated pricing transparency" in record.detail.report_md
+    assert record.detail.agent_messages[-1].payload["writer_repair_mode"] == "full"
+    assert record.detail.agent_messages[-1].payload["previous_report_protected"] is True
+    assert record.detail.agent_messages[-1].payload["anti_regression_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_writer_upstream_collector_redo_uses_qa_issue_for_section_repair() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return (
+            "## User Review Themes\n"
+            "Refreshed persona evidence shows Cursor is easier to explain during "
+            "procurement, while Copilot still benefits from Microsoft workflow "
+            "familiarity for platform buyers. [source:pricing-1]\n"
+            "- Refreshed theme: evaluators value pricing clarity when comparing "
+            "focused developer workflow tools. [source:pricing-1]\n"
+            "- Refreshed blocker: security review and procurement packaging still "
+            "need direct validation before a replacement claim is safe. [source:feature-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer upstream collector section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="collector-persona-review",
+        severity="warn",
+        detected_by="reflector",
+        target_agent="collector",
+        target_subagent="persona",
+        field_path="reflections[-1].coverage_gaps[0]",
+        problem="persona survey and interview review themes need refresh.",
+        redo_scope=RedoScope(
+            kind="collector",
+            target_subagent="persona",
+            rationale="refresh persona",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="collector",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_repair_mode"] == "section"
+    assert payload["writer_repair_sections"] == ["review_theme_summary"]
+    assert "Refreshed persona evidence" in record.detail.report_md
+    assert "Customer theme: pricing clarity supports fast evaluation" not in (
+        record.detail.report_md
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_upstream_collector_redo_recovers_consumed_issue_for_section_repair() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return (
+            "## User Review Themes\n"
+            "Improved persona review themes show Cursor is easier to explain during "
+            "procurement, while Copilot still benefits from Microsoft workflow "
+            "familiarity for platform buyers. [source:pricing-1]\n"
+            "- Refreshed review theme: evaluators value pricing clarity when comparing "
+            "focused developer workflow tools. [source:pricing-1]\n"
+            "- Refreshed adoption blocker: security review and procurement packaging "
+            "still need direct validation before a replacement claim is safe. "
+            "[source:feature-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer consumed upstream collector section repair",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    record.detail.report_md = _writer_repair_protectable_report()
+    issue = QCIssue(
+        id="collector-persona-consumed-review",
+        severity="warn",
+        detected_by="reflector",
+        target_agent="collector",
+        target_subagent="persona",
+        field_path="reflections[-1].coverage_gaps[0]",
+        problem="persona survey and interview review themes need refresh.",
+        redo_scope=RedoScope(
+            kind="collector",
+            target_subagent="persona",
+            rationale="refresh persona",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    service._append_agent_message(
+        record,
+        from_agent="qa",
+        to_agent="collector",
+        message_type="redo_request",
+        payload_schema="RedoRequestPayload",
+        payload={
+            "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            "issues": [issue.model_dump(mode="json")],
+            "issue_ids": [issue.id],
+        },
+    )
+    service._consume_queued_agent_messages(
+        record,
+        to_agent="collector",
+        consumer_agent="redo_router",
+        message_types={"redo_request"},
+    )
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="collector",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+    record.detail.qa_findings = []
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert payload["writer_repair_mode"] == "section"
+    assert payload["writer_repair_sections"] == ["review_theme_summary"]
+    assert "Improved persona review themes" in record.detail.report_md
+    assert "Customer theme: pricing clarity supports fast evaluation" not in (
+        record.detail.report_md
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_upstream_changed_rejects_thinner_full_rewrite() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def fake_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return (
+            "# Cursor vs Copilot Pricing Update\n\n"
+            "## Executive Summary\n"
+            "Cursor has updated pricing transparency for this refreshed collector pass. "
+            "[source:pricing-1]\n\n"
+            "## Decision Summary\n"
+            "Use the updated Cursor pricing transparency evidence as the current sales "
+            "talk track, while treating older comparison depth as superseded. "
+            "[source:pricing-1]\n"
+        )
+
+    service._llm.complete_text = fake_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer upstream thin rewrite",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = _writer_repair_sources()
+    previous_report = _writer_repair_protectable_report()
+    record.detail.report_md = previous_report
+    scope = RedoScope(
+        kind="collector",
+        target_subagent="pricing",
+        target_competitor="Cursor",
+        rationale="new pricing evidence changed upstream data",
+    )
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="collector",
+        redo_scope=scope,
+        redo_scopes=[scope],
+        before_md=record.detail.report_md,
+        issue_ids=["collector-pricing-changed"],
+        qa_issue_ids_before=["collector-pricing-changed"],
+        issue_count_before=1,
+    )
+
+    expected_report = service._preserve_hardened_previous_report(
+        record.detail,
+        previous_report,
+    )
+
+    await service._real_writer_step(record)
+
+    payload = record.detail.agent_messages[-1].payload
+    assert record.detail.report_md == expected_report
+    assert "Cursor has updated pricing transparency" not in record.detail.report_md
+    assert "Customer theme: pricing clarity supports fast evaluation" in record.detail.report_md
+    assert (
+        payload["writer_mode"]
+        == "preserved previous report after writer anti-regression"
+    )
+    assert payload["writer_repair_mode"] == "full"
+    assert payload["previous_report_protected"] is True
+    assert payload["anti_regression_reason"] is not None
+
+
+@pytest.mark.asyncio
+async def test_writer_budget_timeout_fails_without_previous_report() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -3439,10 +7816,11 @@ async def test_writer_budget_timeout_generates_deterministic_report() -> None:
     service._llm.complete_text = slow_complete_text  # type: ignore[method-assign]
     detail = await service.create_run(
         RunCreateRequest(
-            topic="Writer budget fallback",
+            topic="Writer budget timeout",
             competitors=["A"],
             dimensions=["pricing"],
             execution_mode="real",
+            output_language="en-US",
         )
     )
     record = service._runs[detail.id]
@@ -3475,19 +7853,85 @@ async def test_writer_budget_timeout_generates_deterministic_report() -> None:
         summary=["A has transparent pricing."],
     )
 
-    await service._real_writer_step(record)
+    with pytest.raises(
+        RuntimeError,
+        match="Writer failed before report generation: writer LLM exceeded 0.05s",
+    ):
+        await service._real_writer_step(record)
 
-    assert "## Generation Notes" in record.detail.report_md
-    assert "writer LLM exceeded 0.05s" in record.detail.report_md
-    assert (
-        record.detail.agent_messages[-1].payload["writer_mode"]
-        == "deterministic fallback after writer error"
+    assert record.detail.status == "failed"
+    assert record.detail.report_md == ""
+    assert all(
+        message.message_type != "report_ready"
+        for message in record.detail.agent_messages
     )
-    assert record.detail.agent_messages[-1].payload["error"] == "writer LLM exceeded 0.05s"
+    assert any(
+        event.type == "run_failed"
+        and event.agent == "writer"
+        and "writer LLM exceeded 0.05s" in event.message
+        for event in record.events
+    )
 
 
 @pytest.mark.asyncio
-async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
+async def test_writer_empty_output_fails_without_previous_report() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=5,
+        ),
+    )
+
+    async def empty_complete_text(*, system: str, user: str) -> str:  # noqa: ARG001
+        return "   "
+
+    service._llm.complete_text = empty_complete_text  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Writer empty output",
+            competitors=["A"],
+            dimensions=["pricing"],
+            execution_mode="real",
+            output_language="en-US",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="pricing-1",
+            competitor="A",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://example.com/pricing",
+            snippet="A costs $10 per month.",
+            content_hash="abc",
+            confidence=0.9,
+        )
+    ]
+
+    with pytest.raises(
+        RuntimeError,
+        match="Writer failed before report generation: Writer returned empty report content",
+    ):
+        await service._real_writer_step(record)
+
+    assert record.detail.status == "failed"
+    assert record.detail.report_md == ""
+    assert all(
+        message.message_type != "report_ready"
+        for message in record.detail.agent_messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_uses_evidence_pack_for_llm_prompt() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -3514,10 +7958,14 @@ async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
             competitors=["A", "B"],
             dimensions=["pricing"],
             execution_mode="real",
+            output_language="en-US",
         )
     )
     record = service._runs[detail.id]
-    long_snippet = "A pricing is published. " + ("long-context-token " * 400)
+    long_snippet = (
+        "A pricing evidence describes enterprise budget governance, procurement approval, "
+        "usage limits, renewal planning, and developer rollout. "
+    ) * 40
     record.detail.raw_sources = [
         RawSource(
             id="pricing-a",
@@ -3529,7 +7977,19 @@ async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
             snippet=long_snippet,
             content_hash="pricing-a-hash",
             confidence=0.95,
-        )
+        ),
+        RawSource(
+            id="community-pricing-a",
+            competitor="A",
+            dimension="pricing",
+            source_type="reddit_thread",
+            title="A pricing community thread",
+            url="https://reddit.com/r/a/comments/pricing",
+            snippet="Community users report practical pricing caveats and usage limits.",
+            content_hash="community-pricing-a-hash",
+            confidence=0.68,
+            metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+        ),
     ]
     record.detail.comparison_matrix = ComparisonMatrix(
         competitors=["A", "B"],
@@ -3550,13 +8010,2944 @@ async def test_writer_uses_compact_context_package_for_llm_prompt() -> None:
 
     await service._real_writer_step(record)
 
-    assert "Writer Context JSON:" in captured_user
-    assert "under 4,500 characters" in captured_user
+    assert "Writer Evidence Pack JSON:" in captured_user
+    assert "Writer Context JSON:" not in captured_user
+    assert "source_registry" in captured_user
+    assert "around 5,500 characters" not in captured_user
+    assert "8,500-10,000 characters" not in captured_user
+    assert "16,000-20,000 characters" in captured_user
+    assert "Core section minimums" in captured_user
+    assert "70-80%" in captured_user
+    assert "Core analysis layer" in captured_user
+    assert "Support/audit layer" in captured_user
     assert "Competitor KB JSON:" not in captured_user
     assert "Competitor Knowledge Schema JSON:" not in captured_user
-    assert len(captured_user) < 15000
-    assert captured_user.count("long-context-token") < 80
+    marker_count = captured_user.count("enterprise budget governance")
+    assert 1 <= marker_count < 40
+    assert "Official facts vs community observations" in captured_user
+    assert "Do not present community observations as official commitments" in captured_user
+    assert "Community Evidence Triangulation" in captured_user
     assert record.detail.agent_messages[-1].payload["writer_mode"] == "real LLM call"
+
+
+@pytest.mark.asyncio
+async def test_writer_uses_evidence_pack_context_and_emits_preflight(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    detail = RunDetail(
+        id="run-writer-pack",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["pricing"]),
+        raw_sources=[
+            RawSource(
+                id="cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Cursor Pro costs $20 per month.",
+                content_hash="cursor-pricing-hash",
+                confidence=0.96,
+            )
+        ],
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    captured: dict[str, str] = {}
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        preflight_event = next(
+            (event for event in record.events if event.type == "writer_preflight"),
+            None,
+        )
+        assert preflight_event is not None
+        assert preflight_event.payload["raw_source_count"] == 1
+        assert preflight_event.payload["source_registry_count"] >= 1
+        assert preflight_event.payload["writer_evidence_pack_chars"] > 0
+        captured["user"] = kwargs["user"]
+        return (
+            "# Report\n\n"
+            "## Executive Summary\nCursor has visible pricing. [source:cursor-pricing]\n\n"
+            "## Evidence Appendix\n- [source:cursor-pricing] Cursor pricing\n"
+        )
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._real_writer_step(record)
+
+    assert "Writer Evidence Pack JSON:" in captured["user"]
+    assert "Writer Context JSON:" not in captured["user"]
+    assert "source_registry" in captured["user"]
+
+
+@pytest.mark.asyncio
+async def test_writer_fails_before_llm_when_evidence_pack_preflight_has_errors(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    detail = RunDetail(
+        id="run-pack-preflight-fail",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["pricing"]),
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    llm_called = False
+
+    class FakeResult:
+        def telemetry_payload(self):
+            return {
+                "raw_source_count": 1,
+                "preflight_warnings": ["source_not_represented:bad"],
+            }
+
+        def preflight_errors(self):
+            return ["source_not_represented:bad"]
+
+        def to_prompt_json(self):
+            return "{}"
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        nonlocal llm_called
+        llm_called = True
+        return "# should not be called"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeResult(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    with pytest.raises(RuntimeError, match="writer evidence pack preflight failed"):
+        await service._real_writer_step(record)
+
+    assert not llm_called
+    assert any(event.type == "run_failed" for event in record.events)
+
+
+@pytest.mark.asyncio
+async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    sources = [
+        RawSource(
+            id=f"cursor-source-{index}",
+            competitor="Cursor",
+            dimension="persona" if index % 2 else "pricing",
+            source_type="interview_record",
+            title=f"Cursor source {index}",
+            snippet=(
+                "Enterprise buyers evaluate Cursor for security review, onboarding, "
+                "budget control, repository-aware coding, rollout governance, and "
+                f"developer adoption signal {index}. "
+            )
+            * 6,
+            content_hash=f"cursor-source-{index}-hash",
+            confidence=0.82,
+        )
+        for index in range(40)
+    ]
+    detail = RunDetail(
+        id="run-segmented-pack",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        output_language="en-US",
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=sources,
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    calls: list[str] = []
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        calls.append(kwargs["name"])
+        if "segment_name=decision_summary" in user:
+            return (
+                "## Decision Summary\nCursor has clear evidence. [source:cursor-source-0]\n\n"
+                "## Competitive Findings\nCursor has visible evaluation signals. "
+                "[source:cursor-source-0]"
+            )
+        if "segment_name=user_research" in user:
+            return (
+                "## User Review Themes\nEnterprise buyers cite rollout concerns. "
+                "[source:cursor-source-1]"
+            )
+        if "segment_name=competitor_deep_dives" in user:
+            return (
+                "## Competitor Deep Dives\n### Cursor\n"
+                "Cursor has repository-aware workflows. "
+                "[source:cursor-source-2]"
+            )
+        if "segment_name=swot_matrix" in user:
+            return (
+                "## Side-by-Side Decision Matrix\nCursor compares favorably on "
+                "repository-aware workflows. [source:cursor-source-3]\n\n"
+                "## SWOT Analysis\nStrengths include adoption signal. "
+                "[source:cursor-source-3]"
+            )
+        return "## Evidence Appendix\n- [source:cursor-source-0] Cursor source 0"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+    monkeypatch.setattr(
+        "packages.agents.writer.evidence_pack.SINGLE_CALL_CONTEXT_TARGET_CHARS",
+        100,
+    )
+
+    await service._real_writer_step(record)
+
+    assert "report_writer_segment" in calls
+    assert "report_writer" not in calls
+    assert "## Decision Summary" in record.detail.report_md
+    assert any(event.type == "writer_segment_preflight" for event in record.events)
+
+
+class _SegmentedWriterFakeMetrics:
+    segmented_writer_required = True
+
+
+class _SegmentedWriterFakePack:
+    metrics = _SegmentedWriterFakeMetrics()
+
+    def __init__(
+        self,
+        segments: list[dict[str, object]] | None = None,
+        *,
+        segment_name: str = "decision_summary",
+        section_id: str = "decision_summary",
+        segment_kind: str = "section_fragment",
+        output_language: str = "en-US",
+        allowed_source_ids: list[str] | None = None,
+    ) -> None:
+        self._segment = {
+            "schema_version": "writer_evidence_pack.v1",
+            "segment_name": segment_name,
+            "segment_kind": segment_kind,
+            "section_id": section_id,
+            "output_language": output_language,
+            "segment_essential": True,
+            "source_registry": [
+                {"id": source_id}
+                for source_id in (allowed_source_ids or ["cursor-pricing"])
+            ],
+            "groups": [],
+            "quotes": [],
+            "matrix": {},
+            "structured_knowledge": {},
+            "allowed_source_ids": allowed_source_ids or ["cursor-pricing"],
+            "segment_input_chars": 240,
+        }
+        self._segments = segments
+
+    def telemetry_payload(self):
+        return {
+            "raw_source_count": 1,
+            "represented_source_count": 1,
+            "dropped_source_count": 0,
+            "segmented_writer_required": True,
+        }
+
+    def preflight_errors(self):
+        return []
+
+    def to_prompt_json(self):
+        raise AssertionError("segmented writer should not serialize the full pack")
+
+    def segment_inputs(self):
+        if self._segments is not None:
+            return self._segments
+        return [self._segment]
+
+    def validate_segment_citations(self, markdown, *, allowed_source_ids):
+        return [
+            source_id
+            for source_id in source_tokens(markdown)
+            if source_id not in allowed_source_ids
+        ]
+
+    def sanitize_segment_citations(self, markdown, *, allowed_source_ids):
+        return markdown
+
+
+def _segmented_writer_service() -> RunService:
+    return RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+
+
+def _segmented_writer_detail(
+    *,
+    run_id: str,
+    competitors: list[str] | None = None,
+) -> RunDetail:
+    competitors = competitors or ["Cursor"]
+    return RunDetail(
+        id=run_id,
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        output_language="en-US",
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=competitors,
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Cursor pricing is visible.",
+                content_hash="cursor-pricing-hash",
+                confidence=0.96,
+            )
+        ],
+    )
+
+
+def _segmented_writer_record(
+    service: RunService,
+    *,
+    run_id: str = "run-segmented-writer",
+    competitors: list[str] | None = None,
+) -> RunRecord:
+    detail = _segmented_writer_detail(run_id=run_id, competitors=competitors)
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    return record
+
+
+def _segmented_writer_segment(
+    *,
+    segment_name: str,
+    section_id: str,
+    allowed_source_id: str,
+    segment_kind: str = "section_fragment",
+    segment_competitor: str | None = None,
+    segment_batch: str | None = None,
+) -> dict[str, object]:
+    return {
+        "schema_version": "writer_evidence_pack.v1",
+        "segment_name": segment_name,
+        "segment_kind": segment_kind,
+        "section_id": section_id,
+        "segment_competitor": segment_competitor,
+        "segment_batch": segment_batch,
+        "output_language": "en-US",
+        "segment_essential": True,
+        "source_registry": [{"id": allowed_source_id}],
+        "groups": [],
+        "quotes": [],
+        "matrix": {},
+        "structured_knowledge": {},
+        "allowed_source_ids": [allowed_source_id],
+        "segment_input_chars": 240,
+    }
+
+
+def test_writer_required_sections_ignore_nested_support_like_headings() -> None:
+    service = _segmented_writer_service()
+    detail = _segmented_writer_detail(
+        run_id="run-harden-ignore-nested-support",
+        competitors=["Cursor", "GitHub Copilot"],
+    )
+    markdown = """## Decision Summary
+Decision exists. [source:cursor-pricing]
+
+## Competitive Findings
+Findings exist. [source:cursor-pricing]
+
+## User Review Themes
+Themes exist. [source:cursor-pricing]
+
+## Competitor Deep Dives
+### Cursor
+Cursor deep dive begins. [source:cursor-pricing]
+### Confidence Notes
+Nested confidence note belongs inside Cursor's deep dive.
+### GitHub Copilot
+Copilot deep dive must stay before support sections. [source:cursor-pricing]
+
+## Side-by-Side Decision Matrix
+Matrix exists. [source:cursor-pricing]
+
+## SWOT Analysis
+SWOT exists. [source:cursor-pricing]
+"""
+
+    hardened = service._ensure_report_required_sections(detail, markdown)
+
+    assert hardened.index("### GitHub Copilot") < hardened.index(
+        "## Source Quality & Coverage"
+    )
+    assert hardened.index("### GitHub Copilot") < hardened.index(
+        "## Evidence Appendix"
+    )
+
+
+def test_writer_required_sections_ignore_chinese_nested_support_like_headings() -> None:
+    service = _segmented_writer_service()
+    detail = _segmented_writer_detail(
+        run_id="run-harden-ignore-nested-support-zh",
+        competitors=["Cursor", "GitHub Copilot"],
+    )
+    detail.output_language = "zh-CN"
+    confidence_heading = report_label("zh-CN", "confidence_notes")
+    source_quality_heading = report_label("zh-CN", "source_quality")
+    evidence_appendix_heading = report_label("zh-CN", "evidence_appendix")
+    markdown = f"""## {report_label("zh-CN", "decision_summary")}
+已有决策摘要。[source:cursor-pricing]
+
+## {report_label("zh-CN", "competitive_findings")}
+已有竞争发现。[source:cursor-pricing]
+
+## {report_label("zh-CN", "review_theme_summary")}
+已有用户评价整理。[source:cursor-pricing]
+
+## {report_label("zh-CN", "competitor_deep_dives")}
+### Cursor
+Cursor 深挖开始。[source:cursor-pricing]
+### {confidence_heading}
+这是嵌套置信度说明，不是报告级支持章节。
+### GitHub Copilot
+Copilot 深挖必须留在支持章节之前。[source:cursor-pricing]
+
+## {report_label("zh-CN", "side_by_side_matrix")}
+已有矩阵。[source:cursor-pricing]
+
+## {report_label("zh-CN", "swot_analysis")}
+已有 SWOT。[source:cursor-pricing]
+"""
+
+    hardened = service._ensure_report_required_sections(detail, markdown)
+
+    assert hardened.index("### GitHub Copilot") < hardened.index(
+        f"## {source_quality_heading}"
+    )
+    assert hardened.index("### GitHub Copilot") < hardened.index(
+        f"## {evidence_appendix_heading}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_preflight_emits_contract_metadata(monkeypatch) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service, run_id="run-segment-preflight-contract"
+    )
+    events: list[tuple[object, ...]] = []
+
+    async def capture_emit(*args):
+        events.append(args)
+
+    monkeypatch.setattr(service, "emit", capture_emit)
+    pack = _SegmentedWriterFakePack(
+        segments=[
+            {
+                "schema_version": "writer_evidence_pack.v1",
+                "segment_name": "decision_summary",
+                "segment_kind": "section_fragment",
+                "section_id": "decision_summary",
+                "output_language": "en-US",
+                "segment_input_chars": 2000,
+                "allowed_source_ids": ["raw-source-a"],
+                "source_registry": [{"id": "raw-source-a"}],
+                "groups": [],
+                "quotes": [],
+                "matrix": {},
+                "structured_knowledge": {},
+            }
+        ]
+    )
+
+    async def fake_segment_writer(*args, **kwargs):
+        return (
+            "## Decision Summary\nDecision [source:raw-source-a].\n\n"
+            "## Competitive Findings\nFindings [source:raw-source-a]."
+        )
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
+
+    await service._writer_segmented_report_markdown(
+        record,
+        evidence_pack_result=pack,
+        timeout_seconds=60,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    preflight_payloads = [
+        event[5] for event in events if event[1] == "writer_segment_preflight"
+    ]
+    assert preflight_payloads
+    preflight_payload = preflight_payloads[0]
+    assert preflight_payload["segment_kind"] == "section_fragment"
+    assert preflight_payload["section_id"] == "decision_summary"
+    assert "decision_summary" in preflight_payload["allowed_heading_keys"]
+    assert "evidence_support" in preflight_payload["forbidden_heading_keys"]
+    assert preflight_payload["segment_essential"] is True
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_retries_truncated_markdown(monkeypatch) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-retries-truncated-markdown",
+    )
+    pack = _SegmentedWriterFakePack()
+    segment = _segmented_writer_segment(
+        segment_name="swot_matrix",
+        section_id="swot_matrix",
+        allowed_source_id="cursor-pricing",
+    )
+    retry_counts: list[int] = []
+
+    async def fake_segment_writer(*args, **kwargs):
+        retry_counts.append(kwargs["retry_count"])
+        if kwargs["retry_count"] == 0:
+            return (
+                "## Side-by-Side Decision Matrix\n"
+                "| Dimension | Cursor |\n"
+                "|---|---|\n"
+                "| Pricing | clear [source:cursor-pricing] |\n\n"
+                "## SWOT Analysis\n"
+                "### Cursor\n"
+                "#### Strengths\n"
+                "- Cursor pricing is clear [source:cursor-pricing]\n\n"
+                "#### Weaknesses\n"
+                "- Agent single request cost"
+            )
+        return (
+            "## Side-by-Side Decision Matrix\n"
+            "| Dimension | Cursor |\n"
+            "|---|---|\n"
+            "| Pricing | clear [source:cursor-pricing] |\n\n"
+            "## SWOT Analysis\n"
+            "### Cursor\n"
+            "#### Strengths\n"
+            "- Cursor pricing is clear [source:cursor-pricing]\n\n"
+            "#### Weaknesses\n"
+            "- Cost still needs validation [source:cursor-pricing]\n\n"
+            "#### Opportunities\n"
+            "- Use pricing clarity in evaluation [source:cursor-pricing]\n\n"
+            "#### Threats\n"
+            "- Bundled competitors can defend procurement [source:cursor-pricing]."
+        )
+
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+
+    segment_md, _contract = await service._writer_validated_segment_markdown(
+        record,
+        evidence_pack_result=pack,
+        segment=segment,
+        timeout_seconds=60,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    assert retry_counts == [0, 1]
+    assert "#### Threats" in segment_md
+
+
+def test_writer_segment_truncation_accepts_cjk_sentence_endings() -> None:
+    service = _segmented_writer_service()
+
+    error = service._writer_segment_truncation_error(
+        "## SWOT 分析\n"
+        "### Windsurf\n"
+        "#### Threats\n"
+        "- 定价策略若不稳定，可能导致现有用户流失。"
+    )
+
+    assert error is None
+
+
+def test_writer_segment_truncation_does_not_hide_dangling_fragment_before_citation() -> None:
+    service = _segmented_writer_service()
+
+    error = service._writer_segment_truncation_error(
+        "## 竞争发现\n"
+        "- Windsurf 虽然功能面 [source:cursor-pricing]"
+    )
+
+    assert error == "segment output ended with an incomplete list or table row"
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_retries_truncated_markdown_after_contract_retry(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-retries-truncated-markdown-after-contract",
+    )
+    pack = _SegmentedWriterFakePack()
+    segment = _segmented_writer_segment(
+        segment_name="swot_matrix",
+        section_id="swot_matrix",
+        allowed_source_id="cursor-pricing",
+    )
+    retry_counts: list[int] = []
+    contract_errors_by_call: list[list[str]] = []
+
+    async def fake_segment_writer(*args, **kwargs):
+        retry_counts.append(kwargs["retry_count"])
+        contract_errors_by_call.append(list(kwargs.get("contract_errors") or []))
+        if kwargs["retry_count"] == 0:
+            return (
+                "## SWOT Analysis\n"
+                "Cursor pricing visibility is a strength. [source:cursor-pricing]"
+            )
+        if kwargs["retry_count"] == 1:
+            return (
+                "## Side-by-Side Decision Matrix\n"
+                "| Dimension | Cursor |\n"
+                "|---|---|\n"
+                "| Pricing | clear [source:cursor-pricing] |\n\n"
+                "## SWOT Analysis\n"
+                "### Cursor\n"
+                "#### Strengths\n"
+                "- Cursor pricing is clear [source:cursor-pricing]\n\n"
+                "#### Weaknesses\n"
+                "- Agent single request cost"
+            )
+        return (
+            "## Side-by-Side Decision Matrix\n"
+            "| Dimension | Cursor |\n"
+            "|---|---|\n"
+            "| Pricing | clear [source:cursor-pricing] |\n\n"
+            "## SWOT Analysis\n"
+            "### Cursor\n"
+            "#### Strengths\n"
+            "- Cursor pricing is clear [source:cursor-pricing]\n\n"
+            "#### Weaknesses\n"
+            "- Cost still needs validation [source:cursor-pricing]\n\n"
+            "#### Opportunities\n"
+            "- Use pricing clarity in evaluation [source:cursor-pricing]\n\n"
+            "#### Threats\n"
+            "- Bundled competitors can defend procurement [source:cursor-pricing]."
+        )
+
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+
+    segment_md, _contract = await service._writer_validated_segment_markdown(
+        record,
+        evidence_pack_result=pack,
+        segment=segment,
+        timeout_seconds=60,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    assert retry_counts == [0, 1, 2]
+    assert any(
+        "incomplete list" in error for error in contract_errors_by_call[-1]
+    )
+    assert "#### Threats" in segment_md
+
+
+@pytest.mark.asyncio
+async def test_evidence_shard_outputs_notes_then_section_writer_outputs_one_h2(
+    monkeypatch,
+):
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, competitors=["Cursor"])
+    pack = _SegmentedWriterFakePack(
+        [
+            {
+                "segment_name": "decision_summary",
+                "segment_kind": "evidence_shard",
+                "section_id": "decision_summary",
+                "output_language": "en-US",
+                "segment_batch": "sources:1",
+                "segment_input_chars": 2000,
+                "allowed_source_ids": ["raw-source-a"],
+                "groups": [],
+                "sources": [],
+            },
+            {
+                "segment_name": "decision_summary",
+                "segment_kind": "evidence_shard",
+                "section_id": "decision_summary",
+                "output_language": "en-US",
+                "segment_batch": "sources:2",
+                "segment_input_chars": 2000,
+                "allowed_source_ids": ["raw-source-b"],
+                "groups": [],
+                "sources": [],
+            },
+        ]
+    )
+    calls = []
+    captured_segments: list[dict[str, object]] = []
+
+    async def fake_segment_writer(*args, **kwargs):
+        segment = kwargs["segment"]
+        calls.append(segment["segment_kind"])
+        captured_segments.append(dict(segment))
+        if segment["segment_kind"] == "evidence_shard":
+            return (
+                f"- shard note {segment['segment_batch']} "
+                f"[source:{segment['allowed_source_ids'][0]}]"
+            )
+        return (
+            "## Decision Summary\n"
+            "Merged shard note [source:raw-source-a][source:raw-source-b].\n\n"
+            "## Competitive Findings\n"
+            "Merged shard finding [source:raw-source-a][source:raw-source-b]."
+        )
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
+
+    report = await service._writer_segmented_report_markdown(
+        record,
+        evidence_pack_result=pack,
+        timeout_seconds=60,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    assert calls == ["evidence_shard", "evidence_shard", "section_fragment"]
+    assert report.count("## Decision Summary") == 1
+    assert report.count("## Competitive Findings") == 1
+    assert "Merged shard note" in report
+    synthesized_segment = captured_segments[2]
+    assert synthesized_segment["shard_notes"] == [
+        "- shard note sources:1 [source:raw-source-a]",
+        "- shard note sources:2 [source:raw-source-b]",
+    ]
+    assert synthesized_segment["allowed_source_ids"] == ["raw-source-a", "raw-source-b"]
+    assert synthesized_segment["groups"] == []
+    assert synthesized_segment["sources"] == []
+    assert synthesized_segment["segment_batch"] == "from_evidence_shards"
+    contract_keys = {
+        "allowed_heading_keys",
+        "required_heading_keys",
+        "forbidden_heading_keys",
+        "allowed_h2_headings",
+        "required_h2_headings",
+        "forbidden_h2_headings",
+    }
+    synthesized_payload = {
+        key: value
+        for key, value in synthesized_segment.items()
+        if key not in contract_keys
+    }
+    assert synthesized_segment["segment_input_chars"] == len(
+        json.dumps(synthesized_payload, ensure_ascii=False)
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_shard_synthesis_preserves_competitor(monkeypatch):
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-shard-synthesis-competitor",
+        competitors=["Cursor", "Claude Code"],
+    )
+    pack = _SegmentedWriterFakePack(
+        [
+            _segmented_writer_segment(
+                segment_name="competitor_deep_dives",
+                section_id="competitor_deep_dives",
+                segment_kind="evidence_shard",
+                segment_competitor="Cursor",
+                segment_batch="sources:1",
+                allowed_source_id="cursor-pricing",
+            ),
+            _segmented_writer_segment(
+                segment_name="competitor_deep_dives",
+                section_id="competitor_deep_dives",
+                segment_kind="evidence_shard",
+                segment_competitor="Cursor",
+                segment_batch="sources:2",
+                allowed_source_id="cursor-feature",
+            ),
+            _segmented_writer_segment(
+                segment_name="competitor_deep_dives",
+                section_id="competitor_deep_dives",
+                segment_kind="evidence_shard",
+                segment_competitor="Claude Code",
+                segment_batch="sources:1",
+                allowed_source_id="claude-pricing",
+            ),
+            _segmented_writer_segment(
+                segment_name="competitor_deep_dives",
+                section_id="competitor_deep_dives",
+                segment_kind="evidence_shard",
+                segment_competitor="Claude Code",
+                segment_batch="sources:2",
+                allowed_source_id="claude-feature",
+            ),
+        ]
+    )
+    captured_sections: list[dict[str, object]] = []
+
+    async def fake_segment_writer(*args, **kwargs):
+        segment = kwargs["segment"]
+        if segment["segment_kind"] == "evidence_shard":
+            return (
+                f"- {segment['segment_competitor']} shard {segment['segment_batch']} "
+                f"[source:{segment['allowed_source_ids'][0]}]"
+            )
+        captured_sections.append(dict(segment))
+        if segment["segment_competitor"] == "Cursor":
+            return (
+                "## Competitor Deep Dives\n"
+                "### Cursor\n"
+                "Cursor synthesis cites only Cursor sources. "
+                "[source:cursor-pricing][source:cursor-feature]"
+            )
+        return (
+            "## Competitor Deep Dives\n"
+            "### Claude Code\n"
+            "Claude synthesis cites only Claude sources. "
+            "[source:claude-pricing][source:claude-feature]"
+        )
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
+
+    report = await service._writer_segmented_report_markdown(
+        record,
+        evidence_pack_result=pack,
+        timeout_seconds=60,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    assert [segment["segment_competitor"] for segment in captured_sections] == [
+        "Cursor",
+        "Claude Code",
+    ]
+    assert captured_sections[0]["allowed_source_ids"] == [
+        "cursor-feature",
+        "cursor-pricing",
+    ]
+    assert captured_sections[1]["allowed_source_ids"] == [
+        "claude-feature",
+        "claude-pricing",
+    ]
+    assert captured_sections[0]["segment_name"] == "competitor_deep_dives Cursor"
+    assert captured_sections[1]["segment_name"] == "competitor_deep_dives Claude Code"
+    assert "### Cursor" in report
+    assert "### Claude Code" in report
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_backfills_missing_competitive_findings(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-backfill-findings")
+    record.detail.raw_sources = [
+        RawSource(
+            id=source_id,
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title=f"Source {source_id}",
+            snippet=f"Snippet for {source_id}.",
+            content_hash=f"{source_id}-hash",
+            confidence=0.96,
+        )
+        for source_id in (
+            "raw-source-a",
+            "raw-source-b",
+            "raw-source-c",
+            "raw-source-d",
+            "raw-source-e",
+        )
+    ]
+    segments = [
+        _segmented_writer_segment(
+            segment_name="decision_summary",
+            section_id="decision_summary",
+            segment_kind="evidence_shard",
+            allowed_source_id="raw-source-a",
+            segment_batch="sources:1",
+        ),
+        _segmented_writer_segment(
+            segment_name="decision_summary",
+            section_id="decision_summary",
+            segment_kind="evidence_shard",
+            allowed_source_id="raw-source-b",
+            segment_batch="sources:2",
+        ),
+        _segmented_writer_segment(
+            segment_name="user_research",
+            section_id="review_theme_summary",
+            allowed_source_id="raw-source-c",
+        ),
+        _segmented_writer_segment(
+            segment_name="competitor_deep_dives Cursor",
+            section_id="competitor_deep_dives",
+            allowed_source_id="raw-source-d",
+            segment_competitor="Cursor",
+        ),
+        _segmented_writer_segment(
+            segment_name="swot_matrix",
+            section_id="swot_matrix",
+            allowed_source_id="raw-source-e",
+        ),
+        _segmented_writer_segment(
+            segment_name="support_appendix",
+            section_id="evidence_support",
+            segment_kind="support_fragment",
+            allowed_source_id="raw-source-e",
+        ),
+    ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        if "sources:1" in user:
+            return "- Decision shard one."
+        if "sources:2" in user:
+            return "- Decision shard two."
+        if (
+            "segment_name=decision_summary" in user
+            and "from_evidence_shards" in user
+        ):
+            if "retry_count=1" in user:
+                return (
+                    "## Decision Summary\n"
+                    "Cursor pricing is visible. "
+                    "[source:raw-source-a][source:raw-source-b]\n\n"
+                    "## Competitive Findings\n"
+                    "Cursor has the clearest pricing signal. "
+                    "[source:raw-source-a][source:raw-source-b]"
+                )
+            return (
+                "## Decision Summary\n"
+                "Cursor pricing is visible, but the segment omitted competitive "
+                "findings. [source:raw-source-a][source:raw-source-b]"
+            )
+        if "segment_name=user_research" in user:
+            return "## User Review Themes\nUsers mention pricing. [source:raw-source-c]"
+        if "segment_name=competitor_deep_dives Cursor" in user:
+            return "## Competitor Deep Dives\n### Cursor\nVisible pricing. [source:raw-source-d]"
+        if "segment_name=swot_matrix" in user:
+            return (
+                "## Side-by-Side Decision Matrix\nCursor pricing is visible. "
+                "[source:raw-source-e]\n\n"
+                "## SWOT Analysis\nStrengths include pricing visibility. "
+                "[source:raw-source-e]"
+            )
+        if "segment_name=support_appendix" in user:
+            return "## Evidence & QA Support\nPricing source attached. [source:raw-source-e]"
+        raise AssertionError(f"unexpected writer segment prompt: {user}")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(segments=segments),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._real_writer_step(record)
+
+    report_md = record.detail.report_md
+    assert "## Competitive Findings" in report_md
+    assert record.detail.status == "running"
+    validated_events = [
+        event
+        for event in record.events
+        if event.type == "writer_segment_validated"
+        and event.payload["section_id"] == "decision_summary"
+    ]
+    assert [event.payload["validation_status"] for event in validated_events[-2:]] == [
+        "retry",
+        "pass",
+    ]
+    assert validated_events[-2].payload["missing_required_heading_keys"] == [
+        "competitive_findings"
+    ]
+    repair_events = [
+        event for event in record.events if event.type == "writer_quality_preflight_repair"
+    ]
+    assert not repair_events
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_backfills_missing_side_by_side_matrix(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-backfill-matrix")
+    record.detail.raw_sources = [
+        RawSource(
+            id=source_id,
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title=f"Source {source_id}",
+            snippet=f"Snippet for {source_id}.",
+            content_hash=f"{source_id}-hash",
+            confidence=0.96,
+        )
+        for source_id in (
+            "raw-source-a",
+            "raw-source-b",
+            "raw-source-c",
+            "raw-source-d",
+            "raw-source-e",
+        )
+    ]
+    record.detail.comparison_matrix = ComparisonMatrix(
+        competitors=["Cursor"],
+        dimensions=["pricing"],
+        cells=[
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="pricing",
+                value="Cursor publishes team pricing with visible per-seat tiers.",
+                source_ids=["raw-source-e"],
+                confidence=0.96,
+            )
+        ],
+        winner_by_dimension={"pricing": "Cursor"},
+        summary=["pricing: Cursor has the clearest public pricing evidence."],
+    )
+    segments = [
+        _segmented_writer_segment(
+            segment_name="decision_summary",
+            section_id="decision_summary",
+            allowed_source_id="raw-source-a",
+        ),
+        _segmented_writer_segment(
+            segment_name="user_research",
+            section_id="review_theme_summary",
+            allowed_source_id="raw-source-c",
+        ),
+        _segmented_writer_segment(
+            segment_name="competitor_deep_dives Cursor",
+            section_id="competitor_deep_dives",
+            allowed_source_id="raw-source-d",
+            segment_competitor="Cursor",
+        ),
+        _segmented_writer_segment(
+            segment_name="swot_matrix",
+            section_id="swot_matrix",
+            allowed_source_id="raw-source-e",
+        ),
+        _segmented_writer_segment(
+            segment_name="support_appendix",
+            section_id="evidence_support",
+            segment_kind="support_fragment",
+            allowed_source_id="raw-source-e",
+        ),
+    ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        if "segment_name=decision_summary" in user:
+            return (
+                "## Decision Summary\n"
+                "Cursor pricing is visible. [source:raw-source-a]\n\n"
+                "## Competitive Findings\n"
+                "Cursor has the clearest pricing signal. [source:raw-source-a]"
+            )
+        if "segment_name=user_research" in user:
+            return "## User Review Themes\nUsers mention pricing. [source:raw-source-c]"
+        if "segment_name=competitor_deep_dives Cursor" in user:
+            return "## Competitor Deep Dives\n### Cursor\nVisible pricing. [source:raw-source-d]"
+        if "segment_name=swot_matrix" in user:
+            if "retry_count=1" in user:
+                return (
+                    "## Side-by-Side Decision Matrix\n"
+                    "Cursor publishes team pricing with visible per-seat tiers. "
+                    "[source:raw-source-e]\n\n"
+                    "## SWOT Analysis\n"
+                    "Strengths include pricing visibility. [source:raw-source-e]"
+                )
+            return "## SWOT Analysis\nStrengths include pricing visibility. [source:raw-source-e]"
+        if "segment_name=support_appendix" in user:
+            return "## Evidence & QA Support\nPricing source attached. [source:raw-source-e]"
+        raise AssertionError(f"unexpected writer segment prompt: {user}")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(segments=segments),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._real_writer_step(record)
+
+    report_md = record.detail.report_md
+    assert "## Side-by-Side Decision Matrix" in report_md
+    assert "Cursor publishes team pricing" in report_md
+    assert record.detail.status == "running"
+    validated_events = [
+        event
+        for event in record.events
+        if event.type == "writer_segment_validated"
+        and event.payload["section_id"] == "swot_matrix"
+    ]
+    assert [event.payload["validation_status"] for event in validated_events] == [
+        "retry",
+        "pass",
+    ]
+    assert validated_events[0].payload["missing_required_heading_keys"] == [
+        "side_by_side_matrix"
+    ]
+    repair_events = [
+        event for event in record.events if event.type == "writer_quality_preflight_repair"
+    ]
+    assert not repair_events
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_retries_when_segment_uses_forbidden_heading(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-contract-retry")
+    calls: list[str] = []
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        calls.append(user)
+        assert "Allowed H2 headings for this segment:" in user
+        assert "Executive Summary" in user
+        assert "Forbidden H2 headings for this segment:" in user
+        assert "Source Quality" in user
+        if "retry_count=1" in user:
+            assert "Previous segment violated its heading contract" in user
+            assert "Forbidden H2 headings found: Evidence Support" in user
+            return (
+                "## Decision Summary\n"
+                "Cursor pricing is visible. [source:cursor-pricing]\n\n"
+                "## Competitive Findings\n"
+                "Cursor has visible pricing evidence. [source:cursor-pricing]"
+            )
+        return (
+            "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]\n\n"
+            "## Evidence Support\nSupport belongs elsewhere. [source:cursor-pricing]"
+        )
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
+
+    await service._real_writer_step(record)
+
+    assert len(calls) == 2
+    assert "## Evidence Support" not in record.detail.report_md
+    assert "## Decision Summary" in record.detail.report_md
+    assert "## Competitive Findings" in record.detail.report_md
+    validated_events = [
+        event for event in record.events if event.type == "writer_segment_validated"
+    ]
+    assert [event.payload["validation_status"] for event in validated_events] == [
+        "retry",
+        "pass",
+    ]
+    assert validated_events[0].payload["forbidden_headings"] == ["Evidence Support"]
+    assert validated_events[0].payload["segment_retry_count"] == 0
+    assert validated_events[1].payload["segment_retry_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_retries_when_swot_segment_omits_matrix(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-required-heading")
+    calls: list[str] = []
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        calls.append(user)
+        if "retry_count=1" in user:
+            assert "Previous segment violated its heading contract" in user
+            assert "Missing required H2 heading keys: side_by_side_matrix" in user
+            return (
+                "## Side-by-Side Decision Matrix\n"
+                "Cursor pricing is visible. [source:cursor-pricing]\n\n"
+                "## SWOT Analysis\n"
+                "Cursor pricing visibility is a strength. [source:cursor-pricing]"
+            )
+        return (
+            "## SWOT Analysis\n"
+            "Cursor pricing visibility is a strength. [source:cursor-pricing]"
+        )
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(
+            segment_name="swot_matrix",
+            section_id="swot_matrix",
+        ),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
+
+    await service._real_writer_step(record)
+
+    assert len(calls) == 2
+    assert "## Side-by-Side Decision Matrix" in record.detail.report_md
+    validated_events = [
+        event for event in record.events if event.type == "writer_segment_validated"
+    ]
+    assert [event.payload["validation_status"] for event in validated_events] == [
+        "retry",
+        "pass",
+    ]
+    assert validated_events[0].payload["segment_retry_count"] == 0
+    assert validated_events[1].payload["segment_retry_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_repairs_citations_after_contract_retry(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-contract-then-citation",
+    )
+    calls: list[str] = []
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        calls.append(user)
+        if len(calls) == 1:
+            return (
+                "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]\n\n"
+                "## Evidence Support\nSupport belongs elsewhere. [source:cursor-pricing]"
+            )
+        if len(calls) == 2:
+            assert "Previous segment violated its heading contract" in user
+            return (
+                "## Decision Summary\nCursor pricing is visible. [source:missing-source]\n\n"
+                "## Competitive Findings\nVisible pricing evidence. [source:missing-source]"
+            )
+        assert "Previous segment cited source IDs outside this segment" in user
+        assert "Previous segment violated its heading contract" in user
+        return (
+            "## Decision Summary\nCursor pricing is visible. [source:cursor-pricing]\n\n"
+            "## Competitive Findings\nVisible pricing evidence. [source:cursor-pricing]"
+        )
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
+
+    await service._real_writer_step(record)
+
+    assert len(calls) == 3
+    assert "[source:missing-source]" not in record.detail.report_md
+    assert "[source:cursor-pricing]" in record.detail.report_md
+    validated_events = [
+        event for event in record.events if event.type == "writer_segment_validated"
+    ]
+    assert [event.payload["validation_status"] for event in validated_events] == [
+        "retry",
+        "pass",
+    ]
+    assert validated_events[1].payload["segment_retry_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_assembles_duplicate_sections_before_return(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-assembler")
+    record.detail.raw_sources = [
+        RawSource(
+            id=source_id,
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title=f"Source {source_id}",
+            snippet=f"Snippet for {source_id}.",
+            content_hash=f"{source_id}-hash",
+            confidence=0.96,
+        )
+        for source_id in (
+            "raw-source-a",
+            "raw-source-b",
+            "raw-source-c",
+            "raw-source-d",
+            "raw-source-e",
+            "raw-source-f",
+            "raw-source-g",
+        )
+    ]
+    segments = [
+        _segmented_writer_segment(
+            segment_name="decision_summary",
+            section_id="decision_summary",
+            allowed_source_id="raw-source-a",
+            segment_batch="sources:1",
+        ),
+        _segmented_writer_segment(
+            segment_name="decision_summary",
+            section_id="decision_summary",
+            allowed_source_id="raw-source-b",
+            segment_batch="sources:2",
+        ),
+        _segmented_writer_segment(
+            segment_name="competitive_findings",
+            section_id="competitive_findings",
+            allowed_source_id="raw-source-c",
+        ),
+        _segmented_writer_segment(
+            segment_name="user_research",
+            section_id="review_theme_summary",
+            allowed_source_id="raw-source-d",
+        ),
+        _segmented_writer_segment(
+            segment_name="competitor_deep_dives Cursor",
+            section_id="competitor_deep_dives",
+            allowed_source_id="raw-source-e",
+            segment_competitor="Cursor",
+        ),
+        _segmented_writer_segment(
+            segment_name="swot_matrix",
+            section_id="swot_matrix",
+            allowed_source_id="raw-source-f",
+        ),
+        _segmented_writer_segment(
+            segment_name="support_appendix",
+            section_id="evidence_support",
+            segment_kind="support_fragment",
+            allowed_source_id="raw-source-g",
+        ),
+    ]
+    calls: list[str] = []
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        calls.append(user)
+        if "segment_name=decision_summary" in user and "sources:1" in user:
+            return (
+                "## Decision Summary\n"
+                "Decision from sources:1 [source:raw-source-a].\n\n"
+                "## Competitive Findings\n"
+                "Findings from sources:1 [source:raw-source-a]."
+            )
+        if "segment_name=decision_summary" in user and "sources:2" in user:
+            return (
+                "## Decision Summary\n"
+                "Decision from sources:2 [source:raw-source-b].\n\n"
+                "## Competitive Findings\n"
+                "Findings from sources:2 [source:raw-source-b]."
+            )
+        if "segment_name=competitive_findings" in user:
+            return "## Competitive Findings\nFindings [source:raw-source-c]."
+        if "segment_name=user_research" in user:
+            return "## User Review Themes\nThemes [source:raw-source-d]."
+        if "segment_name=competitor_deep_dives Cursor" in user:
+            return "## Competitor Deep Dives\n### Cursor\nDeep dive [source:raw-source-e]."
+        if "segment_name=swot_matrix" in user:
+            return (
+                "## Side-by-Side Decision Matrix\nMatrix [source:raw-source-f].\n\n"
+                "## SWOT Analysis\nSWOT [source:raw-source-f]."
+            )
+        if "segment_name=support_appendix" in user:
+            return "## Evidence and QA Support\nSupport [source:raw-source-g]."
+        raise AssertionError(f"unexpected writer segment prompt: {user}")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(segments=segments),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._real_writer_step(record)
+
+    decision_prompts = [
+        call
+        for call in calls
+        if "segment_name=decision_summary" in call and "sources:" in call
+    ]
+    assert len(decision_prompts) == 2
+    report_md = record.detail.report_md
+    assert report_md.count("## Decision Summary") == 1
+    assert report_md.index("## Competitor Deep Dives") < report_md.index(
+        "## Evidence & QA Support"
+    )
+    assert "Decision from sources:1 [source:raw-source-a]." in report_md
+    assert "Decision from sources:2 [source:raw-source-b]." in report_md
+    quality_events = [
+        event for event in record.events if event.type == "writer_quality_preflight"
+    ]
+    assert len(quality_events) == 1
+    assert quality_events[0].payload["passed"] is True
+    assembly_events = [
+        event for event in record.events if event.type == "writer_assembly_completed"
+    ]
+    assert len(assembly_events) == 1
+    payload = assembly_events[0].payload
+    assert payload["duplicate_section_count_before"] == 3
+    assert payload["duplicate_section_count_after"] == 0
+    assert "decision_summary" in payload["merged_section_keys"]
+    assert "competitive_findings" in payload["merged_section_keys"]
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_fails_when_contract_retry_still_invalid(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-contract-invalid")
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        return (
+            "## Executive Summary\nCursor pricing is visible. [source:cursor-pricing]\n\n"
+            "## Evidence Support\nSupport belongs elsewhere. [source:cursor-pricing]"
+        )
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    with pytest.raises(RuntimeError, match="violated heading contract after retry"):
+        await service._real_writer_step(record)
+
+    assert record.detail.status == "failed"
+    assert record.detail.report_md == ""
+
+
+@pytest.mark.asyncio
+async def test_segmented_writer_does_not_serialize_full_evidence_pack(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    detail = RunDetail(
+        id="run-segmented-no-full-serialization",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Cursor pricing is visible.",
+                content_hash="cursor-pricing-hash",
+                confidence=0.92,
+            )
+        ],
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    full_serialized = False
+
+    class FakeMetrics:
+        segmented_writer_required = True
+
+    class FakeEvidencePackResult:
+        metrics = FakeMetrics()
+
+        def telemetry_payload(self):
+            return {
+                "raw_source_count": 1,
+                "represented_source_count": 1,
+                "dropped_source_count": 0,
+                "segmented_writer_required": True,
+            }
+
+        def preflight_errors(self):
+            return []
+
+        def to_prompt_json(self):
+            nonlocal full_serialized
+            full_serialized = True
+            raise AssertionError("segmented writer should not serialize the full pack")
+
+        def segment_inputs(self):
+            return [
+                _segmented_writer_segment(
+                    segment_name="decision_summary",
+                    section_id="decision_summary",
+                    allowed_source_id="cursor-pricing",
+                ),
+                _segmented_writer_segment(
+                    segment_name="competitive_findings",
+                    section_id="competitive_findings",
+                    allowed_source_id="cursor-pricing",
+                ),
+                _segmented_writer_segment(
+                    segment_name="user_research",
+                    section_id="review_theme_summary",
+                    allowed_source_id="cursor-pricing",
+                ),
+                _segmented_writer_segment(
+                    segment_name="competitor_deep_dives",
+                    section_id="competitor_deep_dives",
+                    allowed_source_id="cursor-pricing",
+                ),
+                _segmented_writer_segment(
+                    segment_name="swot_matrix",
+                    section_id="swot_matrix",
+                    allowed_source_id="cursor-pricing",
+                ),
+                _segmented_writer_segment(
+                    segment_name="support_appendix",
+                    section_id="evidence_support",
+                    segment_kind="support_fragment",
+                    allowed_source_id="cursor-pricing",
+                ),
+            ]
+
+        def validate_segment_citations(self, markdown, *, allowed_source_ids):
+            return []
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        user = kwargs["user"]
+        if "segment_name=decision_summary" in user:
+            return (
+                "## Decision Summary\n"
+                "Cursor has visible pricing. [source:cursor-pricing]\n\n"
+                "## Competitive Findings\n"
+                "Cursor has visible pricing evidence. [source:cursor-pricing]"
+            )
+        if "segment_name=competitive_findings" in user:
+            return "## Competitive Findings\nCursor has visible pricing. [source:cursor-pricing]"
+        if "segment_name=user_research" in user:
+            return "## User Review Themes\nUsers discuss pricing. [source:cursor-pricing]"
+        if "segment_name=competitor_deep_dives" in user:
+            return "## Competitor Deep Dives\n### Cursor\nVisible pricing. [source:cursor-pricing]"
+        if "segment_name=swot_matrix" in user:
+            return (
+                "## Side-by-Side Decision Matrix\nCursor pricing is visible. "
+                "[source:cursor-pricing]\n\n"
+                "## SWOT Analysis\nStrengths include pricing visibility. "
+                "[source:cursor-pricing]"
+            )
+        if "segment_name=support_appendix" in user:
+            return "## Evidence & QA Support\nPricing source attached. [source:cursor-pricing]"
+        raise AssertionError(f"unexpected writer segment prompt: {user}")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeEvidencePackResult(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._real_writer_step(record)
+
+    assert not full_serialized
+    assert "Cursor has visible pricing" in record.detail.report_md
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_prompt_includes_source_quality_and_user_research_policy(
+    monkeypatch,
+) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    detail = RunDetail(
+        id="run-segment-prompt-policy",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["persona"],
+        ),
+        raw_sources=[],
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    captured: dict[str, str] = {}
+    segment = {
+        "schema_version": "writer_evidence_pack.v1",
+        "segment_name": "user_research",
+        "source_registry": [],
+        "groups": [],
+        "quotes": [],
+        "matrix": {},
+        "structured_knowledge": {},
+        "allowed_source_ids": ["cursor-persona"],
+        "segment_input_chars": 240,
+    }
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["system"] = kwargs["system"]
+        captured["user"] = kwargs["user"]
+        return "## User Review Themes\nEnterprise buyers cite onboarding. [source:cursor-persona]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="## User Review Themes",
+        retry_count=0,
+    )
+
+    captured_system_prompt = captured["system"]
+    captured_user_prompt = captured["user"]
+    prompt = f"{captured_system_prompt}\n{captured_user_prompt}"
+    assert "segment_kind=" in captured_user_prompt
+    assert "section_id=" in captured_user_prompt
+    assert (
+        "Do not write headings outside this segment's contract"
+        in captured_user_prompt
+    )
+    assert (
+        "Do not use web_search_result or confidence < 0.75 as the sole support"
+        in prompt
+    )
+    assert (
+        "Do not combine multiple source IDs inside one [source:...] token"
+        in captured_system_prompt
+    )
+    assert "[source:A][source:B]" in prompt
+    assert "as user-research signals, not as official factual proof" in prompt
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_prompt_includes_competitor_deep_dive_template(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-template-deep-dive")
+    captured: dict[str, str] = {}
+    segment = _segmented_writer_segment(
+        segment_name="competitor_deep_dives Cursor",
+        section_id="competitor_deep_dives",
+        segment_competitor="Cursor",
+        allowed_source_id="cursor-pricing",
+    )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return "## Competitor Deep Dives\n### Cursor\nPricing is visible. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="",
+        retry_count=0,
+    )
+
+    prompt = captured["user"]
+    assert "Required segment outline:" in prompt
+    assert "## Competitor Deep Dives" in prompt
+    assert "### Cursor" in prompt
+    assert "#### Pricing and Packaging" in prompt
+    assert "#### Community Feedback, Adoption Blockers, and Switching Triggers" in prompt
+    assert "Do not copy placeholder source IDs" in prompt
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_prompt_prefers_explicit_section_id_over_legacy_name(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-template-explicit-section",
+    )
+    captured: dict[str, str] = {}
+    segment = _segmented_writer_segment(
+        segment_name="user_research",
+        section_id="competitor_deep_dives",
+        segment_competitor="Cursor",
+        allowed_source_id="cursor-pricing",
+    )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return "## Competitor Deep Dives\n### Cursor\nPricing is visible. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="",
+        retry_count=0,
+    )
+
+    prompt = captured["user"]
+    assert "## Competitor Deep Dives" in prompt
+    assert "### Cursor" in prompt
+    assert "#### Simulated Survey and Interview Signals" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_support_prompt_uses_canonical_support_labels(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-template-support-labels",
+    )
+    captured: dict[str, str] = {}
+    segment = _segmented_writer_segment(
+        segment_name="support_appendix",
+        section_id="evidence_support",
+        segment_kind="support_fragment",
+        allowed_source_id="cursor-pricing",
+    )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return "## Evidence & QA Support\nSupport. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="",
+        retry_count=0,
+    )
+
+    prompt = captured["user"]
+    assert "## Claim Validation & Evidence Risk" in prompt
+    assert "## Next Collection / Verification Plan" in prompt
+    assert "## Claim Risk and Evidence Limits" not in prompt
+    assert "## Next Collection Plan" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_evidence_shard_prompt_outline_has_no_h2(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-template-shard-outline",
+    )
+    captured: dict[str, str] = {}
+    segment = _segmented_writer_segment(
+        segment_name="decision_summary",
+        section_id="decision_summary",
+        segment_kind="evidence_shard",
+        allowed_source_id="cursor-pricing",
+        segment_batch="sources:1",
+    )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return "- Pricing is visible. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="",
+        retry_count=0,
+    )
+
+    prompt = captured["user"]
+    outline_block = prompt.split("Required segment outline:", 1)[1].split(
+        "Confirmed Memory Preferences:",
+        1,
+    )[0]
+    assert "Do not write any ## H2 heading" in outline_block
+    assert "Return compact cited evidence notes" in outline_block
+    assert not any(
+        line.startswith("## ") for line in outline_block.splitlines()
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_prompt_resolves_legacy_names_without_section_id(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-template-legacy-names",
+    )
+    captured_prompts: list[str] = []
+    cases = [
+        ("decision_summary", None, "## Decision Summary", "### Pricing and Packaging"),
+        (
+            "user_research",
+            None,
+            "## User Review Themes",
+            "#### Simulated Survey and Interview Signals",
+        ),
+        (
+            "competitor_deep_dives",
+            "Cursor",
+            "## Competitor Deep Dives",
+            "### Cursor",
+        ),
+        ("swot_matrix", None, "## Side-by-Side Decision Matrix", "#### Threats"),
+        (
+            "support_appendix",
+            None,
+            "## Evidence & QA Support",
+            "## Evidence Appendix",
+        ),
+    ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured_prompts.append(kwargs["user"])
+        return "## Evidence & QA Support\nSupport. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    for segment_name, competitor, required_text, second_text in cases:
+        segment = _segmented_writer_segment(
+            segment_name=segment_name,
+            section_id=segment_name,
+            segment_competitor=competitor,
+            allowed_source_id="cursor-pricing",
+        )
+        segment.pop("section_id")
+        if segment_name == "support_appendix":
+            segment["segment_kind"] = "support_fragment"
+
+        await service._writer_segment_markdown(
+            record,
+            segment=segment,
+            timeout_seconds=1,
+            language_guidance="Use English.",
+            memory_context="none",
+            layer_context="none",
+            required_sections="",
+            retry_count=0,
+        )
+
+        prompt = captured_prompts[-1]
+        assert "Required segment outline:" in prompt
+        assert required_text in prompt
+        assert second_text in prompt
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_prompt_includes_all_segment_outlines(monkeypatch) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, run_id="run-segment-template-all")
+    captured_prompts: list[str] = []
+    cases = [
+        (
+            "decision_summary",
+            "decision_summary",
+            None,
+            "## Decision Summary",
+            "### Pricing and Packaging",
+        ),
+        (
+            "user_research",
+            "review_theme_summary",
+            None,
+            "## User Review Themes",
+            "#### Simulated Survey and Interview Signals",
+        ),
+        (
+            "swot_matrix",
+            "swot_matrix",
+            None,
+            "## Side-by-Side Decision Matrix",
+            "#### Threats",
+        ),
+        (
+            "support_appendix",
+            "evidence_support",
+            None,
+            "## Evidence & QA Support",
+            "## Evidence Appendix",
+        ),
+    ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured_prompts.append(kwargs["user"])
+        user = kwargs["user"]
+        if "section_id=decision_summary" in user:
+            return (
+                "## Decision Summary\nDecision. [source:cursor-pricing]\n\n"
+                "## Competitive Findings\nFindings. [source:cursor-pricing]"
+            )
+        if "section_id=review_theme_summary" in user:
+            return "## User Review Themes\nTheme. [source:cursor-pricing]"
+        if "section_id=swot_matrix" in user:
+            return (
+                "## Side-by-Side Decision Matrix\nMatrix. [source:cursor-pricing]\n\n"
+                "## SWOT Analysis\nSWOT. [source:cursor-pricing]"
+            )
+        return "## Evidence & QA Support\nSupport. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    for segment_name, section_id, competitor, required_text, second_text in cases:
+        segment = _segmented_writer_segment(
+            segment_name=segment_name,
+            section_id=section_id,
+            segment_competitor=competitor,
+            allowed_source_id="cursor-pricing",
+            segment_kind=(
+                "support_fragment"
+                if section_id == "evidence_support"
+                else "section_fragment"
+            ),
+        )
+        await service._writer_segment_markdown(
+            record,
+            segment=segment,
+            timeout_seconds=1,
+            language_guidance="Use English.",
+            memory_context="none",
+            layer_context="none",
+            required_sections="",
+            retry_count=0,
+        )
+        prompt = captured_prompts[-1]
+        assert "Required segment outline:" in prompt
+        assert required_text in prompt
+        assert second_text in prompt
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_prompt_localizes_core_outline_h2_headings(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-template-localized-h2",
+    )
+    record.detail.output_language = "zh-CN"
+    captured_prompts: list[str] = []
+    cases = [
+        (
+            "decision_summary",
+            "decision_summary",
+            [
+                "decision_summary",
+                "competitive_findings",
+            ],
+        ),
+        (
+            "user_research",
+            "review_theme_summary",
+            [
+                "review_theme_summary",
+                "community_evidence_triangulation",
+            ],
+        ),
+        (
+            "swot_matrix",
+            "swot_matrix",
+            [
+                "side_by_side_matrix",
+                "swot_analysis",
+            ],
+        ),
+    ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured_prompts.append(kwargs["user"])
+        user = kwargs["user"]
+        if "section_id=decision_summary" in user:
+            return (
+                f"## {report_label('zh-CN', 'decision_summary')}\n"
+                "Decision. [source:cursor-pricing]\n\n"
+                f"## {report_label('zh-CN', 'competitive_findings')}\n"
+                "Findings. [source:cursor-pricing]"
+            )
+        if "section_id=review_theme_summary" in user:
+            return (
+                f"## {report_label('zh-CN', 'review_theme_summary')}\n"
+                "Theme. [source:cursor-pricing]\n\n"
+                f"## {report_label('zh-CN', 'community_evidence_triangulation')}\n"
+                "Triangulation. [source:cursor-pricing]"
+            )
+        return (
+            f"## {report_label('zh-CN', 'side_by_side_matrix')}\n"
+            "Matrix. [source:cursor-pricing]\n\n"
+            f"## {report_label('zh-CN', 'swot_analysis')}\n"
+            "SWOT. [source:cursor-pricing]"
+        )
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    for segment_name, section_id, expected_heading_keys in cases:
+        segment = _segmented_writer_segment(
+            segment_name=segment_name,
+            section_id=section_id,
+            allowed_source_id="cursor-pricing",
+        )
+        segment["output_language"] = "zh-CN"
+
+        await service._writer_segment_markdown(
+            record,
+            segment=segment,
+            timeout_seconds=1,
+            language_guidance="Use Simplified Chinese.",
+            memory_context="none",
+            layer_context="none",
+            required_sections="",
+            retry_count=0,
+        )
+
+        prompt = captured_prompts[-1]
+        for key in expected_heading_keys:
+            assert f"## {report_label('zh-CN', key)}" in prompt
+        for english_heading in [
+            "## Decision Summary",
+            "## Competitive Findings",
+            "## User Review Themes",
+            "## Community Evidence Triangulation",
+            "## Side-by-Side Decision Matrix",
+            "## SWOT Analysis",
+        ]:
+            assert english_heading not in prompt
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    sources = [
+        RawSource(
+            id="cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor Pro costs $20 per month.",
+            content_hash="cursor-pricing-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="cursor-persona",
+            competitor="Cursor",
+            dimension="persona",
+            source_type="interview_record",
+            title="Cursor persona",
+            snippet="Enterprise buyers evaluate Cursor for security review.",
+            content_hash="cursor-persona-hash",
+            confidence=0.82,
+        ),
+    ]
+    detail = RunDetail(
+        id="run-segment-retry-valid",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=sources,
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    decision_calls = 0
+
+    def segment_payload_from_prompt(user: str) -> dict[str, object]:
+        marker = "Segment Evidence Pack JSON: "
+        if marker not in user:
+            return {}
+        payload = user.split(marker, 1)[1].split("\n\nRequired sections", 1)[0]
+        return json.loads(payload)
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        nonlocal decision_calls
+        user = kwargs["user"]
+        segment_payload = segment_payload_from_prompt(user)
+        if segment_payload.get("segment_kind") == "evidence_shard":
+            allowed_source_ids = segment_payload.get("allowed_source_ids") or []
+            source_id = (
+                allowed_source_ids[0]
+                if allowed_source_ids
+                else "cursor-pricing"
+            )
+            return f"- Cursor shard note cites scoped evidence. [source:{source_id}]"
+        if "segment_name=decision_summary" in user:
+            decision_calls += 1
+            if "retry_count=1" in user:
+                return (
+                    "## Decision Summary\nCursor pricing is visible. [source:cursor-pricing]\n\n"
+                    "## Competitive Findings\nCursor has cited evaluation signals. "
+                    "[source:cursor-pricing]"
+                )
+            return (
+                "## Decision Summary\nCursor pricing is visible. [source:missing-source]\n\n"
+                "## Competitive Findings\nCursor has unsupported evaluation signals. "
+                "[source:missing-source]"
+            )
+        if "segment_name=user_research" in user:
+            return (
+                "## User Review Themes\nEnterprise buyers cite security review. "
+                "[source:cursor-persona]"
+            )
+        if "segment_name=competitor_deep_dives" in user:
+            return (
+                "## Competitor Deep Dives\n### Cursor\n"
+                "Cursor has cited evidence. "
+                "[source:cursor-pricing]"
+            )
+        if "segment_name=swot_matrix" in user:
+            return (
+                "## Side-by-Side Decision Matrix\nCursor pricing is visible for comparison. "
+                "[source:cursor-pricing]\n\n"
+                "## SWOT Analysis\nCursor has cited evidence. [source:cursor-pricing]"
+            )
+        return "## Evidence Support\nCursor has cited evidence. [source:cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+    monkeypatch.setattr(
+        "packages.agents.writer.evidence_pack.SINGLE_CALL_CONTEXT_TARGET_CHARS",
+        100,
+    )
+
+    await service._real_writer_step(record)
+
+    assert decision_calls == 2
+    assert "[source:missing-source]" not in record.detail.report_md
+    assert "[source:cursor-pricing]" in record.detail.report_md
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_sanitizes_spacing_and_combined_citations(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    sources = [
+        RawSource(
+            id="raw-source-openai-codex-pricing",
+            competitor="OpenAI Codex",
+            dimension="pricing",
+            source_type="official_docs",
+            title="OpenAI Codex pricing",
+            snippet="OpenAI Codex pricing is documented.",
+            content_hash="openai-codex-pricing-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="raw-source-openai-api-pricing",
+            competitor="OpenAI Codex",
+            dimension="pricing",
+            source_type="official_docs",
+            title="OpenAI API pricing",
+            snippet="OpenAI API pricing is documented.",
+            content_hash="openai-api-pricing-hash",
+            confidence=0.95,
+        ),
+    ]
+    detail = RunDetail(
+        id="run-segment-sanitize-citations",
+        topic="OpenAI Codex pricing",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="OpenAI Codex pricing",
+            competitors=["OpenAI Codex"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=sources,
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    decision_calls = 0
+
+    def segment_payload_from_prompt(user: str) -> dict[str, object]:
+        marker = "Segment Evidence Pack JSON: "
+        if marker not in user:
+            return {}
+        payload = user.split(marker, 1)[1].split("\n\nRequired sections", 1)[0]
+        return json.loads(payload)
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        nonlocal decision_calls
+        user = kwargs["user"]
+        segment_payload = segment_payload_from_prompt(user)
+        if segment_payload.get("segment_kind") == "evidence_shard":
+            allowed_source_ids = segment_payload.get("allowed_source_ids") or []
+            source_id = (
+                allowed_source_ids[0]
+                if allowed_source_ids
+                else "raw-source-openai-codex-pricing"
+            )
+            return f"- Pricing shard note cites scoped evidence. [source:{source_id}]"
+        if "segment_name=decision_summary" in user:
+            decision_calls += 1
+            return (
+                "## Decision Summary\nCodex pricing is supported by official evidence. "
+                "[source: raw-source-openai-codex-pricing | raw-source-openai-api-pricing]\n\n"
+                "## Competitive Findings\nThe pricing evidence comes from official docs. "
+                "[source:raw-source-openai-codex-pricing]"
+            )
+        if "segment_name=user_research" in user:
+            return (
+                "## User Review Themes\nNo cited user-review themes are available in this "
+                "fixture; treat buyer sentiment as an evidence gap."
+            )
+        if "segment_name=competitor_deep_dives" in user:
+            return (
+                "## Competitor Deep Dives\n### OpenAI Codex\n"
+                "Codex pricing has cited evidence. "
+                "[source:raw-source-openai-codex-pricing]"
+            )
+        if "segment_name=swot_matrix" in user:
+            return (
+                "## Side-by-Side Decision Matrix\nCodex pricing has cited evidence. "
+                "[source:raw-source-openai-codex-pricing]\n\n"
+                "## SWOT Analysis\nCodex pricing has cited evidence. "
+                "[source:raw-source-openai-codex-pricing]"
+            )
+        return (
+            "## Evidence Support\nCodex pricing has cited evidence. "
+            "[source:raw-source-openai-codex-pricing]"
+        )
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+    monkeypatch.setattr(
+        "packages.agents.writer.evidence_pack.SINGLE_CALL_CONTEXT_TARGET_CHARS",
+        100,
+    )
+
+    await service._real_writer_step(record)
+
+    assert decision_calls == 1
+    assert "[source: raw-source-openai-codex-pricing" not in record.detail.report_md
+    assert " | raw-source-openai-api-pricing]" not in record.detail.report_md
+    assert (
+        "[source:raw-source-openai-codex-pricing][source:raw-source-openai-api-pricing]"
+        in record.detail.report_md
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_retry_fails_when_citations_stay_invalid(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            writer_timeout_seconds=10,
+        ),
+    )
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor Pro costs $20 per month.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+    )
+    detail = RunDetail(
+        id="run-segment-retry-invalid",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[source],
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        return "## Executive Summary\nCursor pricing is visible. [source:missing-source]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+    monkeypatch.setattr(
+        "packages.agents.writer.evidence_pack.SINGLE_CALL_CONTEXT_TARGET_CHARS",
+        100,
+    )
+
+    with pytest.raises(RuntimeError, match="invalid source IDs after retry"):
+        await service._real_writer_step(record)
+
+    assert record.detail.status == "failed"
+    assert record.detail.report_md == ""
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_uses_evidence_pack_context(monkeypatch) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-repair-pack",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="cursor-persona",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="interview_record",
+                title="Cursor persona interview",
+                snippet="Enterprise buyers evaluate Cursor for security and onboarding.",
+                content_hash="cursor-persona-hash",
+                confidence=0.82,
+            )
+        ],
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    captured: dict[str, str] = {}
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return "## User Review Themes\nEnterprise buyers cite onboarding. [source:cursor-persona]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_section_repair_markdown(
+        record,
+        sections=["review_theme_summary"],
+        previous_report="## User Review Themes\nThin.",
+    )
+
+    assert "Writer Evidence Pack JSON:" in captured["user"]
+    assert "Writer Context JSON:" not in captured["user"]
+    assert "source_registry" in captured["user"]
+    assert "cursor-persona" in captured["user"]
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_uses_segment_payload_for_segmented_pack(
+    monkeypatch,
+) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-repair-segment-pack",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[],
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    captured: dict[str, str] = {}
+    full_serialized = False
+
+    class FakeMetrics:
+        segmented_writer_required = True
+
+    class FakeEvidencePackResult:
+        metrics = FakeMetrics()
+
+        def preflight_errors(self):
+            return []
+
+        def to_prompt_json(self):
+            nonlocal full_serialized
+            full_serialized = True
+            raise AssertionError("section repair should not serialize the full pack")
+
+        def repair_segment_input(self, sections):
+            return {
+                "schema_version": "writer_evidence_pack.v1",
+                "repair_sections": list(sections or []),
+                "segment_count": 1,
+                "allowed_source_ids": ["cursor-persona"],
+                "segments": [
+                    {
+                        "segment_name": "user_research",
+                        "source_registry": [{"id": "cursor-persona"}],
+                        "groups": [],
+                        "quotes": [],
+                        "matrix": {},
+                        "structured_knowledge": {},
+                        "allowed_source_ids": ["cursor-persona"],
+                        "segment_input_chars": 240,
+                    }
+                ],
+            }
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return "## User Review Themes\nEnterprise buyers cite onboarding. [source:cursor-persona]"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeEvidencePackResult(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_section_repair_markdown(
+        record,
+        sections=["review_theme_summary"],
+        previous_report="## User Review Themes\nThin.",
+    )
+
+    assert not full_serialized
+    assert "Writer Evidence Pack JSON:" in captured["user"]
+    assert "repair_sections" in captured["user"]
+    assert "cursor-persona" in captured["user"]
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_iterates_budgeted_segment_payloads(
+    monkeypatch,
+) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-repair-segment-pack-parts",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["pricing"]),
+        raw_sources=[],
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    full_serialized = False
+    calls: list[str] = []
+
+    def repair_payload(part: int, source_id: str) -> dict[str, object]:
+        return {
+            "schema_version": "writer_evidence_pack.v1",
+            "repair_sections": ["competitor_deep_dives"],
+            "segment_names": ["competitor_deep_dives"],
+            "segment_count": 1,
+            "repair_part": part,
+            "repair_part_count": 2,
+            "allowed_source_ids": [source_id],
+            "segments": [
+                {
+                    "segment_name": "competitor_deep_dives",
+                    "source_registry": [{"id": source_id}],
+                    "groups": [],
+                    "quotes": [],
+                    "matrix": {},
+                    "structured_knowledge": {},
+                    "allowed_source_ids": [source_id],
+                    "segment_input_chars": 240,
+                }
+            ],
+            "repair_input_chars": 640,
+            "segment_input_target_chars": 240_000,
+        }
+
+    class FakeMetrics:
+        segmented_writer_required = True
+
+    class FakeEvidencePackResult:
+        metrics = FakeMetrics()
+
+        def telemetry_payload(self):
+            return {
+                "raw_source_count": 2,
+                "represented_source_count": 2,
+                "dropped_source_count": 0,
+                "segmented_writer_required": True,
+            }
+
+        def preflight_errors(self):
+            return []
+
+        def to_prompt_json(self):
+            nonlocal full_serialized
+            full_serialized = True
+            raise AssertionError("section repair should not serialize the full pack")
+
+        def repair_segment_input(self, sections):
+            return {
+                "repair_sections": list(sections or []),
+                "segments": [
+                    repair_payload(1, "cursor-pricing-a")["segments"][0],
+                    repair_payload(2, "cursor-pricing-b")["segments"][0],
+                ],
+                "repair_input_chars": 320_000,
+            }
+
+        def repair_segment_inputs(self, sections):
+            assert list(sections) == ["competitor_deep_dives"]
+            return [
+                repair_payload(1, "cursor-pricing-a"),
+                repair_payload(2, "cursor-pricing-b"),
+            ]
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        calls.append(kwargs["user"])
+        return (
+            f"## Competitor Deep Dives\nPart {len(calls)} cites "
+            f"[source:cursor-pricing-{'a' if len(calls) == 1 else 'b'}]"
+        )
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeEvidencePackResult(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    result = await service._writer_section_repair_markdown(
+        record,
+        sections=["competitor_deep_dives"],
+        previous_report="## Competitor Deep Dives\nThin.",
+    )
+
+    preflight_event = next(
+        (event for event in record.events if event.type == "writer_preflight"),
+        None,
+    )
+    assert not full_serialized
+    assert len(calls) == 2
+    assert all("Writer Evidence Pack JSON:" in user for user in calls)
+    assert '"repair_part": 1' in calls[0]
+    assert '"repair_part": 2' in calls[1]
+    assert "Part 1 cites" in result
+    assert "Part 2 cites" in result
+    assert result.count("## Competitor Deep Dives") == 1
+    assert preflight_event is not None
+    assert preflight_event.payload["writer_repair_mode"] == "section"
+    assert preflight_event.payload["writer_repair_sections"] == [
+        "competitor_deep_dives"
+    ]
+    assert preflight_event.payload["segmented_writer_required"] is True
+    assert preflight_event.payload["repair_segment_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_synthesizes_evidence_shards_once(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-repair-evidence-shards",
+        competitors=["Cursor"],
+    )
+    shard_segments = [
+        {
+            "schema_version": "writer_evidence_pack.v1",
+            "segment_name": "decision_summary",
+            "segment_kind": "evidence_shard",
+            "section_id": "decision_summary",
+            "output_language": "en-US",
+            "segment_batch": "sources:1",
+            "segment_input_chars": 2000,
+            "allowed_source_ids": ["raw-source-a"],
+            "groups": [],
+            "sources": [],
+        },
+        {
+            "schema_version": "writer_evidence_pack.v1",
+            "segment_name": "decision_summary",
+            "segment_kind": "evidence_shard",
+            "section_id": "decision_summary",
+            "output_language": "en-US",
+            "segment_batch": "sources:2",
+            "segment_input_chars": 2000,
+            "allowed_source_ids": ["raw-source-b"],
+            "groups": [],
+            "sources": [],
+        },
+    ]
+    calls: list[str] = []
+
+    class FakeMetrics:
+        segmented_writer_required = True
+
+    class FakeEvidencePackResult:
+        metrics = FakeMetrics()
+
+        def telemetry_payload(self):
+            return {
+                "raw_source_count": 2,
+                "represented_source_count": 2,
+                "dropped_source_count": 0,
+                "segmented_writer_required": True,
+            }
+
+        def preflight_errors(self):
+            return []
+
+        def repair_segment_inputs(self, sections):
+            assert list(sections) == ["decision_summary"]
+            return [
+                {
+                    "repair_sections": ["decision_summary"],
+                    "segments": [shard_segments[0]],
+                    "allowed_source_ids": ["raw-source-a"],
+                    "repair_part": 1,
+                    "repair_part_count": 2,
+                    "repair_input_chars": 2000,
+                },
+                {
+                    "repair_sections": ["decision_summary"],
+                    "segments": [shard_segments[1]],
+                    "allowed_source_ids": ["raw-source-b"],
+                    "repair_part": 2,
+                    "repair_part_count": 2,
+                    "repair_input_chars": 2000,
+                },
+            ]
+
+        def validate_segment_citations(self, markdown, *, allowed_source_ids):
+            return [
+                source_id
+                for source_id in source_tokens(markdown)
+                if source_id not in allowed_source_ids
+            ]
+
+        def sanitize_segment_citations(self, markdown, *, allowed_source_ids):
+            return markdown
+
+    async def fake_segment_writer(*args, **kwargs):
+        segment = kwargs["segment"]
+        calls.append(segment["segment_kind"])
+        if segment["segment_kind"] == "evidence_shard":
+            return (
+                f"- repair shard note {segment['segment_batch']} "
+                f"[source:{segment['allowed_source_ids'][0]}]"
+            )
+        assert segment["shard_notes"] == [
+            "- repair shard note sources:1 [source:raw-source-a]",
+            "- repair shard note sources:2 [source:raw-source-b]",
+        ]
+        return (
+            "## Decision Summary\n"
+            "Repaired shard note [source:raw-source-a][source:raw-source-b].\n\n"
+            "## Competitive Findings\n"
+            "Repaired shard finding [source:raw-source-a][source:raw-source-b]."
+        )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        raise AssertionError("evidence shard repair should use segment writer")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeEvidencePackResult(),
+    )
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    result = await service._writer_section_repair_markdown(
+        record,
+        sections=["decision_summary"],
+        previous_report="## Decision Summary\nThin.",
+    )
+
+    assert calls == ["evidence_shard", "evidence_shard", "section_fragment"]
+    assert result.count("## Decision Summary") == 1
+    assert result.count("## Competitive Findings") == 1
+    assert "Repaired shard note" in result
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_fails_before_llm_when_evidence_pack_preflight_has_errors(
+    monkeypatch,
+) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-section-repair-pack-preflight-fail",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="AI coding agent", competitors=["Cursor"], dimensions=["pricing"]),
+    )
+    record = RunRecord(detail=detail)
+    llm_called = False
+
+    class FakeResult:
+        def preflight_errors(self):
+            return ["source_not_represented:bad"]
+
+        def to_prompt_json(self):
+            raise AssertionError("to_prompt_json should not be called")
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        nonlocal llm_called
+        llm_called = True
+        return "# should not be called"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeResult(),
+    )
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    with pytest.raises(
+        RuntimeError,
+        match="writer evidence pack preflight failed: source_not_represented:bad",
+    ):
+        await service._writer_section_repair_markdown(
+            record,
+            sections=["pricing_analysis"],
+            previous_report="## Pricing Analysis\nThin.",
+        )
+
+    assert not llm_called
 
 
 def test_candidate_evidence_prefers_matching_search_results() -> None:
@@ -4035,6 +11426,574 @@ async def test_collector_uses_search_candidates_before_homepage_derived_fallback
     assert "https://www.anthropic.com/features" not in fetch_calls
 
 
+@pytest.mark.asyncio
+async def test_collector_adds_community_sources_even_when_official_sources_exist() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_target_verified_sources_per_branch=1,
+            collector_search_max_results=4,
+            collector_community_enabled=True,
+            collector_community_queries_per_branch=2,
+            collector_community_target_sources_per_branch=2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    async def fake_trace_search(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        query,
+        max_results,
+        context=None,
+    ) -> list[SearchResult]:
+        results_by_query = {
+            "Cursor pricing plans billing usage limits AI coding assistants official source": [
+                SearchResult(
+                    title="Cursor pricing",
+                    url="https://cursor.com/pricing",
+                    snippet="Cursor pricing plans include Pro and Teams.",
+                )
+            ],
+            "Cursor pricing usage limit reddit AI coding assistants": [
+                SearchResult(
+                    title="Cursor Pro usage limit thread",
+                    url="https://www.reddit.com/r/cursor/comments/pro_limits",
+                    snippet=(
+                        "Users report Cursor Pro is $20 per month and mention usage limits."
+                    ),
+                )
+            ],
+            "Cursor pricing usage limit forum AI coding assistants": [
+                SearchResult(
+                    title="Cursor forum pricing limits",
+                    url="https://forum.cursor.com/t/pricing-limits/1",
+                    snippet="A staff member explains usage limits for paid plans.",
+                )
+            ],
+        }
+        return results_by_query.get(query, [])[:max_results]
+
+    async def fake_trace_fetch(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        url,
+        context=None,
+    ) -> EvidenceFetchResult:
+        text_by_url = {
+            "https://cursor.com/pricing": (
+                "Cursor pricing plans include Pro, Teams, billing, and usage."
+            ),
+            "https://www.reddit.com/r/cursor/comments/pro_limits": (
+                "Users report Cursor Pro is $20 per month and mention usage limits."
+            ),
+            "https://forum.cursor.com/t/pricing-limits/1": (
+                "A staff member explains usage limits for paid plans."
+            ),
+        }
+        text = text_by_url[url]
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title=f"Fetched {url}",
+            text=text,
+            content_hash=f"hash-{len(text)}",
+            status_code=200,
+            fetch_method="test_fetch",
+            quality_score=0.95,
+            text_length=len(text),
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._trace_fetch = fake_trace_fetch  # type: ignore[method-assign]
+
+    await service._real_collector_branch_step(record, "pricing", "Cursor")
+
+    source_types = {source.source_type for source in record.detail.raw_sources}
+    assert "webpage_verified" in source_types
+    assert {"reddit_thread", "community_forum"} & source_types
+    assert any(source.metadata.get("community_evidence") for source in record.detail.raw_sources)
+
+
+@pytest.mark.asyncio
+async def test_collector_preserves_official_sources_when_community_search_fails() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_target_verified_sources_per_branch=1,
+            collector_search_max_results=4,
+            collector_community_enabled=True,
+            collector_community_queries_per_branch=1,
+            collector_community_target_sources_per_branch=1,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    official_source = RawSource(
+        id="cursor-official-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor official pricing",
+        url="https://cursor.com/pricing",
+        snippet="Cursor Pro is $20 per month.",
+        content_hash="cursor-official-pricing-hash",
+        confidence=0.95,
+    )
+
+    async def fake_collect_with_web_search(  # noqa: ANN001
+        record,
+        dimension,
+        competitor,
+        context,
+        *,
+        seed_sources=None,
+        include_official=True,
+    ) -> list[RawSource]:
+        assert dimension == "pricing"
+        assert competitor == "Cursor"
+        assert include_official is True
+        return [official_source]
+
+    async def fail_community_collection(  # noqa: ANN001
+        record,
+        detail,
+        dimension,
+        competitor,
+        context,
+    ) -> list[RawSource]:
+        raise RuntimeError("community search down")
+
+    service._collect_competitor_with_web_search = fake_collect_with_web_search  # type: ignore[method-assign]
+    service._collect_community_sources_for_branch = fail_community_collection  # type: ignore[method-assign]
+
+    await service._real_collector_branch_step(record, "pricing", "Cursor")
+
+    assert len(record.detail.raw_sources) == 1
+    assert record.detail.raw_sources[0].source_type == "webpage_verified"
+    assert str(record.detail.raw_sources[0].url) == "https://cursor.com/pricing"
+    collector_done = next(
+        event
+        for event in reversed(service.get_trace(detail.id) or [])
+        if event.type == "node_completed" and event.agent == "collector"
+    )
+    assert collector_done.payload["collect"]["community_error"] == "community search down"
+
+
+@pytest.mark.asyncio
+async def test_collector_keeps_useful_community_snippet_when_fetch_fails() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_target_verified_sources_per_branch=1,
+            collector_search_max_results=4,
+            collector_community_enabled=True,
+            collector_community_queries_per_branch=1,
+            collector_community_target_sources_per_branch=1,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    async def fake_trace_search(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        query,
+        max_results,
+        context=None,
+    ) -> list[SearchResult]:
+        results_by_query = {
+            "Cursor pricing plans billing usage limits AI coding assistants official source": [
+                SearchResult(
+                    title="Cursor pricing",
+                    url="https://cursor.com/pricing",
+                    snippet="Cursor pricing plans include Pro.",
+                )
+            ],
+            "Cursor pricing usage limit reddit AI coding assistants": [
+                SearchResult(
+                    title="Cursor Pro reported pricing",
+                    url="https://www.reddit.com/r/cursor/comments/pro_limits",
+                    snippet=(
+                        "Users report Cursor Pro is $20 per month with usage limit confusion."
+                    ),
+                )
+            ],
+        }
+        return results_by_query.get(query, [])[:max_results]
+
+    async def fake_trace_fetch(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        url,
+        context=None,
+    ) -> EvidenceFetchResult:
+        if url == "https://www.reddit.com/r/cursor/comments/pro_limits":
+            return EvidenceFetchResult(
+                url=url,
+                ok=False,
+                title="blocked",
+                text="",
+                content_hash="blocked-hash",
+                status_code=403,
+                error="robots blocked",
+                fetch_method="test_failed_fetch",
+                quality_score=0.0,
+                text_length=0,
+                failure_reason="robots_blocked",
+            )
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="Cursor pricing",
+            text="Cursor pricing plans include Pro.",
+            content_hash="official-hash",
+            status_code=200,
+            fetch_method="test_fetch",
+            quality_score=0.95,
+            text_length=32,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._trace_fetch = fake_trace_fetch  # type: ignore[method-assign]
+
+    await service._real_collector_branch_step(record, "pricing", "Cursor")
+
+    snippet_sources = [
+        source for source in record.detail.raw_sources if source.source_type == "snippet_only"
+    ]
+    assert len(snippet_sources) == 1
+    assert snippet_sources[0].confidence == 0.55
+    assert snippet_sources[0].metadata["community_source_type"] == "reddit_thread"
+
+
+@pytest.mark.asyncio
+async def test_collector_records_no_result_metadata_for_empty_community_search() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_target_verified_sources_per_branch=1,
+            collector_search_max_results=4,
+            collector_community_enabled=True,
+            collector_community_queries_per_branch=1,
+            collector_community_target_sources_per_branch=1,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+
+    async def fake_trace_search(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        query,
+        max_results,
+        context=None,
+    ) -> list[SearchResult]:
+        if (
+            query
+            == "Cursor pricing plans billing usage limits AI coding assistants official source"
+        ):
+            return [
+                SearchResult(
+                    title="Cursor pricing",
+                    url="https://cursor.com/pricing",
+                    snippet="Cursor pricing plans include Pro.",
+                )
+            ]
+        return []
+
+    async def fake_trace_fetch(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        url,
+        context=None,
+    ) -> EvidenceFetchResult:
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="Cursor pricing",
+            text="Cursor pricing plans include Pro.",
+            content_hash="official-hash",
+            status_code=200,
+            fetch_method="test_fetch",
+            quality_score=0.95,
+            text_length=32,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._trace_fetch = fake_trace_fetch  # type: ignore[method-assign]
+
+    await service._real_collector_branch_step(record, "pricing", "Cursor")
+
+    community_messages = [
+        message
+        for message in record.detail.agent_messages
+        if message.message_type == "community_search_completed"
+    ]
+    assert len(community_messages) == 1
+    assert community_messages[0].payload["candidate_count"] == 0
+    assert community_messages[0].payload["no_result"] is True
+
+
+@pytest.mark.asyncio
+async def test_collector_does_not_repeat_community_search_after_skill_tool_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_target_verified_sources_per_branch=1,
+            collector_search_max_results=4,
+            collector_community_enabled=True,
+            collector_community_queries_per_branch=1,
+            collector_community_target_sources_per_branch=1,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["review"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    community_query = "Cursor G2 reviews pros cons AI coding assistants"
+    community_query_count = 0
+
+    async def fake_trace_search(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        query,
+        max_results,
+        context=None,
+    ) -> list[SearchResult]:
+        nonlocal community_query_count
+        if query == community_query:
+            community_query_count += 1
+            return [
+                SearchResult(
+                    title="Cursor user review thread",
+                    url="https://www.reddit.com/r/cursor/comments/review_feedback",
+                    snippet=(
+                        "Cursor users share reviews, pros, cons, complaints, and adoption "
+                        "feedback for coding teams."
+                    ),
+                )
+            ][:max_results]
+        return []
+
+    async def fake_trace_fetch(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        url,
+        context=None,
+    ) -> EvidenceFetchResult:
+        if url != "https://www.reddit.com/r/cursor/comments/review_feedback":
+            return EvidenceFetchResult(
+                url=url,
+                ok=False,
+                title="not found",
+                text="",
+                content_hash="failed-fetch",
+                status_code=404,
+                error="not found",
+                fetch_method="test_failed_fetch",
+                quality_score=0.0,
+                text_length=0,
+                failure_reason="http_404",
+            )
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="Cursor user review thread",
+            text=(
+                "Cursor users share reviews, pros, cons, complaints, praise, adoption "
+                "feedback, code completion workflow, and developer team experience."
+            ),
+            content_hash="cursor-review-hash",
+            status_code=200,
+            fetch_method="test_fetch",
+            quality_score=0.95,
+            text_length=136,
+        )
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+    service._trace_fetch = fake_trace_fetch  # type: ignore[method-assign]
+
+    await service._real_collector_branch_step(record, "review", "Cursor")
+
+    community_messages = [
+        message
+        for message in record.detail.agent_messages
+        if message.message_type == "community_search_completed"
+    ]
+    community_sources = [
+        source
+        for source in record.detail.raw_sources
+        if source.metadata.get("community_evidence")
+    ]
+    assert len(community_messages) == 1
+    assert community_query_count == 1
+    assert len(community_sources) == 1
+    events = service.get_trace(detail.id) or []
+    collector_done = next(
+        event
+        for event in events
+        if event.type == "node_completed"
+        and event.agent == "collector"
+        and event.payload["retrieval_stage"] == "collector_branch_finish"
+    )
+    assert collector_done.payload["collect"]["community_source_count"] == 1
+    assert collector_done.payload["collect"]["community_source_ids"] == [
+        community_sources[0].id
+    ]
+
+
+@pytest.mark.asyncio
+async def test_collector_target_zero_skips_community_search() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_community_enabled=True,
+            collector_community_queries_per_branch=1,
+            collector_community_target_sources_per_branch=0,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    context = SubagentContext(run_id=detail.id, agent="collector", subagent="pricing::Cursor")
+    search_count = 0
+
+    async def fake_trace_search(  # noqa: ANN001
+        record,
+        agent,
+        subagent,
+        query,
+        max_results,
+        context=None,
+    ) -> list[SearchResult]:
+        nonlocal search_count
+        search_count += 1
+        return [
+            SearchResult(
+                title="Cursor Pro usage limit thread",
+                url="https://www.reddit.com/r/cursor/comments/pro_limits",
+                snippet="Users report Cursor Pro is $20 per month and mention usage limits.",
+            )
+        ]
+
+    service._trace_search = fake_trace_search  # type: ignore[method-assign]
+
+    sources = await service._collect_community_sources_for_branch(
+        record,
+        detail,
+        "pricing",
+        "Cursor",
+        context,
+    )
+
+    assert sources == []
+    assert search_count == 0
+
+
 def test_collector_search_query_adds_product_qualifier_for_ambiguous_names() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -4086,7 +12045,7 @@ def test_collector_rejects_product_identity_confusion_sources() -> None:
         source_type="webpage_verified",
         title="Devin pricing",
         url="https://devin.ai/pricing",
-        snippet="Devin Desktop pricing includes a Team plan and Enterprise plan.",
+        snippet="Devin agent pricing includes Team and Enterprise plans for software teams.",
         content_hash="hash-windsurf",
         confidence=0.96,
     )
@@ -4195,6 +12154,171 @@ def test_collector_accepts_windsurf_feature_docs_redirect_sources() -> None:
     )
 
     assert service._source_quality_problem(source) is None
+
+
+def test_collector_accepts_windsurf_pricing_rebrand_redirect_source() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    source = RawSource(
+        id="pricing-windsurf-devin-rebrand",
+        competitor="Windsurf",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Plans and Pricing | Devin",
+        url="https://devin.ai/pricing",
+        snippet=(
+            "Windsurf is now Devin Desktop. Plans and Pricing include an "
+            "Individual Free plan, Pro at $20 per month, Teams at $30 per user "
+            "per month, and Enterprise contact sales options."
+        ),
+        content_hash="windsurf-devin-pricing-hash",
+        confidence=0.96,
+    )
+
+    assert service._source_quality_problem(source) is None
+
+
+def test_collector_react_actions_follow_skill_allowlist() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+
+    pricing_actions = service._collector_react_allowed_actions("pricing")
+    review_actions = service._collector_react_allowed_actions("review")
+    feature_actions = service._collector_react_allowed_actions("feature")
+
+    assert pricing_actions == [
+        "web_search",
+        "robots_check",
+        "fetch_page",
+        "finish",
+    ]
+    assert review_actions == [
+        "web_search",
+        "search_review_site",
+        "fetch_page",
+        "finish",
+    ]
+    assert feature_actions == [
+        "web_search",
+        "fetch_page",
+        "find_official_docs",
+        "finish",
+    ]
+
+
+def test_skill_allowlists_only_include_supported_collector_actions() -> None:
+    registry = SkillRegistry.from_default_path()
+    supported_actions = set(RunService.COLLECTOR_REACT_ACTIONS) | {"finish"}
+
+    for skill in registry.list():
+        assert set(skill.tools_allowlist) <= supported_actions
+
+
+def test_collector_does_not_keep_duplicate_identity_guard_helpers() -> None:
+    assert not hasattr(RunService, "_competitor_identity_problem")
+    assert not hasattr(RunService, "_is_windsurf_devin_redirect_source")
+
+
+@pytest.mark.asyncio
+async def test_collector_skill_tools_do_not_emit_legacy_simulated_persona_source() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-no-legacy-simulated-persona",
+        topic="AI Coding Agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI Coding Agent",
+            competitors=["Windsurf"],
+            dimensions=["persona"],
+        ),
+    )
+    record = RunRecord(detail=detail)
+    context = SubagentContext(
+        run_id=detail.id,
+        agent="collector",
+        subagent="persona::Windsurf",
+    )
+
+    sources = await service._collect_competitor_with_skill_tools(
+        record,
+        "persona",
+        "Windsurf",
+        context,
+        qa_feedback=[],
+    )
+
+    assert sources == []
+
+
+def test_persona_web_search_query_uses_customer_adoption_terms() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-persona-query",
+        topic="AI coding assistant",
+        status="running",
+        execution_mode="real",
+        created_at="2026-06-11T00:00:00",
+        updated_at="2026-06-11T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant",
+            competitors=["Windsurf"],
+            dimensions=["persona"],
+        ),
+    )
+
+    query = service._web_search_query(detail, "Windsurf", "persona").casefold()
+
+    for term in [
+        "customers",
+        "case studies",
+        "developer adoption",
+        "user reviews",
+        "onboarding",
+        "switching",
+        "workflow fit",
+    ]:
+        assert term in query
 
 
 def test_collector_rejects_pricing_pages_as_persona_evidence() -> None:
@@ -4650,6 +12774,134 @@ async def test_collect_qa_blocks_and_retries_collector_before_analyst() -> None:
 
 
 @pytest.mark.asyncio
+async def test_weak_persona_collect_qa_retries_collector_before_analyst() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            max_iterations=2,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+    order: list[str] = []
+    collector_calls = 0
+
+    async def fake_planner(record):  # noqa: ANN001, ANN202
+        order.append("planner")
+
+    async def fake_collector(record, dimension, competitor):  # noqa: ANN001, ANN202
+        nonlocal collector_calls
+        collector_calls += 1
+        order.append(f"collector:{collector_calls}")
+        if collector_calls == 1:
+            record.detail.raw_sources.append(
+                RawSource(
+                    id="windsurf-persona-proxy",
+                    competitor=competitor,
+                    covered_competitors=[competitor],
+                    dimension=dimension,
+                    source_type="interview_record",
+                    title="Windsurf persona proxy",
+                    snippet="Proxy interview mentions workflow fit and switching risk.",
+                    content_hash="windsurf-persona-proxy-hash",
+                    confidence=0.62,
+                    metadata={"fallback_synthetic": True},
+                )
+            )
+            return
+        record.detail.raw_sources.append(
+            RawSource(
+                id="windsurf-persona-customer-story",
+                competitor=competitor,
+                covered_competitors=[competitor],
+                dimension=dimension,
+                source_type="webpage_verified",
+                title="Windsurf customer adoption story",
+                url="https://windsurf.com/customers/example",
+                snippet=(
+                    "Developers and engineering teams adopted Windsurf for workflow fit, "
+                    "onboarding, and switching cost reduction."
+                ),
+                content_hash="windsurf-persona-customer-story-hash",
+                confidence=0.92,
+            )
+        )
+
+    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+        order.append("analyst")
+        service._merge_competitor_kb_slice(
+            record.detail,
+            competitor,
+            dimension,
+            [
+                (
+                    "Windsurf serves developer teams evaluating workflow fit. "
+                    "[source:windsurf-persona-customer-story]"
+                )
+            ],
+        )
+
+    async def fake_comparator(record):  # noqa: ANN001, ANN202
+        order.append("comparator")
+        record.detail.comparison_matrix = service._build_comparison_matrix(record.detail, {})
+
+    async def fake_reflector(record):  # noqa: ANN001, ANN202
+        order.append("reflector")
+
+    async def fake_writer(record):  # noqa: ANN001, ANN202
+        order.append("writer")
+        record.detail.report_md = (
+            "Windsurf targets developer teams. [source:windsurf-persona-customer-story]"
+        )
+
+    async def fake_qa(record):  # noqa: ANN001, ANN202
+        order.append("qa")
+        record.detail.qa_findings = []
+
+    service._real_planner_step = fake_planner  # type: ignore[method-assign]
+    service._real_collector_branch_step = fake_collector  # type: ignore[method-assign]
+    service._real_analyst_branch_step = fake_analyst  # type: ignore[method-assign]
+    service._real_comparator_step = fake_comparator  # type: ignore[method-assign]
+    service._real_reflector_step = fake_reflector  # type: ignore[method-assign]
+    service._real_writer_step = fake_writer  # type: ignore[method-assign]
+    service._real_qa_step = fake_qa  # type: ignore[method-assign]
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Persona collect gate",
+                competitors=["Windsurf"],
+                dimensions=["persona"],
+                execution_mode="real",
+            )
+        )
+
+        await service.run_pipeline(detail.id)
+
+        assert order == [
+            "planner",
+            "collector:1",
+            "collector:2",
+            "analyst",
+            "comparator",
+            "reflector",
+            "writer",
+            "qa",
+        ]
+        updated = service.get_run(detail.id)
+        assert updated is not None
+        assert updated.status == "completed"
+        assert updated.qa_findings == []
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_real_pipeline_auto_runs_scoped_redo_for_qa_findings() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -4793,6 +13045,49 @@ async def test_release_gate_sync_creates_scoped_qa_repair_issue() -> None:
 
 
 @pytest.mark.asyncio
+async def test_release_gate_sync_updates_latest_revision_after_issue_count() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Release gate revision sync",
+            competitors=["Claude"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.report_md = "After redo. [source:pricing-1]"
+    record.detail.revisions = [
+        RevisionRecord(
+            id="revision-1",
+            iteration=1,
+            stage="writer",
+            before_md="Before redo.",
+            after_md=record.detail.report_md,
+            issue_count_before=1,
+            issue_count_after=0,
+            convergence_ratio=0.0,
+        )
+    ]
+
+    service._sync_release_gate_repair_issues(record, _blocked_release_gate())
+
+    assert len(record.detail.qa_findings) == 1
+    assert record.detail.revisions[-1].issue_count_after == 1
+    assert record.detail.revisions[-1].convergence_ratio == 1.0
+
+
+@pytest.mark.asyncio
 async def test_release_gate_auto_redo_uses_existing_scoped_redo_for_real_runs() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -4912,10 +13207,163 @@ def test_release_gate_quality_metadata_records_followup_tasks() -> None:
     assert metadata["warning_repair"]["before_warn_count"] == 1
     assert metadata["warning_repair"]["target_count"] == 1
     assert metadata["warning_repair"]["targets"][0]["target_section"] == "Pricing Analysis"
+    assert (
+        metadata["warning_repair"]["targets"][0]["acceptance_rule"]
+        == "Collect a second independent pricing source."
+    )
     assert metadata["redo_scopes"][0]["target_subagent"] == "pricing"
-    assert "## Release Gate Follow-up Repairs" in projection.report_version.report_md
-    assert projection.report_version.report_md.count("## Release Gate Follow-up Repairs") == 1
-    assert "Collect a second independent pricing source." in projection.report_version.report_md
+    assert "## Release Gate Follow-up Repairs" not in projection.report_version.report_md
+    assert "claim_self_consistency_required: 1 warning(s)" not in (
+        projection.report_version.report_md
+    )
+    assert "Collect a second independent pricing source." not in projection.report_version.report_md
+
+
+def test_release_gate_quality_metadata_records_blocked_status_in_report() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    projection = EnterpriseRunProjection(
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-1",
+        report_version=ReportVersionRecord(
+            id="report-version-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id="run-1",
+            version_number=1,
+            topic_normalized="release-gate-blocked",
+            competitor_layer="L1",
+            competitor_set_hash="hash",
+            report_md=(
+                "# Report\n\n"
+                "## Final QA Gate Status\n"
+                "**Status: passed.** No unresolved deterministic QA findings were recorded."
+            ),
+        ),
+    )
+
+    changed = service._attach_release_gate_quality_metadata(projection, _blocked_release_gate())
+    metadata = projection.report_version.quality_metadata["release_gate"]
+
+    assert changed is True
+    assert metadata["allowed"] is False
+    assert metadata["status"] == "blocked"
+    assert metadata["warning_repair"]["changed"] is True
+    assert "## Release Gate Follow-up Repairs" not in projection.report_version.report_md
+    assert (
+        "- Release gate status: blocked; 1 blocker(s), 0 warning(s), "
+        "1 total issue(s)."
+    ) not in projection.report_version.report_md
+    assert "claim_uses_low_confidence_evidence: 1 blocker(s)" not in (
+        projection.report_version.report_md
+    )
+
+
+def test_release_gate_quality_metadata_uses_current_projection_scope() -> None:
+    store = EnterpriseMemoryStore()
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+        enterprise_store=store,
+    )
+    detail = RunDetail(
+        id="run-current-scope",
+        topic="Release gate current scope",
+        status="completed",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="Release gate current scope",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+    )
+    context = store.start_run(detail, project_id="project-current-scope")
+    competitor_id = context.competitor_id_map["Cursor"]
+    old_evidence = EvidenceRecord(
+        id="evidence-old",
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        run_id=detail.id,
+        raw_source_id="raw-old",
+        competitor_id=competitor_id,
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Old pricing",
+        snippet="Old pricing source.",
+        content_hash="old",
+        reliability_score=0.9,
+    )
+    fresh_evidence = EvidenceRecord(
+        id="evidence-fresh",
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        run_id=detail.id,
+        raw_source_id="raw-fresh",
+        competitor_id=competitor_id,
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Fresh pricing",
+        snippet="Fresh pricing source.",
+        content_hash="fresh",
+        reliability_score=0.9,
+    )
+    old_version = ReportVersionRecord(
+        id="report-version-current-scope",
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        run_id=detail.id,
+        version_number=1,
+        topic_normalized="release-gate-current-scope",
+        competitor_layer="L1",
+        competitor_set_hash="hash-current-scope",
+        report_md="# Report\n[source:raw-old]",
+        evidence_ids=[old_evidence.id],
+    )
+    store.save_projection(
+        EnterpriseRunProjection(
+            workspace_id=context.workspace_id,
+            project_id=context.project_id,
+            run_id=detail.id,
+            evidence_records=[old_evidence],
+            report_version=old_version,
+        )
+    )
+    fresh_projection = EnterpriseRunProjection(
+        workspace_id=context.workspace_id,
+        project_id=context.project_id,
+        run_id=detail.id,
+        evidence_records=[old_evidence, fresh_evidence],
+        report_version=old_version.model_copy(
+            update={
+                "report_md": "# Report\n[source:raw-old][source:raw-fresh]",
+                "evidence_ids": [old_evidence.id, fresh_evidence.id],
+            }
+        ),
+    )
+
+    service._attach_release_gate_quality_metadata(fresh_projection, _blocked_release_gate())
+
+    scope = fresh_projection.report_version.quality_metadata["release_gate"]["report_scope"]
+    assert scope["scoped_evidence_ids"] == [old_evidence.id, fresh_evidence.id]
 
 
 @pytest.mark.asyncio
@@ -5782,6 +14230,428 @@ def test_writer_source_digest_omits_noisy_snippet() -> None:
     assert digest[0]["snippet_quality"] == "omitted_no_clean_business_snippet"
 
 
+def test_writer_source_digest_preserves_clean_business_snippet() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    snippet = (
+        "Enterprise engineering teams use the product for agentic coding, "
+        "repository modernization, pull request automation, secure rollout governance, "
+        "budget predictability, onboarding consistency, workflow migration, "
+        "developer productivity analysis, debugging and fixes, refactoring, "
+        "IDE workflow consolidation, and audit-ready adoption planning."
+    )
+    source = RawSource(
+        id="persona-long",
+        competitor="A",
+        dimension="persona",
+        source_type="interview_record",
+        title="A persona interview",
+        url=None,
+        snippet=snippet,
+        content_hash="persona-long-hash",
+        confidence=0.9,
+    )
+
+    digest = service._writer_source_digest([source])
+
+    assert digest[0]["snippet"] == snippet
+
+
+def test_writer_source_ids_for_chinese_user_research_prefers_survey_and_interview_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-zh-citation-user-research",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["GitHub Copilot"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="github-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                snippet="GitHub Copilot pricing plans.",
+                content_hash="github-pricing-hash",
+                confidence=0.98,
+            ),
+            RawSource(
+                id="github-persona-survey",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="GitHub Copilot persona survey synthesis",
+                snippet="Simulated survey research with adoption blockers and switching triggers.",
+                content_hash="github-persona-survey-hash",
+                confidence=0.76,
+            ),
+            RawSource(
+                id="github-persona-interview",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="interview_record",
+                title="GitHub Copilot persona interview synthesis",
+                snippet="Synthetic interview record with buyer concerns and user feedback.",
+                content_hash="github-persona-interview-hash",
+                confidence=0.82,
+            ),
+        ],
+    )
+
+    source_ids = service._source_ids_for_report_line(
+        detail,
+        "用户画像调查和访谈记录显示，企业买家关注治理、预算审批和切换风险。",
+    )
+
+    assert source_ids[:2] == ["github-persona-survey", "github-persona-interview"]
+    assert "github-pricing" not in source_ids[:2]
+
+
+def test_writer_hardens_chinese_user_research_with_persona_sources() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-zh-hardening-user-research",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["GitHub Copilot"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="github-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                snippet="GitHub Copilot pricing plans.",
+                content_hash="github-pricing-hash",
+                confidence=0.98,
+            ),
+            RawSource(
+                id="github-persona-survey",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="GitHub Copilot persona survey synthesis",
+                snippet="Simulated survey research with adoption blockers and switching triggers.",
+                content_hash="github-persona-survey-hash",
+                confidence=0.76,
+            ),
+        ],
+    )
+    markdown = "## 用户研究证据\n用户画像调查显示买家关注治理和预算审批。"
+
+    hardened = service._ensure_report_claim_citations(detail, markdown)
+
+    assert "[source:github-persona-survey]" in hardened
+    assert "[source:github-pricing]" not in hardened
+
+
+def test_writer_source_ids_for_chinese_pricing_user_overlap_keeps_pricing_first() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-zh-citation-pricing-user-overlap",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["GitHub Copilot"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="github-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                snippet="GitHub Copilot pricing plans.",
+                content_hash="github-pricing-hash",
+                confidence=0.98,
+            ),
+            RawSource(
+                id="github-persona-survey",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="GitHub Copilot persona survey synthesis",
+                snippet="Simulated survey research with adoption blockers and switching triggers.",
+                content_hash="github-persona-survey-hash",
+                confidence=0.76,
+            ),
+            RawSource(
+                id="github-persona-interview",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="interview_record",
+                title="GitHub Copilot persona interview synthesis",
+                snippet="Synthetic interview record with buyer concerns and user feedback.",
+                content_hash="github-persona-interview-hash",
+                confidence=0.82,
+            ),
+        ],
+    )
+    line = "GitHub Copilot 企业用户按席位定价，每月费用随套餐变化。"
+
+    source_ids = service._source_ids_for_report_line(detail, line)
+    hardened = service._ensure_report_claim_citations(detail, line)
+
+    assert source_ids[0] == "github-pricing"
+    assert "[source:github-pricing]" in hardened
+
+
+def test_writer_source_ids_for_english_pricing_user_overlap_keeps_pricing_first() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-en-citation-pricing-user-overlap",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["GitHub Copilot"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="github-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                snippet="GitHub Copilot pricing plans.",
+                content_hash="github-pricing-hash",
+                confidence=0.98,
+            ),
+            RawSource(
+                id="github-persona-survey",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="GitHub Copilot persona survey synthesis",
+                snippet="Simulated survey research with adoption blockers and switching triggers.",
+                content_hash="github-persona-survey-hash",
+                confidence=0.76,
+            ),
+            RawSource(
+                id="github-persona-interview",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="interview_record",
+                title="GitHub Copilot persona interview synthesis",
+                snippet="Synthetic interview record with buyer concerns and user feedback.",
+                content_hash="github-persona-interview-hash",
+                confidence=0.82,
+            ),
+        ],
+    )
+
+    source_ids = service._source_ids_for_report_line(
+        detail,
+        "Enterprise users compare GitHub Copilot pricing by seat and monthly cost.",
+    )
+
+    assert source_ids[0] == "github-pricing"
+
+
+def test_writer_chinese_pricing_persona_overlap_ranks_pricing_first() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-zh-citation-pricing-persona-raw-order",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["GitHub Copilot"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="github-persona-survey",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="GitHub Copilot persona survey synthesis",
+                snippet="Simulated survey research with adoption blockers and switching triggers.",
+                content_hash="github-persona-survey-hash",
+                confidence=0.76,
+            ),
+            RawSource(
+                id="github-persona-interview",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="interview_record",
+                title="GitHub Copilot persona interview synthesis",
+                snippet="Synthetic interview record with buyer concerns and user feedback.",
+                content_hash="github-persona-interview-hash",
+                confidence=0.82,
+            ),
+            RawSource(
+                id="github-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                snippet="GitHub Copilot pricing plans.",
+                content_hash="github-pricing-hash",
+                confidence=0.98,
+            ),
+        ],
+    )
+    line = "GitHub Copilot 企业用户按席位定价，每月费用随套餐变化。"
+
+    source_ids = service._source_ids_for_report_line(detail, line)
+    hardened = service._ensure_report_claim_citations(detail, line)
+
+    assert source_ids[0] == "github-pricing"
+    assert "[source:github-pricing]" in hardened
+
+
+def test_writer_feature_persona_overlap_ranks_feature_first() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-en-citation-feature-persona-raw-order",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["GitHub Copilot"],
+            dimensions=["feature", "persona"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="github-persona-survey",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="GitHub Copilot persona survey synthesis",
+                snippet="Simulated survey research with adoption blockers and switching triggers.",
+                content_hash="github-persona-survey-hash",
+                confidence=0.76,
+            ),
+            RawSource(
+                id="github-persona-interview",
+                competitor="GitHub Copilot",
+                dimension="persona",
+                source_type="interview_record",
+                title="GitHub Copilot persona interview synthesis",
+                snippet="Synthetic interview record with buyer concerns and user feedback.",
+                content_hash="github-persona-interview-hash",
+                confidence=0.82,
+            ),
+            RawSource(
+                id="github-feature",
+                competitor="GitHub Copilot",
+                dimension="feature",
+                source_type="webpage_verified",
+                title="GitHub Copilot features",
+                snippet="GitHub Copilot supports code completion and repository context.",
+                content_hash="github-feature-hash",
+                confidence=0.94,
+            ),
+        ],
+    )
+
+    source_ids = service._source_ids_for_report_line(
+        detail,
+        "Enterprise users compare GitHub Copilot code completion capability and context features.",
+    )
+
+    assert source_ids[0] == "github-feature"
+
+
 def test_deterministic_payload_uses_normalized_fields_before_noisy_snippet() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -5870,6 +14740,188 @@ def test_writer_source_digest_exposes_normalized_fields() -> None:
     assert "$20/month" in str(digest[0]["snippet"])
     assert "normalized_fields" in digest[0]
     assert "snippet_quality" not in digest[0]
+
+
+def test_writer_source_digest_compacts_duplicate_normalized_field_text() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    huge_quote = "OpenAI pricing includes model rates and request limits. " * 500
+    source = RawSource(
+        id="pricing-a",
+        competitor="A",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="A pricing",
+        url="https://a.example/pricing",
+        snippet="A Pro costs $20/month with 500 requests.",
+        content_hash="pricing-a-hash",
+        confidence=0.9,
+        metadata={
+            "normalized_fields": [
+                {
+                    "kind": "pricing",
+                    "model_type": "subscription_saas",
+                    "tier_name": "Pro",
+                    "price": "$20/month",
+                    "billing_cycle": "monthly",
+                    "usage_limit": "500 requests",
+                    "source_quote": huge_quote,
+                    "raw_text": huge_quote,
+                    "html": huge_quote,
+                }
+            ]
+        },
+    )
+
+    digest = service._writer_source_digest([source])
+
+    digest_json = json.dumps(digest[0], ensure_ascii=False)
+    normalized_fields = digest[0]["normalized_fields"]
+    assert isinstance(normalized_fields, list)
+    assert normalized_fields[0]["kind"] == "pricing"
+    assert normalized_fields[0]["tier_name"] == "Pro"
+    assert normalized_fields[0]["price"] == "$20/month"
+    assert normalized_fields[0]["usage_limit"] == "500 requests"
+    assert "source_quote" in normalized_fields[0]
+    assert "raw_text" not in normalized_fields[0]
+    assert "html" not in normalized_fields[0]
+    assert len(digest_json) < 5000
+
+
+def test_writer_source_digest_exposes_community_metadata() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    source = RawSource(
+        id="reddit-cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="reddit_thread",
+        title="Cursor pricing reddit",
+        url="https://reddit.com/r/cursor/comments/abc",
+        snippet="Cursor Pro is $20 per month.",
+        content_hash="hash",
+        confidence=0.62,
+        metadata={
+            "community_evidence": True,
+            "community_source_type": "reddit_thread",
+            "community_authority_signal": "user",
+            "official_commitment": False,
+            "community_claim_clusters": [
+                {
+                    "kind": "pricing",
+                    "label": "community_observed",
+                    "claim": "Community sources report pricing at $20 per month.",
+                    "source_ids": ["reddit-cursor-pricing"],
+                    "confidence": 0.62,
+                    "evidence": ["Cursor Pro is $20 per month."],
+                }
+            ],
+        },
+    )
+
+    digest = service._writer_source_digest([source])
+
+    assert digest[0]["source_type"] == "reddit_thread"
+    assert digest[0]["community_evidence"] is True
+    assert digest[0]["official_commitment"] is False
+    assert digest[0]["community_claim_clusters"][0]["label"] == "community_observed"
+
+
+def test_writer_source_digest_projects_community_clusters_compactly() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    long_claim = "Community users report pricing caveats. " + ("claim-detail " * 80)
+    long_evidence = "A long user quote about practical pricing caveats. " + (
+        "evidence-detail " * 80
+    )
+    long_authority_signal = "community moderator with repeated product usage " + (
+        "authority-detail " * 20
+    )
+    clusters = [
+        {
+            "kind": "pricing",
+            "label": "community_observed",
+            "claim": long_claim,
+            "source_ids": [f"community-source-{index}" for index in range(8)],
+            "official_source_ids": [f"official-source-{index}" for index in range(8)],
+            "confidence": "0.6789",
+            "evidence": [long_evidence for _ in range(5)],
+            "normalized_value": "$20/month",
+            "conflict_values": [f"conflict-{index}" for index in range(8)],
+            "debug_object": object(),
+        },
+        *(
+            {
+                "kind": "pricing",
+                "label": "community_contested",
+                "claim": f"Cluster {index} claim",
+                "source_ids": [f"community-source-{index}"],
+                "confidence": 0.5,
+                "evidence": [f"Evidence {index}"],
+            }
+            for index in range(1, 7)
+        ),
+    ]
+    source = RawSource(
+        id="community-pricing-a",
+        competitor="A",
+        dimension="pricing",
+        source_type="reddit_thread",
+        title="A pricing community thread",
+        url="https://reddit.com/r/a/comments/pricing",
+        snippet="Community users report practical pricing caveats and usage limits.",
+        content_hash="community-pricing-a-hash",
+        confidence=0.68,
+        metadata={
+            "community_evidence": True,
+            "community_source_type": object(),
+            "community_authority_signal": long_authority_signal,
+            "community_claim_clusters": clusters,
+        },
+    )
+
+    digest = service._writer_source_digest([source])
+    projected_clusters = digest[0]["community_claim_clusters"]
+
+    json.dumps(digest, ensure_ascii=False)
+    assert "community_source_type" not in digest[0]
+    assert len(digest[0]["community_authority_signal"]) <= 83
+    assert len(projected_clusters) == 5
+    assert "debug_object" not in projected_clusters[0]
+    assert len(projected_clusters[0]["claim"]) <= 183
+    assert len(projected_clusters[0]["source_ids"]) == 6
+    assert len(projected_clusters[0]["official_source_ids"]) == 6
+    assert projected_clusters[0]["confidence"] == 0.679
+    assert len(projected_clusters[0]["evidence"]) == 3
+    assert all(len(item) <= 183 for item in projected_clusters[0]["evidence"])
+    assert len(projected_clusters[0]["conflict_values"]) == 5
 
 
 def test_deterministic_feature_payload_uses_shared_taxonomy() -> None:
@@ -6339,6 +15391,48 @@ def test_deterministic_pricing_payload_maps_claude_code_max_tiers() -> None:
         for tier in tiers
         if tier["price"] in {"$100/month", "$200/month"}
     ] == [("Max", "$100/month"), ("Max", "$200/month")]
+
+
+def test_deterministic_pricing_payload_ignores_credit_balance_prices() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    sources = [
+        {
+            "id": "copilot-pricing",
+            "title": "GitHub Copilot pricing",
+            "snippet": (
+                "Business costs $19 per user per month. "
+                "Enterprise costs $39 per user per month. "
+                "A promotional trial balance mentions $70 in credits, but that is "
+                "not an Enterprise plan price."
+            ),
+            "confidence": 0.95,
+        }
+    ]
+
+    pricing = service._deterministic_structured_knowledge_payload(
+        competitor="GitHub Copilot",
+        dimension="pricing",
+        dimension_sources=sources,
+    )
+
+    tiers = pricing["pricing_model"]["tiers"]
+    assert ("Business", "$19 per user per month") in [
+        (tier["name"], tier["price"]) for tier in tiers
+    ]
+    assert ("Enterprise", "$39 per user per month") in [
+        (tier["name"], tier["price"]) for tier in tiers
+    ]
+    assert "$70" not in {tier["price"] for tier in tiers}
 
 
 def test_structured_pricing_payload_appends_missing_paid_tiers_from_sources() -> None:
@@ -6975,6 +16069,41 @@ async def test_demo_pipeline_uses_same_langgraph_fanout_shape() -> None:
         await service._graph_checkpointer.aclose()
 
 
+def test_hitl_resume_request_accepts_competitor_edits() -> None:
+    request = HitlResumeRequest(
+        decision="modify_plan",
+        dimensions=["pricing", "feature"],
+        competitors=["Cursor", "GitHub Copilot", "Windsurf"],
+        competitor_edits=[
+            {
+                "action": "rename",
+                "name": "Replit",
+                "new_name": "Windsurf",
+                "reason": "Windsurf is the direct AI IDE competitor.",
+                "source_note": "Reviewer correction",
+            },
+            {
+                "action": "remove",
+                "name": "Replit",
+                "reason": "Adjacent market, not target market.",
+            },
+        ],
+    )
+
+    assert request.competitors == ["Cursor", "GitHub Copilot", "Windsurf"]
+    assert request.competitor_edits[0].action == "rename"
+    assert request.competitor_edits[0].new_name == "Windsurf"
+    assert request.competitor_edits[1].action == "remove"
+
+
+def test_hitl_resume_request_keeps_existing_payload_compatible() -> None:
+    request = HitlResumeRequest(decision="modify_plan", dimensions=["feature"])
+
+    assert request.dimensions == ["feature"]
+    assert request.competitors is None
+    assert request.competitor_edits == []
+
+
 @pytest.mark.asyncio
 async def test_hitl_uses_langgraph_command_resume_and_updates_plan() -> None:
     service = RunService(
@@ -7068,6 +16197,530 @@ async def test_hitl_uses_langgraph_command_resume_and_updates_plan() -> None:
             and event.payload["hitl_lifecycle"]["lifecycle_stage"] == "resumed"
             for event in service.get_trace(detail.id) or []
         )
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_planner_hitl_resume_updates_competitors_and_discovery() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    async def fake_resume_graph(run_id, request):  # noqa: ANN001, ANN202
+        return None
+
+    service._resume_interrupted_graph = fake_resume_graph  # type: ignore[method-assign]
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="AI IDE",
+                competitors=["Cursor", "GitHub Co-pilot", "Replit"],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+        record = service._runs[detail.id]
+        record.pending_interrupts["planner"] = {
+            "stage": "planner",
+            "graph_kind": "real",
+            "thread_id": "thread-plan-review",
+            "interrupt_node": "planner_hitl",
+        }
+        record.detail.competitor_discovery = CompetitorDiscovery(
+            query="AI IDE competitors",
+            selected_competitors=["Cursor", "GitHub Co-pilot", "Replit"],
+            candidates=[
+                CompetitorCandidate(
+                    name="Cursor",
+                    rank=1,
+                    selected=True,
+                    rationale="Direct AI IDE.",
+                    confidence=0.9,
+                ),
+                CompetitorCandidate(
+                    name="GitHub Co-pilot",
+                    rank=2,
+                    selected=True,
+                    rationale="Direct coding assistant with spelling variant.",
+                    confidence=0.8,
+                ),
+                CompetitorCandidate(
+                    name="Replit",
+                    rank=3,
+                    selected=True,
+                    rationale="Adjacent coding platform.",
+                    confidence=0.55,
+                ),
+            ],
+        )
+        record.detail.plan.homepage_hints = {
+            "Cursor": "https://cursor.com",
+            "GitHub Co-pilot": "https://github.com/features/copilot",
+            "Replit": "https://replit.com",
+        }
+        record.detail.plan.homepage_verified = {
+            "Cursor": True,
+            "GitHub Co-pilot": True,
+            "Replit": True,
+        }
+
+        updated = await service.resume(
+            detail.id,
+            HitlResumeRequest(
+                decision="modify_plan",
+                dimensions=["pricing", "feature"],
+                competitors=["Cursor", "GitHub Copilot", "Windsurf"],
+                competitor_edits=[
+                    {
+                        "action": "rename",
+                        "name": "GitHub Co-pilot",
+                        "new_name": "GitHub Copilot",
+                        "reason": "Normalize product spelling.",
+                    },
+                    {
+                        "action": "remove",
+                        "name": "Replit",
+                        "reason": "Adjacent market.",
+                    },
+                    {
+                        "action": "add",
+                        "name": "Windsurf",
+                        "reason": "Direct buyer comparison.",
+                        "source_note": "Reviewer supplied.",
+                    },
+                ],
+            ),
+        )
+
+        assert updated is not None
+        assert updated.plan.competitors == ["Cursor", "GitHub Copilot", "Windsurf"]
+        assert updated.plan.dimensions == ["pricing", "feature"]
+        assert [
+            (task.stage, task.competitor, task.dimension)
+            for task in updated.plan.task_decomposition
+            if task.stage == "collector"
+        ] == [
+            ("collector", "Cursor", "pricing"),
+            ("collector", "Cursor", "feature"),
+            ("collector", "GitHub Copilot", "pricing"),
+            ("collector", "GitHub Copilot", "feature"),
+            ("collector", "Windsurf", "pricing"),
+            ("collector", "Windsurf", "feature"),
+        ]
+        assert updated.competitor_discovery is not None
+        assert updated.competitor_discovery.selected_competitors == [
+            "Cursor",
+            "GitHub Copilot",
+            "Windsurf",
+        ]
+        candidate_by_name = {
+            candidate.name: candidate for candidate in updated.competitor_discovery.candidates
+        }
+        assert candidate_by_name["Cursor"].selected is True
+        assert candidate_by_name["GitHub Co-pilot"].selected is False
+        assert candidate_by_name["GitHub Copilot"].selected is True
+        assert candidate_by_name["Replit"].selected is False
+        assert candidate_by_name["Windsurf"].selected is True
+        assert updated.plan.homepage_hints == {
+            "Cursor": "https://cursor.com",
+            "GitHub Copilot": "https://github.com/features/copilot",
+        }
+        assert updated.plan.homepage_verified == {"Cursor": True, "GitHub Copilot": True}
+
+        lifecycle_messages = [
+            message
+            for message in updated.agent_messages
+            if message.message_type == "hitl_lifecycle"
+        ]
+        assert lifecycle_messages[0].payload["hitl_lifecycle"]["metadata"]["competitors"] == [
+            "Cursor",
+            "GitHub Copilot",
+            "Windsurf",
+        ]
+        assert lifecycle_messages[0].payload["hitl_lifecycle"]["metadata"]["competitor_edits"][0][
+            "action"
+        ] == "rename"
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_resume_uses_current_hitl_node_when_stale_pending_interrupt_exists() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    async def fake_resume_graph(run_id, request):  # noqa: ANN001, ANN202
+        return None
+
+    service._resume_interrupted_graph = fake_resume_graph  # type: ignore[method-assign]
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Stale HITL pending",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+        record = service._runs[detail.id]
+        record.detail.status = "interrupted"
+        record.detail.current_node = "qa_hitl"
+        record.pending_interrupts["planner"] = {
+            "stage": "planner",
+            "graph_kind": "real",
+            "thread_id": detail.id,
+            "interrupt_node": "planner_hitl",
+        }
+        record.pending_interrupts["qa"] = {
+            "stage": "qa",
+            "graph_kind": "real",
+            "thread_id": detail.id,
+            "interrupt_node": "qa_hitl",
+        }
+
+        await service.resume(detail.id, HitlResumeRequest(decision="accept"))
+
+        lifecycle_messages = [
+            message
+            for message in record.detail.agent_messages
+            if message.message_type == "hitl_lifecycle"
+        ]
+        assert lifecycle_messages[-2].payload["hitl_lifecycle"]["stage"] == "qa"
+        assert lifecycle_messages[-2].payload["hitl_lifecycle"]["review_kind"] == "qa_review"
+        assert (
+            lifecycle_messages[-2].payload["hitl_lifecycle"]["metadata"]["pending_interrupt"][
+                "interrupt_node"
+            ]
+            == "qa_hitl"
+        )
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_resume_marks_interrupt_as_in_progress_before_graph_consumes_it() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+    resume_calls = 0
+
+    async def fake_resume_graph(run_id, request):  # noqa: ANN001, ANN202
+        nonlocal resume_calls
+        resume_calls += 1
+        await asyncio.sleep(0)
+
+    service._resume_interrupted_graph = fake_resume_graph  # type: ignore[method-assign]
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Duplicate HITL resume",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+        record = service._runs[detail.id]
+        record.detail.status = "interrupted"
+        record.detail.current_node = "qa_hitl"
+        record.pending_interrupts["qa"] = {
+            "stage": "qa",
+            "graph_kind": "real",
+            "thread_id": detail.id,
+            "interrupt_node": "qa_hitl",
+        }
+
+        await service.resume(detail.id, HitlResumeRequest(decision="accept"))
+        assert service.has_pending_interrupt(detail.id) is False
+
+        await service.resume(detail.id, HitlResumeRequest(decision="accept"))
+        await asyncio.sleep(0)
+
+        assert resume_calls == 1
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stale_hitl_timeout_does_not_resume_non_current_interrupt() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+            hitl_timeout_seconds=0.01,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+    resume_calls = 0
+
+    async def fake_resume(run_id, request):  # noqa: ANN001, ANN202
+        nonlocal resume_calls
+        resume_calls += 1
+        return None
+
+    service.resume = fake_resume  # type: ignore[method-assign]
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Stale HITL timeout",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+        record = service._runs[detail.id]
+        record.detail.status = "interrupted"
+        record.detail.current_node = "qa_hitl"
+        record.pending_interrupts["planner"] = {
+            "stage": "planner",
+            "graph_kind": "real",
+            "thread_id": detail.id,
+            "interrupt_node": "planner_hitl",
+        }
+
+        service._schedule_hitl_timeout(record, "planner")
+        await asyncio.sleep(0.05)
+
+        assert resume_calls == 0
+        assert "planner" not in record.pending_interrupts
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_get_run_repairs_running_hitl_node_to_interrupted() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Stale running HITL status",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+            )
+        )
+        record = service._runs[detail.id]
+        record.detail.status = "running"
+        record.detail.current_node = "qa_hitl"
+        record.pending_interrupts.clear()
+        service._persist_run(detail.id)
+
+        repaired = service.get_run(detail.id)
+
+        assert repaired is not None
+        assert repaired.status == "interrupted"
+        assert repaired.current_node == "qa_hitl"
+        assert service.has_pending_interrupt(detail.id) is True
+        assert service._runs[detail.id].pending_interrupts["qa"]["interrupt_node"] == "qa_hitl"
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_planner_hitl_rejects_competitor_edits_without_modify_plan() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="AI IDE",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+        service._runs[detail.id].pending_interrupts["planner"] = {
+            "stage": "planner",
+            "graph_kind": "real",
+            "thread_id": "thread-plan-review",
+            "interrupt_node": "planner_hitl",
+        }
+
+        with pytest.raises(ValueError, match="modify_plan"):
+            await service.resume(
+                detail.id,
+                HitlResumeRequest(
+                    decision="accept",
+                    competitors=["Cursor", "Windsurf"],
+                    competitor_edits=[
+                        {
+                            "action": "add",
+                            "name": "Windsurf",
+                            "reason": "Direct buyer comparison.",
+                        }
+                    ],
+                ),
+            )
+
+        assert service._runs[detail.id].detail.plan.competitors == ["Cursor"]
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_journal_hydrates_planner_hitl_pending_interrupt_after_restart(tmp_path) -> None:
+    journal = RunJournal(tmp_path / "run_journal.db")
+    settings = Settings(
+        demo_mode=False,
+        ark_api_key="key",
+        ark_model="model",
+        ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+        llm_timeout_seconds=10,
+        llm_temperature=0.2,
+        hitl_enabled=True,
+    )
+    original = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=settings,
+        journal=journal,
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await original.create_run(
+            RunCreateRequest(
+                topic="AI IDE",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+        record = original._runs[detail.id]
+        record.detail.status = "interrupted"
+        record.detail.current_node = "planner_hitl"
+        original._persist_run(detail.id)
+    finally:
+        await original._graph_checkpointer.aclose()
+
+    reloaded = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=settings,
+        journal=journal,
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    async def fake_resume_graph(run_id, request):  # noqa: ANN001, ANN202
+        return None
+
+    reloaded._resume_interrupted_graph = fake_resume_graph  # type: ignore[method-assign]
+
+    try:
+        assert reloaded.has_pending_interrupt(detail.id) is True
+
+        updated = await reloaded.resume(
+            detail.id,
+            HitlResumeRequest(decision="accept", note="Continue after restart."),
+        )
+
+        assert updated is not None
+        assert updated.status == "running"
+    finally:
+        await reloaded._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_planner_hitl_rejects_empty_competitor_edit() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            hitl_enabled=True,
+        ),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="AI IDE",
+                competitors=["Cursor"],
+                dimensions=["pricing"],
+                execution_mode="real",
+            )
+        )
+        service._runs[detail.id].pending_interrupts["planner"] = {
+            "stage": "planner",
+            "graph_kind": "real",
+            "thread_id": "thread-empty-competitors",
+            "interrupt_node": "planner_hitl",
+        }
+
+        with pytest.raises(ValueError, match="At least one competitor"):
+            await service.resume(
+                detail.id,
+                HitlResumeRequest(decision="modify_plan", competitors=[]),
+            )
     finally:
         await service._graph_checkpointer.aclose()
 
@@ -7251,3 +16904,598 @@ async def test_hitl_timeout_auto_accepts_interrupt() -> None:
         assert lifecycle_stages[:3] == ["requested", "timed_out", "resumed"]
     finally:
         await service._graph_checkpointer.aclose()
+
+
+def test_get_run_can_return_compact_detail_without_trace_payloads() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-compact",
+        topic="Compact detail",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(topic="Compact detail", competitors=["A"], dimensions=["pricing"]),
+        trace_spans=[
+            TraceSpan(
+                id="span-1",
+                kind="llm",
+                agent="collector",
+                name="collect",
+                status="ok",
+                duration_ms=12,
+                input_preview="short input",
+                output_preview="short output",
+                full_input="large input" * 1000,
+                full_output="large output" * 1000,
+            )
+        ],
+        agent_messages=[
+            AgentMessage(
+                id="message-1",
+                run_id="run-compact",
+                from_agent="collector",
+                to_agent="analyst",
+                message_type="collected",
+                payload_schema="TestPayload",
+                payload={"body": "large payload" * 1000},
+            )
+        ],
+        tool_call_messages=[
+            ToolCallMessage(
+                id="tool-1",
+                run_id="run-compact",
+                agent="collector",
+                tool_name="fetch_page",
+                status="ok",
+                result={"body": "large tool result" * 1000},
+            )
+        ],
+    )
+    service._runs[detail.id] = RunRecord(detail=detail)
+
+    compact = service.get_run(detail.id, include_trace_payloads=False)
+    full = service.get_run(detail.id)
+
+    assert compact is not None
+    assert compact.trace_spans[0].input_preview == "short input"
+    assert compact.trace_spans[0].full_input == ""
+    assert compact.trace_spans[0].full_output == ""
+    assert compact.agent_messages == []
+    assert compact.tool_call_messages == []
+    assert full is not None
+    assert full.trace_spans[0].full_input.startswith("large input")
+    assert full.agent_messages[0].payload["body"].startswith("large payload")
+
+
+def test_collect_join_annotates_community_claim_clusters() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-clusters",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+    )
+    record = RunRecord(detail=detail)
+    record.detail.raw_sources = [
+        RawSource(
+            id="reddit-cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="reddit_thread",
+            title="Cursor pricing reddit",
+            url="https://reddit.com/r/cursor/comments/abc",
+            snippet="Cursor Pro is $20 per month.",
+            content_hash="reddit-hash",
+            confidence=0.62,
+            metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+        ),
+        RawSource(
+            id="forum-cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="community_forum",
+            title="Cursor pricing forum",
+            url="https://forum.cursor.com/t/pricing/1",
+            snippet="Cursor Pro price is $20 per month.",
+            content_hash="forum-hash",
+            confidence=0.78,
+            metadata={"community_evidence": True, "community_source_type": "community_forum"},
+        ),
+    ]
+
+    service._annotate_community_claim_clusters(record.detail, ["pricing"])
+
+    clusters = record.detail.raw_sources[0].metadata["community_claim_clusters"]
+    assert clusters[0]["label"] == "community_triangulated"
+    assert clusters[0]["confidence"] >= 0.70
+    assert clusters[0]["source_ids"] == ["reddit-cursor-pricing", "forum-cursor-pricing"]
+
+
+def test_collect_join_marks_community_cluster_official_confirmed_when_values_match() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-official-confirmed",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-official-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="official-hash",
+                confidence=0.92,
+            ),
+            RawSource(
+                id="reddit-cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/abc",
+                snippet="Cursor Pro is $20 per month.",
+                content_hash="reddit-hash",
+                confidence=0.62,
+                metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+            ),
+        ],
+    )
+
+    service._annotate_community_claim_clusters(detail, ["pricing"])
+
+    clusters = detail.raw_sources[1].metadata["community_claim_clusters"]
+    assert clusters[0]["label"] == "official_confirmed"
+    assert clusters[0]["confidence"] >= 0.95
+    assert clusters[0]["official_source_ids"] == ["cursor-official-pricing"]
+    assert clusters[0]["source_ids"] == ["reddit-cursor-pricing", "cursor-official-pricing"]
+
+
+def test_collect_join_does_not_official_confirm_generic_usage_limit_claims() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-generic-usage-limit",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-official-limits",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor limits",
+                url="https://cursor.com/pricing",
+                snippet="Cursor usage limits are documented for paid plans.",
+                content_hash="official-limits-hash",
+                confidence=0.91,
+            ),
+            RawSource(
+                id="cursor-reddit-limits",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor usage limits reddit",
+                url="https://reddit.com/r/cursor/comments/limits",
+                snippet="Users report usage limits.",
+                content_hash="reddit-limits-hash",
+                confidence=0.64,
+                metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+            ),
+        ],
+    )
+
+    service._annotate_community_claim_clusters(detail, ["pricing"])
+
+    clusters = detail.raw_sources[1].metadata["community_claim_clusters"]
+    usage_limit_cluster = next(
+        cluster for cluster in clusters if cluster["kind"] == "usage_limit"
+    )
+    assert usage_limit_cluster["label"] != "official_confirmed"
+    assert "official_source_ids" not in usage_limit_cluster
+
+
+def test_comparison_matrix_keeps_community_sources_out_of_official_winner_signal() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-comparator-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Users report Cursor Pro pricing and usage-limit caveats.",
+                content_hash="cursor-reddit-hash",
+                confidence=0.90,
+                metadata={
+                    "community_evidence": True,
+                    "community_source_type": "reddit_thread",
+                    "community_claim_clusters": [
+                        {
+                            "kind": "pricing",
+                            "label": "community_triangulated",
+                            "claim": "Community sources report pricing caveats.",
+                            "source_ids": ["cursor-reddit-pricing", "cursor-forum-pricing"],
+                            "confidence": 0.90,
+                            "evidence": ["Users report Cursor pricing caveats."],
+                        }
+                    ],
+                },
+            ),
+            RawSource(
+                id="cursor-forum-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="community_forum",
+                title="Cursor pricing forum",
+                url="https://forum.cursor.com/t/pricing",
+                snippet="Forum users discuss pricing caveats and quotas.",
+                content_hash="cursor-forum-hash",
+                confidence=0.88,
+                metadata={"community_evidence": True, "community_source_type": "community_forum"},
+            ),
+            RawSource(
+                id="copilot-official-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                url="https://github.com/features/copilot#pricing",
+                snippet="GitHub Copilot official pricing is published.",
+                content_hash="copilot-official-hash",
+                confidence=0.84,
+            ),
+        ],
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+
+    assert matrix.winner_by_dimension["pricing"] == "GitHub Copilot"
+    assert any("[community-adjusted:pricing]" in item for item in matrix.summary)
+    assert any("community_triangulated" in item for item in matrix.summary)
+
+
+def test_comparison_matrix_ignores_community_only_kb_findings_for_official_winner() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-kb-finding-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing"],
+        ),
+        competitor_kbs={
+            "Cursor": CompetitorKB(
+                competitor="Cursor",
+                slices={
+                    "pricing": [
+                        "Community pricing caveat [source:cursor-reddit-pricing]",
+                        "Community quota caveat [source:cursor-reddit-pricing]",
+                    ]
+                },
+                sources=["cursor-reddit-pricing"],
+                confidence=0.9,
+            ),
+            "GitHub Copilot": CompetitorKB(
+                competitor="GitHub Copilot",
+                slices={
+                    "pricing": [
+                        "Official pricing is published [source:copilot-official-pricing]"
+                    ]
+                },
+                sources=["copilot-official-pricing"],
+                confidence=0.84,
+            ),
+        },
+        raw_sources=[
+            RawSource(
+                id="cursor-reddit-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="reddit_thread",
+                title="Cursor pricing reddit",
+                url="https://reddit.com/r/cursor/comments/pricing",
+                snippet="Users report pricing caveats.",
+                content_hash="cursor-reddit-pricing-hash",
+                confidence=0.9,
+                metadata={"community_evidence": True, "community_source_type": "reddit_thread"},
+            ),
+            RawSource(
+                id="copilot-official-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                url="https://github.com/features/copilot#pricing",
+                snippet="GitHub Copilot official pricing is published.",
+                content_hash="copilot-official-pricing-hash",
+                confidence=0.84,
+            ),
+        ],
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+
+    assert matrix.winner_by_dimension["pricing"] == "GitHub Copilot"
+
+
+def test_comparison_matrix_ignores_mismatched_official_finding_citations() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-mismatched-official-finding-citation",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing"],
+        ),
+        competitor_kbs={
+            "Cursor": CompetitorKB(
+                competitor="Cursor",
+                slices={
+                    "pricing": [
+                        "Archived pricing detail [source:cursor-official-archive]"
+                    ]
+                },
+                sources=["cursor-official-archive"],
+                confidence=0.9,
+            )
+        },
+        raw_sources=[
+            RawSource(
+                id="cursor-official-archive",
+                competitor="Cursor",
+                dimension="pricing_archive",
+                source_type="webpage_verified",
+                title="Cursor archived pricing",
+                url="https://cursor.com/pricing/archive",
+                snippet="Cursor archived official pricing is published.",
+                content_hash="cursor-official-archive-hash",
+                confidence=0.91,
+            )
+        ],
+    )
+
+    matrix = service._build_comparison_matrix(detail, {"matrix_summary": []})
+
+    assert matrix.winner_by_dimension["pricing"] == "tie"
+
+
+def test_comparison_matrix_ignores_community_only_llm_winner_signal() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        )
+    )
+    detail = RunDetail(
+        id="run-community-llm-winner-guard",
+        topic="AI coding assistants",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="AI coding assistants",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["review"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-reddit-review",
+                competitor="Cursor",
+                dimension="review",
+                source_type="reddit_thread",
+                title="Cursor review reddit",
+                url="https://reddit.com/r/cursor/comments/review",
+                snippet="Users report pricing confusion and adoption friction.",
+                content_hash="cursor-reddit-review-hash",
+                confidence=0.76,
+                metadata={
+                    "community_evidence": True,
+                    "community_source_type": "reddit_thread",
+                    "community_claim_clusters": [
+                        {
+                            "kind": "complaint",
+                            "label": "community_observed",
+                            "claim": "Users report pricing confusion.",
+                            "source_ids": ["cursor-reddit-review"],
+                            "confidence": 0.76,
+                            "evidence": ["Users report pricing confusion."],
+                        }
+                    ],
+                },
+            )
+        ],
+    )
+
+    matrix = service._build_comparison_matrix(
+        detail,
+        {"winner_by_dimension": {"review": "Cursor"}, "matrix_summary": []},
+    )
+
+    assert matrix.winner_by_dimension["review"] == "tie"
+    assert any("[community-adjusted:review]" in item for item in matrix.summary)
+
+
+def test_writer_source_appendix_backfill_uses_registry_rows() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-appendix-pack",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                snippet="Cursor Pro costs $20 per month.",
+                content_hash="cursor-pricing-hash",
+                confidence=0.96,
+            )
+        ],
+    )
+
+    appendix = service._writer_source_appendix_lines(detail)
+
+    assert any("[source:cursor-pricing]" in line for line in appendix)
+    assert not any("Cursor Pro costs $20 per month." in line for line in appendix)
+
+
+def test_backfill_competitor_deep_dives_uses_competitor_h3() -> None:
+    service = _segmented_writer_service()
+    detail = _segmented_writer_detail(
+        run_id="run-backfill-deep-dive-h3",
+        competitors=["Cursor", "GitHub Copilot"],
+    )
+
+    lines = service._backfill_competitor_deep_dives_section(detail)
+    markdown = "\n".join(lines)
+
+    assert "## Competitor Deep Dives" in markdown
+    assert "\n### Cursor\n" in f"\n{markdown}\n"
+    assert "\n### GitHub Copilot\n" in f"\n{markdown}\n"
+    assert markdown.index("### Cursor") < markdown.index("### GitHub Copilot")

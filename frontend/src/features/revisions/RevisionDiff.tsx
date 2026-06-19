@@ -1,11 +1,14 @@
 import { GitCompareArrows } from "lucide-react";
 import type { RevisionRecord } from "../../api/types";
+import { useTranslation } from '../../stores/i18n';
 
 interface RevisionDiffProps {
+  compact?: boolean;
   revisions: RevisionRecord[];
 }
 
-export function RevisionDiff({ revisions }: RevisionDiffProps) {
+export function RevisionDiff({ compact = false, revisions }: RevisionDiffProps) {
+  const { t } = useTranslation();
   const latest = revisions.length > 0 ? revisions[revisions.length - 1] : undefined;
   const targetCompetitors = latest?.target_competitors?.length
     ? latest.target_competitors.join(", ")
@@ -17,12 +20,12 @@ export function RevisionDiff({ revisions }: RevisionDiffProps) {
   return (
     <section className="panel revision-panel">
       <div className="panel-heading-row">
-        <h2>Revision loop</h2>
+        <h2>{t('revisions.title')}</h2>
         <GitCompareArrows size={17} aria-hidden />
       </div>
 
       {!latest ? (
-        <p>No revisions yet.</p>
+        <p>{t('revisions.noRevisions')}</p>
       ) : (
         <>
           <div className="revision-metrics">
@@ -48,18 +51,35 @@ export function RevisionDiff({ revisions }: RevisionDiffProps) {
             </span>
           </div>
 
-          <div className="revision-diff-grid">
-            <article>
-              <strong>Before</strong>
-              <pre>{latest.before_md || "No prior report body."}</pre>
-            </article>
-            <article>
-              <strong>After</strong>
-              <pre>{latest.after_md || "No updated report body."}</pre>
-            </article>
-          </div>
+          {compact ? (
+            <div className="revision-compact-grid">
+              <article>
+                <strong>Before preview</strong>
+                <p>{compactText(latest.before_md) || "No prior report body."}</p>
+              </article>
+              <article>
+                <strong>After preview</strong>
+                <p>{compactText(latest.after_md) || "No updated report body."}</p>
+              </article>
+            </div>
+          ) : (
+            <div className="revision-diff-grid">
+              <article>
+                <strong>{t('revisions.before')}</strong>
+                <pre>{latest.before_md || "No prior report body."}</pre>
+              </article>
+              <article>
+                <strong>{t('revisions.after')}</strong>
+                <pre>{latest.after_md || "No updated report body."}</pre>
+              </article>
+            </div>
+          )}
         </>
       )}
     </section>
   );
+}
+
+function compactText(markdown: string) {
+  return markdown.replace(/\s+/g, " ").trim().slice(0, 520);
 }

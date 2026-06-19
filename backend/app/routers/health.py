@@ -59,7 +59,7 @@ def health(
         ),
         HealthCheck(
             name="sqlite",
-            status="ok" if journal.load_runs() is not None else "error",
+            status="ok" if journal.ping() else "error",
             detail="run journal opened",
         ),
         _enterprise_store_check(settings),

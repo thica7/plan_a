@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections import Counter
+from collections.abc import Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from packages.refs import merge_ordered_refs
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     ComparisonCell,
@@ -14,6 +17,8 @@ from packages.schema.models import (
     FeatureTree,
     PricingModel,
     RawSource,
+    SWOTAnalysis,
+    SWOTItem,
     UserPersonaModel,
 )
 
@@ -32,6 +37,18 @@ FEATURE_TAXONOMY_ORDER = (
     "enterprise administration",
 )
 
+COMMUNITY_MATRIX_SOURCE_TYPES = {
+    "community_forum",
+    "reddit_thread",
+    "github_discussion",
+    "github_issue",
+    "review_site",
+    "developer_blog",
+    "snippet_only",
+}
+
+COMPARATOR_LLM_MAX_ATTEMPTS = 3
+
 
 class ComparatorAgentMixin:
     async def _real_comparator_step(self, record: RunRecord) -> None:
@@ -44,47 +61,31 @@ class ComparatorAgentMixin:
             message_types={"analyst_qa_result"},
         )
         await self.emit(detail.id, "node_started", "comparator", None, "Calling comparator.")
-        fallback: dict[str, object] = {}
         timeout_seconds = max(0.05, float(self._settings.comparator_timeout_seconds))
-        try:
-            payload = await asyncio.wait_for(
-                self._trace_llm_json(
-                    record,
-                    agent="comparator",
-                    subagent=None,
-                    name="comparison_matrix",
-                    system="You are a comparator. Build a compact cross-competitor matrix summary.",
-                    user=(
-                        f"Topic: {detail.topic}\n"
-                        f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                        f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                        f"Competitor KB JSON: {self._competitor_kb_json(detail)}\n"
-                        "Competitor Knowledge Schema JSON: "
-                        f"{self._competitor_knowledge_json(detail)}\n"
-                        f"Source digest JSON: {self._source_digest_json(detail)}"
-                    ),
-                    schema_hint=(
-                        '{"matrix_summary":["row"],'
-                        '"winner_by_dimension":{"dimension":"competitor or tie"}}'
-                    ),
-                ),
-                timeout=timeout_seconds,
-            )
-        except TimeoutError:
+        payload, fallback = await self._comparator_payload_with_retries(
+            record,
+            timeout_seconds=timeout_seconds,
+        )
+        if fallback.get("used"):
             payload = self._deterministic_comparator_payload(timeout_seconds)
-            fallback = {
-                "reason": "timeout",
-                "timeout_seconds": timeout_seconds,
-                "deterministic_fallback": True,
-            }
-        detail.comparison_matrix = self._build_comparison_matrix(detail, payload)
+        module_status = "fallback" if fallback.get("used") else "llm"
+        detail.comparison_matrix = self._build_comparison_matrix(
+            detail,
+            payload,
+            fallback_used=bool(fallback.get("used")),
+        )
+        self._refresh_swot_analyses(detail)
         self._append_agent_message(
             record,
             from_agent="comparator",
             to_agent="reflector",
             message_type="comparison_matrix_ready",
             payload_schema="ComparisonMatrix",
-            payload={"comparison_matrix": detail.comparison_matrix.model_dump(mode="json")},
+            payload={
+                "comparison_matrix": detail.comparison_matrix.model_dump(mode="json"),
+                "module_status": module_status,
+                "fallback": fallback,
+            },
         )
         detail.updated_at = datetime.utcnow()
         await self.emit(
@@ -92,8 +93,91 @@ class ComparatorAgentMixin:
             "node_completed",
             "comparator",
             None,
-            "Comparator completed.",
-            {"matrix": payload, "fallback": fallback},
+            (
+                "Comparator completed with deterministic fallback."
+                if module_status == "fallback"
+                else "Comparator completed."
+            ),
+            {"matrix": payload, "fallback": fallback, "module_status": module_status},
+        )
+
+    async def _comparator_payload_with_retries(
+        self,
+        record: RunRecord,
+        *,
+        timeout_seconds: float,
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        detail = record.detail
+        last_error: BaseException | None = None
+        last_reason = "empty_content"
+        for attempt in range(1, COMPARATOR_LLM_MAX_ATTEMPTS + 1):
+            try:
+                payload = await asyncio.wait_for(
+                    self._trace_llm_json(
+                        record,
+                        agent="comparator",
+                        subagent=None,
+                        name="comparison_matrix",
+                        system=(
+                            "You are a comparator. Build a compact "
+                            "cross-competitor matrix summary."
+                        ),
+                        user=(
+                            f"Topic: {detail.topic}\n"
+                            f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                            f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                            f"Competitor KB JSON: {self._competitor_kb_json(detail)}\n"
+                            "Competitor Knowledge Schema JSON: "
+                            f"{self._competitor_knowledge_json(detail)}\n"
+                            f"Source digest JSON: {self._source_digest_json(detail)}"
+                        ),
+                        schema_hint=(
+                            '{"matrix_summary":["row"],'
+                            '"winner_by_dimension":{"dimension":"competitor or tie"}}'
+                        ),
+                    ),
+                    timeout=timeout_seconds,
+                )
+                if self._comparator_payload_has_content(payload):
+                    return (
+                        payload,
+                        {
+                            "used": False,
+                            "deterministic_fallback": False,
+                            "attempts": attempt,
+                            "max_attempts": COMPARATOR_LLM_MAX_ATTEMPTS,
+                        },
+                    )
+                last_reason = "empty_content"
+                last_error = RuntimeError("Comparator LLM returned empty content.")
+            except TimeoutError as exc:
+                last_reason = "timeout"
+                last_error = exc
+            except Exception as exc:  # noqa: BLE001 - comparator can degrade after retries.
+                last_reason = "llm_error"
+                last_error = exc
+
+        fallback: dict[str, object] = {
+            "used": True,
+            "reason": last_reason,
+            "timeout_seconds": timeout_seconds,
+            "attempts": COMPARATOR_LLM_MAX_ATTEMPTS,
+            "max_attempts": COMPARATOR_LLM_MAX_ATTEMPTS,
+            "deterministic_fallback": True,
+        }
+        if last_error is not None and last_reason != "timeout":
+            fallback["error"] = str(last_error)
+        return {}, fallback
+
+    def _comparator_payload_has_content(self, payload: object) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        summary = payload.get("matrix_summary")
+        if isinstance(summary, list) and any(str(item).strip() for item in summary):
+            return True
+        winners = payload.get("winner_by_dimension")
+        return isinstance(winners, dict) and any(
+            str(value).strip() for value in winners.values()
         )
 
     def _deterministic_comparator_payload(self, timeout_seconds: float) -> dict[str, object]:
@@ -107,7 +191,13 @@ class ComparatorAgentMixin:
             "winner_by_dimension": {},
         }
 
-    def _build_comparison_matrix(self, detail: RunDetail, payload: dict) -> ComparisonMatrix:
+    def _build_comparison_matrix(
+        self,
+        detail: RunDetail,
+        payload: dict,
+        *,
+        fallback_used: bool = False,
+    ) -> ComparisonMatrix:
         cells: list[ComparisonCell] = []
         for dimension in detail.plan.dimensions:
             for competitor in detail.plan.competitors:
@@ -147,6 +237,13 @@ class ComparatorAgentMixin:
             cells,
             {str(key): str(value) for key, value in payload_winners.items()},
         )
+        if fallback_used:
+            voted_winners, fallback_summary = self._conservative_fallback_winners(
+                detail,
+                cells,
+                voted_winners,
+            )
+            vote_summary = [*vote_summary, *fallback_summary]
         return ComparisonMatrix(
             competitors=detail.plan.competitors,
             dimensions=detail.plan.dimensions,
@@ -154,10 +251,198 @@ class ComparatorAgentMixin:
             winner_by_dimension=voted_winners,
             summary=[
                 *self._matrix_standardization_summary(detail),
+                *self._community_matrix_summary(detail),
                 *self._string_list(payload.get("matrix_summary")),
                 *vote_summary,
             ],
         )
+
+    def _conservative_fallback_winners(
+        self,
+        detail: RunDetail,
+        cells: list[ComparisonCell],
+        voted_winners: dict[str, str],
+    ) -> tuple[dict[str, str], list[str]]:
+        source_by_id = {source.id: source for source in detail.raw_sources}
+        cell_by_key = {(cell.dimension, cell.competitor): cell for cell in cells}
+        winners = dict(voted_winners)
+        summary: list[str] = []
+        for dimension, winner in list(winners.items()):
+            if winner == "tie":
+                continue
+            official_counts = {
+                competitor: self._official_matrix_source_count(
+                    self._matrix_cell(cell_by_key, dimension, competitor),
+                    source_by_id,
+                )
+                for competitor in detail.plan.competitors
+            }
+            if all(count > 0 for count in official_counts.values()):
+                continue
+            winners[dimension] = "tie"
+            summary.append(
+                "[fallback-conservative:{dimension}] winner=tie; "
+                "deterministic fallback had incomplete scoped official coverage "
+                "({counts})".format(
+                    dimension=dimension,
+                    counts=", ".join(
+                        f"{competitor}={count}"
+                        for competitor, count in official_counts.items()
+                    ),
+                )
+            )
+        return winners, summary
+
+    def _refresh_swot_analyses(self, detail: RunDetail) -> None:
+        matrix = detail.comparison_matrix
+        if matrix is None:
+            return
+        cells_by_competitor: dict[str, list[ComparisonCell]] = {
+            competitor: [] for competitor in detail.plan.competitors
+        }
+        for cell in matrix.cells:
+            cells_by_competitor.setdefault(cell.competitor, []).append(cell)
+
+        for competitor in detail.plan.competitors:
+            knowledge = detail.competitor_knowledge.get(competitor)
+            if knowledge is None:
+                continue
+
+            valid_competitors = set(detail.plan.competitors)
+            strengths: list[SWOTItem] = []
+            weaknesses: list[SWOTItem] = []
+            opportunities: list[SWOTItem] = []
+
+            competitor_cells = cells_by_competitor.get(competitor, [])
+            cell_by_dimension = {cell.dimension: cell for cell in competitor_cells}
+            for dimension, winner in matrix.winner_by_dimension.items():
+                cell = cell_by_dimension.get(dimension)
+                if cell is None:
+                    continue
+                normalized_winner = winner.strip()
+                is_tie = normalized_winner.casefold() == "tie"
+                if normalized_winner == competitor:
+                    strengths.append(
+                        self._swot_item(
+                            f"Wins {dimension} comparison: {cell.value}",
+                            cell.source_ids,
+                            cell.confidence,
+                        )
+                    )
+                elif (
+                    normalized_winner in valid_competitors
+                    and normalized_winner != competitor
+                    and not is_tie
+                ):
+                    weaknesses.append(
+                        self._swot_item(
+                            f"Loses {dimension} comparison to {normalized_winner}: "
+                            f"{cell.value}",
+                            cell.source_ids,
+                            cell.confidence,
+                        )
+                    )
+
+            review_summary = knowledge.review_summary
+            for item in review_summary.praise_themes:
+                strengths.append(
+                    self._swot_item(item.theme, item.source_ids, item.confidence)
+                )
+            for item in [
+                *review_summary.complaint_themes,
+                *review_summary.adoption_blockers,
+            ]:
+                weaknesses.append(
+                    self._swot_item(item.theme, item.source_ids, item.confidence)
+                )
+            for item in review_summary.switching_triggers:
+                opportunities.append(
+                    self._swot_item(item.theme, item.source_ids, item.confidence)
+                )
+
+            if not opportunities:
+                persona_claim = next(
+                    (
+                        claim
+                        for claim in knowledge.user_personas.summary_claims
+                        if claim.source_ids
+                    ),
+                    None,
+                )
+                if persona_claim is not None:
+                    opportunities.append(
+                        self._swot_item(
+                            persona_claim.claim,
+                            persona_claim.source_ids,
+                            persona_claim.confidence,
+                        )
+                    )
+
+            threats = [
+                self._swot_item(
+                    "Threat requires more competitor or adjacent-workflow evidence."
+                )
+            ]
+            all_items = [*strengths, *weaknesses, *opportunities, *threats]
+            kb_sources = detail.competitor_kbs.get(competitor)
+            knowledge.swot_analysis = SWOTAnalysis(
+                competitor=competitor,
+                strengths=strengths,
+                weaknesses=weaknesses,
+                opportunities=opportunities,
+                threats=threats,
+                source_ids=merge_ordered_refs(
+                    knowledge.source_ids,
+                    kb_sources.sources if kb_sources is not None else [],
+                    *(cell.source_ids for cell in competitor_cells),
+                    review_summary.source_ids,
+                    *(item.source_ids for item in all_items),
+                ),
+                confidence=self._average_swot_confidence(
+                    all_items,
+                    [
+                        self._average_cell_confidence(competitor_cells),
+                        review_summary.confidence,
+                        knowledge.confidence,
+                    ],
+                ),
+            )
+
+    def _swot_item(
+        self,
+        text: str,
+        source_ids: Sequence[str] | None = None,
+        confidence: float = 0.0,
+    ) -> SWOTItem:
+        merged_source_ids = merge_ordered_refs(source_ids or [])
+        return SWOTItem(
+            text=" ".join(text.split()),
+            source_ids=merged_source_ids,
+            confidence=max(0.0, min(1.0, confidence)),
+            evidence_gap=not merged_source_ids,
+        )
+
+    def _average_cell_confidence(self, cells: Sequence[ComparisonCell]) -> float:
+        confidences = [cell.confidence for cell in cells if cell.confidence > 0]
+        if not confidences:
+            return 0.0
+        return max(0.0, min(1.0, sum(confidences) / len(confidences)))
+
+    def _average_swot_confidence(
+        self,
+        items: Sequence[SWOTItem],
+        fallback_confidences: Sequence[float] | None = None,
+    ) -> float:
+        confidences = [
+            item.confidence
+            for item in items
+            if item.source_ids and not item.evidence_gap and item.confidence > 0
+        ]
+        if not confidences and fallback_confidences is not None:
+            confidences = [value for value in fallback_confidences if value > 0]
+        if not confidences:
+            return 0.0
+        return max(0.0, min(1.0, sum(confidences) / len(confidences)))
 
     def _structured_matrix_value(
         self, detail: RunDetail, competitor: str, dimension: str
@@ -505,27 +790,35 @@ class ComparatorAgentMixin:
         winners: dict[str, str] = {}
         summary: list[str] = []
         cell_by_key = {(cell.dimension, cell.competitor): cell for cell in cells}
+        source_by_id = {source.id: source for source in detail.raw_sources}
         for dimension in detail.plan.dimensions:
             signals: dict[str, str] = {}
             evidence_winner = self._winner_from_numeric_signal(
                 {
-                    competitor: len(
-                        self._matrix_cell(cell_by_key, dimension, competitor).source_ids
+                    competitor: self._official_matrix_source_count(
+                        self._matrix_cell(cell_by_key, dimension, competitor),
+                        source_by_id,
                     )
                     for competitor in detail.plan.competitors
                 }
             )
             confidence_winner = self._winner_from_numeric_signal(
                 {
-                    competitor: self._matrix_cell(
-                        cell_by_key, dimension, competitor
-                    ).confidence
+                    competitor: self._official_matrix_confidence(
+                        self._matrix_cell(cell_by_key, dimension, competitor),
+                        source_by_id,
+                    )
                     for competitor in detail.plan.competitors
                 }
             )
             finding_winner = self._winner_from_numeric_signal(
                 {
-                    competitor: self._matrix_finding_count(detail, dimension, competitor)
+                    competitor: self._official_matrix_finding_count(
+                        detail,
+                        dimension,
+                        competitor,
+                        source_by_id,
+                    )
                     for competitor in detail.plan.competitors
                 }
             )
@@ -536,11 +829,20 @@ class ComparatorAgentMixin:
             if finding_winner:
                 signals["findings"] = finding_winner
             llm_winner = payload_winners.get(dimension)
-            if llm_winner in detail.plan.competitors or llm_winner == "tie":
+            if llm_winner == "tie" or (
+                llm_winner in detail.plan.competitors
+                and self._matrix_competitor_has_scoped_official_signal(
+                    detail,
+                    cell_by_key,
+                    dimension,
+                    llm_winner,
+                    source_by_id,
+                )
+            ):
                 signals["llm"] = llm_winner
             winner = self._winner_from_matrix_signals(dimension, signals)
             if winner is None:
-                winner = llm_winner if isinstance(llm_winner, str) and llm_winner else "tie"
+                winner = "tie"
             winners[dimension] = winner
             summary.append(
                 "[majority-vote:{dimension}] winner={winner}; {signals}".format(
@@ -564,6 +866,154 @@ class ComparatorAgentMixin:
             (dimension, competitor),
             ComparisonCell(competitor=competitor, dimension=dimension, value=""),
         )
+
+    def _official_matrix_source_count(
+        self,
+        cell: ComparisonCell,
+        source_by_id: dict[str, RawSource],
+    ) -> int:
+        return sum(
+            1
+            for source_id in cell.source_ids
+            if self._matrix_source_is_official_signal(source_by_id.get(source_id))
+        )
+
+    def _official_matrix_confidence(
+        self,
+        cell: ComparisonCell,
+        source_by_id: dict[str, RawSource],
+    ) -> float:
+        confidences = [
+            source.confidence
+            for source_id in cell.source_ids
+            for source in [source_by_id.get(source_id)]
+            if self._matrix_source_is_official_signal(source)
+        ]
+        return max(confidences, default=0.0)
+
+    def _matrix_source_is_official_signal(self, source: RawSource | None) -> bool:
+        if source is None:
+            return False
+        if source.metadata.get("community_evidence"):
+            return False
+        return source.source_type not in COMMUNITY_MATRIX_SOURCE_TYPES
+
+    def _matrix_competitor_has_scoped_official_signal(
+        self,
+        detail: RunDetail,
+        cell_by_key: dict[tuple[str, str], ComparisonCell],
+        dimension: str,
+        competitor: str,
+        source_by_id: dict[str, RawSource],
+    ) -> bool:
+        cell = self._matrix_cell(cell_by_key, dimension, competitor)
+        if any(
+            self._matrix_source_is_scoped_official_signal(
+                source_by_id.get(source_id),
+                dimension,
+                competitor,
+            )
+            for source_id in cell.source_ids
+        ):
+            return True
+        return (
+            self._official_matrix_finding_count(
+                detail,
+                dimension,
+                competitor,
+                source_by_id,
+            )
+            > 0
+        )
+
+    def _community_matrix_summary(self, detail: RunDetail) -> list[str]:
+        summaries: list[str] = []
+        seen: set[tuple[str, str, str, str, str]] = set()
+        for source in detail.raw_sources:
+            if not source.metadata.get("community_evidence"):
+                continue
+            clusters = source.metadata.get("community_claim_clusters")
+            if not isinstance(clusters, list):
+                continue
+            for cluster in clusters:
+                if not isinstance(cluster, dict):
+                    continue
+                label = str(cluster.get("label") or "")
+                if label not in {
+                    "official_confirmed",
+                    "community_triangulated",
+                    "community_observed",
+                    "community_contested",
+                }:
+                    continue
+                kind = str(cluster.get("kind") or "")
+                normalized_value = str(cluster.get("normalized_value") or "")
+                claim = str(cluster.get("claim") or "Community observation")
+                key = (source.dimension, source.competitor, kind, normalized_value, label)
+                if key in seen:
+                    continue
+                seen.add(key)
+                source_ids = [
+                    str(source_id)
+                    for source_id in cluster.get("source_ids", [])
+                    if str(source_id).strip()
+                ]
+                summaries.append(
+                    "[community-adjusted:{dimension}] {competitor}: {label}; "
+                    "{claim} sources={sources}".format(
+                        dimension=source.dimension,
+                        competitor=source.competitor,
+                        label=label,
+                        claim=claim,
+                        sources=", ".join(source_ids[:4]),
+                    )
+                )
+        return summaries[:8]
+
+    def _official_matrix_finding_count(
+        self,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+        source_by_id: dict[str, RawSource],
+    ) -> int:
+        kb = detail.competitor_kbs.get(competitor)
+        if kb is None:
+            return 0
+        count = 0
+        for finding in kb.slices.get(dimension, []):
+            source_ids = self._matrix_finding_source_ids(finding)
+            if source_ids and any(
+                self._matrix_source_is_scoped_official_signal(
+                    source_by_id.get(source_id),
+                    dimension,
+                    competitor,
+                )
+                for source_id in source_ids
+            ):
+                count += 1
+        return count
+
+    def _matrix_source_is_scoped_official_signal(
+        self,
+        source: RawSource | None,
+        dimension: str,
+        competitor: str,
+    ) -> bool:
+        return (
+            self._matrix_source_is_official_signal(source)
+            and source is not None
+            and source.dimension == dimension
+            and self._source_matches_competitor(source, competitor)
+        )
+
+    def _matrix_finding_source_ids(self, finding: str) -> list[str]:
+        matches = re.findall(
+            r"\[source:([^\]\s]+)\]|\bsource\s+id\s*:\s*([A-Za-z0-9_.:/#-]+)",
+            finding,
+            flags=re.IGNORECASE,
+        )
+        return merge_ordered_refs(value for match in matches for value in match)
 
     def _matrix_finding_count(
         self, detail: RunDetail, dimension: str, competitor: str

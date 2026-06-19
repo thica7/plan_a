@@ -1,0 +1,22 @@
+/* Locale badge for language switcher */
+.topbar-icon-button {
+  position: relative;
+}
+
+.locale-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  background: var(--primary-500);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.dark-theme .locale-badge {
+  background: var(--primary-600);
+}

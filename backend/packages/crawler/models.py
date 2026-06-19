@@ -12,18 +12,18 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 class CrawlRequest(BaseModel):
     """Request to crawl a single URL."""
 
-    url: str
+    url: str = Field(min_length=1, max_length=2048)
     run_id: str | None = None
     competitor: str | None = None
     dimension: str | None = None
     render_js: bool = False
-    timeout_seconds: float = 15.0
+    timeout_seconds: float = Field(default=15.0, ge=1.0, le=60.0)
     respect_robots: bool = True
     verify: bool = True
-    max_bytes: int = 5_000_000  # 5 MB
-    max_depth: int = 2
-    max_urls: int = 1_000
-    max_total_bytes: int = 50_000_000
+    max_bytes: int = Field(default=5_000_000, ge=1_024, le=10_000_000)
+    max_depth: int = Field(default=2, ge=0, le=5)
+    max_urls: int = Field(default=1_000, ge=1, le=5_000)
+    max_total_bytes: int = Field(default=50_000_000, ge=1_024, le=100_000_000)
 
 
 class ParsedPage(BaseModel):

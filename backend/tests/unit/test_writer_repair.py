@@ -1,0 +1,1039 @@
+from __future__ import annotations
+
+from datetime import datetime
+
+from packages.agents.writer.repair import (
+    apply_line_repair,
+    build_writer_repair_plan,
+    replace_markdown_section,
+    report_regression_problem,
+    section_regression_problem,
+)
+from packages.schema.api_dto import RunDetail
+from packages.schema.models import (
+    AnalysisPlan,
+    QCIssue,
+    RawSource,
+    RedoScope,
+    RunMetrics,
+)
+
+
+def test_writer_repair_classifies_line_repair_for_protectable_report() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issues = [_report_line_issue(line_number=8, problem="non-publishable text noise")]
+
+    plan = build_writer_repair_plan(detail, issues, upstream_data_changed=False)
+
+    assert plan.mode == "line"
+    assert plan.previous_report_protectable is True
+    assert plan.line_numbers == [8]
+
+
+def test_writer_repair_requires_full_rewrite_for_poor_report() -> None:
+    detail = _detail(report_md="# Report\n\nthin")
+    issues = [_report_line_issue(line_number=3, problem="non-publishable text noise")]
+
+    plan = build_writer_repair_plan(detail, issues, upstream_data_changed=False)
+
+    assert plan.mode == "full"
+    assert plan.previous_report_protectable is False
+    assert "report is not protectable" in plan.reason
+
+
+def test_upstream_data_changed_uses_section_repair_only_for_clean_section_mapping() -> None:
+    detail = _detail(report_md=_protectable_report()).model_copy(
+        update={
+            "id": "run-routing",
+            "topic": "AI coding",
+            "plan": AnalysisPlan(
+                topic="AI coding",
+                competitors=["Cursor"],
+                dimensions=["pricing", "persona"],
+            ),
+        }
+    )
+    issue = QCIssue(
+        id="issue-review",
+        severity="warn",
+        detected_by="reflector",
+        target_agent="collector",
+        target_subagent="persona",
+        field_path="reflections[-1].coverage_gaps[0]",
+        problem="persona survey and interview review themes need refresh.",
+        redo_scope=RedoScope(
+            kind="collector",
+            target_subagent="persona",
+            rationale="refresh persona",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=True)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["review_theme_summary"]
+    assert plan.anti_regression_required is True
+
+
+def test_upstream_data_changed_uses_full_rewrite_for_broad_or_unmapped_issues() -> None:
+    detail = _detail(report_md=_protectable_report()).model_copy(
+        update={
+            "id": "run-routing-broad",
+            "topic": "AI coding",
+            "plan": AnalysisPlan(
+                topic="AI coding",
+                competitors=["Cursor"],
+                dimensions=["pricing", "feature"],
+            ),
+        }
+    )
+    issues = [
+        QCIssue(
+            id="issue-one",
+            severity="blocker",
+            detected_by="schema",
+            target_agent="analyst",
+            field_path="competitor_knowledge",
+            problem="Multiple structured slices changed.",
+            redo_scope=RedoScope(kind="analyst", rationale="broad refresh"),
+        )
+    ]
+
+    plan = build_writer_repair_plan(detail, issues, upstream_data_changed=True)
+
+    assert plan.mode == "full"
+    assert plan.anti_regression_required is True
+
+
+def test_upstream_data_changed_uses_full_rewrite_for_mixed_mapped_unmapped_issues() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issues = [
+        QCIssue(
+            id="issue-review",
+            severity="warn",
+            detected_by="reflector",
+            target_agent="collector",
+            target_subagent="persona",
+            field_path="reflections[-1].coverage_gaps[0]",
+            problem="persona survey and interview review themes need refresh.",
+            redo_scope=RedoScope(
+                kind="collector",
+                target_subagent="persona",
+                rationale="refresh persona",
+            ),
+        ),
+        QCIssue(
+            id="issue-broad",
+            severity="blocker",
+            detected_by="schema",
+            target_agent="analyst",
+            field_path="competitor_knowledge",
+            problem="Multiple structured slices changed.",
+            redo_scope=RedoScope(kind="analyst", rationale="broad refresh"),
+        ),
+    ]
+
+    plan = build_writer_repair_plan(detail, issues, upstream_data_changed=True)
+
+    assert plan.mode == "full"
+    assert plan.anti_regression_required is True
+
+
+def test_writer_repair_maps_standalone_rag_phrase_to_rag_gap_fill() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-rag-gap-fill",
+        severity="warn",
+        detected_by="reflector",
+        target_agent="writer",
+        field_path="report_md.section[rag_gap_fill]",
+        problem="RAG gap fill needs refresh.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Refresh RAG gap fill."),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["rag_gap_fill"]
+
+
+def test_writer_repair_maps_thin_competitive_findings_to_section_repair() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-competitive-findings-thin",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        field_path="report_quality.core_section_depth_score",
+        problem="Competitive Findings section is too thin for decision-grade reporting.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Expand Competitive Findings."),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["competitive_findings"]
+
+
+def test_writer_repair_maps_thin_decision_summary_to_section_repair() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-decision-summary-thin",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        field_path="report_quality.core_section_depth_score",
+        problem="Decision Summary section needs recommended action and immediate next move.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Expand Decision Summary."),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["decision_summary"]
+
+
+def test_writer_repair_maps_rationale_only_decision_summary_to_section_repair() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-generic-thin-core",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        field_path="report_quality.core_section_depth_score",
+        problem="Core section is too thin for decision-grade reporting.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Expand Decision Summary."),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["decision_summary"]
+
+
+def test_writer_repair_routes_release_gate_report_depth_to_full_rewrite() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-report-depth-required",
+        severity="blocker",
+        detected_by="coverage",
+        target_agent="writer",
+        field_path="release_gate.report_depth_required",
+        problem=(
+            "Report richness below threshold: core_section_depth_score=0.86; "
+            "SWOT quadrants and RAG gap-fill also need expansion."
+        ),
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="Redo writer report with expanded evidence-backed core analysis.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "full"
+    assert plan.anti_regression_required is True
+    assert "report_depth_required" in plan.reason
+
+
+def test_writer_repair_routes_release_gate_depth_to_named_section_when_scoped() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-report-depth-decision-summary",
+        severity="blocker",
+        detected_by="coverage",
+        target_agent="writer",
+        field_path="release_gate.report_depth_required",
+        problem=(
+            "Report core richness metrics are below release minimums: "
+            "core_section_depth_score=0.96 (<1.00). Decision Summary is too thin."
+        ),
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="Expand Decision Summary without rewriting the full report.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["decision_summary"]
+    assert plan.anti_regression_required is True
+
+
+def test_writer_repair_routes_deterministic_hygiene_damage_to_assemble() -> None:
+    damaged_report = (
+        _protectable_report()
+        + "\n\nFull list is available in Segment Evidence Pack JSON source_registry. "
+        "[source:source-0]"
+    )
+    detail = _detail(report_md=damaged_report)
+    issue = QCIssue(
+        id="issue-report-hygiene-required",
+        severity="blocker",
+        detected_by="coverage",
+        target_agent="writer",
+        field_path="release_gate.report_depth_required",
+        problem=(
+            "Report core richness metrics are below release minimums: "
+            "citation_hygiene_score=0.00 (<1.00)."
+        ),
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="Repair report citation hygiene without rewriting the full report.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "assemble"
+    assert "deterministic report structure damage" in plan.reason
+
+
+def test_writer_repair_claim_risk_review_wording_does_not_target_user_reviews() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-claim-risk-publication-review",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        field_path="report_quality.claim_risk_section_score",
+        problem="Claim Validation & Evidence Risk section needs review before publication.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="Expand claim risk review before publication.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["claim_risk"]
+
+
+def test_writer_repair_maps_battlecard_watchouts_to_battlecard_only() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-battlecard-watchouts",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        field_path="report_md.section[battlecard]",
+        problem="Battlecard watchouts section needs clearer objection handling.",
+        redo_scope=RedoScope(kind="writer_only", rationale="Expand Battlecard watchouts."),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["battlecard"]
+
+
+def test_writer_repair_routes_claim_self_consistency_warns_to_scoped_sections() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issues: list[QCIssue] = []
+    for index, subagent in enumerate(
+        ["persona", "persona", "persona", "feature", "pricing"], start=1
+    ):
+        issues.append(
+            QCIssue(
+                id=f"claim-self-consistency-{index}",
+                severity="warn",
+                detected_by="coverage",
+                target_agent="collector",
+                target_subagent=subagent,
+                target_competitor="Cursor",
+                field_path="release_gate.claim_self_consistency_required",
+                problem=(
+                    "claim_self_consistency_required: validation is weak; "
+                    "recommended_action=rewrite_claim; failed_checks=text_support."
+                ),
+                redo_scope=RedoScope(
+                    kind="writer_only",
+                    target_subagent=subagent,
+                    target_competitor="Cursor",
+                    rationale="Rewrite weak claim or downgrade conclusion.",
+                ),
+            )
+        )
+
+    plan = build_writer_repair_plan(detail, issues, upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["review_theme_summary", "competitive_findings"]
+    assert plan.anti_regression_required is True
+
+
+def test_apply_line_repair_removes_only_still_noisy_lines() -> None:
+    markdown = "good opening\nbad line \ufffd\nkeep this cited line [source:pricing-1]\n"
+    issues = [_report_line_issue(line_number=2, problem="non-publishable text noise")]
+
+    repaired = apply_line_repair(markdown, issues)
+
+    assert "bad line" not in repaired
+    assert "good opening" in repaired
+    assert "keep this cited line [source:pricing-1]" in repaired
+
+
+def test_replace_markdown_section_preserves_unrelated_sections() -> None:
+    original = (
+        "# Report\n\n"
+        "## Executive Summary\n"
+        "Keep this summary. [source:pricing-1]\n\n"
+        "## User Review Themes\n"
+        "Thin.\n\n"
+        "## SWOT Analysis\n"
+        "- Strengths: keep swot. [source:pricing-1]\n"
+    )
+    replacement = (
+        "## User Review Themes\n"
+        "- Praise: users value direct workflow fit. [source:pricing-1]\n"
+        "- Blocker: rollout still needs security proof. [source:pricing-1]\n"
+    )
+
+    updated = replace_markdown_section(
+        original,
+        target_section="review_theme_summary",
+        output_language="en-US",
+        replacement_markdown=replacement,
+    )
+
+    assert "Keep this summary. [source:pricing-1]" in updated
+    assert "- Strengths: keep swot. [source:pricing-1]" in updated
+    assert "- Praise: users value direct workflow fit. [source:pricing-1]" in updated
+    assert "Thin." not in updated
+
+
+def test_replace_markdown_section_replaces_zh_cn_heading_without_duplicate() -> None:
+    original = (
+        "# 报告\n\n"
+        "## 执行摘要\n"
+        "保留摘要内容。 [source:pricing-1]\n\n"
+        "## 用户评价整理\n"
+        "旧的用户评价内容。\n\n"
+        "## SWOT 分析\n"
+        "- 保留 SWOT 内容。 [source:feature-1]\n"
+    )
+    replacement = (
+        "## 用户评价整理\n"
+        "- 新评价: 买家关注定价透明度。 [source:pricing-1]\n"
+    )
+
+    updated = replace_markdown_section(
+        original,
+        "review_theme_summary",
+        "zh-CN",
+        replacement,
+    )
+
+    assert updated.count("## 用户评价整理") == 1
+    assert "旧的用户评价内容" not in updated
+    assert "- 新评价: 买家关注定价透明度。 [source:pricing-1]" in updated
+    assert "保留摘要内容。 [source:pricing-1]" in updated
+    assert "- 保留 SWOT 内容。 [source:feature-1]" in updated
+
+
+def test_replace_markdown_section_restores_canonical_order_for_numbered_zh_sections() -> None:
+    original = (
+        "# AI Coding Agent 竞争报告\n\n"
+        "## 1. 执行摘要\n"
+        "摘要内容。 [source:pricing-1]\n\n"
+        "## 2. 决策摘要\n"
+        "决策内容。 [source:pricing-1]\n\n"
+        "## 7. 对比矩阵\n"
+        "矩阵内容。 [source:pricing-1]\n\n"
+        "## 5. 竞品深挖\n"
+        "旧深挖内容。 [source:feature-1]\n\n"
+        "## SWOT 分析\n"
+        "SWOT 内容。 [source:feature-1]\n"
+    )
+    replacement = (
+        "## 5. 竞品深挖\n"
+        "新的深挖内容。 [source:feature-1]\n"
+    )
+
+    updated = replace_markdown_section(
+        original,
+        "competitor_deep_dives",
+        "zh-CN",
+        replacement,
+    )
+
+    assert updated.count("## 5. 竞品深挖") == 1
+    assert "旧深挖内容" not in updated
+    assert updated.index("## 5. 竞品深挖") < updated.index("## 7. 对比矩阵")
+    assert updated.index("## SWOT 分析") > updated.index("## 5. 竞品深挖")
+
+
+def test_report_regression_detects_collapsed_review_section() -> None:
+    previous = _detail(report_md=_protectable_report())
+    candidate = _detail(
+        report_md=_protectable_report().replace(
+            (
+                "User review themes show Cursor is easier to explain during procurement, "
+                "while Copilot benefits from\n"
+                "existing Microsoft workflow familiarity. [source:pricing-1]\n"
+                "- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]\n"
+                "- Adoption blocker: security review and procurement packaging still need "
+                "deeper evidence.\n"
+                "[source:feature-1]"
+            ),
+            "Existing evidence does not provide verified user reviews.",
+        )
+    )
+
+    problem = report_regression_problem(
+        previous, candidate, protected_sections=["review_theme_summary"]
+    )
+
+    assert problem is not None
+    assert "review_theme_summary" in problem
+
+
+def test_report_regression_detects_collapsed_zh_cn_review_section() -> None:
+    previous_body = (
+        "用户评价整理显示，采购团队更容易理解 Cursor 的定价透明度，也会继续比较 "
+        "Copilot 在微软工作流中的熟悉度。 [source:pricing-1]\n"
+        "- 客户主题: 定价清晰度帮助销售团队更快完成评估。 [source:pricing-1]\n"
+        "- 采用阻碍: 安全审查和采购包装仍需要更深证据。 [source:feature-1]\n"
+        "- 转换触发: 当团队需要更直接的开发流程说明时，Cursor 更容易被提出。 "
+        "[source:pricing-1]\n"
+        "- 采购语境: 团队还会比较上线培训、合规审查和现有微软采购路径，"
+        "因此评价摘要必须保留这些有证据的购买阻力。 [source:feature-1]"
+    )
+    previous = _detail(
+        report_md=(
+            "# Cursor vs Copilot\n\n"
+            "## 用户评价整理\n"
+            f"{previous_body}\n\n"
+            "## SWOT 分析\n"
+            "- 优势: 保留 SWOT 内容。 [source:feature-1]\n"
+        )
+    )
+    candidate = _detail(
+        report_md=previous.report_md.replace(
+            previous_body,
+            "现有证据不足以提供已验证的用户评价。",
+        )
+    )
+
+    problem = report_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert problem is not None
+    assert "review_theme_summary" in problem
+
+
+def test_report_regression_detects_review_section_losing_user_research_sources() -> None:
+    previous = RunDetail(
+        id="run-prev",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="cursor-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="Cursor survey",
+                snippet="Survey with adoption blockers.",
+                content_hash="cursor-survey-hash",
+                confidence=0.76,
+            )
+        ],
+        report_md=(
+            "# Report\n\n"
+            "## User Review Themes\n"
+            "Survey and interview signals describe adoption blockers. [source:cursor-survey]\n"
+        ),
+    )
+    candidate = previous.model_copy(
+        update={
+            "report_md": (
+                "# Report\n\n"
+                "## User Review Themes\n"
+                "User evidence is summarized from pricing pages. [source:pricing-1]\n"
+            )
+        }
+    )
+
+    problem = report_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert problem is not None
+    assert "user research source" in problem
+
+
+def test_report_regression_detects_review_section_losing_fragmented_user_research_source() -> None:
+    previous = RunDetail(
+        id="run-prev",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="cursor-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="Cursor survey",
+                snippet="Survey with adoption blockers.",
+                content_hash="cursor-survey-hash",
+                confidence=0.76,
+            )
+        ],
+        report_md=(
+            "# Report\n\n"
+            "## User Review Themes\n"
+            "Survey and interview signals describe adoption blockers. "
+            "[source:cursor-survey#chunk-1]\n"
+        ),
+    )
+    candidate = previous.model_copy(
+        update={
+            "report_md": (
+                "# Report\n\n"
+                "## User Review Themes\n"
+                "User evidence is summarized from pricing pages. [source:pricing-1]\n"
+            )
+        }
+    )
+
+    problem = report_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert problem is not None
+    assert "user research source" in problem
+
+
+def test_section_regression_detects_review_section_losing_replaced_user_research_source() -> None:
+    previous = RunDetail(
+        id="run-prev",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="new-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="New Cursor survey",
+                snippet="Refreshed survey with adoption blockers.",
+                content_hash="new-survey-hash",
+                confidence=0.78,
+            ),
+            RawSource(
+                id="pricing-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Pricing page.",
+                content_hash="pricing-1-hash",
+                confidence=0.93,
+            ),
+        ],
+        report_md=(
+            "# Report\n\n"
+            "## User Review Themes\n"
+            "Survey and interview language describes adoption blockers, switching "
+            "triggers, and persona feedback from buyer interviews. [source:old-survey]\n"
+        ),
+    )
+    candidate = previous.model_copy(
+        update={
+            "report_md": (
+                "# Report\n\n"
+                "## User Review Themes\n"
+                "Pricing evidence now summarizes buyer posture, adoption concerns, "
+                "and switching triggers without citing the refreshed survey. "
+                "[source:pricing-1]\n"
+            ),
+        }
+    )
+
+    problem = section_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert problem is not None
+    assert "user research source" in problem
+
+
+def test_section_regression_detects_review_section_losing_old_survey_token_source() -> None:
+    previous = RunDetail(
+        id="run-prev",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="new-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="New Cursor survey",
+                snippet="Refreshed survey with adoption blockers.",
+                content_hash="new-survey-hash",
+                confidence=0.78,
+            ),
+            RawSource(
+                id="pricing-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Pricing page.",
+                content_hash="pricing-1-hash",
+                confidence=0.93,
+            ),
+        ],
+        report_md=(
+            "# Report\n\n"
+            "## User Review Themes\n"
+            "Pain points and onboarding friction dominate trial follow-through. "
+            "[source:old-survey]\n"
+        ),
+    )
+    candidate = previous.model_copy(
+        update={
+            "report_md": (
+                "# Report\n\n"
+                "## User Review Themes\n"
+                "Pricing packaging is the only cited buyer signal. [source:pricing-1]\n"
+            ),
+        }
+    )
+
+    problem = section_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert problem is not None
+    assert "user research source" in problem
+
+
+def test_section_regression_allows_explicit_user_research_evidence_gap() -> None:
+    previous = RunDetail(
+        id="run-prev",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="new-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="New Cursor survey",
+                snippet="Refreshed survey with adoption blockers.",
+                content_hash="new-survey-hash",
+                confidence=0.78,
+            ),
+            RawSource(
+                id="pricing-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Pricing page.",
+                content_hash="pricing-1-hash",
+                confidence=0.93,
+            ),
+        ],
+        report_md=(
+            "# Report\n\n"
+            "## User Review Themes\n"
+            "No user research or reviews are available yet; keep this as an evidence gap.\n"
+        ),
+    )
+    candidate = previous.model_copy(
+        update={
+            "report_md": (
+                "# Report\n\n"
+                "## User Review Themes\n"
+                "Pricing packaging is the only cited buyer signal. [source:pricing-1]\n"
+            ),
+        }
+    )
+
+    problem = section_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert problem is None
+
+
+def test_section_regression_allows_review_theme_fallback_evidence_gap() -> None:
+    previous = RunDetail(
+        id="run-prev",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="new-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="New Cursor survey",
+                snippet="Refreshed survey with adoption blockers.",
+                content_hash="new-survey-hash",
+                confidence=0.78,
+            ),
+            RawSource(
+                id="pricing-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Pricing page.",
+                content_hash="pricing-1-hash",
+                confidence=0.93,
+            ),
+        ],
+        report_md=(
+            "# Report\n\n"
+            "## User Review Themes\n"
+            "No cited review themes are available yet; keep conclusions as Evidence gap.\n"
+        ),
+    )
+    candidate = previous.model_copy(
+        update={
+            "report_md": (
+                "# Report\n\n"
+                "## User Review Themes\n"
+                "Pricing packaging is the only cited buyer signal. [source:pricing-1]\n"
+            ),
+        }
+    )
+
+    problem = section_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert problem is None
+
+
+def test_report_regression_ignores_absolute_quality_gate_failure_without_relative_regression() -> None:
+    previous = RunDetail(
+        id="run-prev",
+        topic="AI coding",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(topic="AI coding", competitors=["Cursor"], dimensions=["persona"]),
+        raw_sources=[
+            RawSource(
+                id="cursor-survey",
+                competitor="Cursor",
+                dimension="persona",
+                source_type="survey_simulated",
+                title="Cursor survey",
+                snippet="Survey with adoption blockers.",
+                content_hash="cursor-survey-hash",
+                confidence=0.76,
+            )
+        ],
+        report_md=(
+            "# Report\n\n"
+            "## User Review Themes\n"
+            "Survey signals describe adoption blockers and switching triggers. "
+            "[source:cursor-survey]\n"
+        ),
+    )
+    candidate = previous.model_copy(
+        update={
+            "report_md": (
+                "# Report\n\n"
+                "## User Review Themes\n"
+                "Survey signals describe onboarding blockers and switching triggers. "
+                "[source:cursor-survey]\n"
+            )
+        }
+    )
+
+    global_problem = report_regression_problem(previous, candidate, ["review_theme_summary"])
+    section_problem = section_regression_problem(previous, candidate, ["review_theme_summary"])
+
+    assert global_problem is None
+    assert section_problem is None
+
+
+def test_writer_repair_helpers_accept_approved_positional_api() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issues = [_report_line_issue(line_number=8, problem="non-publishable text noise")]
+
+    plan = build_writer_repair_plan(detail, issues)
+
+    assert plan.mode == "line"
+
+    updated = replace_markdown_section(
+        "# Report\n\n## User Review Themes\nThin.\n",
+        "review_theme_summary",
+        "en-US",
+        "## User Review Themes\nCited replacement. [source:pricing-1]\n",
+    )
+
+    assert "Cited replacement. [source:pricing-1]" in updated
+    assert "Thin." not in updated
+
+    problem = report_regression_problem(detail, detail, ["review_theme_summary"])
+
+    assert problem is None
+
+
+def _report_line_issue(*, line_number: int, problem: str) -> QCIssue:
+    field_path = f"report_md.line[{line_number}]"
+    return QCIssue(
+        id=f"issue-line-{line_number}",
+        severity="blocker",
+        detected_by="text_quality",
+        target_agent="writer",
+        field_path=field_path,
+        problem=problem,
+        redo_scope=RedoScope(kind="writer_only", rationale=problem),
+    )
+
+
+def _detail(*, report_md: str) -> RunDetail:
+    return RunDetail(
+        id="run-writer-repair",
+        topic="Cursor vs Copilot pricing",
+        status="running",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="Cursor vs Copilot pricing",
+            competitors=["Cursor", "Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            competitor_layer="L1",
+        ),
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://example.com/cursor-pricing",
+                snippet="Cursor pricing is published.",
+                content_hash="pricing-1",
+                confidence=0.9,
+            ),
+            RawSource(
+                id="feature-1",
+                competitor="Copilot",
+                dimension="feature",
+                source_type="webpage_verified",
+                title="Copilot feature",
+                url="https://example.com/copilot-feature",
+                snippet="Copilot has IDE integration.",
+                content_hash="feature-1",
+                confidence=0.9,
+            ),
+        ],
+        metrics=RunMetrics(llm_calls=3, source_coverage_rate=1.0, claim_citation_rate=1.0),
+        report_md=report_md,
+    )
+
+
+def _protectable_report() -> str:
+    return """
+# Cursor vs Copilot Direct Battlecard
+
+## Executive Summary
+Cursor has stronger pricing transparency, while Copilot has integration breadth.
+[source:pricing-1] [source:feature-1]
+
+## Decision Summary
+Recommended action: use Cursor's pricing clarity as the initial L1 battlecard point while
+keeping Copilot's bundled distribution as the procurement counter-position.
+- Do not overstate a winner beyond pricing and workflow evidence; enterprise security proof
+still needs direct validation before procurement guidance becomes firm. [source:feature-1]
+- Immediate next move: collect one current trust-center source and one buyer-objection source
+so sales can separate pricing clarity from rollout risk. [source:pricing-1]
+[source:pricing-1] [source:feature-1]
+
+## Competitive Findings
+- Pricing: Cursor has clearer standalone pricing evidence, which makes the sales response easier.
+[source:pricing-1]
+- Feature: Copilot has broad IDE integration evidence, which gives it a defensible adoption path.
+[source:feature-1]
+- Persona: developer evaluators can understand Cursor's focused value faster, while platform
+buyers may still prefer Copilot's Microsoft adjacency for governance and procurement continuity.
+[source:pricing-1] [source:feature-1]
+
+## Competitor Deep Dives
+- Cursor wins on pricing clarity and focused workflow; watchouts remain procurement and
+security proof.
+[source:pricing-1]
+- Copilot wins on distribution and IDE breadth; watchouts remain direct packaging comparison.
+[source:feature-1]
+- Cursor weakness: the available evidence does not yet prove enterprise rollout readiness, so
+sales should keep security claims qualified until a verified trust source is collected.
+[source:feature-1]
+- Copilot weakness: bundled familiarity can obscure standalone value comparison, so evaluators
+need pricing and onboarding proof before accepting it as the default choice. [source:pricing-1]
+
+## User Review Themes
+User review themes show Cursor is easier to explain during procurement, while Copilot benefits from
+existing Microsoft workflow familiarity. [source:pricing-1]
+- Customer theme: pricing clarity supports fast evaluation. [source:pricing-1]
+- Adoption blocker: security review and procurement packaging still need deeper evidence.
+[source:feature-1]
+
+## SWOT Analysis
+- Strengths: Cursor has pricing clarity that sales can explain quickly. [source:pricing-1]
+- Weaknesses: Enterprise procurement proof remains incomplete. [source:feature-1]
+- Opportunities: Buyer education can focus on standalone value. [source:pricing-1]
+- Threats: Copilot can defend through Microsoft distribution. [source:feature-1]
+
+## Battlecard
+Sales should use pricing transparency and switching objections as the first battlecard line.
+[source:pricing-1] [source:feature-1]
+- Response guidance: lead with Cursor's transparent evaluation path when buyers ask for direct
+developer workflow value. [source:pricing-1]
+- Objection handling: acknowledge Copilot's Microsoft distribution advantage, then ask whether
+the buyer needs bundled familiarity or a focused coding workflow proof. [source:feature-1]
+- Follow-up: request security, onboarding, and procurement evidence before making an absolute
+replacement claim. [source:pricing-1] [source:feature-1]
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Copilot |
+| --- | --- | --- |
+| Price | clearer price [source:pricing-1] | bundled context [source:feature-1] |
+| Feature | focused workflow [source:pricing-1] | IDE breadth [source:feature-1] |
+| Persona | direct evaluation [source:pricing-1] | platform continuity [source:feature-1] |
+| Security | qualify readiness [source:feature-1] | verify governance [source:feature-1] |
+| Procurement | lead with clarity [source:pricing-1] | separate value [source:feature-1] |
+| Follow-up | collect objections [source:pricing-1] | onboarding proof [source:feature-1] |
+
+## Source Quality & Coverage
+The run uses verified pages for both target competitors. [source:pricing-1] [source:feature-1]
+
+## User Research Evidence
+Review and buyer-feedback inputs are directional demand evidence. [source:pricing-1]
+
+## Scenario QA Checklist
+- Scenario: l1_pricing_pack; layer: L1; recommended dimensions: pricing, feature, persona.
+
+## Claim Validation & Evidence Risk
+No unresolved blocker claims were detected, but security and procurement claims remain gated.
+[source:pricing-1] [source:feature-1]
+
+## Evidence Appendix
+- pricing-1: Cursor pricing [source:pricing-1]
+- feature-1: Copilot feature [source:feature-1]
+""".strip()

@@ -22,7 +22,15 @@ export type RunEventType =
   | "qa.blocked"
   | "redo.routed"
   | "benchmark.scored"
-  | "report.ready";
+  | "report.ready"
+  | "runtime.command"
+  | "writer_preflight"
+  | "writer_segment_preflight"
+  | "writer_segment_validated"
+  | "writer_assembly_completed"
+  | "writer_assemble_repair_completed"
+  | "writer_quality_preflight"
+  | "writer_quality_preflight_repair";
 
 export interface RunEvent {
   id: number;

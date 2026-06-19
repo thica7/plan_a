@@ -3,6 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
+from packages.i18n.language import DEFAULT_OUTPUT_LANGUAGE, OutputLanguage
 from packages.schema.enterprise import EnterpriseRunProjection
 from packages.schema.models import (
     AgentMessage,
@@ -42,8 +43,19 @@ class RunCreateRequest(BaseModel):
     competitor_layer: Literal["L1", "L2", "L3"] | None = None
     scenario_id: str | None = Field(default=None, min_length=1, max_length=120)
     execution_mode: Literal["auto", "demo", "real"] = "auto"
+    output_language: OutputLanguage = DEFAULT_OUTPUT_LANGUAGE
     auto_redo_warn_enabled: bool | None = None
     hitl_enabled: bool | None = None
+
+
+class CompetitorEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["add", "remove", "rename", "keep", "mark_unrelated"]
+    name: str = Field(min_length=1, max_length=200)
+    new_name: str | None = Field(default=None, min_length=1, max_length=200)
+    reason: str = Field(default="", max_length=1000)
+    source_note: str = Field(default="", max_length=1000)
 
 
 class HitlResumeRequest(BaseModel):
@@ -52,6 +64,8 @@ class HitlResumeRequest(BaseModel):
     decision: Literal["accept", "modify_plan", "force_pass", "redo"]
     note: str | None = None
     dimensions: list[str] | None = None
+    competitors: list[str] | None = Field(default=None, max_length=8)
+    competitor_edits: list[CompetitorEdit] = Field(default_factory=list, max_length=32)
 
 
 class RunSummary(BaseModel):
@@ -64,6 +78,7 @@ class RunSummary(BaseModel):
     topic: str
     status: RunStatus
     execution_mode: Literal["demo", "real"]
+    output_language: OutputLanguage = DEFAULT_OUTPUT_LANGUAGE
     created_at: datetime
     updated_at: datetime
 

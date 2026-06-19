@@ -25,11 +25,61 @@ from packages.schema.models import (
     PricingModel,
     PricingTier,
     RawSource,
+    ReviewThemeItem,
+    ReviewThemeSummary,
     UserPersonaModel,
     UserPersonaSegment,
 )
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
+REVIEW_SUMMARY_DIMENSION_HINTS = (
+    "review",
+    "persona",
+    "user",
+    "customer",
+    "buyer",
+    "feedback",
+    "adoption",
+    "switching",
+)
+POSITIVE_REVIEW_TERMS = (
+    "praise",
+    "like",
+    "liked",
+    "love",
+    "fast",
+    "easy",
+    "strong",
+    "preferred",
+    "adopted",
+    "productive",
+    "accelerate",
+)
+NEGATIVE_REVIEW_TERMS = (
+    "complain",
+    "complaint",
+    "friction",
+    "difficult",
+    "slow",
+    "confusing",
+    "expensive",
+    "risk",
+    "cost",
+    "onboarding",
+    "effort",
+    "uncertainty",
+    "blocker",
+    "concern",
+    "pain",
+)
+SWITCHING_REVIEW_TERMS = (
+    "switch",
+    "switching",
+    "migrate",
+    "migration",
+    "replace",
+    "alternative",
+)
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
@@ -761,11 +811,21 @@ class AnalystAgentMixin:
         dimension: str,
         dimension_sources: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        uses_review_summary = self._dimension_uses_review_summary(dimension)
         usable_sources = [
             source
             for source in dimension_sources
             if str(source.get("id") or "").strip()
-            and source_business_snippet(source, dimension=dimension)
+            and (
+                source_business_snippet(source, dimension=dimension)
+                or (
+                    uses_review_summary
+                    and any(
+                        str(source.get(key) or "").strip()
+                        for key in ("summary", "snippet", "text")
+                    )
+                )
+            )
         ][:3]
         claims = [
             {
@@ -787,6 +847,15 @@ class AnalystAgentMixin:
                     "confidence": 0.0,
                 }
             ]
+        review_summary = (
+            self._build_review_summary_from_source_dicts(
+                competitor=competitor,
+                dimension=dimension,
+                sources=usable_sources,
+            )
+            if uses_review_summary
+            else None
+        )
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
             claim_models = [
@@ -815,7 +884,7 @@ class AnalystAgentMixin:
                 if claim.get("source_ids")
             ]
             claim_text = " ".join(claim.claim for claim in claim_models)
-            return {
+            payload = {
                 "user_personas": {
                     "segments": [
                         segment.model_dump(mode="json")
@@ -828,6 +897,11 @@ class AnalystAgentMixin:
                     "summary_claims": claims,
                 }
             }
+            if review_summary is not None:
+                payload["review_summary"] = review_summary.model_dump(mode="json")
+            return payload
+        if review_summary is not None:
+            return {"review_summary": review_summary.model_dump(mode="json")}
         claim_models = [
             KnowledgeClaim.model_validate(claim)
             for claim in claims
@@ -1002,6 +1076,94 @@ class AnalystAgentMixin:
             if source.dimension == dimension and self._source_matches_competitor(source, competitor)
         ]
 
+    def _source_matches_competitor(self, source: RawSource, competitor: str) -> bool:
+        if source.covered_competitors:
+            return competitor in source.covered_competitors
+        return self._competitor_label_matches(source.competitor, competitor)
+
+    def _competitor_label_matches(self, source_competitor: str, competitor: str) -> bool:
+        source_competitor = source_competitor.strip()
+        source_key = source_competitor.casefold()
+        competitor_key = competitor.strip().casefold()
+        if source_key == competitor_key:
+            return True
+        if self._competitor_label_means_all(source_key):
+            return True
+        parts = [
+            part.strip().casefold()
+            for part in re.split(r",|;|/|\||\s+and\s+|\s*&\s*", source_competitor)
+            if part.strip()
+        ]
+        if competitor_key in parts:
+            return True
+        return competitor_key in source_key
+
+    def _competitor_label_means_all(self, source_key: str) -> bool:
+        return bool(
+            source_key.startswith("all ")
+            or "all target" in source_key
+            or "all competitors" in source_key
+            or "all models" in source_key
+            or "cross-model all" in source_key
+            or "cross model all" in source_key
+            or re.search(r"\ball\s+\d+\s+(?:target\s+)?(?:models|competitors|llms)\b", source_key)
+        )
+
+    def _source_ids_for_competitor_dimension(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+    ) -> list[str]:
+        return [
+            source.id
+            for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
+        ]
+
+    def _filter_findings_to_known_source_ids(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        findings: list[str],
+    ) -> list[str]:
+        valid_source_ids = set(
+            self._source_ids_for_competitor_dimension(detail, competitor, dimension)
+        )
+        if not valid_source_ids:
+            return [finding.strip() for finding in findings if finding.strip()]
+        filtered: list[str] = []
+        seen: set[str] = set()
+        for finding in findings:
+            clean = finding.strip()
+            if not clean:
+                continue
+            cited_ids = self._extract_cited_source_ids(clean)
+            unknown_ids = {
+                source_id for source_id in cited_ids if source_id not in valid_source_ids
+            }
+            if cited_ids and unknown_ids == cited_ids:
+                continue
+            if unknown_ids:
+                clean = self._remove_unknown_source_refs(clean, unknown_ids)
+            key = " ".join(clean.split()).casefold()
+            if clean and key not in seen:
+                seen.add(key)
+                filtered.append(clean)
+        return filtered
+
+    def _remove_unknown_source_refs(self, text: str, source_ids: set[str]) -> str:
+        cleaned = text
+        for source_id in source_ids:
+            escaped = re.escape(source_id)
+            cleaned = re.sub(
+                rf"\s*\[source(?:\s+id)?(?::|\s+){escaped}\]",
+                "",
+                cleaned,
+                flags=re.IGNORECASE,
+            )
+        return " ".join(cleaned.split())
+
     def _kb_cache_content_hash(self, detail: RunDetail, competitor: str, dimension: str) -> str:
         sources = self._sources_for_competitor_dimension(detail, competitor, dimension)
         if not sources:
@@ -1018,18 +1180,47 @@ class AnalystAgentMixin:
         return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:24]
 
     def _apply_kb_cache_entry(self, detail: RunDetail, entry: KBCacheEntry) -> None:
+        valid_source_ids = self._source_ids_for_competitor_dimension(
+            detail,
+            entry.competitor,
+            entry.dimension,
+        )
         kb = detail.competitor_kbs.get(entry.competitor) or CompetitorKB(
             competitor=entry.competitor
         )
-        kb.slices[entry.dimension] = entry.kb_slice
-        kb.sources = merge_ordered_refs(kb.sources, entry.source_ids)
+        kb.slices[entry.dimension] = self._filter_findings_to_known_source_ids(
+            detail,
+            entry.competitor,
+            entry.dimension,
+            entry.kb_slice,
+        )
+        kb.sources = merge_ordered_refs(kb.sources, valid_source_ids)
         kb.confidence = entry.confidence
         detail.competitor_kbs[entry.competitor] = kb
 
         knowledge = detail.competitor_knowledge.get(entry.competitor) or CompetitorKnowledge(
             competitor=entry.competitor
         )
-        cached = entry.knowledge
+        cached = entry.knowledge.model_copy(deep=True)
+        cached_review_summary = cached.review_summary.model_copy(deep=True)
+        uses_review_summary = self._dimension_uses_review_summary(entry.dimension)
+        if uses_review_summary:
+            self._sanitize_review_summary_source_ids(cached_review_summary, set(valid_source_ids))
+            if not self._review_summary_has_cited_items(cached_review_summary):
+                rebuilt_review_summary = self._build_review_summary_from_source_dicts(
+                    competitor=entry.competitor,
+                    dimension=entry.dimension,
+                    sources=[
+                        source.model_dump(mode="json")
+                        for source in self._sources_for_competitor_dimension(
+                            detail,
+                            entry.competitor,
+                            entry.dimension,
+                        )
+                    ],
+                )
+                if self._review_summary_has_cited_items(rebuilt_review_summary):
+                    cached_review_summary = rebuilt_review_summary
         dimension_key = entry.dimension.casefold()
         if "pricing" in dimension_key:
             knowledge.pricing_model = cached.pricing_model
@@ -1037,11 +1228,23 @@ class AnalystAgentMixin:
             knowledge.user_personas = cached.user_personas
         else:
             knowledge.feature_tree = cached.feature_tree
+        if uses_review_summary:
+            knowledge.review_summary = cached_review_summary
+        self._sanitize_structured_knowledge_slice_sources(
+            detail,
+            entry.competitor,
+            entry.dimension,
+            knowledge,
+            sanitize_review_summary=uses_review_summary,
+        )
         knowledge.source_ids = merge_ordered_refs(
             knowledge.source_ids,
-            entry.source_ids,
+            valid_source_ids,
             cached.source_ids,
         )
+        knowledge.source_ids = [
+            source_id for source_id in knowledge.source_ids if source_id in valid_source_ids
+        ]
         knowledge.confidence = max(knowledge.confidence, cached.confidence, entry.confidence)
         detail.competitor_knowledge[entry.competitor] = knowledge
 
@@ -1082,6 +1285,12 @@ class AnalystAgentMixin:
             findings = [
                 finding for finding in competitor_findings.get(competitor, []) if finding.strip()
             ]
+            findings = self._filter_findings_to_known_source_ids(
+                detail,
+                competitor,
+                dimension,
+                findings,
+            )
             if not findings:
                 findings = [
                     source.snippet or source.title
@@ -1117,6 +1326,12 @@ class AnalystAgentMixin:
         findings: list[str],
     ) -> None:
         clean_findings = [finding for finding in findings if finding.strip()]
+        clean_findings = self._filter_findings_to_known_source_ids(
+            detail,
+            competitor,
+            dimension,
+            clean_findings,
+        )
         if not clean_findings:
             clean_findings = [
                 source.snippet or source.title
@@ -1174,11 +1389,37 @@ class AnalystAgentMixin:
             knowledge.feature_tree.nodes = self._feature_nodes_from_text(
                 " ".join(claim.claim for claim in claims), claims
             )
+        if self._dimension_uses_review_summary(dimension):
+            review_sources = [
+                source.model_dump(mode="json")
+                for source in self._sources_for_competitor_dimension(
+                    detail, competitor, dimension
+                )
+            ]
+            community_summary = self._build_review_summary_from_community_clusters(
+                competitor=competitor,
+                dimension=dimension,
+                sources=review_sources,
+            )
+            if self._review_summary_has_cited_items(community_summary):
+                knowledge.review_summary = community_summary
+            else:
+                knowledge.review_summary = self._build_review_summary_from_source_dicts(
+                    competitor=competitor,
+                    dimension=dimension,
+                    sources=review_sources,
+                )
         source_ids = [
             source.id
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
         ]
         knowledge.source_ids = merge_ordered_refs(knowledge.source_ids, source_ids)
+        self._sanitize_structured_knowledge_slice_sources(
+            detail,
+            competitor,
+            dimension,
+            knowledge,
+        )
         source_confidences = [
             source.confidence
             for source in detail.raw_sources
@@ -1240,6 +1481,68 @@ class AnalystAgentMixin:
                     knowledge.feature_tree.nodes = []
                     knowledge.feature_tree.summary_claims = []
 
+        review_section = raw.get("review_summary")
+        review_summary_changed = False
+        if isinstance(review_section, dict):
+            knowledge.review_summary = self._review_summary_from_dict(
+                review_section,
+                competitor=competitor,
+                dimension=dimension,
+            )
+            review_summary_changed = True
+        elif self._dimension_uses_review_summary(dimension):
+            review_sources = [
+                source.model_dump(mode="json")
+                for source in self._sources_for_competitor_dimension(
+                    detail, competitor, dimension
+                )
+            ]
+            community_summary = self._build_review_summary_from_community_clusters(
+                competitor=competitor,
+                dimension=dimension,
+                sources=review_sources,
+            )
+            if self._review_summary_has_cited_items(community_summary):
+                knowledge.review_summary = community_summary
+            else:
+                knowledge.review_summary = self._build_review_summary_from_source_dicts(
+                    competitor=competitor,
+                    dimension=dimension,
+                    sources=review_sources,
+                )
+            review_summary_changed = True
+
+        if self._dimension_uses_review_summary(
+            dimension
+        ) and not self._review_summary_has_theme_items(knowledge.review_summary):
+            review_sources = [
+                source.model_dump(mode="json")
+                for source in self._sources_for_competitor_dimension(
+                    detail, competitor, dimension
+                )
+            ]
+            fallback_review_summary = self._build_review_summary_from_community_clusters(
+                competitor=competitor,
+                dimension=dimension,
+                sources=review_sources,
+            )
+            if not self._review_summary_has_cited_items(fallback_review_summary):
+                fallback_review_summary = self._build_review_summary_from_source_dicts(
+                    competitor=competitor,
+                    dimension=dimension,
+                    sources=review_sources,
+                )
+            if self._review_summary_has_cited_items(fallback_review_summary):
+                knowledge.review_summary = fallback_review_summary
+                review_summary_changed = True
+
+        self._sanitize_structured_knowledge_slice_sources(
+            detail,
+            competitor,
+            dimension,
+            knowledge,
+            sanitize_review_summary=review_summary_changed,
+        )
         claims = self._structured_claims_for_dimension(knowledge, dimension)
         knowledge.source_ids = merge_ordered_refs(
             knowledge.source_ids,
@@ -1275,8 +1578,183 @@ class AnalystAgentMixin:
             return 0.0
         return sum(claim.confidence for claim in claims) / len(claims)
 
+    def _sanitize_structured_knowledge_slice_sources(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        knowledge: CompetitorKnowledge,
+        *,
+        sanitize_review_summary: bool = False,
+    ) -> None:
+        valid_source_ids = set(
+            self._source_ids_for_competitor_dimension(detail, competitor, dimension)
+        )
+        if sanitize_review_summary:
+            self._sanitize_review_summary_source_ids(knowledge.review_summary, valid_source_ids)
+        if not valid_source_ids:
+            return
+        dimension_key = dimension.casefold()
+        if "pricing" in dimension_key:
+            self._sanitize_pricing_model_source_ids(knowledge.pricing_model, valid_source_ids)
+        elif "persona" in dimension_key or "user" in dimension_key:
+            self._sanitize_persona_model_source_ids(knowledge.user_personas, valid_source_ids)
+        else:
+            self._sanitize_feature_tree_source_ids(knowledge.feature_tree, valid_source_ids)
+        knowledge.source_ids = [
+            source_id for source_id in knowledge.source_ids if source_id in valid_source_ids
+        ]
+
+    def _sanitize_review_summary_source_ids(
+        self,
+        review_summary: ReviewThemeSummary,
+        valid_source_ids: set[str],
+    ) -> None:
+        review_summary.source_ids = self._known_source_ids(
+            review_summary.source_ids,
+            valid_source_ids,
+        )
+        for items in (
+            review_summary.praise_themes,
+            review_summary.complaint_themes,
+            review_summary.adoption_blockers,
+            review_summary.switching_triggers,
+        ):
+            self._sanitize_review_theme_item_source_ids(items, valid_source_ids)
+
+    def _sanitize_review_theme_item_source_ids(
+        self,
+        items: list[ReviewThemeItem],
+        valid_source_ids: set[str],
+    ) -> None:
+        for item in items:
+            had_source_ids = bool(item.source_ids)
+            item.source_ids = self._known_source_ids(item.source_ids, valid_source_ids)
+            if had_source_ids and not item.source_ids:
+                item.evidence_gap = True
+
+    def _review_summary_has_content(self, review_summary: ReviewThemeSummary) -> bool:
+        return bool(
+            review_summary.source_ids
+            or review_summary.praise_themes
+            or review_summary.complaint_themes
+            or review_summary.adoption_blockers
+            or review_summary.switching_triggers
+            or review_summary.persona_segments
+        )
+
+    def _review_summary_theme_items(
+        self, review_summary: ReviewThemeSummary
+    ) -> list[ReviewThemeItem]:
+        return [
+            *review_summary.praise_themes,
+            *review_summary.complaint_themes,
+            *review_summary.adoption_blockers,
+            *review_summary.switching_triggers,
+        ]
+
+    def _review_summary_has_theme_items(self, review_summary: ReviewThemeSummary) -> bool:
+        return bool(self._review_summary_theme_items(review_summary))
+
+    def _review_summary_has_cited_items(self, review_summary: ReviewThemeSummary) -> bool:
+        return any(item.source_ids for item in self._review_summary_theme_items(review_summary))
+
+    def _known_source_ids(
+        self,
+        source_ids: list[str],
+        valid_source_ids: set[str],
+    ) -> list[str]:
+        return merge_ordered_refs(
+            source_id for source_id in source_ids if source_id in valid_source_ids
+        )
+
+    def _sanitize_pricing_model_source_ids(
+        self,
+        pricing_model: PricingModel,
+        valid_source_ids: set[str],
+    ) -> None:
+        pricing_model.notes = self._claims_with_known_source_ids(
+            pricing_model.notes,
+            valid_source_ids,
+        )
+        for tier in pricing_model.tiers:
+            tier.claims = self._claims_with_known_source_ids(tier.claims, valid_source_ids)
+
+    def _sanitize_persona_model_source_ids(
+        self,
+        personas: UserPersonaModel,
+        valid_source_ids: set[str],
+    ) -> None:
+        personas.summary_claims = self._claims_with_known_source_ids(
+            personas.summary_claims,
+            valid_source_ids,
+        )
+        for segment in personas.segments:
+            segment.claims = self._claims_with_known_source_ids(segment.claims, valid_source_ids)
+
+    def _sanitize_feature_tree_source_ids(
+        self,
+        feature_tree: FeatureTree,
+        valid_source_ids: set[str],
+    ) -> None:
+        feature_tree.summary_claims = self._claims_with_known_source_ids(
+            feature_tree.summary_claims,
+            valid_source_ids,
+        )
+        for node in feature_tree.nodes:
+            self._sanitize_feature_node_source_ids(node, valid_source_ids)
+
+    def _sanitize_feature_node_source_ids(
+        self,
+        node: FeatureNode,
+        valid_source_ids: set[str],
+    ) -> None:
+        node.claims = self._claims_with_known_source_ids(node.claims, valid_source_ids)
+        for child in node.children:
+            self._sanitize_feature_node_source_ids(child, valid_source_ids)
+
+    def _claims_with_known_source_ids(
+        self,
+        claims: list[KnowledgeClaim],
+        valid_source_ids: set[str],
+    ) -> list[KnowledgeClaim]:
+        filtered: list[KnowledgeClaim] = []
+        seen: set[tuple[str, tuple[str, ...]]] = set()
+        for claim in claims:
+            source_ids = [
+                source_id for source_id in claim.source_ids if source_id in valid_source_ids
+            ]
+            if not source_ids:
+                continue
+            claim.source_ids = merge_ordered_refs(source_ids)
+            key = (claim.claim.casefold(), tuple(claim.source_ids))
+            if key in seen:
+                continue
+            seen.add(key)
+            filtered.append(claim)
+        return filtered
+
     def _structured_knowledge_schema_hint(self, dimension: str) -> str:
         claim = {"claim": "factual claim", "source_ids": ["source-id"], "confidence": 0.0}
+        review_item = {
+            "theme": "review theme",
+            "evidence": "short cited evidence",
+            "source_ids": ["source-id"],
+            "confidence": 0.0,
+            "evidence_gap": False,
+        }
+        review_summary = {
+            "competitor": "competitor name",
+            "dimension": dimension,
+            "praise_themes": [review_item],
+            "complaint_themes": [review_item],
+            "adoption_blockers": [review_item],
+            "switching_triggers": [review_item],
+            "persona_segments": ["segment"],
+            "sentiment_hint": "positive|mixed|negative|unknown",
+            "source_ids": ["source-id"],
+            "confidence": 0.0,
+        }
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
             return json.dumps(
@@ -1296,23 +1774,26 @@ class AnalystAgentMixin:
                 }
             )
         if "persona" in dimension_key or "user" in dimension_key:
-            return json.dumps(
-                {
-                    "user_personas": {
-                        "segments": [
-                            {
-                                "name": "segment",
-                                "role": "role or unknown",
-                                "company_size": "size or unknown",
-                                "pain_points": ["pain"],
-                                "use_cases": ["case"],
-                                "claims": [claim],
-                            }
-                        ],
-                        "summary_claims": [claim],
-                    }
+            hint = {
+                "user_personas": {
+                    "segments": [
+                        {
+                            "name": "segment",
+                            "role": "role or unknown",
+                            "company_size": "size or unknown",
+                            "pain_points": ["pain"],
+                            "use_cases": ["case"],
+                            "claims": [claim],
+                        }
+                    ],
+                    "summary_claims": [claim],
                 }
-            )
+            }
+            if self._dimension_uses_review_summary(dimension):
+                hint["review_summary"] = review_summary
+            return json.dumps(hint)
+        if self._dimension_uses_review_summary(dimension):
+            return json.dumps({"review_summary": review_summary})
         return json.dumps(
             {
                 "feature_tree": {
@@ -1328,6 +1809,118 @@ class AnalystAgentMixin:
                 }
             }
         )
+
+    def _structured_claims_for_dimension(
+        self,
+        knowledge: CompetitorKnowledge | None,
+        dimension: str,
+    ) -> list[KnowledgeClaim]:
+        if knowledge is None:
+            return []
+        dimension_key = dimension.casefold()
+        if "pricing" in dimension_key:
+            claims = [
+                *knowledge.pricing_model.notes,
+                *[claim for tier in knowledge.pricing_model.tiers for claim in tier.claims],
+            ]
+        elif "persona" in dimension_key or "user" in dimension_key:
+            claims = [
+                *knowledge.user_personas.summary_claims,
+                *[
+                    claim
+                    for segment in knowledge.user_personas.segments
+                    for claim in segment.claims
+                ],
+            ]
+        else:
+            claims = [
+                *knowledge.feature_tree.summary_claims,
+                *[claim for node in knowledge.feature_tree.nodes for claim in node.claims],
+            ]
+        if self._dimension_uses_review_summary(dimension):
+            claims = [*claims, *self._review_summary_claims(knowledge.review_summary)]
+        return claims
+
+    def _review_summary_claims(
+        self,
+        review_summary: ReviewThemeSummary,
+    ) -> list[KnowledgeClaim]:
+        claims: list[KnowledgeClaim] = []
+        seen: set[tuple[str, tuple[str, ...]]] = set()
+        for item in (
+            *review_summary.praise_themes,
+            *review_summary.complaint_themes,
+            *review_summary.adoption_blockers,
+            *review_summary.switching_triggers,
+        ):
+            if not item.source_ids:
+                continue
+            source_ids = merge_ordered_refs(item.source_ids)
+            claim_text = self._review_theme_claim_text(item)
+            key = (claim_text.casefold(), tuple(source_ids))
+            if key in seen:
+                continue
+            seen.add(key)
+            claims.append(
+                KnowledgeClaim(
+                    claim=claim_text,
+                    source_ids=source_ids,
+                    confidence=item.confidence,
+                )
+            )
+        return claims
+
+    def _review_theme_claim_text(self, item: ReviewThemeItem) -> str:
+        theme = " ".join((item.theme or "").split())
+        evidence = " ".join((item.evidence or "").split())
+        if theme and evidence:
+            return f"{theme}: {evidence}"
+        return theme or evidence or "Review theme"
+
+    def _review_summary_from_dict(
+        self,
+        raw: dict[str, Any],
+        *,
+        competitor: str,
+        dimension: str,
+    ) -> ReviewThemeSummary:
+        try:
+            repaired = self._repair_uncited_review_theme_items(raw)
+            return ReviewThemeSummary.model_validate(repaired)
+        except Exception:
+            return ReviewThemeSummary(competitor=competitor, dimension=dimension)
+
+    def _repair_uncited_review_theme_items(
+        self,
+        raw: dict[str, Any],
+    ) -> dict[str, Any]:
+        repaired = dict(raw)
+        for field in (
+            "praise_themes",
+            "complaint_themes",
+            "adoption_blockers",
+            "switching_triggers",
+        ):
+            items = repaired.get(field)
+            if not isinstance(items, list):
+                continue
+            repaired_items: list[Any] = []
+            for item in items:
+                if not isinstance(item, dict):
+                    repaired_items.append(item)
+                    continue
+                item_data = dict(item)
+                if not self._raw_review_item_has_source_ids(item_data):
+                    item_data["evidence_gap"] = True
+                repaired_items.append(item_data)
+            repaired[field] = repaired_items
+        return repaired
+
+    def _raw_review_item_has_source_ids(self, raw: dict[str, Any]) -> bool:
+        source_ids = raw.get("source_ids")
+        if not isinstance(source_ids, list):
+            return False
+        return any(str(source_id).strip() for source_id in source_ids)
 
     def _claims_from_structured_payload(
         self, payload: dict[str, Any], dimension: str
@@ -1346,6 +1939,13 @@ class AnalystAgentMixin:
                 probe.user_personas = UserPersonaModel.model_validate(raw["user_personas"])
             elif isinstance(raw.get("feature_tree"), dict):
                 probe.feature_tree = FeatureTree.model_validate(raw["feature_tree"])
+            review_section = raw.get("review_summary")
+            if isinstance(review_section, dict):
+                probe.review_summary = self._review_summary_from_dict(
+                    review_section,
+                    competitor="probe",
+                    dimension=dimension,
+                )
             return self._structured_claims_for_dimension(probe, dimension)
         except Exception:
             return []
@@ -1361,12 +1961,24 @@ class AnalystAgentMixin:
             source.id
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
         ]
+        valid_source_ids = set(fallback_source_ids)
         claims: list[KnowledgeClaim] = []
         for finding in findings:
             clean = finding.strip()
             if not clean:
                 continue
-            source_ids = sorted(self._extract_cited_source_ids(clean))
+            cited_source_ids = sorted(self._extract_cited_source_ids(clean))
+            if valid_source_ids:
+                source_ids = [
+                    source_id for source_id in cited_source_ids if source_id in valid_source_ids
+                ]
+                if cited_source_ids and not source_ids:
+                    continue
+                unknown_source_ids = set(cited_source_ids) - valid_source_ids
+                if unknown_source_ids:
+                    clean = self._remove_unknown_source_refs(clean, unknown_source_ids)
+            else:
+                source_ids = cited_source_ids
             if not source_ids:
                 source_ids = fallback_source_ids[:1]
             if not source_ids:
@@ -1384,8 +1996,9 @@ class AnalystAgentMixin:
         return sum(confidences) / len(confidences)
 
     def _extract_price_hint(self, text: str) -> str:
-        match = self._price_hint_regex().search(text)
-        if match:
+        for match in self._price_hint_regex().finditer(text):
+            if self._price_hint_is_noise(text, match):
+                continue
             return " ".join(match.group(0).split())
         if re.search(r"\bfree\b|no credit card required", text, flags=re.IGNORECASE):
             return "$0"
@@ -1395,8 +2008,9 @@ class AnalystAgentMixin:
         return re.compile(
             (
                 r"(?:\$|USD\s*)\s?\d+(?:[.,]\d+)?"
-                r"(?:\s*(?:/|per)\s*(?:month|mo|year|yr|seat|user|developer|credit|"
-                r"request|token|million tokens|usage))?"
+                r"(?:\s*(?:-|–|—|to)\s*\$?\s?\d+(?:[.,]\d+)?)?"
+                r"(?:\s*(?:/|per)\s*(?:active\s+day|day|month|mo|year|yr|seat|"
+                r"user|developer|credit|request|token|million tokens|usage))*"
             ),
             flags=re.IGNORECASE,
         )
@@ -1419,6 +2033,8 @@ class AnalystAgentMixin:
             )
             seen_keys.add((tiers[-1].name.casefold(), tiers[-1].price.casefold()))
         for index, match in enumerate(self._price_hint_regex().finditer(text), start=1):
+            if self._price_hint_is_noise(text, match):
+                continue
             price = " ".join(match.group(0).split())
             window = self._pricing_window_around_match(text, match)
             name = self._extract_pricing_tier_name_near_price(text, match)
@@ -1434,7 +2050,7 @@ class AnalystAgentMixin:
                 PricingTier(
                     name=name,
                     price=price,
-                    billing_cycle=self._extract_billing_cycle_hint(window),
+                    billing_cycle=self._billing_cycle_for_price_window(price, window),
                     limits=self._extract_limit_hints(window),
                     claims=claims,
                 )
@@ -1452,6 +2068,28 @@ class AnalystAgentMixin:
                 claims=claims,
             )
         ]
+
+    def _price_hint_is_noise(self, text: str, match: re.Match[str]) -> bool:
+        price = match.group(0)
+        if self._extract_billing_cycle_hint(price) != "unknown":
+            return False
+        window = text[max(0, match.start() - 64) : min(len(text), match.end() + 96)]
+        return bool(
+            re.search(
+                r"\b(?:promo|promotional|trial\s+balance|credit\s+balance)\b|"
+                r"\b(?:in|as|worth)\s+credits?\b|"
+                r"\bcredits?\s+(?:balance|included)\b|"
+                r"\bnot\s+(?:a\s+)?(?:plan\s+)?price\b",
+                window,
+                flags=re.IGNORECASE,
+            )
+        )
+
+    def _billing_cycle_for_price_window(self, price: str, window: str) -> str:
+        price_cycle = self._extract_billing_cycle_hint(price)
+        if price_cycle != "unknown":
+            return price_cycle
+        return self._extract_billing_cycle_hint(window)
 
     def _pricing_window_around_match(self, text: str, match: re.Match[str]) -> str:
         start = self._previous_pricing_tier_keyword_index(text, match.start())
@@ -1523,12 +2161,16 @@ class AnalystAgentMixin:
 
     def _extract_billing_cycle_hint(self, text: str) -> str:
         normalized = text.casefold()
+        if re.search(
+            r"\b(active\s+day|per\s+day|/day|daily|usage|credit|request|token|"
+            r"metered|consumption)\b",
+            normalized,
+        ):
+            return "usage"
         if re.search(r"\b(per month|/month|monthly|/mo|per mo)\b", normalized):
             return "monthly"
         if re.search(r"\b(per year|/year|annual|annually|yearly|/yr|per yr)\b", normalized):
             return "annual"
-        if re.search(r"\b(usage|credit|request|token|metered|consumption)\b", normalized):
-            return "usage"
         return "unknown"
 
     def _extract_limit_hints(self, text: str) -> list[str]:
@@ -1560,25 +2202,38 @@ class AnalystAgentMixin:
         dimension: str,
         pricing_model: PricingModel,
     ) -> None:
-        evidence_text = " ".join(
-            " ".join((source.title, source.snippet))
+        evidence_texts = [
+            " ".join((source.title, source.snippet)).strip()
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
-        )
-        if not evidence_text.strip():
+        ]
+        evidence_texts = [text for text in evidence_texts if text]
+        if not evidence_texts:
             return
-        price = self._extract_price_hint(evidence_text)
-        billing_cycle = self._extract_billing_cycle_hint(evidence_text)
-        limits = self._extract_limit_hints(evidence_text)
         existing_claims = [
             *pricing_model.notes,
             *[claim for tier in pricing_model.tiers for claim in tier.claims],
         ]
-        extracted_tiers = self._pricing_tiers_from_text(evidence_text, existing_claims)
+        extracted_tiers: list[PricingTier] = []
+        limits: list[str] = []
+        seen_limits: set[str] = set()
+        for evidence_text in evidence_texts:
+            extracted_tiers.extend(
+                self._pricing_tiers_from_text(evidence_text, existing_claims)
+            )
+            for limit in self._extract_limit_hints(evidence_text):
+                key = limit.casefold()
+                if key not in seen_limits:
+                    seen_limits.add(key)
+                    limits.append(limit)
+        first_extracted = next(
+            (tier for tier in extracted_tiers if tier.price != "unknown"),
+            None,
+        )
         for tier in pricing_model.tiers:
-            if tier.price == "unknown" and price != "unknown":
-                tier.price = price
-            if tier.billing_cycle == "unknown" and billing_cycle != "unknown":
-                tier.billing_cycle = billing_cycle
+            if tier.price == "unknown" and first_extracted is not None:
+                tier.price = first_extracted.price
+            if tier.billing_cycle == "unknown" and first_extracted is not None:
+                tier.billing_cycle = first_extracted.billing_cycle
             if not tier.limits and limits:
                 tier.limits = limits
         seen_keys = {
@@ -1884,6 +2539,214 @@ class AnalystAgentMixin:
 
     def _any_pattern_matches(self, text: str, patterns: list[str]) -> bool:
         return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
+
+    def _dimension_uses_review_summary(self, dimension: str) -> bool:
+        key = dimension.casefold().replace("-", "_")
+        return any(hint in key for hint in REVIEW_SUMMARY_DIMENSION_HINTS)
+
+    def _build_review_summary_from_source_dicts(
+        self,
+        *,
+        competitor: str,
+        dimension: str,
+        sources: list[dict[str, Any]],
+    ) -> ReviewThemeSummary:
+        source_ids = [
+            str(source.get("id") or "").strip()
+            for source in sources
+            if str(source.get("id") or "").strip()
+        ]
+        text = " ".join(
+            " ".join(
+                str(source.get(key) or "")
+                for key in ("title", "summary", "snippet", "text")
+            )
+            for source in sources
+        )
+        confidence = max(
+            (
+                float(source.get("confidence") or 0.0)
+                for source in sources
+                if str(source.get("id") or "").strip()
+            ),
+            default=0.0,
+        )
+        praise = []
+        complaints = []
+        blockers = []
+        switching = []
+        if any(term in text.casefold() for term in POSITIVE_REVIEW_TERMS):
+            praise.append(
+                self._review_theme_item(
+                    "Praised workflow or value theme",
+                    text,
+                    source_ids,
+                    confidence,
+                )
+            )
+        if any(term in text.casefold() for term in NEGATIVE_REVIEW_TERMS):
+            item = self._review_theme_item(
+                "Complaint or adoption friction theme",
+                text,
+                source_ids,
+                confidence,
+            )
+            complaints.append(item)
+            blockers.append(item)
+        if any(term in text.casefold() for term in SWITCHING_REVIEW_TERMS):
+            switching.append(
+                self._review_theme_item(
+                    "Switching or migration trigger",
+                    text,
+                    source_ids,
+                    confidence,
+                )
+            )
+        return ReviewThemeSummary(
+            competitor=competitor,
+            dimension=dimension,
+            praise_themes=praise,
+            complaint_themes=complaints,
+            adoption_blockers=blockers,
+            switching_triggers=switching,
+            persona_segments=self._review_persona_segments(text),
+            sentiment_hint=self._review_sentiment_hint(bool(praise), bool(complaints)),
+            source_ids=source_ids,
+            confidence=confidence,
+        )
+
+    def _build_review_summary_from_community_clusters(
+        self,
+        *,
+        competitor: str,
+        dimension: str,
+        sources: list[dict[str, Any]],
+    ) -> ReviewThemeSummary:
+        summary = ReviewThemeSummary(competitor=competitor, dimension=dimension)
+        seen_cluster_keys: set[tuple[str, str, str, str, tuple[str, ...]]] = set()
+        for source in sources:
+            metadata = source.get("metadata")
+            if not isinstance(metadata, dict):
+                continue
+            clusters = metadata.get("community_claim_clusters")
+            if not isinstance(clusters, list):
+                continue
+            for cluster in clusters:
+                if not isinstance(cluster, dict):
+                    continue
+                kind = str(cluster.get("kind") or "")
+                raw_source_ids = cluster.get("source_ids", [])
+                source_ids = (
+                    tuple(
+                        str(source_id).strip()
+                        for source_id in raw_source_ids
+                        if str(source_id).strip()
+                    )
+                    if isinstance(raw_source_ids, list)
+                    else ()
+                )
+                key = (
+                    kind,
+                    str(cluster.get("normalized_value") or ""),
+                    str(cluster.get("label") or ""),
+                    str(cluster.get("claim") or ""),
+                    source_ids,
+                )
+                if key in seen_cluster_keys:
+                    continue
+                seen_cluster_keys.add(key)
+                item = self._community_review_theme_item(cluster)
+                if kind == "praise":
+                    summary.praise_themes.append(item)
+                elif kind == "complaint":
+                    summary.complaint_themes.append(item)
+                elif kind == "adoption_blocker":
+                    summary.adoption_blockers.append(item)
+                elif kind == "switching_trigger":
+                    summary.switching_triggers.append(item)
+                elif kind in {"usage_limit", "feature_limitation"}:
+                    summary.complaint_themes.append(item)
+        theme_items = [
+            *summary.praise_themes,
+            *summary.complaint_themes,
+            *summary.adoption_blockers,
+            *summary.switching_triggers,
+        ]
+        summary.source_ids = merge_ordered_refs(
+            source_id for item in theme_items for source_id in item.source_ids
+        )
+        confidences = [item.confidence for item in theme_items]
+        if confidences:
+            summary.confidence = max(confidences)
+            summary.sentiment_hint = self._review_sentiment_hint(
+                bool(summary.praise_themes),
+                bool(summary.complaint_themes or summary.adoption_blockers),
+            )
+        return summary
+
+    def _community_review_theme_item(self, cluster: dict[str, Any]) -> ReviewThemeItem:
+        raw_source_ids = cluster.get("source_ids", [])
+        source_ids = [
+            str(source_id)
+            for source_id in raw_source_ids
+            if str(source_id).strip()
+        ] if isinstance(raw_source_ids, list) else []
+        evidence_list = cluster.get("evidence", [])
+        evidence = (
+            str(evidence_list[0])
+            if isinstance(evidence_list, list) and evidence_list
+            else str(cluster.get("claim") or "")
+        )
+        return ReviewThemeItem(
+            theme=str(cluster.get("claim") or "Community observation"),
+            evidence=evidence,
+            source_ids=source_ids,
+            confidence=self._coerce_confidence(cluster.get("confidence"), default=0.55),
+            evidence_gap=not source_ids,
+        )
+
+    def _review_theme_item(
+        self,
+        theme: str,
+        text: str,
+        source_ids: list[str],
+        confidence: float,
+    ) -> ReviewThemeItem:
+        evidence = self._compact_review_evidence(text)
+        return ReviewThemeItem(
+            theme=theme,
+            evidence=evidence,
+            source_ids=source_ids,
+            confidence=confidence,
+            evidence_gap=not source_ids,
+        )
+
+    def _compact_review_evidence(self, text: str, limit: int = 220) -> str:
+        compact = " ".join(text.split())
+        if len(compact) <= limit:
+            return compact
+        return f"{compact[: limit - 1].rstrip()}..."
+
+    def _review_persona_segments(self, text: str) -> list[str]:
+        normalized = text.casefold()
+        segments: list[str] = []
+        for label, terms in (
+            ("developers", ("developer", "engineer", "coding")),
+            ("enterprise buyers", ("enterprise", "buyer", "procurement")),
+            ("teams", ("team", "workspace", "organization")),
+        ):
+            if any(term in normalized for term in terms):
+                segments.append(label)
+        return segments[:4]
+
+    def _review_sentiment_hint(self, has_praise: bool, has_complaint: bool) -> str:
+        if has_praise and has_complaint:
+            return "mixed"
+        if has_praise:
+            return "positive"
+        if has_complaint:
+            return "negative"
+        return "unknown"
 
     def _enrich_persona_model_from_sources(
         self,

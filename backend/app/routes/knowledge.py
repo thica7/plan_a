@@ -14,9 +14,12 @@ from typing import Annotated, Any, Literal
 
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from app.deps import get_enterprise_user_context
+from packages.auth import EnterpriseUserContext, can_access_workspace
 from packages.crawler.models import CrawlRequest, CrawlResult
+from packages.enterprise.store import DEFAULT_WORKSPACE_ID
 from packages.knowledge.embeddings import (
     EmbeddingProvider,
     HashEmbeddingProvider,
@@ -39,6 +42,17 @@ router = APIRouter()
 _repository = KnowledgeRepository()
 _repository_lock = asyncio.Lock()
 _repository_initialised = False
+
+_BATCH_MAX_ITEMS = 100
+_BATCH_MAX_TEXT_CHARS = 500_000
+_BATCH_MAX_BASE64_CHARS = 8_000_000
+_BATCH_ALLOWED_MIME_TYPES = {
+    "application/json",
+    "text/csv",
+    "text/html",
+    "text/markdown",
+    "text/plain",
+}
 
 
 class CrawlJobCreate(BaseModel):
@@ -64,25 +78,25 @@ class CrawlJob(BaseModel):
 
 class BatchIngestItem(BaseModel):
     source: Literal["url", "text", "base64"]
-    url: str | None = None
+    url: str | None = Field(default=None, max_length=2048)
     crawl_run_id: str | None = None
     competitor: str | None = None
     dimension: str | None = None
-    text: str | None = None
-    title: str | None = None
-    content_b64: str | None = None
-    mime: str | None = None
-    filename: str | None = None
+    text: str | None = Field(default=None, max_length=_BATCH_MAX_TEXT_CHARS)
+    title: str | None = Field(default=None, max_length=500)
+    content_b64: str | None = Field(default=None, max_length=_BATCH_MAX_BASE64_CHARS)
+    mime: str | None = Field(default=None, max_length=120)
+    filename: str | None = Field(default=None, max_length=260)
 
 
 class BatchIngestOptions(BaseModel):
-    max_concurrent: int = 4
+    max_concurrent: int = Field(default=4, ge=1, le=16)
     fail_fast: bool = False
 
 
 class BatchIngestRequest(BaseModel):
-    items: list[BatchIngestItem]
-    options: BatchIngestOptions = BatchIngestOptions()
+    items: list[BatchIngestItem] = Field(min_length=1, max_length=_BATCH_MAX_ITEMS)
+    options: BatchIngestOptions = Field(default_factory=BatchIngestOptions)
 
 
 class RejectedItem(BaseModel):
@@ -185,18 +199,21 @@ def get_reranker_provider() -> RerankerProvider | None:
 RepositoryDep = Annotated[KnowledgeRepository, Depends(get_repository)]
 EmbeddingProviderDep = Annotated[EmbeddingProvider, Depends(get_embedding_provider)]
 RerankerProviderDep = Annotated[RerankerProvider | None, Depends(get_reranker_provider)]
+EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
 
 
 @router.get("/knowledge/documents", response_model=list[KnowledgeDocument])
 async def list_knowledge_documents(
     response: Response,
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
     competitor: str | None = None,
     dimension: str | None = None,
     source_type: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[KnowledgeDocument]:
+    _require_kb_access(user, "memory:read")
     try:
         total = await repo.count_documents(
             competitor=competitor,
@@ -221,7 +238,9 @@ async def list_knowledge_documents(
 async def get_knowledge_document(
     document_id: str,
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
 ) -> KnowledgeDocument:
+    _require_kb_access(user, "memory:read")
     try:
         document = await repo.get_document(document_id)
         if document is None:
@@ -237,7 +256,9 @@ async def get_knowledge_document(
 async def delete_knowledge_document(
     document_id: str,
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
 ) -> None:
+    _require_kb_access(user, "memory:write")
     try:
         document = await repo.get_document(document_id)
         if document is None:
@@ -256,7 +277,9 @@ async def delete_knowledge_document(
 async def get_knowledge_document_versions(
     document_id: str,
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
 ) -> list[KnowledgeDocument]:
+    _require_kb_access(user, "memory:read")
     versions = await repo.get_document_versions(document_id)
     if not versions:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -267,8 +290,10 @@ async def get_knowledge_document_versions(
 async def diff_knowledge_document(
     document_id: str,
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
     against: str = Query(...),
 ) -> DocumentDiffResponse:
+    _require_kb_access(user, "memory:read")
     document = await repo.get_document(document_id)
     other = await repo.get_document(against)
     if document is None or other is None:
@@ -288,7 +313,9 @@ async def merge_knowledge_document_version(
     document_id: str,
     request: DocumentMergeRequest,
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
 ) -> KnowledgeDocument:
+    _require_kb_access(user, "memory:write")
     merged = await repo.merge_document_version(document_id, request.target_document_id)
     if merged is None:
         raise HTTPException(status_code=404, detail="Document version not found")
@@ -301,7 +328,9 @@ async def search_knowledge(
     repo: RepositoryDep,
     embedding_provider: EmbeddingProviderDep,
     reranker_provider: RerankerProviderDep,
+    user: EnterpriseUserDep,
 ) -> RetrievalResponse:
+    _require_kb_access(user, "memory:read")
     try:
         service = RetrievalService(
             repo=repo,
@@ -328,7 +357,9 @@ async def evaluate_knowledge(
     repo: RepositoryDep,
     embedding_provider: EmbeddingProviderDep,
     reranker_provider: RerankerProviderDep,
+    user: EnterpriseUserDep,
 ) -> EvalRunDetail:
+    _require_kb_access(user, "memory:write")
     top_k = max(1, request.top_k)
     labels = [
         RetrievalLabel(
@@ -387,9 +418,11 @@ async def evaluate_knowledge(
 @router.get("/knowledge/eval/runs", response_model=list[EvalRunSummary])
 async def list_knowledge_eval_runs(
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> list[EvalRunSummary]:
+    _require_kb_access(user, "memory:read")
     rows = await repo.list_eval_runs(limit=limit, offset=offset)
     return [EvalRunSummary(**row) for row in rows]
 
@@ -398,7 +431,9 @@ async def list_knowledge_eval_runs(
 async def get_knowledge_eval_run(
     run_id: str,
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
 ) -> EvalRunDetail:
+    _require_kb_access(user, "memory:read")
     row = await repo.get_eval_run(run_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Eval run not found")
@@ -406,7 +441,11 @@ async def get_knowledge_eval_run(
 
 
 @router.get("/knowledge/stats", response_model=KnowledgeStatsResponse)
-async def get_knowledge_stats(repo: RepositoryDep) -> KnowledgeStatsResponse:
+async def get_knowledge_stats(
+    repo: RepositoryDep,
+    user: EnterpriseUserDep,
+) -> KnowledgeStatsResponse:
+    _require_kb_access(user, "memory:read")
     stats = await repo.knowledge_stats()
     return KnowledgeStatsResponse(**stats)
 
@@ -415,10 +454,12 @@ async def get_knowledge_stats(repo: RepositoryDep) -> KnowledgeStatsResponse:
 async def list_knowledge_crawl_jobs(
     response: Response,
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
     status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[CrawlJob]:
+    _require_kb_access(user, "source:read")
     total = await repo.count_crawl_jobs(status=status_filter)
     response.headers["X-Total-Count"] = str(total)
     response.headers["X-Limit"] = str(limit)
@@ -431,7 +472,9 @@ async def list_knowledge_crawl_jobs(
 async def create_knowledge_crawl_job(
     request: CrawlJobCreate,
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
 ) -> CrawlJob:
+    _require_kb_access(user, "source:write")
     job_id = await repo.create_crawl_job(
         request.url,
         run_id=request.run_id,
@@ -449,7 +492,9 @@ async def create_knowledge_crawl_job(
 async def get_knowledge_crawl_job(
     job_id: str,
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
 ) -> CrawlJob:
+    _require_kb_access(user, "source:read")
     row = await repo.get_crawl_job(job_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Crawl job not found")
@@ -457,7 +502,11 @@ async def get_knowledge_crawl_job(
 
 
 @router.get("/knowledge/crawl-runs", response_model=list[CrawlRunSummary])
-async def list_knowledge_crawl_runs(repo: RepositoryDep) -> list[CrawlRunSummary]:
+async def list_knowledge_crawl_runs(
+    repo: RepositoryDep,
+    user: EnterpriseUserDep,
+) -> list[CrawlRunSummary]:
+    _require_kb_access(user, "source:read")
     rows = await repo.list_crawl_runs()
     return [CrawlRunSummary(**row) for row in rows]
 
@@ -467,7 +516,9 @@ async def create_knowledge_batch(
     request: BatchIngestRequest,
     repo: RepositoryDep,
     embedding_provider: EmbeddingProviderDep,
+    user: EnterpriseUserDep,
 ) -> BatchIngestResponse:
+    _require_kb_access(user, "memory:write")
     rejected: list[RejectedItem] = []
     accepted_items: list[tuple[int, BatchIngestItem]] = []
     for index, item in enumerate(request.items):
@@ -508,7 +559,9 @@ async def create_knowledge_batch(
 async def get_knowledge_ingest_job(
     job_id: str,
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
 ) -> IngestJob:
+    _require_kb_access(user, "memory:read")
     row = await repo.get_ingest_job(job_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Ingest job not found")
@@ -518,9 +571,11 @@ async def get_knowledge_ingest_job(
 @router.get("/knowledge/ingest-jobs", response_model=list[IngestJob])
 async def list_knowledge_ingest_jobs(
     repo: RepositoryDep,
+    user: EnterpriseUserDep,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[IngestJob]:
+    _require_kb_access(user, "memory:read")
     rows = await repo.list_ingest_jobs(limit=limit, offset=offset)
     return [_row_to_ingest_job(row) for row in rows]
 
@@ -846,7 +901,15 @@ def _validate_batch_item(item: BatchIngestItem) -> str | None:
             return "content_b64 is required"
         if not item.mime:
             return "mime is required"
+        if item.mime.split(";", 1)[0].strip().lower() not in _BATCH_ALLOWED_MIME_TYPES:
+            return "mime is not supported"
     return None
+
+
+def _require_kb_access(user: EnterpriseUserContext, action: str) -> None:
+    workspace_id = user.workspace_id or DEFAULT_WORKSPACE_ID
+    if not can_access_workspace(user, workspace_id, action):
+        raise HTTPException(status_code=403, detail="Insufficient workspace permission")
 
 
 def _kb_ingest_on_crawl() -> bool:

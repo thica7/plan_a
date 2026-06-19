@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -67,6 +68,9 @@ from packages.schema.enterprise import (
 )
 from packages.sources import normalize_report_version_sources
 
+_MIGRATION_LOCK = threading.Lock()
+_MIGRATED_DATABASE_URLS: set[str] = set()
+
 
 class EnterprisePostgresStore:
     """Postgres-backed enterprise repository for Workspace/Project/Evidence projections."""
@@ -88,7 +92,7 @@ class EnterprisePostgresStore:
         self._dict_row = dict_row
         self._jsonb = Jsonb
         if auto_migrate:
-            self.migrate()
+            self._migrate_once()
 
     @contextmanager
     def _connect(
@@ -145,10 +149,21 @@ class EnterprisePostgresStore:
         script = _schema_path().read_text(encoding="utf-8")
         with self._service_connection() as conn:
             with conn.cursor() as cur:
-                for statement in _split_sql(script):
-                    cur.execute(statement)
-                self._copy_legacy_claim_records(cur)
+                cur.execute("SELECT pg_advisory_lock(%s, %s)", (816873309, 20260619))
+                try:
+                    for statement in _split_sql(script):
+                        cur.execute(statement)
+                    self._copy_legacy_claim_records(cur)
+                finally:
+                    cur.execute("SELECT pg_advisory_unlock(%s, %s)", (816873309, 20260619))
             conn.commit()
+
+    def _migrate_once(self) -> None:
+        with _MIGRATION_LOCK:
+            if self.database_url in _MIGRATED_DATABASE_URLS:
+                return
+            self.migrate()
+            _MIGRATED_DATABASE_URLS.add(self.database_url)
 
     def ping(self) -> str:
         with self._service_connection() as conn:
@@ -573,7 +588,6 @@ class EnterprisePostgresStore:
         period_start, period_end = _usage_period(period_start, period_end)
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
             with conn.cursor() as cur:
-                self._upsert_workspace(cur, workspace_id)
                 workspace_row = cur.execute(
                     "SELECT * FROM workspaces WHERE id = %s",
                     (workspace_id,),
@@ -623,7 +637,11 @@ class EnterprisePostgresStore:
                     (workspace_id, period_start, period_end),
                 ).fetchone()
             conn.commit()
-        workspace = WorkspaceRecord.model_validate(dict(workspace_row))
+        workspace = (
+            WorkspaceRecord.model_validate(dict(workspace_row))
+            if workspace_row is not None
+            else _default_workspace_record(workspace_id)
+        )
         usage = dict(usage_row or {})
         return build_workspace_usage_summary(
             workspace,
@@ -655,7 +673,11 @@ class EnterprisePostgresStore:
                 "SELECT * FROM workspaces WHERE id = %s",
                 (workspace_id,),
             ).fetchone()
-        workspace = self._model_from_row(WorkspaceRecord, row)
+        workspace = (
+            self._model_from_row(WorkspaceRecord, row)
+            if row is not None
+            else _default_workspace_record(workspace_id)
+        )
         return build_quota_decision(usage, workspace.quota_enforcement)
 
     def list_notifications(
@@ -2595,6 +2617,14 @@ def _usage_period(
 ) -> tuple[datetime, datetime]:
     default_start, default_end = current_month_window()
     return period_start or default_start, period_end or default_end
+
+
+def _default_workspace_record(workspace_id: str) -> WorkspaceRecord:
+    return WorkspaceRecord(
+        id=workspace_id,
+        name=_title_from_id(workspace_id),
+        description="Phase 1 workspace.",
+    )
 
 
 def _embedding_dedupe_key(evidence: EvidenceRecord) -> str:

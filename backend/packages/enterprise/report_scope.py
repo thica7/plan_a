@@ -9,6 +9,7 @@ from packages.schema.enterprise import (
     ClaimRecord,
     CompetitorRecord,
     EvidenceRecord,
+    EnterpriseRunProjection,
     ProjectRecord,
     ReportVersionRecord,
 )
@@ -42,6 +43,7 @@ def report_release_gate_scope(
     *,
     project: ProjectRecord,
     store: EnterpriseStore,
+    projection: EnterpriseRunProjection | None = None,
 ) -> tuple[list[CompetitorRecord], list[EvidenceRecord], list[ClaimRecord]]:
     """Return the exact records that a report version is allowed to publish.
 
@@ -50,7 +52,12 @@ def report_release_gate_scope(
     evidence, and claims that the report actually cites.
     """
 
-    return build_report_scope(version, project=project, store=store).as_release_gate_tuple()
+    return build_report_scope(
+        version,
+        project=project,
+        store=store,
+        projection=projection,
+    ).as_release_gate_tuple()
 
 
 def build_report_scope(
@@ -58,21 +65,40 @@ def build_report_scope(
     *,
     project: ProjectRecord,
     store: EnterpriseStore,
+    projection: EnterpriseRunProjection | None = None,
 ) -> ReportScope:
-    projection = store.get_run_projection(version.run_id) if version.run_id else None
+    current_projection = projection
+    projection = _current_or_stored_projection(version, store, projection)
     scope_source = "report_version_ids"
     if projection is not None and projection.report_version.id == version.id:
-        evidence = projection.evidence_records
-        claims = projection.claim_records
-        scope_source = "run_projection"
-    else:
-        evidence = _records_in_id_order(
-            store.list_evidence(project_id=project.id),
-            version.evidence_ids,
+        evidence = _records_for_report_run(
+            version,
+            _records_in_id_order(projection.evidence_records, version.evidence_ids),
         )
-        claims = _records_in_id_order(
-            store.list_claims(project_id=project.id),
-            version.claim_ids,
+        claims = _records_for_report_run(
+            version,
+            _records_in_id_order(projection.claim_records, version.claim_ids),
+        )
+        scope_source = (
+            "current_projection"
+            if current_projection is not None
+            and current_projection.report_version.id == version.id
+            else "run_projection"
+        )
+    else:
+        evidence = _records_for_report_run(
+            version,
+            _records_in_id_order(
+                store.list_evidence(project_id=project.id),
+                version.evidence_ids,
+            ),
+        )
+        claims = _records_for_report_run(
+            version,
+            _records_in_id_order(
+                store.list_claims(project_id=project.id),
+                version.claim_ids,
+            ),
         )
     competitors = report_scope_competitors(
         version,
@@ -102,8 +128,14 @@ def report_scope_metadata(
     *,
     project: ProjectRecord,
     store: EnterpriseStore,
+    projection: EnterpriseRunProjection | None = None,
 ) -> dict[str, Any]:
-    return build_report_scope(version, project=project, store=store).metadata
+    return build_report_scope(
+        version,
+        project=project,
+        store=store,
+        projection=projection,
+    ).metadata
 
 
 def report_scope_competitors(
@@ -150,6 +182,25 @@ def _records_in_id_order(
 ) -> list[RecordWithIdT]:
     records_by_id = {item.id: item for item in records}
     return [records_by_id[item] for item in ids if item in records_by_id]
+
+
+def _current_or_stored_projection(
+    version: ReportVersionRecord,
+    store: EnterpriseStore,
+    projection: EnterpriseRunProjection | None,
+) -> EnterpriseRunProjection | None:
+    if projection is not None and projection.report_version.id == version.id:
+        return projection
+    return store.get_run_projection(version.run_id) if version.run_id else None
+
+
+def _records_for_report_run(
+    version: ReportVersionRecord,
+    records: Iterable[RecordWithIdT],
+) -> list[RecordWithIdT]:
+    if not version.run_id:
+        return list(records)
+    return [item for item in records if getattr(item, "run_id", None) == version.run_id]
 
 
 def _dedupe_ordered_strings(values: Iterable[object]) -> list[str]:

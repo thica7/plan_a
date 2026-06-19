@@ -10,13 +10,22 @@ from urllib.parse import urlparse
 from packages.agents import SubagentContext
 from packages.agents.collectors.skill_tools import collect_competitor_with_skill_tools
 from packages.business_intel.entity_resolver import (
-    confusion_terms_for_competitor,
     identity_terms_for_competitor,
     is_trusted_url_for_competitor,
     normalize_competitor_key,
     search_qualifier_for_competitor,
 )
+from packages.community import (
+    CommunityClaimCluster,
+    build_community_queries,
+    cluster_community_claims,
+    extract_community_claims_from_source,
+    reclassify_community_source,
+    snippet_only_source_from_candidate,
+)
+from packages.community.source_classifier import classify_community_source
 from packages.identity import compute_raw_source_id
+from packages.refs import merge_ordered_refs
 from packages.research.discovery import (
     homepage_candidates,
     trusted_registry_candidates,
@@ -35,7 +44,6 @@ from packages.search import SearchResult
 from packages.tools import (
     fetch_evidence_page,
     search_review_site_queries,
-    survey_simulator,
 )
 from packages.tools.source_discovery import (
     SourceCandidate,
@@ -58,6 +66,14 @@ if TYPE_CHECKING:
 
 
 class CollectorAgentMixin:
+    COLLECTOR_REACT_ACTIONS = (
+        "web_search",
+        "robots_check",
+        "fetch_page",
+        "find_official_docs",
+        "search_review_site",
+    )
+
     async def _run_collector_react(
         self,
         record: RunRecord,
@@ -70,6 +86,11 @@ class CollectorAgentMixin:
         fetched_by_url: dict[str, Any] = {}
         added = 0
         max_turns = self._collector_task_max_turns(detail.plan, dimension)
+        allowed_actions = [
+            action
+            for action in self._collector_react_allowed_actions(dimension)
+            if action in {"web_search", "fetch_page", "finish"}
+        ]
         for turn in range(1, max_turns + 1):
             payload = await self._trace_llm_json(
                 record,
@@ -78,7 +99,7 @@ class CollectorAgentMixin:
                 name=f"{dimension}_react_turn_{turn}",
                 system=(
                     "You are a bounded collector ReAct runner. Decide exactly one next action. "
-                    "Allowed actions are web_search, fetch_page, finish. "
+                    f"Allowed actions are {', '.join(allowed_actions)}. "
                     "Use web_search to find evidence, fetch_page to inspect promising URLs, "
                     "and finish only when you can output structured sources."
                 ),
@@ -92,7 +113,7 @@ class CollectorAgentMixin:
                     "title, url, summary, confidence."
                 ),
                 schema_hint=(
-                    '{"action":"web_search|fetch_page|finish","query":"query or null",'
+                    f'{{"action":"{"|".join(allowed_actions)}","query":"query or null",'
                     '"url":"https://... or null","rationale":"short reason",'
                     '"sources":[{"competitor":"name","title":"title","url":"https://... or null",'
                     '"summary":"summary","confidence":0.0}]}'
@@ -100,6 +121,16 @@ class CollectorAgentMixin:
                 context=context,
             )
             action = str(payload.get("action") or "").strip().lower()
+            if action not in allowed_actions:
+                observations.append(
+                    {
+                        "turn": turn,
+                        "action": action or "unknown",
+                        "error": "unsupported_action",
+                        "allowed_actions": allowed_actions,
+                    }
+                )
+                continue
             if action == "web_search":
                 query = str(
                     payload.get("query")
@@ -193,6 +224,7 @@ class CollectorAgentMixin:
         fetched_by_url: dict[str, Any] = {}
         qa_feedback = self._qa_feedback_for_branch(detail, "collector", dimension, competitor)
         max_turns = self._collector_task_max_turns(detail.plan, dimension, competitor)
+        allowed_actions = self._collector_react_allowed_actions(dimension)
         for turn in range(1, max_turns + 1):
             payload = await self._trace_llm_json(
                 record,
@@ -202,8 +234,7 @@ class CollectorAgentMixin:
                 system=(
                     "You are a bounded collector ReAct runner for exactly one competitor "
                     "and one dimension. "
-                    "Allowed actions are web_search, robots_check, fetch_page, find_official_docs, "
-                    "search_review_site, survey_simulator, finish. "
+                    f"Allowed actions are {', '.join(allowed_actions)}. "
                     "Use search/fetch evidence before finish. Return only sources for "
                     "the assigned competitor."
                 ),
@@ -219,8 +250,7 @@ class CollectorAgentMixin:
                     "summary, confidence."
                 ),
                 schema_hint=(
-                    '{"action":"web_search|robots_check|fetch_page|find_official_docs|'
-                    'search_review_site|survey_simulator|finish","query":"query or null",'
+                    f'{{"action":"{"|".join(allowed_actions)}","query":"query or null",'
                     '"url":"https://... or null","rationale":"short reason",'
                     '"sources":[{"title":"title","url":"https://... or null",'
                     '"summary":"summary","confidence":0.0}]}'
@@ -228,6 +258,16 @@ class CollectorAgentMixin:
                 context=context,
             )
             action = str(payload.get("action") or "").strip().lower()
+            if action not in allowed_actions:
+                observations.append(
+                    {
+                        "turn": turn,
+                        "action": action or "unknown",
+                        "error": "unsupported_action",
+                        "allowed_actions": allowed_actions,
+                    }
+                )
+                continue
             if action == "web_search":
                 query = str(
                     payload.get("query") or self._web_search_query(detail, competitor, dimension)
@@ -345,34 +385,6 @@ class CollectorAgentMixin:
                 )
                 observations.append({"turn": turn, "action": action, "queries": plan.queries})
                 continue
-            if action == "survey_simulator":
-                records = survey_simulator(
-                    topic=detail.topic,
-                    competitor=competitor,
-                    dimension=dimension,
-                    qa_feedback=qa_feedback,
-                )
-                self._trace_local_tool(
-                    record,
-                    agent="collector",
-                    subagent=context.subagent,
-                    name="survey_simulator",
-                    input_text=json.dumps(
-                        {"topic": detail.topic, "competitor": competitor, "dimension": dimension},
-                        ensure_ascii=False,
-                    ),
-                    output_text=json.dumps([item.__dict__ for item in records], ensure_ascii=False),
-                    context=context,
-                    metadata={"record_count": len(records)},
-                )
-                observations.append(
-                    {
-                        "turn": turn,
-                        "action": action,
-                        "records": [item.__dict__ for item in records],
-                    }
-                )
-                continue
             if action == "finish":
                 return self._source_candidates_from_react_finish(
                     detail,
@@ -389,6 +401,19 @@ class CollectorAgentMixin:
                 {"turn": turn, "action": action or "unknown", "error": "unsupported_action"}
             )
         return []
+
+    def _collector_react_allowed_actions(self, dimension: str) -> list[str]:
+        skill = self._skill_registry.get(dimension)
+        configured = list(skill.tools_allowlist if skill is not None else [])
+        supported = set(self.COLLECTOR_REACT_ACTIONS)
+        actions: list[str] = []
+        for action in configured:
+            if action in supported and action not in actions:
+                actions.append(action)
+        if not actions:
+            actions.extend(["web_search", "fetch_page"])
+        actions.append("finish")
+        return actions
 
     def _force_source_competitor(
         self, raw_sources: object, competitor: str
@@ -558,7 +583,10 @@ class CollectorAgentMixin:
             )
 
         async def fetch(url: str):
-            return await self._trace_fetch(record, "collector", dimension, url, context)
+            try:
+                return await self._trace_fetch(record, "collector", dimension, url, context)
+            except Exception:  # noqa: BLE001 - one failed candidate should not abort collection.
+                return None
 
         result = await run_research_pipeline(
             brief,
@@ -566,12 +594,14 @@ class CollectorAgentMixin:
             search=search if enable_search and self._search.is_enabled else None,
             seed_candidates=seed_candidates,
         )
+        admission_diagnostics: list[dict[str, object]] = []
         sources = self._raw_sources_from_research_result(
             detail,
             brief,
             result,
             batch_sources=batch_sources,
             target_source_count=target_source_count,
+            rejection_diagnostics=admission_diagnostics,
         )
         self._trace_local_tool(
             record,
@@ -593,6 +623,7 @@ class CollectorAgentMixin:
                     "gap_ids": [gap.id for gap in result.gaps],
                     "repair_task_ids": [task.id for task in result.repair_tasks],
                     "metrics": result.metrics,
+                    "admission_rejections": admission_diagnostics[:12],
                 },
                 ensure_ascii=False,
             ),
@@ -603,6 +634,7 @@ class CollectorAgentMixin:
                 "captured_ok_count": result.metrics.get("captured_ok_count", 0),
                 "gap_count": len(result.gaps),
                 "repair_round_count": result.metrics.get("repair_round_count", 0),
+                "admission_rejection_count": len(admission_diagnostics),
             },
         )
         return sources
@@ -615,6 +647,7 @@ class CollectorAgentMixin:
         *,
         batch_sources: list[RawSource],
         target_source_count: int,
+        rejection_diagnostics: list[dict[str, object]] | None = None,
     ) -> list[RawSource]:
         return raw_sources_from_research_result(
             brief,
@@ -648,7 +681,8 @@ class CollectorAgentMixin:
                 brief.dimension,
                 page.snippet,
             ),
-            source_is_usable=self._source_is_usable,
+            source_is_usable=self._research_source_is_usable,
+            rejection_diagnostics=rejection_diagnostics,
         )
 
     async def _collect_official_sources(
@@ -870,10 +904,150 @@ class CollectorAgentMixin:
             query = template.format(competitor=competitor)
         else:
             query = f"{competitor} {dimension}"
+        if self._dimension_needs_persona_strength_gate(dimension):
+            persona_terms = (
+                "customers case studies developer adoption user reviews "
+                "onboarding switching workflow fit"
+            )
+            query = f"{query} {persona_terms}"
         qualifier = self._competitor_search_qualifier(competitor)
         if qualifier and qualifier.casefold() not in query.casefold():
             query = f"{query} {qualifier}"
         return f"{query} {detail.topic} official source"
+
+    async def _community_source_candidates(
+        self,
+        record: RunRecord,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+        context: SubagentContext,
+    ) -> list[SourceCandidate]:
+        if not self._settings.collector_community_enabled or not self._search.is_enabled:
+            return []
+        queries = build_community_queries(
+            competitor=competitor,
+            dimension=dimension,
+            topic=detail.topic,
+            limit=max(0, int(self._settings.collector_community_queries_per_branch)),
+        )
+        candidates: list[SourceCandidate] = []
+        for query in queries:
+            results = await self._trace_search(
+                record,
+                agent="collector",
+                subagent=context.subagent,
+                query=query,
+                max_results=max(1, int(self._settings.collector_community_max_results_per_query)),
+                context=context,
+            )
+            for rank, result in enumerate(results):
+                classification = classify_community_source(
+                    url=result.url,
+                    title=result.title,
+                    snippet=result.snippet,
+                )
+                if not classification.is_community:
+                    continue
+                candidates.append(
+                    SourceCandidate(
+                        title=result.title,
+                        url=result.url,
+                        snippet=result.snippet,
+                        origin="community_search",
+                        competitor=competitor,
+                        dimension=dimension,
+                        rank=rank,
+                        confidence=classification.base_confidence,
+                        query=query,
+                        date=result.date,
+                        last_updated=result.last_updated,
+                        reason="community_evidence_search",
+                        metadata={
+                            "community_evidence": True,
+                            "community_source_type": classification.source_type,
+                            "community_authority_signal": classification.authority_signal,
+                            "community_classification_reason": classification.reason,
+                        },
+                    )
+                )
+        self._append_agent_message(
+            record,
+            from_agent="collector",
+            to_agent="collect_join",
+            message_type="community_search_completed",
+            payload_schema="CommunitySearchSummary",
+            payload={
+                "competitor": competitor,
+                "dimension": dimension,
+                "queries": queries,
+                "query_count": len(queries),
+                "candidate_count": len(candidates),
+                "candidate_ids": [candidate.id for candidate in candidates],
+                "no_result": not candidates,
+            },
+        )
+        return candidates
+
+    async def _collect_community_sources_for_branch(
+        self,
+        record: RunRecord,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+        context: SubagentContext,
+    ) -> list[RawSource]:
+        target_count = max(0, int(self._settings.collector_community_target_sources_per_branch))
+        if target_count <= 0:
+            return []
+        candidates = await self._community_source_candidates(
+            record, detail, dimension, competitor, context
+        )
+        if not candidates:
+            return []
+        fetched_sources = await self._collect_competitor_with_research_pipeline(
+            record,
+            detail,
+            dimension,
+            competitor,
+            context,
+            batch_sources=[],
+            target_source_count=target_count,
+            include_official=False,
+            seed_candidates=candidates,
+            enable_search=False,
+            enable_repair=False,
+        )
+        community_sources = [
+            reclassify_community_source(source, run_id=detail.id) for source in fetched_sources
+        ]
+        if len(community_sources) < target_count:
+            existing_urls = {
+                str(source.url).rstrip("/")
+                for source in community_sources
+                if source.url is not None
+            }
+            for candidate in candidates:
+                if len(community_sources) >= target_count:
+                    break
+                if candidate.url.rstrip("/") in existing_urls:
+                    continue
+                snippet_source = snippet_only_source_from_candidate(candidate, run_id=detail.id)
+                if snippet_source is None:
+                    continue
+                community_sources.append(snippet_source)
+                existing_urls.add(candidate.url.rstrip("/"))
+        return [
+            source
+            for source in community_sources
+            if not self._candidate_already_collected(
+                detail,
+                [],
+                competitor=competitor,
+                dimension=dimension,
+                url=str(source.url) if source.url else None,
+            )
+        ]
 
     def _dimension_source_terms(self, dimension: str) -> list[str]:
         normalized = dimension.casefold()
@@ -890,8 +1064,23 @@ class CollectorAgentMixin:
                 "scim",
                 "audit",
             ]
-        if "persona" in normalized:
-            return ["persona", "customer", "user", "buyer", "case study"]
+        if "persona" in normalized or "user" in normalized:
+            return [
+                "persona",
+                "customer",
+                "customers",
+                "user",
+                "buyer",
+                "case study",
+                "case studies",
+                "customer story",
+                "developer adoption",
+                "review",
+                "feedback",
+                "workflow fit",
+                "onboarding",
+                "switching",
+            ]
         return [normalized, "feature", "docs"]
 
     def _official_registry_key(self, competitor: str) -> str:
@@ -970,6 +1159,21 @@ class CollectorAgentMixin:
                 "privacy",
                 "indemnity",
             ]
+        if "persona" in normalized or "user" in normalized:
+            return [
+                "developer",
+                "developers",
+                "engineering team",
+                "enterprise team",
+                "customer adoption",
+                "user reviews",
+                "buyer persona",
+                "workflow fit",
+                "onboarding effort",
+                "switching cost",
+                "use case",
+                "pain point",
+            ]
         return []
 
     def _dimension_window_score(self, text: str, dimension: str) -> int:
@@ -1011,6 +1215,31 @@ class CollectorAgentMixin:
     def _source_is_usable(self, source: RawSource) -> bool:
         return self._source_quality_problem(source) is None
 
+    def _research_source_is_usable(self, source: RawSource) -> bool:
+        problem = self._source_quality_problem(source)
+        if problem is None:
+            return True
+        if (
+            source.candidate_origin == "community_search"
+            and "does not expose a recognizable" in problem
+            and self._community_source_mentions_competitor(source)
+        ):
+            classification = classify_community_source(
+                url=str(source.url or ""),
+                title=source.title,
+                snippet=source.snippet,
+            )
+            return classification.is_community
+        return False
+
+    def _community_source_mentions_competitor(self, source: RawSource) -> bool:
+        haystack = f"{source.title}\n{source.url or ''}\n{source.snippet}".casefold()
+        competitor_terms = {
+            source.competitor.casefold(),
+            normalize_competitor_key(source.competitor),
+        }
+        return any(term and term in haystack for term in competitor_terms)
+
     def _source_quality_problem(self, source: RawSource) -> str | None:
         return source_quality_problem(source)
 
@@ -1026,7 +1255,20 @@ class CollectorAgentMixin:
         if "persona" in dimension_key or "user" in dimension_key:
             return any(
                 term in normalized_text
-                for term in ["developer", "customer", "enterprise", "team", "user"]
+                for term in [
+                    "developer",
+                    "customer",
+                    "enterprise",
+                    "team",
+                    "user",
+                    "adoption",
+                    "review",
+                    "feedback",
+                    "workflow fit",
+                    "onboarding",
+                    "switching",
+                    "use case",
+                ]
             )
         return any(
             term in normalized_text for term in ["model", "api", "feature", "coding", "reasoning"]
@@ -1103,7 +1345,8 @@ class CollectorAgentMixin:
                 re.search(
                     r"(?:target(?:ed)?\s+(?:user|customer|persona)|for\s+(?:developers|teams|enterprises|"
                     r"engineering|marketing|sales)|case stud(?:y|ies)|customer|"
-                    r"enterprise|adoption|use case)",
+                    r"enterprise|adoption|use case|user reviews?|feedback|workflow fit|"
+                    r"onboarding|switching|pain point)",
                     normalized_text,
                 )
             )
@@ -1166,98 +1409,6 @@ class CollectorAgentMixin:
     def _competitor_search_qualifier(self, competitor: str) -> str:
         return search_qualifier_for_competitor(competitor)
 
-    def _competitor_identity_problem(self, source: RawSource) -> str | None:
-        if source.source_type in USER_RESEARCH_SOURCE_TYPES:
-            return None
-        key = self._official_registry_key(source.competitor)
-        if not key or key.startswith("crossmodel"):
-            return None
-        haystack = f"{source.title}\n{source.url or ''}\n{source.snippet}".casefold()
-        for term in confusion_terms_for_competitor(source.competitor):
-            if (
-                key == "windsurf"
-                and term == "devin.ai"
-                and self._is_windsurf_docs_redirect_source(source, haystack)
-            ):
-                continue
-            if term in haystack:
-                return (
-                    f"Source {source.id} appears to describe `{term}` rather than "
-                    f"{source.competitor}."
-                )
-        hints = identity_terms_for_competitor(source.competitor)
-        if hints and not any(term in haystack for term in hints):
-            return (
-                f"Source {source.id} does not expose a recognizable {source.competitor} "
-                "product identity signal."
-            )
-        return None
-
-    def _is_windsurf_docs_redirect_source(self, source: RawSource, haystack: str) -> bool:
-        url = str(source.url or "").casefold()
-        return (
-            any(path in url for path in ("docs.devin.ai/desktop", "docs.devin.ai/windsurf"))
-            and "windsurf" in haystack
-            and "devin desktop" not in haystack
-            and "cognition devin" not in haystack
-        )
-
-    def _dimension_terms_present(self, dimension: str, normalized_text: str) -> bool:
-        dimension_key = dimension.casefold()
-        if "pricing" in dimension_key:
-            terms = [
-                "pricing",
-                "price",
-                "cost",
-                "billing",
-                "token",
-                "tier",
-                "free",
-                "enterprise",
-                "plan",
-                "$",
-            ]
-        elif "persona" in dimension_key or "user" in dimension_key:
-            terms = [
-                "customer",
-                "user",
-                "developer",
-                "enterprise",
-                "team",
-                "persona",
-                "target",
-                "use case",
-                "case study",
-                "organization",
-            ]
-        elif "review" in dimension_key or "feedback" in dimension_key:
-            terms = [
-                "review",
-                "feedback",
-                "rating",
-                "complaint",
-                "praise",
-                "customer",
-                "user",
-                "adoption",
-                "switching",
-                "pain point",
-            ]
-        else:
-            terms = [
-                "feature",
-                "capability",
-                "model",
-                "context",
-                "multimodal",
-                "coding",
-                "reasoning",
-                "benchmark",
-                "api",
-                "tool",
-            ]
-        return any(term in normalized_text for term in terms)
-
     async def _source_from_search_result(
         self,
         detail: RunDetail,
@@ -1311,12 +1462,14 @@ class CollectorAgentMixin:
             search=None,
             seed_candidates=[source_candidate],
         )
+        admission_diagnostics: list[dict[str, object]] = []
         sources = self._raw_sources_from_research_result(
             detail,
             brief,
             result_obj,
             batch_sources=[],
             target_source_count=1,
+            rejection_diagnostics=admission_diagnostics,
         )
         if not sources and not self._requires_verified_web_evidence(detail, dimension):
             source = self._demo_search_result_source(
@@ -1332,7 +1485,7 @@ class CollectorAgentMixin:
             reason = (
                 self._fetch_rejection_reason(page)
                 if page is not None and page.status != "ok"
-                else "research_pipeline_no_accepted_evidence"
+                else self._admission_rejection_reason(admission_diagnostics)
             )
             self._trace_rejected_source_candidate(
                 record,
@@ -1346,6 +1499,16 @@ class CollectorAgentMixin:
             )
             return None
         return sources[0] if sources else None
+
+    def _admission_rejection_reason(self, diagnostics: list[dict[str, object]]) -> str:
+        if not diagnostics:
+            return "research_pipeline_no_accepted_evidence"
+        first = diagnostics[0]
+        reason = str(first.get("reason") or "raw_source_admission_rejected")
+        detail = str(first.get("detail") or "").strip()
+        if detail:
+            return f"{reason}:{detail[:180]}"
+        return reason
 
     def _demo_search_result_source(
         self,
@@ -1842,6 +2005,26 @@ class CollectorAgentMixin:
                 collect_payload["skill_tool_added"] = len(sources)
             except Exception as exc:  # noqa: BLE001 - skill tools degrade to LLM fallback.
                 collect_payload["skill_tool_error"] = str(exc)
+        community_sources = [
+            source for source in sources if source.metadata.get("community_evidence")
+        ]
+        if not community_sources:
+            try:
+                community_sources = await self._collect_community_sources_for_branch(
+                    record,
+                    detail,
+                    dimension,
+                    competitor,
+                    context,
+                )
+            except Exception as exc:  # noqa: BLE001 - optional community search degrades.
+                collect_payload["community_error"] = str(exc)
+                community_sources = []
+            for source in community_sources:
+                if not self._source_already_in_batch(source, sources):
+                    sources.append(source)
+        collect_payload["community_source_count"] = len(community_sources)
+        collect_payload["community_source_ids"] = [source.id for source in community_sources]
         if not sources:
             payload = await self._trace_llm_json(
                 record,
@@ -1937,6 +2120,7 @@ class CollectorAgentMixin:
             consumer_agent="collect_join",
             message_types={
                 "raw_sources_collected",
+                "community_search_completed",
                 "cross_competitor_sources_collected",
                 "cross_competitor_search_failed",
             },
@@ -1953,10 +2137,30 @@ class CollectorAgentMixin:
             record,
             to_agent="collect_join",
             consumer_agent="collect_join",
-            message_types={"cross_competitor_sources_collected", "cross_competitor_search_failed"},
+            message_types={
+                "community_search_completed",
+                "cross_competitor_sources_collected",
+                "cross_competitor_search_failed",
+            },
         )
         detail.raw_sources = self._normalize_collected_sources(detail, dimensions)
+        self._annotate_community_claim_clusters(detail, dimensions)
         normalized_count = len(detail.raw_sources)
+        # Auto-ingest collected sources into global KB
+        try:
+            from packages.tools.ingest_document import ingest_document_tool
+            for source in detail.raw_sources:
+                if source.text and source.ok:
+                    await ingest_document_tool.ainvoke({
+                        "url": source.url or "",
+                        "title": source.title or "",
+                        "text": source.text[:50000],
+                        "competitor": source.competitor or "",
+                        "dimension": source.dimension or "",
+                        "source_type": source.source_type or "web",
+                    })
+        except Exception:
+            pass  # Non-fatal: KB ingestion should not block pipeline
         self._append_agent_message(
             record,
             from_agent="collect_join",
@@ -1998,7 +2202,9 @@ class CollectorAgentMixin:
             if scoped_dimensions and source.dimension not in scoped_dimensions:
                 normalized.append(source)
                 continue
-            covered_competitors = self._normalize_covered_competitors(detail, source.competitor)
+            covered_competitors = source.covered_competitors or self._normalize_covered_competitors(
+                detail, source.competitor
+            )
             url_key = str(source.url) if source.url else ""
             key = (
                 source.dimension,
@@ -2015,6 +2221,79 @@ class CollectorAgentMixin:
             )
         return normalized
 
+    def _annotate_community_claim_clusters(
+        self,
+        detail: RunDetail,
+        dimensions: list[str],
+    ) -> None:
+        scoped_dimensions = set(dimensions)
+        claims = [
+            claim
+            for source in detail.raw_sources
+            if (not scoped_dimensions or source.dimension in scoped_dimensions)
+            for claim in extract_community_claims_from_source(source)
+        ]
+        clusters = cluster_community_claims(claims)
+        clusters_by_source_id: dict[str, list[dict[str, object]]] = {}
+        for cluster in clusters:
+            payload = cluster.model_dump(mode="json")
+            if (
+                payload.get("label") == "community_observed"
+                and cluster.independent_domain_count >= 2
+                and len(cluster.source_ids) >= 2
+                and cluster.confidence >= 0.70
+            ):
+                payload["label"] = "community_triangulated"
+            official_source_ids = self._official_confirmation_source_ids(detail, cluster)
+            if official_source_ids:
+                payload["label"] = "official_confirmed"
+                payload["confidence"] = max(float(payload.get("confidence") or 0.0), 0.95)
+                payload["official_source_ids"] = official_source_ids
+                payload["source_ids"] = merge_ordered_refs(
+                    cluster.source_ids,
+                    official_source_ids,
+                )
+            for source_id in cluster.source_ids:
+                clusters_by_source_id.setdefault(source_id, []).append(payload)
+        updated_sources: list[RawSource] = []
+        for source in detail.raw_sources:
+            source_clusters = clusters_by_source_id.get(source.id)
+            if not source_clusters:
+                updated_sources.append(source)
+                continue
+            metadata = dict(source.metadata)
+            metadata["community_claim_clusters"] = source_clusters
+            updated_sources.append(source.model_copy(update={"metadata": metadata}))
+        detail.raw_sources = updated_sources
+
+    def _official_confirmation_source_ids(
+        self,
+        detail: RunDetail,
+        cluster: CommunityClaimCluster,
+    ) -> list[str]:
+        if not self._cluster_has_concrete_official_confirmation_value(cluster):
+            return []
+        normalized_value = cluster.normalized_value.casefold()
+        return [
+            source.id
+            for source in detail.raw_sources
+            if source.competitor == cluster.competitor
+            and source.dimension == cluster.dimension
+            and source.source_type == "webpage_verified"
+            and normalized_value in source.snippet.casefold()
+        ]
+
+    def _cluster_has_concrete_official_confirmation_value(
+        self,
+        cluster: CommunityClaimCluster,
+    ) -> bool:
+        normalized_value = cluster.normalized_value.strip()
+        if cluster.kind != "pricing" or not normalized_value:
+            return False
+        return normalized_value.startswith("$") or any(
+            character.isdigit() for character in normalized_value
+        )
+
     async def _collect_cross_competitor_evidence(
         self, record: RunRecord, dimensions: list[str]
     ) -> None:
@@ -2025,7 +2304,11 @@ class CollectorAgentMixin:
             if self._has_cross_competitor_source(detail, dimension):
                 continue
             covered_competitors = self._branch_covered_competitors(detail, dimension)
-            if len(covered_competitors) >= len(detail.plan.competitors):
+            weak_persona_competitors = self._weak_persona_branch_competitors(detail, dimension)
+            if (
+                len(covered_competitors) >= len(detail.plan.competitors)
+                and not weak_persona_competitors
+            ):
                 await self.emit(
                     detail.id,
                     "node_completed",
@@ -2038,6 +2321,7 @@ class CollectorAgentMixin:
                     {
                         "dimension": dimension,
                         "covered_competitors": sorted(covered_competitors),
+                        "weak_persona_competitors": weak_persona_competitors,
                         "skipped": True,
                         "reason": "branch_coverage_complete",
                     },
@@ -2087,7 +2371,10 @@ class CollectorAgentMixin:
                 )
                 if source is None:
                     continue
-                source.covered_competitors = list(detail.plan.competitors)
+                covered = self._cross_source_covered_competitors(detail, source)
+                if len(covered) < 2:
+                    continue
+                source.covered_competitors = covered
                 detail.raw_sources.append(source)
                 self._append_agent_message(
                     record,
@@ -2103,6 +2390,77 @@ class CollectorAgentMixin:
                 )
                 break
 
+    def _cross_source_covered_competitors(
+        self,
+        detail: RunDetail,
+        source: RawSource,
+    ) -> list[str]:
+        text = " ".join(
+            [
+                source.competitor,
+                source.title,
+                str(source.url or ""),
+                source.snippet,
+            ]
+        )
+        return [
+            competitor
+            for competitor in detail.plan.competitors
+            if self._source_text_mentions_competitor(text, competitor)
+        ]
+
+    def _source_text_mentions_competitor(self, text: str, competitor: str) -> bool:
+        haystack = " ".join(text.casefold().split())
+        for term in self._competitor_mention_terms(competitor):
+            if self._term_appears_in_text(term, haystack):
+                return True
+        return False
+
+    def _competitor_mention_terms(self, competitor: str) -> list[str]:
+        generic = {
+            "ai",
+            "agent",
+            "assistant",
+            "code",
+            "coding",
+            "desktop",
+            "editor",
+            "model",
+            "models",
+            "openai",
+            "tool",
+            "tools",
+        }
+        terms: list[str] = []
+        raw_terms = [
+            competitor,
+            re.sub(r"\([^)]*\)", "", competitor),
+            *re.findall(r"\(([^)]*)\)", competitor),
+            *identity_terms_for_competitor(competitor),
+        ]
+        raw_terms.extend(re.split(r"[\s/()&+-]+", competitor))
+        seen: set[str] = set()
+        for value in raw_terms:
+            term = " ".join(str(value).casefold().split()).strip(" -_/")
+            if not term or len(term) < 4 or term in generic:
+                continue
+            if term in seen:
+                continue
+            seen.add(term)
+            terms.append(term)
+        return terms
+
+    def _term_appears_in_text(self, term: str, haystack: str) -> bool:
+        if any(separator in term for separator in (".", "/")):
+            return term in haystack
+        parts = [part for part in re.split(r"[\s._/-]+", term) if part]
+        if not parts:
+            return False
+        pattern = r"(?<![a-z0-9])" + r"[\s._/-]+".join(
+            re.escape(part) for part in parts
+        ) + r"(?![a-z0-9])"
+        return re.search(pattern, haystack, flags=re.IGNORECASE) is not None
+
     def _has_cross_competitor_source(self, detail: RunDetail, dimension: str) -> bool:
         expected = set(detail.plan.competitors)
         for source in detail.raw_sources:
@@ -2115,6 +2473,20 @@ class CollectorAgentMixin:
             if len(covered & expected) >= max(2, min(len(expected), 3)):
                 return True
         return False
+
+    def _weak_persona_branch_competitors(
+        self,
+        detail: RunDetail,
+        dimension: str,
+    ) -> list[str]:
+        if not self._dimension_needs_persona_strength_gate(dimension):
+            return []
+        weak: list[str] = []
+        for competitor in detail.plan.competitors:
+            strength = self._persona_evidence_strength(detail, dimension, competitor)
+            if strength.is_weak and strength.reason != "no_sources":
+                weak.append(competitor)
+        return weak
 
     def _branch_covered_competitors(self, detail: RunDetail, dimension: str) -> set[str]:
         covered: set[str] = set()
@@ -2133,7 +2505,10 @@ class CollectorAgentMixin:
         if dimension == "pricing":
             focus = "pricing comparison API cost per token tiers"
         elif dimension == "persona":
-            focus = "target users customers personas use cases comparison"
+            focus = (
+                "target users customers personas use cases developer adoption user reviews "
+                "onboarding switching workflow fit comparison"
+            )
         else:
             focus = "feature benchmark capabilities comparison"
         return f"{detail.topic} {competitors} {focus} source"

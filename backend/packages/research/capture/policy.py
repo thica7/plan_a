@@ -19,6 +19,8 @@ def invalid_candidate_reason(candidate: SourceCandidate) -> str:
 def fallback_candidate_reason(candidate: SourceCandidate) -> str:
     if candidate.origin == "homepage_derived" and candidate.confidence < 0.6:
         return "deferred_low_confidence_homepage_derived"
+    if candidate.origin == "community_search" and candidate.confidence < 0.45:
+        return "deferred_low_confidence_community_search"
     if candidate.origin in {"perplexity", "web_search"} and candidate.confidence < 0.5:
         return "deferred_low_confidence_search_result"
     return ""

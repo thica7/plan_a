@@ -219,6 +219,7 @@ def _build_report_version(
                 evidence_records,
                 source_reconciliation=normalized_report.reconciliation(evidence_records),
             ),
+            "output_language": detail.output_language,
             "release_claim_admission": _release_claim_admission_metadata(
                 claim_records,
                 release_claim_records,

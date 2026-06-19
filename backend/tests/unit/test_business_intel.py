@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import packages.agents.pydantic_ai_adapter as pydantic_ai_adapter
 from packages.agents.executor import AgentExecutionRequest
 from packages.business_intel import (
@@ -8,6 +10,7 @@ from packages.business_intel import (
     build_red_team_agent,
     business_findings_to_redo_scopes,
     claim_validation_issues_to_redo_scopes,
+    compare_run_quality,
     evaluate_business_qa,
     evaluate_report_release_gate,
     evidence_gaps_to_redo_scopes,
@@ -35,6 +38,8 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
     SourceRegistryRecord,
 )
+from packages.schema.api_dto import RunDetail
+from packages.schema.models import AnalysisPlan, RawSource, RunMetrics
 from packages.skills.registry import SkillRegistry
 
 
@@ -395,6 +400,7 @@ def test_evidence_gaps_generate_pending_schema_suggestions_for_new_dimensions() 
     assert suggestion.proposed_skill.name == "compliance"
     assert suggestion.proposed_skill.output.required_dimension == "compliance"
     assert "fetch_page" in suggestion.proposed_skill.tools_allowlist
+    assert "extract_facts" not in suggestion.proposed_skill.tools_allowlist
 
 
 def test_report_release_gate_requires_clean_qa_and_verified_evidence() -> None:
@@ -540,6 +546,376 @@ def test_report_release_gate_blocks_pending_source_policy_review() -> None:
 
     assert gate.allowed is False
     assert "source_policy_review_required" in {issue.rule_id for issue in gate.issues}
+
+
+def test_report_release_gate_counts_high_quality_triangulated_community_evidence() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="community-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="github_discussion",
+            title="Cursor pricing community discussion",
+            url="https://github.com/orgs/community/discussions/1",
+            snippet="Multiple independent users report Cursor Pro pricing at $20 per month.",
+            content_hash="hash-1",
+            reliability_score=0.85,
+            quality_label="accepted",
+            metadata={
+                "community_evidence": True,
+                "community_claim_clusters": [
+                    {
+                        "label": "community_triangulated",
+                        "confidence": 0.84,
+                        "claim_type": "pricing",
+                        "independent_domain_count": 3,
+                        "source_ids": ["community-1", "community-2", "community-3"],
+                    }
+                ],
+            },
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Community sources triangulate Cursor pricing at $20 per month.",
+            evidence_ids=["evidence-1"],
+            confidence=0.84,
+        )
+    ]
+    report = _report_version(
+        report_md=_structured_release_report(source_token="evidence-1"),
+        evidence_ids=["evidence-1"],
+        claim_ids=["claim-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert "verified_evidence_rate" not in {issue.rule_id for issue in gate.issues}
+    assert gate.allowed is True
+
+
+def test_report_release_gate_counts_collector_threshold_triangulated_community_evidence() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="community-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="github_discussion",
+            title="Cursor pricing community discussion",
+            url="https://github.com/orgs/community/discussions/1",
+            snippet="Multiple independent users report Cursor Pro pricing at $20 per month.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+            metadata={
+                "community_evidence": True,
+                "community_claim_clusters": [
+                    {
+                        "label": "community_triangulated",
+                        "confidence": 0.70,
+                        "kind": "pricing",
+                        "independent_domain_count": 2,
+                        "source_ids": ["community-1", "community-2"],
+                    }
+                ],
+            },
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Community sources triangulate Cursor pricing at $20 per month.",
+            evidence_ids=["evidence-1"],
+            confidence=0.8,
+        )
+    ]
+    report = _report_version(
+        report_md=_structured_release_report(source_token="evidence-1"),
+        evidence_ids=["evidence-1"],
+        claim_ids=["claim-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert "verified_evidence_rate" not in {issue.rule_id for issue in gate.issues}
+    assert gate.allowed is True
+
+
+def test_report_release_gate_still_blocks_untriangulated_community_evidence() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="community-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="snippet_only",
+            title="Cursor pricing reddit snippet",
+            url="https://www.reddit.com/r/cursor/comments/example",
+            snippet="One community snippet reports Cursor pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+            metadata={"community_evidence": True},
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="A community snippet reports Cursor pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.8,
+        )
+    ]
+    report = _report_version(
+        report_md=_structured_release_report(source_token="evidence-1"),
+        evidence_ids=["evidence-1"],
+        claim_ids=["claim-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert "verified_evidence_rate" in {issue.rule_id for issue in gate.issues}
+    assert gate.allowed is False
+
+
+def test_report_release_gate_does_not_dilute_rate_with_auxiliary_evidence() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        ),
+        EvidenceRecord(
+            id="evidence-2",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="snippet-1",
+            competitor_id=competitor.id,
+            dimension="persona",
+            source_type="snippet_only",
+            title="Cursor community snippet",
+            url="https://www.reddit.com/r/cursor/comments/example",
+            snippet="A community snippet provides auxiliary user sentiment.",
+            content_hash="hash-2",
+            reliability_score=0.55,
+            quality_label="unreviewed",
+            metadata={"community_evidence": True},
+        ),
+        EvidenceRecord(
+            id="evidence-3",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="survey-1",
+            competitor_id=competitor.id,
+            dimension="persona",
+            source_type="survey_simulated",
+            title="Cursor persona survey synthesis",
+            url=None,
+            snippet="A simulated survey summarizes buyer persona concerns.",
+            content_hash="hash-3",
+            reliability_score=0.76,
+            quality_label="unreviewed",
+        ),
+        EvidenceRecord(
+            id="evidence-4",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="interview-1",
+            competitor_id=competitor.id,
+            dimension="persona",
+            source_type="interview_record",
+            title="Cursor persona interview synthesis",
+            url=None,
+            snippet="A synthetic interview summarizes adoption blockers.",
+            content_hash="hash-4",
+            reliability_score=0.82,
+            quality_label="unreviewed",
+        ),
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        report_md=_structured_release_report(source_token="evidence-1"),
+        evidence_ids=["evidence-1", "evidence-2", "evidence-3", "evidence-4"],
+        claim_ids=["claim-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert "verified_evidence_rate" not in {issue.rule_id for issue in gate.issues}
+    assert gate.allowed is True
+
+
+def test_report_release_gate_does_not_dilute_rate_with_community_observations() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        ),
+        EvidenceRecord(
+            id="evidence-2",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="forum-1",
+            competitor_id=competitor.id,
+            dimension="feature",
+            source_type="community_forum",
+            title="Cursor community forum observation",
+            url="https://forum.cursor.com/t/example/1",
+            snippet="A forum thread describes a feature limitation in actual use.",
+            content_hash="hash-2",
+            reliability_score=0.92,
+            quality_label="unreviewed",
+            metadata={
+                "community_evidence": True,
+                "community_claim_clusters": [
+                    {
+                        "label": "community_observed",
+                        "confidence": 0.65,
+                        "kind": "feature_limitation",
+                        "independent_domain_count": 1,
+                        "source_ids": ["forum-1"],
+                    }
+                ],
+            },
+        ),
+        EvidenceRecord(
+            id="evidence-3",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="discussion-1",
+            competitor_id=competitor.id,
+            dimension="persona",
+            source_type="github_discussion",
+            title="Cursor community discussion observation",
+            url="https://github.com/orgs/community/discussions/1",
+            snippet="A community discussion describes user sentiment.",
+            content_hash="hash-3",
+            reliability_score=0.92,
+            quality_label="unreviewed",
+            metadata={
+                "community_evidence": True,
+                "community_claim_clusters": [
+                    {
+                        "label": "community_observed",
+                        "confidence": 0.65,
+                        "kind": "persona_signal",
+                        "independent_domain_count": 1,
+                        "source_ids": ["discussion-1"],
+                    }
+                ],
+            },
+        ),
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    report = _report_version(
+        report_md=_structured_release_report(source_token="evidence-1"),
+        evidence_ids=["evidence-1", "evidence-2", "evidence-3"],
+        claim_ids=["claim-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert "verified_evidence_rate" not in {issue.rule_id for issue in gate.issues}
+    assert gate.allowed is True
 
 
 def test_report_release_gate_uses_report_homepage_snapshot_for_competitors() -> None:
@@ -819,6 +1195,197 @@ Collect feature evidence next. [source:evidence-1]
     assert gate.allowed is False
     assert "report_depth_required" in rule_ids
     assert "report_structure_required" not in rule_ids
+
+
+def test_run_quality_does_not_give_full_core_depth_to_short_core_sections() -> None:
+    detail = _quality_run_detail(
+        report_md=_medium_but_still_thin_core_report(),
+        competitors=["Cursor", "Claude Code", "GitHub Copilot", "Windsurf"],
+        dimensions=["pricing", "feature", "persona"],
+    )
+
+    comparison = compare_run_quality(detail)
+    metrics = {metric.name: metric.target_value for metric in comparison.metrics}
+
+    assert metrics["core_analysis_depth_score"] < 1.0
+    assert metrics["core_section_depth_score"] < 1.0
+
+
+def test_report_release_gate_blocks_report_with_thin_core_quality_metrics() -> None:
+    competitor_names = ["Cursor", "Claude Code", "GitHub Copilot", "Windsurf"]
+    competitors = [
+        CompetitorRecord(
+            id=f"competitor-{index}",
+            workspace_id="workspace-1",
+            name=name,
+            normalized_name=name.casefold().replace(" ", "-"),
+            layer="L1",
+            metadata={"homepage_verified": True},
+        )
+        for index, name in enumerate(competitor_names, start=1)
+    ]
+    evidence = [
+        EvidenceRecord(
+            id=f"evidence-{index}",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id=f"evidence-{index}",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title=f"{competitor.name} pricing",
+            url=f"https://example.com/{index}/pricing",
+            snippet=f"{competitor.name} publishes pricing and product positioning.",
+            content_hash=f"hash-{index}",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+        for index, competitor in enumerate(competitors, start=1)
+    ]
+    claims = [
+        ClaimRecord(
+            id=f"claim-{index}",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text=f"{competitor.name} publishes pricing and product positioning.",
+            evidence_ids=[f"evidence-{index}"],
+            confidence=0.9,
+        )
+        for index, competitor in enumerate(competitors, start=1)
+    ]
+    report_md = f"""
+## Executive Summary
+The report has the required release headings but the core analysis remains too compressed for a
+decision-grade release. [source:evidence-1]
+
+{_medium_but_still_thin_core_report()}
+
+## Claim Validation & Evidence Risk
+The scoped claims are cited but still require fuller treatment in the core report. [source:evidence-1]
+
+## RAG Gap-Fill
+Retrieval gaps remain summarized too briefly for publication. [source:evidence-1]
+
+## Scenario Checklist
+The L1 pricing scenario is referenced but not deeply expanded. [source:evidence-1]
+
+## Next Collection / Verification Plan
+Collect stronger customer voice and procurement evidence before final release. [source:evidence-1]
+
+## Evidence Appendix
+- evidence-1 through evidence-4: accepted pricing evidence. [source:evidence-1]
+""".strip()
+    report = _report_version(
+        report_md=report_md,
+        evidence_ids=[item.id for item in evidence],
+        claim_ids=[item.id for item in claims],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=competitors,
+        evidence=evidence,
+        claims=claims,
+    )
+    report_depth_issues = [
+        issue for issue in gate.issues if issue.rule_id == "report_depth_required"
+    ]
+
+    assert len(report_md) > 900
+    assert report_depth_issues
+    assert any(
+        "core_section_depth_score" in issue.message or "swot_section_score" in issue.message
+        for issue in report_depth_issues
+    )
+
+
+def test_report_release_gate_accepts_chinese_report_structure() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="pricing-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.sh/pricing",
+            snippet="Cursor publishes pricing.",
+            content_hash="hash-1",
+            reliability_score=0.9,
+            quality_label="accepted",
+        )
+    ]
+    claims = [
+        ClaimRecord(
+            id="claim-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            competitor_id=competitor.id,
+            claim_type="pricing",
+            claim_text="Cursor publishes pricing.",
+            evidence_ids=["evidence-1"],
+            confidence=0.9,
+        )
+    ]
+    structured_zh = """
+# Cursor 直接战报
+
+## 执行摘要
+Cursor 定价信息可用于直接战报评估，结论仍限定在已验证定价证据范围内。 [source:evidence-1]
+该摘要说明置信度、适用边界和后续采购前需要补充的企业安全材料。 [source:evidence-1]
+
+## 来源质量与覆盖
+报告使用已接受的网页证据，并将结论限定在可验证的定价覆盖范围内。 [source:evidence-1]
+来源质量说明区分官方页面、已抓取网页和仍需后续验证的低置信线索。
+该报告避免把搜索摘要当作最终事实。 [source:evidence-1]
+
+## 横向决策矩阵
+| 维度 | Cursor |
+| --- | --- |
+| 定价 | Cursor 发布可核验定价信息。 [source:evidence-1] |
+
+## 场景 QA 清单
+- 场景：l1_pricing_pack；层级：L1；推荐维度：pricing、feature、persona。
+- 分析问题：哪些套餐门槛影响感知价值？
+- 证据要求：定价行必须使用官方或已抓取网页证据。
+- QA 规则：claim_has_evidence、source_reliability_min、homepage_verified。
+
+## 战报
+销售和产品团队可把定价透明度作为第一条战报线索。 [source:evidence-1]
+安全、采购和企业管控主张应保留为后续验证项。 [source:evidence-1]
+该战报不使用绝对赢家表述，而是说明已验证证据支持哪些短期定位。
+采购结论还需要更强来源。 [source:evidence-1]
+
+## 声明校验与证据风险
+定价声明有已接受证据支撑。 [source:evidence-1]
+更广泛的安全、采购或企业控制声明不应在缺少独立来源时发布。 [source:evidence-1]
+风险说明明确列出低置信来源、单一来源结论和需要降级处理的主张。 [source:evidence-1]
+
+## 下一步采集与验证计划
+下一轮应补充官方企业安全文档、当前采购包装和买方异议证据。 [source:evidence-1]
+补充后重新运行声明校验，确认定价、功能和 persona 结论都能映射到高质量来源。 [source:evidence-1]
+
+## 证据附录
+- evidence-1：Cursor pricing，webpage_verified，confidence 0.90。 [source:evidence-1]
+""".strip()
+    report = _report_version(report_md=structured_zh)
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=claims,
+    )
+
+    assert len(structured_zh) >= 900
+    assert "report_structure_required" not in {issue.rule_id for issue in gate.issues}
 
 
 def test_claim_validator_cross_checks_evidence_support() -> None:
@@ -1468,6 +2035,47 @@ def test_report_release_gate_blocks_strong_conclusion_from_search_only_source() 
         "claim_uses_low_confidence_evidence",
         "strong_conclusion_uses_weak_source",
     } <= {issue.rule_id for issue in gate.issues}
+
+
+def test_report_release_gate_does_not_treat_appendix_caveat_as_strong_conclusion() -> None:
+    competitor = _competitor()
+    evidence = [
+        EvidenceRecord(
+            id="evidence-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            raw_source_id="community-risk-1",
+            competitor_id=competitor.id,
+            dimension="pricing",
+            source_type="snippet_only",
+            title="Cursor pricing community risk",
+            url="https://example.com/community-risk",
+            snippet="Community users mention rate-limit concerns.",
+            content_hash="hash-1",
+            reliability_score=0.55,
+            quality_label="unreviewed",
+        )
+    ]
+    report = _report_version(
+        report_md=(
+            "## Evidence Appendix\n"
+            "QA rule: community posts only identify pricing risk and are not used "
+            "as winner or procurement recommendation evidence. [source:community-risk-1]"
+        ),
+        evidence_ids=["evidence-1"],
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=report,
+        competitors=[competitor],
+        evidence=evidence,
+        claims=[],
+    )
+
+    assert "strong_conclusion_uses_weak_source" not in {
+        issue.rule_id for issue in gate.issues
+    }
 
 
 def test_report_release_gate_blocks_missing_source_tokens() -> None:
@@ -2203,6 +2811,112 @@ def _report_version(
         evidence_ids=evidence_ids or ["evidence-1"],
         quality_metadata=quality_metadata or {},
     )
+
+
+def _quality_run_detail(
+    *,
+    report_md: str,
+    competitors: list[str] | None = None,
+    dimensions: list[str] | None = None,
+) -> RunDetail:
+    competitors = competitors or ["Cursor"]
+    dimensions = dimensions or ["pricing"]
+    return RunDetail(
+        id="run-quality",
+        topic="Cursor pricing",
+        status="completed",
+        execution_mode="real",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        plan=AnalysisPlan(
+            topic="Cursor pricing",
+            competitors=competitors,
+            dimensions=dimensions,
+            competitor_layer="L1",
+        ),
+        raw_sources=[
+            RawSource(
+                id="evidence-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.sh/pricing",
+                snippet="Cursor publishes pricing.",
+                content_hash="hash-1",
+                confidence=0.9,
+            )
+        ],
+        metrics=RunMetrics(llm_calls=3, source_coverage_rate=1.0, claim_citation_rate=1.0),
+        report_md=report_md,
+    )
+
+
+def _medium_but_still_thin_core_report() -> str:
+    citation = "[source:evidence-1]"
+    return f"""
+# AI Coding Agent Battlecard
+
+## Decision Summary
+- Recommended action: use Cursor as the primary evaluation anchor because standalone pricing
+  and focused workflow claims are easier to explain during a first-pass procurement discussion.
+  {citation}
+- Immediate move: validate security, enterprise packaging, and switching costs before making
+  a replacement recommendation against Copilot, Claude Code, or Windsurf. {citation}
+
+## Competitive Findings
+- Pricing: Cursor appears easiest to frame as a standalone purchase, while Copilot benefits
+  from Microsoft adjacency and Claude Code needs clearer usage-cost framing. {citation}
+- Feature: agentic coding workflows are converging, so differentiation depends on context
+  management, IDE fit, policy controls, and team onboarding. {citation}
+- Persona: individual developers, platform buyers, and AI-forward teams all evaluate these
+  tools differently, which means one winner claim would be premature. {citation}
+
+## User Review Themes
+- Praise: evaluators can understand Cursor pricing and workflow positioning quickly. {citation}
+- Complaint: buyers still need stronger enterprise controls, migration proof, and onboarding
+  evidence before replacing an incumbent workflow. {citation}
+- Switching trigger: teams move only when workflow gains outweigh governance and training cost.
+  {citation}
+
+## Competitor Deep Dives
+- Cursor wins on focused positioning and pricing clarity, but still needs procurement and
+  governance validation before an enterprise recommendation is safe. {citation}
+- Claude Code is strongest when sophisticated teams value deeper agentic workflows, but its
+  buying motion needs clearer cost and rollout guardrails. {citation}
+- GitHub Copilot wins on distribution and Microsoft familiarity, but can look less differentiated
+  in a pure agent-workflow comparison. {citation}
+- Windsurf can remain attractive for AI-native workflow experiments, but the current evidence
+  needs stronger enterprise adoption proof. {citation}
+
+## SWOT Analysis
+- Strengths: Cursor has focused workflow framing; Copilot has distribution; Claude Code has
+  advanced agentic depth; Windsurf has AI-native workflow appeal. {citation}
+- Weaknesses: each competitor still has unanswered questions around procurement, packaging,
+  or governance evidence. {citation}
+- Opportunities: the response should tie pricing clarity to onboarding speed and qualify
+  claims that require security or enterprise proof. {citation}
+- Threats: bundled distribution, unclear usage costs, and migration friction can overturn a
+  simple feature-led recommendation. {citation}
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Claude Code | GitHub Copilot | Windsurf |
+| --- | --- | --- | --- | --- |
+| Pricing | Clearer standalone framing. {citation} | Needs usage-cost validation. {citation} | Benefits from bundle context. {citation} | Needs package proof. {citation} |
+| Feature | Focused coding workflow. {citation} | Advanced agentic depth. {citation} | IDE distribution breadth. {citation} | AI-native workflow. {citation} |
+| Persona | Developer-led evaluators. {citation} | Advanced technical teams. {citation} | Enterprise platform buyers. {citation} | AI-forward teams. {citation} |
+
+## Battlecard
+- Win theme: lead with pricing clarity plus focused developer workflow, then qualify all
+  unsupported enterprise claims. {citation}
+- Objection handling: when buyers prefer Copilot, ask whether bundled familiarity or actual
+  workflow productivity is the priority. {citation}
+- Validation ask: collect direct customer voice, trust-center proof, and current package terms
+  before finalizing a replacement recommendation. {citation}
+
+## Source Quality & Coverage
+Accepted source coverage is present, but this sample remains intentionally compact. {citation}
+""".strip()
 
 
 def _structured_release_report(source_token: str = "evidence-1") -> str:

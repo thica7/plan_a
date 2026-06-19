@@ -1,0 +1,27 @@
+@media (max-width: 1180px) {
+  .workbench-overview-grid,
+  .workbench-support-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .qa-blocker-head,
+  .qa-blocker-row,
+  .compact-data-head,
+  .compact-data-row,
+  .run-quality-body,
+  .report-studio-summary,
+  .trace-metric-row {
+    grid-template-columns: 1fr;
+  }
+
+  .quality-score-ring {
+    max-width: 150px;
+  }
+
+  .coverage-table,
+  .trace-stepper {
+    min-width: 620px;
+  }
+}

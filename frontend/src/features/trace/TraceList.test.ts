@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DecisionReplayEvent } from "../../api/types";
 import { formatDecisionPayload } from "./TraceList";
+import { formatModuleExecutionStatus } from "./traceModel";
 
 describe("TraceList decision replay formatting", () => {
   it("summarizes QA blocker issue identity and reason", () => {
@@ -97,5 +98,25 @@ describe("TraceList decision replay formatting", () => {
     expect(summary).toContain("target report");
     expect(summary).toContain("1 redaction types");
     expect(summary).toContain("Prefer official sources");
+  });
+
+  it("summarizes module fallback and normal LLM status", () => {
+    expect(
+      formatModuleExecutionStatus({
+        module_status: "fallback",
+        fallback: {
+          used: true,
+          reason: "llm_error",
+          error: "LLM returned empty content.",
+        },
+      }),
+    ).toContain("Fallback: llm_error");
+
+    expect(
+      formatModuleExecutionStatus({
+        module_status: "llm",
+        fallback: { used: false },
+      }),
+    ).toBe("LLM");
   });
 });

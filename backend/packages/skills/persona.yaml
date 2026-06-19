@@ -4,8 +4,6 @@ description: Infer ICP, buyer persona, use cases, and switching triggers from pu
 tools_allowlist:
   - web_search
   - fetch_page
-  - survey_simulator
-  - extract_facts
 query_templates:
   - "{competitor} customers use cases"
   - "{competitor} case studies"

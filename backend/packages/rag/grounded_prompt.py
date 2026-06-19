@@ -19,10 +19,16 @@ def build_run_grounding_prompt(
     *,
     sources: Iterable[RawSource],
     qa_findings: Iterable[QCIssue] = (),
-    max_sources: int = 12,
+    max_sources: int | None = None,
     max_gap_findings: int = 6,
+    kb_context: str | None = None,
+    include_snippets: bool = False,
 ) -> str:
-    source_lines = _source_lines(sources, max_sources=max_sources)
+    source_lines = _source_lines(
+        sources,
+        max_sources=max_sources,
+        include_snippets=include_snippets,
+    )
     gap_lines = _gap_lines(qa_findings, max_gap_findings=max_gap_findings)
     lines = [
         "Grounded evidence contract:",
@@ -36,7 +42,10 @@ def build_run_grounding_prompt(
     lines.extend(source_lines or ["- none"])
     if gap_lines:
         lines.extend(["", "Open evidence-gap retrieval targets:", *gap_lines])
-    return "\n".join(lines)
+    prompt = "\n".join(lines)
+    if kb_context is not None:
+        prompt += f"\n\n## KB Evidence Context\n{kb_context}"
+    return prompt
 
 
 def build_retrieval_grounding_prompt(
@@ -64,7 +73,7 @@ def format_retrieval_records_for_prompt(
     records: Sequence[RetrievalRecord],
     *,
     max_records: int = 8,
-    max_snippet_chars: int = 420,
+    max_snippet_chars: int | None = None,
 ) -> str:
     lines: list[str] = []
     for record in list(records)[:max_records]:
@@ -78,7 +87,12 @@ def format_retrieval_records_for_prompt(
     return "\n".join(lines)
 
 
-def _source_lines(sources: Iterable[RawSource], *, max_sources: int) -> list[str]:
+def _source_lines(
+    sources: Iterable[RawSource],
+    *,
+    max_sources: int | None,
+    include_snippets: bool,
+) -> list[str]:
     sorted_sources = sorted(
         sources,
         key=lambda source: (
@@ -90,10 +104,11 @@ def _source_lines(sources: Iterable[RawSource], *, max_sources: int) -> list[str
         ),
     )
     lines: list[str] = []
-    for source in sorted_sources[:max_sources]:
+    selected_sources = sorted_sources if max_sources is None else sorted_sources[:max_sources]
+    for source in selected_sources:
         flags = _source_flags(source)
-        title = _trim(source.title, 120)
-        snippet = _trim(source.snippet, 220)
+        title = source.title
+        snippet = source.snippet if include_snippets else ""
         url = str(source.url) if source.url else ""
         line = (
             f"- [source:{source.id}] competitor={source.competitor}; "
@@ -124,7 +139,7 @@ def _gap_lines(
         scope = issue.redo_scope
         competitor = scope.target_competitor or issue.target_competitor or "all competitors"
         dimension = scope.target_subagent or issue.target_subagent or issue.field_path
-        query = " ".join(f"{competitor} {dimension} {issue.problem}".split())[:220]
+        query = " ".join(f"{competitor} {dimension} {issue.problem}".split())
         lines.append(
             f"- gap={issue.id}; severity={issue.severity}; competitor={competitor}; "
             f"dimension={dimension}; suggested_query={query}"
@@ -157,8 +172,10 @@ def _source_flags(source: RawSource) -> list[str]:
     return flags
 
 
-def _trim(value: str, limit: int) -> str:
+def _trim(value: str, limit: int | None) -> str:
     text = " ".join(value.split())
+    if limit is None:
+        return text
     if len(text) <= limit:
         return text
     return f"{text[: limit - 3].rstrip()}..."
