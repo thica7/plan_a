@@ -149,7 +149,7 @@ jobs:
 
       - name: Test report source trace
         working-directory: frontend
-        run: pnpm test -- src/features/report/ReportSourceTrace.test.tsx src/features/report/sourceBundle.test.ts
+        run: pnpm test -- src/features/report/ReportSourceTrace.test.tsx src/features/report/sourceBundle.test.ts src/stores/knowledgeStore.test.ts
 
       - name: Build frontend
         working-directory: frontend
