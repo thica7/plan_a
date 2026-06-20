@@ -56,6 +56,10 @@ from packages.agents.writer.structured_sections import (
     StructuredReportGenerationError,
     StructuredSectionGenerationError,
 )
+from packages.agents.writer.structured_repair import (
+    previous_recommendation_posture,
+    recommendation_delta_problem,
+)
 from packages.business_intel.release_gate import REPORT_RICHNESS_MINIMUMS
 from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.scenarios import get_scenario_pack
@@ -1379,6 +1383,91 @@ class WriterAgentMixin:
                                 "schema-contract segment publication contract failed: "
                                 + ", ".join(publication_validation.issue_codes())
                             )
+                        writer_mode = "real schema-contract segmented writer call"
+                        if pending_redo is not None:
+                            scoped_competitors: set[str] = set()
+                            scoped_dimensions: set[str] = set()
+                            for scope in pending_redo.redo_scopes:
+                                if scope.target_competitor:
+                                    scoped_competitors.add(scope.target_competitor)
+                                scoped_competitors.update(
+                                    competitor
+                                    for competitor in scope.target_competitors
+                                    if competitor
+                                )
+                                if scope.target_subagent:
+                                    scoped_dimensions.add(scope.target_subagent)
+                            previous_recommendation = previous_recommendation_posture(
+                                previous_structured_report=getattr(
+                                    record,
+                                    "structured_report_snapshot",
+                                    None,
+                                ),
+                                previous_report=previous_report,
+                            )
+                            candidate_recommendation = previous_recommendation_posture(
+                                previous_structured_report=None,
+                                previous_report=report_md,
+                            )
+                            if previous_recommendation and candidate_recommendation:
+                                recommendation_problem = recommendation_delta_problem(
+                                    previous_recommendation=previous_recommendation,
+                                    candidate_recommendation=candidate_recommendation,
+                                    scoped_competitors=scoped_competitors,
+                                    scoped_dimensions=scoped_dimensions,
+                                    candidate_rationale=report_md,
+                                )
+                                recommendation_accepted = recommendation_problem is None
+                                recommendation_reason = recommendation_problem or (
+                                    "recommendation retained or justified by scoped "
+                                    "evidence"
+                                )
+                                recommendation_payload: dict[str, object] = {
+                                    "accepted": recommendation_accepted,
+                                    "reason": recommendation_reason,
+                                    "previous_recommendation": previous_recommendation,
+                                    "candidate_recommendation": candidate_recommendation,
+                                    "scoped_competitors": sorted(scoped_competitors),
+                                    "scoped_dimensions": sorted(scoped_dimensions),
+                                }
+                                await self.emit(
+                                    detail.id,
+                                    "writer_recommendation_delta_checked",
+                                    "writer",
+                                    None,
+                                    "Schema-contract segment recommendation delta checked.",
+                                    recommendation_payload,
+                                )
+                                self._trace_local_tool(
+                                    record,
+                                    agent="writer",
+                                    subagent=None,
+                                    name="writer_recommendation_delta_checked",
+                                    input_text="schema_contract_segment_report",
+                                    output_text=json.dumps(
+                                        recommendation_payload,
+                                        ensure_ascii=False,
+                                        default=str,
+                                    ),
+                                    metadata={
+                                        "accepted": recommendation_accepted,
+                                        "reason": recommendation_reason,
+                                    },
+                                )
+                                if recommendation_problem:
+                                    anti_regression_reason = recommendation_problem
+                                    detail.report_md = (
+                                        self._preserve_hardened_previous_report(
+                                            detail,
+                                            previous_report,
+                                        )
+                                    )
+                                    report_md = detail.report_md
+                                    writer_mode = (
+                                        "preserved previous report after "
+                                        "recommendation delta guard"
+                                    )
+                                    structured_recommendation_guard_preserved = True
                         if structured_targets:
                             await self.emit(
                                 detail.id,
@@ -1395,7 +1484,6 @@ class WriterAgentMixin:
                                     "authoring_mode": "schema_contract_segment",
                                 },
                             )
-                        writer_mode = "real schema-contract segmented writer call"
                     except Exception as exc:  # noqa: BLE001 - structured path may be temporarily unavailable.
                         fallback_reason = str(exc)[:500]
                         if not _structured_markdown_fallback_allowed(

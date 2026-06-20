@@ -9088,6 +9088,80 @@ def test_schema_contract_segment_scoped_redo_uses_segment_authoring(
     assert "writer_schema_first_failed_closed" not in event_types
 
 
+def test_schema_contract_segment_scoped_redo_preserves_unjustified_recommendation_drift(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(
+        service,
+        competitors=["Claude Code", "Cursor", "Windsurf"],
+    )
+    record.detail.execution_mode = "real"
+    record.detail.output_language = "en-US"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+    record.detail.report_md = _schema_contract_segmented_en_markdown(
+        note="Previous report must remain after recommendation drift.",
+    )
+    _attach_scoped_structured_writer_redo(
+        record,
+        subagent="persona",
+        competitor="Claude Code",
+    )
+
+    async def fail_if_structured_report_called(
+        self,
+        record,
+        evidence_pack_result,
+        timeout_seconds,
+    ):
+        raise AssertionError("Structured JSON writer must not run")
+
+    async def fake_segment_report(self, record, evidence_pack_result, timeout_seconds):
+        return (
+            f"## {report_label('en-US', 'executive_summary')}\n"
+            "Recommendation: Windsurf should become the primary recommendation. "
+            "[source:raw-source-b]\n\n"
+            f"## {report_label('en-US', 'decision_summary')}\n"
+            "This scoped redo only fills Claude Code persona evidence and does not "
+            "add new Windsurf proof. [source:raw-source-survey]\n\n"
+            f"## {report_label('en-US', 'competitive_findings')}\n"
+            "The candidate rationale is limited to Claude Code persona context; "
+            "there is no new Windsurf evidence. [source:raw-source-survey]\n\n"
+            f"## {report_label('en-US', 'evidence_support')}\n"
+            "Support material records the Claude Code persona refresh scope. "
+            "[source:raw-source-survey]\n"
+        )
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
+        fail_if_structured_report_called,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_schema_contract_segment_report",
+        fake_segment_report,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    assert "GitHub Copilot and Cursor" in record.detail.report_md
+    assert "Previous report must remain after recommendation drift" in record.detail.report_md
+    assert "Windsurf should become the primary recommendation" not in record.detail.report_md
+    event = next(
+        event
+        for event in record.events
+        if event.type == "writer_recommendation_delta_checked"
+    )
+    assert event.payload["accepted"] is False
+    assert "recommendation changed" in event.payload["reason"]
+    assert event.payload["scoped_competitors"] == ["Claude Code"]
+    assert event.payload["scoped_dimensions"] == ["persona"]
+
+
 def test_schema_contract_segment_scoped_redo_preserves_previous_report_on_segment_error(
     monkeypatch,
 ) -> None:
