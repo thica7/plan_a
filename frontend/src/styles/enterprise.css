@@ -959,6 +959,83 @@
   padding: 6px 8px;
 }
 
+.release-review-queue-panel {
+  align-content: start;
+}
+
+.release-review-task-list {
+  display: grid;
+  gap: 10px;
+  max-height: 430px;
+  overflow: auto;
+}
+
+.release-review-task {
+  background: #ffffff;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px;
+}
+
+.release-review-task.blocker {
+  background: var(--danger-soft);
+  border-color: rgba(194, 65, 58, 0.2);
+}
+
+.release-review-task.warn {
+  background: var(--amber-soft);
+  border-color: rgba(183, 121, 31, 0.22);
+}
+
+.release-review-task header {
+  align-items: start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.release-review-task header > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.release-review-task strong,
+.release-review-task p,
+.release-review-task span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.release-review-task header span,
+.release-review-task p,
+.release-review-task-metrics {
+  color: #475569;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.release-review-task p {
+  margin: 0;
+}
+
+.release-review-task-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.release-review-task-metrics span {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  padding: 3px 7px;
+}
+
 .report-review-desk .source-scope-list,
 .report-review-desk .review-claim-list {
   max-height: 240px;

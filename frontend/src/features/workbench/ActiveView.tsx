@@ -164,8 +164,16 @@ export function ActiveView({
       <ActivityCenter
         auditLogs={data.auditLogs}
         evalOps={data.evalOps}
+        gateRedoIssueId={gateRedoIssueId}
+        gateRedoResult={gateRedoResult}
+        kbRollbackIssueId={kbRollbackIssueId}
+        kbRollbackResult={kbRollbackResult}
         notifications={data.notifications}
+        onRedoGateIssue={onRedoGateIssue}
+        onRollbackKbIssue={onRollbackKbIssue}
         project={selectedProject}
+        releaseGate={releaseGate}
+        selectedVersion={selectedVersion}
       />
     );
   }
