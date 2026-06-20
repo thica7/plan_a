@@ -153,6 +153,47 @@ def test_accepts_renderer_output_for_clean_zh_report() -> None:
     assert result.issues == []
 
 
+def test_publication_contract_rejects_source_citation_on_section_marker_line() -> None:
+    report = _report("zh-CN")
+    markdown = (
+        "<!-- report-section:key=executive_summary layer=core --> "
+        "[source:raw-source-a]\n"
+        "## 执行摘要\n"
+        "- 建议: 选择 Cursor。[source:raw-source-a]\n"
+    )
+
+    result = validate_publication_contract(
+        markdown,
+        structured_report=report,
+        allowed_source_ids={"raw-source-a"},
+    )
+
+    assert not result.passed
+    assert "citation_on_section_marker" in result.issue_codes()
+    issue = next(
+        item for item in result.issues if item.code == "citation_on_section_marker"
+    )
+    assert issue.line_number == 1
+    assert issue.repair_target == "renderer"
+
+
+def test_publication_contract_accepts_clean_section_marker_line() -> None:
+    report = _report("zh-CN")
+    markdown = (
+        "<!-- report-section:key=executive_summary layer=core -->\n"
+        "## 执行摘要\n"
+        "- 建议: 选择 Cursor。[source:raw-source-a]\n"
+    )
+
+    result = validate_publication_contract(
+        markdown,
+        structured_report=report,
+        allowed_source_ids={"raw-source-a"},
+    )
+
+    assert "citation_on_section_marker" not in result.issue_codes()
+
+
 def test_rejects_internal_terms_and_unknown_sources() -> None:
     markdown = "source_registry should stay internal.\n\n正文 [source:unknown-source]\n"
 

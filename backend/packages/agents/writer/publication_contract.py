@@ -16,6 +16,8 @@ from packages.agents.writer.structured_report import StructuredReport
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 _WHITESPACE_RE = re.compile(r"\s+")
+_SECTION_MARKER_RE = re.compile(r"^<!--\s*report-section:[^>]*-->\s*$")
+_SECTION_MARKER_PREFIX_RE = re.compile(r"^<!--\s*report-section:[^>]*-->")
 
 
 def _normalize_heading(text: str) -> str:
@@ -128,6 +130,7 @@ def validate_publication_contract(
     issues: list[PublicationContractIssue] = []
     is_zh = _is_zh_report(structured_report)
 
+    _validate_section_marker_lines(lines, issues=issues)
     _validate_headings(lines, is_zh=is_zh, issues=issues)
     _validate_table_headers(lines, issues=issues)
     _validate_internal_terms(lines, issues=issues)
@@ -145,6 +148,28 @@ def _is_zh_report(report: StructuredReport | None) -> bool:
     if report is None:
         return False
     return report.output_language.lower().startswith("zh")
+
+
+def _validate_section_marker_lines(
+    lines: list[str],
+    *,
+    issues: list[PublicationContractIssue],
+) -> None:
+    for line_number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not _SECTION_MARKER_PREFIX_RE.match(stripped):
+            continue
+        if not _SECTION_MARKER_RE.fullmatch(stripped):
+            issues.append(
+                PublicationContractIssue(
+                    code="citation_on_section_marker"
+                    if has_source_token(stripped)
+                    else "invalid_section_marker_line",
+                    line_number=line_number,
+                    message="Section marker line must contain only the marker comment.",
+                    repair_target="renderer",
+                )
+            )
 
 
 def _validate_headings(
