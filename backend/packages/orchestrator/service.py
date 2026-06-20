@@ -4,7 +4,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from langgraph.types import Command, interrupt
 
@@ -111,6 +111,9 @@ from packages.schema.survey import UserResearchImportRequest, UserResearchImport
 from packages.search import PerplexitySearchClient, SearchResult
 from packages.skills.registry import SkillRegistry
 from packages.tools import WebSearchRequest, fetch_evidence_page, robots_check, web_search
+
+if TYPE_CHECKING:
+    from packages.agents.writer.structured_report import StructuredReport
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
 ACTIVE_RUN_DUPLICATE_WINDOW_SECONDS = 300
@@ -238,6 +241,8 @@ class RunRecord:
     active_graph_kind: Literal["real", "demo", "scoped_redo"] | None = None
     active_thread_id: str | None = None
     pending_graph_redo: PendingGraphRedo | None = None
+    structured_report_snapshot: "StructuredReport | None" = None
+    previous_structured_report_snapshot: "StructuredReport | None" = None
 
 
 class RunService(

@@ -8483,35 +8483,45 @@ def _structured_writer_fixture_report(detail: RunDetail) -> StructuredReport:
     from test_writer_structured_renderer import _report
 
     report = _report(detail.output_language or "zh-CN")
-    report.core.user_review_themes.competitor_themes.append(
-        report.core.user_review_themes.competitor_themes[0].model_copy(
-            deep=True,
-            update={"competitor": "Windsurf"},
-        )
-    )
-    report.core.competitor_deep_dives.append(
-        report.core.competitor_deep_dives[0].model_copy(
-            deep=True,
-            update={"competitor": "Windsurf"},
-        )
-    )
-    report.core.swot.competitors.append(
-        report.core.swot.competitors[0].model_copy(
-            deep=True,
-            update={"competitor": "Windsurf"},
-        )
-    )
-    report.core.battlecard.plays.insert(
-        0,
-        report.core.battlecard.plays[0].model_copy(
-            deep=True,
-            update={"competitor": "Cursor"},
-        ),
-    )
+    expected_competitors = list(detail.plan.competitors)
+    user_theme_template = report.core.user_review_themes.competitor_themes[0]
+    user_theme_by_competitor = {
+        item.competitor: item for item in report.core.user_review_themes.competitor_themes
+    }
+    report.core.user_review_themes.competitor_themes = [
+        user_theme_by_competitor.get(competitor)
+        or user_theme_template.model_copy(deep=True, update={"competitor": competitor})
+        for competitor in expected_competitors
+    ]
+    deep_dive_template = report.core.competitor_deep_dives[0]
+    deep_dive_by_competitor = {
+        item.competitor: item for item in report.core.competitor_deep_dives
+    }
+    report.core.competitor_deep_dives = [
+        deep_dive_by_competitor.get(competitor)
+        or deep_dive_template.model_copy(deep=True, update={"competitor": competitor})
+        for competitor in expected_competitors
+    ]
+    swot_template = report.core.swot.competitors[0]
+    swot_by_competitor = {item.competitor: item for item in report.core.swot.competitors}
+    report.core.swot.competitors = [
+        swot_by_competitor.get(competitor)
+        or swot_template.model_copy(deep=True, update={"competitor": competitor})
+        for competitor in expected_competitors
+    ]
+    battlecard_template = report.core.battlecard.plays[0]
+    battlecard_by_competitor = {
+        item.competitor: item for item in report.core.battlecard.plays
+    }
+    report.core.battlecard.plays = [
+        battlecard_by_competitor.get(competitor)
+        or battlecard_template.model_copy(deep=True, update={"competitor": competitor})
+        for competitor in expected_competitors
+    ]
     return report.model_copy(
         update={
             "topic": detail.topic,
-            "competitors": list(detail.plan.competitors),
+            "competitors": expected_competitors,
             "dimensions": list(detail.plan.dimensions),
         }
     )
@@ -8578,6 +8588,41 @@ def _attach_structured_writer_redo(record: RunRecord) -> None:
     )
 
 
+def _attach_scoped_structured_writer_redo(
+    record: RunRecord,
+    *,
+    subagent: str,
+    competitor: str,
+) -> None:
+    issue = QCIssue(
+        id=f"issue-scoped-{subagent}-{competitor}".replace(" ", "-").lower(),
+        severity="warn",
+        detected_by="coverage",
+        target_agent="collector",
+        target_subagent=subagent,
+        target_competitor=competitor,
+        field_path=f"raw_sources[{competitor}:{subagent}]",
+        problem=f"{competitor} needs refreshed {subagent} evidence.",
+        redo_scope=RedoScope(
+            kind="collector",
+            target_subagent=subagent,
+            target_competitor=competitor,
+            rationale=f"Refresh {subagent} evidence for {competitor}.",
+        ),
+    )
+    record.detail.qa_findings = [issue]
+    record.pending_graph_redo = PendingGraphRedo(
+        iteration=1,
+        stage="collector",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md=record.detail.report_md,
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+
+
 def test_real_writer_uses_structured_path_when_enabled(monkeypatch) -> None:
     service = _segmented_writer_service()
     service._settings = replace(
@@ -8617,6 +8662,8 @@ def test_real_writer_uses_structured_path_when_enabled(monkeypatch) -> None:
         "targets": ["core.battlecard"],
         "llm_required": True,
     }
+    assert record.previous_structured_report_snapshot is None
+    assert record.structured_report_snapshot == structured_report
     assert any(
         span.name == "writer_structured_report_validated"
         for span in record.detail.trace_spans
@@ -8659,6 +8706,252 @@ def test_real_schema_first_writer_fails_closed_when_structured_path_fails(
     event_types = [event.type for event in record.events]
     assert "writer_schema_first_failed_closed" in event_types
     assert "writer_markdown_fallback_used" not in event_types
+
+
+def test_real_schema_first_scoped_redo_discards_unscoped_recommendation_drift(
+    monkeypatch,
+) -> None:
+    from packages.agents.writer.structured_renderer import render_structured_report
+
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(
+        service,
+        competitors=["Claude Code", "Cursor", "Windsurf"],
+    )
+    record.detail.execution_mode = "real"
+    record.detail.output_language = "en-US"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+    previous_snapshot = _structured_writer_fixture_report(record.detail)
+    previous_snapshot.core.executive_summary.recommendation.text = (
+        "GitHub Copilot and Cursor are the risk-adjusted primary choices."
+    )
+    record.structured_report_snapshot = previous_snapshot
+    record.detail.report_md = render_structured_report(previous_snapshot)
+    _attach_scoped_structured_writer_redo(
+        record,
+        subagent="persona",
+        competitor="Claude Code",
+    )
+
+    candidate = previous_snapshot.model_copy(deep=True)
+    candidate.core.executive_summary.recommendation.text = (
+        "Windsurf is the primary recommendation."
+    )
+    candidate.core.executive_summary.risk_adjusted_rationale.text = (
+        "Windsurf has broad feature coverage."
+    )
+
+    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
+        return candidate
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
+        fake_structured_report,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    assert "GitHub Copilot and Cursor" in record.detail.report_md
+    assert "Windsurf is the primary recommendation" not in record.detail.report_md
+    assert record.structured_report_snapshot == previous_snapshot
+    assert not any(
+        event.type == "writer_structured_repair_failed_preserved_previous"
+        for event in record.events
+    )
+    assert "writer_schema_first_failed_closed" not in [
+        event.type for event in record.events
+    ]
+
+
+def test_real_schema_first_scoped_redo_merges_scoped_section_and_discards_unscoped_recommendation_drift(  # noqa: E501
+    monkeypatch,
+) -> None:
+    from packages.agents.writer.structured_renderer import render_structured_report
+
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(
+        service,
+        competitors=["Claude Code", "Cursor", "Windsurf"],
+    )
+    record.detail.execution_mode = "real"
+    record.detail.output_language = "en-US"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+    previous_snapshot = _structured_writer_fixture_report(record.detail)
+    previous_snapshot.core.executive_summary.recommendation.text = (
+        "GitHub Copilot and Cursor are the risk-adjusted primary choices."
+    )
+    previous_snapshot.core.user_review_themes.cross_competitor_patterns[0].text = (
+        "Previous persona pattern."
+    )
+    record.structured_report_snapshot = previous_snapshot
+    record.detail.report_md = render_structured_report(previous_snapshot)
+    _attach_scoped_structured_writer_redo(
+        record,
+        subagent="persona",
+        competitor="Claude Code",
+    )
+
+    candidate = previous_snapshot.model_copy(deep=True)
+    candidate.core.executive_summary.recommendation.text = (
+        "Windsurf is the primary recommendation."
+    )
+    candidate.core.executive_summary.risk_adjusted_rationale.text = (
+        "Windsurf has broad feature coverage."
+    )
+    candidate.core.user_review_themes.cross_competitor_patterns[0].text = (
+        "Updated Claude Code persona evidence supports terminal-heavy teams."
+    )
+
+    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
+        return candidate
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
+        fake_structured_report,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    assert "GitHub Copilot and Cursor" in record.detail.report_md
+    assert "Windsurf is the primary recommendation" not in record.detail.report_md
+    assert "Updated Claude Code persona evidence" in record.detail.report_md
+    assert (
+        record.structured_report_snapshot.core.executive_summary.recommendation.text
+        == "GitHub Copilot and Cursor are the risk-adjusted primary choices."
+    )
+    assert (
+        record.structured_report_snapshot.core.user_review_themes.cross_competitor_patterns[
+            0
+        ].text
+        == "Updated Claude Code persona evidence supports terminal-heavy teams."
+    )
+    assert not any(
+        event.type == "writer_structured_repair_failed_preserved_previous"
+        for event in record.events
+    )
+
+
+def test_real_schema_first_scoped_redo_uses_markdown_previous_recommendation_without_snapshot(  # noqa: E501
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(
+        service,
+        competitors=["Claude Code", "Cursor", "Windsurf"],
+    )
+    record.detail.execution_mode = "real"
+    record.detail.output_language = "en-US"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+    record.detail.report_md = (
+        "## Executive Summary\n"
+        "- Recommendation: GitHub Copilot and Cursor are the risk-adjusted primary choices. "
+        "[source:raw-source-a]\n"
+    )
+    _attach_scoped_structured_writer_redo(
+        record,
+        subagent="persona",
+        competitor="Claude Code",
+    )
+    candidate = _structured_writer_fixture_report(record.detail)
+    candidate.core.executive_summary.recommendation.text = (
+        "Windsurf is the primary recommendation."
+    )
+    candidate.core.executive_summary.risk_adjusted_rationale.text = (
+        "Windsurf has broad feature coverage."
+    )
+
+    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
+        return candidate
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
+        fake_structured_report,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    assert "GitHub Copilot and Cursor" in record.detail.report_md
+    assert "Windsurf is the primary recommendation" not in record.detail.report_md
+    event = next(
+        event
+        for event in record.events
+        if event.type == "writer_structured_repair_failed_preserved_previous"
+    )
+    assert event.payload["previous_report_preserved"] is True
+    assert "recommendation changed" in event.payload["reason"]
+    assert "writer_schema_first_failed_closed" not in [
+        event.type for event in record.events
+    ]
+
+
+def test_real_schema_first_scoped_redo_preserves_previous_report_on_structured_section_regression(  # noqa: E501
+    monkeypatch,
+) -> None:
+    from packages.agents.writer.structured_renderer import render_structured_report
+
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(
+        service,
+        competitors=["Claude Code", "Cursor", "Windsurf"],
+    )
+    record.detail.execution_mode = "real"
+    record.detail.output_language = "en-US"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+    previous_snapshot = _structured_writer_fixture_report(record.detail)
+    previous_snapshot.core.user_review_themes.cross_competitor_patterns[0].text = (
+        "Previous persona pattern includes adoption blocker, buyer context, "
+        "switching trigger, and evidence caveat with enough detail."
+    )
+    record.structured_report_snapshot = previous_snapshot
+    record.detail.report_md = render_structured_report(previous_snapshot)
+    _attach_scoped_structured_writer_redo(
+        record,
+        subagent="persona",
+        competitor="Claude Code",
+    )
+    candidate = previous_snapshot.model_copy(deep=True)
+    candidate.core.user_review_themes.cross_competitor_patterns[0].text = "Thin."
+    candidate.core.user_review_themes.competitor_themes[0].direct_user_signals = []
+
+    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
+        return candidate
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
+        fake_structured_report,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    assert "Previous persona pattern includes adoption blocker" in record.detail.report_md
+    assert "Thin." not in record.detail.report_md
+    assert record.structured_report_snapshot == previous_snapshot
+    event = next(
+        event
+        for event in record.events
+        if event.type == "writer_schema_first_failed_closed"
+    )
+    assert "scoped structured section regressed" in event.payload["reason"]
 
 
 def test_markdown_writer_still_runs_when_structured_flag_disabled(monkeypatch) -> None:

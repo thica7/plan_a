@@ -34,6 +34,13 @@ from packages.agents.writer.segment_contract import (
     validate_segment_contract,
 )
 from packages.agents.writer.structured_renderer import render_structured_report
+from packages.agents.writer.structured_repair import (
+    merge_scoped_structured_report,
+    previous_recommendation_posture,
+    recommendation_delta_problem,
+    scoped_structured_section_keys,
+    structured_scoped_regression_problem,
+)
 from packages.agents.writer.structured_report import (
     BattlecardSection,
     CitedText,
@@ -570,6 +577,9 @@ class WriterAgentMixin:
         writer_repair_decision = ""
         anti_regression_reason: str | None = None
         previous_report_protected = False
+        structured_recommendation_guard_preserved = False
+        structured_scoped_merge_applied = False
+        structured_scoped_regression_checked = False
         redo_issue_by_id: dict[str, QCIssue] = {}
         for message in redo_messages:
             for item in message.payload.get("issues", []):
@@ -851,98 +861,205 @@ class WriterAgentMixin:
                             report=structured_report,
                             expected_competitors=list(detail.plan.competitors),
                         )
-                        structured_report = assembly.report
-                        structured_validation = validate_structured_report(
-                            structured_report,
-                            allowed_source_ids={source.id for source in detail.raw_sources},
-                            strong_source_ids=_strong_writer_source_ids(detail),
-                        )
-                        structured_payload = {
-                            **structured_validation.telemetry_payload(),
-                            "assembly": assembly.telemetry,
-                        }
-                        await self.emit(
-                            detail.id,
-                            "writer_structured_report_validated",
-                            "writer",
-                            None,
-                            "Writer structured report validated.",
-                            structured_payload,
-                        )
-                        self._trace_local_tool(
+                        candidate_structured_report = assembly.report
+                        previous_structured_report = getattr(
                             record,
-                            agent="writer",
-                            subagent=None,
-                            name="writer_structured_report_validated",
-                            input_text="structured_report",
-                            output_text=json.dumps(
-                                structured_payload,
-                                ensure_ascii=False,
-                                default=str,
-                            ),
-                            metadata={
-                                "passed": structured_validation.passed,
-                                "issue_count": len(structured_validation.issues),
-                            },
-                        )
-                        if not structured_validation.passed:
-                            raise ValueError(
-                                "structured writer validation failed: "
-                                + ", ".join(structured_validation.issue_codes())
-                            )
-                        rendered = render_structured_report(structured_report)
-                        publication_validation = validate_publication_contract(
-                            rendered,
-                            structured_report=structured_report,
-                            allowed_source_ids={source.id for source in detail.raw_sources},
-                        )
-                        publication_payload = publication_validation.telemetry_payload()
-                        await self.emit(
-                            detail.id,
-                            "writer_publication_contract_validated",
-                            "writer",
+                            "structured_report_snapshot",
                             None,
-                            "Writer publication contract validated.",
-                            publication_payload,
                         )
-                        self._trace_local_tool(
-                            record,
-                            agent="writer",
-                            subagent=None,
-                            name="writer_publication_contract_validated",
-                            input_text="rendered_structured_report",
-                            output_text=json.dumps(
-                                publication_payload,
-                                ensure_ascii=False,
-                                default=str,
-                            ),
-                            metadata={
-                                "passed": publication_validation.passed,
-                                "issue_count": len(publication_validation.issues),
-                            },
-                        )
-                        if not publication_validation.passed:
-                            raise ValueError(
-                                "structured writer publication contract failed: "
-                                + ", ".join(publication_validation.issue_codes())
+                        pending = record.pending_graph_redo
+                        scoped_competitors: set[str] = set()
+                        scoped_dimensions: set[str] = set()
+                        recommendation_problem: str | None = None
+                        structured_report = candidate_structured_report
+                        if pending is not None and previous_structured_report is not None:
+                            affected_structured_keys = scoped_structured_section_keys(
+                                pending.redo_scopes,
                             )
-                        if structured_targets:
+                            structured_report = merge_scoped_structured_report(
+                                previous=previous_structured_report,
+                                candidate=candidate_structured_report,
+                                scopes=pending.redo_scopes,
+                            )
+                            regression_problem = structured_scoped_regression_problem(
+                                previous=previous_structured_report,
+                                merged=structured_report,
+                                affected_keys=affected_structured_keys,
+                            )
+                            structured_scoped_regression_checked = True
+                            if regression_problem:
+                                raise ValueError(regression_problem)
+                            structured_scoped_merge_applied = True
+                        previous_recommendation = previous_recommendation_posture(
+                            previous_structured_report=previous_structured_report,
+                            previous_report=previous_report,
+                        )
+                        candidate_summary = structured_report.core.executive_summary
+                        if pending is not None and previous_recommendation:
+                            for scope in pending.redo_scopes:
+                                if scope.target_competitor:
+                                    scoped_competitors.add(scope.target_competitor)
+                                scoped_competitors.update(scope.target_competitors)
+                                if scope.target_subagent:
+                                    scoped_dimensions.add(scope.target_subagent)
+                            recommendation_problem = recommendation_delta_problem(
+                                previous_recommendation=previous_recommendation,
+                                candidate_recommendation=(
+                                    candidate_summary.recommendation.text
+                                ),
+                                scoped_competitors=scoped_competitors,
+                                scoped_dimensions=scoped_dimensions,
+                                candidate_rationale=(
+                                    candidate_summary.risk_adjusted_rationale.text
+                                ),
+                            )
+                        if recommendation_problem:
+                            previous_report_to_preserve = previous_report
+                            if (
+                                not previous_report_to_preserve.strip()
+                                and previous_structured_report is not None
+                            ):
+                                previous_report_to_preserve = render_structured_report(
+                                    previous_structured_report,
+                                )
+                            if not previous_report_to_preserve.strip():
+                                raise ValueError(
+                                    "structured recommendation guard failed but no "
+                                    "previous report was available to preserve"
+                                )
+                            anti_regression_reason = recommendation_problem
+                            detail.report_md = self._preserve_hardened_previous_report(
+                                detail,
+                                previous_report_to_preserve,
+                            )
+                            report_md = detail.report_md
+                            writer_mode = (
+                                "preserved previous report after recommendation delta guard"
+                            )
+                            structured_recommendation_guard_preserved = True
+                            candidate_recommendation = candidate_summary.recommendation.text
                             await self.emit(
                                 detail.id,
-                                "writer_structured_repair_selected",
+                                "writer_structured_repair_failed_preserved_previous",
                                 "writer",
                                 None,
-                                "Structured repair targets selected",
+                                (
+                                    "Scoped structured redo recommendation guard "
+                                    "preserved the previous report."
+                                ),
                                 {
-                                    "targets": list(dict.fromkeys(structured_targets)),
-                                    "llm_required": any(
-                                        target != "renderer"
-                                        for target in structured_targets
-                                    ),
+                                    "reason": recommendation_problem,
+                                    "previous_report_preserved": True,
+                                    "scoped_competitors": sorted(scoped_competitors),
+                                    "scoped_dimensions": sorted(scoped_dimensions),
+                                    "previous_recommendation": previous_recommendation,
+                                    "candidate_recommendation": candidate_recommendation,
+                                    "writer_repair_mode": writer_repair_mode,
+                                    "writer_repair_sections": list(writer_repair_sections),
                                 },
                             )
-                        report_md = rendered
-                        writer_mode = "real structured writer call"
+                        else:
+                            structured_validation = validate_structured_report(
+                                structured_report,
+                                allowed_source_ids={
+                                    source.id for source in detail.raw_sources
+                                },
+                                strong_source_ids=_strong_writer_source_ids(detail),
+                            )
+                            structured_payload = {
+                                **structured_validation.telemetry_payload(),
+                                "assembly": assembly.telemetry,
+                            }
+                            await self.emit(
+                                detail.id,
+                                "writer_structured_report_validated",
+                                "writer",
+                                None,
+                                "Writer structured report validated.",
+                                structured_payload,
+                            )
+                            self._trace_local_tool(
+                                record,
+                                agent="writer",
+                                subagent=None,
+                                name="writer_structured_report_validated",
+                                input_text="structured_report",
+                                output_text=json.dumps(
+                                    structured_payload,
+                                    ensure_ascii=False,
+                                    default=str,
+                                ),
+                                metadata={
+                                    "passed": structured_validation.passed,
+                                    "issue_count": len(structured_validation.issues),
+                                },
+                            )
+                            if not structured_validation.passed:
+                                raise ValueError(
+                                    "structured writer validation failed: "
+                                    + ", ".join(structured_validation.issue_codes())
+                                )
+                            rendered = render_structured_report(structured_report)
+                            publication_validation = validate_publication_contract(
+                                rendered,
+                                structured_report=structured_report,
+                                allowed_source_ids={
+                                    source.id for source in detail.raw_sources
+                                },
+                            )
+                            publication_payload = (
+                                publication_validation.telemetry_payload()
+                            )
+                            await self.emit(
+                                detail.id,
+                                "writer_publication_contract_validated",
+                                "writer",
+                                None,
+                                "Writer publication contract validated.",
+                                publication_payload,
+                            )
+                            self._trace_local_tool(
+                                record,
+                                agent="writer",
+                                subagent=None,
+                                name="writer_publication_contract_validated",
+                                input_text="rendered_structured_report",
+                                output_text=json.dumps(
+                                    publication_payload,
+                                    ensure_ascii=False,
+                                    default=str,
+                                ),
+                                metadata={
+                                    "passed": publication_validation.passed,
+                                    "issue_count": len(publication_validation.issues),
+                                },
+                            )
+                            if not publication_validation.passed:
+                                raise ValueError(
+                                    "structured writer publication contract failed: "
+                                    + ", ".join(publication_validation.issue_codes())
+                                )
+                            record.previous_structured_report_snapshot = (
+                                previous_structured_report
+                            )
+                            record.structured_report_snapshot = structured_report
+                            if structured_targets:
+                                await self.emit(
+                                    detail.id,
+                                    "writer_structured_repair_selected",
+                                    "writer",
+                                    None,
+                                    "Structured repair targets selected",
+                                    {
+                                        "targets": list(dict.fromkeys(structured_targets)),
+                                        "llm_required": any(
+                                            target != "renderer"
+                                            for target in structured_targets
+                                        ),
+                                    },
+                                )
+                            report_md = rendered
+                            writer_mode = "real structured writer call"
                     except Exception as exc:  # noqa: BLE001 - structured path may be temporarily unavailable.
                         fallback_reason = str(exc)[:500]
                         if not _structured_markdown_fallback_allowed(
@@ -1033,6 +1150,11 @@ class WriterAgentMixin:
                     previous_report.strip()
                     and repair_plan is not None
                     and repair_plan.anti_regression_required
+                    and not structured_recommendation_guard_preserved
+                    and not (
+                        structured_scoped_merge_applied
+                        and structured_scoped_regression_checked
+                    )
                 ):
                     repair_comparison_metrics = detail.metrics.model_copy(
                         update={
@@ -1070,7 +1192,7 @@ class WriterAgentMixin:
                         candidate_detail,
                         protected_sections=protected_sections,
                     )
-                if anti_regression_reason:
+                if anti_regression_reason and not structured_recommendation_guard_preserved:
                     detail.report_md = self._preserve_hardened_previous_report(
                         detail,
                         previous_report,
