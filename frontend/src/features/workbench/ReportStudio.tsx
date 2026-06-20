@@ -17,11 +17,14 @@ import { ReportReviewDesk } from "./ReportReviewDesk";
 import { ReportVersionPanel } from "./ReportVersionPanel";
 import type { ReportAction, ReportExportFormat } from "./reportOperations";
 import { useTranslation } from "../../stores/i18n";
+import type { KnowledgeRollbackRequest, KnowledgeRollbackResult } from "../../stores/knowledgeStore";
 
 interface ReportStudioProps {
   claims: ClaimRecord[];
   evidenceById: Map<string, EvidenceRecord>;
   isPending: boolean;
+  kbRollbackIssueId: string | null;
+  kbRollbackResult: { issueId: string; result: KnowledgeRollbackResult } | null;
   lastExport: ArtifactRecord | null;
   onExport: (format: ReportExportFormat) => void;
   onEvidenceQuality: (evidenceId: string, qualityLabel: EvidenceQualityLabel) => void;
@@ -29,6 +32,7 @@ interface ReportStudioProps {
   onSelectEvidence: (evidence: EvidenceRecord) => void;
   onSelectReport: (report: ReportVersionRecord) => void;
   onReportAction: (action: ReportAction) => void;
+  onRollbackKbIssue: (issueId: string, request: KnowledgeRollbackRequest) => void;
   releaseGate: ReportReleaseGate | null;
   reportSources: ReportSourceBundle;
   selectedVersion: ReportVersionRecord | null;
@@ -41,6 +45,8 @@ export function ReportStudio({
   claims,
   evidenceById,
   isPending,
+  kbRollbackIssueId,
+  kbRollbackResult,
   lastExport,
   onExport,
   onEvidenceQuality,
@@ -48,6 +54,7 @@ export function ReportStudio({
   onSelectEvidence,
   onSelectReport,
   onReportAction,
+  onRollbackKbIssue,
   releaseGate,
   reportSources,
   selectedVersion,
@@ -130,7 +137,10 @@ export function ReportStudio({
           diff={diff}
           evidenceById={evidenceById}
           isDiffLoading={isDiffLoading}
+          kbRollbackIssueId={kbRollbackIssueId}
+          kbRollbackResult={kbRollbackResult}
           onEvidenceQuality={onEvidenceQuality}
+          onRollbackKbIssue={onRollbackKbIssue}
           onSelectClaim={onSelectClaim}
           onSelectEvidence={onSelectEvidence}
           previousVersion={previousVersion}

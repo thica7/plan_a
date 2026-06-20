@@ -1,8 +1,8 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import type { ReportReleaseGate } from "../../api/types";
 import { useI18n } from "../../stores/i18n";
-import { ReportReviewDesk, buildReleaseIssueAuditRows } from "./ReportReviewDesk";
+import { ReportReviewDesk, buildReleaseIssueAuditRows, buildReleaseIssueRollbackTarget } from "./ReportReviewDesk";
 
 const claimConflictGate = {
   allowed: false,
@@ -70,6 +70,32 @@ describe("ReportReviewDesk release gate audit metadata", () => {
     expect(screen.getByText("collector-run-1")).toBeInTheDocument();
   });
 
+  it("fires rollback with the KB document selector from release gate metadata", () => {
+    const onRollbackKbIssue = vi.fn();
+
+    render(
+      <ReportReviewDesk
+        diff={null}
+        evidenceById={new Map()}
+        isDiffLoading={false}
+        onEvidenceQuality={() => undefined}
+        onRollbackKbIssue={onRollbackKbIssue}
+        onSelectClaim={() => undefined}
+        onSelectEvidence={() => undefined}
+        previousVersion={null}
+        releaseGate={claimConflictGate}
+        scopedClaims={[]}
+        selectedVersion={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Rollback KB evidence/i }));
+
+    expect(onRollbackKbIssue).toHaveBeenCalledWith("issue-claim-conflict", {
+      document_ids: ["kb-doc-pricing-v3"],
+      restore_previous: true,
+    });
+  });
   it("builds compact audit rows from release gate metadata", () => {
     const rows = buildReleaseIssueAuditRows(claimConflictGate.issues[0]);
 
@@ -79,5 +105,15 @@ describe("ReportReviewDesk release gate audit metadata", () => {
       value: "kb-doc-pricing-v3 / v3 / active",
     });
     expect(rows).toContainEqual({ label: "Freshness", value: "86%" });
+  });
+
+  it("builds a rollback target from KB audit metadata", () => {
+    const target = buildReleaseIssueRollbackTarget(claimConflictGate.issues[0]);
+
+    expect(target).toEqual({
+      issueId: "issue-claim-conflict",
+      request: { document_ids: ["kb-doc-pricing-v3"], restore_previous: true },
+      selectorSummary: "kb-doc-pricing-v3",
+    });
   });
 });

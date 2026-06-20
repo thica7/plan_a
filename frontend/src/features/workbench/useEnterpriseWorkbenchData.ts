@@ -8,6 +8,7 @@ import type {
   ProjectRecord,
   ReportReleaseGate,
 } from "../../api/types";
+import { useKnowledgeStore, type KnowledgeRollbackRequest, type KnowledgeRollbackResult } from "../../stores/knowledgeStore";
 import { loadProjectCore, loadProjectSignals, loadReleaseGate, loadWorkbenchProjects } from "./dataLoaders";
 import { exportReportArtifact, performReportAction, type ReportAction, type ReportExportFormat } from "./reportOperations";
 import {
@@ -32,7 +33,13 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
   const [isFillingGaps, setFillingGaps] = useState(false);
   const [isReportActionPending, setReportActionPending] = useState(false);
   const [lastExport, setLastExport] = useState<ArtifactRecord | null>(null);
+  const [kbRollbackIssueId, setKbRollbackIssueId] = useState<string | null>(null);
+  const [kbRollbackResult, setKbRollbackResult] = useState<{
+    issueId: string;
+    result: KnowledgeRollbackResult;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const rollbackDocuments = useKnowledgeStore((state) => state.rollbackDocuments);
 
   useEffect(() => setActiveView(initialView), [initialView]);
 
@@ -167,6 +174,20 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     }
   }
 
+  async function handleKbRollbackIssue(issueId: string, request: KnowledgeRollbackRequest) {
+    setKbRollbackIssueId(issueId);
+    setKbRollbackResult(null);
+    setError(null);
+    try {
+      const result = await rollbackDocuments(request);
+      setKbRollbackResult({ issueId, result });
+      if (selectedProject) await refreshProject(selectedProject);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to rollback KB evidence");
+    } finally {
+      setKbRollbackIssueId(null);
+    }
+  }
   async function handleEvidenceQuality(evidenceId: string, qualityLabel: EvidenceQualityLabel) {
     try {
       const result = await updateEvidenceQuality(evidenceId, { quality_label: qualityLabel });
@@ -218,10 +239,13 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     handleEvidenceQuality,
     handleExport,
     handleGapFill,
+    handleKbRollbackIssue,
     handleReportAction,
     isFillingGaps,
     isLoadingProject,
     isLoadingProjects,
+    kbRollbackIssueId,
+    kbRollbackResult,
     isReportActionPending,
     lastExport,
     projects,

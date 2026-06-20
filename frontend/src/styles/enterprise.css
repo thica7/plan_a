@@ -931,6 +931,34 @@
   overflow-wrap: anywhere;
 }
 
+.release-issue-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.release-issue-actions span,
+.release-issue-feedback {
+  color: #475569;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.release-issue-actions .table-action-button {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.release-issue-feedback {
+  background: var(--success-soft);
+  border-radius: 6px;
+  color: var(--success);
+  margin: 8px 0 0;
+  padding: 6px 8px;
+}
+
 .report-review-desk .source-scope-list,
 .report-review-desk .review-claim-list {
   max-height: 240px;

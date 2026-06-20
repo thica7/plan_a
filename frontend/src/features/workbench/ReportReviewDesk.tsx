@@ -1,4 +1,4 @@
-import { Database, GitCompareArrows, MessageSquareWarning } from "lucide-react";
+import { Database, GitCompareArrows, MessageSquareWarning, RotateCcw } from "lucide-react";
 import type {
   BusinessQAFinding,
   ClaimRecord,
@@ -10,13 +10,17 @@ import type {
 } from "../../api/types";
 import { EmptyState, LoadingState, MetricCard, Panel, StatusPill } from "../../components/ui";
 import { useTranslation } from "../../stores/i18n";
+import type { KnowledgeRollbackRequest, KnowledgeRollbackResult } from "../../stores/knowledgeStore";
 
 
 interface ReportReviewDeskProps {
   diff: ReportVersionDiff | null;
   evidenceById: Map<string, EvidenceRecord>;
   isDiffLoading: boolean;
+  kbRollbackIssueId?: string | null;
+  kbRollbackResult?: ReleaseIssueRollbackResult | null;
   onEvidenceQuality: (evidenceId: string, qualityLabel: EvidenceQualityLabel) => void;
+  onRollbackKbIssue?: (issueId: string, request: KnowledgeRollbackRequest) => void | Promise<void>;
   onSelectClaim: (claim: ClaimRecord) => void;
   onSelectEvidence: (evidence: EvidenceRecord) => void;
   previousVersion: ReportVersionRecord | null;
@@ -29,7 +33,10 @@ export function ReportReviewDesk({
   diff,
   evidenceById,
   isDiffLoading,
+  kbRollbackIssueId = null,
+  kbRollbackResult = null,
   onEvidenceQuality,
+  onRollbackKbIssue,
   onSelectClaim,
   onSelectEvidence,
   previousVersion,
@@ -40,7 +47,12 @@ export function ReportReviewDesk({
   return (
     <aside className="report-review-desk">
       <DiffPanel diff={diff} isLoading={isDiffLoading} previousVersion={previousVersion} />
-      <ReleaseIssuesPanel releaseGate={releaseGate} />
+      <ReleaseIssuesPanel
+        kbRollbackIssueId={kbRollbackIssueId}
+        kbRollbackResult={kbRollbackResult}
+        onRollbackKbIssue={onRollbackKbIssue}
+        releaseGate={releaseGate}
+      />
       <ClaimReviewPanel onSelectClaim={onSelectClaim} scopedClaims={scopedClaims} />
       <EvidenceScopePanel
         evidenceById={evidenceById}
@@ -93,7 +105,17 @@ function DiffPanel({
   );
 }
 
-function ReleaseIssuesPanel({ releaseGate }: { releaseGate: ReportReleaseGate | null }) {
+function ReleaseIssuesPanel({
+  kbRollbackIssueId,
+  kbRollbackResult,
+  onRollbackKbIssue,
+  releaseGate,
+}: {
+  kbRollbackIssueId: string | null;
+  kbRollbackResult: ReleaseIssueRollbackResult | null;
+  onRollbackKbIssue?: (issueId: string, request: KnowledgeRollbackRequest) => void | Promise<void>;
+  releaseGate: ReportReleaseGate | null;
+}) {
   const { t } = useTranslation();
   return (
     <Panel title={t("workbench.gateIssues")} icon={<MessageSquareWarning size={16} aria-hidden />}>
@@ -101,6 +123,9 @@ function ReleaseIssuesPanel({ releaseGate }: { releaseGate: ReportReleaseGate | 
         <div className="recommendation-list compact">
           {releaseGate.issues.slice(0, 5).map((issue) => {
             const auditRows = buildReleaseIssueAuditRows(issue);
+            const rollbackTarget = buildReleaseIssueRollbackTarget(issue);
+            const rollbackResult = kbRollbackResult?.issueId === issue.id ? kbRollbackResult.result : null;
+            const isRollingBack = kbRollbackIssueId === issue.id;
             return (
               <article className={`recommendation-card ${issue.severity}`} key={issue.id}>
                 <strong>{issue.rule_name}</strong>
@@ -114,6 +139,27 @@ function ReleaseIssuesPanel({ releaseGate }: { releaseGate: ReportReleaseGate | 
                       </div>
                     ))}
                   </dl>
+                ) : null}
+                {rollbackTarget && onRollbackKbIssue ? (
+                  <div className="release-issue-actions">
+                    <button
+                      className="table-action-button"
+                      disabled={Boolean(kbRollbackIssueId)}
+                      onClick={() => void onRollbackKbIssue(rollbackTarget.issueId, rollbackTarget.request)}
+                      title={`Rollback ${rollbackTarget.selectorSummary}`}
+                      type="button"
+                    >
+                      <RotateCcw size={14} aria-hidden />
+                      {isRollingBack ? "Rolling back" : "Rollback KB evidence"}
+                    </button>
+                    <span>{rollbackTarget.selectorSummary}</span>
+                  </div>
+                ) : null}
+                {rollbackResult ? (
+                  <p className="release-issue-feedback">
+                    Rollback matched {rollbackResult.matched_count}, archived {rollbackResult.rolled_back_count},
+                    restored {rollbackResult.restored_count}.
+                  </p>
                 ) : null}
               </article>
             );
@@ -130,6 +176,17 @@ function ReleaseIssuesPanel({ releaseGate }: { releaseGate: ReportReleaseGate | 
 export interface ReleaseIssueAuditRow {
   label: string;
   value: string;
+}
+
+export interface ReleaseIssueRollbackResult {
+  issueId: string;
+  result: KnowledgeRollbackResult;
+}
+
+export interface ReleaseIssueRollbackTarget {
+  issueId: string;
+  request: KnowledgeRollbackRequest;
+  selectorSummary: string;
 }
 
 export function buildReleaseIssueAuditRows(issue: BusinessQAFinding): ReleaseIssueAuditRow[] {
@@ -178,9 +235,57 @@ export function buildReleaseIssueAuditRows(issue: BusinessQAFinding): ReleaseIss
   return rows.slice(0, 10);
 }
 
+export function buildReleaseIssueRollbackTarget(issue: BusinessQAFinding): ReleaseIssueRollbackTarget | null {
+  const metadata = issue.metadata ?? {};
+  const trail = metadataObjectList(metadata["evidence_audit_trail"]);
+  const documentIds = uniqueStrings(
+    trail.map((item) => metadataText(item, "kb_document_id")).filter((item): item is string => Boolean(item)),
+  );
+  if (documentIds.length > 0) {
+    return {
+      issueId: issue.id,
+      request: { document_ids: documentIds, restore_previous: true },
+      selectorSummary: documentIds.length === 1 ? documentIds[0] : `${documentIds.length} KB documents`,
+    };
+  }
+
+  const rawSourceId = firstMetadataText(trail, "kb_raw_source_id");
+  if (rawSourceId) {
+    return {
+      issueId: issue.id,
+      request: { raw_source_id: rawSourceId, restore_previous: true },
+      selectorSummary: `raw source ${rawSourceId}`,
+    };
+  }
+
+  const collectorRunId = firstMetadataText(trail, "kb_collector_run_id");
+  if (collectorRunId) {
+    return {
+      issueId: issue.id,
+      request: { run_id: collectorRunId, restore_previous: true },
+      selectorSummary: `collector run ${collectorRunId}`,
+    };
+  }
+
+  return null;
+}
+
+function firstMetadataText(items: Record<string, unknown>[], key: string): string | null {
+  for (const item of items) {
+    const value = metadataText(item, key);
+    if (value) return value;
+  }
+  return null;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
 function metadataObjectList(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
+  return value.filter(
+    (item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item),
+  );
 }
 
 function metadataStringList(value: unknown): string[] {

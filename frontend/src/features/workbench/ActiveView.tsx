@@ -9,6 +9,7 @@ import type {
   ReportReleaseGate,
   ReportVersionRecord,
 } from "../../api/types";
+import type { KnowledgeRollbackRequest, KnowledgeRollbackResult } from "../../stores/knowledgeStore";
 import type { ReportSourceBundle } from "../report/sourceBundle";
 import { ActivityCenter } from "./ActivityCenter";
 import { CompetitorLibrary } from "./CompetitorLibrary";
@@ -27,11 +28,14 @@ interface ActiveViewProps {
   filteredEvidence: EvidenceRecord[];
   gapFillResult: EvidenceGapFillResult | null;
   isFillingGaps: boolean;
+  kbRollbackIssueId: string | null;
+  kbRollbackResult: { issueId: string; result: KnowledgeRollbackResult } | null;
   isReportActionPending: boolean;
   lastExport: ArtifactRecord | null;
   onEvidenceQuality: (evidenceId: string, qualityLabel: EvidenceQualityLabel) => void;
   onExport: (format: ReportExportFormat) => void;
   onFillGaps: () => void;
+  onRollbackKbIssue: (issueId: string, request: KnowledgeRollbackRequest) => void;
   onReportAction: (action: ReportAction) => void;
   onSelectClaim: (claim: ClaimRecord) => void;
   onSelectEvidence: (evidence: EvidenceRecord) => void;
@@ -55,11 +59,14 @@ export function ActiveView({
   filteredEvidence,
   gapFillResult,
   isFillingGaps,
+  kbRollbackIssueId,
+  kbRollbackResult,
   isReportActionPending,
   lastExport,
   onEvidenceQuality,
   onExport,
   onFillGaps,
+  onRollbackKbIssue,
   onReportAction,
   onSelectClaim,
   onSelectEvidence,
@@ -98,6 +105,8 @@ export function ActiveView({
         claims={data.claims}
         evidenceById={evidenceById}
         isPending={isReportActionPending}
+        kbRollbackIssueId={kbRollbackIssueId}
+        kbRollbackResult={kbRollbackResult}
         lastExport={lastExport}
         onEvidenceQuality={onEvidenceQuality}
         onExport={onExport}
@@ -105,6 +114,7 @@ export function ActiveView({
         onSelectEvidence={onSelectEvidence}
         onSelectReport={onSelectReport}
         onReportAction={onReportAction}
+        onRollbackKbIssue={onRollbackKbIssue}
         releaseGate={releaseGate}
         reportSources={reportSources}
         selectedVersion={selectedVersion}
