@@ -596,6 +596,58 @@ async def test_create_run_reuses_recent_active_duplicate_even_with_new_key() -> 
 
 
 @pytest.mark.asyncio
+async def test_sync_appended_run_event_reaches_active_no_journal_subscriber() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Sync event subscriber",
+            competitors=["Claude"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+    stream = service.stream_events(detail.id)
+    next_event_task: asyncio.Task[RunEvent] | None = None
+    try:
+        next_event_task = asyncio.create_task(stream.__anext__())
+        started = time.monotonic()
+        while len(record.subscribers) == 0:
+            if time.monotonic() - started > 1:
+                raise AssertionError("stream did not attach a live subscriber")
+            if next_event_task.done():
+                next_event_task.result()
+                next_event_task = asyncio.create_task(stream.__anext__())
+            await asyncio.sleep(0)
+
+        service._append_run_event_sync(
+            record,
+            "writer_unified_quality_result_recorded",
+            "quality",
+            None,
+            "Unified final quality result recorded.",
+            {"issue_count": 0},
+        )
+
+        event = await asyncio.wait_for(next_event_task, timeout=1)
+        assert event.type == "writer_unified_quality_result_recorded"
+    finally:
+        if next_event_task is not None and not next_event_task.done():
+            next_event_task.cancel()
+        await stream.aclose()
+
+
+@pytest.mark.asyncio
 async def test_ensure_run_visible_reuses_recent_active_duplicate() -> None:
     settings = Settings(
         demo_mode=True,
@@ -13695,6 +13747,178 @@ async def test_release_gate_sync_creates_scoped_qa_repair_issue() -> None:
 
 
 @pytest.mark.asyncio
+async def test_release_gate_sync_records_unified_quality_result_event_and_revision_counts() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Unified quality result",
+            competitors=["Claude"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.report_md = "After redo. [source:pricing-1]"
+    record.detail.revisions = [
+        RevisionRecord(
+            id="revision-1",
+            iteration=1,
+            stage="writer",
+            before_md="Before redo.",
+            after_md=record.detail.report_md,
+            issue_count_before=1,
+            issue_count_after=0,
+            convergence_ratio=0.0,
+        )
+    ]
+
+    service._sync_release_gate_repair_issues(record, _blocked_release_gate())
+
+    unified_events = [
+        event for event in record.events if event.type == "writer_unified_quality_result_recorded"
+    ]
+    assert len(record.detail.qa_findings) == 1
+    assert record.detail.revisions[-1].issue_count_after == 1
+    assert record.detail.revisions[-1].convergence_ratio == 1.0
+    assert len(unified_events) == 1
+    assert unified_events[0].payload == {
+        "blocker_count": 1,
+        "warn_count": 0,
+        "issue_count": 1,
+        "quality_status": "completed_with_blockers",
+        "readiness_score": 70,
+        "revision_issue_count_after": 1,
+        "revision_convergence_ratio": 1.0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_release_gate_sync_updates_revision_after_report_normalization() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Release gate normalized report sync",
+            competitors=["Claude"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.report_md = "Normalized after enterprise projection. [source:pricing-1]"
+    record.detail.revisions = [
+        RevisionRecord(
+            id="revision-1",
+            iteration=1,
+            stage="writer",
+            before_md="Before redo.",
+            after_md="Pre-normalization report. [source:pricing-1]",
+            issue_count_before=1,
+            issue_count_after=0,
+            convergence_ratio=0.0,
+        )
+    ]
+    await service.emit(
+        detail.id,
+        "revision_recorded",
+        "orchestrator",
+        None,
+        "Revision 1 recorded with convergence ratio 0.00.",
+        {"revision": record.detail.revisions[-1].model_dump(mode="json")},
+    )
+
+    service._sync_release_gate_repair_issues(record, _blocked_release_gate())
+
+    assert record.detail.revisions[-1].issue_count_after == 1
+    assert record.detail.revisions[-1].convergence_ratio == 1.0
+    assert record.detail.revisions[-1].after_md == record.detail.report_md
+    revision_events = [event for event in record.events if event.type == "revision_recorded"]
+    assert len(revision_events) == 2
+    latest_revision_payload = revision_events[-1].payload["revision"]
+    assert latest_revision_payload["after_md"] == record.detail.report_md
+    assert latest_revision_payload["issue_count_after"] == 1
+
+
+@pytest.mark.asyncio
+async def test_release_gate_sync_records_unified_quality_result_when_gate_is_absent() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Release gate absent quality sync",
+            competitors=["Claude"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.report_md = "Final report. [source:pricing-1]"
+    record.detail.qa_findings = [
+        QCIssue(
+            id="qc-deterministic-1",
+            severity="warn",
+            detected_by="schema",
+            target_agent="writer",
+            field_path="report_md.executive_summary",
+            problem="Executive summary needs stronger support.",
+            redo_scope=RedoScope(kind="writer_only", rationale="Improve summary support."),
+        )
+    ]
+    record.detail.revisions = [
+        RevisionRecord(
+            id="revision-1",
+            iteration=1,
+            stage="writer",
+            before_md="Before redo.",
+            after_md=record.detail.report_md,
+            issue_count_before=2,
+            issue_count_after=0,
+            convergence_ratio=0.0,
+        )
+    ]
+
+    issues = service._sync_release_gate_repair_issues(record, None)
+
+    assert issues == []
+    assert len(record.detail.qa_findings) == 1
+    assert record.detail.revisions[-1].issue_count_after == 1
+    unified_events = [
+        event for event in record.events if event.type == "writer_unified_quality_result_recorded"
+    ]
+    assert len(unified_events) == 1
+    assert unified_events[0].payload["warn_count"] == 1
+    assert unified_events[0].payload["quality_status"] == "completed_with_warnings"
+
+
+@pytest.mark.asyncio
 async def test_release_gate_sync_updates_latest_revision_after_issue_count() -> None:
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -13729,12 +13953,25 @@ async def test_release_gate_sync_updates_latest_revision_after_issue_count() -> 
             convergence_ratio=0.0,
         )
     ]
+    await service.emit(
+        detail.id,
+        "revision_recorded",
+        "orchestrator",
+        None,
+        "Revision 1 recorded with convergence ratio 0.00.",
+        {"revision": record.detail.revisions[-1].model_dump(mode="json")},
+    )
 
     service._sync_release_gate_repair_issues(record, _blocked_release_gate())
 
     assert len(record.detail.qa_findings) == 1
     assert record.detail.revisions[-1].issue_count_after == 1
     assert record.detail.revisions[-1].convergence_ratio == 1.0
+    revision_events = [event for event in record.events if event.type == "revision_recorded"]
+    latest_revision_payload = revision_events[-1].payload["revision"]
+    assert latest_revision_payload["id"] == record.detail.revisions[-1].id
+    assert latest_revision_payload["issue_count_after"] == record.detail.revisions[-1].issue_count_after
+    assert latest_revision_payload["convergence_ratio"] == record.detail.revisions[-1].convergence_ratio
 
 
 @pytest.mark.asyncio

@@ -44,6 +44,7 @@ EXPECTED_EVENT_TYPES = {
     "writer_structured_repair_failed_preserved_previous",
     "writer_schema_first_failed_closed",
     "writer_markdown_fallback_used",
+    "writer_unified_quality_result_recorded",
 }
 
 
@@ -63,6 +64,25 @@ def test_frontend_subscribes_to_backend_sse_event_types() -> None:
     for event_type in EXPECTED_EVENT_TYPES:
         assert f'"{event_type}"' in client_source
         assert f'"{event_type}"' in sse_types_source
+
+
+def test_generated_openapi_types_include_backend_sse_event_types() -> None:
+    base_dir = Path(__file__).resolve().parents[3]
+    openapi_types_source = (base_dir / "frontend" / "src" / "api" / "openapi.ts").read_text(
+        encoding="utf-8"
+    )
+
+    for event_type in EXPECTED_EVENT_TYPES:
+        assert f'"{event_type}"' in openapi_types_source
+
+
+def test_openapi_run_event_enum_includes_backend_sse_event_types() -> None:
+    base_dir = Path(__file__).resolve().parents[3]
+    openapi = json.loads((base_dir / "frontend" / "openapi.json").read_text(encoding="utf-8"))
+
+    event_enum = openapi["components"]["schemas"]["RunEvent"]["properties"]["type"]["enum"]
+
+    assert set(event_enum) == EXPECTED_EVENT_TYPES
 
 
 def test_run_event_to_sse_round_trips_payload() -> None:

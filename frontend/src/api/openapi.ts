@@ -3159,6 +3159,28 @@ export interface components {
              */
             created_at?: string;
         };
+        /** CompetitorEdit */
+        CompetitorEdit: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "add" | "remove" | "rename" | "keep" | "mark_unrelated";
+            /** Name */
+            name: string;
+            /** New Name */
+            new_name?: string | null;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Source Note
+             * @default
+             */
+            source_note: string;
+        };
         /** CompetitorKB */
         CompetitorKB: {
             /** Competitor */
@@ -3182,6 +3204,8 @@ export interface components {
             feature_tree?: components["schemas"]["FeatureTree"];
             pricing_model?: components["schemas"]["PricingModel"];
             user_personas?: components["schemas"]["UserPersonaModel"];
+            review_summary?: components["schemas"]["ReviewThemeSummary"];
+            swot_analysis?: components["schemas"]["SWOTAnalysis"];
             /** Source Ids */
             source_ids?: string[];
             /**
@@ -4574,6 +4598,10 @@ export interface components {
             note?: string | null;
             /** Dimensions */
             dimensions?: string[] | null;
+            /** Competitors */
+            competitors?: string[] | null;
+            /** Competitor Edits */
+            competitor_edits?: components["schemas"]["CompetitorEdit"][];
         };
         /** ImportedUserResearchMaterial */
         ImportedUserResearchMaterial: {
@@ -6576,6 +6604,64 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** ReviewThemeItem */
+        ReviewThemeItem: {
+            /** Theme */
+            theme: string;
+            /**
+             * Evidence
+             * @default
+             */
+            evidence: string;
+            /** Source Ids */
+            source_ids?: string[];
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
+            /**
+             * Evidence Gap
+             * @default false
+             */
+            evidence_gap: boolean;
+        };
+        /** ReviewThemeSummary */
+        ReviewThemeSummary: {
+            /**
+             * Competitor
+             * @default
+             */
+            competitor: string;
+            /**
+             * Dimension
+             * @default review
+             */
+            dimension: string;
+            /** Praise Themes */
+            praise_themes?: components["schemas"]["ReviewThemeItem"][];
+            /** Complaint Themes */
+            complaint_themes?: components["schemas"]["ReviewThemeItem"][];
+            /** Adoption Blockers */
+            adoption_blockers?: components["schemas"]["ReviewThemeItem"][];
+            /** Switching Triggers */
+            switching_triggers?: components["schemas"]["ReviewThemeItem"][];
+            /** Persona Segments */
+            persona_segments?: string[];
+            /**
+             * Sentiment Hint
+             * @default unknown
+             * @enum {string}
+             */
+            sentiment_hint: "positive" | "mixed" | "negative" | "unknown";
+            /** Source Ids */
+            source_ids?: string[];
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
+        };
         /** RevisionRecord */
         RevisionRecord: {
             /** Id */
@@ -6809,7 +6895,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "run_created" | "node_started" | "node_completed" | "interrupt" | "qa_issue" | "report_updated" | "revision_recorded" | "run_completed" | "run_failed" | "agent.started" | "agent.finished" | "tool.called" | "rag.retrieved" | "self_consistency.sampled" | "memory.recalled" | "memory.feedback_captured" | "hitl.reviewed" | "claim.validated" | "qa.blocked" | "redo.routed" | "benchmark.scored" | "report.ready" | "runtime.command" | "writer_preflight" | "writer_segment_preflight" | "writer_segment_validated" | "writer_assembly_completed" | "writer_assemble_repair_completed" | "writer_quality_preflight" | "writer_quality_preflight_repair";
+            type: "run_created" | "node_started" | "node_completed" | "interrupt" | "qa_issue" | "report_updated" | "revision_recorded" | "run_completed" | "run_failed" | "agent.started" | "agent.finished" | "tool.called" | "rag.retrieved" | "self_consistency.sampled" | "memory.recalled" | "memory.feedback_captured" | "hitl.reviewed" | "claim.validated" | "qa.blocked" | "redo.routed" | "benchmark.scored" | "report.ready" | "runtime.command" | "writer_preflight" | "writer_segment_preflight" | "writer_segment_validated" | "writer_assembly_completed" | "writer_assemble_repair_completed" | "writer_quality_preflight" | "writer_quality_preflight_repair" | "writer_structured_repair_selected" | "writer_structured_section_started" | "writer_structured_section_completed" | "writer_structured_section_failed" | "writer_structured_report_validated" | "writer_publication_contract_validated" | "writer_structured_repair_failed_preserved_previous" | "writer_schema_first_failed_closed" | "writer_markdown_fallback_used" | "writer_unified_quality_result_recorded";
             /** Agent */
             agent?: string | null;
             /** Subagent */
@@ -7272,6 +7358,46 @@ export interface components {
              * @default
              */
             reason: string;
+        };
+        /** SWOTAnalysis */
+        SWOTAnalysis: {
+            /**
+             * Competitor
+             * @default
+             */
+            competitor: string;
+            /** Strengths */
+            strengths?: components["schemas"]["SWOTItem"][];
+            /** Weaknesses */
+            weaknesses?: components["schemas"]["SWOTItem"][];
+            /** Opportunities */
+            opportunities?: components["schemas"]["SWOTItem"][];
+            /** Threats */
+            threats?: components["schemas"]["SWOTItem"][];
+            /** Source Ids */
+            source_ids?: string[];
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
+        };
+        /** SWOTItem */
+        SWOTItem: {
+            /** Text */
+            text: string;
+            /** Source Ids */
+            source_ids?: string[];
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
+            /**
+             * Evidence Gap
+             * @default false
+             */
+            evidence_gap: boolean;
         };
         /** ScenarioPack */
         ScenarioPack: {
@@ -8608,7 +8734,9 @@ export interface operations {
     };
     get_run_api_runs__run_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                include_trace_payloads?: boolean;
+            };
             header?: never;
             path: {
                 run_id: string;

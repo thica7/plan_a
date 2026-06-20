@@ -8,8 +8,11 @@ from packages.quality.findings import (
     quality_findings_from_red_team,
     quality_findings_from_release_gate,
 )
+from packages.quality.final_result import FinalQualityResult, build_final_quality_result
 
 __all__ = [
+    "FinalQualityResult",
+    "build_final_quality_result",
     "quality_findings_from_business_qa",
     "quality_findings_from_claim_validation",
     "quality_findings_from_evalops",

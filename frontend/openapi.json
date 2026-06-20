@@ -143,6 +143,16 @@
               "type": "string",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "include_trace_payloads",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Trace Payloads"
+            }
           }
         ],
         "responses": {
@@ -14054,6 +14064,59 @@
         ],
         "title": "CompetitorDiscovery"
       },
+      "CompetitorEdit": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove",
+              "rename",
+              "keep",
+              "mark_unrelated"
+            ],
+            "title": "Action"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "new_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Name"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Reason",
+            "default": ""
+          },
+          "source_note": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Source Note",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "name"
+        ],
+        "title": "CompetitorEdit"
+      },
       "CompetitorKB": {
         "properties": {
           "competitor": {
@@ -14106,6 +14169,12 @@
           },
           "user_personas": {
             "$ref": "#/components/schemas/UserPersonaModel"
+          },
+          "review_summary": {
+            "$ref": "#/components/schemas/ReviewThemeSummary"
+          },
+          "swot_analysis": {
+            "$ref": "#/components/schemas/SWOTAnalysis"
           },
           "source_ids": {
             "items": {
@@ -17292,6 +17361,29 @@
               }
             ],
             "title": "Dimensions"
+          },
+          "competitors": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competitors"
+          },
+          "competitor_edits": {
+            "items": {
+              "$ref": "#/components/schemas/CompetitorEdit"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Competitor Edits"
           }
         },
         "additionalProperties": false,
@@ -21947,6 +22039,121 @@
         ],
         "title": "RetrievalResponse"
       },
+      "ReviewThemeItem": {
+        "properties": {
+          "theme": {
+            "type": "string",
+            "title": "Theme"
+          },
+          "evidence": {
+            "type": "string",
+            "title": "Evidence",
+            "default": ""
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          },
+          "evidence_gap": {
+            "type": "boolean",
+            "title": "Evidence Gap",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "theme"
+        ],
+        "title": "ReviewThemeItem"
+      },
+      "ReviewThemeSummary": {
+        "properties": {
+          "competitor": {
+            "type": "string",
+            "title": "Competitor",
+            "default": ""
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension",
+            "default": "review"
+          },
+          "praise_themes": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewThemeItem"
+            },
+            "type": "array",
+            "title": "Praise Themes"
+          },
+          "complaint_themes": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewThemeItem"
+            },
+            "type": "array",
+            "title": "Complaint Themes"
+          },
+          "adoption_blockers": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewThemeItem"
+            },
+            "type": "array",
+            "title": "Adoption Blockers"
+          },
+          "switching_triggers": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewThemeItem"
+            },
+            "type": "array",
+            "title": "Switching Triggers"
+          },
+          "persona_segments": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Persona Segments"
+          },
+          "sentiment_hint": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "mixed",
+              "negative",
+              "unknown"
+            ],
+            "title": "Sentiment Hint",
+            "default": "unknown"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReviewThemeSummary"
+      },
       "RevisionRecord": {
         "properties": {
           "id": {
@@ -22532,7 +22739,24 @@
               "redo.routed",
               "benchmark.scored",
               "report.ready",
-              "runtime.command"
+              "runtime.command",
+              "writer_preflight",
+              "writer_segment_preflight",
+              "writer_segment_validated",
+              "writer_assembly_completed",
+              "writer_assemble_repair_completed",
+              "writer_quality_preflight",
+              "writer_quality_preflight_repair",
+              "writer_structured_repair_selected",
+              "writer_structured_section_started",
+              "writer_structured_section_completed",
+              "writer_structured_section_failed",
+              "writer_structured_report_validated",
+              "writer_publication_contract_validated",
+              "writer_structured_repair_failed_preserved_previous",
+              "writer_schema_first_failed_closed",
+              "writer_markdown_fallback_used",
+              "writer_unified_quality_result_recorded"
             ],
             "title": "Type"
           },
@@ -23611,6 +23835,93 @@
           "allowed_in_real_mode"
         ],
         "title": "RuntimeToolPolicyDecision"
+      },
+      "SWOTAnalysis": {
+        "properties": {
+          "competitor": {
+            "type": "string",
+            "title": "Competitor",
+            "default": ""
+          },
+          "strengths": {
+            "items": {
+              "$ref": "#/components/schemas/SWOTItem"
+            },
+            "type": "array",
+            "title": "Strengths"
+          },
+          "weaknesses": {
+            "items": {
+              "$ref": "#/components/schemas/SWOTItem"
+            },
+            "type": "array",
+            "title": "Weaknesses"
+          },
+          "opportunities": {
+            "items": {
+              "$ref": "#/components/schemas/SWOTItem"
+            },
+            "type": "array",
+            "title": "Opportunities"
+          },
+          "threats": {
+            "items": {
+              "$ref": "#/components/schemas/SWOTItem"
+            },
+            "type": "array",
+            "title": "Threats"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SWOTAnalysis"
+      },
+      "SWOTItem": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          },
+          "evidence_gap": {
+            "type": "boolean",
+            "title": "Evidence Gap",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "SWOTItem"
       },
       "ScenarioPack": {
         "properties": {

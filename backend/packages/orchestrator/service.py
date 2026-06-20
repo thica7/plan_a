@@ -77,6 +77,7 @@ from packages.orchestrator.graph import (
     build_real_analysis_graph,
     build_scoped_redo_graph,
 )
+from packages.quality import FinalQualityResult, build_final_quality_result
 from packages.refs import merge_ordered_refs, normalize_dimension_refs
 from packages.research.evaluation import quality_gaps_from_release_gate
 from packages.research.repair import (
@@ -2180,6 +2181,34 @@ class RunService(
         for queue in list(record.subscribers):
             await queue.put(event)
 
+    def _append_run_event_sync(
+        self,
+        record: RunRecord,
+        event_type: str,
+        agent: str | None,
+        subagent: str | None,
+        message: str,
+        payload: dict[str, Any] | None = None,
+    ) -> RunEvent:
+        # Synchronous accounting paths cannot await emit(); keep persistence,
+        # journaling, and active subscriber delivery aligned with emit().
+        event = build_run_event(
+            event_id=len(record.events) + 1,
+            run_id=record.detail.id,
+            event_type=event_type,
+            agent=agent,
+            subagent=subagent,
+            message=message,
+            payload=payload or {},
+        )
+        record.events.append(event)
+        self._persist_run(record.detail.id)
+        if self._journal is not None:
+            self._journal.append_event(event)
+        for queue in list(record.subscribers):
+            queue.put_nowait(event)
+        return event
+
     def _append_agent_message(
         self,
         record: RunRecord,
@@ -2803,11 +2832,18 @@ class RunService(
             if not issue.field_path.startswith("release_gate.")
         ]
         if gate is None:
-            if len(retained) != len(detail.qa_findings):
-                detail.qa_findings = retained
-                detail.updated_at = datetime.utcnow()
-                self._refresh_quality_metrics(detail)
-                self._sync_latest_revision_issue_count(detail)
+            final_quality = build_final_quality_result(
+                deterministic_findings=retained,
+                release_gate_findings=[],
+                readiness_score=None,
+                issue_count_before=self._final_quality_issue_count_before(detail),
+            )
+            detail.qa_findings = final_quality.findings
+            detail.updated_at = datetime.utcnow()
+            self._refresh_quality_metrics(detail)
+            self._sync_latest_revision_from_final_quality(detail, final_quality)
+            self._sync_latest_revision_recorded_event(record)
+            self._record_unified_quality_result_event(record, final_quality)
             return []
 
         gaps = quality_gaps_from_release_gate(gate)
@@ -2839,30 +2875,87 @@ class RunService(
                 )
             )
 
-        detail.qa_findings = [*retained, *release_issues]
+        readiness_score = gate.readiness.score if gate.readiness is not None else None
+        final_quality = build_final_quality_result(
+            deterministic_findings=retained,
+            release_gate_findings=release_issues,
+            readiness_score=readiness_score,
+            issue_count_before=self._final_quality_issue_count_before(detail),
+        )
+        detail.qa_findings = final_quality.findings
         detail.updated_at = datetime.utcnow()
         self._refresh_quality_metrics(detail)
-        self._sync_latest_revision_issue_count(detail)
+        self._sync_latest_revision_from_final_quality(detail, final_quality)
+        self._sync_latest_revision_recorded_event(record)
+        self._record_unified_quality_result_event(record, final_quality)
         return release_issues
 
-    def _sync_latest_revision_issue_count(self, detail: RunDetail) -> None:
+    def _final_quality_issue_count_before(self, detail: RunDetail) -> int:
+        if detail.revisions:
+            return detail.revisions[-1].issue_count_before
+        return len(detail.qa_findings)
+
+    def _record_unified_quality_result_event(
+        self,
+        record: RunRecord,
+        final_quality: FinalQualityResult,
+    ) -> None:
+        self._append_run_event_sync(
+            record,
+            "writer_unified_quality_result_recorded",
+            "quality",
+            None,
+            "Unified final quality result recorded.",
+            final_quality.telemetry_payload(),
+        )
+
+    def _sync_latest_revision_from_final_quality(
+        self,
+        detail: RunDetail,
+        final_quality: FinalQualityResult,
+    ) -> None:
         if not detail.revisions:
             return
         latest = detail.revisions[-1]
-        if latest.after_md and latest.after_md != detail.report_md:
+        updates: dict[str, Any] = {}
+        if latest.after_md != detail.report_md:
+            updates["after_md"] = detail.report_md
+        if latest.issue_count_after != final_quality.revision_issue_count_after:
+            updates["issue_count_after"] = final_quality.revision_issue_count_after
+        if latest.convergence_ratio != final_quality.revision_convergence_ratio:
+            updates["convergence_ratio"] = final_quality.revision_convergence_ratio
+        if not updates:
             return
-        issue_count_after = len(detail.qa_findings)
-        if latest.issue_count_after == issue_count_after:
+        detail.revisions[-1] = latest.model_copy(update=updates)
+
+    def _sync_latest_revision_recorded_event(self, record: RunRecord) -> None:
+        detail = record.detail
+        if not detail.revisions:
             return
-        detail.revisions[-1] = latest.model_copy(
-            update={
-                "issue_count_after": issue_count_after,
-                "convergence_ratio": self._convergence_ratio(
-                    latest.issue_count_before,
-                    issue_count_after,
+        latest = detail.revisions[-1]
+        latest_payload = latest.model_dump(mode="json")
+        for event in reversed(record.events):
+            if event.type != "revision_recorded":
+                continue
+            revision_payload = event.payload.get("revision")
+            if not isinstance(revision_payload, dict):
+                continue
+            if revision_payload.get("id") != latest.id:
+                continue
+            if revision_payload == latest_payload:
+                return
+            self._append_run_event_sync(
+                record,
+                "revision_recorded",
+                "orchestrator",
+                None,
+                (
+                    f"Revision {latest.iteration} final quality counts recorded with "
+                    f"convergence ratio {latest.convergence_ratio:.2f}."
                 ),
-            }
-        )
+                {"revision": latest_payload},
+            )
+            return
 
     def _release_gate_detected_by(self, scope: RedoScope) -> str:
         if scope.kind == "writer_only":

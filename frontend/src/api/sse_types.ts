@@ -39,7 +39,8 @@ export type RunEventType =
   | "writer_publication_contract_validated"
   | "writer_structured_repair_failed_preserved_previous"
   | "writer_schema_first_failed_closed"
-  | "writer_markdown_fallback_used";
+  | "writer_markdown_fallback_used"
+  | "writer_unified_quality_result_recorded";
 
 export interface RunEvent {
   id: number;
