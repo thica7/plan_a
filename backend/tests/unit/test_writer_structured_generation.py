@@ -12,6 +12,7 @@ from packages.agents.writer.logic import (
     _structured_section_inputs,
 )
 from packages.agents.writer.structured_report import ExecutiveSummarySection, ReportSupport
+from packages.agents.writer.structured_sections import StructuredSectionGenerationError
 from packages.orchestrator.service import RunRecord
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import AnalysisPlan, RawSource
@@ -125,6 +126,27 @@ class _MinimalEvidencePackResult:
 
 def _minimal_evidence_pack_result() -> _MinimalEvidencePackResult:
     return _MinimalEvidencePackResult()
+
+
+def _section_fixture_for_schema(section_schema, segment):
+    fixture = _report("zh-CN")
+    if section_schema.__name__ == "CitedTextListSection":
+        return section_schema(items=[fixture.core.decision_summary[0]])
+    mapping = {
+        "ExecutiveSummarySection": fixture.core.executive_summary,
+        "UserReviewThemesSection": fixture.core.user_review_themes,
+        "DecisionMatrixSection": fixture.core.decision_matrix,
+        "SwotSection": fixture.core.swot,
+        "BattlecardSection": fixture.core.battlecard,
+        "ReportSupport": fixture.support,
+    }
+    if section_schema.__name__ in mapping:
+        return mapping[section_schema.__name__]
+    if section_schema.__name__ == "CompetitorDeepDiveSection":
+        return fixture.core.competitor_deep_dives[0].model_copy(
+            update={"competitor": str(segment.get("competitor") or "Cursor")}
+        )
+    raise AssertionError(f"unexpected section schema {section_schema.__name__}")
 
 
 class _SegmentedEvidencePackResult:
@@ -786,6 +808,168 @@ async def test_structured_section_json_retries_invalid_json_once() -> None:
 
 
 @pytest.mark.asyncio
+async def test_structured_section_json_raises_typed_failure_after_retry() -> None:
+    harness = _WriterHarness(["not json", "still not json"])
+
+    with pytest.raises(Exception) as exc_info:
+        await harness._writer_structured_section_json(
+            record=object(),
+            segment={"section_id": "executive_summary", "content": "Evidence"},
+            section_schema=ExecutiveSummarySection,
+            allowed_source_ids={"raw-source-a"},
+            timeout_seconds=5.0,
+        )
+
+    assert exc_info.value.__class__.__name__ == "StructuredSectionGenerationError"
+    assert exc_info.value.section_key == "executive_summary"
+    assert exc_info.value.section_id == "executive_summary"
+    assert exc_info.value.schema_name == "ExecutiveSummarySection"
+    assert "structured writer response must be a JSON object" in exc_info.value.message
+    assert "executive_summary" in str(exc_info.value)
+    assert len(harness.prompts) == 2
+
+
+@pytest.mark.asyncio
+async def test_structured_section_json_wraps_initial_timeout_as_typed_failure(
+    monkeypatch,
+) -> None:
+    harness = _WriterHarness([])
+
+    async def raise_timeout(*args, **kwargs):
+        raise TimeoutError("section timed out")
+
+    monkeypatch.setattr(harness, "_trace_llm_text", raise_timeout)
+
+    with pytest.raises(StructuredSectionGenerationError) as exc_info:
+        await harness._writer_structured_section_json(
+            record=object(),
+            segment={"section_id": "executive_summary", "content": "Evidence"},
+            section_schema=ExecutiveSummarySection,
+            allowed_source_ids={"raw-source-a"},
+            timeout_seconds=5.0,
+        )
+
+    assert exc_info.value.error_kind == "timeout"
+    assert exc_info.value.attempt == "initial"
+    assert exc_info.value.section_key == "executive_summary"
+
+
+@pytest.mark.asyncio
+async def test_structured_section_json_wraps_retry_provider_exception_as_typed_failure(
+    monkeypatch,
+) -> None:
+    harness = _WriterHarness([])
+    calls = 0
+
+    async def invalid_then_provider_error(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return "not json"
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(harness, "_trace_llm_text", invalid_then_provider_error)
+
+    with pytest.raises(StructuredSectionGenerationError) as exc_info:
+        await harness._writer_structured_section_json(
+            record=object(),
+            segment={"section_id": "executive_summary", "content": "Evidence"},
+            section_schema=ExecutiveSummarySection,
+            allowed_source_ids={"raw-source-a"},
+            timeout_seconds=5.0,
+        )
+
+    assert calls == 2
+    assert exc_info.value.error_kind == "llm_exception"
+    assert exc_info.value.attempt == "retry"
+    assert "provider unavailable" in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_structured_report_emits_section_failed_event(monkeypatch) -> None:
+    harness = _WriterHarness([])
+    record = _writer_record_with_sources(["raw-source-a", "raw-source-b"])
+
+    async def failing_section_json(
+        record, *, segment, section_schema, allowed_source_ids, timeout_seconds
+    ):
+        if str(segment["section_id"]) == "decision_matrix":
+            from packages.agents.writer.structured_sections import (
+                StructuredSectionGenerationError,
+            )
+
+            raise StructuredSectionGenerationError(
+                section_key="decision_matrix",
+                section_id="decision_matrix",
+                schema_name="DecisionMatrixSection",
+                message="source_ids are required unless evidence_role is evidence_gap",
+            )
+        return _section_fixture_for_schema(section_schema, segment)
+
+    monkeypatch.setattr(harness, "_writer_structured_section_json", failing_section_json)
+
+    with pytest.raises(Exception) as exc_info:
+        await harness._writer_structured_report(
+            record,
+            evidence_pack_result=_minimal_evidence_pack_result(),
+            timeout_seconds=10,
+        )
+
+    assert exc_info.value.__class__.__name__ == "StructuredReportGenerationError"
+    failed = [
+        event
+        for event in harness.emitted_events
+        if event[1] == "writer_structured_section_failed"
+    ]
+    assert len(failed) == 1
+    payload = failed[0][5]
+    assert payload is not None
+    assert payload["section_key"] == "decision_matrix"
+    assert payload["section_id"] == "decision_matrix"
+    assert payload["schema_name"] == "DecisionMatrixSection"
+    assert payload["section_schema"] == "DecisionMatrixSection"
+    assert payload["section_index"] == 7
+    assert payload["section_total"] == 11
+    assert payload["error"] == (
+        "source_ids are required unless evidence_role is evidence_gap"
+    )
+
+
+@pytest.mark.asyncio
+async def test_structured_report_emits_section_failed_event_for_timeout(
+    monkeypatch,
+) -> None:
+    harness = _WriterHarness([])
+    record = _writer_record_with_sources(["raw-source-a", "raw-source-b"])
+
+    async def raise_timeout(*args, **kwargs):
+        raise TimeoutError("section timed out")
+
+    monkeypatch.setattr(harness, "_trace_llm_text", raise_timeout)
+
+    with pytest.raises(Exception) as exc_info:
+        await harness._writer_structured_report(
+            record,
+            evidence_pack_result=_minimal_evidence_pack_result(),
+            timeout_seconds=10,
+        )
+
+    assert exc_info.value.__class__.__name__ == "StructuredReportGenerationError"
+    failed = [
+        event
+        for event in harness.emitted_events
+        if event[1] == "writer_structured_section_failed"
+    ]
+    assert len(failed) == 1
+    payload = failed[0][5]
+    assert payload is not None
+    assert payload["section_key"] == "executive_summary"
+    assert payload["schema_name"] == "ExecutiveSummarySection"
+    assert payload["error_kind"] == "timeout"
+    assert payload["attempt"] == "initial"
+
+
+@pytest.mark.asyncio
 async def test_structured_section_json_rejects_disallowed_support_appendix_source_id() -> None:
     payload = {
         "source_quality": [],
@@ -807,7 +991,7 @@ async def test_structured_section_json_rejects_disallowed_support_appendix_sourc
     }
     harness = _WriterHarness([json.dumps(payload), json.dumps(payload)])
 
-    with pytest.raises(ValueError, match="raw-source-b"):
+    with pytest.raises(StructuredSectionGenerationError, match="raw-source-b"):
         await harness._writer_structured_section_json(
             record=object(),
             segment={"section_id": "support", "content": "Evidence"},

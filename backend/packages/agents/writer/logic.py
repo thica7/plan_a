@@ -47,6 +47,10 @@ from packages.agents.writer.structured_report import (
     SwotSection,
     UserReviewThemesSection,
 )
+from packages.agents.writer.structured_sections import (
+    StructuredReportGenerationError,
+    StructuredSectionGenerationError,
+)
 from packages.agents.writer.structured_validation import validate_structured_report
 from packages.business_intel.release_gate import REPORT_RICHNESS_MINIMUMS
 from packages.business_intel.report_quality import compare_run_quality
@@ -219,6 +223,27 @@ def _parse_structured_section_response(
         invalid = ", ".join(sorted(invalid_source_ids))
         raise ValueError(f"structured writer response used disallowed source_ids: {invalid}")
     return section
+
+
+def _structured_section_generation_error(
+    segment: Mapping[str, object],
+    section_schema: type[BaseModel],
+    exc: BaseException,
+    *,
+    error_kind: str,
+    attempt: str,
+) -> StructuredSectionGenerationError:
+    section_id = str(segment.get("section_id") or "unknown")
+    section_key = str(segment.get("section_key") or section_id)
+    message = str(exc).strip() or exc.__class__.__name__
+    return StructuredSectionGenerationError(
+        section_key=section_key,
+        section_id=section_id,
+        schema_name=section_schema.__name__,
+        message=message,
+        error_kind=error_kind,
+        attempt=attempt,
+    )
 
 
 def _source_ids_from_section(section: BaseModel) -> set[str]:
@@ -1188,6 +1213,8 @@ class WriterAgentMixin:
         total_sections = len(plan)
         for index, item in enumerate(plan, start=1):
             key = _structured_section_key(item)
+            section_schema = _structured_section_schema(item["schema"])
+            section_inputs[key]["section_key"] = key
             if "allowed_source_ids" in section_inputs[key]:
                 section_allowed_source_ids = {
                     source_id
@@ -1201,6 +1228,7 @@ class WriterAgentMixin:
                 "section_id": str(item["section_id"]),
                 "section_index": index,
                 "section_total": total_sections,
+                "section_schema": section_schema.__name__,
                 "allowed_source_count": len(section_allowed_source_ids),
             }
             if item.get("competitor") is not None:
@@ -1213,13 +1241,30 @@ class WriterAgentMixin:
                 f"Writing structured report section {index}/{total_sections}: {key}",
                 event_payload,
             )
-            sections[key] = await self._writer_structured_section_json(
-                record,
-                segment=section_inputs[key],
-                section_schema=_structured_section_schema(item["schema"]),
-                allowed_source_ids=section_allowed_source_ids,
-                timeout_seconds=timeout_seconds,
-            )
+            try:
+                sections[key] = await self._writer_structured_section_json(
+                    record,
+                    segment=section_inputs[key],
+                    section_schema=section_schema,
+                    allowed_source_ids=section_allowed_source_ids,
+                    timeout_seconds=timeout_seconds,
+                )
+            except StructuredSectionGenerationError as exc:
+                await self.emit(
+                    detail.id,
+                    "writer_structured_section_failed",
+                    "writer",
+                    key,
+                    f"Structured report section failed {index}/{total_sections}: {key}",
+                    {
+                        **event_payload,
+                        "schema_name": exc.schema_name,
+                        "error": exc.message,
+                        "error_kind": exc.error_kind,
+                        "attempt": exc.attempt,
+                    },
+                )
+                raise StructuredReportGenerationError((exc,)) from exc
             await self.emit(
                 detail.id,
                 "writer_structured_section_completed",
@@ -1377,20 +1422,37 @@ class WriterAgentMixin:
             section_schema=section_schema,
             allowed_source_ids=allowed_source_ids,
         )
-        response = await asyncio.wait_for(
-            self._trace_llm_text(
-                record,
-                agent="writer",
-                subagent=None,
-                name="structured_report_section",
-                system=(
-                    "You are a senior enterprise competitive-intelligence analyst "
-                    "writing one structured report section."
+        try:
+            response = await asyncio.wait_for(
+                self._trace_llm_text(
+                    record,
+                    agent="writer",
+                    subagent=None,
+                    name="structured_report_section",
+                    system=(
+                        "You are a senior enterprise competitive-intelligence analyst "
+                        "writing one structured report section."
+                    ),
+                    user=prompt,
                 ),
-                user=prompt,
-            ),
-            timeout=timeout_seconds,
-        )
+                timeout=timeout_seconds,
+            )
+        except TimeoutError as exc:
+            raise _structured_section_generation_error(
+                segment,
+                section_schema,
+                exc,
+                error_kind="timeout",
+                attempt="initial",
+            ) from exc
+        except Exception as exc:
+            raise _structured_section_generation_error(
+                segment,
+                section_schema,
+                exc,
+                error_kind="llm_exception",
+                attempt="initial",
+            ) from exc
         try:
             return _parse_structured_section_response(
                 response,
@@ -1404,25 +1466,67 @@ class WriterAgentMixin:
                 allowed_source_ids=allowed_source_ids,
                 previous_validation_error=str(exc),
             )
-            retry_response = await asyncio.wait_for(
-                self._trace_llm_text(
-                    record,
-                    agent="writer",
-                    subagent=None,
-                    name="structured_report_section_retry",
-                    system=(
-                        "You are fixing a structured writer JSON response. "
-                        "Return valid JSON only."
+            try:
+                retry_response = await asyncio.wait_for(
+                    self._trace_llm_text(
+                        record,
+                        agent="writer",
+                        subagent=None,
+                        name="structured_report_section_retry",
+                        system=(
+                            "You are fixing a structured writer JSON response. "
+                            "Return valid JSON only."
+                        ),
+                        user=retry_prompt,
                     ),
-                    user=retry_prompt,
-                ),
-                timeout=timeout_seconds,
-            )
-            return _parse_structured_section_response(
-                retry_response,
+                    timeout=timeout_seconds,
+                )
+            except TimeoutError as retry_exc:
+                raise _structured_section_generation_error(
+                    segment,
+                    section_schema,
+                    retry_exc,
+                    error_kind="timeout",
+                    attempt="retry",
+                ) from retry_exc
+            except Exception as retry_exc:
+                raise _structured_section_generation_error(
+                    segment,
+                    section_schema,
+                    retry_exc,
+                    error_kind="llm_exception",
+                    attempt="retry",
+                ) from retry_exc
+            try:
+                return _parse_structured_section_response(
+                    retry_response,
+                    section_schema,
+                    allowed_source_ids,
+                )
+            except ValueError as retry_exc:
+                raise _structured_section_generation_error(
+                    segment,
+                    section_schema,
+                    retry_exc,
+                    error_kind="validation",
+                    attempt="retry",
+                ) from retry_exc
+            except Exception as retry_exc:
+                raise _structured_section_generation_error(
+                    segment,
+                    section_schema,
+                    retry_exc,
+                    error_kind="unexpected",
+                    attempt="retry",
+                ) from retry_exc
+        except Exception as exc:
+            raise _structured_section_generation_error(
+                segment,
                 section_schema,
-                allowed_source_ids,
-            )
+                exc,
+                error_kind="unexpected",
+                attempt="initial",
+            ) from exc
 
     def _structured_section_prompt(
         self,
