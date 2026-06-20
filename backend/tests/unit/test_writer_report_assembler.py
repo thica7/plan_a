@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from packages.agents.writer.assembler import assemble_report_sections
+from packages.agents.writer.assembler import (
+    ReportSectionFragment,
+    assemble_report_fragments,
+    assemble_report_sections,
+)
 from packages.business_intel.report_sections import build_report_section_index
 from packages.i18n.language import report_label
 
@@ -130,3 +134,62 @@ def test_assembler_handles_zh_labels() -> None:
     assert result.markdown.index(f"## {deep_dives}") < result.markdown.index(
         f"## {evidence}"
     )
+
+
+def test_keyed_assembler_uses_fragment_layer_for_unknown_sections() -> None:
+    fragments = [
+        ReportSectionFragment(
+            markdown="## Custom Core Readout\nCore finding. [source:raw-source-a]",
+            section_key="decision_summary",
+            layer="core",
+            segment_name="decision_summary",
+        ),
+        ReportSectionFragment(
+            markdown="## Mystery Audit Notes\nSupport note. [source:raw-source-b]",
+            section_key="evidence_support",
+            layer="support",
+            segment_name="support_appendix",
+        ),
+    ]
+
+    assembled = assemble_report_fragments(
+        fragments,
+        output_language="en-US",
+        competitors=["Cursor"],
+    )
+
+    assert assembled.markdown.index("## Custom Core Readout") < assembled.markdown.index(
+        "## Mystery Audit Notes"
+    )
+    assert assembled.telemetry["unknown_core_section_count"] == 1
+    assert assembled.telemetry["unknown_support_section_count"] == 1
+    assert assembled.telemetry["fragment_layer_counts"] == {"core": 1, "support": 1}
+
+
+def test_keyed_assembler_keeps_known_support_after_core_even_when_input_is_first() -> None:
+    fragments = [
+        ReportSectionFragment(
+            markdown="## Evidence & QA Support\nSupport first. [source:raw-source-b]",
+            section_key="evidence_support",
+            layer="support",
+            segment_name="support_appendix",
+        ),
+        ReportSectionFragment(
+            markdown="## Decision Summary\nDecision second. [source:raw-source-a]",
+            section_key="decision_summary",
+            layer="core",
+            segment_name="decision_summary",
+        ),
+    ]
+
+    assembled = assemble_report_fragments(
+        fragments,
+        output_language="en-US",
+        competitors=["Cursor"],
+    )
+
+    assert assembled.markdown.index("## Decision Summary") < assembled.markdown.index(
+        "## Evidence & QA Support"
+    )
+    assert assembled.telemetry["input_fragment_count"] == 2
+    assert assembled.telemetry["first_support_key"] == "evidence_support"

@@ -42,6 +42,15 @@ class AssembledReport:
 
 
 @dataclass(frozen=True)
+class ReportSectionFragment:
+    markdown: str
+    section_key: str
+    layer: str
+    segment_name: str
+    competitor: str | None = None
+
+
+@dataclass(frozen=True)
 class StructuredReportAssemblyResult:
     report: StructuredReport
     telemetry: dict[str, object]
@@ -83,8 +92,48 @@ class _SectionBlock:
     key: str | None
 
 
+def assemble_report_fragments(
+    fragments: Sequence[ReportSectionFragment],
+    *,
+    output_language: object,
+    competitors: Sequence[str],
+) -> AssembledReport:
+    assembled = _assemble_report_blocks(
+        [
+            (fragment.markdown, fragment.section_key, fragment.layer)
+            for fragment in fragments
+        ],
+        output_language=output_language,
+        competitors=competitors,
+    )
+    layer_counts: dict[str, int] = {}
+    for fragment in fragments:
+        layer_counts[fragment.layer] = layer_counts.get(fragment.layer, 0) + 1
+    telemetry = {
+        **assembled.telemetry,
+        "input_fragment_count": len(fragments),
+        "fragment_layer_counts": layer_counts,
+        "fragment_section_keys": [fragment.section_key for fragment in fragments],
+        "fragment_segment_names": [fragment.segment_name for fragment in fragments],
+    }
+    return AssembledReport(markdown=assembled.markdown, telemetry=telemetry)
+
+
 def assemble_report_sections(
     markdown_sections: Sequence[str],
+    *,
+    output_language: object,
+    competitors: Sequence[str],
+) -> AssembledReport:
+    return _assemble_report_blocks(
+        [(markdown, "", "") for markdown in markdown_sections],
+        output_language=output_language,
+        competitors=competitors,
+    )
+
+
+def _assemble_report_blocks(
+    fragment_inputs: Sequence[tuple[str, str, str]],
     *,
     output_language: object,
     competitors: Sequence[str],
@@ -96,7 +145,7 @@ def assemble_report_sections(
     unknown_support_sections: list[_SectionBlock] = []
 
     output_language_text = str(output_language)
-    for markdown in markdown_sections:
+    for markdown, _fragment_section_key, fragment_layer in fragment_inputs:
         intro, sections = _parse_fragment(markdown, output_language_text)
         if intro:
             intro_blocks.append(intro)
@@ -104,6 +153,10 @@ def assemble_report_sections(
             if section.key is not None:
                 known_sections.setdefault(section.key, []).append(section.body)
                 known_counts[section.key] = known_counts.get(section.key, 0) + 1
+            elif fragment_layer == "support":
+                unknown_support_sections.append(section)
+            elif fragment_layer == "core":
+                unknown_core_sections.append(section)
             elif _looks_like_support_heading(section.heading):
                 unknown_support_sections.append(section)
             else:
@@ -144,7 +197,7 @@ def assemble_report_sections(
     )
     markdown = "\n\n".join(block for block in output_blocks if block).strip()
     telemetry: dict[str, object] = {
-        "input_fragment_count": len(markdown_sections),
+        "input_fragment_count": len(fragment_inputs),
         "output_section_count": len(output_section_keys)
         + len(unknown_core_sections)
         + len(unknown_support_sections),
