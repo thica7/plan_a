@@ -177,6 +177,7 @@ WRITER_NORMALIZED_FIELD_LONG_KEY_PARTS = (
     "trigger",
 )
 WRITER_NORMALIZED_SNIPPET_LIMIT = 1600
+STRUCTURED_SECTION_INPUT_TARGET_CHARS = 28_000
 
 
 def writer_user_research_policy_text() -> str:
@@ -492,7 +493,13 @@ def _structured_section_inputs(
                 competitor=item.get("competitor"),
                 segment_inputs=segment_inputs,
             )
-            primary_segments = matching_segments[:1]
+            primary_segments = [
+                _project_structured_section_segment(
+                    segment,
+                    section_id=section_id,
+                )
+                for segment in matching_segments[:1]
+            ]
             omitted_segments = matching_segments[1:]
             segment["evidence_segments"] = primary_segments
             segment["allowed_source_ids"] = _source_ids_from_structured_segments(
@@ -507,6 +514,418 @@ def _structured_section_inputs(
             segment["evidence_pack"] = base
         inputs[_structured_section_key(item)] = segment
     return inputs
+
+
+def _project_structured_section_segment(
+    segment: dict[str, object],
+    *,
+    section_id: str,
+) -> dict[str, object]:
+    if _json_chars(segment) <= STRUCTURED_SECTION_INPUT_TARGET_CHARS:
+        return segment
+
+    projection_levels = (
+        {
+            "source_title_limit": 96,
+            "coverage_note_count": 2,
+            "coverage_note_limit": 140,
+            "fact_count": 2,
+            "signal_count": 1,
+            "kb_signal_count": 1,
+            "conflict_count": 1,
+            "quote_count": 4,
+            "text_limit": 180,
+            "matrix_summary_count": 3,
+            "matrix_value_limit": 220,
+            "source_detail_level": 2,
+            "group_source_id_count": 6,
+        },
+        {
+            "source_title_limit": 80,
+            "coverage_note_count": 1,
+            "coverage_note_limit": 100,
+            "fact_count": 1,
+            "signal_count": 1,
+            "kb_signal_count": 1,
+            "conflict_count": 1,
+            "quote_count": 2,
+            "text_limit": 140,
+            "matrix_summary_count": 2,
+            "matrix_value_limit": 160,
+            "source_detail_level": 2,
+            "group_source_id_count": 6,
+        },
+        {
+            "source_title_limit": 64,
+            "coverage_note_count": 0,
+            "coverage_note_limit": 80,
+            "fact_count": 1,
+            "signal_count": 0,
+            "kb_signal_count": 1,
+            "conflict_count": 0,
+            "quote_count": 0,
+            "text_limit": 100,
+            "matrix_summary_count": 1,
+            "matrix_value_limit": 100,
+            "source_detail_level": 1,
+            "group_source_id_count": 4,
+        },
+        {
+            "source_title_limit": 0,
+            "coverage_note_count": 0,
+            "coverage_note_limit": 0,
+            "fact_count": 1,
+            "signal_count": 0,
+            "kb_signal_count": 0,
+            "conflict_count": 0,
+            "quote_count": 0,
+            "text_limit": 80,
+            "matrix_summary_count": 1,
+            "matrix_value_limit": 60,
+            "source_detail_level": 0,
+            "group_source_id_count": 3,
+        },
+    )
+    original_chars = _json_chars(segment)
+    for level, config in enumerate(projection_levels, start=1):
+        projected = _compact_structured_section_segment(
+            segment,
+            section_id=section_id,
+            original_chars=original_chars,
+            projection_level=level,
+            config=config,
+        )
+        if _json_chars(projected) <= STRUCTURED_SECTION_INPUT_TARGET_CHARS:
+            return projected
+    return _compact_structured_section_segment(
+        segment,
+        section_id=section_id,
+        original_chars=original_chars,
+        projection_level=len(projection_levels),
+        config=projection_levels[-1],
+    )
+
+
+def _compact_structured_section_segment(
+    segment: dict[str, object],
+    *,
+    section_id: str,
+    original_chars: int,
+    projection_level: int,
+    config: Mapping[str, int],
+) -> dict[str, object]:
+    projected: dict[str, object] = {}
+    for key in (
+        "schema_version",
+        "segment_name",
+        "segment_kind",
+        "section_id",
+        "output_language",
+        "segment_essential",
+        "segment_competitor",
+        "segment_dimension",
+        "segment_batch",
+        "shard_output_format",
+        "coverage",
+    ):
+        if key in segment:
+            projected[key] = segment[key]
+    projected["section_id"] = projected.get("section_id") or section_id
+    projected["section_projection"] = "compact"
+    projected["section_projection_level"] = projection_level
+    projected["original_segment_input_chars"] = original_chars
+    projected["section_input_target_chars"] = STRUCTURED_SECTION_INPUT_TARGET_CHARS
+
+    source_registry = segment.get("source_registry")
+    if isinstance(source_registry, list):
+        projected["source_registry"] = [
+            _compact_section_source_registry_item(
+                item,
+                detail_level=config["source_detail_level"],
+                title_limit=config["source_title_limit"],
+            )
+            for item in source_registry
+            if isinstance(item, Mapping)
+        ]
+
+    groups = segment.get("groups")
+    if isinstance(groups, list):
+        projected["groups"] = [
+            _compact_section_group_payload(group, config=config)
+            for group in groups
+            if isinstance(group, Mapping)
+        ]
+
+    quotes = segment.get("quotes")
+    quote_count = config["quote_count"]
+    if isinstance(quotes, list) and quote_count > 0:
+        projected["quotes"] = [
+            _compact_section_quote_payload(quote, text_limit=config["text_limit"])
+            for quote in quotes[:quote_count]
+            if isinstance(quote, Mapping)
+        ]
+        projected["quotes_truncated_count"] = max(0, len(quotes) - quote_count)
+    elif isinstance(quotes, list):
+        projected["quote_count"] = len(quotes)
+        projected["quotes_omitted_for_section_projection"] = True
+
+    matrix = segment.get("matrix")
+    if isinstance(matrix, Mapping):
+        projected["matrix"] = _compact_section_matrix_payload(matrix, config=config)
+
+    structured_knowledge = segment.get("structured_knowledge")
+    if isinstance(structured_knowledge, Mapping):
+        projected["structured_knowledge"] = structured_knowledge
+
+    allowed_source_ids = _string_values(segment.get("allowed_source_ids"))
+    if allowed_source_ids:
+        projected["allowed_source_id_count"] = len(allowed_source_ids)
+
+    projected["segment_input_chars"] = _json_chars(projected)
+    return projected
+
+
+def _compact_section_source_registry_item(
+    item: Mapping[str, object],
+    *,
+    detail_level: int,
+    title_limit: int,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "id": item.get("id") or item.get("source_id"),
+        "competitor": item.get("competitor"),
+        "dimension": item.get("dimension"),
+        "source_type": item.get("source_type"),
+    }
+    if detail_level >= 1:
+        payload.update(
+            {
+                "confidence": item.get("confidence"),
+                "authority_role": item.get("authority_role"),
+            }
+        )
+    if detail_level >= 2:
+        payload.update(
+            {
+                "covered_competitors": _string_values(item.get("covered_competitors")),
+                "title": _compact_section_text(item.get("title"), title_limit),
+                "quality_score": item.get("quality_score"),
+                "has_normalized_fields": item.get("has_normalized_fields"),
+                "has_community_clusters": item.get("has_community_clusters"),
+                "no_signal_reason": item.get("no_signal_reason"),
+            }
+        )
+    return {
+        key: value
+        for key, value in payload.items()
+        if value not in (None, "", [])
+    }
+
+
+def _compact_section_group_payload(
+    group: Mapping[str, object],
+    *,
+    config: Mapping[str, int],
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        key: value
+        for key, value in {
+            "competitor": group.get("competitor"),
+            "dimension": group.get("dimension"),
+            "confidence_summary": group.get("confidence_summary"),
+            "fact_count": group.get("fact_count"),
+            "unstructured_signal_count": group.get("unstructured_signal_count"),
+            "kb_signal_count": group.get("kb_signal_count"),
+            "conflict_count": group.get("conflict_count"),
+        }.items()
+        if value not in (None, "", [])
+    }
+    for source_key in (
+        "source_ids",
+        "official_source_ids",
+        "community_source_ids",
+        "user_research_source_ids",
+    ):
+        _add_compact_source_id_scope(
+            payload,
+            source_key,
+            group.get(source_key),
+            max_count=config["group_source_id_count"],
+        )
+    coverage_notes = _string_values(group.get("coverage_notes"))
+    note_count = config["coverage_note_count"]
+    if note_count > 0:
+        payload["coverage_notes"] = [
+            _compact_section_text(note, config["coverage_note_limit"])
+            for note in coverage_notes[:note_count]
+        ]
+    if len(coverage_notes) > note_count:
+        payload["coverage_notes_truncated_count"] = len(coverage_notes) - note_count
+
+    payload["facts"] = _compact_section_payload_list(
+        group.get("facts"),
+        limit=config["fact_count"],
+        text_limit=config["text_limit"],
+    )
+    payload["unstructured_signals"] = _compact_section_payload_list(
+        group.get("unstructured_signals"),
+        limit=config["signal_count"],
+        text_limit=config["text_limit"],
+    )
+    payload["kb_signals"] = _compact_section_payload_list(
+        group.get("kb_signals"),
+        limit=config["kb_signal_count"],
+        text_limit=config["text_limit"],
+    )
+    conflicts = group.get("conflicts")
+    payload["conflicts"] = _compact_section_payload_list(
+        conflicts,
+        limit=config["conflict_count"],
+        text_limit=config["text_limit"],
+    )
+    for key in ("facts", "unstructured_signals", "kb_signals", "conflicts"):
+        if not payload.get(key):
+            payload.pop(key, None)
+    return payload
+
+
+def _add_compact_source_id_scope(
+    payload: dict[str, object],
+    key: str,
+    value: object,
+    *,
+    max_count: int,
+) -> None:
+    source_ids = _string_values(value)
+    if not source_ids:
+        return
+    payload[key] = source_ids[:max_count]
+    payload[f"{key}_total_count"] = len(source_ids)
+    if len(source_ids) > max_count:
+        payload[f"{key}_truncated_count"] = len(source_ids) - max_count
+
+
+def _compact_section_payload_list(
+    value: object,
+    *,
+    limit: int,
+    text_limit: int,
+) -> list[object]:
+    if not isinstance(value, list) or limit <= 0:
+        return []
+    return [_compact_section_value(item, text_limit) for item in value[:limit]]
+
+
+def _compact_section_quote_payload(
+    quote: Mapping[str, object],
+    *,
+    text_limit: int,
+) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in {
+            "id": quote.get("id"),
+            "excerpt": _compact_section_text(quote.get("excerpt"), text_limit),
+            "full_text_source_ids": _string_values(quote.get("full_text_source_ids")),
+        }.items()
+        if value not in (None, "", [])
+    }
+
+
+def _compact_section_matrix_payload(
+    matrix: Mapping[str, object],
+    *,
+    config: Mapping[str, int],
+) -> dict[str, object]:
+    summary = _string_values(matrix.get("summary"))
+    cells = matrix.get("cells")
+    return {
+        key: value
+        for key, value in {
+            "winner_by_dimension": matrix.get("winner_by_dimension"),
+            "summary": [
+                _compact_section_text(item, config["matrix_value_limit"])
+                for item in summary[: config["matrix_summary_count"]]
+            ],
+            "summary_truncated_count": max(
+                0,
+                len(summary) - config["matrix_summary_count"],
+            ),
+            "cells": (
+                [
+                    _compact_section_matrix_cell(cell, config=config)
+                    for cell in cells
+                    if isinstance(cell, Mapping)
+                ]
+                if isinstance(cells, list)
+                else []
+            ),
+        }.items()
+        if value not in (None, "", [])
+    }
+
+
+def _compact_section_matrix_cell(
+    cell: Mapping[str, object],
+    *,
+    config: Mapping[str, int],
+) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in {
+            "competitor": cell.get("competitor"),
+            "dimension": cell.get("dimension"),
+            "value": _compact_section_text(cell.get("value"), config["matrix_value_limit"]),
+            "source_ids": _string_values(cell.get("source_ids")),
+            "confidence": cell.get("confidence"),
+        }.items()
+        if value not in (None, "", [])
+    }
+
+
+def _compact_section_value(value: object, text_limit: int) -> object:
+    if isinstance(value, str):
+        return _compact_section_text(value, text_limit)
+    if isinstance(value, Mapping):
+        compact: dict[str, object] = {}
+        for key, child in value.items():
+            if key in {"url", "short_source_note"}:
+                continue
+            compact_value = _compact_section_value(child, text_limit)
+            if compact_value not in (None, "", []):
+                compact[str(key)] = compact_value
+        return compact
+    if isinstance(value, list):
+        return [
+            compact_item
+            for item in value[:4]
+            for compact_item in [_compact_section_value(item, text_limit)]
+            if compact_item not in (None, "", [])
+        ]
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _compact_section_text(value: object, limit: int) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = " ".join(value.split())
+    if not text:
+        return None
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)].rstrip() + "..."
+
+
+def _string_values(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item.strip()]
+
+
+def _json_chars(value: object) -> int:
+    return len(json.dumps(value, ensure_ascii=False))
 
 
 def _structured_budgeted_segment_inputs(evidence_pack_result) -> list[dict[str, object]]:
@@ -557,14 +976,20 @@ def _select_structured_evidence_segments(
 
 def _structured_segment_ref(segment: dict[str, object]) -> dict[str, object]:
     source_ids = _source_ids_from_structured_segments([segment])
-    return {
+    ref = {
         "segment_name": segment.get("segment_name") or segment.get("section_id"),
         "segment_competitor": segment.get("segment_competitor")
         or segment.get("competitor"),
         "segment_batch": segment.get("segment_batch"),
-        "allowed_source_ids": source_ids,
         "source_count": len(source_ids),
     }
+    if len(source_ids) <= 6:
+        ref["allowed_source_ids"] = source_ids
+    else:
+        ref["representative_source_ids"] = source_ids[:6]
+        ref["allowed_source_ids_total_count"] = len(source_ids)
+        ref["allowed_source_ids_truncated_count"] = len(source_ids) - 6
+    return ref
 
 
 def _source_ids_from_structured_segments(

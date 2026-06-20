@@ -8,6 +8,7 @@ import pytest
 from packages.agents.writer.assembler import StructuredReportAssembler
 from packages.agents.writer.logic import (
     CitedTextListSection,
+    STRUCTURED_SECTION_INPUT_TARGET_CHARS,
     WriterAgentMixin,
     build_structured_writer_section_plan,
     _structured_section_inputs,
@@ -237,6 +238,130 @@ class _NoExecutiveEvidencePackResult:
         ]
 
 
+class _LargeDecisionSegmentEvidencePackResult:
+    metrics = SimpleNamespace(segment_count=1, segmented_writer_required=True)
+
+    def to_prompt_json(self) -> str:
+        return "FULL_PACK_SHOULD_NOT_BE_REPEATED"
+
+    def segment_inputs(self) -> list[dict[str, object]]:
+        source_registry = [
+            {
+                "id": f"raw-source-{index:02d}",
+                "competitor": "Cursor" if index % 2 else "Windsurf",
+                "dimension": "pricing" if index % 3 else "persona",
+                "source_type": "webpage_verified",
+                "title": f"Large source {index}",
+                "url": f"https://example.com/research/{index}/" + ("path/" * 20),
+                "confidence": 0.9,
+                "authority_role": "vendor_official" if index % 2 else "community",
+                "short_source_note": "source note " * 80,
+                "quality_score": 0.91,
+                "represented_by_count": 4,
+                "representation_types": ["fact", "signal", "quote"],
+            }
+            for index in range(1, 41)
+        ]
+        groups = [
+            {
+                "competitor": competitor,
+                "dimension": dimension,
+                "source_ids": [item["id"] for item in source_registry],
+                "official_source_ids": [source_registry[0]["id"]],
+                "community_source_ids": [source_registry[1]["id"]],
+                "user_research_source_ids": [source_registry[2]["id"]],
+                "confidence_summary": {"avg": 0.87, "min": 0.75, "max": 0.97},
+                "coverage_notes": ["coverage note " * 60 for _ in range(5)],
+                "facts": [
+                    {
+                        "kind": "pricing_fact",
+                        "competitor": competitor,
+                        "dimension": dimension,
+                        "values": {"summary": "fact detail " * 120},
+                        "source_ids": [source_registry[fact_index]["id"]],
+                        "quote_ids": [f"quote-{fact_index}"],
+                        "confidence": 0.88,
+                    }
+                    for fact_index in range(8)
+                ],
+                "unstructured_signals": [
+                    {
+                        "source_id": source_registry[signal_index]["id"],
+                        "competitor": competitor,
+                        "dimension": dimension,
+                        "source_type": "webpage_verified",
+                        "signal_summary": "signal detail " * 120,
+                        "salient_terms": ["pricing", "persona", "workflow"],
+                        "confidence": 0.86,
+                        "quote_ids": [f"quote-{signal_index}"],
+                    }
+                    for signal_index in range(6)
+                ],
+                "kb_signals": [
+                    {
+                        "competitor": competitor,
+                        "dimension": dimension,
+                        "text": "knowledge detail " * 120,
+                        "source_ids": [source_registry[kb_index]["id"]],
+                        "merged_into_present": True,
+                    }
+                    for kb_index in range(6)
+                ],
+                "conflicts": [
+                    {
+                        "claim_area": "pricing",
+                        "positions": {"official": "official claim " * 40},
+                        "source_ids_by_position": {"official": [source_registry[0]["id"]]},
+                        "confidence_by_position": {"official": 0.9},
+                        "resolution_status": "resolved",
+                    }
+                ],
+            }
+            for competitor in ("Cursor", "Windsurf", "Claude Code", "GitHub Copilot")
+            for dimension in ("pricing", "feature", "persona")
+        ]
+        return [
+            {
+                "schema_version": "writer_evidence_pack.v1",
+                "segment_name": "decision_summary",
+                "section_id": "decision_summary",
+                "output_language": "zh-CN",
+                "source_registry": source_registry,
+                "groups": groups,
+                "quotes": [
+                    {
+                        "id": f"quote-{index}",
+                        "excerpt": "quote detail " * 120,
+                        "full_text_source_ids": [source_registry[index % 40]["id"]],
+                    }
+                    for index in range(40)
+                ],
+                "matrix": {
+                    "winner_by_dimension": {"pricing": "Cursor"},
+                    "summary": ["matrix summary " * 80 for _ in range(6)],
+                    "cells": [
+                        {
+                            "competitor": competitor,
+                            "dimension": dimension,
+                            "value": "matrix cell detail " * 120,
+                            "source_ids": [source_registry[0]["id"]],
+                            "confidence": 0.86,
+                        }
+                        for competitor in (
+                            "Cursor",
+                            "Windsurf",
+                            "Claude Code",
+                            "GitHub Copilot",
+                        )
+                        for dimension in ("pricing", "feature", "persona")
+                    ],
+                },
+                "allowed_source_ids": [item["id"] for item in source_registry],
+                "segment_input_chars": 230_000,
+            }
+        ]
+
+
 def test_structured_section_plan_has_core_before_support_and_no_markdown_layout_ownership() -> None:
     plan = build_structured_writer_section_plan(
         competitors=["Cursor", "Windsurf"],
@@ -421,6 +546,29 @@ def test_structured_section_inputs_keep_empty_scope_when_no_matching_segments() 
     assert executive_summary["evidence_segments"] == []
     assert executive_summary["allowed_source_ids"] == []
     assert executive_summary["additional_segment_refs"] == []
+
+
+def test_structured_section_inputs_compact_large_primary_segments_without_losing_scope() -> None:
+    inputs = _structured_section_inputs(
+        evidence_pack_result=_LargeDecisionSegmentEvidencePackResult(),
+        competitors=["Cursor", "Windsurf", "Claude Code", "GitHub Copilot"],
+        dimensions=["pricing", "feature", "persona"],
+    )
+
+    executive_summary = inputs["executive_summary"]
+    serialized = json.dumps(executive_summary, ensure_ascii=False)
+
+    assert len(serialized) <= STRUCTURED_SECTION_INPUT_TARGET_CHARS
+    assert "FULL_PACK_SHOULD_NOT_BE_REPEATED" not in serialized
+    assert "fact detail " * 20 not in serialized
+    assert len(executive_summary["allowed_source_ids"]) == 40
+    segment = executive_summary["evidence_segments"][0]
+    assert segment["section_projection"] == "compact"
+    assert len(segment["source_registry"]) == 40
+    assert len(segment["groups"]) == 12
+    assert {item["id"] for item in segment["source_registry"]} == set(
+        executive_summary["allowed_source_ids"]
+    )
 
 
 @pytest.mark.asyncio
