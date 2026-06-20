@@ -1,5 +1,6 @@
 import { Database, GitCompareArrows, MessageSquareWarning } from "lucide-react";
 import type {
+  BusinessQAFinding,
   ClaimRecord,
   EvidenceQualityLabel,
   EvidenceRecord,
@@ -98,12 +99,25 @@ function ReleaseIssuesPanel({ releaseGate }: { releaseGate: ReportReleaseGate | 
     <Panel title={t("workbench.gateIssues")} icon={<MessageSquareWarning size={16} aria-hidden />}>
       {releaseGate ? (
         <div className="recommendation-list compact">
-          {releaseGate.issues.slice(0, 5).map((issue) => (
-            <article className={`recommendation-card ${issue.severity}`} key={issue.id}>
-              <strong>{issue.rule_name}</strong>
-              <p>{issue.message}</p>
-            </article>
-          ))}
+          {releaseGate.issues.slice(0, 5).map((issue) => {
+            const auditRows = buildReleaseIssueAuditRows(issue);
+            return (
+              <article className={`recommendation-card ${issue.severity}`} key={issue.id}>
+                <strong>{issue.rule_name}</strong>
+                <p>{issue.message}</p>
+                {auditRows.length > 0 ? (
+                  <dl className="release-issue-audit-grid" aria-label={`Audit trail for ${issue.id}`}>
+                    {auditRows.map((row) => (
+                      <div key={`${row.label}-${row.value}`}>
+                        <dt>{row.label}</dt>
+                        <dd>{row.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
+              </article>
+            );
+          })}
           {releaseGate.issues.length === 0 ? <p className="muted-line">No active release gate issues.</p> : null}
         </div>
       ) : (
@@ -111,6 +125,81 @@ function ReleaseIssuesPanel({ releaseGate }: { releaseGate: ReportReleaseGate | 
       )}
     </Panel>
   );
+}
+
+export interface ReleaseIssueAuditRow {
+  label: string;
+  value: string;
+}
+
+export function buildReleaseIssueAuditRows(issue: BusinessQAFinding): ReleaseIssueAuditRow[] {
+  const metadata = issue.metadata ?? {};
+  const rows: ReleaseIssueAuditRow[] = [];
+  const issueTypes = metadataStringList(metadata["claim_validation_issue_types"]);
+  const conflictIds = metadataStringList(metadata["conflicting_evidence_ids"]);
+  if (issueTypes.length > 0) {
+    rows.push({ label: "Claim issue", value: issueTypes.join(", ") });
+  }
+  if (conflictIds.length > 0) {
+    rows.push({ label: "Conflict evidence", value: conflictIds.join(", ") });
+  }
+
+  const trail = metadataObjectList(metadata["evidence_audit_trail"]);
+  for (const item of trail.slice(0, 2)) {
+    const evidenceId = metadataText(item, "evidence_id");
+    const rawSourceId = metadataText(item, "raw_source_id");
+    const kbDocumentId = metadataText(item, "kb_document_id");
+    const kbVersion = metadataText(item, "kb_document_version");
+    const kbStatus = metadataText(item, "kb_document_status");
+    const kbRawSourceId = metadataText(item, "kb_raw_source_id");
+    const collectorRunId = metadataText(item, "kb_collector_run_id");
+    const freshnessScore = metadataNumber(item, "kb_freshness_score");
+
+    if (evidenceId || rawSourceId) {
+      rows.push({ label: "Evidence", value: [evidenceId, rawSourceId].filter(Boolean).join(" / ") });
+    }
+    if (kbDocumentId) {
+      rows.push({
+        label: "KB document",
+        value: [kbDocumentId, kbVersion ? `v${kbVersion}` : "", kbStatus].filter(Boolean).join(" / "),
+      });
+    }
+    if (kbRawSourceId) {
+      rows.push({ label: "KB raw source", value: kbRawSourceId });
+    }
+    if (collectorRunId) {
+      rows.push({ label: "Collector run", value: collectorRunId });
+    }
+    if (freshnessScore !== null) {
+      rows.push({ label: "Freshness", value: `${Math.round(freshnessScore * 100)}%` });
+    }
+  }
+
+  return rows.slice(0, 10);
+}
+
+function metadataObjectList(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
+}
+
+function metadataStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item || "").trim()).filter(Boolean);
+}
+
+function metadataText(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key];
+  if (value === null || value === undefined || value === "") return null;
+  return String(value);
+}
+
+function metadataNumber(metadata: Record<string, unknown>, key: string): number | null {
+  const value = metadata[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function ClaimReviewPanel({

@@ -902,6 +902,35 @@
   overflow: auto;
 }
 
+.release-issue-audit-grid {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
+  margin: 8px 0 0;
+}
+
+.release-issue-audit-grid div {
+  display: contents;
+}
+
+.release-issue-audit-grid dt,
+.release-issue-audit-grid dd {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.release-issue-audit-grid dt {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.release-issue-audit-grid dd {
+  color: #0f172a;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .report-review-desk .source-scope-list,
 .report-review-desk .review-claim-list {
   max-height: 240px;

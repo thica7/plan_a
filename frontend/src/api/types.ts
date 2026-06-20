@@ -1127,6 +1127,7 @@ export interface BusinessQAFinding {
   evidence_ids: string[];
   claim_ids: string[];
   recommendation: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface BusinessQAEvaluation {
