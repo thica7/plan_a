@@ -214,6 +214,65 @@ def test_keyed_assembler_canonical_section_key_overrides_misleading_heading() ->
     assert assembled.telemetry["first_support_key"] is None
 
 
+def test_keyed_assembler_keeps_intro_inside_canonical_section() -> None:
+    fragments = [
+        ReportSectionFragment(
+            markdown=(
+                "Lead-in decision sentence. [source:raw-source-a]\n\n"
+                "## Evidence & QA Support\n"
+                "This H2 should not define the section. [source:raw-source-a]"
+            ),
+            section_key="decision_summary",
+            layer="core",
+            segment_name="decision_summary",
+        )
+    ]
+
+    assembled = assemble_report_fragments(
+        fragments,
+        output_language="en-US",
+        competitors=["Cursor"],
+    )
+
+    assert assembled.markdown.startswith(
+        "<!-- report-section:key=decision_summary layer=core -->\n## Decision Summary"
+    )
+    assert "Lead-in decision sentence" in assembled.markdown
+    assert assembled.markdown.index("Lead-in decision sentence") > assembled.markdown.index(
+        "## Decision Summary"
+    )
+    assert "## Evidence & QA Support" not in assembled.markdown
+
+
+def test_keyed_assembler_treats_audit_layer_as_support_for_unknown_sections() -> None:
+    fragments = [
+        ReportSectionFragment(
+            markdown="## Mystery Audit Notes\nAudit note. [source:raw-source-a]",
+            section_key="custom_audit_notes",
+            layer="audit",
+            segment_name="support_appendix",
+        ),
+        ReportSectionFragment(
+            markdown="## Custom Core Readout\nCore note. [source:raw-source-b]",
+            section_key="custom_core_readout",
+            layer="core",
+            segment_name="decision_summary",
+        ),
+    ]
+
+    assembled = assemble_report_fragments(
+        fragments,
+        output_language="en-US",
+        competitors=["Cursor"],
+    )
+
+    assert assembled.markdown.index("## Custom Core Readout") < assembled.markdown.index(
+        "## Mystery Audit Notes"
+    )
+    assert assembled.telemetry["unknown_support_section_count"] == 1
+    assert assembled.telemetry["unknown_core_section_count"] == 1
+
+
 def test_keyed_assembler_keeps_known_support_after_core_even_when_input_is_first() -> None:
     fragments = [
         ReportSectionFragment(

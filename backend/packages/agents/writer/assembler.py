@@ -147,24 +147,27 @@ def _assemble_report_blocks(
     output_language_text = str(output_language)
     for markdown, fragment_section_key, fragment_layer in fragment_inputs:
         canonical_fragment_key = _canonical_fragment_key(fragment_section_key)
+        normalized_fragment_layer = _normalized_fragment_layer(fragment_layer)
         intro, sections = _parse_fragment(markdown, output_language_text)
-        if not sections and canonical_fragment_key is not None:
-            if intro:
+        if canonical_fragment_key is not None:
+            canonical_bodies = [intro] if intro else []
+            canonical_bodies.extend(section.body for section in sections if section.body)
+            if canonical_bodies:
                 _append_known_section(
                     known_sections,
                     known_counts,
                     canonical_fragment_key,
-                    intro,
+                    "\n\n".join(canonical_bodies),
                 )
+            continue
+        if not sections:
+            if intro:
+                intro_blocks.append(intro)
             continue
         if intro:
             intro_blocks.append(intro)
         for section in sections:
-            section_key = (
-                canonical_fragment_key
-                if canonical_fragment_key is not None
-                else section.key
-            )
+            section_key = section.key
             if section_key is not None:
                 _append_known_section(
                     known_sections,
@@ -172,9 +175,9 @@ def _assemble_report_blocks(
                     section_key,
                     section.body,
                 )
-            elif fragment_layer == "support":
+            elif normalized_fragment_layer == "support":
                 unknown_support_sections.append(section)
-            elif fragment_layer == "core":
+            elif normalized_fragment_layer == "core":
                 unknown_core_sections.append(section)
             elif _looks_like_support_heading(section.heading):
                 unknown_support_sections.append(section)
@@ -249,6 +252,15 @@ def _canonical_fragment_key(section_key: str) -> str | None:
     if key in CANONICAL_REPORT_ORDER:
         return key
     return None
+
+
+def _normalized_fragment_layer(layer: str) -> str:
+    normalized = layer.strip().casefold()
+    if normalized in {"support", "audit", "appendix"}:
+        return "support"
+    if normalized == "core":
+        return "core"
+    return ""
 
 
 def _parse_fragment(
