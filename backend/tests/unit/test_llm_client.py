@@ -106,7 +106,7 @@ async def test_complete_text_falls_back_to_backup_provider(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_complete_text_sends_configured_max_tokens(monkeypatch) -> None:
+async def test_complete_text_does_not_send_default_max_tokens(monkeypatch) -> None:
     payloads: list[dict[str, object]] = []
 
     class FakeAsyncClient:
@@ -133,12 +133,12 @@ async def test_complete_text_sends_configured_max_tokens(monkeypatch) -> None:
             )
 
     monkeypatch.setattr("packages.llm.doubao_client.httpx.AsyncClient", FakeAsyncClient)
-    client = DoubaoClient(_settings(llm_max_tokens=4096))
+    client = DoubaoClient(_settings())
 
     content = await client.complete_text(system="system", user="user")
 
     assert content == "ok"
-    assert payloads[0]["max_tokens"] == 4096
+    assert "max_tokens" not in payloads[0]
 
 
 @pytest.mark.asyncio

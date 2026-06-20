@@ -117,7 +117,6 @@ class DoubaoClient:
                 {"role": "user", "content": user},
             ],
             "temperature": self._settings.llm_temperature,
-            "max_tokens": self._settings.llm_max_tokens,
         }
         headers = {
             "Authorization": f"Bearer {provider.api_key}",
