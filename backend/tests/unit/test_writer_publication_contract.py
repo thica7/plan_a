@@ -194,6 +194,24 @@ def test_publication_contract_accepts_clean_section_marker_line() -> None:
     assert "citation_on_section_marker" not in result.issue_codes()
 
 
+def test_publication_contract_accepts_renderer_section_markers_without_citations() -> None:
+    report = _report("zh-CN")
+    markdown = render_structured_report(report)
+    marker_lines = [
+        line for line in markdown.splitlines() if line.startswith("<!-- report-section:")
+    ]
+
+    result = validate_publication_contract(
+        markdown,
+        structured_report=report,
+        allowed_source_ids={"raw-source-a", "raw-source-b", "raw-source-survey"},
+    )
+
+    assert marker_lines
+    assert result.passed
+    assert all("[source:" not in line for line in marker_lines)
+
+
 def test_rejects_internal_terms_and_unknown_sources() -> None:
     markdown = "source_registry should stay internal.\n\n正文 [source:unknown-source]\n"
 

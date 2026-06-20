@@ -236,6 +236,26 @@ def test_renderer_emits_structured_section_markers_for_layer_indexing() -> None:
     assert index.is_support_or_audit_line(support_section.line_start + 1) is True
 
 
+def test_renderer_section_marker_lines_do_not_carry_citations() -> None:
+    rendered = render_structured_report(_report("zh-CN"))
+    marker_lines = [
+        line for line in rendered.splitlines() if line.startswith("<!-- report-section:")
+    ]
+
+    assert marker_lines
+    assert all("[source:" not in line for line in marker_lines)
+
+
+def test_renderer_zh_structural_headings_are_localized() -> None:
+    rendered = render_structured_report(_report("zh-CN"))
+
+    assert "## 执行摘要" in rendered
+    assert "Direct User / Community Signals" not in rendered
+    assert "Direct User and Community Signals" not in rendered
+    assert "Pricing and Packaging" not in rendered
+    assert "#### 直接用户与社区信号" in rendered
+
+
 def test_renderer_omits_empty_claim_group_headings() -> None:
     report = _report()
     theme = report.core.user_review_themes.competitor_themes[0]

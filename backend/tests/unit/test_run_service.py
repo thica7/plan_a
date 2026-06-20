@@ -8722,6 +8722,42 @@ def test_real_writer_uses_structured_path_when_enabled(monkeypatch) -> None:
     )
 
 
+def test_real_schema_first_success_does_not_emit_markdown_fallback(monkeypatch) -> None:
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(service, competitors=["Cursor", "Windsurf"])
+    record.detail.execution_mode = "real"
+    record.detail.output_language = "zh-CN"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+    structured_report = _structured_writer_fixture_report(record.detail)
+
+    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
+        return structured_report
+
+    async def fail_if_markdown_writer_called(self, record, evidence_pack_result, timeout_seconds):
+        raise AssertionError("Markdown fallback must not be called")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
+        fake_structured_report,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_markdown_report_from_evidence_pack",
+        fail_if_markdown_writer_called,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    event_types = [event.type for event in record.events]
+    assert "writer_markdown_fallback_used" not in event_types
+    assert "writer_structured_report_validated" in event_types
+    assert "writer_publication_contract_validated" in event_types
+
+
 def test_real_schema_first_writer_fails_closed_when_structured_path_fails(
     monkeypatch,
 ) -> None:

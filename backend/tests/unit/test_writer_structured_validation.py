@@ -212,6 +212,20 @@ def test_template_like_executive_summary_is_rejected() -> None:
     assert "executive_summary_missing_risk_adjusted_rationale" in validation.issue_codes()
 
 
+def test_structured_validation_rejects_template_only_executive_summary() -> None:
+    report = _report()
+    report.core.executive_summary.recommendation.text = "core conclusion"
+
+    result = validate_structured_report(
+        report,
+        allowed_source_ids={"raw-source-a"},
+        strong_source_ids={"raw-source-a"},
+    )
+
+    assert not result.passed
+    assert "executive_summary_template_only" in result.issue_codes()
+
+
 def test_internal_terms_are_rejected_in_cited_text_before_rendering() -> None:
     report = _clean_report()
     report.core.executive_summary.recommendation.text = (
