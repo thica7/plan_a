@@ -11,6 +11,7 @@ from packages.agents.writer.assembler import ReportSectionFragment
 from packages.agents.writer.repair import build_writer_repair_plan
 from packages.agents.writer.structured_report import StructuredReport
 from packages.business_intel.homepage import HomepageVerification
+from packages.business_intel.report_sections import report_section_marker
 from packages.business_intel.report_quality import compare_run_quality
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
@@ -9037,6 +9038,104 @@ def test_real_schema_contract_writer_fails_closed_on_publication_contract_error(
         "schema-contract segment publication contract failed"
         in failed_closed_event.payload["reason"]
     )
+
+
+def test_schema_contract_publication_internal_leak_repairs_target_section(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(service, competitors=["Cursor"])
+    record.detail.execution_mode = "real"
+    record.detail.output_language = "zh-CN"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+    repaired_sections: list[tuple[str, ...]] = []
+
+    async def fake_segmented_report(
+        self,
+        record,
+        *,
+        evidence_pack_result,
+        timeout_seconds,
+        language_guidance,
+        memory_context,
+        layer_context,
+        required_sections,
+    ):
+        return (
+            f"{report_section_marker('executive_summary', 'core')}\n"
+            f"## {report_label('zh-CN', 'executive_summary')}\n"
+            "建议优先评估 Cursor。 [source:raw-source-a]\n\n"
+            f"{report_section_marker('decision_summary', 'core')}\n"
+            f"## {report_label('zh-CN', 'decision_summary')}\n"
+            "Cursor 保持采购评估优先级。 [source:raw-source-a]\n\n"
+            f"{report_section_marker('competitive_findings', 'core')}\n"
+            f"## {report_label('zh-CN', 'competitive_findings')}\n"
+            "证据支持谨慎推进。 [source:raw-source-a]\n\n"
+            f"{report_section_marker('evidence_support', 'support')}\n"
+            f"## {report_label('zh-CN', 'evidence_support')}\n"
+            "完整清单见报告开头 source_registry。 [source:raw-source-a]\n"
+        )
+
+    async def fake_section_repair(
+        self,
+        record,
+        *,
+        sections,
+        previous_report,
+        publication_issues=None,
+    ):
+        repaired_sections.append(tuple(sections))
+        assert publication_issues
+        assert publication_issues[0].code == "internal_term_leak"
+        assert "source_registry" in publication_issues[0].excerpt
+        return (
+            f"{report_section_marker('evidence_support', 'support')}\n"
+            f"## {report_label('zh-CN', 'evidence_support')}\n"
+            "证据支撑层列出本次分析使用的关键来源，完整来源以系统来源清单为准。 "
+            "[source:raw-source-a]\n"
+        )
+
+    async def fail_if_markdown_writer_called(
+        self,
+        record,
+        evidence_pack_result,
+        timeout_seconds,
+    ):
+        raise AssertionError("Markdown fallback must not run for publication repair")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_segmented_report_markdown",
+        fake_segmented_report,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_section_repair_markdown",
+        fake_section_repair,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_markdown_report_from_evidence_pack",
+        fail_if_markdown_writer_called,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    assert repaired_sections == [("evidence_support",)]
+    assert record.detail.status != "failed"
+    assert "source_registry" not in record.detail.report_md
+    assert "系统来源清单" in record.detail.report_md
+    event_types = [event.type for event in record.events]
+    assert "writer_publication_contract_repaired" in event_types
+    assert "writer_schema_first_failed_closed" not in event_types
+    validation_events = [
+        event
+        for event in record.events
+        if event.type == "writer_publication_contract_validated"
+    ]
+    assert validation_events[-1].payload["passed"] is True
 
 
 def test_schema_contract_segment_scoped_redo_uses_segment_authoring(

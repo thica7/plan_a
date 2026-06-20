@@ -19,7 +19,11 @@ from packages.agents.writer.evidence_pack import (
     SEGMENT_INPUT_TARGET_CHARS,
     build_writer_evidence_pack,
 )
-from packages.agents.writer.publication_contract import validate_publication_contract
+from packages.agents.writer.publication_contract import (
+    PublicationContractIssue,
+    PublicationContractResult,
+    validate_publication_contract,
+)
 from packages.agents.writer.quality_preflight import run_writer_quality_preflight
 from packages.agents.writer.repair import (
     WriterRepairPlan,
@@ -61,6 +65,7 @@ from packages.agents.writer.structured_repair import (
     recommendation_delta_problem,
 )
 from packages.business_intel.release_gate import REPORT_RICHNESS_MINIMUMS
+from packages.business_intel.report_sections import build_report_section_index
 from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.i18n.language import (
@@ -102,6 +107,14 @@ USER_RESEARCH_SOURCE_TYPE_ORDER = (
 )
 USER_RESEARCH_SOURCE_TYPES = set(USER_RESEARCH_SOURCE_TYPE_ORDER)
 CJK_TEXT_RE = re.compile(r"[\u3400-\u9fff]")
+PROMPT_INTERNAL_FIELD_NAMES = (
+    "source_registry",
+    "allowed_source_ids",
+    "publication_repair_issues",
+    "represented_by",
+    "Segment Evidence Pack JSON",
+    "Writer Evidence Pack",
+)
 PRICING_LINE_TOKENS = (
     "price",
     "pricing",
@@ -1379,6 +1392,50 @@ class WriterAgentMixin:
                             },
                         )
                         if not publication_validation.passed:
+                            repaired_report_md = await self._repair_schema_contract_publication_issues(
+                                record,
+                                report_md=report_md,
+                                validation=publication_validation,
+                                timeout_seconds=timeout_seconds,
+                            )
+                            if repaired_report_md is not None:
+                                report_md = repaired_report_md
+                                publication_validation = validate_publication_contract(
+                                    report_md,
+                                    structured_report=None,
+                                    allowed_source_ids={
+                                        source.id for source in detail.raw_sources
+                                    },
+                                    output_language=detail.output_language,
+                                )
+                                publication_payload = (
+                                    publication_validation.telemetry_payload()
+                                )
+                                await self.emit(
+                                    detail.id,
+                                    "writer_publication_contract_validated",
+                                    "writer",
+                                    None,
+                                    "Writer publication contract validated after section repair.",
+                                    publication_payload,
+                                )
+                                self._trace_local_tool(
+                                    record,
+                                    agent="writer",
+                                    subagent=None,
+                                    name="writer_publication_contract_validated",
+                                    input_text="schema_contract_segment_report_repaired",
+                                    output_text=json.dumps(
+                                        publication_payload,
+                                        ensure_ascii=False,
+                                        default=str,
+                                    ),
+                                    metadata={
+                                        "passed": publication_validation.passed,
+                                        "issue_count": len(publication_validation.issues),
+                                    },
+                                )
+                        if not publication_validation.passed:
                             raise ValueError(
                                 "schema-contract segment publication contract failed: "
                                 + ", ".join(publication_validation.issue_codes())
@@ -1970,6 +2027,92 @@ class WriterAgentMixin:
             layer_context=self._writer_layer_context(detail),
             required_sections=self._writer_required_sections(detail),
         )
+
+    async def _repair_schema_contract_publication_issues(
+        self,
+        record: RunRecord,
+        *,
+        report_md: str,
+        validation: PublicationContractResult,
+        timeout_seconds: float,
+    ) -> str | None:
+        detail = record.detail
+        repairable_issues = [
+            issue
+            for issue in validation.issues
+            if issue.repair_target == "structured_section"
+        ]
+        if not repairable_issues or len(repairable_issues) != len(validation.issues):
+            return None
+        target_sections = self._publication_issue_section_keys(
+            report_md,
+            repairable_issues,
+        )
+        if not target_sections:
+            return None
+        await self.emit(
+            detail.id,
+            "writer_publication_contract_repair_selected",
+            "writer",
+            None,
+            "Writer publication contract issues mapped to section repair.",
+            {
+                "sections": target_sections,
+                "issue_codes": sorted({issue.code for issue in repairable_issues}),
+                "issues": [
+                    {
+                        "code": issue.code,
+                        "line_number": issue.line_number,
+                        "message": issue.message,
+                        "excerpt": issue.excerpt,
+                    }
+                    for issue in repairable_issues
+                ],
+            },
+        )
+        repaired_section_md = await self._writer_section_repair_markdown(
+            record,
+            sections=target_sections,
+            previous_report=report_md,
+            publication_issues=repairable_issues,
+        )
+        repaired_report_md = report_md
+        for section in target_sections:
+            repaired_report_md = replace_markdown_section(
+                repaired_report_md,
+                section,
+                detail.output_language,
+                repaired_section_md,
+            )
+        await self.emit(
+            detail.id,
+            "writer_publication_contract_repaired",
+            "writer",
+            None,
+            "Writer publication contract issues repaired by section rewrite.",
+            {
+                "sections": target_sections,
+                "issue_codes": sorted({issue.code for issue in repairable_issues}),
+                "before_chars": len(report_md),
+                "after_chars": len(repaired_report_md),
+            },
+        )
+        return repaired_report_md
+
+    def _publication_issue_section_keys(
+        self,
+        report_md: str,
+        issues: Sequence[PublicationContractIssue],
+    ) -> list[str]:
+        index = build_report_section_index(report_md)
+        keys: list[str] = []
+        for issue in issues:
+            key = _section_key_at_line(index.sections, issue.line_number)
+            if key is None:
+                return []
+            if key not in keys:
+                keys.append(key)
+        return keys
 
     async def _writer_structured_section_json(
         self,
@@ -3237,6 +3380,9 @@ class WriterAgentMixin:
                 "the section as an evidence gap/absence note and do not invent user "
                 "research findings.\n"
             )
+        publication_repair_instruction = self._writer_publication_repair_instruction(
+            _publication_issues_from_segment(segment)
+        )
         shard_instruction = ""
         if segment.get("segment_kind") == "evidence_shard":
             shard_instruction += (
@@ -3293,6 +3439,7 @@ class WriterAgentMixin:
                     f"{citation_warning}"
                     f"{contract_warning}"
                     f"{user_research_gap_instruction}"
+                    f"{publication_repair_instruction}"
                     f"{shard_instruction}"
                     "Do not write headings outside this segment's contract. "
                     "Do not write support or appendix sections unless "
@@ -3316,6 +3463,7 @@ class WriterAgentMixin:
         *,
         sections: Sequence[str],
         previous_report: str,
+        publication_issues: Sequence[PublicationContractIssue] | None = None,
     ) -> str:
         detail = record.detail
         evidence_pack_result = build_writer_evidence_pack(detail)
@@ -3388,6 +3536,13 @@ class WriterAgentMixin:
         )
         if repair_has_evidence_shards:
             timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
+            repair_segments = [
+                self._with_publication_repair_issues(
+                    segment,
+                    publication_issues=publication_issues,
+                )
+                for segment in repair_segments
+            ]
             repaired_fragments = await self._writer_segment_markdown_parts(
                 record,
                 evidence_pack_result=evidence_pack_result,
@@ -3434,12 +3589,34 @@ class WriterAgentMixin:
                         "Use the exact requested level-2 heading for each returned section.\n"
                         "You must preserve existing [source:ID] syntax.\n"
                         f"{self._writer_community_policy_text()}\n"
+                        f"{self._writer_publication_repair_instruction(publication_issues)}"
                         f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
                         f"Previous report:\n{previous_report}"
                     ),
                 )
             )
         return self._join_section_repair_parts(repaired_sections, section_headings)
+
+    def _with_publication_repair_issues(
+        self,
+        segment: dict[str, object],
+        *,
+        publication_issues: Sequence[PublicationContractIssue] | None,
+    ) -> dict[str, object]:
+        if not publication_issues:
+            return segment
+        return {
+            **segment,
+            "publication_repair_issues": [
+                {
+                    "code": issue.code,
+                    "line_number": issue.line_number,
+                    "message": issue.message,
+                    "excerpt": issue.excerpt,
+                }
+                for issue in publication_issues
+            ],
+        }
 
     def _writer_community_policy_text(self) -> str:
         return (
@@ -3448,6 +3625,33 @@ class WriterAgentMixin:
             "community_contested clusters may support actual-use risks, user evaluation, "
             "and pricing caveats. Do not present community observations as official "
             "commitments unless an official source also supports the same claim."
+        )
+
+    def _writer_publication_repair_instruction(
+        self,
+        issues: Sequence[PublicationContractIssue] | None,
+    ) -> str:
+        internal_names = ", ".join(PROMPT_INTERNAL_FIELD_NAMES)
+        base = (
+            "Do not mention internal JSON or implementation field names in the report "
+            f"body, including: {internal_names}. Refer to them as sources, evidence, "
+            "or the source list in reader-facing language.\n"
+        )
+        if not issues:
+            return base
+        issue_lines = []
+        for issue in issues:
+            excerpt = issue.excerpt or issue.message
+            issue_lines.append(
+                f"- line {issue.line_number}: {issue.code}; remove or rewrite "
+                f"this excerpt: {excerpt}"
+            )
+        return (
+            base
+            + "Previous assembled report failed publication contract for this "
+            + "section. Repair only the listed issue(s):\n"
+            + "\n".join(issue_lines)
+            + "\n"
         )
 
     def _writer_section_heading_instruction(self, detail: RunDetail, section: str) -> str:
@@ -6034,3 +6238,47 @@ class WriterAgentMixin:
             if preferred_user_research_ids:
                 source_ids = [*preferred_user_research_ids, *source_ids]
         return unique(source_ids)
+
+
+def _publication_issues_from_segment(
+    segment: Mapping[str, object],
+) -> list[PublicationContractIssue]:
+    raw_issues = segment.get("publication_repair_issues")
+    if not isinstance(raw_issues, list):
+        return []
+    issues: list[PublicationContractIssue] = []
+    for item in raw_issues:
+        if not isinstance(item, Mapping):
+            continue
+        issues.append(
+            PublicationContractIssue(
+                code=str(item.get("code") or "publication_contract"),
+                line_number=_safe_int(item.get("line_number")),
+                message=str(item.get("message") or ""),
+                repair_target="structured_section",
+                excerpt=str(item.get("excerpt") or ""),
+            )
+        )
+    return issues
+
+
+def _section_key_at_line(sections: Sequence[object], line_number: int) -> str | None:
+    current_key: str | None = None
+    for section in sections:
+        line_start = getattr(section, "line_start", 0)
+        if line_start > line_number:
+            break
+        section_key = getattr(section, "section_key", None)
+        if isinstance(section_key, str) and section_key:
+            current_key = section_key
+    return current_key
+
+
+def _safe_int(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return 0
