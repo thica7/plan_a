@@ -254,6 +254,18 @@ def _normalize_structured_section_payload(value: Any) -> Any:
 def _structured_section_contract_instructions(
     section_schema: type[BaseModel],
 ) -> list[str]:
+    if section_schema is CitedTextListSection:
+        return [
+            (
+                'CitedTextListSection output must be exactly {"items": [...]} '
+                "where every item is a CitedText data object."
+            ),
+            (
+                "Schema JSON describes the shape; it is not the output. "
+                "Never return $defs, properties, required, title, type, or "
+                "additionalProperties as top-level keys."
+            ),
+        ]
     if section_schema is BattlecardSection:
         return [
             (

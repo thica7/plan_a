@@ -7,6 +7,7 @@ import pytest
 
 from packages.agents.writer.assembler import StructuredReportAssembler
 from packages.agents.writer.logic import (
+    CitedTextListSection,
     WriterAgentMixin,
     build_structured_writer_section_plan,
     _structured_section_inputs,
@@ -654,6 +655,23 @@ def test_battlecard_prompt_requires_cited_derivative_talk_tracks() -> None:
     assert "rebuttal_talk_tracks" in prompt
     assert "Do not output inference with empty source_ids" in prompt
     assert "proof_needed_before_external_use or evidence_limits" in prompt
+
+
+def test_cited_text_list_prompt_rejects_schema_echo_shape() -> None:
+    prompt = _WriterHarness([])._structured_section_prompt(
+        segment={
+            "section_id": "decision_summary",
+            "content": "Decision evidence",
+            "output_language": "zh-CN",
+        },
+        section_schema=CitedTextListSection,
+        allowed_source_ids={"raw-source-a", "raw-source-b"},
+        previous_validation_error="$defs extra inputs are not permitted",
+    )
+
+    assert 'exactly {"items": [' in prompt
+    assert "Schema JSON describes the shape; it is not the output" in prompt
+    assert "Never return $defs, properties, required, title, type, or additionalProperties" in prompt
 
 
 @pytest.mark.asyncio
