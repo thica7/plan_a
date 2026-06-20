@@ -177,7 +177,6 @@ WRITER_NORMALIZED_FIELD_LONG_KEY_PARTS = (
     "trigger",
 )
 WRITER_NORMALIZED_SNIPPET_LIMIT = 1600
-STRUCTURED_SECTION_COMPLETION_MAX_TOKENS = 1536
 STRUCTURED_SECTION_INPUT_TARGET_CHARS = 28_000
 
 
@@ -2035,7 +2034,6 @@ class WriterAgentMixin:
                         "writing one structured report section."
                     ),
                     user=prompt,
-                    max_tokens=STRUCTURED_SECTION_COMPLETION_MAX_TOKENS,
                 ),
                 timeout=timeout_seconds,
             )
@@ -2080,7 +2078,6 @@ class WriterAgentMixin:
                             "Return valid JSON only."
                         ),
                         user=retry_prompt,
-                        max_tokens=STRUCTURED_SECTION_COMPLETION_MAX_TOKENS,
                     ),
                     timeout=timeout_seconds,
                 )
@@ -2163,12 +2160,6 @@ class WriterAgentMixin:
             "Return JSON only.",
             "Do not write Markdown headings.",
             language_guidance,
-            (
-                "Write compact decision-grade JSON. Keep each CitedText.text under "
-                "240 characters, each matrix summary under 180 characters, and use "
-                "short source_id arrays. Prefer 3-6 high-signal items for list "
-                "sections unless the schema explicitly requires competitor coverage."
-            ),
             "Do not include markdown citation tokens inside text fields.",
             "Put citations only in source_ids.",
             "Use only allowed_source_ids.",

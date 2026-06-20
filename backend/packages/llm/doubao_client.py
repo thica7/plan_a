@@ -82,13 +82,7 @@ class DoubaoClient:
                 self._last_finish_reason = None
         raise LLMError("LLM JSON request failed for all providers: " + " | ".join(errors))
 
-    async def complete_text(
-        self,
-        *,
-        system: str,
-        user: str,
-        max_tokens: int | None = None,
-    ) -> str:
+    async def complete_text(self, *, system: str, user: str) -> str:
         providers = self._provider_configs()
         if not providers:
             raise LLMError(self._route_error_message())
@@ -100,7 +94,6 @@ class DoubaoClient:
                     provider,
                     system=system,
                     user=user,
-                    max_tokens=max_tokens,
                 )
             except LLMError as exc:
                 errors.append(f"{provider.name}: {exc}")
@@ -116,11 +109,7 @@ class DoubaoClient:
         *,
         system: str,
         user: str,
-        max_tokens: int | None = None,
     ) -> str:
-        request_max_tokens = (
-            max(1, int(max_tokens)) if max_tokens is not None else self._settings.llm_max_tokens
-        )
         payload = {
             "model": provider.model,
             "messages": [
@@ -128,7 +117,7 @@ class DoubaoClient:
                 {"role": "user", "content": user},
             ],
             "temperature": self._settings.llm_temperature,
-            "max_tokens": request_max_tokens,
+            "max_tokens": self._settings.llm_max_tokens,
         }
         headers = {
             "Authorization": f"Bearer {provider.api_key}",

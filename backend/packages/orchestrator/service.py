@@ -3432,7 +3432,6 @@ class RunService(
         system: str,
         user: str,
         context: SubagentContext | None = None,
-        max_tokens: int | None = None,
     ) -> str:
         started = time.perf_counter()
         input_text = f"{system}\n\n{user}"
@@ -3440,11 +3439,7 @@ class RunService(
             context.add_message("system", system)
             context.add_message("user", user)
         try:
-            output = await self._llm.complete_text(
-                system=system,
-                user=user,
-                max_tokens=max_tokens,
-            )
+            output = await self._llm.complete_text(system=system, user=user)
         except Exception as exc:
             self._append_trace_span(
                 record,
@@ -3456,17 +3451,7 @@ class RunService(
                 started=started,
                 input_text=input_text,
                 output_text=str(exc),
-                metadata=self._trace_metadata(
-                    context,
-                    {
-                        "error": str(exc),
-                        **(
-                            {"requested_max_tokens": max_tokens}
-                            if max_tokens is not None
-                            else {}
-                        ),
-                    },
-                ),
+                metadata=self._trace_metadata(context, {"error": str(exc)}),
             )
             raise
         usage = self._consume_llm_usage()
@@ -3483,16 +3468,7 @@ class RunService(
             input_text=input_text,
             output_text=output,
             metadata=self._trace_metadata(
-                context,
-                {
-                    "response_format": "text",
-                    **(
-                        {"requested_max_tokens": max_tokens}
-                        if max_tokens is not None
-                        else {}
-                    ),
-                    **self._llm_usage_metadata(usage),
-                },
+                context, {"response_format": "text", **self._llm_usage_metadata(usage)}
             ),
             token_usage=usage,
         )

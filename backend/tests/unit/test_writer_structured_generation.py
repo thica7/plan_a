@@ -8,7 +8,6 @@ import pytest
 from packages.agents.writer.assembler import StructuredReportAssembler
 from packages.agents.writer.logic import (
     CitedTextListSection,
-    STRUCTURED_SECTION_COMPLETION_MAX_TOKENS,
     STRUCTURED_SECTION_INPUT_TARGET_CHARS,
     WriterAgentMixin,
     build_structured_writer_section_plan,
@@ -56,22 +55,10 @@ class _WriterHarness(WriterAgentMixin):
     def __init__(self, responses: list[str]) -> None:
         self.responses = responses
         self.prompts: list[str] = []
-        self.max_token_requests: list[int | None] = []
         self.emitted_events: list[tuple[str, str, str | None, str | None, str, dict[str, object] | None]] = []
 
-    async def _trace_llm_text(
-        self,
-        record,
-        *,
-        agent,
-        subagent,
-        name,
-        system,
-        user,
-        max_tokens=None,
-    ) -> str:
+    async def _trace_llm_text(self, record, *, agent, subagent, name, system, user) -> str:
         self.prompts.append(system + "\n" + user)
-        self.max_token_requests.append(max_tokens)
         return self.responses.pop(0)
 
     async def emit(
@@ -951,60 +938,6 @@ async def test_structured_section_json_accepts_valid_json_and_rejects_markdown_c
 
     assert section.recommendation.text == "优先以 Cursor 作为团队采购基线。"
     assert "[source:" not in harness.prompts[0]
-
-
-@pytest.mark.asyncio
-async def test_structured_section_json_uses_section_completion_budget() -> None:
-    payload = {
-        "recommendation": {
-            "text": "Choose Cursor.",
-            "source_ids": ["raw-source-a"],
-            "confidence": "high",
-            "evidence_role": "official_fact",
-        },
-        "risk_adjusted_rationale": {
-            "text": "Cursor has the clearest cited evidence.",
-            "source_ids": ["raw-source-a"],
-            "confidence": "high",
-            "evidence_role": "official_fact",
-        },
-        "competitor_postures": [
-            {
-                "competitor": "Cursor",
-                "posture": {
-                    "text": "Use Cursor as the baseline.",
-                    "source_ids": ["raw-source-a"],
-                    "confidence": "high",
-                    "evidence_role": "official_fact",
-                },
-            }
-        ],
-        "confidence_boundary": {
-            "text": "Validate security terms before purchase.",
-            "source_ids": ["raw-source-a"],
-            "confidence": "medium",
-            "evidence_role": "official_fact",
-        },
-        "next_actions": [
-            {
-                "text": "Run a procurement proof point check.",
-                "source_ids": ["raw-source-a"],
-                "confidence": "medium",
-                "evidence_role": "official_fact",
-            }
-        ],
-    }
-    harness = _WriterHarness([json.dumps(payload)])
-
-    await harness._writer_structured_section_json(
-        record=object(),
-        segment={"section_id": "executive_summary", "content": "Evidence"},
-        section_schema=ExecutiveSummarySection,
-        allowed_source_ids={"raw-source-a"},
-        timeout_seconds=5.0,
-    )
-
-    assert harness.max_token_requests == [STRUCTURED_SECTION_COMPLETION_MAX_TOKENS]
 
 
 @pytest.mark.asyncio
