@@ -46,6 +46,7 @@ jobs:
         run: |
           pytest -q \
             backend/tests/unit/test_rag_kb_eval_set.py \
+            backend/tests/unit/test_knowledge_evidence_bridge.py \
             backend/tests/unit/test_retrieval_params.py::test_sparse_mode_uses_sqlite_without_dense_vector_search \
             backend/tests/unit/test_run_service.py::test_collect_qa_flags_stale_kb_reused_source_for_refresh \
             backend/tests/unit/test_run_service.py::test_collect_qa_flags_kb_live_source_contradiction \

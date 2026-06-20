@@ -31,7 +31,15 @@ async def test_sync_knowledge_to_evidence_uses_watermark_and_safe_metadata(tmp_p
                 competitor="Example",
                 dimension="pricing",
                 text="Example pricing page. Starter plan costs 10 USD per seat. " * 20,
-                metadata={"robots_status": "allowed", "large_blob": "x" * 1000},
+                metadata={
+                    "robots_status": "allowed",
+                    "large_blob": "x" * 1000,
+                    "run_id": "collector-run-1",
+                    "raw_source_id": "raw-source-pricing-1",
+                    "collector_confidence": 0.92,
+                    "collector_candidate_origin": "web_fetch",
+                    "collector_fetch_method": "browser_fetch",
+                },
             ),
             "hash-pricing",
         )
@@ -99,13 +107,31 @@ async def test_sync_knowledge_to_evidence_uses_watermark_and_safe_metadata(tmp_p
         assert skipped.skipped_count == 1
         evidence = store.list_evidence(project_id="project-kb")[0]
         assert evidence.metadata["kb_sync"] is True
+        assert evidence.metadata["kb_document_status"] == "active"
+        assert evidence.metadata["kb_fetched_at"]
+        assert evidence.metadata["kb_last_seen_at"]
+        assert evidence.metadata["kb_freshness_basis_at"]
+        assert evidence.metadata["kb_freshness_score"] > 0
+        assert evidence.metadata["kb_raw_source_id"] == "raw-source-pricing-1"
+        assert evidence.metadata["kb_collector_run_id"] == "collector-run-1"
+        assert evidence.metadata["kb_collector_candidate_origin"] == "web_fetch"
+        assert evidence.metadata["kb_collector_fetch_method"] == "browser_fetch"
+        assert evidence.metadata["kb_collector_confidence"] == 0.92
+        states = await repo.get_evidence_sync_states(
+            workspace_id="workspace-kb",
+            project_id="project-kb",
+            document_ids=[document.id],
+        )
+        assert states[document.id]["metadata"]["evidence_raw_source_id"] == evidence.raw_source_id
+        assert states[document.id]["metadata"]["kb_raw_source_id"] == "raw-source-pricing-1"
+        assert states[document.id]["metadata"]["kb_document_status"] == "active"
         # 同步只保存精选 chunk 和截断正文，避免长网页拖慢 evidence 存储与索引。
         assert evidence.metadata["kb_selected_chunk_count"] == 1
         assert evidence.metadata["kb_omitted_chunk_count"] == 1
         assert len(evidence.metadata["full_text"]) <= 20
         assert evidence.metadata["source_text_truncated"] is True
         assert evidence.metadata["kb_source_metadata"] == {
-            "omitted_key_count": 1,
+            "omitted_key_count": 6,
             "robots_status": "allowed",
         }
         assert hits
